@@ -4,7 +4,8 @@
 
 Fill and handle now share one value and one small buffer, preventing independent lag.
 The paint borrows SHM directly and avoids constructing a font system or panel scene.
-Full Arch CI passes; presented-frame latency and five-pair memory checks remain open.
+Full Arch CI passes, including local values without projection and service call progress.
+Shared-paint captures pass; final latency and five-pair memory checks remain open.
 Dispatch-only timing is unchanged; the 25 ms gate has not passed.
 
 | Check | Result |
@@ -12,6 +13,8 @@ Dispatch-only timing is unchanged; the 25 ms gate has not passed.
 | Shared-paint pixel poses | 101 at 1× and 1.5× |
 | Descriptor origin scales | 1× / 1.5× / 2× |
 | Child SHM bound | ≤128 KiB, two slots |
+| Coherent sampled frames, old / shared / QML | 30/41 / 41/41 / 41/41 |
+| Shared paint value differences | 0 px across 94 paints |
 | Dispatch-only CPU p95 before / after | 35.863 / 35.869 ms |
 
 ## 2026-10-25 — B0123 Spotlight retention and palette

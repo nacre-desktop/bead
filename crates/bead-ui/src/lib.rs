@@ -7,6 +7,7 @@ pub mod i18n;
 pub mod input;
 mod interaction;
 pub mod layout;
+mod local_range;
 pub mod markdown;
 mod materialized;
 pub mod recovery;

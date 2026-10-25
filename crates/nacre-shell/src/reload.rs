@@ -170,6 +170,7 @@ pub struct Runtime {
     slider_sent: Option<std::time::Instant>,
     slider_pending: Option<UiEvent>,
     slider_release_serial: u64,
+    slider_local_active: bool,
     launcher_memory: Option<crate::launcher::Memory>,
     connection_status: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     connection_subscription: Option<bead::core::source::Subscription>,
@@ -650,6 +651,7 @@ impl Runtime {
             slider_sent: None,
             slider_pending: None,
             slider_release_serial: 0,
+            slider_local_active: false,
             launcher_memory: None,
             connection_status: None,
             connection_subscription: None,
@@ -2719,6 +2721,12 @@ impl SceneSource for Runtime {
                         travel: (start, end),
                         pointer,
                         fill,
+                        local_feedback: self.control.is_some()
+                            && first.action.as_deref() == Some("cc.do")
+                            && motion.get("argument").is_some()
+                            && self
+                                .session
+                                .supports_local_range(&first.id, motion.get("argument")),
                         release_serial: self.slider_release_serial,
                     })
             })
@@ -2731,6 +2739,9 @@ impl SceneSource for Runtime {
             .as_ref()
             .and(self.slider_sent)
             .map(|sent| sent + std::time::Duration::from_millis(34));
+        if self.slider_local_active {
+            return send;
+        }
         [
             send,
             self.session.preview_deadline(),
@@ -3229,6 +3240,43 @@ impl SceneSource for Runtime {
         self.session.watch(wakeup)
     }
     fn stage(&mut self, mut event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+        // Service completion stays live even when the view keeps its accepted layout.
+        if matches!(&event, UiEvent::LocalDrag { .. } | UiEvent::Model(_))
+            && let Some(control) = &self.control
+        {
+            control.tick_calls();
+        }
+        let mut local = false;
+        if let UiEvent::LocalDrag { x, y } = event {
+            local = true;
+            event = UiEvent::Drag { x, y };
+        }
+        // Finish the old gesture before release can retire its final target. A final flush is exempt from the continuous-drag cap.
+        if matches!(&event, UiEvent::Release)
+            && let Some(pending) = self.slider_pending.take()
+        {
+            self.slider_sent = None;
+            let _ = self.stage(pending)?;
+        }
+        // Service notifications carry no model delta: the source already owns
+        // the latest data. Project it once on release; explicit model/geometry
+        // changes still take the ordinary path immediately.
+        if self.slider_local_active && matches!(&event,UiEvent::Model(values) if values.is_empty())
+        {
+            if self
+                .slider_sent
+                .is_some_and(|sent| sent.elapsed() >= std::time::Duration::from_millis(34))
+                && let Some(pending) = self.slider_pending.take()
+            {
+                self.slider_sent = None;
+                return self.stage(pending);
+            }
+            return Ok(None);
+        }
+        if !local {
+            self.slider_local_active = false;
+        }
+
         if matches!(event, UiEvent::Release)
             && self.session.stores.get("bead.pressed") == Some(&bead::core::Value::Bool(true))
         {
@@ -3287,20 +3335,19 @@ impl SceneSource for Runtime {
         }
         let _pointer_input = matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
             .then(|| self.session.pointer_input());
-        // Finish the old gesture before release can retire its final target. A final flush is exempt from the continuous-drag cap.
-        if matches!(&event, UiEvent::Release)
-            && let Some(pending) = self.slider_pending.take()
-        {
-            self.slider_sent = None;
-            let _ = self.stage(pending)?;
-        }
         if matches!(&event, UiEvent::Model(values) if values.is_empty())
             && self
                 .slider_sent
                 .is_some_and(|sent| sent.elapsed() >= std::time::Duration::from_millis(34))
             && let Some(pending) = self.slider_pending.take()
         {
-            event = pending;
+            event = match pending {
+                UiEvent::LocalDrag { x, y } => {
+                    local = true;
+                    UiEvent::Drag { x, y }
+                }
+                other => other,
+            };
         }
         // A pearl's border lights up under the pointer; re-decorate only when that flips.
         if self.detached
@@ -3798,20 +3845,61 @@ impl SceneSource for Runtime {
             return self.finish_scene(final_scene, false);
         }
         if matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
-            && let Some((id, _, argument)) = &mut host_action
+            && let Some((id, action_name, argument)) = &mut host_action
             && self.session.has_preview(id)
         {
-            // First stage the exact pointer target, then read its view-authored
-            // argument. The 34 ms cap applies to writes, never local feedback.
-            pointer_scene = self.pointer_feedback(id, &event, true)?;
-            if let Some(continuous) = self.session.pointer_argument(id) {
-                *argument = continuous;
+            // Retained ranges already painted the frame; update their value and
+            // authored argument without materializing or laying out the panel.
+            if local {
+                let format = self.session.view_nodes().iter().find_map(|node| {
+                    let scope = node.id.rsplit_once('.')?.0;
+                    if !id.starts_with(&format!("{scope}.")) {
+                        return None;
+                    }
+                    let bead::core::Value::List(records) = node.metadata.as_ref()? else {
+                        return None;
+                    };
+                    records
+                        .first()?
+                        .get("pointer_motion")?
+                        .get("argument")
+                        .cloned()
+                });
+                if self.control.is_none() || action_name != "cc.do" || format.is_none() {
+                    local = false;
+                }
+                if local && let UiEvent::Drag { x, y } = &event {
+                    if let Some(value) =
+                        self.session.local_range_feedback(id, *x, format.as_ref())?
+                    {
+                        *argument = value;
+                        self.slider_local_active = true;
+                        bead::core::profile::position("slider_local_feedback", *x, *y);
+                        bead::core::profile::mark("slider_local_feedback");
+                    } else {
+                        local = false;
+                    }
+                }
+            }
+            if !local {
+                self.slider_local_active = false;
+                pointer_scene = self.pointer_feedback(id, &event, true)?;
+                if let Some(continuous) = self.session.pointer_argument(id) {
+                    *argument = continuous;
+                }
             }
             if self
                 .slider_sent
                 .is_some_and(|sent| sent.elapsed() < std::time::Duration::from_millis(34))
             {
-                self.slider_pending = Some(event);
+                self.slider_pending = Some(if local {
+                    UiEvent::LocalDrag {
+                        x: self.pointer_at.0,
+                        y: self.pointer_at.1,
+                    }
+                } else {
+                    event
+                });
                 return self.finish_scene(pointer_scene, false);
             }
             self.slider_pending = None;
@@ -4072,6 +4160,9 @@ impl SceneSource for Runtime {
                     bead::core::Value::Bool(false),
                 )]))?;
                 return self.finish_scene(scene, false);
+            }
+            if local {
+                return Ok(None);
             }
             // A level step keeps the focus so the drag continues over the next step.
             let scene = match pointer_scene.take().map_or_else(
@@ -5326,7 +5417,7 @@ impl SceneSource for Runtime {
                     hovered.or(pill)
                 }
             }
-            UiEvent::Drag { x, y } => self.session.drag(x, y)?,
+            UiEvent::Drag { x, y } | UiEvent::LocalDrag { x, y } => self.session.drag(x, y)?,
             UiEvent::Release => self.session.release()?,
             UiEvent::Ime {
                 preedit,

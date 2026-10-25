@@ -103,7 +103,7 @@ return function(ui, tokens)
             ui.Box{id="track",position="absolute",left=inset,top=12,width=avail,height=6,radius=3,fill="surfaceContainerHighest"},
             kit.Fill{id="level",position="absolute",left=inset,top=12,width=4+fraction*(avail-8),height=6,radius=3,
                 from="primary",to="secondary",opacity=opacity},
-            ui.Box{id="thumb",metadata={{pointer_motion={key=key,origin=inset,travel=avail-8,fraction=fraction,fill={id="level",minimum=4,radius=3,gradient_min=16,from=ui.alpha("primary",opacity),to=ui.alpha(tokens.gradients~=false and "secondary" or "primary",opacity)}}}},position="absolute",left=inset+fraction*(avail-8),top=7,width=8,height=16,radius=3,fill=ui.alpha("primary",opacity)},
+            ui.Box{id="thumb",metadata={{pointer_motion={key=key,origin=inset,argument=p.pointer_format,travel=avail-8,fraction=fraction,fill={id="level",minimum=4,radius=3,gradient_min=16,from=ui.alpha("primary",opacity),to=ui.alpha(tokens.gradients~=false and "secondary" or "primary",opacity)}}}},position="absolute",left=inset+fraction*(avail-8),top=7,width=8,height=16,radius=3,fill=ui.alpha("primary",opacity)},
             live and ui.Row(props(children,{id="hits",width="100%",height=height,gap=0})) or nil}
     end
     function kit.Tile(p)
@@ -179,7 +179,7 @@ return function(ui, tokens)
         local right=detail and 40 or 8
         local control=kit.Slider{id="level",position="absolute",left=42,top=23,width=W-90-right,
             value=p.value,min=0,max=100,step=p.step or 5,label=p.label,enabled=armed,on_change=p.on_change,change_arg=p.change_arg,
-            echo_value=p.echo_value,echo_tolerance=p.echo_tolerance}
+            echo_value=p.echo_value,echo_tolerance=p.echo_tolerance,pointer_format=p.pointer_format}
         local kids={
             ui.Text{id="label",position="absolute",left=46,top=7,width=W-46-(detail and 86 or 54),height=16,font_size=(tokens.text.caption-1)*4/3,
                 color="onSurfaceVariant",text=p.caption or p.label},

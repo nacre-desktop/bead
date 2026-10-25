@@ -316,6 +316,11 @@ pub enum UiEvent {
         x: f32,
         y: f32,
     },
+    /// A retained range was painted locally; the source may update its value without layout.
+    LocalDrag {
+        x: f32,
+        y: f32,
+    },
     /// The primary pointer button was released.
     Release,
     Reload,
@@ -427,6 +432,7 @@ pub struct DragVisual {
     pub travel: (f32, f32),
     pub pointer: (f32, f32),
     pub fill: Option<DragFill>,
+    pub local_feedback: bool,
     /// Source-owned accepted release count, used for atomic visual handover.
     pub release_serial: u64,
 }

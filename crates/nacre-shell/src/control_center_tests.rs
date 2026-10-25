@@ -2769,3 +2769,249 @@ fn shared_slider_origins_match_at_fractional_scale() -> bead_test::Result<()> {
     }
     Ok(())
 }
+
+#[test]
+fn local_slider_drag_defers_projection_and_releases_once() -> bead_test::Result<()> {
+    use bead::wayland::{SceneSource, UiEvent};
+
+    let h = harness(base(), "home", 1.)?;
+    let mut runtime = crate::reload::Runtime::new(h.session).with_control_center(offline())?;
+    let projections = std::rc::Rc::new(std::cell::Cell::new(0usize));
+    let observed = projections.clone();
+    // Keep fixture controls armed, and observe projection independently of transport.
+    runtime.session.set_projector(Box::new(move |_| {
+        observed.set(observed.get() + 1);
+        Ok(BTreeMap::new())
+    }));
+    let scene = runtime
+        .stage(UiEvent::Relayout)?
+        .expect("control-center scene");
+    runtime.commit();
+
+    let visual = runtime
+        .drag_visuals()
+        .into_iter()
+        .find(|visual| visual.id.contains("tile-volume") && visual.id.ends_with(".thumb"))
+        .expect("volume slider exports a drag visual");
+    assert!(
+        visual.local_feedback,
+        "volume accepts local slider feedback"
+    );
+    let layer = scene
+        .layers
+        .iter()
+        .find(|layer| layer.id == visual.id)
+        .expect("volume thumb layer");
+    let bead::render::Primitive::Rounded { rect, .. } = &scene.primitives[layer.own.start] else {
+        panic!("volume thumb is rounded");
+    };
+    let press_x = rect.x + rect.w / 2.;
+    let press_y = visual.grab.y + visual.grab.h / 2.;
+    runtime.stage(UiEvent::Click {
+        x: press_x,
+        y: press_y,
+    })?;
+    runtime.commit();
+
+    let pressed_visual = runtime
+        .drag_visuals()
+        .into_iter()
+        .find(|candidate| candidate.id == visual.id)
+        .expect("pressed slider visual");
+    let release_serial = pressed_visual.release_serial;
+    let node_snapshot: Vec<_> = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .map(|node| (node.id.clone(), bead::ui::rect(&node.draw)))
+        .collect();
+    let fill_bounds = pressed_visual
+        .fill
+        .as_ref()
+        .map(|fill| runtime.session.paint_bounds(&fill.id).expect("fill bounds"));
+
+    let before_projection = projections.get();
+    for fraction in [0.23f32, 0.57, 0.81] {
+        let x = pressed_visual.pointer.0
+            + fraction * (pressed_visual.pointer.1 - pressed_visual.pointer.0);
+        let y = pressed_visual.grab.y + pressed_visual.grab.h / 2.;
+        assert!(
+            runtime.stage(UiEvent::LocalDrag { x, y })?.is_none(),
+            "local motion must not produce a full scene"
+        );
+        let Some(bead::core::Value::Number(value)) =
+            runtime.session.stores.get("bead.preview.value")
+        else {
+            panic!("local continuous preview value is stored");
+        };
+        assert!(
+            ((*value as f32) - fraction * 100.).abs() < 0.2,
+            "fraction={fraction}, value={value}"
+        );
+        let current_nodes: Vec<_> = runtime
+            .session
+            .view_nodes()
+            .iter()
+            .map(|node| (node.id.clone(), bead::ui::rect(&node.draw)))
+            .collect();
+        assert_eq!(
+            current_nodes, node_snapshot,
+            "local drag must retain the accepted node tree"
+        );
+        if let (Some(fill), Some(before)) = (&pressed_visual.fill, fill_bounds) {
+            assert_eq!(runtime.session.paint_bounds(&fill.id), Some(before));
+        }
+    }
+
+    assert!(
+        runtime.stage(UiEvent::Model(BTreeMap::new()))?.is_none(),
+        "service wakeups do not rebuild the held slider view"
+    );
+    assert_eq!(
+        projections.get(),
+        before_projection,
+        "held values and service wakeups skip projection"
+    );
+
+    let released_scene = runtime
+        .stage(UiEvent::Release)?
+        .expect("release ends the pressed range and projects the latest source data");
+    runtime.commit();
+    assert!(
+        projections.get() > before_projection,
+        "release projects the source again"
+    );
+    let released_visual = runtime
+        .drag_visuals()
+        .into_iter()
+        .find(|candidate| candidate.id == visual.id)
+        .expect("slider descriptor survives the release frame");
+    assert_eq!(
+        released_visual.release_serial,
+        release_serial.wrapping_add(1),
+        "one physical release advances its descriptor serial once"
+    );
+    assert!(
+        runtime.stage(UiEvent::Release)?.is_none(),
+        "duplicate release is harmless"
+    );
+    assert_eq!(
+        runtime
+            .drag_visuals()
+            .into_iter()
+            .find(|candidate| candidate.id == visual.id)
+            .expect("slider descriptor after duplicate release")
+            .release_serial,
+        release_serial.wrapping_add(1),
+        "duplicate release must not increment the serial"
+    );
+
+    let next = runtime
+        .drag_visuals()
+        .into_iter()
+        .find(|v| v.id == visual.id)
+        .unwrap();
+    let x = next.pointer.0 + 0.45 * (next.pointer.1 - next.pointer.0);
+    let y = next.grab.y + next.grab.h / 2.;
+    runtime.stage(UiEvent::Click { x, y })?;
+    runtime.commit();
+    assert!(runtime.stage(UiEvent::LocalDrag { x, y })?.is_none());
+    assert!(
+        runtime
+            .stage(UiEvent::Model(BTreeMap::from([(
+                "panel.open".into(),
+                Value::Bool(false)
+            )])))?
+            .is_some(),
+        "an explicit close stays responsive while the gesture is held"
+    );
+    runtime.commit();
+    assert_eq!(
+        runtime.session.stores.get("panel.open"),
+        Some(&Value::Bool(false))
+    );
+    runtime.stage(UiEvent::Release)?;
+    runtime.commit();
+    assert!(
+        runtime
+            .stage(UiEvent::Model(BTreeMap::from([(
+                "panel.open".into(),
+                Value::Bool(true)
+            )])))?
+            .is_some()
+    );
+    runtime.commit();
+    assert_eq!(
+        runtime.session.stores.get("panel.open"),
+        Some(&Value::Bool(true))
+    );
+    let _ = released_scene;
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn local_slider_ticks_send_latest_level_while_held_and_after_release() {
+    async fn next_call(control: &ControlCenter, lab: &mut Lab) -> (String, Json) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if let Ok(call) = lab.calls.try_recv() {
+                    break call;
+                }
+                control.tick_calls();
+                tokio::select! {
+                    call=lab.calls.recv()=>break call.expect("fixture call channel closed"),
+                    _=tokio::time::sleep(Duration::from_millis(5))=>{},
+                }
+            }
+        })
+        .await
+        .expect("control tick did not dispatch the queued level")
+    }
+
+    let mut lab = lab(&["audio.set_volume"]).await;
+    let control = control_for(&lab).await;
+
+    // First local drag starts a request. No await occurs until the burst below has
+    // queued its latest targets behind that in-flight call.
+    control.act("set:audio.output:20");
+    control.tick_calls();
+
+    // Several continuous updates arrive while the first call is in flight. Each
+    // event calls tick_calls, but the controller coalesces their target to the latest.
+    for percent in [35, 58, 75] {
+        control.tick_calls();
+        control.act(&format!("set:audio.output:{percent}"));
+    }
+    let (method, params) = call(&mut lab).await;
+    assert_eq!(method, "audio.set_volume");
+    assert!((params["value"].as_f64().unwrap() - 0.008).abs() < 1e-9);
+    let (method, params) = next_call(&control, &mut lab).await;
+    assert_eq!(method, "audio.set_volume");
+    assert!(
+        (params["value"].as_f64().unwrap() - 0.421875).abs() < 1e-9,
+        "only the newest in-flight target (75%) should follow the first call"
+    );
+
+    // Final motion is queued during the second write. The runtime's release flush
+    // ticks call tickets again, so the final daemon write carries the release target.
+    control.act("set:audio.output:82");
+    control.act("set:audio.output:95");
+    control.tick_calls(); // release flush polls the previous ticket and sends the final target
+    let (method, params) = next_call(&control, &mut lab).await;
+    assert_eq!(method, "audio.set_volume");
+    assert!(
+        (params["value"].as_f64().unwrap() - 0.857375).abs() < 1e-9,
+        "the final 95% target must be sent after the earlier request completes: {params:?}"
+    );
+
+    // Drain the final ticket without a view projection and ensure it does not loop.
+    for _ in 0..10 {
+        control.tick_calls();
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert!(
+        lab.calls.try_recv().is_err(),
+        "settled level has no duplicate write"
+    );
+}

@@ -102,7 +102,10 @@ impl Visual {
         parent: &wl_surface::WlSurface,
         qh: &QueueHandle<App>,
     ) {
-        if !self.retiring && !self.dirty {
+        if !self.retiring
+            && !self.dirty
+            && (bead_core::profile::enabled() || bead_core::profile::frame_trace())
+        {
             presentation.feedback(
                 parent,
                 qh,
@@ -139,8 +142,11 @@ impl Dispatch<WpPresentationFeedback, Feedback> for App {
             let presented = ((u64::from(tv_sec_hi) << 32) | u64::from(tv_sec_lo)) * 1_000_000_000
                 + u64::from(tv_nsec);
             println!(
-                "POINTER_VISUAL_PRESENTED x={} received_ns={} commit_ns={} presented_ns={presented}",
-                data.x, data.received, data.committed
+                "POINTER_VISUAL_PRESENTED x={} received_ns={} commit_ns={} presented_ns={presented} observed_ns={}",
+                data.x,
+                data.received,
+                data.committed,
+                monotonic_ns()
             );
         }
     }
@@ -516,7 +522,7 @@ impl App {
         visual.received = monotonic_ns();
         visual.dirty = true;
         visual.pending = Some((x, y));
-        let arm = !visual.timer;
+        let arm = !visual.timer && !visual.spec.local_feedback;
         let token = visual.token;
         visual.timer = true;
         let parent = self.surfaces[index].wl_surface().clone();
@@ -548,10 +554,16 @@ impl App {
     pub(super) fn pointer_visual_flush(&mut self, index: usize) {
         let pending = self.surfaces[index].pointer_visual.as_mut().and_then(|v| {
             v.timer = false;
-            v.pending.take()
+            v.pending.take().map(|(x, y)| {
+                if v.spec.local_feedback {
+                    UiEvent::LocalDrag { x, y }
+                } else {
+                    UiEvent::Drag { x, y }
+                }
+            })
         });
-        if let Some((x, y)) = pending {
-            self.view_event(true, UiEvent::Drag { x, y });
+        if let Some(event) = pending {
+            self.view_event(true, event);
         }
     }
     pub(super) fn pointer_visual_release(&mut self, index: usize) {
@@ -647,6 +659,13 @@ impl App {
         }
         bead_core::profile::mark("pointer_visual_commit");
         parent.commit();
+        if self.surfaces[index]
+            .pointer_visual
+            .as_ref()
+            .is_some_and(|v| v.spec.local_feedback && !v.dirty)
+        {
+            self.pointer_visual_flush(index);
+        }
     }
     /// A scratch scene leaves the source transaction and worker rasters intact.
     pub(super) fn pointer_visual_scene(&mut self, index: usize) -> Option<Scene> {
@@ -741,7 +760,11 @@ impl App {
         let visual = self.surfaces[index].pointer_visual.take().unwrap();
         let mut events = Vec::with_capacity(2);
         if let Some((x, y)) = visual.pending {
-            events.push(UiEvent::Drag { x, y });
+            events.push(if visual.spec.local_feedback {
+                UiEvent::LocalDrag { x, y }
+            } else {
+                UiEvent::Drag { x, y }
+            });
         }
         if !visual.released {
             self.pointer_pressed = false;
@@ -767,6 +790,7 @@ mod tests {
             travel: (6., 86.),
             pointer: (10., 90.),
             fill: None,
+            local_feedback: false,
             release_serial: 0,
         };
         assert_eq!(pose(&spec, -200.), 6.);
@@ -790,6 +814,7 @@ mod tests {
             travel: (0., 100.),
             pointer: (4., 104.),
             release_serial: 0,
+            local_feedback: false,
             fill: Some(crate::DragFill {
                 id: "slider.fill".into(),
                 rect: Rect::new(0., 5., 4., 6.),
@@ -872,6 +897,7 @@ mod tests {
             travel: (92., 192.),
             pointer: (92., 192.),
             fill: None,
+            local_feedback: false,
             release_serial: 0,
         };
         let mut pixels = vec![0; 12 * 24 * 4];

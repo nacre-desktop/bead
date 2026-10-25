@@ -51,7 +51,7 @@ local function level(id,label)
    text=id=="audio.input" and (item.on and "mic_off" or "mic") or (item.on and "volume_off" or "volume_up"),
    aria_label=label,on_activate=item.toggle and ui.action("cc.do","toggle:"..id) or nil,color="primary"},
   kit.Slider{id="level",position="absolute",left=42,top=24,width=content_width-104,value=item.value,label=label,
-   enabled=item.set==true,on_change=item.set and "cc.do" or nil,change_arg=function(n) return "set:"..id..":"..tostring(n) end},
+   enabled=item.set==true,on_change=item.set and "cc.do" or nil,change_arg=function(n) return "set:"..id..":"..tostring(n) end,pointer_format={prefix="set:"..id..":",precision=3}},
   ui.Text{id="value",position="absolute",left=content_width-56,top=32,width=42,height=20,text=item.available and item.status or "—",
    text_align="right",font_size=T.text.caption*4/3,color="onSurfaceVariant"}}
 end
@@ -70,7 +70,7 @@ local function stream_card(item)
    font_size=(T.text.caption+1)*4/3,color="onSurface"},
   kit.Slider{id="volume",position="absolute",left=T.spacing.sm,top=32,width=content_width-104,value=item.value,
    label=ui.tr("bead.panel.audio-app-volume",{name=item.label}),enabled=item.enabled==true,
-   on_change=item.enabled and "cc.do" or nil,change_arg=function(n) return "set:stream:"..item.id..":"..tostring(n) end},
+   on_change=item.enabled and "cc.do" or nil,change_arg=function(n) return "set:stream:"..item.id..":"..tostring(n) end,pointer_format={prefix="set:stream:"..item.id..":",precision=3}},
   ui.Text{id="percent",position="absolute",left=mute_left+mute_size-42-40,top=38,width=40,height=18,text=item.status,
    text_align="right",font_size=(T.text.caption-1)*4/3,color="onSurfaceVariant"},
   kit.IconButton{id="mute",position="absolute",left=mute_left,top=(64-mute_size)/2,width=mute_size,height=mute_size,padding=0,

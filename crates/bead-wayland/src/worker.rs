@@ -116,6 +116,9 @@ fn enqueue(queue: &mut VecDeque<Job>, job: Job) {
         ) | (
             Some(Job::Stage(UiEvent::Drag { .. }, _)),
             Job::Stage(UiEvent::Drag { .. }, _)
+        ) | (
+            Some(Job::Stage(UiEvent::LocalDrag { .. }, _)),
+            Job::Stage(UiEvent::LocalDrag { .. }, _)
         )
     );
     if replace {
@@ -323,7 +326,7 @@ impl SceneSource for Source {
                                 UiEvent::Hover { x, y } => {
                                     bead_core::profile::position("worker_hover", *x, *y)
                                 }
-                                UiEvent::Drag { x, y } => {
+                                UiEvent::Drag { x, y } | UiEvent::LocalDrag { x, y } => {
                                     bead_core::profile::position("worker_drag", *x, *y)
                                 }
                                 UiEvent::Click { x, y } => {
@@ -333,7 +336,7 @@ impl SceneSource for Source {
                             }
                             bead_core::profile::mark(match &event {
                                 UiEvent::Hover { .. } => "worker_hover",
-                                UiEvent::Drag { .. } => "worker_drag",
+                                UiEvent::Drag { .. } | UiEvent::LocalDrag { .. } => "worker_drag",
                                 UiEvent::Click { .. } => "worker_click",
                                 _ => "worker_input",
                             });

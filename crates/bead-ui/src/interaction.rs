@@ -454,15 +454,16 @@ impl Session {
         self.focus_with_visibility(id, true, false, None, false)
     }
     /// Pointer focus retains keyboard routing without painting a keyboard focus ring.
-    fn preview_position(&self, node: &Node, x: Option<f32>) -> (String, f32) {
+    pub(super) fn preview_position(&self, node: &Node, x: Option<f32>) -> (String, f32) {
         let mut value = node.preview_value;
         if !node.preview_key.is_empty()
             && let Some(x) = x
         {
-            let peers = self
-                .current_nodes
-                .iter()
-                .filter(|peer| peer.preview_key == node.preview_key);
+            let peers = self.current_nodes.iter().filter(|peer| {
+                peer.preview_key == node.preview_key
+                    && peer.id.rsplit_once('.').map(|(parent, _)| parent)
+                        == node.id.rsplit_once('.').map(|(parent, _)| parent)
+            });
             let mut left = f32::INFINITY;
             let mut right = f32::NEG_INFINITY;
             let mut low = f32::INFINITY;
@@ -712,10 +713,13 @@ impl Session {
     }
     fn drag_node(&self) -> Option<&Node> {
         if let Some(group) = &self.range_grab {
+            let Some(Value::Text(focused)) = self.stores.get("bead.focused") else {
+                return None;
+            };
             return self
                 .current_nodes
                 .iter()
-                .find(|node| node.drag && &node.preview_key == group);
+                .find(|node| node.id == *focused && node.drag && &node.preview_key == group);
         }
         let Value::Text(focused) = self.stores.get("bead.focused")? else {
             return None;
@@ -737,6 +741,7 @@ impl Session {
                     node.id.rsplit_once('.').map(|(parent, _)| parent) == group
                 } else {
                     node.preview_key == current.preview_key
+                        && node.id.rsplit_once('.').map(|(parent, _)| parent) == group
                 }
         };
         self.hit(x, y, false).filter(|node| peer(node)).or_else(|| {

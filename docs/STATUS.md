@@ -21,7 +21,11 @@ The first continuation handles established drag motion directly on Wayland event
 dispatch and submits the latest pose after fd drain; full Arch CI passes. Fresh
 matched timing records no end-to-end improvement (35.863→35.869 ms p95).
 Shared fill and handle now use one value/buffer; pixel and full Arch CI checks
-pass. Fresh presented-frame checks and the no-layout continuation remain open.
+pass. Presented shared paints agree exactly (94/94); cursor-free coherence is
+41/41 samples, versus the old thumb-only path's 30/41 and QML's 41/41.
+Local control/sound values now skip view projection and layout; service calls
+continue independently. Full Arch CI passes. Final matched latency, memory and
+first-key gates remain open.
 Five-pair median costs peak at +0.711 MiB CPU / +0.914 MiB pinned GL,
 within the declared 1 MiB budget; absolute GL retention is substantial. Pixel
 error, general dragging and complete smoothness remain unproven.

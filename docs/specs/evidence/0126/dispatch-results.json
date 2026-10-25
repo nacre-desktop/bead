@@ -1,7 +1,8 @@
 {
   "method": "same-host CPU 120 Hz parent, nested niri advertises 60 Hz; one matched pair; timing only, not memory gate",
   "control_revision": "312c63e7",
-  "candidate_revision": "c7772734",
+  "candidate_revision": "312c63e7 plus the readiness-only code diff from c7772734",
+  "scope": "unit-only pair; concurrent notification, Today and widget changes excluded",
   "control": {
     "method": "exact same-gesture injected coordinate joined to received pointer coordinate; visual feedback carries latest receipt and commit clocks",
     "gestures_calibrated": 12,

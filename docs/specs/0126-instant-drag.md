@@ -1,8 +1,9 @@
 # B0126 — instant slider drag
 
 Status: owner accepted the measured candidate on 2026-10-25; the measured thumb path is now enabled by default. The new continuation gate is 120 Hz total p95 ≤25 ms with fill and
-handle derived from the same value in every frame. Improvements proceed in order:
-immediate fd dispatch, shared slider pose, then slider-only updates. The prior
+handle derived from the same value in every frame. Immediate fd dispatch, shared
+slider paint and slider-only value updates now pass full CI and are enabled in
+the product. Final capture gates remain open. The prior
 21/12 ms rejection below is historical, superseded by this explicit acceptance.
 
 The preserved
@@ -43,7 +44,23 @@ Pixel tests cover 101 poses at scales 1 and 1.5; descriptor origins also pass at
 The child uses a continuous linear gradient like QML; idle kit Fill retains its
 stepped approximation, a known color-interpolation difference on handover.
 
-## Experiment
+## Continuation: local values without panel work
+
+`Session::local_range_feedback` commits the range value and an authored numeric
+or prefix/precision/suffix argument without running the view or layout. Control
+and sound templates supply that argument format; unsupported actions retain the
+ordinary path. Native paints flush the latest local value once per committed
+slider frame. Only service writes retain the 34 ms cap, with a final release flush.
+Service sources already own incoming data: empty update notifications skip view
+projection while held, and release projects the newest snapshot. Explicit model
+changes and close commands remain immediate. Call tickets and newest queued
+service targets drain independently of projection, including while held.
+Tests observe unchanged nodes/fill bounds and zero projector calls for local
+values, resumed projection on release, responsive close, and fake-daemon writes.
+The full Arch CI passes, including runtime projection and fake-daemon transport
+regressions. Final matched latency/memory/first-key captures are pending.
+
+## Experiment (historical thumb-only baseline)
 
 The normal renderer already submits on input when its frame callback is free.
 Removing that pacing guard repeats B0105's rejected multiple-frame experiment.

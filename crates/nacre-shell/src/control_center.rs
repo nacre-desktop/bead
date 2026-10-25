@@ -1326,6 +1326,27 @@ impl ControlCenter {
         }
     }
 
+    /// Drain completed calls and send each source's newest queued slider target.
+    /// This path is safe during local drag feedback: it does not project panel state.
+    pub(crate) fn tick_calls(&self) {
+        self.poll();
+        self.flush_levels();
+    }
+
+    fn flush_levels(&self) {
+        let pending: Vec<(String, f64)> = {
+            let st = self.st.borrow();
+            st.targets
+                .iter()
+                .filter(|(source, _)| !st.calls.iter().any(|call| &call.source == *source))
+                .map(|(source, percent)| (source.clone(), *percent))
+                .collect()
+        };
+        for (source, percent) in pending {
+            self.level(&source, percent);
+        }
+    }
+
     /// Project the open panel; a hidden panel projects nothing.
     pub fn project(&self, stores: &Stores) -> BTreeMap<String, Value> {
         if stores.get("panel.open") == Some(&Value::Bool(false)) {
@@ -1333,17 +1354,7 @@ impl ControlCenter {
         }
         self.poll();
         self.persist(stores);
-        let pending: Vec<(String, f64)> = {
-            let st = self.st.borrow();
-            st.targets
-                .iter()
-                .filter(|(source, _)| !st.calls.iter().any(|c| &c.source == *source))
-                .map(|(source, percent)| (source.clone(), *percent))
-                .collect()
-        };
-        for (source, percent) in pending {
-            self.level(&source, percent);
-        }
+        self.flush_levels();
         let battery = self
             .data("battery")
             .filter(|data| healthy(data))
