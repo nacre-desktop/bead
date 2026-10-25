@@ -96,7 +96,8 @@ SCROLL_SCENES = {
     'clipboard': ([('ui', 'nacre', 'clipboard')], 960, 600, 80, 1.6),
     # Populate the private daemon's notification list before opening its panel.
     'notifications-list': ([('notify', f'Scroll fixture {i:02d}', f'Private synthetic notification row {i:02d}.')
-                            for i in range(20)] + [('sleep', 2.0), ('ui', 'nacre', 'controls', 'notifications')],
+                            for i in range(20)] + [('sleep', 2.0), ('close-fixture-notices',),
+                                                   ('ui', 'nacre', 'controls', 'notifications')],
                            1600, 650, 80, 1.6),
     'notifications-popup': ([('notify', f'Scroll fixture {i:02d}', f'Private synthetic notification row {i:02d}.')
                              for i in range(20)] + [('sleep', 2.0)], 1715, 650, 80, 1.6),
@@ -156,6 +157,8 @@ def notify(self, summary, body):
     if reply.returncode == 0 and match:
         self.fixture_notice_ids = getattr(self, 'fixture_notice_ids', [])
         self.fixture_notice_ids.append(int(match.group(1)))
+        self.fixture_active_ids = getattr(self, 'fixture_active_ids', [])
+        self.fixture_active_ids.append(int(match.group(1)))
     else:
         self.errors.append(f'notification fixture failed: {reply.stderr.strip()[:160]}')
 
@@ -172,6 +175,15 @@ def close_fixture_notifications(self, notice_ids):
             closed.append(notice_id)
         else:
             self.errors.append(f'notification fixture cleanup failed for id {notice_id}')
+    return closed
+
+
+def close_active_fixture_notifications(arm):
+    active = list(getattr(arm, 'fixture_active_ids', []))
+    closed = close_fixture_notifications(arm, active)
+    arm.fixture_closed_ids = getattr(arm, 'fixture_closed_ids', [])
+    arm.fixture_closed_ids.extend(closed)
+    arm.fixture_active_ids = [notice_id for notice_id in active if notice_id not in closed]
     return closed
 
 
@@ -228,15 +240,21 @@ def run(self, command, timeout=15, check=True, env=None):
 
 def steps(self, operations):
     for step in operations:
-        if step[0] == 'wheel':
+        if step[0] == 'close-fixture-notices':
+            close_active_fixture_notifications(self)
+        elif step[0] == 'wheel':
             _, kind, delta, count, interval, *point = step
             reverse = kind.endswith('-reverse')
             axis_kind = kind.removesuffix('-reverse')
+            oscillate = reverse and axis_kind == 'pixel' and os.environ.get('PACING_OSCILLATE') == '1'
             scale = self.geometry['scale']
             x, y = point if point else (1100, 600)
             command = [self.args.pointer_tool, str(round(x * scale)), str(round(y * scale)),
-                       str(self.args.size[0]), str(self.args.size[1]), 'stream-reverse' if reverse else 'stream', axis_kind, str(delta),
-                       str(count), str(max(1, round(interval * 1000)))]
+                       str(self.args.size[0]), str(self.args.size[1]),
+                       scroll_stream_mode(axis_kind, reverse, oscillate),
+                       axis_kind, str(delta), str(count), str(max(1, round(interval * 1000)))]
+            if oscillate:
+                command.append(os.environ.get('PACING_OSCILLATE_PERIOD', '3'))
             self.release_pointer()
             limit = count * interval + 10
             for display in (self.env['WAYLAND_DISPLAY'], self.env['BEAD_PARENT']):
@@ -316,6 +334,12 @@ def shell_trace_env(arm_name, log_dir, env=None):
     if arm_name == 'bead':
         result['BEAD_APP_LOG_DIR'] = str(log_dir)
     return result
+
+
+def scroll_stream_mode(axis_kind, reverse, oscillate):
+    if reverse and axis_kind == 'pixel' and oscillate:
+        return 'stream-oscillate'
+    return 'stream-reverse' if reverse else 'stream'
 
 
 def percentile(values, p):
@@ -661,6 +685,8 @@ def pace_drive(self, names):
     self.errors = []
     notification_fixture_runs = []
     self.fixture_notice_ids = []
+    self.fixture_active_ids = []
+    self.fixture_closed_ids = []
     try:  # shell process components (Pss, Pss_Anon, Pss_Shmem, DRM, SwapPss ...) in KiB
         memory['idle'] = self.rss()
     except Exception as error:
@@ -674,6 +700,10 @@ def pace_drive(self, names):
                 self.steps([('ui', 'nacre', 'close')])
                 time.sleep(0.8)
                 self.scroll_notice_fixture = name.startswith('scroll-notifications')
+                if self.scroll_notice_fixture:
+                    self.fixture_notice_ids = []
+                    self.fixture_active_ids = []
+                    self.fixture_closed_ids = []
                 self.steps(prepare)
                 screenshot_base = None
                 screenshot_mid_enabled = os.environ.get('PACING_CAPTURE_MID') == '1'
@@ -726,7 +756,8 @@ def pace_drive(self, names):
                     self.errors.append(f'archiving app logs {name}: {error}')
                 if name.startswith('scroll-notifications'):
                     notice_ids = list(self.fixture_notice_ids)
-                    closed_ids = close_fixture_notifications(self, notice_ids)
+                    close_active_fixture_notifications(self)
+                    closed_ids = list(self.fixture_closed_ids)
                     notification_fixture_runs.append({
                         'scene': name, 'repeat': repeat, 'posted_ids': notice_ids,
                         'closed_ids': closed_ids, 'ttl_ms': 60000
@@ -808,6 +839,10 @@ def pace_drive(self, names):
                                                       'presented_refresh_hz': round(1e9 / presented_refresh_ns, 3) if presented_refresh_ns else None,
                                                       'presented_refresh_matches_requested_hz': bool(presented_refresh_ns and
                                                                                                      abs(presented_refresh_ns - round(1e9 / HZ)) <= round(1e9 / HZ * .05)),
+                                                      'input_pattern': ('finger-oscillating/wheel-single-reversal'
+                                                                        if os.environ.get('PACING_OSCILLATE') == '1'
+                                                                        else 'single-midpoint-reversal'),
+                                                      'input_oscillation_period': int(os.environ.get('PACING_OSCILLATE_PERIOD', '3')) if os.environ.get('PACING_OSCILLATE') == '1' else None,
                                                       'presentation_discarded': presentation_discarded if discarded_trace_collected else None,
                                                       'presentation_discarded_trace_collected': discarded_trace_collected,
                                                       'errors': self.errors, 'memory_kib': memory,

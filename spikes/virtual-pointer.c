@@ -6,6 +6,8 @@
 //   virtual-pointer X Y W H stream wheel|pixel DELTA COUNT MS   COUNT axis events, one every MS ms (B0110)
 //   virtual-pointer X Y W H stream-reverse wheel|pixel DELTA COUNT MS
 //     sends DELTA through the first half of the stream, then -DELTA without lifting (B0135)
+//   virtual-pointer X Y W H stream-oscillate wheel|pixel DELTA COUNT MS PERIOD
+//     alternates direction every PERIOD samples without lifting (active-scroll proof)
 // It connects to $WAYLAND_DISPLAY (private labwc or nested niri, never the live session),
 // creates a wlr virtual pointer, sends one absolute motion and, with `press`, holds the left button until killed.
 // Build (needs wayland-scanner and wlr-protocols):
@@ -67,13 +69,16 @@ int main(int argc, char **argv) {
     zwlr_virtual_pointer_v1_frame(pointer);
     wl_display_roundtrip(display);
     usleep(100000); // Let the compositor establish pointer focus before the gesture.
-    if (argc == 10 && (!strcmp(argv[5], "stream") || !strcmp(argv[5], "stream-reverse"))) {
+    int oscillate = argc == 11 && !strcmp(argv[5], "stream-oscillate");
+    if ((argc == 10 && (!strcmp(argv[5], "stream") || !strcmp(argv[5], "stream-reverse"))) || oscillate) {
         // One virtual pointer, absolute deadlines: scroll gestures at a steady device rate (B0110).
         int reverse = !strcmp(argv[5], "stream-reverse");
         int wheel = !strcmp(argv[6], "wheel");
         double delta = atof(argv[7]);
         unsigned count = (unsigned)atoi(argv[8]), ms = (unsigned)atoi(argv[9]);
-        if (!count || count > 5000 || !ms || ms > 2000 || (reverse && count < 2)) {
+        unsigned period = oscillate ? (unsigned)atoi(argv[10]) : 0;
+        if (!count || count > 5000 || !ms || ms > 2000 || (reverse && count < 2) ||
+            (oscillate && (!period || period > count))) {
             fprintf(stderr, "stream needs COUNT 1..5000, MS 1..2000; reverse needs at least 2\n"); return 2;
         }
         struct timespec started;
@@ -82,7 +87,8 @@ int main(int argc, char **argv) {
             unsigned long long ns = (unsigned long long)started.tv_nsec + (unsigned long long)ms * 1000000ULL * i;
             struct timespec deadline = {started.tv_sec + ns / 1000000000ULL, ns % 1000000000ULL};
             clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &deadline, NULL);
-            double event_delta = reverse && i >= count / 2 ? -delta : delta;
+            double event_delta = reverse && i >= count / 2 ? -delta :
+                                 oscillate && (i / period) % 2 ? -delta : delta;
             struct timespec sent;
             clock_gettime(CLOCK_MONOTONIC, &sent);
             fprintf(stdout, "AXIS_SENT monotonic_ns=%llu source=%s direction=%s index=%u delta=%.3f\n",

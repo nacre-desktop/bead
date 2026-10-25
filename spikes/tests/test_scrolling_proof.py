@@ -194,6 +194,11 @@ class ScrollReversalProofTests(unittest.TestCase):
         self.assertEqual(env["KEEP"], "value")
         self.assertNotIn("BEAD_APP_LOG_DIR", pacing.shell_trace_env("qml", self.root / "logs"))
 
+    def test_active_scroll_oscillation_changes_finger_stream_only(self):
+        self.assertEqual(pacing.scroll_stream_mode("pixel", True, True), "stream-oscillate")
+        self.assertEqual(pacing.scroll_stream_mode("wheel", True, True), "stream-reverse")
+        self.assertEqual(pacing.scroll_stream_mode("pixel", True, False), "stream-reverse")
+
     def test_native_scroll_scenes_close_the_app_they_open(self):
         for scene in ("colors-app", "colors-rail"):
             for device in ("touchpad", "wheel"):
@@ -201,6 +206,21 @@ class ScrollReversalProofTests(unittest.TestCase):
         for scene in ("welcome-hero", "welcome-shortcuts", "welcome-apps", "welcome-ready", "welcome-help"):
             for device in ("touchpad", "wheel"):
                 self.assertEqual(pacing.SCROLL_CLEANUPS[f"scroll-{scene}-{device}"], [("app_close", "welcome")])
+
+    def test_notification_history_closes_active_fixture_rows_before_open(self):
+        prepare = pacing.SCROLL_SCENES["notifications-list"][0]
+        self.assertLess(prepare.index(("close-fixture-notices",)), prepare.index(("ui", "nacre", "controls", "notifications")))
+        calls = []
+
+        def run(command, check=False):
+            calls.append(command)
+            return CompletedProcess(command, 0, stdout="()", stderr="")
+
+        arm = SimpleNamespace(fixture_active_ids=[17, 18], fixture_closed_ids=[], errors=[], run=run)
+        self.assertEqual(pacing.close_active_fixture_notifications(arm), [17, 18])
+        self.assertEqual(arm.fixture_active_ids, [])
+        self.assertEqual(arm.fixture_closed_ids, [17, 18])
+        self.assertEqual([command[-1] for command in calls], ["17", "18"])
 
     def test_scroll_notification_fixture_uses_long_ttl_and_closes_exact_ids(self):
         calls = []
