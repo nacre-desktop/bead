@@ -182,7 +182,7 @@ fn bake(
                     .map(|raster| raster.pixels.data().len())
                     .sum();
                 let encoded_bytes: usize = scene.asset_data.values().map(|bytes| bytes.len()).sum();
-                println!(
+                bead_core::vprintln!(
                     "UI_IMAGE_BYTES scale={scale} raster_bytes={image_bytes} encoded_bytes={encoded_bytes} thread={:?}",
                     std::thread::current().id()
                 );
@@ -378,7 +378,7 @@ impl SceneSource for Source {
                             }
                             drop(bake_profile);
                             bead_core::profile::mark("worker_paint_ready");
-                            println!(
+                            bead_core::vprintln!(
                                 "WORKER_PREPARE token={token} reload={reload} total_ms={:.3} builds={}",
                                 started.elapsed().as_secs_f64() * 1000.,
                                 cache.builds

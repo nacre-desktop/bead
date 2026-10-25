@@ -605,7 +605,7 @@ impl TreeCache {
                     );
                     if !reused {
                         self.builds += 1;
-                        println!(
+                        bead_core::vprintln!(
                             "PROFILE stage=layer_bake id={id} total_ms={:.3} builds={}",
                             started.elapsed().as_secs_f64() * 1000.,
                             self.builds

@@ -10,6 +10,7 @@ SMOKE_ROOT holds the binary and src/shell (the shell's working directory). A tin
 only; never the live session. The fake daemon is a test double, not a Nacre daemon."""
 import json, os, pathlib, shutil, signal, socket, statistics, subprocess, sys, threading, time
 
+os.environ.setdefault('BEAD_VERBOSE_LOG', '1')
 ROOT = pathlib.Path(os.environ["SMOKE_ROOT"])
 RUN = pathlib.Path("/tmp/b0052-app")
 OUT = ROOT / "out"

@@ -8,6 +8,7 @@ refresh does not establish real-monitor performance. Stops only its own clients.
 import argparse
 import math
 import os
+os.environ.setdefault('BEAD_VERBOSE_LOG', '1')
 import pathlib
 import re
 import subprocess

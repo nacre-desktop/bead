@@ -13,6 +13,7 @@ Never touches the live session: refuses the real runtime dir and the real bus.
 import argparse
 import json
 import os
+os.environ.setdefault('BEAD_VERBOSE_LOG', '1')
 import shlex
 import shutil
 import signal

@@ -1,6 +1,26 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Opt-in numeric timing; never records text, keys or user content.
 use std::sync::OnceLock;
+/// Per-frame/per-commit diagnostics (`PROFILE`, `UI_COMMIT`, `BUFFER`, ...) are
+/// off in production so normal use writes nothing per frame. Harnesses opt in
+/// with `BEAD_VERBOSE_LOG=1` (or any `BEAD_PROFILE_INPUT`).
+pub fn verbose() -> bool {
+    static VERBOSE: OnceLock<bool> = OnceLock::new();
+    *VERBOSE.get_or_init(|| {
+        std::env::var_os("BEAD_VERBOSE_LOG")
+            .is_some_and(|v| v.as_os_str() != std::ffi::OsStr::new("0"))
+            || enabled()
+    })
+}
+/// `println!` that only writes when [`verbose`] logging is enabled.
+#[macro_export]
+macro_rules! vprintln {
+    ($($arg:tt)*) => {
+        if $crate::profile::verbose() {
+            println!($($arg)*);
+        }
+    };
+}
 pub fn enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
     *ENABLED.get_or_init(|| std::env::var_os("BEAD_PROFILE_INPUT").is_some())

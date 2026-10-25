@@ -4,6 +4,7 @@
 SPDX-License-Identifier: MIT OR Apache-2.0
 """
 import os
+os.environ.setdefault('BEAD_VERBOSE_LOG', '1')
 import pathlib
 import shutil
 import signal

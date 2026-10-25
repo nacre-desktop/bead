@@ -82,7 +82,7 @@ impl LayerCache {
             Damage::full(w, h),
         )?;
         self.builds += 1;
-        println!(
+        bead_core::vprintln!(
             "PROFILE stage=layer_bake raster_ms={:.3} total_ms={:.3} pixels={}x{} builds={}",
             drawing.elapsed().as_secs_f64() * 1000.,
             start.elapsed().as_secs_f64() * 1000.,

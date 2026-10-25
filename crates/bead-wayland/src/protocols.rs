@@ -309,16 +309,16 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
                         s.presented_ms.push((ns - last) as f64 / 1_000_000.);
                     }
                     if state.options.trace_state && s.companion {
-                        println!("PANEL_PRESENTED monotonic_ns={ns}");
+                        bead_core::vprintln!("PANEL_PRESENTED monotonic_ns={ns}");
                     }
                     if state.options.debug_luau_stall_ms.is_some() {
-                        println!(
+                        bead_core::vprintln!(
                             "DEBUG_PRESENTED monotonic_ns={ns} companion={}",
                             s.companion
                         );
                     }
                     if s.presented_generation != Some(data.update) {
-                        println!(
+                        bead_core::vprintln!(
                             "UI_PRESENTED generation={} monotonic_ns={} refresh_ns={} companion={} update={} cpu_ns={}",
                             data.generation,
                             ns,

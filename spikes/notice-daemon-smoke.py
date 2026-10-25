@@ -3,6 +3,7 @@
 core views, UI provider) hosts notices and the OSD in-process as overlay views (`--notices`)."""
 import json, os, pathlib, re, shutil, signal, socket, subprocess, sys, time
 
+os.environ.setdefault('BEAD_VERBOSE_LOG', '1')
 ROOT = pathlib.Path(os.environ["SMOKE_ROOT"])
 SRC, BIN = ROOT / "src", ROOT / "bin"
 SHELL = BIN / os.environ.get("SHELL_BIN", "nacre-shell")

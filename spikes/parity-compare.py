@@ -23,6 +23,7 @@ import html
 import json
 import math
 import os
+os.environ.setdefault('BEAD_VERBOSE_LOG', '1')
 import re
 from pathlib import Path
 import shutil

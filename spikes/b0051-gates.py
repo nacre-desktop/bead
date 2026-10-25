@@ -16,6 +16,7 @@ Needs niri, labwc, dbus-daemon, grim, ffmpeg, python3-pillow. Usage:
   b0051-gates.py memory PAIRS CONTROL_DIR CAND_DIR"""
 import json, os, pathlib, shutil, signal, socket, statistics, subprocess, sys, time
 
+os.environ.setdefault('BEAD_VERBOSE_LOG', '1')
 ROOT = pathlib.Path(os.environ["SMOKE_ROOT"])
 SRC, BIN = ROOT / "src", ROOT / "bin"
 RUN = pathlib.Path("/tmp/b0051-run")

@@ -379,7 +379,7 @@ impl App {
                     return;
                 }
                 if self.options.trace_state {
-                    println!("UI_STATE {}", o.source.state_summary());
+                    bead_core::vprintln!("UI_STATE {}", o.source.state_summary());
                 }
                 scene
             }

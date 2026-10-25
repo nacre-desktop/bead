@@ -10,6 +10,7 @@ BEAD_BAR_ROUTES_PROOF=1. Memory is not measured here (see per-output-proof.py).
 import importlib.util
 import json
 import os
+os.environ.setdefault('BEAD_VERBOSE_LOG', '1')
 import pathlib
 import socket as unix_socket
 import subprocess

@@ -7,6 +7,7 @@ not grow by more than 0.5 MiB at the median per phase. The renderer process is m
 separately (PSS and CPU while playing, paused and released).
 """
 import argparse, json, os, shutil, signal, statistics, subprocess, sys, tempfile, threading, time
+os.environ.setdefault('BEAD_VERBOSE_LOG', '1')
 from pathlib import Path
 from PIL import Image
 

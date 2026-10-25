@@ -146,7 +146,7 @@ impl Transport {
         } else {
             None
         };
-        println!(
+        bead_core::vprintln!(
             "PROFILE stage=gpu_context ms={:.3} api={:?} device_type={:?} vello_intermediate={}",
             start.elapsed().as_secs_f64() * 1000.,
             info.backend,
@@ -269,7 +269,7 @@ impl GpuRenderer {
                 device.clone(),
                 queue.clone(),
             ))?);
-            println!(
+            bead_core::vprintln!(
                 "PROFILE stage=femtovg_init ms={:.3}",
                 start.elapsed().as_secs_f64() * 1000.
             );
@@ -322,7 +322,7 @@ impl GpuRenderer {
                     self.image_clock,
                 ),
             );
-            println!(
+            bead_core::vprintln!(
                 "PROFILE stage=layer_upload ms={:.3} uploads={}",
                 start.elapsed().as_secs_f64() * 1000.,
                 self.cache.builds
@@ -427,7 +427,7 @@ impl Renderer for GpuRenderer {
                             ..vello::RendererOptions::default()
                         },
                     )?);
-                    println!(
+                    bead_core::vprintln!(
                         "PROFILE stage=vello_init ms={:.3}",
                         start.elapsed().as_secs_f64() * 1000.
                     );
@@ -444,7 +444,7 @@ impl Renderer for GpuRenderer {
                         height: h,
                     });
                     self.uploaded_key = Some(layer.key);
-                    println!(
+                    bead_core::vprintln!(
                         "PROFILE stage=layer_upload uploads={} shared_cpu_bytes=true",
                         self.cache.builds
                     );

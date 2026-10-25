@@ -10,6 +10,7 @@ import importlib.util
 import json
 import signal
 import os
+os.environ.setdefault('BEAD_VERBOSE_LOG', '1')
 from pathlib import Path
 import subprocess
 import tempfile

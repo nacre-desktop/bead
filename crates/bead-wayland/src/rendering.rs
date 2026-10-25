@@ -235,7 +235,7 @@ impl App {
                     surface.previous = None;
                     surface.visual_damage = Default::default();
                     surface.redraw = true;
-                    println!("SHM_POOL_COMPACT output={}", surface.output_name);
+                    bead_core::vprintln!("SHM_POOL_COMPACT output={}", surface.output_name);
                     app.draw(index, &qh);
                     #[cfg(all(target_os = "linux", target_env = "gnu"))]
                     unsafe {
@@ -350,7 +350,7 @@ impl App {
                 self.gl = Some(unsafe { bead_render::gl::Transport::new(display) }?);
             }
             if surface.gl.is_none() {
-                println!(
+                bead_core::vprintln!(
                     "BUFFER companion={} logical={}x{} physical={}x{} scale={} transport=GL",
                     surface.companion,
                     surface.width,
@@ -629,7 +629,7 @@ impl App {
                     }
                     s.input_visible = Some(visible);
                     s.input_rect = input_rect;
-                    println!("PANEL_INPUT visible={visible}");
+                    bead_core::vprintln!("PANEL_INPUT visible={visible}");
                 }
                 let focus_visible = visible
                     && !self.options.test_passive
@@ -712,7 +712,7 @@ impl App {
                     .iter()
                     .map(|r| u64::from(r.w) * u64::from(r.h))
                     .sum();
-                println!(
+                bead_core::vprintln!(
                     "DAMAGE rectangles={} pixels={} share={:.6}",
                     regions.len(),
                     pixels,
@@ -753,7 +753,7 @@ impl App {
                         unsafe { transport.create_surface(window, w as u32, h as u32) }
                             .map_err(|e| GpuUnavailable(e.to_string()))?,
                     );
-                    println!(
+                    bead_core::vprintln!(
                         "BUFFER output={} logical={}x{} physical={}x{} scale={scale} transport=GL",
                         s.output.id().protocol_id(),
                         s.width,
@@ -881,7 +881,7 @@ impl App {
                         }
                     }
                     if s.gpu.is_some() {
-                        println!(
+                        bead_core::vprintln!(
                             "BUFFER output={} logical={}x{} physical={}x{} scale={scale} transport=GPU",
                             s.output.id().protocol_id(),
                             s.width,
@@ -1008,7 +1008,7 @@ impl App {
                     });
                     s.allocations += 1;
                 }
-                println!(
+                bead_core::vprintln!(
                     "BUFFER output={} logical={}x{} physical={}x{} scale={scale} format={format:?} allocation_count={} pool_bytes={} buffer_bytes={size}",
                     s.output.id().protocol_id(),
                     s.width,
@@ -1195,14 +1195,14 @@ impl App {
             && self.started.elapsed().as_secs_f64() > 2.
         {
             if self.options.debug_luau_stall_ms.is_some() {
-                println!(
+                bead_core::vprintln!(
                     "DEBUG_FRAME monotonic_ns={} companion={}",
                     monotonic_ns(),
                     self.surfaces[index].companion
                 );
             }
             if self.options.trace_state && self.surfaces[index].companion {
-                println!(
+                bead_core::vprintln!(
                     "PANEL_FRAME processing_ms={:.3}",
                     frame_started.elapsed().as_secs_f64() * 1000.
                 );

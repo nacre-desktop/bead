@@ -570,7 +570,7 @@ impl App {
         if self.options.trace_state
             && let UiEvent::Backend(snapshot) = &event
         {
-            println!(
+            bead_core::vprintln!(
                 "UI_EVENT monotonic_ns={} title={}",
                 monotonic_ns(),
                 snapshot.focused_window().map_or("", |w| w.title.as_str())
@@ -699,7 +699,7 @@ impl App {
                     bridge.update(tree);
                 }
                 if self.options.trace_state {
-                    println!("UI_STATE {}", runtime.state_summary());
+                    bead_core::vprintln!("UI_STATE {}", runtime.state_summary());
                 }
                 self.ui_serial += 1;
                 if self.processing_panel {
@@ -766,14 +766,14 @@ impl App {
                         }
                     }
                 }
-                println!(
+                bead_core::vprintln!(
                     "UI_PLATFORM a11y_adapters={} ime_objects={} ui_channels={}",
                     usize::from(self.accessibility.is_some()),
                     usize::from(self.text_input.is_some()),
                     if self.accessibility.is_some() { 2 } else { 1 }
                 );
                 let (layers, images) = self.renderer.resource_counts();
-                println!(
+                bead_core::vprintln!(
                     "UI_RESOURCES {} layers={} gpu_images={} surfaces={} output={}",
                     runtime.resource_counts(),
                     layers,
@@ -781,7 +781,7 @@ impl App {
                     self.surfaces.len(),
                     active_output.as_deref().unwrap_or("shared")
                 );
-                println!(
+                bead_core::vprintln!(
                     "UI_COMMIT generation={} reload={} prepare_ms={:.3} monotonic_ns={} update={} companion={} source_error={} output={}",
                     self.scene.resource_revision,
                     reload,

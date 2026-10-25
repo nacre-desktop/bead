@@ -3,6 +3,7 @@
 """Native bar screenshot proof; uses measure.py's existing private session."""
 import json
 import os
+os.environ.setdefault('BEAD_VERBOSE_LOG', '1')
 import pathlib
 import subprocess
 import time

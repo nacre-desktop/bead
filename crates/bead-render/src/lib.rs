@@ -895,7 +895,7 @@ fn load_scene_fonts(scene: &Scene) -> Result<FontSystem> {
     db.set_sans_serif_family("Noto Sans");
     db.set_monospace_family("Noto Sans Mono");
     db.set_serif_family("DejaVu Serif");
-    println!(
+    bead_core::vprintln!(
         "PROFILE stage=font_load ms={:.3} files={} faces={}",
         start.elapsed().as_secs_f64() * 1000.,
         scene.font_files.len(),
@@ -1173,11 +1173,13 @@ impl Renderer for CpuRenderer {
             return Err("active CPU textures exceed cache budget".into());
         }
         if self.textures.len() != before {
-            println!(
+            bead_core::vprintln!(
                 "PROFILE stage=resources text_ms={:.3} images_ms={:.3} shadow_ms={:.3}",
-                stages[0], stages[1], stages[2]
+                stages[0],
+                stages[1],
+                stages[2]
             );
-            println!(
+            bead_core::vprintln!(
                 "RESOURCES scale={scale} textures={} color_glyphs={} fonts={:?}",
                 self.textures.len(),
                 self.color_glyphs,

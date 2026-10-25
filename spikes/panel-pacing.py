@@ -4,6 +4,7 @@
 import importlib.util
 import json
 import os
+os.environ.setdefault('BEAD_VERBOSE_LOG', '1')
 import pathlib
 import re
 import signal

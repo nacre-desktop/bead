@@ -11,6 +11,7 @@ BINDIR holds nacre-shell and nacre-helper. Run on the desktop under the heavy-jo
 import argparse, json, os, pathlib, re, shutil, signal, statistics, subprocess, sys, tempfile, time
 
 
+os.environ.setdefault('BEAD_VERBOSE_LOG', '1')
 def sh(cmd, **kw):
     return subprocess.run(cmd, capture_output=True, text=True, **kw)
 

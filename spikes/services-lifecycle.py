@@ -3,6 +3,7 @@
 """Real private tray/PipeWire proof callback for the existing measure.py harness."""
 import json
 import os
+os.environ.setdefault('BEAD_VERBOSE_LOG', '1')
 import pathlib
 import subprocess
 import threading

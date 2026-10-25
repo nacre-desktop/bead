@@ -343,7 +343,7 @@ impl GlRenderer {
                         touched: self.serial,
                     },
                 );
-                println!(
+                bead_core::vprintln!(
                     "PROFILE stage=layer_upload id={} pixels={} region=full",
                     item.id,
                     w * h
@@ -387,7 +387,7 @@ impl GlRenderer {
                             changed.x as usize,
                             changed.y as usize,
                         )?;
-                        println!(
+                        bead_core::vprintln!(
                             "PROFILE stage=layer_upload id={} pixels={} region=partial",
                             item.id,
                             changed.w * changed.h
