@@ -306,12 +306,11 @@ impl App {
             return Ok(());
         }
         let now = self.started.elapsed().as_secs_f64();
+        // Moving a cached surface does not need a cold GPU upgrade. Keep an
+        // existing GL renderer warm during prewarm, but let an idle CPU panel
+        // hand off and return using its already rendered pixels.
         let animated = self.options.animate
-            || self.animations.active(now)
-            || self
-                .surfaces
-                .iter()
-                .any(|surface| surface.prepared_native.is_some());
+            || (self.panel_dock_transition.is_none() && self.animations.active(now));
         if self.companion_policy.frame(now, animated) {
             if let Some((_, renderer, kind)) = &mut self.companion {
                 *renderer = bead_render::renderer(RendererKind::FemtovgGl)?;
