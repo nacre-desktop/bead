@@ -26,14 +26,14 @@ materialized and renderer caches. Report measured cost, never substitute zeros.
 | Surface | Implementation |
 | --- | --- |
 | Notifications | shared Scroll; variable-height VirtualList replaces full Repeat |
-| Settings content / side tabs / selects | shared Scroll / kit.Select |
+| Settings content / side tabs / selects | shared Scroll / variable-height VirtualList / kit.Select |
 | Launcher results / apps | kit.VirtualGrid |
 | Updates / clipboard / keybindings / picker | shell VirtualList |
 | Widgets editor | replacement app unavailable; no reachable scroll surface |
 | Welcome | shared Scroll canvas |
-| Colors | shared Scroll rail and canvas |
-| AI chat | kit.Transcript window; shared Scroll questions and saved chats |
-| Control center / network / tray | shared Scroll |
+| Colors | VirtualList rail; shared Scroll canvas |
+| AI chat | kit.Transcript window; shared Scroll questions; VirtualList saved chats |
+| Control history / network / tray | VirtualList history / shared Scroll / variable-height VirtualList |
 | Overview / wallpaper | shared Scroll; gallery already windows tiles |
 | Dashboard weather and artwork crops | shared Scroll (crops are bounded artwork) |
 | Kit demo / layout example | shared Scroll |

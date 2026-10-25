@@ -25,6 +25,7 @@ end
 -- B0067: the QML rail. Width huge*7+xl, group captions huge+hairline tall, items huge+compact tall with a caption-size
 -- label and an accent wash on the current page (SettingsView.qml).
 local RAIL=sp.huge*7+sp.xl
+local WINDOW_HEIGHT=ui.resolve_for_check(ui.bind("bead.viewport.height"))
 local function nav(item)
     if item.kind=="group" then
         return ui.Text{id="group",text=item.label,height=sp.huge+sp.hairline,padding_left=sp.md,padding_top=sp.md,font_size=tx.caption*4/3,color="onSurfaceVariant"}
@@ -176,9 +177,9 @@ return ui.Column{id="settings",width="100%",height="100%",fill="surface",
         kit.TextInput{id="search",text=ui.bind("settings.search"),placeholder=ui.tr("bead.settings.search-placeholder"),
             height=sp.huge+sp.md,fill="surface",border_width=1,border_color="outlineVariant",
             width="fill",aria_label=ui.tr("bead.settings.search-placeholder")},
-        ui.Scroll{id="nav-scroll",scroll=ui.bind("settings.nav.scroll"),grow=1,
-            ui.Column{id="nav-list",width="fill",gap=sp.xs,
-                ui.Repeat{id="nav",model=ui.bind("settings.nav"),key="id",render=nav}}},
+        require("../kit/virtual-list"){id="nav-scroll",scroll=ui.bind("settings.nav.scroll"),width="fill",grow=1,
+            window_height=WINDOW_HEIGHT,model=ui.bind("settings.nav"),key="id",gap=sp.xs,repeat_id="nav",
+            row_height=function(item) return item.kind=="group" and sp.huge+sp.hairline or sp.huge+sp.compact end,render=nav},
         ui.Button{id="widgets-app",width="fill",height=sp.huge+sp.compact,shrink=0,padding_left=sp.md,
             radius=kit.tokens.radii.small,fill="transparent",hover_fill=ui.alpha("onSurface",.06),
             focus_on_pointer=false,aria_label="Widgets",on_activate=act("do:open|widgets"),

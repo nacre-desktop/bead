@@ -99,15 +99,15 @@ elseif section=="chats" then
         add(ui.Text{id="note",position="absolute",left=E,top=LT,width=INNER,height=3*T.spacing.xxl,text=note,font_size=T.text.title*4/3-4,color="onSurfaceVariant"})
     end
     local RH=BTN+T.spacing.xxl-5
-    add(ui.Scroll{id="saved",scroll=ui.bind("chat.qscroll"),position="absolute",left=E,top=LT,width=INNER,height=H-LT-E,
-        ui.Column{id="saved-rows",width=INNER,gap=T.spacing.xs+2,
-            ui.Repeat{id="rows",model=ui.bind("chat.saved"),key="id",render=function(item)
-                return kit.Button{id="row",width=INNER,height=RH,padding=T.spacing.sm+1,radius=T.spacing.md,fill="surfaceContainer",aria_label=item.t,
-                    on_activate=ui.action("chat.do",item.a),
-                    ui.Column{id="saved-text",width=INNER-2*T.spacing.sm-2,height=RH-2*T.spacing.sm-2,gap=0,
-                        ui.Text{id="saved-title",text=item.t,width=INNER-2*T.spacing.sm-2,height=22,font_size=BODY-1,color="onSurface"},
-                        ui.Text{id="saved-detail",text=item.d,width=INNER-2*T.spacing.sm-2,height=16,font_size=CAPTION-1,color="onSurfaceVariant"}}}
-            end}}})
+    add(require("../kit/virtual-list"){id="saved",scroll=ui.bind("chat.qscroll"),position="absolute",left=E,top=LT,
+        width=INNER,height=H-LT-E,model=ui.bind("chat.saved"),key="id",row_height=RH,gap=T.spacing.xs+2,repeat_id="rows",
+        render=function(item)
+            return kit.Button{id="row",width=INNER,height=RH,padding=T.spacing.sm+1,radius=T.spacing.md,fill="surfaceContainer",aria_label=item.t,
+                on_activate=ui.action("chat.do",item.a),
+                ui.Column{id="saved-text",width=INNER-2*T.spacing.sm-2,height=RH-2*T.spacing.sm-2,gap=0,
+                    ui.Text{id="saved-title",text=item.t,width=INNER-2*T.spacing.sm-2,height=22,font_size=BODY-1,color="onSurface"},
+                    ui.Text{id="saved-detail",text=item.d,width=INNER-2*T.spacing.sm-2,height=16,font_size=CAPTION-1,color="onSurfaceVariant"}}}
+        end})
 else
     local provider=get("chat.provider")
     add(ui.Column{id="preferences",position="absolute",left=E,top=TOP,width=INNER,gap=T.spacing.md,

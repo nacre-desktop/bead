@@ -301,10 +301,15 @@ local function catalog()
     return stack("catalog",items)
 end
 local function notifications_page()
-    local items={header(ui.tr("bead.panel.control-notifications"),ui.action("page","home"))}
-    local group,height=stack("notices",notices(nil,true),T.spacing.md)
-    table.insert(items,{group,height})
-    return stack("detail",items,T.spacing.lg)
+    local group,group_height=stack("notices",notices(0,true),T.spacing.md)
+    local prefix,prefix_height=stack("detail",{
+        header(ui.tr("bead.panel.control-notifications"),ui.action("page","home")),
+        {group,group_height}},T.spacing.lg)
+    local height=math.max(1,get("cc.max_height")-TOP-PAD)
+    local list=require("../kit/virtual-list"){id="history-scroll",scroll=ui.bind("cc.scroll"),
+        width=INNER,height=height,model=ui.bind("cc.notices"),key="id",row_height=NOTICE_H,gap=T.spacing.md,
+        before=prefix,before_height=prefix_height,before_gap=#get("cc.notices")>0 and T.spacing.md or 0,render=notice_card}
+    return list,height
 end
 local function detail()
     local id=get("cc.detail")

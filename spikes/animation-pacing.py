@@ -98,6 +98,8 @@ SCROLL_SCENES = {
     'notifications-list': ([('notify', f'Scroll fixture {i:02d}', f'Private synthetic notification row {i:02d}.')
                             for i in range(20)] + [('ui', 'nacre', 'controls', 'notifications')],
                            1600, 650, 80, 1.6),
+    'notifications-popup': ([('notify', f'Scroll fixture {i:02d}', f'Private synthetic notification row {i:02d}.')
+                             for i in range(20)] + [('click', 1715, 25)], 1715, 650, 80, 1.6),
 }
 for _scene, (_prepare, _x, _y, _count, _seconds) in SCROLL_SCENES.items():
     ANIMS['scroll-' + _scene + '-touchpad'] = (
@@ -125,6 +127,28 @@ def start_daemon(self):
 
 
 m.Arm.start_daemon = start_daemon
+
+_orig_app_rss = m.Arm.app_rss
+
+
+def app_rss(self):
+    result = _orig_app_rss(self)
+    if self.name != 'bead':
+        return result
+    import socket
+    import struct
+    for name in ('colors', 'welcome'):
+        try:
+            with socket.socket(socket.AF_UNIX) as client:
+                client.connect(str(self.runtime / f'app-{name}.sock'))
+                pid, _, _ = struct.unpack('3i', client.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+            result[name] = self.rss(pid)
+        except OSError:
+            pass
+    return result
+
+
+m.Arm.app_rss = app_rss
 for _scene in SCROLL_SCENES:
     for _device in ('touchpad', 'wheel'):
         SCROLL_CLEANUPS.setdefault(f'scroll-{_scene}-{_device}', [('ui', 'nacre', 'close')])
@@ -211,12 +235,15 @@ def steps(self, operations):
 m.Arm.spawn, m.Arm.run, m.Arm.steps = spawn, run, steps
 
 SCROLL_STORE_KEYS = {
+    'launcher': 'launcher.scroll.y', 'clipboard': 'launcher.scroll.y',
+    'keybindings': 'extras.scroll',
     'settings-content': 'settings.scroll', 'settings-nav': 'settings.nav.scroll',
     'colors-app': 'colors.scroll', 'colors-rail': 'colors.rail.scroll', 'welcome-hero': 'welcome.scroll',
     'welcome-shortcuts': 'welcome.scroll', 'welcome-apps': 'welcome.scroll',
     'welcome-ready': 'welcome.scroll', 'welcome-help': 'welcome.scroll',
     'ai-chat': 'chat.scroll', 'wallpaper-picker': 'extras.scroll',
-    'notifications-list': 'cc.scroll', 'updates-popout': 'status.updates_scroll',
+    'notifications-list': 'cc.scroll', 'notifications-popup': 'notifications.scroll.y',
+    'updates-popout': 'status.updates_scroll',
 }
 
 
@@ -250,7 +277,7 @@ def reversal_proof(log_paths, input_path, animation, start_ns, end_ns):
     candidates = []
     for path in log_paths:
         pending_state = None
-        by_update = {}
+        by_ui_update = {}
         window_states = {}
         window_by_id = {}
         delivered = []
@@ -290,24 +317,31 @@ def reversal_proof(log_paths, input_path, animation, start_ns, end_ns):
             elif line.startswith('UI_COMMIT '):
                 fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
                 if pending_state is not None and 'update' in fields and store_key in pending_state:
-                    by_update[fields['update']] = float(pending_state[store_key])
+                    key = (fields.get('companion'), fields.get('generation'), fields['update'])
+                    by_ui_update[key] = float(pending_state[store_key])
                 pending_state = None
             elif line.startswith('UI_PRESENTED '):
                 fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
-                update = fields.get('update')
-                if update in by_update and 'monotonic_ns' in fields:
+                key = (fields.get('companion'), fields.get('generation'), fields.get('update'))
+                if key in by_ui_update and 'monotonic_ns' in fields:
                     stamp = int(fields['monotonic_ns'])
                     if start_ns <= stamp <= end_ns:
-                        samples.append((stamp, by_update[update]))
+                        samples.append((stamp, by_ui_update[key]))
         delivered.sort()
         samples.sort()
+        forward_input = inputs[0][1] if inputs else 0
+        prior_delivery = next(((stamp, delta) for stamp, delta in reversed(delivered)
+                               if inputs and inputs[0][0] <= stamp < input_ns), None)
+        if not prior_delivery or not forward_input:
+            continue
+        direction_sign = 1 if prior_delivery[1] * forward_input > 0 else -1
         flips = [(stamp, delta) for (_, old), (stamp, delta) in zip(delivered, delivered[1:])
-                 if stamp >= input_ns and old * delta < 0 and delta * input_delta < 0]
+                 if stamp >= input_ns and old * delta < 0 and delta * input_delta * direction_sign > 0]
         if not flips or len(samples) < 2:
             continue
         flip_ns, flip_delta = flips[0]
         prior_moves = [b[1] - a[1] for a, b in zip(samples, samples[1:])
-                       if a[0] < flip_ns and b[1] != a[1]]
+                       if b[0] < flip_ns and b[1] != a[1]]
         if not prior_moves:
             continue
         expected = -1 if prior_moves[-1] > 0 else 1
@@ -466,6 +500,7 @@ def pace_drive(self, names):
     mono_ref = time.monotonic()
     windows = []
     memory = {}
+    memory_phase = {}
     self.errors = []
     try:  # shell process components (Pss, Pss_Anon, Pss_Shmem, DRM, SwapPss ...) in KiB
         memory['idle'] = self.rss()
@@ -482,11 +517,9 @@ def pace_drive(self, names):
                 self.steps(prepare)
                 screenshot_base = None
                 if name.startswith('scroll-') and repeat == 0:
-                    _, _, _, _, _, x, y = next(iter(opens))
                     screenshot_base = self.out / 'scroll-evidence' / name
                     screenshot_base.parent.mkdir(parents=True, exist_ok=True)
-                    region = f'{max(0, x - 300)},{max(0, y - 250)} 600x500'
-                    self.grab(screenshot_base.with_name(name + '-before.png'), scale=0.5, region=region)
+                    self.grab(screenshot_base.with_name(name + '-before.png'), scale=0.5)
                 phases = [('open', opens)] if name.startswith(('scroll-', 'settings-reversal-')) else [('open', opens), ('close', closes)]
                 for phase, phase_steps in phases:
                     start = time.time()
@@ -494,7 +527,7 @@ def pace_drive(self, names):
                     try:
                         if screenshot_base is not None and phase == 'open':
                             self.scroll_mid_capture = lambda: self.grab(
-                                screenshot_base.with_name(name + '-mid.png'), scale=0.5, region=region)
+                                screenshot_base.with_name(name + '-mid.png'), scale=0.5)
                         self.steps(phase_steps)
                     finally:
                         if screenshot_base is not None:
@@ -506,7 +539,13 @@ def pace_drive(self, names):
                                     'mono_end_ns': int(time.monotonic() * 1e9)})
                     time.sleep(0.5)
                     if screenshot_base is not None and phase == 'open':
-                        self.grab(screenshot_base.with_name(name + '-after.png'), scale=0.5, region=region)
+                        self.grab(screenshot_base.with_name(name + '-after.png'), scale=0.5)
+                if name.startswith('scroll-'):
+                    try:
+                        memory_phase.setdefault(name, []).append({
+                            'repeat': repeat, 'shell': self.rss(), 'apps': self.app_rss()})
+                    except Exception as error:
+                        self.errors.append(f'memory {name}: {error}')
                 if name in CLOSE_APPS:
                     self.steps([('app_close', CLOSE_APPS[name])])
                 if name in SCROLL_CLEANUPS:
@@ -563,7 +602,8 @@ def pace_drive(self, names):
         results.append({**window, **metrics})
     (self.out / 'pacing.json').write_text(json.dumps({'arm': self.name, 'hz': HZ, 'real_ref': real_ref, 'vsync_ms': VSYNC_MS,
                                                       'backend': 'cpu' if self.args.cpu else 'default',
-                                                      'errors': self.errors, 'memory_kib': memory, 'windows': results}, indent=1))
+                                                      'errors': self.errors, 'memory_kib': memory,
+                                                      'memory_phase_kib': memory_phase, 'windows': results}, indent=1))
     m.log(f'{self.name}: pacing {len(results)} windows, {len(self.errors)} errors')
 
 

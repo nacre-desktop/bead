@@ -86,6 +86,7 @@ jobs:
           nice -n 10 python3 -m unittest discover -s spikes/tests -p test_fullscreen_lips.py
           nice -n 10 python3 -m unittest discover -s spikes/tests -p test_pearl_release_proof.py
           nice -n 10 python3 -m unittest discover -s spikes/tests -p test_launcher_icons_proof.py
+          nice -n 10 python3 -m unittest discover -s spikes/tests -p test_scrolling_proof.py
           nice -n 10 python3 -m py_compile spikes/capture_safety.py spikes/measure.py spikes/bar-matrix.py spikes/dashboard-residency.py spikes/launcher-proof.py spikes/b0002-arm.py spikes/laptop-reference-capture.py spikes/laptop-reference-artifacts.py spikes/parity-compare.py spikes/fake-bluez.py spikes/fake-power.py spikes/fake_system.py spikes/foundation-preview.py spikes/menu-engine-proof.py spikes/menu_engine_trace.py spikes/b0003-arm.py spikes/tests/test_dashboard_capture_windows.py spikes/tests/test_menu_engine_trace.py spikes/tests/test_b0002_arm.py spikes/tests/test_laptop_reference_capture.py spikes/tests/test_b0003_arm.py spikes/tests/test_fake_system.py
       - name: Packaging staging and launcher
         run: python3 -m unittest discover -s packaging/tests

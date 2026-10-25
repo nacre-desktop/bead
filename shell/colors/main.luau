@@ -65,12 +65,13 @@ local function entry(item)
             ui.Text{id="kind",position="absolute",left=8,top=62,width=RAIL-32,height=18,text=item.kind,font_size=px(9),color="onSurfaceVariant"}}}
 end
 local function rail()
+    local window_height=ui.resolve_for_check(ui.bind("bead.viewport.height"))
     return ui.Column{id="rail",width=RAIL,height="100%",shrink=0,radius=18,fill="surfaceContainer",padding=sp.md,gap=sp.sm,
         kit.TextInput{id="search",text=ui.bind("colors.query"),placeholder=ui.tr("bead.colors.find-wallpaper"),width="fill",
             aria_label=ui.tr("bead.colors.find-wallpaper")},
         ui.Text{id="empty",visible=ui.bind("colors.empty"),text=ui.tr("bead.colors.no-matches"),width="fill",height=40,font_size=px(10),color="onSurfaceVariant"},
-        ui.Scroll{id="entries",scroll=ui.bind("colors.rail.scroll"),grow=1,
-            ui.Column{id="list",width="fill",gap=6,ui.Repeat{id="items",model=ui.bind("colors.entries"),key="id",render=entry}}}}
+        require("../kit/virtual-list"){id="entries",scroll=ui.bind("colors.rail.scroll"),width="fill",grow=1,
+            window_height=window_height,model=ui.bind("colors.entries"),key="id",row_height=88,gap=6,repeat_id="items",render=entry}}
 end
 local function studio(v)
     local pw=math.min(COL1,821)

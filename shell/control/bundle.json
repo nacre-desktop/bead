@@ -1,7 +1,7 @@
 {
   "modules": [
-    "control/placement.luau",
-    "control/regions.luau",
+    "status/network-body.luau",
+    "status/bluetooth-body.luau",
     "status/battery-body.luau",
     "status/body.luau",
     "sound/body.luau",

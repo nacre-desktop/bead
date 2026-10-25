@@ -10,16 +10,14 @@ return kit.Panel{id="tray-panel",edge="top",open=ui.bind("panel.open"),width=300
             kit.Button{id="close",text="×",aria_label=ui.tr("bead.panel.tray-close"),width=28,height=28,on_activate=ui.action("close")},
         },
         ui.Text{visible=ui.bind("tray.empty"),text=ui.tr("bead.panel.tray-empty"),height=28,font_size=14,color="onSurfaceVariant"},
-        ui.Scroll{id="rows",width="100%",height=height-56,scroll=ui.bind("tray.scroll"),
-          ui.Column{width="100%",shrink=0,gap=2,
-            ui.Repeat{id="entries",model=ui.bind("tray.rows"),key="id",render=function(item)
+        require("../kit/virtual-list"){id="rows",width="100%",height=height-56,scroll=ui.bind("tray.scroll"),
+            model=ui.bind("tray.rows"),key="id",row_height=function(item) return item.separator and 1 or 30 end,
+            gap=2,repeat_id="entries",render=function(item)
                 if item.separator then return ui.Box{width="100%",height=1,fill="outlineVariant"} end
                 return kit.Button{id="entry",width="100%",height=30,padding=4,
                     fill="transparent",on_activate=item.enabled and ui.action(item.submenu and "services.menu.open" or "services.menu",item.id) or nil,
                     ui.Text{text=item.toggle..item.label..(item.submenu and "  ›" or ""),width="100%",height=24,font_size=14,color=item.enabled and "onSurface" or "onSurfaceVariant"},
                 }
             end},
-          },
-        },
     },
 }
