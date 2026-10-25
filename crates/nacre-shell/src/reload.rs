@@ -2450,9 +2450,18 @@ fn resolve_icon_path(icon: &str) -> std::path::PathBuf {
     {
         return path;
     }
-    let path = freedesktop_icons::lookup(icon)
-        .with_size(48)
-        .find()
+    let direct=std::path::PathBuf::from(icon);
+    let theme=freedesktop_icons::default_theme_gtk().unwrap_or_else(|| "Papirus".into());
+    let path=direct.is_absolute().then_some(direct).filter(|path|path.is_file())
+        .or_else(|| [theme.as_str(),"hicolor","Adwaita"].into_iter().find_map(|theme|
+            freedesktop_icons::lookup(icon).with_theme(theme).with_size(48).find()))
+        .or_else(|| {
+            if icon.is_empty() || std::path::Path::new(icon).components().count()!=1 {return None;}
+            let roots=std::env::var_os("XDG_DATA_DIRS").unwrap_or_else(|| "/usr/local/share:/usr/share".into());
+            std::env::split_paths(&roots).find_map(|root|["svg","png","xpm"].into_iter()
+                .map(|extension|root.join("icons").join(format!("{icon}.{extension}")))
+                .find(|path|path.is_file()))
+        })
         .unwrap_or_else(|| "@bead-icon-fallback.svg".into());
     if path.as_path() != std::path::Path::new("@bead-icon-fallback.svg")
         && let Ok(mut map) = cache.lock()
