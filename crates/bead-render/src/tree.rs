@@ -12,6 +12,25 @@ use tiny_skia::{
     FillRule, Mask, Paint, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Stroke, Transform,
 };
 
+// Old and candidate frames overlap until presenter acknowledgement; steady cache remains 64 MiB.
+// Charge every live overlap against 128 MiB per owner and the unchanged process-wide cap.
+const STEADY_RASTER_LIMIT: usize = 64 * bead_core::cache::MIB;
+const LIVE_RASTER_LIMIT: usize = 128 * bead_core::cache::MIB;
+
+fn validate_frame_rasters(items: &[Item]) -> Result<()> {
+    let bytes = items
+        .iter()
+        .filter_map(|item| item.raster.as_ref())
+        .try_fold(0usize, |total, raster| {
+            total.checked_add(raster.pixels.data().len())
+        })
+        .ok_or("candidate retained rasters overflow")?;
+    if bytes > STEADY_RASTER_LIMIT {
+        return Err("candidate retained rasters exceed steady cache budget".into());
+    }
+    Ok(())
+}
+
 #[derive(Clone)]
 pub struct Raster {
     pub pixels: Arc<Pixmap>,
@@ -708,7 +727,7 @@ impl TreeCache {
         let charge = self
             .raster_budget
             .get_or_insert_with(|| {
-                bead_core::cache::Budget::new("retained-cpu-rasters", 64 * bead_core::cache::MIB)
+                bead_core::cache::Budget::new("retained-cpu-rasters", LIVE_RASTER_LIMIT)
             })
             .reserve(pixels.data().len() + 192)?;
         Ok(Some(EdgeTemplate {
@@ -823,10 +842,7 @@ impl TreeCache {
                     let charge = self
                         .raster_budget
                         .get_or_insert_with(|| {
-                            bead_core::cache::Budget::new(
-                                "retained-cpu-rasters",
-                                64 * bead_core::cache::MIB,
-                            )
+                            bead_core::cache::Budget::new("retained-cpu-rasters", LIVE_RASTER_LIMIT)
                         })
                         .reserve(bytes)?;
                     item.raster = Some(Arc::new(Raster {
@@ -862,14 +878,6 @@ impl TreeCache {
     }
     pub fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
         if let Some(frame) = scene.prepared.get(&scale.to_bits()) {
-            // Worker-prepared frames own their rasters and nodes. A locally
-            // baked startup fallback is obsolete after this hand-off.
-            if !self.entries.is_empty() || !self.nodes.is_empty() {
-                self.entries.clear();
-                self.nodes.clear();
-                self.raster = CpuRenderer::default();
-                self.font_files.clear();
-            }
             if let Some(motion) = scene.motion.as_ref().filter(|m| m.reveal) {
                 // Build the growing-edge templates as the prepared frame arrives, not in the first reveal frame.
                 for (index, _) in &motion.parts {
@@ -898,16 +906,29 @@ impl TreeCache {
                 .as_ref()
                 .filter(|m| m.reveal && m.progress < 1.)
                 .map(|m| (frame.key, m.progress.to_bits(), scale.to_bits()));
-            if let (Some(pose), Some((last, revealed))) = (pose, &self.revealed_pose)
+            let candidate = if let (Some(pose), Some((last, revealed))) =
+                (pose, &self.revealed_pose)
                 && *last == pose
             {
-                self.frame = Some(revealed.clone());
-                return Ok(());
+                // This exact pose was validated before it entered the cache.
+                revealed.clone()
+            } else {
+                let candidate = match self.revealed_frame(scene, frame, scale)? {
+                    Some(revealed) => Arc::new(revealed),
+                    None => frame.clone(),
+                };
+                validate_frame_rasters(&candidate.items)?;
+                candidate
+            };
+            // Validate before retiring the last good fallback. Worker-prepared
+            // frames own their rasters and nodes after this hand-off.
+            if !self.entries.is_empty() || !self.nodes.is_empty() {
+                self.entries.clear();
+                self.nodes.clear();
+                self.raster = CpuRenderer::default();
+                self.font_files.clear();
             }
-            self.frame = Some(match self.revealed_frame(scene, frame, scale)? {
-                Some(revealed) => Arc::new(revealed),
-                None => frame.clone(),
-            });
+            self.frame = Some(candidate);
             self.revealed_pose = pose.zip(self.frame.clone());
             return Ok(());
         }
@@ -1041,10 +1062,7 @@ impl TreeCache {
                     // identical nodes in this prepare share immutable pixels.
                     let bytes = pixels.data().len() + id.capacity() + 192;
                     let budget = self.raster_budget.get_or_insert_with(|| {
-                        bead_core::cache::Budget::new(
-                            "retained-cpu-rasters",
-                            64 * bead_core::cache::MIB,
-                        )
+                        bead_core::cache::Budget::new("retained-cpu-rasters", LIVE_RASTER_LIMIT)
                     });
                     let charge = loop {
                         match budget.reserve(bytes) {
@@ -1235,6 +1253,28 @@ impl TreeCache {
             })
             .sum::<usize>()
             + layers.capacity() * std::mem::size_of::<LayerPose>();
+        validate_frame_rasters(&items)?;
+        // Keep offscreen rows for scrolling, but cap cache residency and entry count
+        // before replacing the last successfully prepared frame.
+        while self.entries.len() > 1024
+            || self
+                .entries
+                .values()
+                .map(|e| e.raster.pixels.data().len())
+                .sum::<usize>()
+                > STEADY_RASTER_LIMIT
+        {
+            let victim = self
+                .entries
+                .iter()
+                .filter(|(_, e)| e.touched != self.serial)
+                .min_by_key(|(_, e)| e.touched)
+                .map(|(key, _)| key.clone());
+            let Some(victim) = victim else {
+                return Err("active retained rasters exceed cache budget".into());
+            };
+            self.entries.remove(&victim);
+        }
         let accounting = Some(
             self.frame_budget
                 .get_or_insert_with(|| {
@@ -1257,26 +1297,6 @@ impl TreeCache {
             },
             layers,
         }));
-        // Keep offscreen rows for scrolling, but cap cache residency and entry count.
-        while self.entries.len() > 1024
-            || self
-                .entries
-                .values()
-                .map(|e| e.raster.pixels.data().len())
-                .sum::<usize>()
-                > 64 * 1024 * 1024
-        {
-            let victim = self
-                .entries
-                .iter()
-                .filter(|(_, e)| e.touched != self.serial)
-                .min_by_key(|(_, e)| e.touched)
-                .map(|(key, _)| key.clone());
-            let Some(victim) = victim else {
-                return Err("active retained rasters exceed cache budget".into());
-            };
-            self.entries.remove(&victim);
-        }
         Ok(())
     }
 }
@@ -3006,6 +3026,174 @@ mod tests {
         assert!(Arc::ptr_eq(display.frame.as_ref().unwrap(), &imported));
         assert_eq!(display.raster_budget.as_ref().unwrap().used(), 0);
         assert_eq!(display.node_budget.as_ref().unwrap().used(), 0);
+    }
+    // These tests share the process-wide admission cap.
+    static LARGE_RASTER_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    fn large_imported_frame(budget: &bead_core::cache::Budget, count: usize) -> Arc<Frame> {
+        let items = (0..count)
+            .map(|index| {
+                let pixels = Arc::new(Pixmap::new(3000, 3000).unwrap());
+                let charge = budget.reserve(pixels.data().len()).unwrap();
+                Item {
+                    id: format!("large-{index}"),
+                    primitive: Primitive::Rounded {
+                        rect: Rect::new(0., 0., 3000., 3000.),
+                        radius: 0.,
+                        fill: [0; 4],
+                        border: None,
+                    },
+                    clip: None,
+                    raster: Some(Arc::new(Raster {
+                        changed: Damage::full(3000, 3000),
+                        pixels,
+                        origin: (0, 0),
+                        key: index as u64,
+                        base_key: None,
+                        _charge: charge,
+                    })),
+                }
+            })
+            .collect();
+        Arc::new(Frame {
+            items,
+            scale: 1.5,
+            key: count as u64,
+            layer_count: count,
+            layers: Vec::new(),
+            _accounting: None,
+        })
+    }
+    #[test]
+    fn imported_replacement_allows_live_overlap_and_retires_charge_after_last_frame() {
+        let _serial = LARGE_RASTER_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+        let budget = bead_core::cache::Budget::new("test-raster-overlap", LIVE_RASTER_LIMIT);
+        let old = large_imported_frame(&budget, 1);
+        let old_bytes = budget.used();
+        let mut cache = TreeCache {
+            raster_budget: Some(budget.clone()),
+            frame: Some(old.clone()),
+            ..TreeCache::default()
+        };
+        let candidate = large_imported_frame(&budget, 1);
+        let mut scene = scene();
+        scene.prepared.insert(1.5_f32.to_bits(), candidate.clone());
+        cache.prepare(&scene, 1.5).unwrap();
+        assert!(Arc::ptr_eq(cache.frame.as_ref().unwrap(), &candidate));
+        assert!(budget.used() > old_bytes);
+        assert!(budget.used() <= LIVE_RASTER_LIMIT);
+        drop(old);
+        assert_eq!(budget.used(), old_bytes);
+    }
+    #[test]
+    fn normal_bake_replacement_allows_live_overlap_and_reuses_candidate_pixels() {
+        let _serial = LARGE_RASTER_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+        let mut scene = scene();
+        scene.asset_data.clear();
+        scene.width = 2000.;
+        scene.bounds = Rect::new(0., 0., 2000., 2000.);
+        scene.primitives = vec![Primitive::Shadow {
+            rect: Rect::new(0., 0., 2000., 2000.),
+            radius: 35.,
+            blur: 10.,
+        }];
+        scene.layers = vec![crate::SceneLayer {
+            id: "large-shadow".into(),
+            parent: None,
+            own: 0..1,
+            subtree_end: 1,
+            bounds: scene.bounds,
+        }];
+        let mut cache = TreeCache::default();
+        cache.prepare(&scene, 1.5).unwrap();
+        let old_frame = cache.frame.as_ref().unwrap().clone();
+        let old_raster = old_frame.items[0].raster.as_ref().unwrap().clone();
+        let old_raster_weak = Arc::downgrade(&old_raster);
+        let old_pixels = old_raster.pixels.data().to_vec();
+        let mut replacement = scene.clone();
+        let Primitive::Shadow { radius, .. } = &mut replacement.primitives[0] else {
+            unreachable!();
+        };
+        *radius = 37.;
+        cache.prepare(&replacement, 1.5).unwrap();
+        let new_frame = cache.frame.as_ref().unwrap().clone();
+        let new_raster = new_frame.items[0].raster.as_ref().unwrap().clone();
+        let budget = cache.raster_budget.as_ref().unwrap().clone();
+        assert!(!Arc::ptr_eq(&old_raster, &new_raster));
+        assert_ne!(old_pixels, new_raster.pixels.data());
+        let overlap_bytes = budget.used();
+        assert!(overlap_bytes > 64 * bead_core::cache::MIB);
+        assert!(overlap_bytes <= LIVE_RASTER_LIMIT);
+
+        drop(old_frame);
+        drop(old_raster);
+        assert!(old_raster_weak.upgrade().is_none());
+        assert!(budget.used() < overlap_bytes);
+        let before_reuse = new_raster.clone();
+        cache.prepare(&replacement, 1.5).unwrap();
+        assert!(Arc::ptr_eq(
+            &before_reuse,
+            cache.frame.as_ref().unwrap().items[0]
+                .raster
+                .as_ref()
+                .unwrap()
+        ));
+    }
+    #[test]
+    fn entry_cap_failure_keeps_the_previous_frame() {
+        let mut cache = TreeCache::default();
+        cache.prepare(&scene(), 1.).unwrap();
+        let previous = cache.frame.as_ref().unwrap().clone();
+
+        let mut replacement = scene();
+        let Primitive::Image { rect, .. } = &replacement.primitives[0] else {
+            unreachable!();
+        };
+        let image = Primitive::Image {
+            rect: *rect,
+            path: "proof.png".into(),
+            blur: 0.,
+            fit: crate::ImageFit::Fill,
+            clip_polygon: None,
+        };
+        replacement.primitives = (0..1025)
+            .map(|index| {
+                let mut primitive = image.clone();
+                if let Primitive::Image { rect, .. } = &mut primitive {
+                    rect.x = index as f32 * 8.;
+                }
+                primitive
+            })
+            .collect();
+        replacement.layers = (0..1025)
+            .map(|index| crate::SceneLayer {
+                id: format!("row-{index}"),
+                parent: None,
+                own: index..index + 1,
+                subtree_end: index + 1,
+                bounds: Rect::new(index as f32 * 8., 0., 8., 8.),
+            })
+            .collect();
+
+        assert!(cache.prepare(&replacement, 1.).is_err());
+        assert!(Arc::ptr_eq(cache.frame.as_ref().unwrap(), &previous));
+    }
+    #[test]
+    fn oversized_imported_replacement_keeps_previous_frame() {
+        let _serial = LARGE_RASTER_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+        let budget = bead_core::cache::Budget::new("test-raster-oversize", LIVE_RASTER_LIMIT);
+        let old = large_imported_frame(&budget, 1);
+        let mut cache = TreeCache {
+            raster_budget: Some(budget.clone()),
+            frame: Some(old.clone()),
+            ..TreeCache::default()
+        };
+        let previous = cache.frame.as_ref().unwrap().clone();
+        let candidate = large_imported_frame(&budget, 2);
+        let mut scene = scene();
+        scene.prepared.insert(1.5_f32.to_bits(), candidate);
+        assert!(cache.prepare(&scene, 1.5).is_err());
+        assert!(Arc::ptr_eq(cache.frame.as_ref().unwrap(), &previous));
+        assert!(Arc::ptr_eq(&old, &previous));
     }
     #[test]
     fn duplicate_text_shares_immutable_pixels_and_keeps_its_own_delta() {
