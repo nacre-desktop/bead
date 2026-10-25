@@ -256,7 +256,7 @@ impl Consumer {
 
     /// Palette is deliberately committed from the matching activation pair only
     /// after the corresponding background buffer is attached and committed.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub(crate) fn displayed(&self, output: &str) -> Option<ActiveWallpaper> {
         self.displayed.lock().ok()?.get(output).cloned()
     }

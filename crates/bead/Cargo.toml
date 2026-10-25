@@ -23,4 +23,3 @@ gpu=["native-gl","wgpu"]
 
 [dev-dependencies]
 zbus = { version = "=5.19.0", default-features = false, features = ["tokio"] }
-futures-util = "0.3"

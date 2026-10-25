@@ -253,9 +253,6 @@ impl Desktop {
             .send(command)
             .map_err(|_| "PipeWire disconnected".to_string())
     }
-    pub fn bus_task_count(&self) -> usize {
-        self.bus_task_counts().0
-    }
     pub fn bus_task_counts(&self) -> (usize, usize) {
         let (sender, receiver) = std::sync::mpsc::channel();
         if self.sender.try_send(Command::Tasks(sender)).is_err() {
