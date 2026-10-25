@@ -43,3 +43,6 @@ wgpu=["bead/wgpu"]
 vello=["wgpu"]
 gpu=["native-gl","wgpu"]
 trace=[]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread"] }

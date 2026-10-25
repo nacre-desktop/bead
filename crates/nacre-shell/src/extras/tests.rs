@@ -974,7 +974,8 @@ async fn wallpaper_activation_error_is_reported_without_retry_and_boot_change_dr
     }
 }
 
-#[tokio::test(flavor = "current_thread")]
+// Keep the fixture daemon schedulable while the UI performs synchronous staging.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
     use bead::wayland::{SceneSource, UiEvent};
     let mut lab = lab_with_topics(vec!["wallpaper.active".into()]).await;
