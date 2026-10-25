@@ -70,8 +70,10 @@ pub struct TreeCache {
     raster_budget: Option<bead_core::cache::Budget>,
     node_budget: Option<bead_core::cache::Budget>,
     frame_budget: Option<bead_core::cache::Budget>,
-    /// B0117: the pre-rasterised growing edge of the reveal artwork (None inside: unusable, draw per frame).
-    edge: Option<(u64, Option<EdgeTemplate>)>,
+    /// B0117: pre-rasterised growing edges (None: unusable, draw that piece per frame); the artwork and a shadow.
+    edges: Vec<(u64, Option<EdgeTemplate>)>,
+    /// The last frame derived for a reveal pose (frame key, progress bits, scale bits): an unchanged pose is not rebuilt.
+    revealed_pose: Option<((u64, u32, u32), Arc<Frame>)>,
 }
 /// The artwork's growing edge, rasterised once per size and scale and slid along the growth axis every frame.
 struct EdgeTemplate {
@@ -81,6 +83,26 @@ struct EdgeTemplate {
     start: i64,
     key: u64,
     charge: bead_core::cache::Charge,
+}
+#[derive(Clone, Copy)]
+enum EdgeKind<'a> {
+    Art(&'a crate::RevealArt),
+    Shadow { radius: f32, blur: f32 },
+}
+struct EdgeSpec<'a> {
+    kind: EdgeKind<'a>,
+    edge: bead_core::Edge,
+    /// The body whose reveal drives the piece (the shadow's rectangle less its 30 px margin).
+    body: Rect,
+    /// The piece's open-state rectangle and its raster extent along the growth axis.
+    f: Rect,
+    vertical: bool,
+    far: bool,
+    origin: f32,
+    extent: u32,
+    /// The piece's leading edge for a revealed body.
+    lead_of: Box<dyn Fn(Rect) -> f32 + 'a>,
+    length: f32,
 }
 /// Logical extent of the template on the body side (covers the corner radius) and outside the edge (rim).
 const EDGE_INSIDE: f32 = 44.;
@@ -315,7 +337,8 @@ impl TreeCache {
         self.nodes.retain(|(_, bits), _| current(*bits));
         if stale_frame {
             self.frame = None;
-            self.edge = None;
+            self.edges.clear();
+            self.revealed_pose = None;
         }
         if discarded {
             let fonts = self.raster.fonts.take();
@@ -341,54 +364,87 @@ impl TreeCache {
         self.entries.retain(|_, entry| entry.touched == self.serial);
         self.nodes.retain(|_, (_, touched)| *touched == self.serial);
     }
-    /// B0067: a worker-prepared frame of a panel that is still growing out of its edge. The prepared items keep their
-    /// open-state clips and shapes, so the presenter derives the frame for this progress: the body fill and its
-    /// shadow take the reshaped primitives of `Scene::reveal` (the shadow gets a raster of its new size), everything
-    /// else is clipped to the reveal window. None when the scene is not revealing or does not match the frame.
-    /// B0117: the reveal artwork of a growing panel without rasterising anything per frame. The artwork of the
-    /// open state (already prepared) shows up to the growing edge; the edge itself is a band rasterised once
-    /// and slid by whole pixels. Returns the clipped artwork item and the band item, or None to draw the
-    /// artwork the slow way (small reveals, templates that do not match the open-state artwork).
+    /// B0117: the geometry of a growing piece (the joined-frame artwork or the panel's shadow) for the edge
+    /// template, or None when it is not worth or not possible to slide a template (small reveals).
+    fn edge_spec<'a>(scene: &'a Scene, item: &Item, kind: EdgeKind<'a>) -> Option<EdgeSpec<'a>> {
+        let motion = scene.motion.as_ref()?;
+        let base = item.raster.as_ref()?;
+        let (ix, iy) = motion.edge.inward();
+        let (vertical, far) = (iy != 0., ix > 0. || iy > 0.);
+        let f = rect(&item.primitive);
+        let margin = match kind {
+            EdgeKind::Art(_) => 0.,
+            EdgeKind::Shadow { .. } => 30.,
+        };
+        let body = match kind {
+            EdgeKind::Art(art) => art.body,
+            EdgeKind::Shadow { .. } => Rect::new(f.x + 30., f.y + 30., f.w - 60., f.h - 60.),
+        };
+        let (origin, extent) = if vertical {
+            (f.y, base.pixels.height())
+        } else {
+            (f.x, base.pixels.width())
+        };
+        let lead_of = move |r: Rect| {
+            let at = match (vertical, far) {
+                (true, true) => r.y + r.h,
+                (true, false) => r.y,
+                (false, true) => r.x + r.w,
+                (false, false) => r.x,
+            };
+            at + if far { margin } else { -margin }
+        };
+        Some(EdgeSpec {
+            kind,
+            edge: motion.edge,
+            body,
+            f,
+            vertical,
+            far,
+            origin,
+            extent,
+            lead_of: Box::new(lead_of),
+            length: if vertical { body.h } else { body.w },
+        })
+    }
+    /// B0117: the reveal artwork (or shadow) of a growing panel without rasterising anything per frame. The
+    /// open-state raster (already prepared) shows up to the growing edge; the edge itself is a band rasterised
+    /// once and slid by whole pixels. Returns the clipped raster item and the band item, or None to draw the
+    /// piece the slow way (small reveals, templates that do not match the open-state raster).
     fn edge_items(
         &mut self,
         scene: &Scene,
         item: &Item,
+        kind: EdgeKind<'_>,
         scale: f32,
     ) -> Result<Option<(Item, Item)>> {
         let Some(motion) = scene.motion.as_ref() else {
             return Ok(None);
         };
-        let (Some(art), Some(base)) = (motion.art.as_ref(), item.raster.as_ref()) else {
+        let Some(spec) = Self::edge_spec(scene, item, kind) else {
             return Ok(None);
         };
-        let (ix, iy) = motion.edge.inward();
-        let (vertical, far) = (iy != 0., ix > 0. || iy > 0.);
-        let f = rect(&item.primitive);
-        let (origin, extent) = if vertical {
-            (f.y, base.pixels.height() as i64)
-        } else {
-            (f.x, base.pixels.width() as i64)
-        };
-        let lead_of = |r: Rect| match (vertical, far) {
-            (true, true) => r.y + r.h,
-            (true, false) => r.y,
-            (false, true) => r.x + r.w,
-            (false, false) => r.x,
-        };
-        let body = art.body;
-        let length = if vertical { body.h } else { body.w };
-        let now = lead_of(Scene::revealed(body, motion.edge, motion.progress));
-        let full = lead_of(body);
-        let revealed = length - (now - full).abs();
-        if revealed < EDGE_MIN_REVEALED || length < 2. * EDGE_MIN_REVEALED || motion.progress >= 1.
+        let body = spec.body;
+        let full = (spec.lead_of)(body);
+        let now = (spec.lead_of)(Scene::revealed(body, motion.edge, motion.progress));
+        let revealed = spec.length - (now - full).abs();
+        if revealed < EDGE_MIN_REVEALED
+            || spec.length < 2. * EDGE_MIN_REVEALED
+            || motion.progress >= 1.
         {
             return Ok(None);
         }
-        self.ensure_edge(scene, item, scale);
-        let Some((_, Some(template))) = self.edge.as_ref() else {
-            bead_core::vprintln!("REVEAL_EDGE no template");
+        self.ensure_edge(scene, item, kind, scale);
+        let key = Self::edge_key(&spec, item, scale);
+        let Some(template) = self
+            .edges
+            .iter()
+            .find(|(k, _)| *k == key)
+            .and_then(|(_, t)| t.as_ref())
+        else {
             return Ok(None);
         };
+        let (vertical, far, f, origin) = (spec.vertical, spec.far, spec.f, spec.origin);
         let shift = ((now - origin) * scale - template.lead).round() as i64;
         let band = if vertical {
             template.pixels.height()
@@ -396,7 +452,7 @@ impl TreeCache {
             template.pixels.width()
         } as i64;
         let start = template.start + shift;
-        if start < 0 || start + band > extent {
+        if start < 0 || start + band > spec.extent as i64 {
             return Ok(None);
         }
         const M: f32 = 4096.;
@@ -421,8 +477,8 @@ impl TreeCache {
         };
         let mut clipped = item.clone();
         clipped.clip = Some(clip);
-        let mut key = std::collections::hash_map::DefaultHasher::new();
-        (template.key, start).hash(&mut key);
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        (template.key, start).hash(&mut hasher);
         let (w, h) = (template.pixels.width(), template.pixels.height());
         let piece = Item {
             id: format!("{}/edge", item.id),
@@ -435,7 +491,7 @@ impl TreeCache {
                 } else {
                     (start as u32, 0)
                 },
-                key: key.finish(),
+                key: hasher.finish(),
                 base_key: None,
                 changed: Damage::full(w, h),
                 _charge: template.charge.clone(),
@@ -443,37 +499,51 @@ impl TreeCache {
         };
         Ok(Some((clipped, piece)))
     }
-    /// Build the edge template for this artwork now unless it is already cached (called when a prepared frame
-    /// arrives, so the first reveal frame does not pay for it).
-    fn ensure_edge(&mut self, scene: &Scene, item: &Item, scale: f32) {
-        let (Some(motion), Some(base)) = (scene.motion.as_ref(), item.raster.as_ref()) else {
-            return;
-        };
-        let Some(art) = motion.art.as_ref() else {
-            return;
-        };
-        let f = rect(&item.primitive);
-        let body = art.body;
+    fn edge_key(spec: &EdgeSpec<'_>, item: &Item, scale: f32) -> u64 {
         let mut hash = std::collections::hash_map::DefaultHasher::new();
-        (base.key, scale.to_bits(), motion.edge as u8).hash(&mut hash);
-        for v in [body.x, body.y, body.w, body.h, f.x, f.y, f.w, f.h] {
+        let base = item.raster.as_ref().map_or(0, |r| r.key);
+        (
+            base,
+            scale.to_bits(),
+            spec.edge as u8,
+            matches!(spec.kind, EdgeKind::Shadow { .. }),
+        )
+            .hash(&mut hash);
+        for v in [
+            spec.body.x,
+            spec.body.y,
+            spec.body.w,
+            spec.body.h,
+            spec.f.x,
+            spec.f.y,
+            spec.f.w,
+            spec.f.h,
+        ] {
             v.to_bits().hash(&mut hash);
         }
-        let key = hash.finish();
-        if self.edge.as_ref().is_none_or(|(k, _)| *k != key) {
-            let built = self
-                .build_edge(art, motion.edge, item, scale, key)
-                .ok()
-                .flatten();
-            self.edge = Some((key, built));
+        hash.finish()
+    }
+    /// Build the edge template for this piece now unless it is already cached (called when a prepared frame
+    /// arrives, so the first reveal frame does not pay for it).
+    fn ensure_edge(&mut self, scene: &Scene, item: &Item, kind: EdgeKind<'_>, scale: f32) {
+        let Some(spec) = Self::edge_spec(scene, item, kind) else {
+            return;
+        };
+        let key = Self::edge_key(&spec, item, scale);
+        if self.edges.iter().all(|(k, _)| *k != key) {
+            let built = self.build_edge(&spec, item, scale, key).ok().flatten();
+            self.edges.retain(|(k, _)| *k != key);
+            if self.edges.len() >= 2 {
+                self.edges.remove(0);
+            }
+            self.edges.push((key, built));
         }
     }
-    /// Rasterise the growing edge once, at a ghost progress where it is clear of the top join, and check that it
-    /// is a faithful copy of the open-state artwork's own edge (else None: the slow path stays correct).
+    /// Rasterise the growing edge once, at a ghost progress where it is clear of the origin join, and check that
+    /// it is a faithful copy of the open-state raster's own edge (else None: the slow path stays correct).
     fn build_edge(
         &mut self,
-        art: &crate::RevealArt,
-        edge: bead_core::Edge,
+        spec: &EdgeSpec<'_>,
         item: &Item,
         scale: f32,
         key: u64,
@@ -482,47 +552,86 @@ impl TreeCache {
         let Some(base) = item.raster.as_ref() else {
             return Ok(None);
         };
-        let (ix, iy) = edge.inward();
-        let (vertical, far) = (iy != 0., ix > 0. || iy > 0.);
-        let f = rect(&item.primitive);
-        let body = art.body;
-        let length = if vertical { body.h } else { body.w };
-        let (origin, extent) = if vertical {
-            (f.y, base.pixels.height())
-        } else {
-            (f.x, base.pixels.width())
-        };
-        let lead_of = |r: Rect| match (vertical, far) {
-            (true, true) => r.y + r.h,
-            (true, false) => r.y,
-            (false, true) => r.x + r.w,
-            (false, false) => r.x,
-        };
+        let EdgeSpec {
+            kind,
+            edge,
+            body,
+            f,
+            vertical,
+            far,
+            origin,
+            extent,
+            ref lead_of,
+            length,
+        } = *spec;
+        let inside = EDGE_INSIDE
+            + match kind {
+                EdgeKind::Art(_) => 0.,
+                EdgeKind::Shadow { .. } => 30.,
+            };
         let ghost_progress = ((EDGE_MIN_REVEALED + 24.) / length).clamp(0.5, 0.9);
-        let ghost = lead_of(Scene::revealed(body, edge, ghost_progress));
+        let ghost_body = Scene::revealed(body, edge, ghost_progress);
+        let ghost = lead_of(ghost_body);
         let (low, high) = if far {
-            (ghost - EDGE_INSIDE, ghost + EDGE_OUTSIDE)
+            (ghost - inside, ghost + EDGE_OUTSIDE)
         } else {
-            (ghost - EDGE_OUTSIDE, ghost + EDGE_INSIDE)
+            (ghost - EDGE_OUTSIDE, ghost + inside)
         };
         let first = (((low - origin) * scale).floor() as i64).max(0);
-        let last = (((high - origin) * scale).ceil() as i64).min(i64::from(extent));
+        let last = (((high - origin) * scale).ceil() as i64).min(extent as i64);
         if last - first < 4 {
             return Ok(None);
         }
-        let (a, b) = (first as f32 / scale, last as f32 / scale);
-        let crop = if vertical {
-            Rect::new(f.x, origin + a, f.w, b - a)
-        } else {
-            Rect::new(origin + a, f.y, b - a, f.h)
-        };
-        let (_, bytes) = (art.draw)(Scene::revealed(body, edge, ghost_progress), Some(crop));
         let (w, h) = if vertical {
             (base.pixels.width(), (last - first) as u32)
         } else {
             ((last - first) as u32, base.pixels.height())
         };
-        let pixels = crate::svg_pixmap(&bytes, w, h)?;
+        let pixels = match kind {
+            EdgeKind::Art(art) => {
+                let (a, b) = (first as f32 / scale, last as f32 / scale);
+                let crop = if vertical {
+                    Rect::new(f.x, origin + a, f.w, b - a)
+                } else {
+                    Rect::new(origin + a, f.y, b - a, f.h)
+                };
+                let (_, bytes) = (art.draw)(ghost_body, Some(crop));
+                crate::svg_pixmap(&bytes, w, h)?
+            }
+            EdgeKind::Shadow { radius, blur } => {
+                let grown = Rect::new(
+                    ghost_body.x - 30.,
+                    ghost_body.y - 30.,
+                    ghost_body.w + 60.,
+                    ghost_body.h + 60.,
+                );
+                let whole = crate::shadow_pixmap(grown, radius, blur, scale)?;
+                // The ghost raster starts at its own origin; the band is cut at the item's pixel rows/columns.
+                let offset = if vertical {
+                    ((grown.y - origin) * scale).round() as i64
+                } else {
+                    ((grown.x - origin) * scale).round() as i64
+                };
+                let mut band = Pixmap::new(w, h).ok_or("edge band allocation")?;
+                let source = whole.data();
+                let (sw, sh) = (whole.width() as i64, whole.height() as i64);
+                for y in 0..h as i64 {
+                    for x in 0..w as i64 {
+                        let (sx, sy) = if vertical {
+                            (x, y + first - offset)
+                        } else {
+                            (x + first - offset, y)
+                        };
+                        if sx >= 0 && sx < sw && sy >= 0 && sy < sh {
+                            let i = (sy * sw + sx) as usize * 4;
+                            let o = (y * i64::from(w) + x) as usize * 4;
+                            band.data_mut()[o..o + 4].copy_from_slice(&source[i..i + 4]);
+                        }
+                    }
+                }
+                band
+            }
+        };
         let at = |p: &Pixmap, x: u32, y: u32| {
             let i = (y * p.width() + x) as usize * 4;
             [
@@ -548,10 +657,10 @@ impl TreeCache {
         } else {
             (0..h).all(|y| close(at(&pixels, inner as u32, y), at(&pixels, next as u32, y), 2))
         };
-        // ... and equal (colour gradient aside) to the open-state artwork around its own edge.
+        // ... and equal (colour gradient aside) to the open-state raster around its own edge.
         let shift = (((lead_of(body) - ghost) * scale).round() as i64).max(-first);
-        // The edge may sit half a pixel off the artwork's own (whole-pixel shifts), so each template channel
-        // must lie between the artwork's neighbouring pixels along the growth axis (plus a gradient margin).
+        // The edge may sit half a pixel off the raster's own (whole-pixel shifts), so each template channel
+        // must lie between the raster's neighbouring pixels along the growth axis (plus a gradient margin).
         let within = |template: [u8; 4], around: [[u8; 4]; 3]| {
             (0..4).all(|c| {
                 let low = around.iter().map(|p| i32::from(p[c])).min().unwrap_or(0) - 28;
@@ -559,7 +668,7 @@ impl TreeCache {
                 (low..=high).contains(&i32::from(template[c]))
             })
         };
-        let matches = shift + last < i64::from(extent)
+        let matches = shift + last < extent as i64
             && first + shift >= 1
             && if vertical {
                 (0..h).all(|y| {
@@ -610,6 +719,10 @@ impl TreeCache {
             charge,
         }))
     }
+    /// B0067: a worker-prepared frame of a panel that is still growing out of its edge. The prepared items keep their
+    /// open-state clips and shapes, so the presenter derives the frame for this progress: the body fill and its
+    /// shadow take the reshaped primitives of `Scene::reveal` (the shadow gets a raster of its new size), everything
+    /// else is clipped to the reveal window. None when the scene is not revealing or does not match the frame.
     fn revealed_frame(
         &mut self,
         scene: &Scene,
@@ -630,14 +743,22 @@ impl TreeCache {
             return Ok(None);
         }
         let mut items = frame.items.clone();
-        let mut edge_piece = None;
+        let mut edge_pieces = Vec::new();
         for (index, item) in items.iter_mut().enumerate() {
             if motion.parts.iter().any(|(i, _)| *i == index) {
-                if motion.art.as_ref().is_some_and(|art| art.index == index)
-                    && let Some((clipped, piece)) = self.edge_items(scene, item, scale)?
+                let kind = match (&item.primitive, motion.art.as_ref()) {
+                    (_, Some(art)) if art.index == index => Some(EdgeKind::Art(art)),
+                    (Primitive::Shadow { radius, blur, .. }, _) => Some(EdgeKind::Shadow {
+                        radius: *radius,
+                        blur: *blur,
+                    }),
+                    _ => None,
+                };
+                if let Some(kind) = kind
+                    && let Some((clipped, piece)) = self.edge_items(scene, item, kind, scale)?
                 {
                     *item = clipped;
-                    edge_piece = Some((index + 1, piece));
+                    edge_pieces.push((index + 1, piece));
                     continue;
                 }
                 let shaped = scene.primitives[index].clone();
@@ -724,7 +845,7 @@ impl TreeCache {
                 item.clip = scene.clip_at(index);
             }
         }
-        if let Some((at, piece)) = edge_piece {
+        for (at, piece) in edge_pieces.into_iter().rev() {
             items.insert(at, piece);
         }
         let mut key = std::collections::hash_map::DefaultHasher::new();
@@ -749,10 +870,45 @@ impl TreeCache {
                 self.raster = CpuRenderer::default();
                 self.font_files.clear();
             }
+            if let Some(motion) = scene.motion.as_ref().filter(|m| m.reveal) {
+                // Build the growing-edge templates as the prepared frame arrives, not in the first reveal frame.
+                for (index, _) in &motion.parts {
+                    let Some(item) = frame.items.get(*index) else {
+                        continue;
+                    };
+                    match (&item.primitive, motion.art.as_ref()) {
+                        (_, Some(art)) if art.index == *index => {
+                            self.ensure_edge(scene, item, EdgeKind::Art(art), scale);
+                        }
+                        (Primitive::Shadow { radius, blur, .. }, _) => self.ensure_edge(
+                            scene,
+                            item,
+                            EdgeKind::Shadow {
+                                radius: *radius,
+                                blur: *blur,
+                            },
+                            scale,
+                        ),
+                        _ => {}
+                    }
+                }
+            }
+            let pose = scene
+                .motion
+                .as_ref()
+                .filter(|m| m.reveal && m.progress < 1.)
+                .map(|m| (frame.key, m.progress.to_bits(), scale.to_bits()));
+            if let (Some(pose), Some((last, revealed))) = (pose, &self.revealed_pose)
+                && *last == pose
+            {
+                self.frame = Some(revealed.clone());
+                return Ok(());
+            }
             self.frame = Some(match self.revealed_frame(scene, frame, scale)? {
                 Some(revealed) => Arc::new(revealed),
                 None => frame.clone(),
             });
+            self.revealed_pose = pose.zip(self.frame.clone());
             return Ok(());
         }
         if !scale.is_finite() || scale <= 0. {

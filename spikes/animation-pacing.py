@@ -137,7 +137,7 @@ def parse_trace(path, real_ref):
             if not hit:
                 continue
             hh, mm, ss, micro, arrow, interface, ident, event, args = hit.groups()
-            if event not in ('commit', 'done', 'presented', 'attach'):
+            if event not in ('commit', 'done', 'presented', 'attach', 'damage', 'damage_buffer'):
                 continue
             sod = int(hh) * 3600 + int(mm) * 60 + int(ss) + int(micro) / 1e6
             rows.append(((sod - ref_sod) % 86400, bool(arrow), interface, int(ident), event, args))
@@ -145,17 +145,35 @@ def parse_trace(path, real_ref):
 
 
 def window_metrics(rows, start, end, frames):
-    commits, attached = {}, set()
+    commits, attached, visible, seen, housekeeping, last = {}, set(), set(), set(), 0, {}
     for stamp, request, interface, ident, event, args in rows:
         if not (request and interface == 'wl_surface'):
             continue
         if event == 'attach':  # a commit carries a visible frame only if a buffer was attached since the last one
             if not args.startswith('nil'):
                 attached.add(ident)
+        elif event in ('damage', 'damage_buffer'):
+            seen.add(ident)
+            values = [part.strip() for part in args.split(',')]
+            if len(values) == 4 and int(values[2]) * int(values[3]) > 1:
+                visible.add(ident)  # more than a 1x1 touch of the buffer
+            elif len(values) != 4:
+                visible.add(ident)
         elif event == 'commit':
-            if ident in attached and start <= stamp <= end:
+            # A commit whose only damage is a single pixel changes nothing on screen (Bead sends one to get
+            # presentation feedback for a scene that painted identically). Inside a running animation it is
+            # still its frame; after 100 ms of quiet it is housekeeping and not part of the animation.
+            carries = ident in attached and (ident in visible or ident not in seen)
+            if ident in attached and not carries and stamp - last.get(ident, -1e9) > 0.1:
+                if start <= stamp <= end:
+                    housekeeping += 1
+            elif ident in attached and start <= stamp <= end:
                 commits.setdefault(ident, []).append(stamp)
+            if ident in attached:
+                last[ident] = stamp
             attached.discard(ident)
+            visible.discard(ident)
+            seen.discard(ident)
     if not commits:
         return {'frames': 0}
     surface, stamps = max(commits.items(), key=lambda item: len(item[1]))
@@ -167,6 +185,7 @@ def window_metrics(rows, start, end, frames):
         'first_frame_ms': round((stamps[0] - start) * 1000, 1),
         'interval_ms': {k: round(percentile(intervals, p), 2) for k, p in (('p50', .5), ('p95', .95), ('p99', .99))} if intervals else None,
         'longest_gap_ms': round(max(intervals), 1) if intervals else None,
+        'housekeeping_commits': housekeeping,
         'dropped': dropped, 'slow_intervals': sum(i > 1.5 * VSYNC_MS for i in intervals),
         'drop_rate': round(dropped / max(1, dropped + len(intervals)), 3),
     }
