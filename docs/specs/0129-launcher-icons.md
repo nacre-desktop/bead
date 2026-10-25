@@ -46,3 +46,22 @@ engine. It correlates every `PANEL_PRESENTED` with its accepted scene update and
 model/raster readiness. This avoids the existing draw trace's first-two-seconds
 suppression. Nested presentation is not physical laptop scanout timing.
 No temporary replacement or duplicate implementation is introduced.
+
+Paired QML/Bead screenshots use identical private 2880×1800 / 1.5 CPU sessions,
+generated wallpaper/palette and launcher preferences. QML reference is
+`090f92d8c9a275121a95bd3baa478b7a3251386b`; Bead screenshots use the initial
+`db0ff7cd` candidate, with the same visible Luau as the final cache-size revision.
+
+| State | QML | Bead |
+| --- | --- | --- |
+| Idle | [image](evidence/0129/qml-idle.png) | [image](evidence/0129/bead-idle.png) |
+| Open | [image](evidence/0129/qml-launcher.png) | [image](evidence/0129/bead-launcher.png) |
+| Hover | [image](evidence/0129/qml-hover.png) | [image](evidence/0129/bead-hover.png) |
+| Pressed | [image](evidence/0129/qml-pressed.png) | [image](evidence/0129/bead-pressed.png) |
+
+Known parity gaps: Bead's app icons are smaller, its favorite badges remain
+visible, and the first tile starts selected. The QML Recent block is absent from
+Bead; quick-control availability text and update counts differ. Search focus and
+pressed styling differ. Both use the existing bottom attachment in these
+captures. Palette, background and outer panel geometry match visually; pixel or
+animation parity is not claimed. This unit keeps existing logical icon sizes.

@@ -1203,6 +1203,8 @@ impl Menu {
             && completion.task.stamp == stamp
         {
             reply_applied = true;
+            view.request = Some(request.clone());
+            view.stamp = stamp.clone();
             view.pending = None;
             view.pending_limited = false;
             match completion.result {
@@ -1572,6 +1574,15 @@ impl Menu {
         Ok(delta)
     }
 
+    /// Start the initial query while markup loads. Keep first-projection route
+    /// restoration enabled; a different restored route supersedes this request.
+    pub fn prime_initial(&self, stores: &Stores) -> Result<(), bead::ui::Diagnostic> {
+        let request = self.view.borrow().request.clone();
+        let result = self.project(stores);
+        self.view.borrow_mut().request = request;
+        result.map(|_| ())
+    }
+
     /// Let the first launcher request settle briefly before the panel commits its first scene.
     /// Later query projections never wait here, so typing remains independent.
     pub fn project_initial(
@@ -1691,6 +1702,31 @@ mod tests {
         let delta = project_wait(menu, stores).unwrap();
         *stores = stores.reconcile(&delta).unwrap();
         stores.commit(delta).unwrap();
+    }
+    #[test]
+    fn initial_priming_reuses_reply_and_preserves_route_restoration() {
+        let source = prefix_source(false, false);
+        let menu = Menu::new(Some(source.clone())).unwrap();
+        let mut stores = prefix_stores();
+        menu.prime_initial(&stores).unwrap();
+        assert!(menu.view.borrow().request.is_none());
+        apply_projection(&menu, &mut stores);
+        assert_eq!(source.calls.lock().unwrap().len(), 1);
+
+        let menu = Menu::new(Some(prefix_source(false, false))).unwrap();
+        menu.prime_initial(&prefix_stores()).unwrap();
+        let restored = BTreeMap::from([
+            ("launcher.mode".into(), Value::Text("apps".into())),
+            ("launcher.route".into(), Value::Text("actions".into())),
+        ]);
+        stores = stores.reconcile(&restored).unwrap();
+        stores.commit(restored).unwrap();
+        let delta = menu.project(&stores).unwrap();
+        assert_eq!(
+            delta.get("launcher.mode"),
+            Some(&Value::Text("actions".into()))
+        );
+        assert_eq!(menu.view.borrow().pending.as_ref().unwrap().0.1, "actions");
     }
     #[test]
     fn initial_projection_is_bounded_and_later_typing_does_not_wait() {

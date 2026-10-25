@@ -2788,6 +2788,11 @@ impl SceneSource for Runtime {
     ) -> Result<(), Box<dyn Error>> {
         let mut stores = self.session.stores.reconcile(&values)?;
         stores.commit(values)?;
+        if self.launcher_initial_projection.get()
+            && let Some(menu) = &self.launcher
+        {
+            menu.prime_initial(&stores)?;
+        }
         self.session.stores = stores;
         Ok(())
     }
