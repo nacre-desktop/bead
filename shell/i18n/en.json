@@ -259,7 +259,7 @@
   "bead.dashboard.updates-current": "Up to date",
   "bead.dashboard.updates-unavailable": "Updates unavailable",
   "bead.dashboard.weather-days": "Daily outlook",
-  "bead.dashboard.weather-details": "Feels like {feels}    Wind {wind}",
+  "bead.dashboard.weather-details": "Feels like {feels}",
   "bead.dashboard.weather-hours": "Next 24 hours",
   "bead.dashboard.weather-none": "Forecast unavailable",
   "bead.dashboard.weather-photo-credit": "Photo: {author} · {license} · cropped/softened",

@@ -911,10 +911,7 @@ impl Dashboard {
                     "detail",
                     &tr(
                         "bead.dashboard.weather-details",
-                        &[
-                            ("feels", &self.degrees(current.feels_like)),
-                            ("wind", &number(current.wind, " km/h")),
-                        ],
+                        &[("feels", &self.degrees(current.feels_like))],
                     ),
                     96,
                 );
