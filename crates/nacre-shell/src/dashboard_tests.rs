@@ -332,7 +332,7 @@ fn tab_navigation_keeps_runtime_open_and_releases_previous_page_sources() -> Res
     );
     assert_eq!(
         runtime.session.stores.get("dashboard.pearl.target"),
-        Some(&Value::Number(345.))
+        Some(&Value::Number(358.))
     );
     let weather = Harness::load(
         &root(),
@@ -403,6 +403,61 @@ fn tab_navigation_keeps_runtime_open_and_releases_previous_page_sources() -> Res
     assert!(!emitted.lock().unwrap().iter().any(|event| {
         matches!(event, UiEvent::PanelNavigated(view) if view == "dashboard-media")
     }));
+    Ok(())
+}
+
+#[test]
+fn dashboard_pearl_centers_under_each_caption_at_fractional_scale() -> Result<()> {
+    use bead::render::Primitive;
+    crate::i18n::init();
+    for scale in [1., 1.5] {
+        for page in Page::ALL {
+            let mut h = Harness::load(
+                &root(),
+                Path::new(&format!("dashboard/{}/main.luau", page.name())),
+                &root().join("palette.json"),
+                BTreeMap::from([("dashboard.page".into(), Value::Text(page.name().into()))]),
+                Config {
+                    width: 1048,
+                    height: 714,
+                    scale,
+                },
+            )?;
+            h.render()?;
+            let scene = h.scene();
+            let title = if page == Page::Today {
+                crate::i18n::tr("bead.dashboard.nav-dashboard", &[])
+            } else {
+                page.title()
+            };
+            let caption = scene
+                .primitives
+                .iter()
+                .find_map(|p| match p {
+                    Primitive::Text { text, rect, .. } if text == &title && rect.y < 68. => {
+                        Some(*rect)
+                    }
+                    _ => None,
+                })
+                .ok_or("navigation caption")?;
+            let pearl = scene
+                .layers
+                .iter()
+                .find(|l| l.id.ends_with(".tab-pearl"))
+                .and_then(|l| {
+                    l.own.clone().find_map(|i| match &scene.primitives[i] {
+                        Primitive::Rounded { rect, .. } => Some(*rect),
+                        _ => None,
+                    })
+                })
+                .ok_or("selection pearl")?;
+            let difference = ((pearl.x + pearl.w / 2.) - (caption.x + caption.w / 2.)) * scale;
+            assert!(
+                difference.abs() <= 1.,
+                "{page:?} at {scale}: pearl-caption offset {difference} physical pixels"
+            );
+        }
+    }
     Ok(())
 }
 

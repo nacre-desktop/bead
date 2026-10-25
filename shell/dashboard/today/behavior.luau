@@ -110,17 +110,18 @@ base.actions["dashboard.select"]=function(s,id)
     local tabs=s["dashboard.tabs"]
     local count=math.max(1,#tabs)
     local width=936/count
+    local caption_offset=width>=94 and (19+7)/2 or 0
     if not s["dashboard.pearl.moving"] then
         for index,tab in ipairs(tabs) do
             if tab.id==s["dashboard.page"] then
-                s["dashboard.pearl.x"]=(index-1)*width+(width-12)/2
+                s["dashboard.pearl.x"]=(index-1)*width+(width-12)/2+caption_offset
                 break
             end
         end
     end
     for index,tab in ipairs(tabs) do
         if tab.id==id then
-            s["dashboard.pearl.target"]=(index-1)*width+(width-12)/2
+            s["dashboard.pearl.target"]=(index-1)*width+(width-12)/2+caption_offset
             s["dashboard.pearl.moving"]=true
             return
         end

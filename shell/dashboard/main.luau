@@ -16,7 +16,9 @@ local labeled=tw>=94
 local selected_slot=nil
 for index,tab in ipairs(tabs) do if tab.id==page then selected_slot=index break end end
 local moving=ui.resolve_for_check(ui.bind("dashboard.pearl.moving"))
-local pearl_left=selected_slot and (moving and ui.bind("dashboard.pearl.x") or (selected_slot-1)*tw+(tw-12)/2) or nil
+-- The selected pearl follows the caption centre, excluding the icon and its gap.
+local caption_offset=labeled and (19+7)/2 or 0
+local pearl_left=selected_slot and (moving and ui.bind("dashboard.pearl.x") or (selected_slot-1)*tw+(tw-12)/2+caption_offset) or nil
 -- QML NacreDashboardNavigation: icon + title centred at y=6, accent icon / ink title when selected, an 8 px pearl (12 px halo) under the selected slot; no pill.
 for _,tab in ipairs(tabs) do
     local title=tab.id=="today" and ui.tr("bead.dashboard.nav-dashboard") or tab.title
