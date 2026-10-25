@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // B0067 parity harness: move (and optionally press) a virtual pointer on a PRIVATE parent compositor.
 //   virtual-pointer X Y W H [hover|press|click]     positions are in the parent output's pixels, W H its size
+//   virtual-pointer X Y W H stream wheel|pixel DELTA COUNT MS   COUNT axis events, one every MS ms (B0110)
 // It connects to $WAYLAND_DISPLAY (the harness points it at its own headless labwc, never the live session),
 // creates a wlr virtual pointer, sends one absolute motion and, with `press`, holds the left button until killed.
 // Build (needs wayland-scanner and wlr-protocols):
@@ -61,6 +62,34 @@ int main(int argc, char **argv) {
     zwlr_virtual_pointer_v1_frame(pointer);
     wl_display_roundtrip(display);
     usleep(100000); // Let the compositor establish pointer focus before the gesture.
+    if (argc == 10 && !strcmp(argv[5], "stream")) {
+        // One virtual pointer, absolute deadlines: scroll gestures at a steady device rate (B0110).
+        int wheel = !strcmp(argv[6], "wheel");
+        double delta = atof(argv[7]);
+        unsigned count = (unsigned)atoi(argv[8]), ms = (unsigned)atoi(argv[9]);
+        if (!count || count > 5000 || !ms || ms > 2000) { fprintf(stderr, "stream needs COUNT 1..5000, MS 1..2000\n"); return 2; }
+        struct timespec started;
+        clock_gettime(CLOCK_MONOTONIC, &started);
+        for (unsigned i = 0; i < count; i++) {
+            unsigned long long ns = (unsigned long long)started.tv_nsec + (unsigned long long)ms * 1000000ULL * i;
+            struct timespec deadline = {started.tv_sec + ns / 1000000000ULL, ns % 1000000000ULL};
+            clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &deadline, NULL);
+            zwlr_virtual_pointer_v1_axis_source(pointer, wheel ? WL_POINTER_AXIS_SOURCE_WHEEL : WL_POINTER_AXIS_SOURCE_FINGER);
+            if (wheel)
+                zwlr_virtual_pointer_v1_axis_discrete(pointer, now_ms(), WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_double(delta * 15), (int)delta);
+            else
+                zwlr_virtual_pointer_v1_axis(pointer, now_ms(), WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_double(delta));
+            zwlr_virtual_pointer_v1_frame(pointer);
+            wl_display_roundtrip(display);
+        }
+        if (!wheel) {  // a finger lifting ends the gesture, which is what starts a fling
+            zwlr_virtual_pointer_v1_axis_stop(pointer, now_ms(), WL_POINTER_AXIS_VERTICAL_SCROLL);
+            zwlr_virtual_pointer_v1_frame(pointer);
+            wl_display_roundtrip(display);
+        }
+        usleep(300000);
+        return 0;
+    }
     if (argc > 6 && (!strcmp(argv[5], "wheel") || !strcmp(argv[5], "wheel-angle") || !strcmp(argv[5], "pixel"))) {
         int wheel = strncmp(argv[5], "wheel", 5) == 0;
         double delta = atof(argv[6]);
