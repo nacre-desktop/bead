@@ -9,6 +9,17 @@ private interaction captures pass. Five-pair CPU unreclaimable deltas pass the
 +0.5 MiB gate: idle +0.168, open +0.117, closed +0.066 MiB (unit-only snapshot).
 [Evidence and remaining parity limits](specs/0132-today-controls.md). No live change.
 
+## 2026-10-25 — B0126 instant slider drag (rejected experiment)
+
+The visible compositor-moved thumb reduces nested CPU p95 input→feedback from
+72.86 to 56.77 ms at synthetic 60 Hz and 43.62 to 35.87 ms at 120 Hz, but misses
+the 21/12 ms gates. The existing renderer already submits when a frame is free.
+The prototype is withdrawn; its patch and source-pinned measurements remain for
+review. Five-pair median costs peak at +0.711 MiB CPU / +0.914 MiB pinned GL,
+within the declared 1 MiB budget; absolute GL retention is substantial. Pixel
+error, general dragging and complete smoothness remain unproven.
+[Stages, GL/memory results, excluded attempts and validation](specs/0126-instant-drag.md).
+No live deployment or physical-output/laptop-cap acceptance.
 
 ## 2026-10-25 — B0133 Welcome fixes
 

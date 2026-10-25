@@ -1,0 +1,80 @@
+{
+  "arms": {
+    "candidate": {
+      "first_key": {
+        "cpu_ms": 7.415494,
+        "favorites": 12,
+        "fixture_apps": 320,
+        "generation": 1,
+        "input_to_feedback_ms": 7.693282,
+        "method": "exact typed state and generation/update feedback, clocks-only process CPU; local fixture transport",
+        "recents": 8,
+        "result_rows": 64,
+        "update": 4
+      },
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "host_swapin_pages": 0,
+      "shell_log_sha256": "2fb61c6952a3682dd8c53baabfabbaaf6059169c8e73c3960fa4ce1384c81bd9",
+      "source_hashes": {
+        "bead_shell_tree": "1db7f3fc29f493d39b2cfdc693478e009a46ba78331e175bfb205f77caaed56e",
+        "capture_driver": "c8a918da41555d330ba925ef079a0c6e1882a06a882857b56820b26ce45fc86e",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "nacre_shell": "08f5a99c1b233c02d3ac79a0079b83b2e6333a14fd96641c6493779585d4594f",
+        "parity_driver": "1d2a6aceda9e15fa1afd75486455eb7b961d8a682fe73050beeeed2bb2764b2f",
+        "pointer_tool": "96d38eb00ca82f7fa4167a72b3cb22328ca5473b02aced99834d37844740aa73",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff"
+      }
+    },
+    "control": {
+      "first_key": {
+        "cpu_ms": 6.981334,
+        "favorites": 12,
+        "fixture_apps": 320,
+        "generation": 1,
+        "input_to_feedback_ms": 7.272952,
+        "method": "exact typed state and generation/update feedback, clocks-only process CPU; local fixture transport",
+        "recents": 8,
+        "result_rows": 64,
+        "update": 4
+      },
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "host_swapin_pages": 0,
+      "shell_log_sha256": "bafb6e2d9a59778bdfa236020984ac59e1a1ff70070c4dd97921913b3b34845b",
+      "source_hashes": {
+        "bead_shell_tree": "1db7f3fc29f493d39b2cfdc693478e009a46ba78331e175bfb205f77caaed56e",
+        "capture_driver": "c8a918da41555d330ba925ef079a0c6e1882a06a882857b56820b26ce45fc86e",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "nacre_shell": "e6bb25a62c94bc92cc187e96e0fad27a9ad678a331b1e00b32a017b8e9de7256",
+        "parity_driver": "1d2a6aceda9e15fa1afd75486455eb7b961d8a682fe73050beeeed2bb2764b2f",
+        "pointer_tool": "96d38eb00ca82f7fa4167a72b3cb22328ca5473b02aced99834d37844740aa73",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff"
+      }
+    }
+  },
+  "schema": "b0126-first-key-v1",
+  "scope": "one real typed key per arm; fixture launcher, UI process CPU only; private nested synthetic 60 Hz"
+}

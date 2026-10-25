@@ -3001,3 +3001,24 @@ Verdict: phase 1 passes on the B0118-integrated source; Nacre opaque store regis
 Full remote CI and isolated bar checks pass on `a9c2f75`; no new system build dependency (`notify` was already transitive).
 All outliers remain in the medians; negative typed residency is not an optimization claim. Parity alone fixes the clock display input; timers and measured memory/key snapshots stay normal.
 [Sources, component accounting, timing limits, excluded attempts and paired screenshots](docs/specs/0113-widget-system.md).
+
+## B0126 — instant slider drag (2026-10-25)
+
+A visible synchronized child thumb avoids panel raster for pointer poses.
+It saves latency in the private nested comparison, but misses both target gates.
+Input delivery and nested presentation consume most of the remaining time.
+The prototype is rejected; no runtime change is integrated.
+
+| CPU p50/p95 ms | Control | Candidate | QML | Gate |
+| --- | ---: | ---: | ---: | ---: |
+| Synthetic 60 Hz input→feedback | 65.76/72.86 | 50.23/56.77 | 65.04/79.25 | p95 ≤21, fail |
+| Synthetic 120 Hz input→feedback | 37.57/43.62 | 32.02/35.87 | 33.35/50.91 | p95 ≤12, fail |
+| Pinned GL 60 Hz input→feedback | 65.73/70.80 | 49.98/54.83 | 65.04/79.25 | p95 ≤21, fail |
+| Pinned GL 120 Hz input→feedback | 38.71/46.83 | 32.90/37.18 | 33.35/50.91 | p95 ≤12, fail |
+| Fixture first-key UI CPU | 6.981 | 7.415 | — | ≤8 sample passes |
+| CPU maximum median added unreclaimable MiB | — | +0.711 | — | ≤1 budget |
+| Pinned GL maximum median added MiB | — | +0.914 | — | ≤1 budget |
+
+Pixel-error superiority and general dragging are unproven; no physical-output,
+Intel, laptop memory-cap or complete smoothness acceptance is claimed.
+[GL, five-pair memory, stage traces and rejected patch](docs/specs/0126-instant-drag.md).

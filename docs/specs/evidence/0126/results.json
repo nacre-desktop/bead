@@ -1,0 +1,863 @@
+{
+  "arms": {
+    "candidate-cpu-120-bead": {
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "mean_gesture_speed_range_px_s": [
+        2006.444752212211,
+        2015.2943443752717
+      ],
+      "nested_niri_refresh_hz": 60.0,
+      "parent_mode": {
+        "height": 1800,
+        "refresh_hz": 120.0,
+        "width": 2880
+      },
+      "source_hashes": {
+        "bead_shell_tree": "1db7f3fc29f493d39b2cfdc693478e009a46ba78331e175bfb205f77caaed56e",
+        "capture_driver": "c4fbe40a93342536b14fee44b6b9b3d9eb27740bcee317ffe7d02cc42f0b78e3",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "nacre_shell": "08f5a99c1b233c02d3ac79a0079b83b2e6333a14fd96641c6493779585d4594f",
+        "parity_driver": "1d2a6aceda9e15fa1afd75486455eb7b961d8a682fe73050beeeed2bb2764b2f",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff"
+      },
+      "swapin_pages": 0,
+      "timing": {
+        "commit_to_feedback_ms": {
+          "n": 69,
+          "p50": 11.945207,
+          "p95": 15.98534,
+          "p99": 62.161778
+        },
+        "dispatch_to_commit_ms": {
+          "n": 69,
+          "p50": 11.272697,
+          "p95": 12.609967,
+          "p99": 12.855528
+        },
+        "gestures_calibrated": 12,
+        "injection_to_dispatch_ms": {
+          "n": 69,
+          "p50": 10.010286,
+          "p95": 11.892717,
+          "p99": 64.356869
+        },
+        "injection_to_feedback_ms": {
+          "n": 69,
+          "p50": 32.021349,
+          "p95": 35.869072,
+          "p99": 94.176007
+        },
+        "method": "exact same-gesture injected coordinate joined to received pointer coordinate; visual feedback carries latest receipt and commit clocks"
+      }
+    },
+    "candidate-cpu-60-bead": {
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "mean_gesture_speed_range_px_s": [
+        2006.378267902597,
+        2015.3620889100584
+      ],
+      "nested_niri_refresh_hz": 60.0,
+      "parent_mode": {
+        "height": 1800,
+        "refresh_hz": 60.0,
+        "width": 2880
+      },
+      "source_hashes": {
+        "bead_shell_tree": "1db7f3fc29f493d39b2cfdc693478e009a46ba78331e175bfb205f77caaed56e",
+        "capture_driver": "c4fbe40a93342536b14fee44b6b9b3d9eb27740bcee317ffe7d02cc42f0b78e3",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "nacre_shell": "08f5a99c1b233c02d3ac79a0079b83b2e6333a14fd96641c6493779585d4594f",
+        "parity_driver": "1d2a6aceda9e15fa1afd75486455eb7b961d8a682fe73050beeeed2bb2764b2f",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff"
+      },
+      "swapin_pages": 0,
+      "timing": {
+        "commit_to_feedback_ms": {
+          "n": 60,
+          "p50": 19.857007,
+          "p95": 31.968723,
+          "p99": 31.981017
+        },
+        "dispatch_to_commit_ms": {
+          "n": 60,
+          "p50": 12.076449,
+          "p95": 27.707931,
+          "p99": 27.741541
+        },
+        "gestures_calibrated": 12,
+        "injection_to_dispatch_ms": {
+          "n": 60,
+          "p50": 18.276808,
+          "p95": 24.789117,
+          "p99": 39.214872
+        },
+        "injection_to_feedback_ms": {
+          "n": 60,
+          "p50": 50.226525,
+          "p95": 56.77117,
+          "p99": 71.0075
+        },
+        "method": "exact same-gesture injected coordinate joined to received pointer coordinate; visual feedback carries latest receipt and commit clocks"
+      }
+    },
+    "candidate-gl-120-bead": {
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "mean_gesture_speed_range_px_s": [
+        1990.4329796483564,
+        1999.233615818831
+      ],
+      "nested_niri_refresh_hz": 60.0,
+      "parent_mode": {
+        "height": 1800,
+        "refresh_hz": 120.0,
+        "width": 2880
+      },
+      "source_hashes": {
+        "bead_shell_tree": "1db7f3fc29f493d39b2cfdc693478e009a46ba78331e175bfb205f77caaed56e",
+        "capture_driver": "0c2f920e73a030a89a6b08954162e451c7808bd0bf2a8272a43c28e985cfd661",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "nacre_shell": "0cdae6be5ede9cb3b55686f1439a85370991da02ac31889c82843dc8186b2d5c",
+        "parity_driver": "1d2a6aceda9e15fa1afd75486455eb7b961d8a682fe73050beeeed2bb2764b2f",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff"
+      },
+      "swapin_pages": 0,
+      "timing": {
+        "commit_to_feedback_ms": {
+          "n": 80,
+          "p50": 12.460426,
+          "p95": 15.985765,
+          "p99": 140.691916
+        },
+        "dispatch_to_commit_ms": {
+          "n": 80,
+          "p50": 11.533457,
+          "p95": 19.587144,
+          "p99": 26.236572
+        },
+        "gestures_calibrated": 12,
+        "injection_to_dispatch_ms": {
+          "n": 80,
+          "p50": 10.018317,
+          "p95": 14.805165,
+          "p99": 102.403769
+        },
+        "injection_to_feedback_ms": {
+          "n": 80,
+          "p50": 32.89595,
+          "p95": 37.179538,
+          "p99": 269.332257
+        },
+        "method": "exact same-gesture injected coordinate joined to received pointer coordinate; visual feedback carries latest receipt and commit clocks"
+      }
+    },
+    "candidate-gl-60-bead": {
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "mean_gesture_speed_range_px_s": [
+        1990.4870810824066,
+        2002.1206190122596
+      ],
+      "nested_niri_refresh_hz": 60.0,
+      "parent_mode": {
+        "height": 1800,
+        "refresh_hz": 60.0,
+        "width": 2880
+      },
+      "source_hashes": {
+        "bead_shell_tree": "1db7f3fc29f493d39b2cfdc693478e009a46ba78331e175bfb205f77caaed56e",
+        "capture_driver": "0c2f920e73a030a89a6b08954162e451c7808bd0bf2a8272a43c28e985cfd661",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "nacre_shell": "0cdae6be5ede9cb3b55686f1439a85370991da02ac31889c82843dc8186b2d5c",
+        "parity_driver": "1d2a6aceda9e15fa1afd75486455eb7b961d8a682fe73050beeeed2bb2764b2f",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff"
+      },
+      "swapin_pages": 0,
+      "timing": {
+        "commit_to_feedback_ms": {
+          "n": 60,
+          "p50": 20.439534,
+          "p95": 31.971901,
+          "p99": 31.994091
+        },
+        "dispatch_to_commit_ms": {
+          "n": 60,
+          "p50": 11.514097,
+          "p95": 27.507482,
+          "p99": 28.322761
+        },
+        "gestures_calibrated": 12,
+        "injection_to_dispatch_ms": {
+          "n": 60,
+          "p50": 18.026565,
+          "p95": 22.814543,
+          "p99": 23.659333
+        },
+        "injection_to_feedback_ms": {
+          "n": 60,
+          "p50": 49.976535,
+          "p95": 54.827004,
+          "p99": 71.645089
+        },
+        "method": "exact same-gesture injected coordinate joined to received pointer coordinate; visual feedback carries latest receipt and commit clocks"
+      }
+    },
+    "control-cpu-120-bead": {
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "mean_gesture_speed_range_px_s": [
+        2006.33784040912,
+        2015.3504940829826
+      ],
+      "nested_niri_refresh_hz": 60.0,
+      "parent_mode": {
+        "height": 1800,
+        "refresh_hz": 120.0,
+        "width": 2880
+      },
+      "source_hashes": {
+        "bead_shell_tree": "1db7f3fc29f493d39b2cfdc693478e009a46ba78331e175bfb205f77caaed56e",
+        "capture_driver": "c4fbe40a93342536b14fee44b6b9b3d9eb27740bcee317ffe7d02cc42f0b78e3",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "nacre_shell": "e6bb25a62c94bc92cc187e96e0fad27a9ad678a331b1e00b32a017b8e9de7256",
+        "parity_driver": "1d2a6aceda9e15fa1afd75486455eb7b961d8a682fe73050beeeed2bb2764b2f",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff"
+      },
+      "swapin_pages": 0,
+      "timing": {
+        "accepted_to_commit_ms": {
+          "n": 104,
+          "p50": 3.075803,
+          "p95": 9.818997,
+          "p99": 51.255564
+        },
+        "bake_to_accepted_ms": {
+          "n": 104,
+          "p50": 0.46004,
+          "p95": 0.66559,
+          "p99": 0.71062
+        },
+        "commit_to_feedback_ms": {
+          "n": 104,
+          "p50": 15.31037,
+          "p95": 15.53665,
+          "p99": 61.236071
+        },
+        "dispatch_to_worker_ms": {
+          "n": 104,
+          "p50": 1.459531,
+          "p95": 8.022005,
+          "p99": 8.320325
+        },
+        "injection_to_dispatch_ms": {
+          "n": 104,
+          "p50": 10.277966,
+          "p95": 14.7516,
+          "p99": 44.085949
+        },
+        "injection_to_feedback_ms": {
+          "n": 104,
+          "p50": 37.566285,
+          "p95": 43.619438,
+          "p99": 114.277596
+        },
+        "layout_to_bake_ms": {
+          "n": 104,
+          "p50": 0.23309,
+          "p95": 0.262031,
+          "p99": 0.26984
+        },
+        "method": "pressed state value joined to exact commit+feedback; separate stationary press/release endpoints calibrate pointer coordinates",
+        "worker_to_layout_ms": {
+          "n": 104,
+          "p50": 4.922004,
+          "p95": 5.840464,
+          "p99": 7.641555
+        }
+      }
+    },
+    "control-cpu-60-bead": {
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "mean_gesture_speed_range_px_s": [
+        2006.3295305151012,
+        2015.6794362658013
+      ],
+      "nested_niri_refresh_hz": 60.0,
+      "parent_mode": {
+        "height": 1800,
+        "refresh_hz": 60.0,
+        "width": 2880
+      },
+      "source_hashes": {
+        "bead_shell_tree": "1db7f3fc29f493d39b2cfdc693478e009a46ba78331e175bfb205f77caaed56e",
+        "capture_driver": "c4fbe40a93342536b14fee44b6b9b3d9eb27740bcee317ffe7d02cc42f0b78e3",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "nacre_shell": "e6bb25a62c94bc92cc187e96e0fad27a9ad678a331b1e00b32a017b8e9de7256",
+        "parity_driver": "1d2a6aceda9e15fa1afd75486455eb7b961d8a682fe73050beeeed2bb2764b2f",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff"
+      },
+      "swapin_pages": 0,
+      "timing": {
+        "accepted_to_commit_ms": {
+          "n": 63,
+          "p50": 5.951926,
+          "p95": 20.263415,
+          "p99": 26.000621
+        },
+        "bake_to_accepted_ms": {
+          "n": 63,
+          "p50": 0.48647,
+          "p95": 0.649969,
+          "p99": 0.80438
+        },
+        "commit_to_feedback_ms": {
+          "n": 63,
+          "p50": 31.266688,
+          "p95": 31.504037,
+          "p99": 46.140477
+        },
+        "dispatch_to_worker_ms": {
+          "n": 63,
+          "p50": 4.817816,
+          "p95": 6.010366,
+          "p99": 7.124555
+        },
+        "injection_to_dispatch_ms": {
+          "n": 63,
+          "p50": 18.776266,
+          "p95": 28.775459,
+          "p99": 42.67422
+        },
+        "injection_to_feedback_ms": {
+          "n": 63,
+          "p50": 65.763354,
+          "p95": 72.858029,
+          "p99": 91.736705
+        },
+        "layout_to_bake_ms": {
+          "n": 63,
+          "p50": 0.241139,
+          "p95": 0.25619,
+          "p99": 0.26023
+        },
+        "method": "pressed state value joined to exact commit+feedback; separate stationary press/release endpoints calibrate pointer coordinates",
+        "worker_to_layout_ms": {
+          "n": 63,
+          "p50": 4.891297,
+          "p95": 6.292726,
+          "p99": 6.400685
+        }
+      }
+    },
+    "control-gl-120-bead": {
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "mean_gesture_speed_range_px_s": [
+        1990.4398749309223,
+        1999.2515683154343
+      ],
+      "nested_niri_refresh_hz": 60.0,
+      "parent_mode": {
+        "height": 1800,
+        "refresh_hz": 120.0,
+        "width": 2880
+      },
+      "source_hashes": {
+        "bead_shell_tree": "1db7f3fc29f493d39b2cfdc693478e009a46ba78331e175bfb205f77caaed56e",
+        "capture_driver": "0c2f920e73a030a89a6b08954162e451c7808bd0bf2a8272a43c28e985cfd661",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "nacre_shell": "f26d2443b385381f0026bb5046c92ad290bec096515bcfeb6871d05d1e7e0e50",
+        "parity_driver": "1d2a6aceda9e15fa1afd75486455eb7b961d8a682fe73050beeeed2bb2764b2f",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff"
+      },
+      "swapin_pages": 0,
+      "timing": {
+        "accepted_to_commit_ms": {
+          "n": 105,
+          "p50": 2.912119,
+          "p95": 10.963096,
+          "p99": 43.031747
+        },
+        "bake_to_accepted_ms": {
+          "n": 105,
+          "p50": 0.4904,
+          "p95": 0.70707,
+          "p99": 0.73542
+        },
+        "commit_to_feedback_ms": {
+          "n": 105,
+          "p50": 15.609426,
+          "p95": 17.637735,
+          "p99": 54.562913
+        },
+        "dispatch_to_worker_ms": {
+          "n": 105,
+          "p50": 1.319779,
+          "p95": 6.460878,
+          "p99": 8.345457
+        },
+        "injection_to_dispatch_ms": {
+          "n": 105,
+          "p50": 10.266967,
+          "p95": 14.828765,
+          "p99": 82.777405
+        },
+        "injection_to_feedback_ms": {
+          "n": 105,
+          "p50": 38.713938,
+          "p95": 46.826956,
+          "p99": 157.419833
+        },
+        "layout_to_bake_ms": {
+          "n": 105,
+          "p50": 0.24272,
+          "p95": 0.27409,
+          "p99": 0.28647
+        },
+        "method": "pressed state value joined to exact commit+feedback; separate stationary press/release endpoints calibrate pointer coordinates",
+        "worker_to_layout_ms": {
+          "n": 105,
+          "p50": 4.982578,
+          "p95": 5.906678,
+          "p99": 6.471208
+        }
+      }
+    },
+    "control-gl-120-qml": {
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "parent_mode": {
+        "height": 1800,
+        "refresh_hz": 120.0,
+        "width": 2880
+      },
+      "source_hashes": {
+        "bead_shell_tree": "1db7f3fc29f493d39b2cfdc693478e009a46ba78331e175bfb205f77caaed56e",
+        "capture_driver": "c4fbe40a93342536b14fee44b6b9b3d9eb27740bcee317ffe7d02cc42f0b78e3",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "nacre_shell": "e6bb25a62c94bc92cc187e96e0fad27a9ad678a331b1e00b32a017b8e9de7256",
+        "parity_driver": "1d2a6aceda9e15fa1afd75486455eb7b961d8a682fe73050beeeed2bb2764b2f",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff"
+      },
+      "swapin_pages": 0,
+      "timing": {
+        "backend": "gl",
+        "coalesced_events": 235,
+        "coordinate_calibration": {
+          "calibration_event_delay_ms": 0.70712,
+          "calibration_event_generation": 1,
+          "scale": 1.5,
+          "window_origin_offset_logical": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        "coordinate_error_x_logical_p95": 0.002666666666755191,
+        "coordinate_error_y_logical_p95": 0.0,
+        "dispatch_to_sync_ms_p50": 7.918263,
+        "dispatch_to_sync_ms_p95": 8.067883,
+        "dispatch_to_sync_ms_p99": 30.706311,
+        "drag_events": 339,
+        "generation_contract_misses": 0,
+        "injection_to_dispatch_ms_p50": 9.506383,
+        "injection_to_dispatch_ms_p95": 11.661054,
+        "injection_to_dispatch_ms_p99": 41.821385,
+        "injection_to_feedback_ms_p50": 33.345821,
+        "injection_to_feedback_ms_p95": 50.908488,
+        "injection_to_feedback_ms_p99": 164.762278,
+        "input_events": 364,
+        "nested_hz": 60.0,
+        "phase": "control",
+        "pointer_speed_px_s_p50": 2066.44018482241,
+        "pointer_speed_px_s_p95": 2070.7674419447408,
+        "pointer_speed_px_s_p99": 2080.899656157343,
+        "position_rejected_generations": 0,
+        "presented_input_generations": 104,
+        "requested_hz": 120,
+        "slider_position_checks": 104,
+        "slider_position_error_fraction_p50": 0.0030420168067226694,
+        "slider_position_error_fraction_p95": 0.0045546218487394485,
+        "slider_position_error_fraction_p99": 0.004689075630252171,
+        "slider_position_gate_fraction": 0.011,
+        "slider_position_gate_pass": true,
+        "status": "ok",
+        "sync_to_feedback_ms_p50": 15.931226,
+        "sync_to_feedback_ms_p95": 31.976501,
+        "sync_to_feedback_ms_p99": 131.014966,
+        "timestamp_method": "CLOCK_MONOTONIC actuator injection -> exact QML event -> exact generation sync/value -> exact generation Wayland feedback; ROI timestamps unused",
+        "timing_scope": "nested synthetic compositor; not physical scanout",
+        "unmatched_coordinate_events": 0
+      }
+    },
+    "control-gl-60-bead": {
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "mean_gesture_speed_range_px_s": [
+        1990.4568857467414,
+        1999.163621097604
+      ],
+      "nested_niri_refresh_hz": 60.0,
+      "parent_mode": {
+        "height": 1800,
+        "refresh_hz": 60.0,
+        "width": 2880
+      },
+      "source_hashes": {
+        "bead_shell_tree": "1db7f3fc29f493d39b2cfdc693478e009a46ba78331e175bfb205f77caaed56e",
+        "capture_driver": "0c2f920e73a030a89a6b08954162e451c7808bd0bf2a8272a43c28e985cfd661",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "nacre_shell": "f26d2443b385381f0026bb5046c92ad290bec096515bcfeb6871d05d1e7e0e50",
+        "parity_driver": "1d2a6aceda9e15fa1afd75486455eb7b961d8a682fe73050beeeed2bb2764b2f",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff"
+      },
+      "swapin_pages": 0,
+      "timing": {
+        "accepted_to_commit_ms": {
+          "n": 61,
+          "p50": 5.963478,
+          "p95": 10.700167,
+          "p99": 27.539332
+        },
+        "bake_to_accepted_ms": {
+          "n": 61,
+          "p50": 0.53611,
+          "p95": 0.68854,
+          "p99": 0.74464
+        },
+        "commit_to_feedback_ms": {
+          "n": 61,
+          "p50": 31.565651,
+          "p95": 31.646861,
+          "p99": 67.282751
+        },
+        "dispatch_to_worker_ms": {
+          "n": 61,
+          "p50": 2.948319,
+          "p95": 5.463539,
+          "p99": 5.700688
+        },
+        "injection_to_dispatch_ms": {
+          "n": 61,
+          "p50": 17.746555,
+          "p95": 28.688872,
+          "p99": 28.767132
+        },
+        "injection_to_feedback_ms": {
+          "n": 61,
+          "p50": 65.731101,
+          "p95": 70.79959,
+          "p99": 126.982714
+        },
+        "layout_to_bake_ms": {
+          "n": 61,
+          "p50": 0.24288,
+          "p95": 0.25966,
+          "p99": 0.29174
+        },
+        "method": "pressed state value joined to exact commit+feedback; separate stationary press/release endpoints calibrate pointer coordinates",
+        "worker_to_layout_ms": {
+          "n": 61,
+          "p50": 4.892008,
+          "p95": 6.013449,
+          "p99": 6.388008
+        }
+      }
+    },
+    "control-gl-60-qml": {
+      "geometry": {
+        "logical": [
+          1920,
+          1200
+        ],
+        "mode": [
+          2880,
+          1800
+        ],
+        "name": "winit",
+        "scale": 1.5
+      },
+      "parent_mode": {
+        "height": 1800,
+        "refresh_hz": 60.0,
+        "width": 2880
+      },
+      "source_hashes": {
+        "bead_shell_tree": "1db7f3fc29f493d39b2cfdc693478e009a46ba78331e175bfb205f77caaed56e",
+        "capture_driver": "c4fbe40a93342536b14fee44b6b9b3d9eb27740bcee317ffe7d02cc42f0b78e3",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "nacre_shell": "e6bb25a62c94bc92cc187e96e0fad27a9ad678a331b1e00b32a017b8e9de7256",
+        "parity_driver": "1d2a6aceda9e15fa1afd75486455eb7b961d8a682fe73050beeeed2bb2764b2f",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff"
+      },
+      "swapin_pages": 0,
+      "timing": {
+        "backend": "gl",
+        "coalesced_events": 126,
+        "coordinate_calibration": {
+          "calibration_event_delay_ms": 0.70068,
+          "calibration_event_generation": 1,
+          "scale": 1.5,
+          "window_origin_offset_logical": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        "coordinate_error_x_logical_p95": 0.002666666666755191,
+        "coordinate_error_y_logical_p95": 0.0,
+        "dispatch_to_sync_ms_p50": 15.885746,
+        "dispatch_to_sync_ms_p95": 16.116336,
+        "dispatch_to_sync_ms_p99": 16.168156,
+        "drag_events": 202,
+        "generation_contract_misses": 0,
+        "injection_to_dispatch_ms_p50": 18.259267,
+        "injection_to_dispatch_ms_p95": 25.942449,
+        "injection_to_dispatch_ms_p99": 31.745962,
+        "injection_to_feedback_ms_p50": 65.038006,
+        "injection_to_feedback_ms_p95": 79.246992,
+        "injection_to_feedback_ms_p99": 98.565249,
+        "input_events": 227,
+        "nested_hz": 60.0,
+        "phase": "control",
+        "pointer_speed_px_s_p50": 2066.4834212492874,
+        "pointer_speed_px_s_p95": 2071.807823249931,
+        "pointer_speed_px_s_p99": 2087.093362469157,
+        "position_rejected_generations": 0,
+        "presented_input_generations": 76,
+        "requested_hz": 60,
+        "slider_position_checks": 76,
+        "slider_position_error_fraction_p50": 0.0018991596638660013,
+        "slider_position_error_fraction_p95": 0.0045546218487394485,
+        "slider_position_error_fraction_p99": 0.0045546218487394485,
+        "slider_position_gate_fraction": 0.011,
+        "slider_position_gate_pass": true,
+        "status": "ok",
+        "sync_to_feedback_ms_p50": 31.907052,
+        "sync_to_feedback_ms_p95": 47.14426,
+        "sync_to_feedback_ms_p99": 62.856005,
+        "timestamp_method": "CLOCK_MONOTONIC actuator injection -> exact QML event -> exact generation sync/value -> exact generation Wayland feedback; ROI timestamps unused",
+        "timing_scope": "nested synthetic compositor; not physical scanout",
+        "unmatched_coordinate_events": 0
+      }
+    }
+  },
+  "bead_base": "61e735074796f95fc705f64f33b751653de170a2",
+  "gpu": "AMD integrated/radeonsi proxy; Intel unmeasured",
+  "pixel_analysis": {
+    "arms": {
+      "candidate-cpu-120-bead": {
+        "frames": 41,
+        "reason": "no stable moving near-white cursor fingerprint",
+        "status": "gap",
+        "thumb_frames": 20
+      },
+      "candidate-cpu-60-bead": {
+        "cursor_shapes": [
+          "88e941c22cff1aeb"
+        ],
+        "frames": 21,
+        "pairs": 3,
+        "reason": "need eight distinct cursor/thumb pairs spanning half the trajectory",
+        "status": "gap"
+      },
+      "candidate-gl-120-bead": {
+        "cursor_shapes": [
+          "88e941c22cff1aeb"
+        ],
+        "frames": 41,
+        "pairs": 4,
+        "reason": "need eight distinct cursor/thumb pairs spanning half the trajectory",
+        "status": "gap"
+      },
+      "candidate-gl-60-bead": {
+        "cursor_shapes": [
+          "88e941c22cff1aeb"
+        ],
+        "frames": 21,
+        "pairs": 3,
+        "reason": "need eight distinct cursor/thumb pairs spanning half the trajectory",
+        "status": "gap"
+      },
+      "candidate_vs_qml_60hz": {
+        "reason": "one or both pixel-error samples are insufficient",
+        "status": "gap"
+      },
+      "control-cpu-120-bead": {
+        "cursor_shapes": [
+          "88e941c22cff1aeb"
+        ],
+        "frames": 41,
+        "pairs": 2,
+        "reason": "need eight distinct cursor/thumb pairs spanning half the trajectory",
+        "status": "gap"
+      },
+      "control-cpu-60-bead": {
+        "cursor_shapes": [
+          "88e941c22cff1aeb"
+        ],
+        "frames": 21,
+        "pairs": 4,
+        "reason": "need eight distinct cursor/thumb pairs spanning half the trajectory",
+        "status": "gap"
+      },
+      "control-gl-120-bead": {
+        "cursor_shapes": [
+          "88e941c22cff1aeb"
+        ],
+        "frames": 41,
+        "pairs": 5,
+        "reason": "need eight distinct cursor/thumb pairs spanning half the trajectory",
+        "status": "gap"
+      },
+      "control-gl-120-qml": {
+        "cursor_shapes": [
+          "869a76e93f4d9073"
+        ],
+        "frames": 41,
+        "pairs": 6,
+        "reason": "need eight distinct cursor/thumb pairs spanning half the trajectory",
+        "status": "gap"
+      },
+      "control-gl-60-bead": {
+        "cursor_shapes": [
+          "88e941c22cff1aeb"
+        ],
+        "frames": 21,
+        "pairs": 5,
+        "reason": "need eight distinct cursor/thumb pairs spanning half the trajectory",
+        "status": "gap"
+      },
+      "control-gl-60-qml": {
+        "cursor_shapes": [
+          "869a76e93f4d9073"
+        ],
+        "frames": 21,
+        "pairs": 3,
+        "reason": "need eight distinct cursor/thumb pairs spanning half the trajectory",
+        "status": "gap"
+      }
+    },
+    "schema": "b0126-pixel-analysis-v1",
+    "timestamp_policy": "no frame-spawn or frame-completion time used for latency or pairing"
+  },
+  "qml_source": "836df1a643eae6e2f54ec86967a83d2f27561d3d",
+  "schema": "b0126-results-v1",
+  "timing_scope": "private nested synthetic parent cadence; not physical scanout",
+  "trace_records": {
+    "file": "trace-samples.jsonl",
+    "note": "Raw timing/calibration/position records and twenty per-arm memory snapshots, one per line.",
+    "records": 1030
+  }
+}

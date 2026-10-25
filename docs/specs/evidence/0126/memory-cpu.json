@@ -1,0 +1,433 @@
+{
+  "memory-cpu": {
+    "backend": "cpu",
+    "clean_file_note": "Pss_File/file-backed PSS is informational and is not part of the unreclaimable gate",
+    "pair_count": 5,
+    "phases": {
+      "closed": {
+        "anon_mib": {
+          "candidate_median_mib": 30.742188,
+          "control_median_mib": 30.328125,
+          "median_delta_mib": 0.414062,
+          "pair_deltas_mib": [
+            -0.046875,
+            0.019531,
+            0.414062,
+            0.421875,
+            0.75
+          ]
+        },
+        "drm_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "file_backed_mib": {
+          "candidate_median_mib": 21.041992,
+          "control_median_mib": 20.960938,
+          "median_delta_mib": 0.081055,
+          "pair_deltas_mib": [
+            0.203125,
+            0.081055,
+            -0.095703,
+            -0.035156,
+            0.277344
+          ]
+        },
+        "pss_mib": {
+          "candidate_median_mib": 54.774414,
+          "control_median_mib": 54.456055,
+          "median_delta_mib": 0.318359,
+          "pair_deltas_mib": [
+            0.15625,
+            0.100586,
+            0.318359,
+            0.386719,
+            1.027344
+          ]
+        },
+        "pss_plus_drm_mib": {
+          "candidate_median_mib": 54.774414,
+          "control_median_mib": 54.456055,
+          "median_delta_mib": 0.318359,
+          "pair_deltas_mib": [
+            0.15625,
+            0.100586,
+            0.318359,
+            0.386719,
+            1.027344
+          ]
+        },
+        "shmem_mib": {
+          "candidate_median_mib": 3.058594,
+          "control_median_mib": 3.058594,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "swap_pss_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "unreclaimable_mib": {
+          "candidate_median_mib": 33.800781,
+          "control_median_mib": 33.386719,
+          "median_delta_mib": 0.414062,
+          "pair_deltas_mib": [
+            -0.046875,
+            0.019531,
+            0.414062,
+            0.421875,
+            0.75
+          ]
+        }
+      },
+      "idle": {
+        "anon_mib": {
+          "candidate_median_mib": 19.246094,
+          "control_median_mib": 19.257812,
+          "median_delta_mib": -0.023438,
+          "pair_deltas_mib": [
+            -0.128906,
+            0.285156,
+            -0.03125,
+            0.066406,
+            -0.023438
+          ]
+        },
+        "drm_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "file_backed_mib": {
+          "candidate_median_mib": 20.099609,
+          "control_median_mib": 20.023438,
+          "median_delta_mib": 0.130859,
+          "pair_deltas_mib": [
+            0.217773,
+            0.130859,
+            -0.189453,
+            -0.108398,
+            0.37793
+          ]
+        },
+        "pss_mib": {
+          "candidate_median_mib": 40.03418,
+          "control_median_mib": 39.974609,
+          "median_delta_mib": 0.088867,
+          "pair_deltas_mib": [
+            0.088867,
+            0.416016,
+            -0.220703,
+            -0.041992,
+            0.354492
+          ]
+        },
+        "pss_plus_drm_mib": {
+          "candidate_median_mib": 40.03418,
+          "control_median_mib": 39.974609,
+          "median_delta_mib": 0.088867,
+          "pair_deltas_mib": [
+            0.088867,
+            0.416016,
+            -0.220703,
+            -0.041992,
+            0.354492
+          ]
+        },
+        "shmem_mib": {
+          "candidate_median_mib": 0.693359,
+          "control_median_mib": 0.693359,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "swap_pss_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "unreclaimable_mib": {
+          "candidate_median_mib": 19.939453,
+          "control_median_mib": 19.951172,
+          "median_delta_mib": -0.023438,
+          "pair_deltas_mib": [
+            -0.128906,
+            0.285156,
+            -0.03125,
+            0.066406,
+            -0.023438
+          ]
+        }
+      },
+      "open": {
+        "anon_mib": {
+          "candidate_median_mib": 29.191406,
+          "control_median_mib": 29.390625,
+          "median_delta_mib": -0.09375,
+          "pair_deltas_mib": [
+            0.117188,
+            -0.476562,
+            -0.09375,
+            -0.023438,
+            -0.296875
+          ]
+        },
+        "drm_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "file_backed_mib": {
+          "candidate_median_mib": 20.987305,
+          "control_median_mib": 20.915039,
+          "median_delta_mib": 0.076172,
+          "pair_deltas_mib": [
+            0.194336,
+            0.076172,
+            -0.092773,
+            -0.046875,
+            0.266602
+          ]
+        },
+        "pss_mib": {
+          "candidate_median_mib": 55.875977,
+          "control_median_mib": 56.097656,
+          "median_delta_mib": -0.12793,
+          "pair_deltas_mib": [
+            0.270508,
+            -0.400391,
+            -0.12793,
+            -0.128906,
+            -0.012695
+          ]
+        },
+        "pss_plus_drm_mib": {
+          "candidate_median_mib": 55.875977,
+          "control_median_mib": 56.097656,
+          "median_delta_mib": -0.12793,
+          "pair_deltas_mib": [
+            0.270508,
+            -0.400391,
+            -0.12793,
+            -0.128906,
+            -0.012695
+          ]
+        },
+        "shmem_mib": {
+          "candidate_median_mib": 5.736328,
+          "control_median_mib": 5.736328,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            -0.041016,
+            0.0,
+            0.058594,
+            -0.058594,
+            0.017578
+          ]
+        },
+        "swap_pss_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "unreclaimable_mib": {
+          "candidate_median_mib": 34.886719,
+          "control_median_mib": 35.085938,
+          "median_delta_mib": -0.082031,
+          "pair_deltas_mib": [
+            0.076172,
+            -0.476562,
+            -0.035156,
+            -0.082031,
+            -0.279297
+          ]
+        }
+      },
+      "open_after_drags": {
+        "anon_mib": {
+          "candidate_median_mib": 32.125,
+          "control_median_mib": 31.601562,
+          "median_delta_mib": 0.710938,
+          "pair_deltas_mib": [
+            1.042969,
+            0.328125,
+            1.707031,
+            0.113281,
+            0.710938
+          ]
+        },
+        "drm_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "file_backed_mib": {
+          "candidate_median_mib": 21.017578,
+          "control_median_mib": 20.953125,
+          "median_delta_mib": 0.071289,
+          "pair_deltas_mib": [
+            0.206055,
+            0.071289,
+            -0.092773,
+            -0.055664,
+            0.266602
+          ]
+        },
+        "pss_mib": {
+          "candidate_median_mib": 61.327148,
+          "control_median_mib": 60.567383,
+          "median_delta_mib": 0.977539,
+          "pair_deltas_mib": [
+            1.249023,
+            0.399414,
+            1.614258,
+            0.057617,
+            0.977539
+          ]
+        },
+        "pss_plus_drm_mib": {
+          "candidate_median_mib": 61.327148,
+          "control_median_mib": 60.567383,
+          "median_delta_mib": 0.977539,
+          "pair_deltas_mib": [
+            1.249023,
+            0.399414,
+            1.614258,
+            0.057617,
+            0.977539
+          ]
+        },
+        "shmem_mib": {
+          "candidate_median_mib": 8.154297,
+          "control_median_mib": 8.154297,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "swap_pss_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "unreclaimable_mib": {
+          "candidate_median_mib": 40.279297,
+          "control_median_mib": 39.755859,
+          "median_delta_mib": 0.710938,
+          "pair_deltas_mib": [
+            1.042969,
+            0.328125,
+            1.707031,
+            0.113281,
+            0.710938
+          ]
+        }
+      }
+    },
+    "refresh_hz": 60
+  },
+  "provenance": {
+    "all_five_sources_identical_within_each_phase": true,
+    "bar_renderer": "CPU",
+    "geometry": "2880x1800 scale 1.5; synthetic parent 60 Hz",
+    "memory_scope": "UI process; helper/daemon excluded",
+    "panel_renderer": "cpu",
+    "raw_snapshots": "trace-samples.jsonl",
+    "source_hashes_by_phase": {
+      "candidate": {
+        "bead_shell_tree": "1db7f3fc29f493d39b2cfdc693478e009a46ba78331e175bfb205f77caaed56e",
+        "capture_driver": "1626663a680d23b327acc8b07dcee4a1e6a8d9db29535b9d091eaa9e4b0e072a",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "nacre_shell": "08f5a99c1b233c02d3ac79a0079b83b2e6333a14fd96641c6493779585d4594f",
+        "parity_driver": "1d2a6aceda9e15fa1afd75486455eb7b961d8a682fe73050beeeed2bb2764b2f",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff"
+      },
+      "control": {
+        "bead_shell_tree": "1db7f3fc29f493d39b2cfdc693478e009a46ba78331e175bfb205f77caaed56e",
+        "capture_driver": "1626663a680d23b327acc8b07dcee4a1e6a8d9db29535b9d091eaa9e4b0e072a",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "nacre_shell": "e6bb25a62c94bc92cc187e96e0fad27a9ad678a331b1e00b32a017b8e9de7256",
+        "parity_driver": "1d2a6aceda9e15fa1afd75486455eb7b961d8a682fe73050beeeed2bb2764b2f",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff"
+      }
+    }
+  },
+  "schema": "b0126-memory-summary-v1"
+}

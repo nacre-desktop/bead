@@ -1,0 +1,433 @@
+{
+  "memory-gl": {
+    "backend": "gl",
+    "clean_file_note": "Pss_File/file-backed PSS is informational and is not part of the unreclaimable gate",
+    "pair_count": 5,
+    "phases": {
+      "closed": {
+        "anon_mib": {
+          "candidate_median_mib": 57.355469,
+          "control_median_mib": 57.238281,
+          "median_delta_mib": 0.191406,
+          "pair_deltas_mib": [
+            0.117188,
+            0.191406,
+            1.421875,
+            0.304688,
+            -0.605469
+          ]
+        },
+        "drm_mib": {
+          "candidate_median_mib": 98.960938,
+          "control_median_mib": 98.960938,
+          "median_delta_mib": -0.007812,
+          "pair_deltas_mib": [
+            -0.007812,
+            0.007812,
+            -2.0,
+            -0.007812,
+            0.007812
+          ]
+        },
+        "file_backed_mib": {
+          "candidate_median_mib": 45.616211,
+          "control_median_mib": 45.589844,
+          "median_delta_mib": -0.004883,
+          "pair_deltas_mib": [
+            -0.045898,
+            -0.004883,
+            -0.108398,
+            0.109375,
+            0.129883
+          ]
+        },
+        "pss_mib": {
+          "candidate_median_mib": 103.694336,
+          "control_median_mib": 103.623047,
+          "median_delta_mib": 0.186523,
+          "pair_deltas_mib": [
+            0.071289,
+            0.186523,
+            1.313477,
+            0.414062,
+            -0.474609
+          ]
+        },
+        "pss_plus_drm_mib": {
+          "candidate_median_mib": 202.605469,
+          "control_median_mib": 202.591797,
+          "median_delta_mib": 0.063477,
+          "pair_deltas_mib": [
+            0.063477,
+            0.194336,
+            -0.686523,
+            0.40625,
+            -0.466797
+          ]
+        },
+        "shmem_mib": {
+          "candidate_median_mib": 0.793945,
+          "control_median_mib": 0.793945,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "swap_pss_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "unreclaimable_mib": {
+          "candidate_median_mib": 156.907227,
+          "control_median_mib": 157.000977,
+          "median_delta_mib": 0.109375,
+          "pair_deltas_mib": [
+            0.109375,
+            0.199219,
+            -0.578125,
+            0.296875,
+            -0.597656
+          ]
+        }
+      },
+      "idle": {
+        "anon_mib": {
+          "candidate_median_mib": 19.335938,
+          "control_median_mib": 19.335938,
+          "median_delta_mib": -0.09375,
+          "pair_deltas_mib": [
+            -0.09375,
+            0.125,
+            -0.109375,
+            0.15625,
+            -0.234375
+          ]
+        },
+        "drm_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "file_backed_mib": {
+          "candidate_median_mib": 20.074219,
+          "control_median_mib": 19.973633,
+          "median_delta_mib": 0.100586,
+          "pair_deltas_mib": [
+            0.100586,
+            -0.052734,
+            -0.299805,
+            0.142578,
+            0.240234
+          ]
+        },
+        "pss_mib": {
+          "candidate_median_mib": 40.111328,
+          "control_median_mib": 40.039062,
+          "median_delta_mib": 0.006836,
+          "pair_deltas_mib": [
+            0.006836,
+            0.072266,
+            -0.40918,
+            0.298828,
+            0.005859
+          ]
+        },
+        "pss_plus_drm_mib": {
+          "candidate_median_mib": 40.111328,
+          "control_median_mib": 40.039062,
+          "median_delta_mib": 0.006836,
+          "pair_deltas_mib": [
+            0.006836,
+            0.072266,
+            -0.40918,
+            0.298828,
+            0.005859
+          ]
+        },
+        "shmem_mib": {
+          "candidate_median_mib": 0.693359,
+          "control_median_mib": 0.693359,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "swap_pss_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "unreclaimable_mib": {
+          "candidate_median_mib": 20.029297,
+          "control_median_mib": 20.029297,
+          "median_delta_mib": -0.09375,
+          "pair_deltas_mib": [
+            -0.09375,
+            0.125,
+            -0.109375,
+            0.15625,
+            -0.234375
+          ]
+        }
+      },
+      "open": {
+        "anon_mib": {
+          "candidate_median_mib": 53.945312,
+          "control_median_mib": 53.992188,
+          "median_delta_mib": -0.046875,
+          "pair_deltas_mib": [
+            -0.136719,
+            0.472656,
+            -0.523438,
+            -0.046875,
+            0.253906
+          ]
+        },
+        "drm_mib": {
+          "candidate_median_mib": 91.746094,
+          "control_median_mib": 95.199219,
+          "median_delta_mib": -3.453125,
+          "pair_deltas_mib": [
+            -7.816406,
+            7.816406,
+            -3.453125,
+            -7.816406,
+            7.816406
+          ]
+        },
+        "file_backed_mib": {
+          "candidate_median_mib": 45.554688,
+          "control_median_mib": 45.526367,
+          "median_delta_mib": -0.004883,
+          "pair_deltas_mib": [
+            -0.047852,
+            -0.004883,
+            -0.102539,
+            0.094727,
+            0.124023
+          ]
+        },
+        "pss_mib": {
+          "candidate_median_mib": 100.370117,
+          "control_median_mib": 100.321289,
+          "median_delta_mib": 0.047852,
+          "pair_deltas_mib": [
+            -0.18457,
+            0.467773,
+            -0.626953,
+            0.047852,
+            0.378906
+          ]
+        },
+        "pss_plus_drm_mib": {
+          "candidate_median_mib": 192.116211,
+          "control_median_mib": 195.731445,
+          "median_delta_mib": -4.080078,
+          "pair_deltas_mib": [
+            -8.000977,
+            8.28418,
+            -4.080078,
+            -7.768555,
+            8.195312
+          ]
+        },
+        "shmem_mib": {
+          "candidate_median_mib": 0.795898,
+          "control_median_mib": 0.795898,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "swap_pss_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "unreclaimable_mib": {
+          "candidate_median_mib": 146.487305,
+          "control_median_mib": 150.073242,
+          "median_delta_mib": -3.976562,
+          "pair_deltas_mib": [
+            -7.953125,
+            8.289062,
+            -3.976562,
+            -7.863281,
+            8.070312
+          ]
+        }
+      },
+      "open_after_drags": {
+        "anon_mib": {
+          "candidate_median_mib": 57.300781,
+          "control_median_mib": 56.375,
+          "median_delta_mib": 0.925781,
+          "pair_deltas_mib": [
+            0.15625,
+            1.472656,
+            -0.015625,
+            0.925781,
+            1.097656
+          ]
+        },
+        "drm_mib": {
+          "candidate_median_mib": 64.589844,
+          "control_median_mib": 64.589844,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            -0.011719,
+            0.011719,
+            0.0,
+            -0.011719,
+            0.011719
+          ]
+        },
+        "file_backed_mib": {
+          "candidate_median_mib": 45.580078,
+          "control_median_mib": 45.553711,
+          "median_delta_mib": -0.004883,
+          "pair_deltas_mib": [
+            -0.047852,
+            -0.004883,
+            -0.107422,
+            0.111328,
+            0.125
+          ]
+        },
+        "pss_mib": {
+          "candidate_median_mib": 103.75293,
+          "control_median_mib": 102.711914,
+          "median_delta_mib": 1.037109,
+          "pair_deltas_mib": [
+            0.108398,
+            1.467773,
+            -0.12207,
+            1.037109,
+            1.222656
+          ]
+        },
+        "pss_plus_drm_mib": {
+          "candidate_median_mib": 168.342773,
+          "control_median_mib": 167.301758,
+          "median_delta_mib": 1.025391,
+          "pair_deltas_mib": [
+            0.09668,
+            1.479492,
+            -0.12207,
+            1.025391,
+            1.234375
+          ]
+        },
+        "shmem_mib": {
+          "candidate_median_mib": 0.795898,
+          "control_median_mib": 0.795898,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "swap_pss_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "unreclaimable_mib": {
+          "candidate_median_mib": 122.686523,
+          "control_median_mib": 121.768555,
+          "median_delta_mib": 0.914062,
+          "pair_deltas_mib": [
+            0.144531,
+            1.484375,
+            -0.015625,
+            0.914062,
+            1.109375
+          ]
+        }
+      }
+    },
+    "refresh_hz": 60
+  },
+  "provenance": {
+    "all_five_sources_identical_within_each_phase": true,
+    "bar_renderer": "CPU",
+    "geometry": "2880x1800 scale 1.5; synthetic parent 60 Hz",
+    "memory_scope": "UI process; helper/daemon excluded",
+    "panel_renderer": "gl",
+    "raw_snapshots": "trace-samples.jsonl",
+    "source_hashes_by_phase": {
+      "candidate": {
+        "bead_shell_tree": "1db7f3fc29f493d39b2cfdc693478e009a46ba78331e175bfb205f77caaed56e",
+        "capture_driver": "8dd1703ae91339b2da016f50a03cc1359fe80b9ba422c0b2f3bbb031c57e263b",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "nacre_shell": "0cdae6be5ede9cb3b55686f1439a85370991da02ac31889c82843dc8186b2d5c",
+        "parity_driver": "1d2a6aceda9e15fa1afd75486455eb7b961d8a682fe73050beeeed2bb2764b2f",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff"
+      },
+      "control": {
+        "bead_shell_tree": "1db7f3fc29f493d39b2cfdc693478e009a46ba78331e175bfb205f77caaed56e",
+        "capture_driver": "8dd1703ae91339b2da016f50a03cc1359fe80b9ba422c0b2f3bbb031c57e263b",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "nacre_shell": "f26d2443b385381f0026bb5046c92ad290bec096515bcfeb6871d05d1e7e0e50",
+        "parity_driver": "1d2a6aceda9e15fa1afd75486455eb7b961d8a682fe73050beeeed2bb2764b2f",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff"
+      }
+    }
+  },
+  "schema": "b0126-memory-summary-v1"
+}
