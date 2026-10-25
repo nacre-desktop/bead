@@ -1,0 +1,26 @@
+{
+  "source": "98d3de7",
+  "renderer": "CPU",
+  "geometry": {
+    "mode": [
+      2880,
+      1800
+    ],
+    "scale": 1.5
+  },
+  "normal_memory_acceptance": false,
+  "diagnostic": "State tracing and allocator-reporting preload; no arena override. Closed idle dwell exceeds retirement timer.",
+  "primary_tree_node_counts": [
+    19
+  ],
+  "retired_image_raster_counts": [
+    6
+  ],
+  "retained_image_bytes": [
+    0
+  ],
+  "actual_thp_modes": [
+    3
+  ],
+  "guard": "complete, no OOM, process SwapPss zero, host swap-in zero"
+}

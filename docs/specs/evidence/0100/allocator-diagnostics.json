@@ -1,0 +1,325 @@
+{
+  "units": "KiB",
+  "renderer": "CPU",
+  "control_source": "b1826ae",
+  "candidate_source": "5ad0972",
+  "purpose": "Historical diagnostic single arms; no mmap-threshold change selected. Predates the later process THP policy.",
+  "configurations": {
+    "control_4m": {
+      "phases": {
+        "idle": {
+          "rss_kib": {
+            "Pss_Anon": 18188,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 18654
+          },
+          "anon_huge_pages_kib": 0
+        },
+        "wallpaper-settled": {
+          "rss_kib": {
+            "Pss_Anon": 18676,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 17757
+          },
+          "anon_huge_pages_kib": 0
+        },
+        "wallpaper-spotlight-settled": {
+          "rss_kib": {
+            "Pss_Anon": 18964,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 17762
+          },
+          "anon_huge_pages_kib": 0
+        },
+        "wallpaper-hexagons-settled": {
+          "rss_kib": {
+            "Pss_Anon": 18976,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 17878
+          },
+          "anon_huge_pages_kib": 0
+        }
+      },
+      "close_release_checks": [
+        {
+          "allocator_bytes_after_trim": {
+            "arena": 28991488,
+            "used": 16417616,
+            "free": 12573872,
+            "mmap": 0,
+            "keep": 80
+          },
+          "image_rasters": 4,
+          "image_bytes": 0
+        },
+        {
+          "allocator_bytes_after_trim": {
+            "arena": 32759808,
+            "used": 16422784,
+            "free": 16337024,
+            "mmap": 0,
+            "keep": 80
+          },
+          "image_rasters": 4,
+          "image_bytes": 0
+        },
+        {
+          "allocator_bytes_after_trim": {
+            "arena": 35852288,
+            "used": 16459616,
+            "free": 19392672,
+            "mmap": 0,
+            "keep": 80
+          },
+          "image_rasters": 4,
+          "image_bytes": 0
+        }
+      ]
+    },
+    "candidate_4m": {
+      "phases": {
+        "idle": {
+          "rss_kib": {
+            "Pss_Anon": 18164,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19202
+          },
+          "anon_huge_pages_kib": 0
+        },
+        "wallpaper-settled": {
+          "rss_kib": {
+            "Pss_Anon": 19080,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 18132
+          },
+          "anon_huge_pages_kib": 0
+        },
+        "wallpaper-spotlight-settled": {
+          "rss_kib": {
+            "Pss_Anon": 19276,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 18132
+          },
+          "anon_huge_pages_kib": 0
+        },
+        "wallpaper-hexagons-settled": {
+          "rss_kib": {
+            "Pss_Anon": 19604,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 18132
+          },
+          "anon_huge_pages_kib": 0
+        }
+      },
+      "close_release_checks": [
+        {
+          "allocator_bytes_after_trim": {
+            "arena": 33570816,
+            "used": 16445280,
+            "free": 17125536,
+            "mmap": 0,
+            "keep": 1552
+          },
+          "image_rasters": 6,
+          "image_bytes": 0
+        },
+        {
+          "allocator_bytes_after_trim": {
+            "arena": 38313984,
+            "used": 16488768,
+            "free": 21825216,
+            "mmap": 48,
+            "keep": 1552
+          },
+          "image_rasters": 7,
+          "image_bytes": 0
+        },
+        {
+          "allocator_bytes_after_trim": {
+            "arena": 41222144,
+            "used": 16505472,
+            "free": 24716672,
+            "mmap": 80,
+            "keep": 2768
+          },
+          "image_rasters": 22,
+          "image_bytes": 0
+        }
+      ]
+    },
+    "candidate_128k": {
+      "phases": {
+        "idle": {
+          "rss_kib": {
+            "Pss_Anon": 18068,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 19166
+          },
+          "anon_huge_pages_kib": 0
+        },
+        "wallpaper-settled": {
+          "rss_kib": {
+            "Pss_Anon": 19064,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 18118
+          },
+          "anon_huge_pages_kib": 0
+        },
+        "wallpaper-spotlight-settled": {
+          "rss_kib": {
+            "Pss_Anon": 19296,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 18118
+          },
+          "anon_huge_pages_kib": 0
+        },
+        "wallpaper-hexagons-settled": {
+          "rss_kib": {
+            "Pss_Anon": 19656,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 18118
+          },
+          "anon_huge_pages_kib": 0
+        }
+      },
+      "close_release_checks": [
+        {
+          "allocator_bytes_after_trim": {
+            "arena": 32706560,
+            "used": 15798608,
+            "free": 16907952,
+            "mmap": 655456,
+            "keep": 3520
+          },
+          "image_rasters": 6,
+          "image_bytes": 0
+        },
+        {
+          "allocator_bytes_after_trim": {
+            "arena": 37216256,
+            "used": 15812128,
+            "free": 21404128,
+            "mmap": 655712,
+            "keep": 3520
+          },
+          "image_rasters": 7,
+          "image_bytes": 0
+        },
+        {
+          "allocator_bytes_after_trim": {
+            "arena": 40288256,
+            "used": 15857248,
+            "free": 24431008,
+            "mmap": 655776,
+            "keep": 3392
+          },
+          "image_rasters": 22,
+          "image_bytes": 0
+        }
+      ]
+    },
+    "candidate_1m": {
+      "phases": {
+        "idle": {
+          "rss_kib": {
+            "Pss_Anon": 18236,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 18892
+          },
+          "anon_huge_pages_kib": 0
+        },
+        "wallpaper-settled": {
+          "rss_kib": {
+            "Pss_Anon": 19080,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 17917
+          },
+          "anon_huge_pages_kib": 0
+        },
+        "wallpaper-spotlight-settled": {
+          "rss_kib": {
+            "Pss_Anon": 19420,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 17917
+          },
+          "anon_huge_pages_kib": 0
+        },
+        "wallpaper-hexagons-settled": {
+          "rss_kib": {
+            "Pss_Anon": 22576,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 17917
+          },
+          "anon_huge_pages_kib": 8192
+        }
+      },
+      "close_release_checks": [
+        {
+          "allocator_bytes_after_trim": {
+            "arena": 33759232,
+            "used": 16443424,
+            "free": 17315808,
+            "mmap": 0,
+            "keep": 3328
+          },
+          "image_rasters": 6,
+          "image_bytes": 0
+        },
+        {
+          "allocator_bytes_after_trim": {
+            "arena": 38449152,
+            "used": 16483904,
+            "free": 21965248,
+            "mmap": 160,
+            "keep": 3328
+          },
+          "image_rasters": 7,
+          "image_bytes": 0
+        },
+        {
+          "allocator_bytes_after_trim": {
+            "arena": 41291776,
+            "used": 16501616,
+            "free": 24790160,
+            "mmap": 224,
+            "keep": 1952
+          },
+          "image_rasters": 22,
+          "image_bytes": 0
+        }
+      ]
+    }
+  }
+}

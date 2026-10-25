@@ -76,21 +76,23 @@ Allocator follow-up shows stable live heap/cache sizes with varying anonymous ma
 
 [Stages, memory decomposition, source hashes and appearance gaps](docs/specs/0103-control-latency.md).
 
-## 2026-10-24 — B0100 wallpaper picker verification
+## 2026-10-25 — B0100 wallpaper picker
 
-The missing catalogue is now an additive Nacre contract; Bead keeps layout in Luau.
-Only an open picker owns its bounded images and service leases.
-Full remote Arch CI passes at `9920e2a`, including the final theme/rebase pass.
-Private captures are resuming under the shared per-command lock; parity is unverified.
+Super+W opens a real Luau picker backed by the additive Nacre catalogue contract.
+Thirteen guarded private QML/Bead states pass; layout and buffer fixes are included.
+Five final matched pairs fail the relative closed-memory gate; the excess is anonymous.
+Full remote Arch CI passes; this remains a review candidate with explicit visual gaps.
 
-| Check | Result |
-| --- | --- |
-| Picker golden combinations | 3 layouts × 2 media kinds × 2 scales |
-| Encoded image cache budget | 16 MiB, open panel only |
-| Paired QML RMSE | unavailable |
-| Relative unreclaimable memory, CPU | unavailable |
+| CPU, 2880×1800 at scale 1.5 | Result |
+| --- | ---: |
+| Carousel / spotlight / hexagon surface RMSE | 6.055 / 4.879 / 3.479% |
+| Dynamic spotlight / video-activation surface RMSE | 8.745 / 7.269% |
+| Carousel open / close t10–t90 proxy, QML → Bead | 186 → 290 / 116 → 166 ms |
+| Cold fullscreen first image, spotlight / hexagons | 321 / 292 ms |
+| Earlier closed spotlight / hexagon paired median Δ | +1.871 / +2.023 MiB (fail) |
+| Final five-pair idle / carousel / spotlight / hexagon closed Δ | +0.102 / +0.617 / +0.586 / +0.633 MiB (closed fail) |
 
-[Scope, contracts and explicit gaps](docs/specs/0100-wallpaper-picker.md).
+[Source conditions, paired images, memory breakdowns and known gaps](docs/specs/0100-wallpaper-picker.md).
 
 ## 2026-10-24 — B0080 populated Home first key
 

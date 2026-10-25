@@ -1,0 +1,20 @@
+{
+  "source": "c0594d1 (rejected private-font experiment)",
+  "renderer": "CPU",
+  "normal_acceptance": false,
+  "profiler": "heaptrack, raw traces interpreted on build host with matching unstripped binary",
+  "profiler_reference": "https://github.com/KDE/heaptrack",
+  "window": "quiet closed dwell; prefix cut three seconds before RSS marker to account for constructor clock offset and exclude shutdown",
+  "limitations": "Profiler overhead is excluded from tracked allocation counts; these are requested heap bytes, not resident-memory gate measurements. Does not uniquely identify the pages behind normal-arm residuals.",
+  "phases": {
+    "carousel": {
+      "tracked_live_heap_delta_printed": "-73.64K"
+    },
+    "spotlight": {
+      "tracked_live_heap_delta_printed": "-73.36K"
+    },
+    "hexagons": {
+      "tracked_live_heap_delta_printed": "-69.42K"
+    }
+  }
+}

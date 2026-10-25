@@ -1,0 +1,14 @@
+Matched CPU releases, Rust 1.99.0, one Arch container, nice -n 10, cargo -j2.
+Command: cargo build -p nacre-shell --release --no-default-features --locked -j2
+Control source: e2f17a4
+Candidate source: 98d3de7
+Control nacre-shell SHA256: a9f5ca8aa7a18210f91239f87dd25f491587c99d0e279b14f981c1d9b7c6a895
+Candidate nacre-shell SHA256: b04019d27f7bbc72f02057a2e3af9cfee0458dfd34a1bf1b1443dbca417d1cbf
+Control bead-wallpaper-video SHA256: f2e52365397676a42e64364ef7d48dffd1acebb7bb9155a2afd886c103e87455
+Candidate bead-wallpaper-video SHA256: a3722b3dab054c22705a753a4632364ed13cd9bd1f6c5854714c1995b44e4821
+Control nacre-wallpaper-decode SHA256: 2afec2122c7a74cfcd460170325e5347be2072e1bed1ab71aa899ee4c868fcdf
+Candidate nacre-wallpaper-decode SHA256: 1aa75861d30d12d10322a514ad2da34ad24b722e993e0b4ed43834f452c1a1b3
+Both helper source: 34e81afdd58ccd5e4350b4751268b1d900d0c2af
+Both helper SHA256: 13d4c8da1d02dde13231c9f8c27593256453857b0bcdc93b483d96f3c064ebe7
+Full Arch CI: RUST_TEST_THREADS=1 bash .lead/ci.sh, exit 0, CI_ALL_OK.
+Private capture environment: GIO_USE_VFS=local; GIO_USE_VOLUME_MONITOR=unix. No allocator environment override in normal arms.

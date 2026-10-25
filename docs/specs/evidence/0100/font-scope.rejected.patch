@@ -1,0 +1,193 @@
+diff --git a/crates/bead-render/src/lib.rs b/crates/bead-render/src/lib.rs
+index 679d98e..e9964f6 100644
+--- a/crates/bead-render/src/lib.rs
++++ b/crates/bead-render/src/lib.rs
+@@ -678,0 +679 @@ pub struct CpuRenderer {
++    font_system_scope: FontSystemScope,
+@@ -694,0 +696 @@ impl Default for CpuRenderer {
++            font_system_scope: FontSystemScope::Shared,
+@@ -709,0 +712,7 @@ impl CpuRenderer {
++    pub fn with_font_system_scope(font_system_scope: FontSystemScope) -> Self {
++        Self {
++            font_system_scope,
++            ..Self::default()
++        }
++    }
++
+@@ -746,0 +756,10 @@ type SharedFontSystem = std::sync::Arc<std::sync::Mutex<FontSystem>>;
++/// Controls whether this renderer may share its mutable cosmic-text cache with
++/// other renderers that selected the same explicit font files.
++#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
++pub enum FontSystemScope {
++    /// Share a live font system through the bounded weak process index.
++    #[default]
++    Shared,
++    /// Own a separate font system whose caches die with this renderer.
++    Private,
++}
+@@ -963 +982,6 @@ impl Renderer for CpuRenderer {
+-            self.fonts = Some(scene_fonts(scene)?);
++            self.fonts = Some(match self.font_system_scope {
++                FontSystemScope::Shared => scene_fonts(scene)?,
++                FontSystemScope::Private => {
++                    std::sync::Arc::new(std::sync::Mutex::new(load_scene_fonts(scene)?))
++                }
++            });
+@@ -2220,0 +2245,24 @@ mod tests {
++    fn private_font_system_is_distinct_and_dies_with_its_renderer() {
++        let scene = font_pool_scene();
++        let pooled = scene_fonts(&scene).unwrap();
++        let private_weak;
++        {
++            let mut renderer = CpuRenderer::with_font_system_scope(FontSystemScope::Private);
++            renderer.prepare(&scene, 1.).unwrap();
++            let private = renderer.fonts.as_ref().unwrap();
++            assert!(
++                !std::sync::Arc::ptr_eq(&pooled, private),
++                "private renderer must not share the bar-like pooled FontSystem"
++            );
++            private_weak = std::sync::Arc::downgrade(private);
++        }
++        assert!(
++            private_weak.upgrade().is_none(),
++            "private font caches must be released with their renderer owner"
++        );
++        assert!(
++            std::sync::Arc::ptr_eq(&pooled, &scene_fonts(&scene).unwrap()),
++            "private cleanup must not replace or clear the pooled renderer's FontSystem"
++        );
++    }
++    #[test]
+diff --git a/crates/bead-render/src/tree.rs b/crates/bead-render/src/tree.rs
+index 36851bc..ecd78eb 100644
+--- a/crates/bead-render/src/tree.rs
++++ b/crates/bead-render/src/tree.rs
+@@ -73,0 +74,14 @@ pub struct TreeCache {
++impl TreeCache {
++    /// Create a cache whose mutable shaping state is private to this renderer owner.
++    pub fn with_font_system_scope(font_system_scope: crate::FontSystemScope) -> Self {
++        Self {
++            raster: CpuRenderer::with_font_system_scope(font_system_scope),
++            ..Self::default()
++        }
++    }
++
++    fn reset_raster(&mut self) {
++        let font_system_scope = self.raster.font_system_scope;
++        self.raster = CpuRenderer::with_font_system_scope(font_system_scope);
++    }
++}
+@@ -288 +302 @@ impl TreeCache {
+-            self.raster = CpuRenderer::default();
++            self.reset_raster();
+@@ -303 +317,5 @@ impl TreeCache {
+-        self.raster = CpuRenderer::default();
++        let fonts = (self.raster.font_system_scope == crate::FontSystemScope::Private)
++            .then(|| self.raster.fonts.take())
++            .flatten();
++        self.reset_raster();
++        self.raster.fonts = fonts;
+@@ -409 +427 @@ impl TreeCache {
+-                self.raster = CpuRenderer::default();
++                self.reset_raster();
+@@ -423 +441 @@ impl TreeCache {
+-            self.raster = CpuRenderer::default();
++            self.reset_raster();
+@@ -1394,0 +1413,7 @@ impl TreeCpuRenderer {
++    pub fn with_font_system_scope(font_system_scope: crate::FontSystemScope) -> Self {
++        Self {
++            cache: TreeCache::with_font_system_scope(font_system_scope),
++            ..Self::default()
++        }
++    }
++
+@@ -1541,0 +1567,49 @@ mod tests {
++    #[test]
++    fn private_font_scope_survives_idle_trim_and_dies_with_tree_cache() {
++        let scope = crate::FontSystemScope::Private;
++        let mut cache = TreeCache::with_font_system_scope(scope);
++        let font = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
++            .join("../bead-test/fonts/IBMPlexSans.ttf");
++        let mut text_scene = scene();
++        text_scene.font_files = vec![font];
++        text_scene.primitives = vec![Primitive::Text {
++            rect: Rect::new(0., 0., 8., 8.),
++            text: "A".into(),
++            family: "IBM Plex Sans".into(),
++            size: 8.,
++            color: [20, 30, 40, 255],
++            weight: 400,
++            align: None,
++        }];
++        cache.prepare(&text_scene, 1.).unwrap();
++        assert_eq!(cache.raster.font_system_scope, scope);
++        let live = std::sync::Arc::downgrade(cache.raster.fonts.as_ref().unwrap());
++
++        cache.trim_idle();
++        assert_eq!(cache.raster.font_system_scope, scope);
++        assert!(
++            live.upgrade().is_some(),
++            "idle trim keeps same-view shaping warm"
++        );
++
++        // Changing the font set replaces the raster helper but keeps its owner
++        // policy, and releases the obsolete private FontSystem.
++        cache.font_files.clear();
++        if let Primitive::Text { text, .. } = &mut text_scene.primitives[0] {
++            *text = "B".into();
++        }
++        cache.prepare(&text_scene, 1.).unwrap();
++        assert_eq!(cache.raster.font_system_scope, scope);
++        assert!(
++            live.upgrade().is_none(),
++            "old private font set was replaced"
++        );
++        let rebuilt = std::sync::Arc::downgrade(cache.raster.fonts.as_ref().unwrap());
++
++        drop(cache);
++        assert!(
++            rebuilt.upgrade().is_none(),
++            "view worker drop releases its private fonts"
++        );
++    }
++
+diff --git a/crates/bead-wayland/src/panel.rs b/crates/bead-wayland/src/panel.rs
+index 7f2cc11..bc0e1fc 100644
+--- a/crates/bead-wayland/src/panel.rs
++++ b/crates/bead-wayland/src/panel.rs
+@@ -519,0 +520 @@ impl App {
++        let font_scope = bead_render::FontSystemScope::Private;
+@@ -522 +523,3 @@ impl App {
+-            bead_render::renderer(RendererKind::Cpu).map_err(|e| e.to_string())?,
++            Box::new(bead_render::tree::TreeCpuRenderer::with_font_system_scope(
++                font_scope,
++            )),
+@@ -527,4 +530,4 @@ impl App {
+-        let mut source: Box<dyn SceneSource> = Box::new(worker::Source::new(
+-            Box::new(move || factory(open)),
+-            spec.fallback.clone(),
+-        ));
++        let mut source: Box<dyn SceneSource> = Box::new(
++            worker::Source::new(Box::new(move || factory(open)), spec.fallback.clone())
++                .with_font_system_scope(font_scope),
++        );
+diff --git a/crates/bead-wayland/src/worker.rs b/crates/bead-wayland/src/worker.rs
+index 76cec13..8f85ab8 100644
+--- a/crates/bead-wayland/src/worker.rs
++++ b/crates/bead-wayland/src/worker.rs
+@@ -131,0 +132 @@ pub struct Source {
++    font_system_scope: bead_render::FontSystemScope,
+@@ -145,0 +147 @@ impl Source {
++            font_system_scope: bead_render::FontSystemScope::Shared,
+@@ -147,0 +150,5 @@ impl Source {
++    /// Choose whether this worker may share mutable font-system caches with other owners.
++    pub fn with_font_system_scope(mut self, scope: bead_render::FontSystemScope) -> Self {
++        self.font_system_scope = scope;
++        self
++    }
+@@ -191,0 +199 @@ impl SceneSource for Source {
++        let font_system_scope = self.font_system_scope;
+@@ -218 +226,2 @@ impl SceneSource for Source {
+-                let mut cache = bead_render::tree::TreeCache::default();
++                let mut cache =
++                    bead_render::tree::TreeCache::with_font_system_scope(font_system_scope);

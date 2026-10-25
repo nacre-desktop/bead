@@ -98,17 +98,20 @@ Arch CI passes. The private capture lease remained unavailable for over 90 minut
 CPU/GL presentation, matched QML, first-key and memory gates are all unmeasured.
 [B0103](specs/0103-control-latency.md) records the candidate and remaining proofs.
 No integration, live test or performance acceptance.
-## 2026-10-24 — B0100 wallpaper picker (verification blocked)
-## 2026-10-24 — B0100 wallpaper picker (verification in progress)
+## 2026-10-25 — B0100 wallpaper picker (review candidate; memory fails)
 
-Super+W now targets a lazy Luau picker with carousel, spotlight and hexagon
-layouts, search and revision-fenced wallpaper selection. N0070 publishes the
-catalogue contract; images and leases release on close. Full remote Arch CI passes
-at `9920e2a`, including the final theme tokens and rebase onto B0102.
-Private desktop parity and relative memory capture are resuming with the shared
-slot acquired per capture command, waiting without a timeout. [B0100](specs/0100-wallpaper-picker.md)
-records poster-only dynamic previews and remaining motion/import gaps.
-This is an unpublished review candidate, with no live desktop change.
+Super+W opens a lazy Luau carousel, spotlight or hexagon picker with search and
+revision-fenced image/video activation. N0070 supplies the catalogue contract.
+Full remote Arch CI and thirteen guarded private desktop states pass. Paired
+review fixed fullscreen placement, bar overlap, captions and search styling.
+Five final CPU control/candidate pairs give unreclaimable paired median deltas
++0.102 MiB idle, +0.617 carousel closed, +0.586 spotlight closed and +0.633 hexagons
+closed. The closed phases fail the +0.5 MiB gate; the excess is anonymous and its
+residency attribution remains incomplete. Product optimization stops at the gate.
+Three populated-Apps typing pairs remain below 8 ms UI CPU per key.
+[B0100](specs/0100-wallpaper-picker.md) preserves the failed cohorts, rejected
+experiments, paired RMSE/reveal evidence and poster/motion/import gaps.
+No live desktop change or absolute laptop-cap claim; pushed for lead review.
 
 
 ## 2026-10-24 — B0096 owner bar parity (review candidate)

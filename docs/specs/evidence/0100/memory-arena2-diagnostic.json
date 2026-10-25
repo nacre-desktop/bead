@@ -1,0 +1,341 @@
+{
+  "renderer": "CPU",
+  "units": "MiB",
+  "control_source": "e2f17a4",
+  "candidate_source": "f22479a",
+  "diagnostic": "Trace state and private allocator-reporting preload; not normal acceptance",
+  "candidate_environment": {
+    "MALLOC_ARENA_MAX": "2"
+  },
+  "samples": [
+    {
+      "pair": 1,
+      "control": {
+        "idle": {
+          "Pss_Anon": 17.6484375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 19.302734375,
+          "unreclaimable": 28.23046875
+        },
+        "carousel_closed": {
+          "Pss_Anon": 18.171875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.3232421875,
+          "unreclaimable": 28.75390625
+        },
+        "spotlight_closed": {
+          "Pss_Anon": 18.3671875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.3232421875,
+          "unreclaimable": 28.94921875
+        },
+        "hexagons_closed": {
+          "Pss_Anon": 18.3203125,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.3232421875,
+          "unreclaimable": 28.90234375
+        }
+      },
+      "candidate": {
+        "idle": {
+          "Pss_Anon": 18.15234375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 19.16015625,
+          "unreclaimable": 28.734375
+        },
+        "carousel_closed": {
+          "Pss_Anon": 19.0078125,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.169921875,
+          "unreclaimable": 29.58984375
+        },
+        "spotlight_closed": {
+          "Pss_Anon": 19.2421875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.169921875,
+          "unreclaimable": 29.82421875
+        },
+        "hexagons_closed": {
+          "Pss_Anon": 19.44140625,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.169921875,
+          "unreclaimable": 30.0234375
+        }
+      }
+    }
+  ],
+  "phases": {
+    "idle": {
+      "Pss_Anon": {
+        "control_median": 17.6484375,
+        "candidate_median": 18.15234375,
+        "median_delta": 0.50390625,
+        "paired_median_delta": 0.50390625,
+        "paired_delta_range": [
+          0.50390625,
+          0.50390625
+        ]
+      },
+      "Pss_Shmem": {
+        "control_median": 10.58203125,
+        "candidate_median": 10.58203125,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "DRM": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "SwapPss": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "Pss_File": {
+        "control_median": 19.302734375,
+        "candidate_median": 19.16015625,
+        "median_delta": -0.142578125,
+        "paired_median_delta": -0.142578125,
+        "paired_delta_range": [
+          -0.142578125,
+          -0.142578125
+        ]
+      },
+      "unreclaimable": {
+        "control_median": 28.23046875,
+        "candidate_median": 28.734375,
+        "median_delta": 0.50390625,
+        "paired_median_delta": 0.50390625,
+        "paired_delta_range": [
+          0.50390625,
+          0.50390625
+        ]
+      },
+      "pass_relative_gate": false,
+      "anon_delta_above_one_mib": false
+    },
+    "carousel_closed": {
+      "Pss_Anon": {
+        "control_median": 18.171875,
+        "candidate_median": 19.0078125,
+        "median_delta": 0.8359375,
+        "paired_median_delta": 0.8359375,
+        "paired_delta_range": [
+          0.8359375,
+          0.8359375
+        ]
+      },
+      "Pss_Shmem": {
+        "control_median": 10.58203125,
+        "candidate_median": 10.58203125,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "DRM": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "SwapPss": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "Pss_File": {
+        "control_median": 18.3232421875,
+        "candidate_median": 18.169921875,
+        "median_delta": -0.1533203125,
+        "paired_median_delta": -0.1533203125,
+        "paired_delta_range": [
+          -0.1533203125,
+          -0.1533203125
+        ]
+      },
+      "unreclaimable": {
+        "control_median": 28.75390625,
+        "candidate_median": 29.58984375,
+        "median_delta": 0.8359375,
+        "paired_median_delta": 0.8359375,
+        "paired_delta_range": [
+          0.8359375,
+          0.8359375
+        ]
+      },
+      "pass_relative_gate": false,
+      "anon_delta_above_one_mib": false
+    },
+    "spotlight_closed": {
+      "Pss_Anon": {
+        "control_median": 18.3671875,
+        "candidate_median": 19.2421875,
+        "median_delta": 0.875,
+        "paired_median_delta": 0.875,
+        "paired_delta_range": [
+          0.875,
+          0.875
+        ]
+      },
+      "Pss_Shmem": {
+        "control_median": 10.58203125,
+        "candidate_median": 10.58203125,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "DRM": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "SwapPss": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "Pss_File": {
+        "control_median": 18.3232421875,
+        "candidate_median": 18.169921875,
+        "median_delta": -0.1533203125,
+        "paired_median_delta": -0.1533203125,
+        "paired_delta_range": [
+          -0.1533203125,
+          -0.1533203125
+        ]
+      },
+      "unreclaimable": {
+        "control_median": 28.94921875,
+        "candidate_median": 29.82421875,
+        "median_delta": 0.875,
+        "paired_median_delta": 0.875,
+        "paired_delta_range": [
+          0.875,
+          0.875
+        ]
+      },
+      "pass_relative_gate": false,
+      "anon_delta_above_one_mib": false
+    },
+    "hexagons_closed": {
+      "Pss_Anon": {
+        "control_median": 18.3203125,
+        "candidate_median": 19.44140625,
+        "median_delta": 1.12109375,
+        "paired_median_delta": 1.12109375,
+        "paired_delta_range": [
+          1.12109375,
+          1.12109375
+        ]
+      },
+      "Pss_Shmem": {
+        "control_median": 10.58203125,
+        "candidate_median": 10.58203125,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "DRM": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "SwapPss": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "Pss_File": {
+        "control_median": 18.3232421875,
+        "candidate_median": 18.169921875,
+        "median_delta": -0.1533203125,
+        "paired_median_delta": -0.1533203125,
+        "paired_delta_range": [
+          -0.1533203125,
+          -0.1533203125
+        ]
+      },
+      "unreclaimable": {
+        "control_median": 28.90234375,
+        "candidate_median": 30.0234375,
+        "median_delta": 1.12109375,
+        "paired_median_delta": 1.12109375,
+        "paired_delta_range": [
+          1.12109375,
+          1.12109375
+        ]
+      },
+      "pass_relative_gate": false,
+      "anon_delta_above_one_mib": true
+    }
+  }
+}

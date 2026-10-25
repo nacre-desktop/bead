@@ -1,0 +1,341 @@
+{
+  "renderer": "CPU",
+  "units": "MiB",
+  "control_source": "e2f17a4",
+  "candidate_source": "c0594d1",
+  "samples": [
+    {
+      "pair": 1,
+      "control": {
+        "idle": {
+          "Pss_Anon": 17.5078125,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 19.0986328125,
+          "unreclaimable": 28.08984375
+        },
+        "carousel_closed": {
+          "Pss_Anon": 18.05859375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.416015625,
+          "unreclaimable": 28.640625
+        },
+        "spotlight_closed": {
+          "Pss_Anon": 18.375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.416015625,
+          "unreclaimable": 28.95703125
+        },
+        "hexagons_closed": {
+          "Pss_Anon": 18.203125,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.416015625,
+          "unreclaimable": 28.78515625
+        }
+      },
+      "candidate": {
+        "idle": {
+          "Pss_Anon": 17.6796875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 19.0439453125,
+          "unreclaimable": 28.26171875
+        },
+        "carousel_closed": {
+          "Pss_Anon": 18.59375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.09765625,
+          "unreclaimable": 29.17578125
+        },
+        "spotlight_closed": {
+          "Pss_Anon": 18.75,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.09765625,
+          "unreclaimable": 29.33203125
+        },
+        "hexagons_closed": {
+          "Pss_Anon": 19.06640625,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.09765625,
+          "unreclaimable": 29.6484375
+        }
+      }
+    }
+  ],
+  "phases": {
+    "idle": {
+      "Pss_Anon": {
+        "control_median": 17.5078125,
+        "candidate_median": 17.6796875,
+        "median_delta": 0.171875,
+        "paired_median_delta": 0.171875,
+        "paired_delta_range": [
+          0.171875,
+          0.171875
+        ]
+      },
+      "Pss_Shmem": {
+        "control_median": 10.58203125,
+        "candidate_median": 10.58203125,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "DRM": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "SwapPss": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "Pss_File": {
+        "control_median": 19.0986328125,
+        "candidate_median": 19.0439453125,
+        "median_delta": -0.0546875,
+        "paired_median_delta": -0.0546875,
+        "paired_delta_range": [
+          -0.0546875,
+          -0.0546875
+        ]
+      },
+      "unreclaimable": {
+        "control_median": 28.08984375,
+        "candidate_median": 28.26171875,
+        "median_delta": 0.171875,
+        "paired_median_delta": 0.171875,
+        "paired_delta_range": [
+          0.171875,
+          0.171875
+        ]
+      },
+      "pass_relative_gate": true,
+      "anon_delta_above_one_mib": false
+    },
+    "carousel_closed": {
+      "Pss_Anon": {
+        "control_median": 18.05859375,
+        "candidate_median": 18.59375,
+        "median_delta": 0.53515625,
+        "paired_median_delta": 0.53515625,
+        "paired_delta_range": [
+          0.53515625,
+          0.53515625
+        ]
+      },
+      "Pss_Shmem": {
+        "control_median": 10.58203125,
+        "candidate_median": 10.58203125,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "DRM": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "SwapPss": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "Pss_File": {
+        "control_median": 18.416015625,
+        "candidate_median": 18.09765625,
+        "median_delta": -0.318359375,
+        "paired_median_delta": -0.318359375,
+        "paired_delta_range": [
+          -0.318359375,
+          -0.318359375
+        ]
+      },
+      "unreclaimable": {
+        "control_median": 28.640625,
+        "candidate_median": 29.17578125,
+        "median_delta": 0.53515625,
+        "paired_median_delta": 0.53515625,
+        "paired_delta_range": [
+          0.53515625,
+          0.53515625
+        ]
+      },
+      "pass_relative_gate": false,
+      "anon_delta_above_one_mib": false
+    },
+    "spotlight_closed": {
+      "Pss_Anon": {
+        "control_median": 18.375,
+        "candidate_median": 18.75,
+        "median_delta": 0.375,
+        "paired_median_delta": 0.375,
+        "paired_delta_range": [
+          0.375,
+          0.375
+        ]
+      },
+      "Pss_Shmem": {
+        "control_median": 10.58203125,
+        "candidate_median": 10.58203125,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "DRM": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "SwapPss": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "Pss_File": {
+        "control_median": 18.416015625,
+        "candidate_median": 18.09765625,
+        "median_delta": -0.318359375,
+        "paired_median_delta": -0.318359375,
+        "paired_delta_range": [
+          -0.318359375,
+          -0.318359375
+        ]
+      },
+      "unreclaimable": {
+        "control_median": 28.95703125,
+        "candidate_median": 29.33203125,
+        "median_delta": 0.375,
+        "paired_median_delta": 0.375,
+        "paired_delta_range": [
+          0.375,
+          0.375
+        ]
+      },
+      "pass_relative_gate": true,
+      "anon_delta_above_one_mib": false
+    },
+    "hexagons_closed": {
+      "Pss_Anon": {
+        "control_median": 18.203125,
+        "candidate_median": 19.06640625,
+        "median_delta": 0.86328125,
+        "paired_median_delta": 0.86328125,
+        "paired_delta_range": [
+          0.86328125,
+          0.86328125
+        ]
+      },
+      "Pss_Shmem": {
+        "control_median": 10.58203125,
+        "candidate_median": 10.58203125,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "DRM": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "SwapPss": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "Pss_File": {
+        "control_median": 18.416015625,
+        "candidate_median": 18.09765625,
+        "median_delta": -0.318359375,
+        "paired_median_delta": -0.318359375,
+        "paired_delta_range": [
+          -0.318359375,
+          -0.318359375
+        ]
+      },
+      "unreclaimable": {
+        "control_median": 28.78515625,
+        "candidate_median": 29.6484375,
+        "median_delta": 0.86328125,
+        "paired_median_delta": 0.86328125,
+        "paired_delta_range": [
+          0.86328125,
+          0.86328125
+        ]
+      },
+      "pass_relative_gate": false,
+      "anon_delta_above_one_mib": false
+    }
+  },
+  "planned_pairs": 5,
+  "completed_pairs": 1,
+  "acceptance_cohort": false,
+  "early_stop": "Rejected diagnostic: small reduction did not meet carousel/hexagon gate, insufficient benefit for extra API."
+}

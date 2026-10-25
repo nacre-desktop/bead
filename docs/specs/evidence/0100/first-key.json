@@ -1,0 +1,177 @@
+{
+  "renderer": "CPU",
+  "surface": "populated Apps",
+  "fixture_apps": 320,
+  "favorites": 12,
+  "recent": 8,
+  "a_prefix": 64,
+  "control_source": "e2f17a4",
+  "candidate_source": "98d3de7",
+  "samples": [
+    {
+      "pair": 1,
+      "control": [
+        {
+          "key": "a",
+          "cpu_ms": 6.865123,
+          "presented_ms": 7.144012,
+          "update": "4"
+        },
+        {
+          "key": "BackSpace",
+          "cpu_ms": 7.736827,
+          "presented_ms": 8.362452,
+          "update": "5"
+        }
+      ],
+      "accessibility_restore_nodes": {
+        "control": [],
+        "candidate": []
+      },
+      "candidate": [
+        {
+          "key": "a",
+          "cpu_ms": 6.668882,
+          "presented_ms": 6.937303,
+          "update": "4"
+        },
+        {
+          "key": "BackSpace",
+          "cpu_ms": 7.599607,
+          "presented_ms": 8.200602,
+          "update": "5"
+        }
+      ]
+    },
+    {
+      "pair": 2,
+      "control": [
+        {
+          "key": "a",
+          "cpu_ms": 6.965093,
+          "presented_ms": 7.215503,
+          "update": "4"
+        },
+        {
+          "key": "BackSpace",
+          "cpu_ms": 7.567046,
+          "presented_ms": 8.193252,
+          "update": "5"
+        }
+      ],
+      "accessibility_restore_nodes": {
+        "control": [],
+        "candidate": []
+      },
+      "candidate": [
+        {
+          "key": "a",
+          "cpu_ms": 6.719401,
+          "presented_ms": 7.087224,
+          "update": "4"
+        },
+        {
+          "key": "BackSpace",
+          "cpu_ms": 7.455965,
+          "presented_ms": 8.062353,
+          "update": "5"
+        }
+      ]
+    },
+    {
+      "pair": 3,
+      "control": [
+        {
+          "key": "a",
+          "cpu_ms": 6.065198,
+          "presented_ms": 6.482794,
+          "update": "4"
+        },
+        {
+          "key": "BackSpace",
+          "cpu_ms": 7.452134,
+          "presented_ms": 8.032343,
+          "update": "5"
+        }
+      ],
+      "accessibility_restore_nodes": {
+        "control": [],
+        "candidate": []
+      },
+      "candidate": [
+        {
+          "key": "a",
+          "cpu_ms": 6.780223,
+          "presented_ms": 6.971524,
+          "update": "4"
+        },
+        {
+          "key": "BackSpace",
+          "cpu_ms": 7.070094,
+          "presented_ms": 7.493883,
+          "update": "5"
+        }
+      ]
+    }
+  ],
+  "keys": {
+    "a": {
+      "cpu_ms": {
+        "control_median": 6.865123,
+        "candidate_median": 6.719401,
+        "paired_median_delta": -0.19624099999999967,
+        "control_range": [
+          6.065198,
+          6.965093
+        ],
+        "candidate_range": [
+          6.668882,
+          6.780223
+        ]
+      },
+      "presented_ms": {
+        "control_median": 7.144012,
+        "candidate_median": 6.971524,
+        "paired_median_delta": -0.12827900000000003,
+        "control_range": [
+          6.482794,
+          7.215503
+        ],
+        "candidate_range": [
+          6.937303,
+          7.087224
+        ]
+      }
+    },
+    "BackSpace": {
+      "cpu_ms": {
+        "control_median": 7.567046,
+        "candidate_median": 7.455965,
+        "paired_median_delta": -0.13722000000000012,
+        "control_range": [
+          7.452134,
+          7.736827
+        ],
+        "candidate_range": [
+          7.070094,
+          7.599607
+        ]
+      },
+      "presented_ms": {
+        "control_median": 8.193252,
+        "candidate_median": 8.062353,
+        "paired_median_delta": -0.16184999999999938,
+        "control_range": [
+          8.032343,
+          8.362452
+        ],
+        "candidate_range": [
+          7.493883,
+          8.200602
+        ]
+      }
+    }
+  },
+  "retirement_note": "Typing samples stop 0.6 s after close; idle retirement is verified separately.",
+  "limitations": "Fixture UI only; excludes daemon engine CPU. Three pairs, two keys per arm. Presentation callback clocks are nested, not physical scanout."
+}

@@ -1,0 +1,621 @@
+{
+  "renderer": "CPU",
+  "units": "MiB",
+  "control_source": "b1826ae",
+  "candidate_source": "71e4532",
+  "samples": [
+    {
+      "pair": 1,
+      "control": {
+        "idle": {
+          "Pss_Anon": 17.76953125,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.779296875,
+          "unreclaimable": 28.3515625
+        },
+        "carousel_closed": {
+          "Pss_Anon": 18.140625,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.7861328125,
+          "unreclaimable": 28.72265625
+        },
+        "spotlight_closed": {
+          "Pss_Anon": 18.42578125,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.7861328125,
+          "unreclaimable": 29.0078125
+        },
+        "hexagons_closed": {
+          "Pss_Anon": 21.796875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.7734375,
+          "unreclaimable": 32.37890625
+        }
+      },
+      "candidate": {
+        "idle": {
+          "Pss_Anon": 17.87109375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.7822265625,
+          "unreclaimable": 28.453125
+        },
+        "carousel_closed": {
+          "Pss_Anon": 18.6796875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.77734375,
+          "unreclaimable": 29.26171875
+        },
+        "spotlight_closed": {
+          "Pss_Anon": 20.50390625,
+          "Pss_Shmem": 11.28125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.1357421875,
+          "unreclaimable": 31.78515625
+        },
+        "hexagons_closed": {
+          "Pss_Anon": 20.6953125,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.76953125,
+          "unreclaimable": 31.27734375
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "control": {
+        "idle": {
+          "Pss_Anon": 17.8515625,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.568359375,
+          "unreclaimable": 28.43359375
+        },
+        "carousel_closed": {
+          "Pss_Anon": 18.203125,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.6318359375,
+          "unreclaimable": 28.78515625
+        },
+        "spotlight_closed": {
+          "Pss_Anon": 18.40234375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.6318359375,
+          "unreclaimable": 28.984375
+        },
+        "hexagons_closed": {
+          "Pss_Anon": 20.1484375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.6318359375,
+          "unreclaimable": 30.73046875
+        }
+      },
+      "candidate": {
+        "idle": {
+          "Pss_Anon": 17.80859375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.4306640625,
+          "unreclaimable": 28.390625
+        },
+        "carousel_closed": {
+          "Pss_Anon": 18.6015625,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.4326171875,
+          "unreclaimable": 29.18359375
+        },
+        "spotlight_closed": {
+          "Pss_Anon": 20.2734375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.4326171875,
+          "unreclaimable": 30.85546875
+        },
+        "hexagons_closed": {
+          "Pss_Anon": 20.57421875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.4326171875,
+          "unreclaimable": 31.15625
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "control": {
+        "idle": {
+          "Pss_Anon": 17.69921875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.3564453125,
+          "unreclaimable": 28.28125
+        },
+        "carousel_closed": {
+          "Pss_Anon": 18.296875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.478515625,
+          "unreclaimable": 28.87890625
+        },
+        "spotlight_closed": {
+          "Pss_Anon": 18.53515625,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.478515625,
+          "unreclaimable": 29.1171875
+        },
+        "hexagons_closed": {
+          "Pss_Anon": 18.59375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.478515625,
+          "unreclaimable": 29.17578125
+        }
+      },
+      "candidate": {
+        "idle": {
+          "Pss_Anon": 17.8828125,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.759765625,
+          "unreclaimable": 28.46484375
+        },
+        "carousel_closed": {
+          "Pss_Anon": 18.68359375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.7431640625,
+          "unreclaimable": 29.265625
+        },
+        "spotlight_closed": {
+          "Pss_Anon": 20.390625,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.7431640625,
+          "unreclaimable": 30.97265625
+        },
+        "hexagons_closed": {
+          "Pss_Anon": 20.6171875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.7431640625,
+          "unreclaimable": 31.19921875
+        }
+      }
+    },
+    {
+      "pair": 4,
+      "control": {
+        "idle": {
+          "Pss_Anon": 17.81640625,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.619140625,
+          "unreclaimable": 28.3984375
+        },
+        "carousel_closed": {
+          "Pss_Anon": 18.19921875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.8115234375,
+          "unreclaimable": 28.78125
+        },
+        "spotlight_closed": {
+          "Pss_Anon": 18.40234375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.8017578125,
+          "unreclaimable": 28.984375
+        },
+        "hexagons_closed": {
+          "Pss_Anon": 18.5390625,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.8037109375,
+          "unreclaimable": 29.12109375
+        }
+      },
+      "candidate": {
+        "idle": {
+          "Pss_Anon": 17.734375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.42578125,
+          "unreclaimable": 28.31640625
+        },
+        "carousel_closed": {
+          "Pss_Anon": 18.5390625,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.419921875,
+          "unreclaimable": 29.12109375
+        },
+        "spotlight_closed": {
+          "Pss_Anon": 20.21484375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.419921875,
+          "unreclaimable": 30.796875
+        },
+        "hexagons_closed": {
+          "Pss_Anon": 22.88671875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.419921875,
+          "unreclaimable": 33.46875
+        }
+      }
+    },
+    {
+      "pair": 5,
+      "control": {
+        "idle": {
+          "Pss_Anon": 17.71484375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.330078125,
+          "unreclaimable": 28.296875
+        },
+        "carousel_closed": {
+          "Pss_Anon": 18.16796875,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.4677734375,
+          "unreclaimable": 28.75
+        },
+        "spotlight_closed": {
+          "Pss_Anon": 18.3984375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.46484375,
+          "unreclaimable": 28.98046875
+        },
+        "hexagons_closed": {
+          "Pss_Anon": 18.43359375,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.46484375,
+          "unreclaimable": 29.015625
+        }
+      },
+      "candidate": {
+        "idle": {
+          "Pss_Anon": 17.890625,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 18.421875,
+          "unreclaimable": 28.47265625
+        },
+        "carousel_closed": {
+          "Pss_Anon": 18.7265625,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.435546875,
+          "unreclaimable": 29.30859375
+        },
+        "spotlight_closed": {
+          "Pss_Anon": 20.4140625,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.435546875,
+          "unreclaimable": 30.99609375
+        },
+        "hexagons_closed": {
+          "Pss_Anon": 20.64453125,
+          "Pss_Shmem": 10.58203125,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 17.435546875,
+          "unreclaimable": 31.2265625
+        }
+      }
+    }
+  ],
+  "phases": {
+    "idle": {
+      "Pss_Anon": {
+        "control_median": 17.76953125,
+        "candidate_median": 17.87109375,
+        "median_delta": 0.1015625,
+        "paired_median_delta": 0.1015625,
+        "paired_delta_range": [
+          -0.08203125,
+          0.18359375
+        ]
+      },
+      "Pss_Shmem": {
+        "control_median": 10.58203125,
+        "candidate_median": 10.58203125,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "DRM": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "SwapPss": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "Pss_File": {
+        "control_median": 18.568359375,
+        "candidate_median": 18.4306640625,
+        "median_delta": -0.1376953125,
+        "paired_median_delta": 0.0029296875,
+        "paired_delta_range": [
+          -0.193359375,
+          0.4033203125
+        ]
+      },
+      "unreclaimable": {
+        "control_median": 28.3515625,
+        "candidate_median": 28.453125,
+        "median_delta": 0.1015625,
+        "paired_median_delta": 0.1015625,
+        "paired_delta_range": [
+          -0.08203125,
+          0.18359375
+        ]
+      },
+      "pass_relative_gate": true,
+      "anon_delta_above_one_mib": false
+    },
+    "carousel_closed": {
+      "Pss_Anon": {
+        "control_median": 18.19921875,
+        "candidate_median": 18.6796875,
+        "median_delta": 0.48046875,
+        "paired_median_delta": 0.3984375,
+        "paired_delta_range": [
+          0.33984375,
+          0.55859375
+        ]
+      },
+      "Pss_Shmem": {
+        "control_median": 10.58203125,
+        "candidate_median": 10.58203125,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "DRM": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "SwapPss": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "Pss_File": {
+        "control_median": 17.6318359375,
+        "candidate_median": 17.435546875,
+        "median_delta": -0.1962890625,
+        "paired_median_delta": -0.0322265625,
+        "paired_delta_range": [
+          -0.3916015625,
+          0.2646484375
+        ]
+      },
+      "unreclaimable": {
+        "control_median": 28.78125,
+        "candidate_median": 29.26171875,
+        "median_delta": 0.48046875,
+        "paired_median_delta": 0.3984375,
+        "paired_delta_range": [
+          0.33984375,
+          0.55859375
+        ]
+      },
+      "pass_relative_gate": true,
+      "anon_delta_above_one_mib": false
+    },
+    "spotlight_closed": {
+      "Pss_Anon": {
+        "control_median": 18.40234375,
+        "candidate_median": 20.390625,
+        "median_delta": 1.98828125,
+        "paired_median_delta": 1.87109375,
+        "paired_delta_range": [
+          1.8125,
+          2.078125
+        ]
+      },
+      "Pss_Shmem": {
+        "control_median": 10.58203125,
+        "candidate_median": 10.58203125,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.69921875
+        ]
+      },
+      "DRM": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "SwapPss": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "Pss_File": {
+        "control_median": 17.6318359375,
+        "candidate_median": 17.435546875,
+        "median_delta": -0.1962890625,
+        "paired_median_delta": -0.029296875,
+        "paired_delta_range": [
+          -0.3818359375,
+          0.349609375
+        ]
+      },
+      "unreclaimable": {
+        "control_median": 28.984375,
+        "candidate_median": 30.97265625,
+        "median_delta": 1.98828125,
+        "paired_median_delta": 1.87109375,
+        "paired_delta_range": [
+          1.8125,
+          2.77734375
+        ]
+      },
+      "pass_relative_gate": false,
+      "anon_delta_above_one_mib": true
+    },
+    "hexagons_closed": {
+      "Pss_Anon": {
+        "control_median": 18.59375,
+        "candidate_median": 20.64453125,
+        "median_delta": 2.05078125,
+        "paired_median_delta": 2.0234375,
+        "paired_delta_range": [
+          -1.1015625,
+          4.34765625
+        ]
+      },
+      "Pss_Shmem": {
+        "control_median": 10.58203125,
+        "candidate_median": 10.58203125,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "DRM": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "SwapPss": {
+        "control_median": 0.0,
+        "candidate_median": 0.0,
+        "median_delta": 0.0,
+        "paired_median_delta": 0.0,
+        "paired_delta_range": [
+          0.0,
+          0.0
+        ]
+      },
+      "Pss_File": {
+        "control_median": 17.6318359375,
+        "candidate_median": 17.435546875,
+        "median_delta": -0.1962890625,
+        "paired_median_delta": -0.029296875,
+        "paired_delta_range": [
+          -0.3837890625,
+          0.2646484375
+        ]
+      },
+      "unreclaimable": {
+        "control_median": 29.17578125,
+        "candidate_median": 31.2265625,
+        "median_delta": 2.05078125,
+        "paired_median_delta": 2.0234375,
+        "paired_delta_range": [
+          -1.1015625,
+          4.34765625
+        ]
+      },
+      "pass_relative_gate": false,
+      "anon_delta_above_one_mib": true
+    }
+  }
+}
