@@ -1,7 +1,109 @@
 // SPDX-License-Identifier: GPL-3.0-only
 use super::*;
 use bead::core::source::Mirror;
+use bead::wayland::{SceneSource, UiEvent};
+use bead_test::{Config, Harness};
 use nacre_protocol::{Message, framing};
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+
+#[test]
+fn notification_icon_selection_falls_through_unresolved_sources() {
+    assert_eq!(icon_fields(Some("nacre"), None, None)["icon_path"], "");
+    let selected = choose_icon_path(
+        Some("missing-theme-icon"),
+        Some("org.example.Mail.desktop"),
+        Some("/tmp/message.png"),
+        |path| path == "/tmp/message.png",
+        |name| (name == "mail-icon").then(|| "/icons/mail-icon.png".into()),
+        |entry| (entry == "org.example.Mail.desktop").then(|| "mail-icon".into()),
+        "ui/assets/nacre-logo.themed.svg",
+    );
+    assert_eq!(selected, "/icons/mail-icon.png");
+
+    let image = choose_icon_path(
+        Some("missing-theme-icon"),
+        None,
+        Some("/tmp/message.png"),
+        |path| path == "/tmp/message.png",
+        |_| None,
+        |_| None,
+        "brand.svg",
+    );
+    assert_eq!(image, "/tmp/message.png");
+
+    let fallback = choose_icon_path(
+        Some("missing-theme-icon"),
+        None,
+        None,
+        |_| false,
+        |_| None,
+        |_| None,
+        "brand.svg",
+    );
+    assert_eq!(fallback, "brand.svg");
+
+    let local = choose_icon_path(
+        Some("file:///tmp/app.png"),
+        None,
+        None,
+        |path| path == "/tmp/app.png",
+        |_| None,
+        |_| None,
+        "brand.svg",
+    );
+    assert_eq!(local, "/tmp/app.png");
+}
+
+#[test]
+fn runtime_snapshots_an_external_notification_icon_path() -> bead_test::Result<()> {
+    crate::i18n::init();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+    let palette = root.join("palette.json");
+    let dir = std::env::temp_dir().join(format!("bead-notice-icon-runtime-{}", std::process::id()));
+    std::fs::create_dir_all(&dir)?;
+    let icon = dir.join("notice.png");
+    image::RgbaImage::from_pixel(32, 32, image::Rgba([30, 140, 210, 255])).save(&icon)?;
+    let icon_path = icon.to_string_lossy().into_owned();
+    let stores = BTreeMap::from([
+        ("notifications.open".into(), Value::Bool(true)),
+        ("notifications.scroll.y".into(), Value::Number(0.)),
+        (
+            "notifications.rows".into(),
+            Value::list(vec![json!({
+                "id":"n1", "key":"n1|1", "app":"Fixture", "summary":"Local icon",
+                "body":"", "icon":"", "icon_path":icon_path.clone(), "time_str":"now",
+                "urgency":1, "expanded":false, "actions":[], "default":"", "history":false,
+            })]),
+        ),
+    ]);
+    let harness = Harness::load_with_icons(
+        &root,
+        Path::new("notifications/main.luau"),
+        &palette,
+        stores,
+        Config {
+            width: 600,
+            height: 480,
+            scale: 1.5,
+        },
+        BTreeMap::from([(icon_path.clone(), icon.clone())]),
+    )?;
+    let mut runtime = crate::reload::Runtime::new(harness.session);
+    let scene = runtime
+        .stage(UiEvent::Reload)?
+        .ok_or("notification runtime scene missing")?;
+    let icon_path = PathBuf::from(icon_path);
+    assert!(
+        scene.asset_data.contains_key(&icon_path),
+        "external icon must be in the generated scene snapshot"
+    );
+    assert!(scene.primitives.iter().any(|primitive| {
+        matches!(primitive, bead::render::Primitive::Image { path, .. } if path == &icon_path)
+    }));
+    std::fs::remove_dir_all(dir)?;
+    Ok(())
+}
 
 fn state(extra: Json) -> NotificationsState {
     let notice = |rev: u64, default: Json, actions: Json, urgency: &str| {

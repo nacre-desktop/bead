@@ -1,8 +1,13 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 -- QML launcher detail geometry, expressed with the shared theme scale.
 local T=require("bead.kit").tokens
+local ui=require("bead.ui")
 local S=T.spacing
 local M={}
+function M.hovered(id)
+    local key=id:gsub(".",function(c) return string.format("%02x",string.byte(c)) end)
+    return string.find(ui.resolve_for_check(ui.bind("bead.hovered")),".k"..key..".",1,true)~=nil
+end
 M.quick_width=S.xl*13
 M.quick_gap=S.xl
 M.quick_top=S.xxl*3+S.md

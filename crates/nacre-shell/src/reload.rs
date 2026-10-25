@@ -2437,6 +2437,10 @@ impl Runtime {
 /// Icon names resolve through the theme directories (stat-heavy); a launcher grid asks for the same
 /// few dozen names on every scene, so remember the answer. Bounded; only paths are kept, never bytes.
 fn resolve_icon_path(icon: &str) -> std::path::PathBuf {
+    let direct = std::path::Path::new(icon);
+    if direct.is_absolute() && direct.is_file() {
+        return direct.to_path_buf();
+    }
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
     static PATHS: OnceLock<Mutex<HashMap<String, std::path::PathBuf>>> = OnceLock::new();

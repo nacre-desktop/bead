@@ -17,11 +17,12 @@ local Row=ui.component("ResultRow",{item={id="string",name="string",icon="string
             },
         },
       },
-      ui.Button{id="favorite",position="absolute",right=8,top=10,width=28,height=28,radius=8,padding=0,
+      ui.Button{id="favorite",position="absolute",right=12,top=16,width=23,height=23,radius=7,padding=0,
+        visible=item.favorite or item.selected or M.hovered(item.id),
         aria_label=item.favorite and ui.tr("bead.launcher.favorite-remove") or ui.tr("bead.launcher.favorite-add"),
-        fill=item.favorite and ui.tint("surface","primary",.12) or "transparent",
+        fill="transparent",justify="center",align="center",
         on_activate=ui.action("toggle_favorite",item.id),
-        ui.Text{text=item.favorite and "star" or "star_outline",family="Material Symbols Rounded",width="fill",height="fill",font_size=19,text_align="center",color=item.favorite and "primary" or "onSurfaceVariant"},
+        ui.Image{path=item.favorite and "ui/components/assets/favorite-1.themed.svg" or "ui/components/assets/favorite-0.themed.svg",width=11*4/3,height=11*4/3},
       },
     }
 end)

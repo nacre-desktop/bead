@@ -36,6 +36,9 @@ impl Controls {
         let timeout = Duration::from_millis(u64::from(advertised.timeout).clamp(1, 10_000));
         Some((status.boot?, timeout))
     }
+    fn busy(&self) -> bool {
+        self.state.borrow().pending.is_some()
+    }
     fn submit(&self, method: &str, params: Json, wake: CallWake) {
         let mut state = self.state.borrow_mut();
         if state.pending.is_some() {
@@ -57,6 +60,35 @@ impl Controls {
             Ok(ticket) => state.pending = Some(ticket),
             Err(_) => state.message = "bead.common.request-failed".into(),
         }
+    }
+    fn toggle_wallpaper_pause(&self, data: &Json, wake: CallWake) {
+        if data.get("error").is_some_and(|error| !error.is_null()) {
+            return;
+        }
+        let Some(rev) = data.get("rev").and_then(Json::as_u64) else {
+            return;
+        };
+        let Some(paused) = data
+            .get("data")
+            .and_then(Json::as_object)
+            .and_then(|values| values.get("paused"))
+            .and_then(Json::as_bool)
+        else {
+            return;
+        };
+        let mut value = data["data"].clone();
+        let Some(document) = value.as_object_mut() else {
+            return;
+        };
+        // `settings.provider` owns picker-only fields, so preserve the full document and
+        // carry its required version field just as Extras does.
+        document.insert("version".into(), json!(1));
+        document.insert("paused".into(), json!(!paused));
+        self.submit(
+            "settings.provider",
+            json!({"store":"wallpaper-picker","value":value,"rev":rev}),
+            wake,
+        );
     }
     fn say(&self, message: &str) {
         self.state.borrow_mut().message = message.into();
@@ -101,6 +133,16 @@ impl Dashboard {
             }
             return;
         }
+        if page == Page::Today && op == "wallpapers.open" {
+            if let Some(c) = &self.controls {
+                c.submit(
+                    "ui.dispatch",
+                    json!({"target":"nacre","method":"mode","args":["wallpaper"]}),
+                    wake,
+                );
+            }
+            return;
+        }
         let Some(c) = &self.controls else { return };
         match (page, op) {
             (Page::Today, "colors.open") => c.submit(
@@ -115,6 +157,18 @@ impl Dashboard {
             }
             (Page::Focus, "focus.pause" | "focus.resume" | "focus.stop") => {
                 c.submit(op, json!({}), wake)
+            }
+            (Page::Today, "wallpaper.next") if self.wallpaper_next_available() => {
+                c.submit(op, json!({}), wake)
+            }
+            (Page::Today, "wallpaper.pause") if self.wallpaper_dynamic() => {
+                if let Some(snapshot) = self.wallpaper_settings.as_ref().map(|s| s.snapshot())
+                    && snapshot.connected
+                    && !c.busy()
+                    && Self::wallpaper_settings_valid(&snapshot.data)
+                {
+                    c.toggle_wallpaper_pause(&snapshot.data, wake)
+                }
             }
             (Page::Clipboard, "clip.copy") if self.holds(id) => {
                 c.submit("clipboard.copy", json!({"id": id}), wake)
@@ -166,6 +220,47 @@ impl Dashboard {
             (Page::Customize, "tab.toggle" | "tab.up" | "tab.down") => self.customize(op, id, wake),
             _ => {}
         }
+    }
+    fn wallpaper_next_available(&self) -> bool {
+        let topic = self.wallpaper.as_ref().is_some_and(|source| {
+            let snapshot = source.snapshot();
+            let Ok(state) = serde_json::from_value::<nacre_protocol::wallpaper::WallpaperActive>(
+                (*snapshot.data).clone(),
+            ) else {
+                return false;
+            };
+            snapshot.connected && state.available && !state.stale && state.validate().is_ok()
+        });
+        topic
+            && self
+                .controls
+                .as_ref()
+                .is_some_and(|c| !c.busy() && c.ready("wallpaper.next").is_some())
+    }
+    fn wallpaper_dynamic(&self) -> bool {
+        self.wallpaper.as_ref().is_some_and(|source| {
+            let snapshot = source.snapshot();
+            let Ok(state) = serde_json::from_value::<nacre_protocol::wallpaper::WallpaperActive>(
+                (*snapshot.data).clone(),
+            ) else {
+                return false;
+            };
+            snapshot.connected
+                && state.available
+                && !state.stale
+                && state.validate().is_ok()
+                && state
+                    .current
+                    .is_some_and(|wallpaper| wallpaper.motion.is_some())
+        })
+    }
+    fn wallpaper_settings_valid(data: &Json) -> bool {
+        data.get("error").is_none_or(Json::is_null)
+            && data.get("rev").and_then(Json::as_u64).is_some()
+            && data
+                .get("data")
+                .and_then(Json::as_object)
+                .is_some_and(|values| values.get("paused").and_then(Json::as_bool).is_some())
     }
     /// Notification controls go through the same revision-checked plan as the
     /// resident stack; the snapshot on screen decides what may be sent.
@@ -357,6 +452,44 @@ impl Dashboard {
             out.insert(
                 "dashboard.can_colors".into(),
                 Value::Bool(!busy && can("ui.dispatch")),
+            );
+            // B0136's previous action remains visibly disabled until the daemon-owned
+            // history contract is published and integrated.
+            out.insert(
+                "dashboard.can_wallpaper_previous".into(),
+                Value::Bool(false),
+            );
+            out.insert(
+                "dashboard.can_wallpaper_next".into(),
+                Value::Bool(self.wallpaper_next_available()),
+            );
+            let settings = self
+                .wallpaper_settings
+                .as_ref()
+                .map(|source| source.snapshot());
+            let valid_settings = settings.as_ref().is_some_and(|snapshot| {
+                snapshot.connected && Self::wallpaper_settings_valid(&snapshot.data)
+            });
+            let paused = settings
+                .as_ref()
+                .and_then(|snapshot| snapshot.data.get("data"))
+                .and_then(|data| data.get("paused"))
+                .and_then(Json::as_bool)
+                .unwrap_or(false);
+            out.insert("dashboard.wallpaper_paused".into(), Value::Bool(paused));
+            out.insert(
+                "dashboard.wallpaper_dynamic".into(),
+                Value::Bool(self.wallpaper_dynamic()),
+            );
+            out.insert(
+                "dashboard.can_wallpaper_pause".into(),
+                Value::Bool(
+                    !busy
+                        && self.wallpaper_dynamic()
+                        && valid_settings
+                        && self.controls.as_ref().is_some_and(|c| !c.busy())
+                        && can("settings.provider"),
+                ),
             );
         }
         out.insert("dashboard.message".into(), Value::Text(line(&message, 64)));

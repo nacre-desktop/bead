@@ -200,10 +200,29 @@ fn real_launcher_grid_results_and_scrolled_pixels_match_accepted_markup() -> Res
                 _ => None,
             })
             .collect::<BTreeSet<_>>();
-        assert!(
-            fully_visible_rows.is_subset(&favorite_ids),
-            "every fully visible row needs its favorite action"
-        );
+        for id in fully_visible_rows {
+            let node = h
+                .session
+                .view_nodes()
+                .iter()
+                .find(|n| {
+                    n.action.as_deref() == Some("select_app")
+                        && n.action_arg == Some(Value::Text(id.clone()))
+                })
+                .unwrap();
+            let rect = bead::ui::rect(&node.draw);
+            h.script([bead_test::Input::Pointer {
+                x: rect.x + rect.w / 2.,
+                y: rect.y + rect.h / 2.,
+            }])?;
+            assert!(
+                h.session.view_nodes().iter().any(|n| {
+                    n.action.as_deref() == Some("toggle_favorite")
+                        && n.action_arg == Some(Value::Text(id.clone()))
+                }),
+                "hover reveals the favorite action for {id}"
+            );
+        }
     }
     Ok(())
 }

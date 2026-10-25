@@ -214,6 +214,38 @@ fn categories(dirs: &[PathBuf], app_id: &str) -> Vec<String> {
     }
     Vec::new()
 }
+/// `Icon=` from the hinted desktop entry, when the entry is present in XDG data dirs.
+pub(crate) fn desktop_icon_name(app_id: &str) -> Option<String> {
+    let app_id = app_id.strip_suffix(".desktop").unwrap_or(app_id);
+    if app_id.is_empty()
+        || app_id.len() > 128
+        || app_id.contains(['/', '\0'])
+        || app_id.starts_with('.')
+    {
+        return None;
+    }
+    for name in [app_id.to_owned(), app_id.to_lowercase()] {
+        for dir in data_dirs() {
+            let Ok(file) = std::fs::File::open(dir.join(format!("{name}.desktop"))) else {
+                continue;
+            };
+            let mut text = String::new();
+            std::io::Read::read_to_string(&mut std::io::Read::take(file, 64 * 1024), &mut text)
+                .ok()?;
+            let mut entry = false;
+            for line in text.lines() {
+                if line.starts_with('[') {
+                    entry = line.trim() == "[Desktop Entry]";
+                } else if entry && let Some(icon) = line.strip_prefix("Icon=") {
+                    let icon = icon.trim();
+                    return (!icon.is_empty()).then(|| icon.to_owned());
+                }
+            }
+            return None;
+        }
+    }
+    None
+}
 fn data_dirs() -> Vec<PathBuf> {
     let home = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)

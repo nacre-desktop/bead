@@ -709,7 +709,8 @@ async fn launcher_quick_reuses_permanent_notifications_subscription() {
 async fn notification_views_share_permanent_history_and_release_only_their_leases() {
     let notices = json!({"health": health(), "do_not_disturb": false,
         "history_count": 1, "history_more": false, "history_storage": {"ready": true, "writable": true},
-        "history": {"order": ["saved"], "items": {"saved": {"app_name": "Fixture", "summary": "Saved notification", "body": "From disk"}}}});
+        "history": {"order": ["saved"], "items": {"saved": {"app_name": "Fixture", "summary": "Saved notification", "body": "From disk",
+            "icon":"fixture-mail","desktop_entry":"fixture-mail.desktop","image_path":"/tmp/fixture-mail.png"}}}});
     let mut lab = lab_with_payloads(
         &["notifications.clear"],
         controls(),
@@ -740,6 +741,9 @@ async fn notification_views_share_permanent_history_and_release_only_their_lease
         panic!("history rows")
     };
     assert_eq!(rows[0]["summary"], "Saved notification");
+    assert_eq!(rows[0]["icon"], "fixture-mail");
+    assert_eq!(rows[0]["desktop_entry"], "fixture-mail.desktop");
+    assert_eq!(rows[0]["image_path"], "/tmp/fixture-mail.png");
     assert_eq!(projected["cc.notice_clear"], Value::Bool(true));
     drop(control);
     let mut released = Vec::new();

@@ -859,5 +859,11 @@
   "bead.dashboard.weather-hour-legend": "Temperature · Precipitation chance",
   "bead.dashboard.system-temperature": "Temperature",
   "bead.dashboard.system-total": "{value} total",
-  "bead.dashboard.system-unavailable": "Unavailable"
+  "bead.dashboard.system-unavailable": "Unavailable",
+  "bead.dashboard.wallpapers": "Wallpapers",
+  "bead.dashboard.wallpaper-previous": "Previous wallpaper",
+  "bead.dashboard.wallpaper-next": "Next wallpaper",
+  "bead.dashboard.wallpaper-pause": "Pause wallpaper",
+  "bead.dashboard.wallpaper-resume": "Resume wallpaper",
+  "bead.dashboard.wallpaper-static": "Static wallpaper"
 }

@@ -272,6 +272,13 @@ pub fn spec(
             let wallpaper = (page == Page::Today)
                 .then(|| choice.open_named("wallpaper.active", "wallpaper").ok())
                 .flatten();
+            let wallpaper_settings = (page == Page::Today)
+                .then(|| {
+                    choice
+                        .open_named(crate::prefs::WALLPAPER_PICKER, "wallpaper-picker")
+                        .ok()
+                })
+                .flatten();
             let summary_updates = (page == Page::Today)
                 .then(|| choice.open_named("dashboard.updates", "updates").ok())
                 .flatten();
@@ -295,6 +302,7 @@ pub fn spec(
                     .with_clock(clock)
                     .with_player(player)
                     .with_overview(system, wallpaper, summary_updates)
+                    .with_wallpaper_settings(wallpaper_settings)
                     .with_controls(settings, controls, choice.client.clone())
                     .with_prefs(choice.prefs.clone()),
             )
@@ -507,6 +515,7 @@ pub struct Dashboard {
     player: Option<Arc<dyn Source>>,
     system: Option<Arc<dyn Source>>,
     wallpaper: Option<Arc<dyn Source>>,
+    wallpaper_settings: Option<Arc<dyn Source>>,
     summary_updates: Option<Arc<dyn Source>>,
     raster_scale: std::cell::Cell<f64>,
     poster: std::cell::RefCell<Option<Poster>>,
@@ -546,6 +555,7 @@ impl Dashboard {
             player: None,
             system: None,
             wallpaper: None,
+            wallpaper_settings: None,
             summary_updates: None,
             raster_scale: std::cell::Cell::new(2.),
             poster: Default::default(),
@@ -610,6 +620,10 @@ impl Dashboard {
         self.system = system;
         self.wallpaper = wallpaper;
         self.summary_updates = updates;
+        self
+    }
+    pub fn with_wallpaper_settings(mut self, settings: Option<Arc<dyn Source>>) -> Self {
+        self.wallpaper_settings = settings;
         self
     }
     pub fn with_clock(mut self, clock: Option<Arc<dyn Source>>) -> Self {
@@ -702,6 +716,9 @@ impl Dashboard {
             .flatten()
         {
             subscriptions.push(source.subscribe(callback.clone())?);
+        }
+        if let Some(settings) = &self.wallpaper_settings {
+            subscriptions.push(settings.subscribe(callback.clone())?);
         }
         if let Some(clock) = &self.clock {
             subscriptions.push(clock.subscribe(callback)?);

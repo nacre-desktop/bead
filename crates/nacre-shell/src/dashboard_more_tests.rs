@@ -1046,6 +1046,121 @@ async fn player_controls_resolve_the_active_player_and_obey_can_flags() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn today_wallpaper_controls_follow_live_state_and_published_calls() -> Result<()> {
+    let methods = ["ui.dispatch", "settings.provider", "wallpaper.next"];
+    let (dir, client, mut calls) = lab(&methods, &[], vec![ok(), ok(), ok()]).await;
+    let pair = json!({
+            "revision":4,"palette_revision":4,"path":"/fixture/current.png",
+            "file_identity":{"device":"1","inode":"4","size":4096,"mtime_sec":1,"mtime_nsec":0,"ctime_sec":1,"ctime_nsec":0},
+            "presentation":"crop",
+            "palette":{"mode":"dark","colours":{"background":"#101820","onSurface":"#ffffff","primary":"#22aa88"}},
+            "motion":{"kind":"video","path":"/fixture/current.mp4",
+                "file_identity":{"device":"1","inode":"5","size":8192,"mtime_sec":1,"mtime_nsec":0,"ctime_sec":1,"ctime_nsec":0}}
+    });
+    let active = json!({
+        "available":true,"stale":false,"revision":4,
+        "current":pair.clone(),"outputs":{"fixture":pair}
+    });
+    let wallpaper = Arc::new(FakeSource::new(active)?);
+    let wallpaper_settings = Arc::new(FakeSource::new(json!({
+        "store":"wallpaper-picker","rev":9,
+        "data":{"version":1,"kind":"dynamic","layout":"carousel","paused":true,"future":"preserve"}
+    }))?);
+    let dashboard = Dashboard::new(
+        Page::Today,
+        Arc::new(FakeSource::new(fixture("today")).unwrap()),
+        None,
+        false,
+    )
+    .with_overview(None, Some(wallpaper), None)
+    .with_wallpaper_settings(Some(wallpaper_settings))
+    .with_controls(
+        None,
+        Some(controls::Controls::new(client.clone())),
+        Some(client.clone()),
+    );
+    let state = dashboard.project();
+    assert_eq!(
+        state["dashboard.can_wallpaper_previous"],
+        Value::Bool(false)
+    );
+    assert_eq!(state["dashboard.can_wallpaper_next"], Value::Bool(true));
+    assert_eq!(state["dashboard.wallpaper_dynamic"], Value::Bool(true));
+    assert_eq!(state["dashboard.wallpaper_paused"], Value::Bool(true));
+    assert_eq!(state["dashboard.can_wallpaper_pause"], Value::Bool(true));
+    let mut harness = extra_harness(Page::Today, state, 1.)?;
+    harness.render()?;
+    for (operation, size) in [
+        ("wallpapers.open", (111., 36.)),
+        ("colors.open", (111., 36.)),
+        ("wallpaper.pause", (74., 32.)),
+        ("wallpaper.next", (74., 32.)),
+    ] {
+        let node = harness
+            .session
+            .view_nodes()
+            .iter()
+            .find(|node| {
+                node.action_arg == Some(Value::Text(operation.into()))
+                    && (operation != "colors.open" || node.id.ends_with(".colors"))
+            })
+            .expect(operation);
+        assert_eq!(node.action.as_deref(), Some("dashboard.do"));
+        let rect = bead::ui::rect(&node.draw);
+        assert_eq!((rect.w, rect.h), size, "{operation}");
+        assert!(node.activate_on_release, "{operation}");
+    }
+    let previous = harness
+        .scene()
+        .layers
+        .iter()
+        .find(|layer| layer.id.ends_with(".wallpaper-previous"))
+        .expect("previous wallpaper remains visible");
+    let previous_rect = previous.bounds;
+    assert_eq!((previous_rect.w, previous_rect.h), (74., 32.));
+    assert!(
+        !harness
+            .session
+            .view_nodes()
+            .iter()
+            .any(|node| { node.id.ends_with(".wallpaper-previous") && node.action.is_some() }),
+        "previous is disabled until contract publication"
+    );
+    dashboard.act("wallpaper.previous", wake());
+    assert!(
+        calls.try_recv().is_err(),
+        "previous has no daemon call before the history contract"
+    );
+
+    for (operation, expected) in [
+        (
+            "wallpapers.open",
+            (
+                "ui.dispatch",
+                json!({"target":"nacre","method":"mode","args":["wallpaper"]}),
+            ),
+        ),
+        ("wallpaper.next", ("wallpaper.next", json!({}))),
+    ] {
+        dashboard.act(operation, wake());
+        assert_eq!(calls.recv().await.unwrap(), (expected.0.into(), expected.1));
+        settle(&dashboard).await;
+    }
+    dashboard.act("wallpaper.pause", wake());
+    assert_eq!(
+        calls.recv().await.unwrap(),
+        (
+            "settings.provider".into(),
+            json!({"store":"wallpaper-picker","rev":9,
+                "value":{"version":1,"kind":"dynamic","layout":"carousel","paused":false,"future":"preserve"}})
+        )
+    );
+    settle(&dashboard).await;
+    std::fs::remove_dir_all(dir).ok();
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn today_buttons_follow_player_updates_and_call_published_routes() -> Result<()> {
     let (dir, client, mut calls) = lab(
         &[

@@ -6,5 +6,6 @@
     "status/body.luau",
     "sound/body.luau",
     "control/vpn-body.luau"
-  ]
+  ],
+  "assets": ["notifications/fallback.themed.svg"]
 }

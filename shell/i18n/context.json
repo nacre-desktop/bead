@@ -844,5 +844,11 @@
   "bead.dashboard.weather-hour-legend": "Dashboard Weather hourly chart legend for temperature and precipitation chance.",
   "bead.dashboard.system-temperature": "Dashboard System resource gauge system-temperature caption.",
   "bead.dashboard.system-total": "Dashboard System resource gauge system-total caption.",
-  "bead.dashboard.system-unavailable": "Dashboard System resource gauge system-unavailable caption."
+  "bead.dashboard.system-unavailable": "Dashboard System resource gauge system-unavailable caption.",
+  "bead.dashboard.wallpapers": "Today hero wallpaper control: Wallpapers.",
+  "bead.dashboard.wallpaper-previous": "Today hero wallpaper control: Previous wallpaper.",
+  "bead.dashboard.wallpaper-next": "Today hero wallpaper control: Next wallpaper.",
+  "bead.dashboard.wallpaper-pause": "Today hero wallpaper control: Pause wallpaper.",
+  "bead.dashboard.wallpaper-resume": "Today hero wallpaper control: Resume wallpaper.",
+  "bead.dashboard.wallpaper-static": "Today hero wallpaper control: Static wallpaper."
 }

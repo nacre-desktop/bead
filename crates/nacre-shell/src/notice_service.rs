@@ -115,6 +115,101 @@ fn urgency(n: &Notification) -> u8 {
         _ => 1,
     }
 }
+fn local_icon_path(value: &str) -> Option<String> {
+    let value = value.strip_prefix("file://localhost").unwrap_or(value);
+    let value = value.strip_prefix("file://").unwrap_or(value);
+    std::path::Path::new(value)
+        .is_absolute()
+        .then(|| value.to_owned())
+}
+fn theme_name(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"_.-".contains(&b))
+}
+fn choose_icon_path(
+    icon: Option<&str>,
+    desktop_entry: Option<&str>,
+    image_path: Option<&str>,
+    mut is_file: impl FnMut(&str) -> bool,
+    mut theme_icon: impl FnMut(&str) -> Option<String>,
+    mut desktop_icon: impl FnMut(&str) -> Option<String>,
+    fallback: &str,
+) -> String {
+    if let Some(icon) = icon {
+        if std::path::Path::new(icon)
+            .file_stem()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| {
+                matches!(
+                    name.to_ascii_lowercase().as_str(),
+                    "nacre" | "nacre-notifications"
+                )
+            })
+        {
+            return fallback.to_owned();
+        }
+        if let Some(path) = local_icon_path(icon).filter(|p| is_file(p)) {
+            return path;
+        }
+        if theme_name(icon)
+            && let Some(path) = theme_icon(icon)
+        {
+            return path;
+        }
+    }
+    if let Some(entry) = desktop_entry {
+        if let Some(name) = desktop_icon(entry) {
+            if let Some(path) = local_icon_path(&name).filter(|p| is_file(p)) {
+                return path;
+            }
+            if theme_name(&name)
+                && let Some(path) = theme_icon(&name)
+            {
+                return path;
+            }
+        }
+        let basename = entry.rsplit('/').next().unwrap_or(entry);
+        let name = basename.strip_suffix(".desktop").unwrap_or(basename);
+        if theme_name(name)
+            && let Some(path) = theme_icon(name)
+        {
+            return path;
+        }
+    }
+    if let Some(path) = image_path.and_then(local_icon_path).filter(|p| is_file(p)) {
+        return path;
+    }
+    fallback.to_owned()
+}
+/// Preserve the daemon's app icon hints after resolving usable assets at icon scale.
+pub(crate) fn icon_fields(
+    icon: Option<&str>,
+    desktop_entry: Option<&str>,
+    image_path: Option<&str>,
+) -> Json {
+    let path = choose_icon_path(
+        icon,
+        desktop_entry,
+        image_path,
+        |path| std::path::Path::new(path).is_file(),
+        |name| {
+            freedesktop_icons::lookup(name)
+                .with_size(48)
+                .find()
+                .map(|p| p.to_string_lossy().into_owned())
+        },
+        crate::workspace_rows::desktop_icon_name,
+        "",
+    );
+    json!({
+        "icon": icon.unwrap_or_default(),
+        "icon_path": path,
+        "desktop_entry": desktop_entry.unwrap_or_default(),
+        "image_path": image_path.unwrap_or_default(),
+    })
+}
 fn row(id: &str, n: &Notification, expanded: bool, history: bool, now: u64) -> Json {
     let rev = n.revision.unwrap_or(0);
     let default = n.default_action.as_ref().map_or("", |d| d.0.as_str());
@@ -133,11 +228,23 @@ fn row(id: &str, n: &Notification, expanded: bool, history: bool, now: u64) -> J
             })
             .collect()
     };
-    json!({"id": id, "rev": rev, "key": format!("{id}|{rev}"),
+    let mut row = json!({"id": id, "rev": rev, "key": format!("{id}|{rev}"),
         "app": n.app_name, "summary": n.summary, "body": n.body,
-        "icon": n.icon.clone().unwrap_or_default(), "urgency": urgency(n),
+        "urgency": urgency(n),
         "expanded": expanded, "actions": actions, "default": default,
-        "time_str": time_str(now.saturating_sub(n.created_ms)), "history": history})
+        "time_str": time_str(now.saturating_sub(n.created_ms)), "history": history});
+    if let Some(fields) = icon_fields(
+        n.icon.as_deref(),
+        n.desktop_entry.as_deref(),
+        n.image_path.as_deref(),
+    )
+    .as_object()
+    {
+        for (key, value) in fields {
+            row[key] = value.clone();
+        }
+    }
+    row
 }
 
 /// Pure projection of the last-good snapshot. `live` is false while disconnected

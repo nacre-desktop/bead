@@ -937,10 +937,17 @@ impl ControlCenter {
                         if !item.is_object() || (kind == "active" && item["retained"] != true) {
                             return None;
                         }
-                        Some(json!({
+                        let mut row = json!({
                             "id": id.as_str()?, "app": item["app_name"].as_str().unwrap_or(""),
                             "summary": item["summary"].as_str().unwrap_or(""), "body": item["body"].as_str().unwrap_or(""),
-                        }))
+                        });
+                        let icon = crate::notice_service::icon_fields(
+                            item["icon"].as_str(),
+                            item["desktop_entry"].as_str(),
+                            item["image_path"].as_str(),
+                        );
+                        row.as_object_mut()?.extend(icon.as_object()?.clone());
+                        Some(row)
                     })
             })
             .collect();

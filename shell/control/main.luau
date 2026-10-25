@@ -138,11 +138,18 @@ local function build_tile(t,w,h,embedded)
         detail_label=ui.tr("bead.panel.control-details",{name=label})}
 end
 local NOTICE_H=70
+local function noticeIcon(n)
+    if n.icon_path and n.icon_path~="" then return ui.Image{id="app-icon",icon=n.icon_path,width=28,height=28,aria_label=n.app} end
+    return ui.Image{id="app-icon",path="notifications/fallback.themed.svg",width=28,height=28,aria_label=n.app}
+end
 local function notice_card(n)
     return kit.Card{id="notice-"..n.id,width=INNER,height=NOTICE_H,shrink=0,padding=T.spacing.sm,gap=0,padding_left=T.spacing.md,
-        ui.Text{id="app",text=n.app,width=INNER-2*T.spacing.md,height=16,font_size=CAPTION,color="onSurfaceVariant"},
-        ui.Text{id="summary",text=n.summary,width=INNER-2*T.spacing.md,height=22,font_size=BODY,color="onSurface"},
-        ui.Text{id="body",text=n.body,width=INNER-2*T.spacing.md,height=16,font_size=CAPTION,color="onSurfaceVariant"}}
+        ui.Row{id="notice-content",width="fill",height=54,gap=T.spacing.sm,align="center",
+            noticeIcon(n),
+            ui.Column{id="notice-text",grow=1,gap=0,
+                ui.Text{id="app",text=n.app,width="fill",height=16,font_size=CAPTION,color="onSurfaceVariant"},
+                ui.Text{id="summary",text=n.summary,width="fill",height=22,font_size=BODY,color="onSurface"},
+                ui.Text{id="body",text=n.body,width="fill",height=16,font_size=CAPTION,color="onSurfaceVariant"}}}}
 end
 local function notices_empty()
     local text=get("cc.notice_ready") and ui.tr("bead.panel.control-notices-empty") or ui.tr("bead.panel.control-notices-loading")

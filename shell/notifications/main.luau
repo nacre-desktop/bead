@@ -30,6 +30,10 @@ local function noticeHeight(n)
     local footer=footerHeight(n)
     return 28+30+9+textHeight(n.summary,16,n.expanded and 6 or 2)+(body>0 and 9+body or 0)+(footer>0 and 9+footer or 0)
 end
+local function appIcon(n,id,size)
+    if n.icon_path and n.icon_path~="" then return ui.Image{id=id,icon=n.icon_path,width=size,height=size,aria_label=n.app} end
+    return ui.Image{id=id,path="notifications/fallback.themed.svg",width=size,height=size,aria_label=n.app}
+end
 local function notice(n)
     local hasDetails=n.body~="" or #actionRows(n)>0
     local buttons={id="actions",gap=6,height=footerHeight(n),visible=n.expanded and #actionRows(n)>0}
@@ -41,7 +45,7 @@ local function notice(n)
     return kit.Card{id="notice",height=noticeHeight(n),radius=14,padding=14,fill="surfaceContainer",on_activate=ui.action("notifications.card",n.key or n.id),aria_label=n.app..": "..n.summary,
         border_width=1,border_color=n.urgency==2 and "error" or ui.alpha("outlineVariant",.45),gap=9,
         ui.Row{height=30,gap=10,
-            ui.Image{icon=n.icon~="" and n.icon or "dialog-information",width=28,height=28,aria_label=n.app},
+            appIcon(n,"app-icon",28),
             ui.Column{grow=1,gap=0,justify="center",ui.Text{family="IBM Plex Sans",text=n.app,font_size=13.333,height=16},ui.Text{family="IBM Plex Sans",text=n.time_str or ui.tr("bead.notifications.time-now"),font_size=10.667,height=13,color="onSurfaceVariant"}},
             kit.IconButton{id="expand",visible=hasDetails,text=n.expanded and "expand_less" or "expand_more",width=30,height=30,radius=15,fill="transparent",aria_label=n.expanded and ui.tr("bead.notifications.collapse") or ui.tr("bead.notifications.expand"),on_activate=ui.action("notifications.details",n.key or n.id)},
             kit.IconButton{id="dismiss",text="close",width=30,height=30,radius=15,fill="transparent",aria_label=ui.tr("bead.notifications.dismiss"),on_activate=ui.action("notifications.dismiss",n.key or n.id)},

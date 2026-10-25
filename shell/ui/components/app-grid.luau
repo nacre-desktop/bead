@@ -14,11 +14,12 @@ local Tile = ui.component("AppTile", {item={id="string",name="string",icon="stri
                 ui.Text{text=p.item.name,font_size=13.333,height=28,text_align="center"},
             },
         },
-        ui.Button{id="favorite",position="absolute",right=3,top=3,width=26,height=26,radius=8,padding=0,
+        ui.Button{id="favorite",position="absolute",right=1,top=3,width=23,height=23,radius=7,padding=0,
+            visible=M.hovered(p.item.id) or (not ui.resolve_for_check(ui.bind("launcher.home")) and p.item.selected),
             aria_label=p.item.favorite and ui.tr("bead.launcher.favorite-remove") or ui.tr("bead.launcher.favorite-add"),
-            fill=p.item.favorite and ui.tint("surface","primary",.12) or "transparent",
+            fill="transparent",justify="center",align="center",
             on_activate=ui.action("toggle_favorite",p.item.id),
-            ui.Text{text=p.item.favorite and "star" or "star_outline",family="Material Symbols Rounded",width="fill",height="fill",font_size=18,text_align="center",color=p.item.favorite and "primary" or "onSurfaceVariant"},
+            ui.Image{path=p.item.favorite and "ui/components/assets/favorite-1.themed.svg" or "ui/components/assets/favorite-0.themed.svg",width=11*4/3,height=11*4/3},
         },
     }
 end)

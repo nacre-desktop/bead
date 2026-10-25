@@ -63,6 +63,22 @@ return function()
     local gauges=ui.resolve_for_check(ui.bind("dashboard.gauges"))
     local wallpaper=ui.resolve_for_check(ui.bind("dashboard.wallpaper"))
     local colors=ui.resolve_for_check(ui.bind("dashboard.can_colors")) and ui.action("dashboard.do","colors.open") or nil
+    local wallpapers=ui.resolve_for_check(ui.bind("dashboard.can_colors")) and ui.action("dashboard.do","wallpapers.open") or nil
+    local dynamic=ui.resolve_for_check(ui.bind("dashboard.wallpaper_dynamic"))
+    local paused=ui.resolve_for_check(ui.bind("dashboard.wallpaper_paused"))
+    local function wallpaperControl(id,index,glyph,label,available,operation)
+        local action=available and ui.action("dashboard.do",operation) or nil
+        local informational=id=="wallpaper-pause" and not dynamic
+        return kit.Button{id=id,position="absolute",left=(index-1)*l.wallpaperTransportButtonWidth,
+            top=0,width=l.wallpaperTransportButtonWidth,height=l.wallpaperTransportHeight-2*l.wallpaperTransportInset,padding=0,radius=l.wallpaperControlRadius,justify="center",align="center",
+            fill="transparent",hover_fill=action and ui.alpha("onSurface",.08) or "transparent",aria_label=label,
+            on_activate=action,activate_on_release=true,
+            ui.Text{text=glyph,family="Material Symbols Rounded",font_size=l.wallpaperIconSize,width=24,height=24,text_align="center",
+                color=(informational or action) and "onSurface" or ui.alpha("onSurface",l.wallpaperDisabledOpacity)}}
+    end
+    local canPause=ui.resolve_for_check(ui.bind("dashboard.can_wallpaper_pause"))
+    local pauseLabel=not dynamic and ui.tr("bead.dashboard.wallpaper-static")
+        or paused and ui.tr("bead.dashboard.wallpaper-resume") or ui.tr("bead.dashboard.wallpaper-pause")
     local colorsText=ui.tr("bead.dashboard.colors")
     local colorsTextWidth=math.min(l.heroActionWidth-40,math.ceil(ui.text_width(colorsText,"IBM Plex Sans",kit.tokens.text.caption*4/3)))
     local swatches={}
@@ -84,14 +100,29 @@ return function()
             ui.Text{id="weather",text=ui.bind("dashboard.summary"),font_size=l.heroWeatherSize,width=l.width-2*l.heroInset,height=l.heroLineHeight,color=l.heroTextColor},
         },
         ui.Row{id="palette",position="absolute",left=l.heroInset,top=l.hero-37,width=180,height=19,gap=10,table.unpack(swatches)},
-        kit.Button{id="colors",position="absolute",right=kit.tokens.spacing.xl,bottom=l.heroActionBottom,
-            width=l.heroActionWidth,height=l.heroActionHeight,padding=0,radius=l.heroActionRadius,
+        ui.Row{id="wallpaper-actions",position="absolute",right=l.heroActionsRight,bottom=l.heroActionBottom,
+            width=2*l.heroActionWidth+l.heroActionsGap,height=l.heroActionHeight,gap=l.heroActionsGap,
+            kit.Button{id="wallpapers",width=l.heroActionWidth,height=l.heroActionHeight,padding=0,radius=l.heroActionRadius,
+                fill=ui.tint("surface","primary",.12),hover_fill=ui.tint(ui.tint("surface","primary",.12),"onSurface",.08),align="center",justify="center",
+                aria_label=ui.tr("bead.dashboard.wallpapers"),on_activate=wallpapers,activate_on_release=true,
+                ui.Row{width=18+kit.tokens.spacing.xs+math.min(l.heroActionWidth-40,math.ceil(ui.text_width(ui.tr("bead.dashboard.wallpapers"),"IBM Plex Sans",kit.tokens.text.caption*4/3))),height=20,gap=kit.tokens.spacing.xs,align="center",justify="center",
+                    ui.Text{text="wallpaper",family="Material Symbols Rounded",font_size=kit.tokens.icons.small*4/3,width=18,height=20,text_align="center",color="onSurface"},
+                    ui.Text{text=ui.tr("bead.dashboard.wallpapers"),font_size=kit.tokens.text.caption*4/3,height=20,color="onSurface"}}},
+            kit.Button{id="colors",width=l.heroActionWidth,height=l.heroActionHeight,padding=0,radius=l.heroActionRadius,
             fill=ui.tint("surface","primary",.12),hover_fill=ui.tint(ui.tint("surface","primary",.12),"onSurface",.08),align="center",justify="center",
             aria_label=ui.tr("bead.welcome.colors-open"),on_activate=colors,activate_on_release=true,
             ui.Row{width=18+kit.tokens.spacing.xs+colorsTextWidth,height=20,gap=kit.tokens.spacing.xs,align="center",justify="center",
                 ui.Text{text="palette",family="Material Symbols Rounded",font_size=kit.tokens.icons.small*4/3,width=18,height=20,
                     text_align="center",color="onSurface"},
-                ui.Text{text=colorsText,width=colorsTextWidth,font_size=kit.tokens.text.caption*4/3,height=20,color="onSurface"}}},
+                ui.Text{text=colorsText,width=colorsTextWidth,font_size=kit.tokens.text.caption*4/3,height=20,color="onSurface"}}}},
+        kit.Button{id="wallpaper-transport",position="absolute",right=l.wallpaperTransportRight,bottom=l.wallpaperTransportBottom,
+            width=l.wallpaperTransportWidth,height=l.wallpaperTransportHeight,padding=l.wallpaperTransportInset,radius=l.wallpaperTransportRadius,
+            fill=ui.tint("surface","secondary",.1),hover_fill=ui.tint("surface","secondary",.1),
+            wallpaperControl("wallpaper-previous",1,"chevron_left",ui.tr("bead.dashboard.wallpaper-previous"),
+                ui.resolve_for_check(ui.bind("dashboard.can_wallpaper_previous")),"wallpaper.previous"),
+            wallpaperControl("wallpaper-pause",2,not dynamic and "image" or paused and "play_arrow" or "pause",pauseLabel,canPause,"wallpaper.pause"),
+            wallpaperControl("wallpaper-next",3,"chevron_right",ui.tr("bead.dashboard.wallpaper-next"),
+                ui.resolve_for_check(ui.bind("dashboard.can_wallpaper_next")),"wallpaper.next")},
     }
     local hostRows={}
     local hostRowHeight=#host+1>5 and l.hostRowHeight or l.hostSmallRowHeight
