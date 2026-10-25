@@ -10,7 +10,7 @@ local Tile = ui.component("AppTile", {item={id="string",name="string",icon="stri
             on_activate=ui.action("select_app",p.item.id),aria_label=p.item.name,
             ui.Box{position="absolute",left=0,top=10,width=3,height="70%",radius=1.5,fill="primary",visible=p.item.selected},
             ui.Column{align="center",gap=4,padding_top=7,padding_left=7,padding_right=7,
-                ui.Image{icon=p.item.icon,width=36,height=36,aria_label=p.item.name},
+                ui.Image{icon=p.item.icon,width=M.grid_icon,height=M.grid_icon,aria_label=p.item.name},
                 ui.Text{text=p.item.name,font_size=13.333,height=28,text_align="center"},
             },
         },
@@ -26,7 +26,18 @@ end)
 return ui.component("AppGrid",{},function(_)
     local viewport=ui.resolve_for_check(ui.bind("bead.viewport.width"))
     local width=M.content_width(viewport,ui.resolve_for_check(ui.bind("launcher.quick_allowed")))
+    if ui.resolve_for_check(ui.bind("launcher.icon_placeholder")) then
+        local function row()
+            return ui.Row{gap=6,
+                ui.Box{width=M.grid_cell_width,height=M.grid_row_height,radius=11,fill=ui.alpha("onSurface",.04)},
+                ui.Box{width=M.grid_cell_width,height=M.grid_row_height,radius=11,fill=ui.alpha("onSurface",.04)},
+                ui.Box{width=M.grid_cell_width,height=M.grid_row_height,radius=11,fill=ui.alpha("onSurface",.04)},
+                ui.Box{width=M.grid_cell_width,height=M.grid_row_height,radius=11,fill=ui.alpha("onSurface",.04)},
+            }
+        end
+        return ui.Column{width=width,height=400,gap=M.grid_gap_y,row(),row()}
+    end
     return kit.VirtualGrid{id="app-grid",scroll=ui.bind("launcher.scroll.y"),
-        width=width,height=400,min_cell_width=110,gap_x=6,gap_y=5,row_height=76.2,
+        width=width,height=400,min_cell_width=M.grid_cell_width,gap_x=M.grid_gap_x,gap_y=M.grid_gap_y,row_height=M.grid_row_height,
         model=ui.bind("launcher.apps"),key="id",render=function(item)return Tile{item=item}end}
 end)

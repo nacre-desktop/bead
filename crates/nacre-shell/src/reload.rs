@@ -136,6 +136,7 @@ pub struct Runtime {
     spare_chrome: Option<crate::placement::Chrome>,
     detached: bool,
     launcher: Option<std::rc::Rc<crate::launcher::Menu>>,
+    launcher_initial_projection: std::rc::Rc<std::cell::Cell<bool>>,
     launcher_subscription: Option<bead::core::source::Subscription>,
     launcher_quick: Option<std::rc::Rc<crate::launcher_quick::Quick>>,
     launcher_quick_subscription: Vec<bead::core::source::Subscription>,
@@ -172,6 +173,7 @@ pub struct Runtime {
     slider_release_serial: u64,
     slider_local_active: bool,
     launcher_memory: Option<crate::launcher::Memory>,
+    icon_warmer: Option<crate::icon_warm::IconWarmer>,
     connection_status: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     connection_subscription: Option<bead::core::source::Subscription>,
     prefs: Option<std::sync::Arc<dyn bead::core::source::Source>>,
@@ -617,6 +619,7 @@ impl Runtime {
             spare_chrome: None,
             detached: false,
             launcher: None,
+            launcher_initial_projection: std::rc::Rc::new(std::cell::Cell::new(true)),
             launcher_subscription: None,
             launcher_quick: None,
             launcher_quick_subscription: Vec::new(),
@@ -653,6 +656,7 @@ impl Runtime {
             slider_release_serial: 0,
             slider_local_active: false,
             launcher_memory: None,
+            icon_warmer: None,
             connection_status: None,
             connection_subscription: None,
             prefs: None,
@@ -1013,8 +1017,14 @@ impl Runtime {
         }
         let menu = std::rc::Rc::new(crate::launcher::Menu::new(source)?);
         let projector = menu.clone();
-        self.session
-            .set_projector(Box::new(move |stores| projector.project(stores)));
+        let initial = self.launcher_initial_projection.clone();
+        self.session.set_projector(Box::new(move |stores| {
+            if initial.replace(false) {
+                projector.project_initial(stores, std::time::Duration::from_millis(20))
+            } else {
+                projector.project(stores)
+            }
+        }));
         self.session.set_projection_coalescing(true);
         self.session.stores = self
             .session
@@ -1047,8 +1057,13 @@ impl Runtime {
             .ok_or("quick controls need a launcher")?;
         let quick = std::rc::Rc::new(quick);
         let projector = quick.clone();
+        let initial = self.launcher_initial_projection.clone();
         self.session.set_projector(Box::new(move |stores| {
-            let mut changes = menu.project(stores)?;
+            let mut changes = if initial.replace(false) {
+                menu.project_initial(stores, std::time::Duration::from_millis(20))?
+            } else {
+                menu.project(stores)?
+            };
             changes.extend(projector.project(stores));
             Ok(changes)
         }));
@@ -1716,6 +1731,14 @@ impl Runtime {
         self.launcher_memory = Some(memory);
         Ok(self)
     }
+    pub fn with_icon_warmer(
+        mut self,
+        source: std::sync::Arc<dyn bead::core::source::Source>,
+        palette: std::path::PathBuf,
+    ) -> Self {
+        self.icon_warmer = Some(crate::icon_warm::IconWarmer::new(source, palette));
+        self
+    }
     pub fn with_launcher_trigger(
         mut self,
         memory: crate::launcher::Memory,
@@ -2377,17 +2400,21 @@ impl Runtime {
                     } else {
                         resolve_icon_path(icon)
                     };
+                    let fallback = || {
+                        std::sync::Arc::from(include_bytes!("../../../shell/sample.svg").as_slice())
+                    };
                     let data = if path.as_path() == std::path::Path::new("@bead-icon-fallback.svg")
                     {
-                        std::sync::Arc::from(include_bytes!("../../../shell/sample.svg").as_slice())
-                    } else if !reload {
-                        if let Some(data) = self.session.asset_snapshot(path) {
-                            data
-                        } else {
-                            std::sync::Arc::from(std::fs::read(&*path)?)
-                        }
+                        fallback()
+                    } else if !reload && let Some(data) = self.session.asset_snapshot(path) {
+                        data
+                    } else if let Ok(bytes) = std::fs::read(&*path)
+                        && bead::render::validate_asset(path, &bytes).is_ok()
+                    {
+                        std::sync::Arc::from(bytes)
                     } else {
-                        std::sync::Arc::from(std::fs::read(&*path)?)
+                        *path = "@bead-icon-fallback.svg".into();
+                        fallback()
                     };
                     scene.asset_data.insert(path.clone(), data);
                 }
@@ -2442,7 +2469,7 @@ impl Runtime {
 }
 /// Icon names resolve through the theme directories (stat-heavy); a launcher grid asks for the same
 /// few dozen names on every scene, so remember the answer. Bounded; only paths are kept, never bytes.
-fn resolve_icon_path(icon: &str) -> std::path::PathBuf {
+pub(crate) fn resolve_icon_path(icon: &str) -> std::path::PathBuf {
     let direct = std::path::Path::new(icon);
     if direct.is_absolute() && direct.is_file() {
         return direct.to_path_buf();
@@ -3182,11 +3209,17 @@ impl SceneSource for Runtime {
         self.session.focused_masked()
     }
     fn scales(&mut self, scales: Vec<f32>) {
+        let scale = scales
+            .into_iter()
+            .filter(|scale| scale.is_finite() && *scale > 0.)
+            .max_by(f32::total_cmp);
+        if let Some(scale) = scale
+            && let Some(warmer) = &self.icon_warmer
+        {
+            warmer.set_scale(scale);
+        }
         if let Some(dashboard) = &self.dashboard
-            && let Some(scale) = scales
-                .into_iter()
-                .filter(|scale| scale.is_finite() && *scale > 0.)
-                .max_by(f32::total_cmp)
+            && let Some(scale) = scale
         {
             dashboard.borrow().set_raster_scale(scale);
         }
@@ -5816,6 +5849,9 @@ impl SceneSource for Runtime {
                 .is_some_and(|(_, name, _)| name == "close")
     }
     fn presented(&mut self, revision: u64) {
+        if let Some(warmer) = &mut self.icon_warmer {
+            warmer.start();
+        }
         if self.session.presented(revision).is_err() {
             eprintln!("RECOVERY_ERROR code=save_bundle");
         }

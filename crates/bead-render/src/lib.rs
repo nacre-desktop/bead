@@ -6,7 +6,9 @@ use cosmic_text::{
 use std::{
     collections::{BTreeSet, HashMap, VecDeque},
     error::Error,
-    path::Path,
+    hash::{Hash, Hasher},
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex, OnceLock},
     time::Instant,
 };
 use tiny_skia::{
@@ -302,7 +304,9 @@ mod arc_tests {
         assert!(arc_points(rect, f32::NAN, 0., 90.).is_none());
     }
 }
-#[derive(Clone, Copy, Debug, Default, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ImageFit {
     #[default]
@@ -1712,6 +1716,37 @@ fn load_image(
         &file
     };
     let (w, h) = dimensions(rect, scale);
+    if w <= 128 && h <= 128 {
+        return load_cached_image(image_cache(), path, bytes, w, h, fit);
+    }
+    decode_image(path, bytes, w, h, fit)
+}
+
+fn load_cached_image(
+    cache: &Mutex<ImageCache>,
+    path: &Path,
+    bytes: &[u8],
+    width: u32,
+    height: u32,
+    fit: ImageFit,
+) -> Result<Pixmap> {
+    let key = ImageCacheKey::new(path, bytes, width, height, fit);
+    let cached = { cache.lock().expect("image cache poisoned").get(&key) };
+    if let Some(pixels) = cached {
+        return Ok(pixels.as_ref().clone());
+    }
+    cache.lock().expect("image cache poisoned").misses += 1;
+    let pixels = decode_image(path, bytes, width, height, fit)?;
+    if pixels.width() <= 128 && pixels.height() <= 128 {
+        cache
+            .lock()
+            .expect("image cache poisoned")
+            .insert(key, Arc::new(pixels.clone()));
+    }
+    Ok(pixels)
+}
+
+fn decode_image(path: &Path, bytes: &[u8], w: u32, h: u32, fit: ImageFit) -> Result<Pixmap> {
     if path.extension().is_some_and(|e| e == "svg") {
         return svg_pixmap(bytes, w, h);
     }
@@ -1759,6 +1794,141 @@ fn load_image(
         None,
     );
     Ok(target)
+}
+
+const IMAGE_CACHE_LIMIT: usize = 1024 * 1024;
+const IMAGE_CACHE_MAX_ENTRIES: usize = 256;
+const IMAGE_CACHE_MAX_PATH_BYTES: usize = 1024;
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct ImageCacheKey {
+    path: PathBuf,
+    content_hash: u64,
+    width: u32,
+    height: u32,
+    fit: ImageFit,
+}
+impl ImageCacheKey {
+    fn new(path: &Path, bytes: &[u8], width: u32, height: u32, fit: ImageFit) -> Self {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        bytes.hash(&mut hasher);
+        Self {
+            path: path.to_owned(),
+            content_hash: hasher.finish(),
+            width,
+            height,
+            fit,
+        }
+    }
+}
+struct ImageCache {
+    entries: HashMap<ImageCacheKey, CachedImage>,
+    lru: VecDeque<ImageCacheKey>,
+    limit_bytes: usize,
+    bytes: usize,
+    raster_bytes: usize,
+    hits: u64,
+    misses: u64,
+    budget: bead_core::cache::Budget,
+}
+struct CachedImage {
+    pixels: Arc<Pixmap>,
+    _charge: bead_core::cache::Charge,
+}
+impl ImageCache {
+    fn get(&mut self, key: &ImageCacheKey) -> Option<Arc<Pixmap>> {
+        let value = self.entries.get(key)?.pixels.clone();
+        self.lru.retain(|item| item != key);
+        self.lru.push_back(key.clone());
+        self.hits += 1;
+        Some(value)
+    }
+    fn insert(&mut self, key: ImageCacheKey, value: Arc<Pixmap>) {
+        let raster_bytes = value.data().len();
+        let charge_bytes = raster_bytes
+            .saturating_add(key.path.as_os_str().len().saturating_mul(2))
+            .saturating_add(256);
+        if charge_bytes > self.limit_bytes
+            || key.path.as_os_str().len() > IMAGE_CACHE_MAX_PATH_BYTES
+        {
+            return;
+        }
+        if let Some(old) = self.entries.remove(&key) {
+            self.bytes -= old._charge.bytes();
+            self.raster_bytes -= old.pixels.data().len();
+        }
+        self.lru.retain(|item| item != &key);
+        while self.bytes + charge_bytes > self.limit_bytes
+            || self.entries.len() >= IMAGE_CACHE_MAX_ENTRIES
+        {
+            let Some(old_key) = self.lru.pop_front() else {
+                break;
+            };
+            if let Some(old) = self.entries.remove(&old_key) {
+                self.bytes -= old._charge.bytes();
+                self.raster_bytes -= old.pixels.data().len();
+            }
+        }
+        let Ok(charge) = self.budget.reserve(charge_bytes) else {
+            return;
+        };
+        self.bytes += charge_bytes;
+        self.raster_bytes += raster_bytes;
+        self.lru.push_back(key.clone());
+        self.entries.insert(
+            key,
+            CachedImage {
+                pixels: value,
+                _charge: charge,
+            },
+        );
+    }
+}
+fn image_cache() -> &'static Mutex<ImageCache> {
+    static CACHE: OnceLock<Mutex<ImageCache>> = OnceLock::new();
+    CACHE.get_or_init(|| {
+        Mutex::new(ImageCache {
+            entries: HashMap::new(),
+            lru: VecDeque::new(),
+            limit_bytes: IMAGE_CACHE_LIMIT,
+            bytes: 0,
+            raster_bytes: 0,
+            hits: 0,
+            misses: 0,
+            budget: bead_core::cache::Budget::new("image-raster-cache", IMAGE_CACHE_LIMIT),
+        })
+    })
+}
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ImageCacheStats {
+    pub entries: usize,
+    pub raster_bytes: usize,
+    pub charged_bytes: usize,
+    pub limit_bytes: usize,
+    pub hits: u64,
+    pub misses: u64,
+}
+/// Return process-wide icon raster-cache counters and resident raster bytes.
+pub fn image_cache_stats() -> ImageCacheStats {
+    let cache = image_cache().lock().expect("image cache poisoned");
+    ImageCacheStats {
+        entries: cache.entries.len(),
+        raster_bytes: cache.raster_bytes,
+        charged_bytes: cache.bytes,
+        limit_bytes: IMAGE_CACHE_LIMIT,
+        hits: cache.hits,
+        misses: cache.misses,
+    }
+}
+/// Rasterise a small image into the shared cache so later renderer workers can reuse it.
+pub fn prewarm_image(
+    path: &Path,
+    bytes: &[u8],
+    rect: Rect,
+    scale: f32,
+    fit: ImageFit,
+) -> Result<()> {
+    load_image(path, rect, scale, Some(bytes), fit).map(|_| ())
 }
 /// Reads Orient format 1 only. Unknown metadata is intentionally ignored.
 #[derive(Clone)]
@@ -2821,6 +2991,105 @@ mod tests {
             .max()
             .unwrap();
         assert!(max <= 2, "shadow channel difference {max}/255");
+    }
+
+    fn solid_png(color: [u8; 4]) -> Vec<u8> {
+        use image::ImageEncoder;
+        let source = image::RgbaImage::from_pixel(8, 8, image::Rgba(color));
+        let mut bytes = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut bytes)
+            .write_image(source.as_raw(), 8, 8, image::ExtendedColorType::Rgba8)
+            .unwrap();
+        bytes
+    }
+
+    fn isolated_image_cache() -> Mutex<ImageCache> {
+        Mutex::new(ImageCache {
+            entries: HashMap::new(),
+            lru: VecDeque::new(),
+            limit_bytes: IMAGE_CACHE_LIMIT,
+            bytes: 0,
+            raster_bytes: 0,
+            hits: 0,
+            misses: 0,
+            budget: bead_core::cache::Budget::new("image-raster-cache-test", IMAGE_CACHE_LIMIT),
+        })
+    }
+
+    #[test]
+    fn shared_image_cache_reuses_png_and_svg_decodes() {
+        let png_path = Path::new("cache-reuse-unique.png");
+        let png = solid_png([210, 30, 10, 255]);
+        let cache = isolated_image_cache();
+        let first = load_cached_image(&cache, png_path, &png, 8, 8, ImageFit::Fill).unwrap();
+        let second = load_cached_image(&cache, png_path, &png, 8, 8, ImageFit::Fill).unwrap();
+        assert_eq!(first.data(), second.data());
+        assert_eq!(cache.lock().unwrap().hits, 1);
+
+        let svg_path = Path::new("cache-reuse-unique.svg");
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="#12ab34"/></svg>"##;
+        let svg_first = load_cached_image(&cache, svg_path, svg, 8, 8, ImageFit::Fill).unwrap();
+        let svg_second = load_cached_image(&cache, svg_path, svg, 8, 8, ImageFit::Fill).unwrap();
+        assert_eq!(svg_first.data(), svg_second.data());
+        assert_eq!(cache.lock().unwrap().hits, 2);
+    }
+
+    #[test]
+    fn image_cache_invalidates_content_dimensions_and_fit() {
+        let path = Path::new("cache-invalidation-unique.png");
+        let first = solid_png([255, 0, 0, 255]);
+        let changed = solid_png([0, 255, 0, 255]);
+        let cache = isolated_image_cache();
+        let red = load_cached_image(&cache, path, &first, 8, 8, ImageFit::Fill).unwrap();
+        let green = load_cached_image(&cache, path, &changed, 8, 8, ImageFit::Fill).unwrap();
+        assert_ne!(red.data(), green.data());
+        assert_eq!(green.data()[1], 255);
+
+        load_cached_image(&cache, path, &changed, 9, 8, ImageFit::Fill).unwrap();
+        load_cached_image(&cache, path, &changed, 8, 8, ImageFit::Cover).unwrap();
+        assert_eq!(cache.lock().unwrap().entries.len(), 4);
+    }
+
+    #[test]
+    fn image_cache_lru_and_metadata_stay_within_budget() {
+        let mut cache = ImageCache {
+            entries: HashMap::new(),
+            lru: VecDeque::new(),
+            limit_bytes: 8 * 1024,
+            bytes: 0,
+            raster_bytes: 0,
+            hits: 0,
+            misses: 0,
+            budget: bead_core::cache::Budget::new("image-raster-cache-test", 8 * 1024),
+        };
+        let pixmap = Arc::new(Pixmap::new(8, 8).unwrap());
+        let keys: Vec<_> = (0..40)
+            .map(|index| ImageCacheKey {
+                path: PathBuf::from(format!("lru-{index}.png")),
+                content_hash: index,
+                width: 8,
+                height: 8,
+                fit: ImageFit::Fill,
+            })
+            .collect();
+        for key in keys.iter().take(8) {
+            cache.insert(key.clone(), pixmap.clone());
+        }
+        assert!(
+            cache.get(&keys[0]).is_some(),
+            "recently touched entry should remain"
+        );
+        for key in keys.iter().skip(8) {
+            cache.insert(key.clone(), pixmap.clone());
+        }
+        assert!(
+            cache.get(&keys[1]).is_none(),
+            "least recently used entry should be evicted"
+        );
+        assert!(cache.bytes <= 8 * 1024);
+        assert!(cache.entries.len() <= IMAGE_CACHE_MAX_ENTRIES);
+        assert!(cache.raster_bytes <= IMAGE_CACHE_LIMIT);
+        assert!(cache.budget.used() <= 8 * 1024);
     }
 }
 

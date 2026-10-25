@@ -10,7 +10,7 @@ local Row=ui.component("ResultRow",{item={id="string",name="string",icon="string
         on_activate=ui.action("select_app",item.id),aria_label=item.name,
         ui.Box{position="absolute",left=0,top=9,width=3,height=37,radius=1.5,fill="primary",visible=item.selected},
         ui.Row{gap=11,align="center",grow=1,
-            type(item.emoji)=="string" and item.emoji~="" and ui.Text{text=item.emoji,font_size=24,width=30,height=30} or ui.Image{icon=item.icon,width=30,height=30,aria_label=item.name},
+            type(item.emoji)=="string" and item.emoji~="" and ui.Text{text=item.emoji,font_size=24,width=M.result_icon,height=M.result_icon} or ui.Image{icon=item.icon,width=M.result_icon,height=M.result_icon,aria_label=item.name},
             ui.Column{grow=1,gap=3,justify="center",
                 ui.Text{text=item.name,font_size=14.667,height=20,color=item.disabled and "onSurfaceVariant" or "onSurface"},
                 ui.Text{text=item.description,font_size=12,color="onSurfaceVariant",height=16},

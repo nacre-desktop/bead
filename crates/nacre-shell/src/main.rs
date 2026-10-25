@@ -18,6 +18,7 @@ mod frame_config;
 mod headless;
 mod i18n;
 mod i18n_source;
+mod icon_warm;
 mod key_routes;
 mod launcher;
 mod launcher_panel;
@@ -724,7 +725,7 @@ fn start(
             launcher::SourceChoice {
                 fixture: menu_fixture.clone(),
                 socket: daemon_socket.clone(),
-                shared: shared_menu_source,
+                shared: shared_menu_source.clone(),
                 client: _ui_provider.clone(),
             },
             panel_trace,
@@ -1053,6 +1054,14 @@ fn start(
             .as_ref()
             .map(|(_, source)| source.clone())
             .filter(|_| bar);
+        let icon_warm_source = if launcher_panel && bar {
+            match shared_menu_source.clone() {
+                Some(source) => Some(source),
+                None => launcher::source(menu_fixture.as_deref(), daemon_socket.as_deref())?,
+            }
+        } else {
+            None
+        };
         let make_source = move |output: Option<String>| {
             let prefs_source = prefs_source.clone();
             let brightness_client = brightness_client.clone();
@@ -1062,6 +1071,7 @@ fn start(
             let colors = colors.clone();
             let fallback = fallback.clone();
             let connection_status = connection_status.clone();
+            let icon_warm_source = icon_warm_source.clone();
             let launcher_memory = launcher_memory.clone();
             let tray_selection = tray_selection.clone();
             let menu_fixture = menu_fixture.clone();
@@ -1078,8 +1088,17 @@ fn start(
                 let result =
                 (|| -> Result<Box<dyn bead::wayland::SceneSource>, Box<dyn std::error::Error>> {
                     let session =
-                        bead::ui::Session::new("shell".into(), entry, palette, colors, fallback);
+                        bead::ui::Session::new("shell".into(), entry, palette.clone(), colors, fallback);
                     let runtime = reload::Runtime::for_output(session, output).with_trace(trace);
+                    let runtime = if bar {
+                        if let Some(source) = icon_warm_source {
+                            runtime.with_icon_warmer(source, palette.clone())
+                        } else {
+                            runtime
+                        }
+                    } else {
+                        runtime
+                    };
                     let runtime = if let Some(source) = connection_status {
                         runtime.with_connection_status(source)?
                     } else {

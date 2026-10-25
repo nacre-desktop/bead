@@ -3,7 +3,7 @@ return {
   stores = {
     ["bead.scroll.wheel_step"] = 300,
     ["panel.open"] = true, ["launcher.apps"] = {},
-    ["launcher.mode"]="apps", ["launcher.error"]="", ["launcher.pending"]=false, ["launcher.result_count"]=0, ["launcher.total_count"]=0,
+    ["launcher.mode"]="apps", ["launcher.error"]="", ["launcher.pending"]=false, ["launcher.icon_placeholder"]=false, ["launcher.result_count"]=0, ["launcher.total_count"]=0,
     ["launcher.rail.order"]={}, ["launcher.rail.hidden"]={}, ["launcher.groups"]={},
     ["launcher.selection"] = "", ["launcher.route"] = "apps", ["launcher.engine_route"]="",
     ["launcher.search.text"] = "", ["launcher.result_query"] = "", ["launcher.scroll.y"] = 0,

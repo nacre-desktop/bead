@@ -8,6 +8,14 @@ function M.hovered(id)
     local key=id:gsub(".",function(c) return string.format("%02x",string.byte(c)) end)
     return string.find(ui.resolve_for_check(ui.bind("bead.hovered")),".k"..key..".",1,true)~=nil
 end
+-- Keep launcher image sizes in UI settings; the shell prewarmer reads the
+-- matching offscreen warm scene rather than duplicating layout constants.
+M.grid_icon=36
+M.result_icon=30
+M.grid_cell_width=110
+M.grid_row_height=76.2
+M.grid_gap_x=6
+M.grid_gap_y=5
 M.quick_width=S.xl*13
 M.quick_gap=S.xl
 M.quick_top=S.xxl*3+S.md

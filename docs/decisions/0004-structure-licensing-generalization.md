@@ -214,6 +214,10 @@ After Bead's core switch on Nacre, plan support for:
   optional panel hover dismissal. External lip observations and hover-open IPC
   carry pointer ownership across app boundaries; shell Luau owns trigger/pin rules.
 
+- B0129: the renderer's shared small-image raster LRU is keyed by immutable
+  contents, physical dimensions, fit and path; shell Luau selects icon sizes,
+  while the shell adapter owns menu queries and warming policy.
+
 ## Housekeeping (later)
 
 - Move the GPL `nacre-shell` crate and `shell/` assets from Bead to Nacre at a

@@ -191,8 +191,14 @@ fn bake(
                     .map(|raster| raster.pixels.data().len())
                     .sum();
                 let encoded_bytes: usize = scene.asset_data.values().map(|bytes| bytes.len()).sum();
+                let images = frame
+                    .items
+                    .iter()
+                    .filter(|item| matches!(item.primitive, bead_render::Primitive::Image { .. }));
+                let image_count = images.clone().count();
+                let missing_images = images.filter(|item| item.raster.is_none()).count();
                 bead_core::vprintln!(
-                    "UI_IMAGE_BYTES scale={scale} raster_bytes={image_bytes} encoded_bytes={encoded_bytes} thread={:?}",
+                    "UI_IMAGE_BYTES scale={scale} raster_bytes={image_bytes} encoded_bytes={encoded_bytes} images={image_count} missing={missing_images} thread={:?}",
                     std::thread::current().id()
                 );
             }

@@ -151,6 +151,17 @@ fn parse_favorites(value: &Json) -> source::Result<std::collections::BTreeSet<St
         .map(str::to_owned)
         .collect())
 }
+pub(crate) fn recent_ids(value: &Json) -> source::Result<Vec<String>> {
+    parse_favorites(value)?;
+    Ok(value["recent"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .take(16)
+        .filter_map(Json::as_str)
+        .map(str::to_owned)
+        .collect())
+}
 fn prepare(reply: Json, expected_query: Option<&str>) -> source::Result<Prepared> {
     let mut result: MenuQueryResult = serde_json::from_value(reply).map_err(|_| invalid_menu())?;
     result.validate().map_err(|_| invalid_menu())?;
@@ -1519,6 +1530,11 @@ impl Menu {
         } else {
             view.last_scroll = scroll;
         }
+        if stores.get("launcher.icon_placeholder") == Some(&Value::Bool(true))
+            && view.pending.is_none()
+        {
+            delta.insert("launcher.icon_placeholder".into(), Value::Bool(false));
+        }
         // A query may change while the ordered engine result stays identical.
         // Retain the store's immutable model instead of cloning it just to compare.
         match stores.get("launcher.apps") {
@@ -1554,6 +1570,31 @@ impl Menu {
             });
         }
         Ok(delta)
+    }
+
+    /// Let the first launcher request settle briefly before the panel commits its first scene.
+    /// Later query projections never wait here, so typing remains independent.
+    pub fn project_initial(
+        &self,
+        stores: &Stores,
+        timeout: Duration,
+    ) -> Result<BTreeMap<String, Value>, bead::ui::Diagnostic> {
+        let deadline = std::time::Instant::now() + timeout.min(Duration::from_millis(20));
+        loop {
+            let delta = self.project(stores)?;
+            if delta.get("launcher.pending") != Some(&Value::Bool(true)) {
+                return Ok(delta);
+            }
+            if std::time::Instant::now() >= deadline {
+                let mut delta = delta;
+                delta.insert("launcher.icon_placeholder".into(), Value::Bool(true));
+                bead::core::vprintln!(
+                    "LAUNCHER_FIRST_FRAME readiness=timeout_ms20 placeholder=true"
+                );
+                return Ok(delta);
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
     }
 }
 
@@ -1650,6 +1691,36 @@ mod tests {
         let delta = project_wait(menu, stores).unwrap();
         *stores = stores.reconcile(&delta).unwrap();
         stores.commit(delta).unwrap();
+    }
+    #[test]
+    fn initial_projection_is_bounded_and_later_typing_does_not_wait() {
+        let source = prefix_source(false, false);
+        let menu = Menu::new(Some(source)).unwrap();
+        let mut stores = prefix_stores();
+        let started = std::time::Instant::now();
+        let first = menu
+            .project_initial(&stores, Duration::from_millis(20))
+            .unwrap();
+        assert!(started.elapsed() < Duration::from_millis(100));
+        if first.get("launcher.pending") == Some(&Value::Bool(true)) {
+            assert_eq!(
+                first.get("launcher.icon_placeholder"),
+                Some(&Value::Bool(true))
+            );
+        } else {
+            assert!(first.contains_key("launcher.apps"));
+        }
+        stores = stores.reconcile(&first).unwrap();
+        stores.commit(first).unwrap();
+        stores
+            .commit(BTreeMap::from([(
+                "launcher.search.text".into(),
+                Value::Text("typing".into()),
+            )]))
+            .unwrap();
+        let started = std::time::Instant::now();
+        let _ = menu.project(&stores).unwrap();
+        assert!(started.elapsed() < Duration::from_millis(30));
     }
     fn edit_prefix(menu: &Menu, stores: &mut Stores) {
         apply_projection(menu, stores);
