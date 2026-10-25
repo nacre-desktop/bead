@@ -38,5 +38,11 @@ Validation: full remote Arch CI passed: formatting, warning-denied Clippy,
 workspace/trace tests, renderer feature configurations, Luau/schema checks,
 capture-harness tests, packaging, wallpaper smoke, private service/SNI lifecycles,
 and cargo-deny for the workspace and every independent framework graph.
-No style/layout changes, live sessions, installs or host configuration changes. N0074 adds service ordering as a separate defence;
-reconnect remains necessary for daemon restarts. No temporary implementation duplicates.
+No style/layout changes, live sessions, installs or host configuration changes.
+N0074 adds service ordering as a separate defence; reconnect remains necessary
+for daemon restarts.
+
+Transitional duplicate: daemon-configured bars still project the existing local
+sensor snapshot before applying the daemon values. Delete that redundant local
+bar projection 14 days after the daemon replacement is trusted; daemon-less
+framework previews remain supported.
