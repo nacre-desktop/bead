@@ -181,11 +181,14 @@ After Bead's core switch on Nacre, plan support for:
   saved-state hooks and compositor motion notifications are general primitives;
   Nacre titles, helper calls and daemon snapshot decoding stay in the shell adapter.
 
-## Housekeeping (later)
-
 - B0108: `ui.text_width(text, family, size)` measures regular-weight labels with the
   renderer's shaper and a host-supplied font picker; the frontend owns the bounded
   width cache. Shell markup chooses which labels to measure and their geometry.
+  `Session::navigate` stages a selected entry/schema over durable stores without
+  replacing its session; `PanelNavigated` updates catalog identity after commit
+  without replacing the host surface. Page names and lease policy stay in the shell.
+
+## Housekeeping (later)
 
 - Move the GPL `nacre-shell` crate and `shell/` assets from Bead to Nacre at a
   natural boundary, not mid-feature, so Bead's repository is purely permissive.

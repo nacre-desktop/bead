@@ -149,6 +149,54 @@ return ui.Row{id="row",width=400,height=40,justify="center",
 }
 
 #[test]
+fn navigation_loads_the_new_schema_atomically_and_keeps_the_last_good_entry() {
+    let f = fixture();
+    fs::create_dir_all(f.0.join("other")).unwrap();
+    fs::write(
+        f.0.join("other/behavior.luau"),
+        "return {stores={query='',counter=7},actions={},computed={}}",
+    )
+    .unwrap();
+    fs::write(f.0.join("other/main.luau"), r#"local ui=require("bead.ui")
+return ui.Box{id="other",width=400,height=100,
+ ui.Text{id="label",text=ui.bind("query"),width=200,height=24},
+ ui.Text{id="counter",text=tostring(ui.resolve_for_check(ui.bind("counter"))),width=100,height=24}}"#).unwrap();
+    let mut s = session(&f);
+    s.enable_recovery(f.0.join("recovery/current.json"));
+    let before = s.stores.get("query").cloned();
+    let next = s
+        .navigate(
+            "other/main.luau".into(),
+            BTreeMap::from([("query".into(), Value::Text("kept".into()))]),
+        )
+        .unwrap();
+    assert_eq!(s.entry, Path::new("ui/main.luau"));
+    assert_eq!(s.stores.get("query").cloned(), before);
+    s.check_sources().unwrap();
+    s.commit(next);
+    assert_eq!(s.entry, Path::new("other/main.luau"));
+    assert_eq!(s.stores.get("query"), Some(&Value::Text("kept".into())));
+    assert_eq!(s.stores.get("counter"), Some(&Value::Number(7.)));
+    fs::write(f.0.join("other/bad.luau"), "invalid syntax !").unwrap();
+    assert!(
+        s.navigate("other/bad.luau".into(), BTreeMap::new())
+            .is_err()
+    );
+    assert_eq!(s.entry, Path::new("other/main.luau"));
+    assert_eq!(s.stores.get("query"), Some(&Value::Text("kept".into())));
+    let scene = s
+        .update(BTreeMap::from([(
+            "query".into(),
+            Value::Text("still live".into()),
+        )]))
+        .unwrap()
+        .unwrap();
+    assert!(scene.primitives.iter().any(|p| matches!(p,
+        Primitive::Text { text, .. } if text == "still live")));
+    s.commit(scene);
+}
+
+#[test]
 fn clickable_region_can_opt_into_edge_hover() {
     let f = fixture();
     fs::write(f.0.join("ui/main.luau"), r#"local ui=require("bead.ui")

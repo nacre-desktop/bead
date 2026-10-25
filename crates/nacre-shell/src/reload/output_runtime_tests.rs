@@ -121,7 +121,10 @@ fn title_survives_transient_focus_clear_only_while_its_window_stays_active() {
 
     snapshot.windows[0].focused = false;
     let (title, remembered) = focused_title(&snapshot, Some("left"), remembered.as_ref());
-    assert!(title.is_empty(), "changing outputs cannot retain another output's title");
+    assert!(
+        title.is_empty(),
+        "changing outputs cannot retain another output's title"
+    );
     assert_eq!(remembered, None);
     let (title, remembered) = focused_title(&snapshot, Some("removed"), Some(&previous));
     assert!(title.is_empty(), "unknown outputs fail closed");
@@ -129,7 +132,10 @@ fn title_survives_transient_focus_clear_only_while_its_window_stays_active() {
 
     snapshot.connected = false;
     let (title, remembered) = focused_title(&snapshot, Some("right"), Some(&previous));
-    assert!(title.is_empty(), "a disconnected backend shows no stale title");
+    assert!(
+        title.is_empty(),
+        "a disconnected backend shows no stale title"
+    );
     assert_eq!(remembered, None);
 }
 

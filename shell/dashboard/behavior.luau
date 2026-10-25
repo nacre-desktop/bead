@@ -21,7 +21,7 @@ return {stores={
     ["dashboard.select"]=function(s,id)
         local tabs=s["dashboard.tabs"]
         local count=math.max(1,#tabs)
-        local width=math.floor(936/count)
+        local width=936/count
         if not s["dashboard.pearl.moving"] then
             for index,tab in ipairs(tabs) do
                 if tab.id==s["dashboard.page"] then

@@ -4,18 +4,14 @@ local kit=require("bead.kit")
 local page=ui.resolve_for_check(ui.bind("dashboard.page"))
 local preview=ui.resolve_for_check(ui.bind("dashboard.preview"))
 local stale=ui.resolve_for_check(ui.bind("dashboard.stale"))
-local ok,content=pcall(require,"./"..page.."/page")
-if not ok then
-    local fallback_ok,fallback=pcall(require,"./page")
-    if fallback_ok then content=fallback else error(content) end
-end
+local content=require("./page")
 local nav={}
 local tabs=ui.resolve_for_check(ui.bind("dashboard.tabs"))
 local message=ui.resolve_for_check(ui.bind("dashboard.message"))
 local customize=ui.resolve_for_check(ui.bind("dashboard.customize"))
 -- Slots share the strip; labels drop out when a slot gets too narrow.
 local count=math.max(1,#tabs)
-local tw=math.floor(936/count)
+local tw=936/count
 local labeled=tw>=94
 local selected_slot=nil
 for index,tab in ipairs(tabs) do if tab.id==page then selected_slot=index break end end
@@ -27,12 +23,12 @@ for _,tab in ipairs(tabs) do
     local selected=tab.id==page
     local interactive=not selected
     local Button=interactive and kit.Button or ui.Box
-    local label_width=labeled and ui.text_width(title,"IBM Plex Sans",13.333) or 0
+    local label_width=labeled and math.ceil(ui.text_width(title,"IBM Plex Sans",13.333))+kit.tokens.spacing.hairline/2 or 0
     local rw=19+(labeled and 7+label_width or 0)
     local face={
         ui.Row{id="label",position="absolute",left=(tw-rw)/2,top=6,width=rw,height=24,gap=7,align="center",justify="center",
             ui.Text{text=tab.icon,family="Material Symbols Rounded",width=19,height=24,font_size=18.667,color=selected and "primary" or "onSurfaceVariant"},
-            labeled and ui.Text{text=title,width=label_width,height=24,font_size=13.333,color=selected and "onSurface" or "onSurfaceVariant"} or nil,
+            labeled and ui.Text{text=title,width=label_width,height=24,font_size=13.333,text_align="center",color=selected and "onSurface" or "onSurfaceVariant"} or nil,
         },
     }
     table.insert(nav,Button{id=tab.id,width=tw,height=44,padding=0,radius=12,
@@ -40,12 +36,13 @@ for _,tab in ipairs(tabs) do
         aria_label=title,on_activate=interactive and ui.action("dashboard.select",tab.id) or nil,
         table.unpack(face)})
 end
+if pearl_left then
+    nav[#nav+1]=ui.Box{id="tab-halo",position="absolute",left=pearl_left,top=29,width=12,height=12,radius=6,fill=ui.alpha("primary",0.12),
+        ui.Box{id="tab-pearl",position="absolute",left=2,top=2,width=8,height=8,radius=4,fill="primary"}}
+end
 return kit.Panel{id="dashboard",edge="top",open=ui.bind("panel.open"),duration=.36,transition="ease-in-out",fade=false,reveal=true,
     width=984,height=650,padding=0,radius=18,fill="surface",
-    ui.Row{id="navigation",position="absolute",left=24,top=12,width=936,height=44,table.unpack(nav),
-        pearl_left and ui.Box{id="tab-halo",position="absolute",left=pearl_left,top=29,width=12,height=12,radius=6,fill=ui.alpha("primary",0.12),
-            ui.Box{id="tab-pearl",position="absolute",left=2,top=2,width=8,height=8,radius=4,fill="primary"}},
-    },
+    ui.Row{id="navigation",position="absolute",left=24,top=12,width=936,height=44,table.unpack(nav)},
     ui.Box{id="stage",position="absolute",left=22,top=68,width=940,height=562,content()},
     ui.Text{id="state",position="absolute",left=24,top=632,width=936,height=16,font_size=12,text_align="right",
         text=preview and (stale and ui.tr("bead.dashboard.state-preview-stale") or ui.tr("bead.dashboard.state-preview")) or stale and ui.tr("bead.dashboard.state-stale") or "",color=stale and not preview and "error" or "onSurfaceVariant"},

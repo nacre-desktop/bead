@@ -290,12 +290,14 @@ pub fn spec(
             } else {
                 None
             };
-            Ok(Dashboard::new(page, source, secondary, choice.fixtures.is_some())
-                .with_clock(clock)
-                .with_player(player)
-                .with_overview(system, wallpaper, summary_updates)
-                .with_controls(settings, controls, choice.client.clone())
-                .with_prefs(choice.prefs.clone()))
+            Ok(
+                Dashboard::new(page, source, secondary, choice.fixtures.is_some())
+                    .with_clock(clock)
+                    .with_player(player)
+                    .with_overview(system, wallpaper, summary_updates)
+                    .with_controls(settings, controls, choice.client.clone())
+                    .with_prefs(choice.prefs.clone()),
+            )
         })
     };
     Ok(bead::wayland::PanelSpec {

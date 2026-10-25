@@ -18,7 +18,7 @@ local updates_on=ui.resolve_for_check(ui.bind("bar.updates.enabled"))
 local updates_n=ui.resolve_for_check(ui.bind("bar.updates.count"))
 local header=ui.resolve_for_check(ui.bind("bar.height"))
 local title=ui.resolve_for_check(ui.bind("bar.title"))
-local title_width=math.min(t.title_max_width,ui.text_width(title,"IBM Plex Sans",t.title_font))
+local title_width=math.min(t.title_max_width,math.ceil(ui.text_width(title,"IBM Plex Sans",t.title_font))+kit.tokens.spacing.hairline/2)
 local cue_extent=math.min(t.title_cue_max,title_width+t.icon_width+t.title_gap+10)
 local dwell=ui.resolve_for_check(ui.bind("bead.edge.dwell"))
 local ws_count=ui.resolve_for_check(ui.bind("bar.workspace.count"))
@@ -138,7 +138,7 @@ return kit.Bar{edge="top",id="bar",width="100%",height=header,radius=0,fill="sur
     },
     ui.Row{id="title-band",position="absolute",left="28%",right="28%",top=(header-t.title_height)/2,height=t.title_height,justify="center",align="center",gap=t.title_gap,fill="transparent",hover_fill="transparent",focus_ring=false,edge_hover=true,aria_label=ui.tr("bead.bar.active-window"),on_activate=ui.action("bar.title"),
         centered_text{id="title-icon",visible=ui.bind("bead.desktop.titlevisible"),text="desktop_windows",width=24,height=24,shrink=0,family="Material Symbols Rounded",font_size=20,color="primary"},
-        centered_text{id="title",visible=ui.bind("bead.desktop.titlevisible"),text=title,height=24,width=title_width,max_width=t.title_max_width,family="IBM Plex Sans",font_size=t.title_font,color="primary"},
+        centered_text{id="title",visible=ui.bind("bead.desktop.titlevisible"),text=title,height=24,width=title_width,max_width=t.title_max_width,family="IBM Plex Sans",font_size=t.title_font,text_align="center",color="primary"},
         kit.Tooltip{id="tray-tooltip",edge="top",bar_size=-8,left=0,width="100%",height=30,padding=3,visible=ui.bind("bead.desktop.tray.tooltip.visible"),
             ui.Text{text=ui.bind("bead.desktop.tray.tooltip"),height=24,width="100%",font_size=13,color="onSurface"},
         },

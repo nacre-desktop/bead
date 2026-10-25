@@ -1994,8 +1994,14 @@ impl Runtime {
         let previous = std::mem::replace(&mut *current.borrow_mut(), next);
         let animate = !reduced_motion && duration > 0. && from != target;
         if !animate {
-            changes.insert("dashboard.pearl.x".into(), bead::core::Value::Number(target));
-            changes.insert("dashboard.pearl.moving".into(), bead::core::Value::Bool(false));
+            changes.insert(
+                "dashboard.pearl.x".into(),
+                bead::core::Value::Number(target),
+            );
+            changes.insert(
+                "dashboard.pearl.moving".into(),
+                bead::core::Value::Bool(false),
+            );
         }
         let entry = format!("dashboard/{}/main.luau", page.name()).into();
         let scene = match self.session.navigate(entry, changes) {
@@ -2014,9 +2020,8 @@ impl Runtime {
                 duration: std::time::Duration::from_secs_f64(duration),
                 easing,
             });
-            self.dashboard_pearl_deadline = Some(
-                std::time::Instant::now() + std::time::Duration::from_millis(16),
-            );
+            self.dashboard_pearl_deadline =
+                Some(std::time::Instant::now() + std::time::Duration::from_millis(16));
         } else {
             self.dashboard_pearl_animation = None;
             self.dashboard_pearl_deadline = None;
@@ -2053,9 +2058,8 @@ impl Runtime {
             self.dashboard_pearl_deadline = None;
             Some((target, true))
         } else {
-            self.dashboard_pearl_deadline = Some(
-                std::time::Instant::now() + std::time::Duration::from_millis(16),
-            );
+            self.dashboard_pearl_deadline =
+                Some(std::time::Instant::now() + std::time::Duration::from_millis(16));
             Some((value, false))
         }
     }
@@ -2068,10 +2072,14 @@ impl SceneSource for Runtime {
             .as_ref()
             .and(self.slider_sent)
             .map(|sent| sent + std::time::Duration::from_millis(34));
-        [send, self.session.preview_deadline(), self.dashboard_pearl_deadline]
-            .into_iter()
-            .flatten()
-            .min()
+        [
+            send,
+            self.session.preview_deadline(),
+            self.dashboard_pearl_deadline,
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
 
     fn panel_center(&mut self, center: Option<f32>) {
@@ -3488,13 +3496,9 @@ impl SceneSource for Runtime {
                 scope_recovery(&mut self.session, Some(&name));
                 let values = if let Some(backend) = &self.backend {
                     let snapshot = backend.snapshot();
-                    let mut values =
-                        backend_values(&snapshot, Some(&name), &self.workspaces)?;
-                    let (title, focused_window) = focused_title(
-                        &snapshot,
-                        Some(&name),
-                        self.last_focused_window.as_ref(),
-                    );
+                    let mut values = backend_values(&snapshot, Some(&name), &self.workspaces)?;
+                    let (title, focused_window) =
+                        focused_title(&snapshot, Some(&name), self.last_focused_window.as_ref());
                     self.last_focused_window = focused_window;
                     values.insert("bead.focused_title".into(), bead::core::Value::Text(title));
                     values
@@ -3517,11 +3521,8 @@ impl SceneSource for Runtime {
                     snapshot.workspaces.len(),
                     snapshot.windows.len()
                 );
-                let mut values = backend_values(
-                    &snapshot,
-                    self.output.as_deref(),
-                    &self.workspaces,
-                )?;
+                let mut values =
+                    backend_values(&snapshot, self.output.as_deref(), &self.workspaces)?;
                 let (title, focused_window) = focused_title(
                     &snapshot,
                     self.output.as_deref(),
@@ -4415,10 +4416,11 @@ impl SceneSource for Runtime {
             {
                 eprintln!("STATE_ERROR save: {error}");
             }
-            if let Some(view) = self.pending_panel_navigation.take()
-                && let Some(wakeup) = &self.wakeup
-            {
-                wakeup(UiEvent::PanelNavigated(view));
+            if let Some(view) = self.pending_panel_navigation.take() {
+                scope_recovery(&mut self.session, self.output.as_deref());
+                if let Some(wakeup) = &self.wakeup {
+                    wakeup(UiEvent::PanelNavigated(view));
+                }
             }
         }
         true
@@ -4529,7 +4531,8 @@ fn focused_title(
                     || (window.output.is_none()
                         && window.workspace.as_ref().is_some_and(|workspace_id| {
                             snapshot.workspaces.iter().any(|workspace| {
-                                &workspace.id == workspace_id && workspace.output.as_ref() == Some(id)
+                                &workspace.id == workspace_id
+                                    && workspace.output.as_ref() == Some(id)
                             })
                         }))
             })
@@ -4554,8 +4557,7 @@ fn focused_title(
             .filter(window_matches)
             .find(|window| {
                 &window.id == id
-                    && window.workspace.as_ref()
-                        == active_workspace.map(|workspace| &workspace.id)
+                    && window.workspace.as_ref() == active_workspace.map(|workspace| &workspace.id)
             })
     });
     retained.map_or_else(

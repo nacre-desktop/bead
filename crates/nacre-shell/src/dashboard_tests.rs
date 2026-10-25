@@ -275,11 +275,30 @@ fn tab_navigation_keeps_runtime_open_and_releases_previous_page_sources() -> Res
         events.lock().unwrap().push(event);
     }));
     let identity = std::ptr::from_ref(&runtime.session);
-    if let Some(scene) = runtime.stage(UiEvent::Model(BTreeMap::new()))? {
-        drop(scene);
-        runtime.commit();
-    }
-    assert_eq!(runtime.session.stores.get("panel.open"), Some(&Value::Bool(true)));
+    let first_scene = runtime
+        .stage(UiEvent::Model(BTreeMap::new()))?
+        .ok_or("initial dashboard scene")?;
+    let strip_ids = |scene: &bead::render::Scene| {
+        scene
+            .layers
+            .iter()
+            .filter(|layer| layer.id.starts_with("dashboard.navigation"))
+            .map(|layer| layer.id.clone())
+            .collect::<Vec<_>>()
+    };
+    let before_strip = strip_ids(&first_scene);
+    runtime.commit();
+    assert!(
+        runtime
+            .session
+            .resource_counts()
+            .split_whitespace()
+            .any(|part| part == "sources=11")
+    );
+    assert_eq!(
+        runtime.session.stores.get("panel.open"),
+        Some(&Value::Bool(true))
+    );
     let tab = runtime
         .session
         .view_nodes()
@@ -294,13 +313,34 @@ fn tab_navigation_keeps_runtime_open_and_releases_previous_page_sources() -> Res
         x: rect.x + rect.w / 2.,
         y: rect.y + rect.h / 2.,
     })? {
+        assert_eq!(
+            strip_ids(&scene),
+            before_strip,
+            "the strip retains all stable layer IDs"
+        );
         runtime.commit();
         drop(scene);
     }
     assert_eq!(std::ptr::from_ref(&runtime.session), identity);
-    assert_eq!(runtime.session.stores.get("panel.open"), Some(&Value::Bool(true)));
-    assert_eq!(runtime.session.stores.get("dashboard.page"), Some(&Value::Text("weather".into())));
-    assert_eq!(runtime.session.stores.get("dashboard.pearl.target"), Some(&Value::Number(345.)));
+    assert_eq!(
+        runtime.session.stores.get("panel.open"),
+        Some(&Value::Bool(true))
+    );
+    assert_eq!(
+        runtime.session.stores.get("dashboard.page"),
+        Some(&Value::Text("weather".into()))
+    );
+    assert_eq!(
+        runtime.session.stores.get("dashboard.pearl.target"),
+        Some(&Value::Number(345.))
+    );
+    assert!(
+        runtime
+            .session
+            .resource_counts()
+            .split_whitespace()
+            .any(|part| part == "sources=26")
+    );
     assert!(emitted.lock().unwrap().iter().any(|event| {
         matches!(event, UiEvent::PanelNavigated(view) if view == "dashboard-weather")
     }));
@@ -308,10 +348,14 @@ fn tab_navigation_keeps_runtime_open_and_releases_previous_page_sources() -> Res
     assert!(runtime.select_dashboard_page(Page::Weather)?.is_none());
     assert_eq!(next_sources.lock().unwrap().len(), constructed);
     let before_old_publish = notifications.load(Ordering::Relaxed);
-    first.publish(fixture("today"))?;
+    let mut old_update = fixture("today");
+    old_update["health"]["stale"] = json!(true);
+    first.publish(old_update)?;
     assert_eq!(notifications.load(Ordering::Relaxed), before_old_publish);
     let current = next_sources.lock().unwrap()[0].clone();
-    current.publish(fixture("weather"))?;
+    let mut current_update = fixture("weather");
+    current_update["health"]["stale"] = json!(true);
+    current.publish(current_update)?;
     assert!(notifications.load(Ordering::Relaxed) > before_old_publish);
     Ok(())
 }
@@ -471,8 +515,7 @@ fn dashboard_navigation_routes_every_core_tab() -> Result<()> {
                 assert!(
                     harness.session.view_nodes().iter().any(|node| {
                         node.action.as_deref() == Some("dashboard.select")
-                            && node.action_arg
-                                == Some(Value::Text(tab.name().into()))
+                            && node.action_arg == Some(Value::Text(tab.name().into()))
                     }),
                     "unselected {} tab must open its dashboard route",
                     tab.name()
@@ -1316,7 +1359,10 @@ fn dashboard_extras_have_deterministic_pixels_and_only_navigation_actions() -> R
             let mut h = extra_harness(page, model, scale)?;
             for node in h.session.view_nodes() {
                 assert!(
-                    matches!(node.action.as_deref(), None | Some("view.open" | "dashboard.select")),
+                    matches!(
+                        node.action.as_deref(),
+                        None | Some("view.open" | "dashboard.select")
+                    ),
                     "extras execute nothing"
                 );
             }

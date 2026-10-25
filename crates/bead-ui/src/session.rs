@@ -2,6 +2,7 @@
 //! Durable stores, editor/focus state and validate-then-commit reload transactions.
 use super::*;
 pub(super) struct Pending {
+    entry: PathBuf,
     pub(super) generation: Option<Generation>,
     pub(super) stores: Stores,
     pub(super) palette: Palette,
@@ -198,6 +199,7 @@ impl Session {
         &self,
         generation: &Generation,
         palette: &[u8],
+        entry: &Path,
     ) -> Result<bead_core::recovery::Bundle, Diagnostic> {
         let size = generation.sources.values().map(Vec::len).sum::<usize>()
             + generation.assets.values().map(|b| b.len()).sum::<usize>()
@@ -227,7 +229,7 @@ impl Session {
         }
         let bundle = bead_core::recovery::Bundle {
             version: 1,
-            entry: self.entry.clone(),
+            entry: entry.into(),
             palette: palette.to_vec(),
             files,
         };
@@ -269,6 +271,24 @@ impl Session {
         } else {
             result
         }
+    }
+    /// Stage another entry in the same session. Stores and the accepted entry stay
+    /// unchanged until commit; a failed load keeps the previous generation usable.
+    pub fn navigate(
+        &mut self,
+        entry: PathBuf,
+        changes: BTreeMap<String, Value>,
+    ) -> Result<Scene, Diagnostic> {
+        let mut stores = self.stores.clone();
+        stores
+            .commit(changes)
+            .map_err(|e| Diagnostic::new(&entry, 1, 1, e))?;
+        let previous_entry = std::mem::replace(&mut self.entry, entry);
+        let previous_stores = std::mem::replace(&mut self.stores, stores);
+        let result = self.reload_current();
+        self.entry = previous_entry;
+        self.stores = previous_stores;
+        result
     }
     fn reload_current(&mut self) -> Result<Scene, Diagnostic> {
         self.deferred_gesture = false;
@@ -336,6 +356,7 @@ impl Session {
 
         bead_core::profile::mark("layout_ready");
         self.pending = Some(Pending {
+            entry: self.entry.clone(),
             generation: Some(generation),
             stores,
             palette,
@@ -350,6 +371,9 @@ impl Session {
         Ok(scene)
     }
     pub fn commit(&mut self, scene: Scene) {
+        if let Some(pending) = &self.pending {
+            self.entry = pending.entry.clone();
+        }
         let capture = self
             .pending
             .as_ref()
@@ -361,7 +385,7 @@ impl Session {
             .and_then(|(p, g)| {
                 p.palette_bytes
                     .as_ref()
-                    .and_then(|palette| self.capture_bundle(g, palette).ok())
+                    .and_then(|palette| self.capture_bundle(g, palette, &p.entry).ok())
                     .map(|bundle| (g.revision, bundle))
             });
         if let Some(capture) = capture {
@@ -586,6 +610,7 @@ impl Session {
             self.current = old;
         }
         self.pending = Some(Pending {
+            entry: self.entry.clone(),
             generation: None,
             stores,
             palette: Palette(self.palette.0.clone()),
@@ -659,6 +684,7 @@ impl Session {
             generation.materialize(&self.stores, &self.palette, self.viewport)?;
         scene.font_files = self.current.font_files.clone();
         self.pending = Some(Pending {
+            entry: self.entry.clone(),
             generation: None,
             stores: self.stores.clone(),
             palette: Palette(self.palette.0.clone()),
@@ -683,6 +709,7 @@ impl Session {
         let (mut scene, nodes) = generation.materialize(&self.stores, &palette, self.viewport)?;
         scene.font_files = self.current.font_files.clone();
         self.pending = Some(Pending {
+            entry: self.entry.clone(),
             generation: None,
             stores: self.stores.clone(),
             palette,
@@ -710,7 +737,7 @@ impl Session {
                     .is_none_or(|r| r.path != generation.root)
                 && let Some(palette) = &pending.palette_bytes
             {
-                self.capture_bundle(generation, palette)?;
+                self.capture_bundle(generation, palette, &pending.entry)?;
             }
             generation.check_sources(&pending.source_root)?;
             if pending.watch_revision
