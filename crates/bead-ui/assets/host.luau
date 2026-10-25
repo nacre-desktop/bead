@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: MIT OR Apache-2.0
--- A strip host owns placement, never package data sources or shell routes.
+-- A host owns placement, never package data sources or shell routes.
 return function(ui)
     local function integer(n, lo, hi, label)
         assert(type(n)=="number" and n%1==0 and n>=lo and n<=hi, "Host: invalid "..label)
@@ -11,6 +11,45 @@ return function(ui)
         return out
     end
     return function(p)
+        if p.shape=="canvas" then
+            local layout=ui.resolve_for_check(p.layout)
+            assert(type(layout)=="table","Host: canvas layout must be an object")
+            local function dimension(n,label)
+                assert(type(n)=="number" and n==n and n>0 and n<=20000,"Host: invalid canvas "..label)
+                return n
+            end
+            local width=dimension(layout.width,"width")
+            local height=dimension(layout.height,"height")
+            assert(type(layout.instances)=="table","Host: canvas instances must be a list")
+            local children={}
+            for _,instance in layout.instances do
+                local slot=instance.slot
+                assert(type(slot)=="table","Host: canvas slot must be an object")
+                local x,y=slot.x,slot.y
+                local w,h=slot.w,slot.h
+                assert(type(x)=="number" and x==x and x>=0 and x<=20000
+                    and type(y)=="number" and y==y and y>=0 and y<=20000
+                    and type(w)=="number" and w==w and w>0 and w<=20000
+                    and type(h)=="number" and h==h and h>0 and h<=20000
+                    and x+w<=width and y+h<=height,"Host: canvas slot exceeds bounds")
+                local package=p.catalogue[instance.widget]
+                local variant=package and (package.variants.canvas or package.variants.card or package.variants.bar)
+                if variant then
+                    local node=p.render(instance,variant)
+                    if node then
+                        node=ui.Box(merge({id=instance.iid,position="absolute",left=x,top=y,width=w,height=h}, {node}))
+                        table.insert(children,node)
+                    end
+                end
+            end
+            local props={}
+            for k,v in p do
+                if k~="shape" and k~="layout" and k~="catalogue" and k~="render" and k~="flatten" then props[k]=v end
+            end
+            props.width=width; props.height=height
+            for _,node in children do table.insert(props,node) end
+            return ui.Box(props)
+        end
         assert(p.shape=="strip-h", "Host: only strip-h is supported")
         local layout=ui.resolve_for_check(p.layout)
         assert(type(layout)=="table","Host: layout must be a list")

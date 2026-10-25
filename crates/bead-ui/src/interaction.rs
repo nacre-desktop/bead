@@ -80,6 +80,7 @@ impl Session {
     pub fn release(&mut self) -> Result<Option<Scene>, Diagnostic> {
         let deferred = self.deferred_valid();
         self.range_grab = None;
+        self.finish_transfer();
         if self.preview_deadline.is_some() {
             self.preview_deadline =
                 Some(std::time::Instant::now() + std::time::Duration::from_millis(750));
@@ -608,6 +609,106 @@ impl Session {
             .hit(x, y, false)
             .filter(|node| node.drag && !node.preview_key.is_empty())
             .map(|node| node.preview_key.clone());
+        self.transfer_capture = self
+            .current_nodes
+            .iter()
+            .rev()
+            .find(|node| {
+                node.contains(x, y) && node.drag_payload.is_some() && node.drag_action.is_some()
+            })
+            .and_then(|node| {
+                Some(super::session::TransferCapture {
+                    source: node.id.clone(),
+                    action: node.drag_action.clone()?,
+                    payload: node.drag_payload.clone()?,
+                    origin: (x, y),
+                    active: false,
+                })
+            });
+    }
+    /// The active transfer source and original pointer position, for cross-surface routing.
+    pub fn transfer_source(&self) -> Option<(String, Value, (f32, f32))> {
+        let capture = self.transfer_capture.as_ref()?;
+        (capture.active && self.transfer_source_is_current(capture)).then(|| {
+            (
+                capture.source.clone(),
+                capture.payload.clone(),
+                capture.origin,
+            )
+        })
+    }
+    /// Drop-capable nodes in the current materialized view.
+    pub fn drop_targets(&self) -> Vec<Node> {
+        self.current_nodes
+            .iter()
+            .filter(|node| node.drop_action.is_some())
+            .cloned()
+            .collect()
+    }
+    fn transfer_source_is_current(&self, capture: &super::session::TransferCapture) -> bool {
+        self.current_nodes.iter().any(|node| {
+            node.id == capture.source
+                && node.drag_action.as_deref() == Some(capture.action.as_str())
+                && node.drag_payload.as_ref() == Some(&capture.payload)
+        })
+    }
+    /// Produce the generic transfer event after a 4 dp pointer threshold.
+    pub fn transfer_action(
+        &mut self,
+        x: f32,
+        y: f32,
+        phase: &str,
+    ) -> Option<(String, String, Value)> {
+        if !matches!(phase, "move" | "drop" | "cancel") || !x.is_finite() || !y.is_finite() {
+            return None;
+        }
+        let valid = self
+            .transfer_capture
+            .as_ref()
+            .is_some_and(|capture| self.transfer_source_is_current(capture));
+        if !valid {
+            self.transfer_capture = None;
+            return None;
+        }
+        let capture = self.transfer_capture.as_mut()?;
+        let dx = x - capture.origin.0;
+        let dy = y - capture.origin.1;
+        if !capture.active && dx * dx + dy * dy < 16. {
+            return None;
+        }
+        capture.active = true;
+        let target = self
+            .current_nodes
+            .iter()
+            .rev()
+            .find(|node| node.drop_action.is_some() && node.contains(x, y));
+        if phase == "drop" && target.is_none() {
+            return None;
+        }
+        let source_rect = self
+            .current_nodes
+            .iter()
+            .find(|node| node.id == capture.source)
+            .map(|node| rect(&node.draw))?;
+        let source = serde_json::to_value(&capture.payload).ok()?;
+        let target_value = target
+            .and_then(|node| node.drop_argument.as_ref())
+            .and_then(|value| serde_json::to_value(value).ok())
+            .unwrap_or(serde_json::Value::Null);
+        let target_action = target.and_then(|node| node.drop_action.as_deref());
+        let event = serde_json::json!({
+            "source":source,"target":target_value,"target_action":target_action,
+            "x":x,"y":y,"phase":phase,"width":source_rect.w,"height":source_rect.h,"grab_x":capture.origin.0-source_rect.x,"grab_y":capture.origin.1-source_rect.y,
+        });
+        Some((
+            capture.source.clone(),
+            capture.action.clone(),
+            Value::list(vec![event]),
+        ))
+    }
+    /// End a pointer transfer. Hosts call this on release, cancellation, or surface teardown.
+    pub fn finish_transfer(&mut self) {
+        self.transfer_capture = None;
     }
     fn drag_node(&self) -> Option<&Node> {
         if let Some(group) = &self.range_grab {

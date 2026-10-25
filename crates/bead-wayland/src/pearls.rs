@@ -115,6 +115,8 @@ pub(crate) struct Group {
     epoch: u64,
     name: Option<String>,
     center: Option<f32>,
+    anchor: Option<PanelAnchor>,
+    canvas_owner: Option<u64>,
     close_epoch: u64,
     reload_pending: bool,
     target: bool,
@@ -138,6 +140,8 @@ impl Group {
             epoch,
             name,
             center: None,
+            anchor: None,
+            canvas_owner: None,
             close_epoch: 0,
             reload_pending: false,
             target: false,
@@ -185,6 +189,8 @@ impl App {
         swap(&mut self.panel_epoch, &mut g.epoch);
         swap(&mut self.panel_name, &mut g.name);
         swap(&mut self.panel_center, &mut g.center);
+        swap(&mut self.panel_anchor, &mut g.anchor);
+        swap(&mut self.panel_canvas_owner, &mut g.canvas_owner);
         swap(&mut self.panel_close_epoch, &mut g.close_epoch);
         swap(&mut self.panel_reload_pending, &mut g.reload_pending);
         swap(&mut self.panel_target, &mut g.target);

@@ -552,7 +552,10 @@ impl FrontEnd for LuauFrontEnd {
                         if let mlua::Value::Table(table) = &value
                             && let Ok(name) = table.get::<String>("__bind")
                         {
-                            return lua.to_value(&resolve(&name).map_err(mlua::Error::external)?);
+                            return crate::script::value_to_lua(
+                                lua,
+                                &resolve(&name).map_err(mlua::Error::external)?,
+                            );
                         }
                         Ok(value)
                     })?,
@@ -703,7 +706,7 @@ impl FrontEnd for LuauFrontEnd {
                             if i < first || i >= first.saturating_add(count) {
                                 continue;
                             }
-                            let row: Table = render.call(lua.to_value(item)?)?;
+                            let row: Table = render.call(crate::script::json_value(lua, item)?)?;
                             let prefix = format!(
                                 "{id}.k{}.",
                                 key.bytes().map(|b| format!("{b:02x}")).collect::<String>()

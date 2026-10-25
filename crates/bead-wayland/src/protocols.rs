@@ -43,6 +43,10 @@ impl CompositorHandler for App {
             self.overlay_scale(scale.max(1) as u32 * 120);
             return;
         }
+        if self.canvas_surface(surface) && !self.canvas_has_fractional(surface) {
+            self.canvas_scale(surface, scale.max(1) as u32 * 120);
+            return;
+        }
         if self
             .edge_surfaces
             .iter()
@@ -186,6 +190,12 @@ impl Dispatch<WpFractionalScaleV1, wl_surface::WlSurface> for App {
             && state.overlay_surface() == Some(surface)
         {
             state.overlay_scale(scale);
+            return;
+        }
+        if let wp_fractional_scale_v1::Event::PreferredScale { scale } = event
+            && state.canvas_surface(surface)
+        {
+            state.canvas_scale(surface, scale);
             return;
         }
         if let wp_fractional_scale_v1::Event::PreferredScale { scale } = event
@@ -377,6 +387,7 @@ impl OutputHandler for App {
         self.restore_pearls();
         self.sync_edges();
         self.app_open_pending();
+        self.canvas_output_updated(&output);
         if self.options.primary_factory.is_some() {
             let id = self.output_id(&output);
             let viewport = self.output.info(&output).and_then(|info| info.logical_size);
@@ -432,6 +443,7 @@ impl OutputHandler for App {
         if self.overlay_on(&output) {
             self.release_overlay();
         }
+        self.canvas_output_removed(&output);
         self.surfaces.retain(|s| s.output != output);
         self.edge_output_removed(&output);
         let removed: Vec<String> = self
@@ -495,6 +507,10 @@ impl LayerShellHandler for App {
             self.release_overlay();
             return;
         }
+        if self.canvas_layer_is(layer) {
+            self.canvas_release_layer(layer);
+            return;
+        }
         let removed: Vec<String> = self
             .wallpaper_surfaces
             .iter()
@@ -544,6 +560,10 @@ impl LayerShellHandler for App {
         }
         if self.overlay_layer_is(layer) {
             self.overlay_configure(config.new_size);
+            return;
+        }
+        if self.canvas_layer_is(layer) {
+            self.canvas_configure(layer, config.new_size);
             return;
         }
         if let Some(surface) = self
@@ -870,6 +890,10 @@ impl App {
         }
         if self.overlay_surface() == Some(&event.surface) {
             self.overlay_pointer(event);
+            return;
+        }
+        if self.canvas_surface(&event.surface) {
+            self.canvas_pointer(event);
             return;
         }
         if self
@@ -1323,6 +1347,14 @@ impl Dispatch<wayland_client::protocol::wl_callback::WlCallback, FrameData> for 
     ) {
         if let Some(id) = state.slot_of_surface(&data.surface) {
             state.in_slot(id, |app| Self::event(app, proxy, event, data, conn, qh));
+            return;
+        }
+        if matches!(
+            &event,
+            wayland_client::protocol::wl_callback::Event::Done { .. }
+        ) && state.canvas_surface(&data.surface)
+        {
+            state.canvas_frame(&data.surface, data.epoch);
             return;
         }
         if let wayland_client::protocol::wl_callback::Event::Done { callback_data } = event

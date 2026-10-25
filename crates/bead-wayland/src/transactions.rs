@@ -5,8 +5,13 @@ fn panel_event_belongs_to_host(event: &UiEvent) -> bool {
     matches!(
         event,
         UiEvent::CompanionSelect { .. }
+            | UiEvent::CompanionSelectAt { .. }
             | UiEvent::PanelNavigated(_)
             | UiEvent::CompanionOffer { .. }
+            | UiEvent::HostModel(_)
+            | UiEvent::CompanionAction { .. }
+            | UiEvent::CanvasOffer { .. }
+            | UiEvent::CanvasModel { .. }
             | UiEvent::CompanionVisibility(true)
             | UiEvent::ShellHidden(_)
             | UiEvent::LivePalette(_)
@@ -163,6 +168,27 @@ impl App {
             self.set_hidden(state.unwrap_or(!self.hidden));
             return;
         }
+        if let UiEvent::CompanionSelectAt {
+            view,
+            output,
+            anchor,
+        } = event
+        {
+            if self.hidden {
+                return;
+            }
+            let output = output.or_else(|| self.active_output.clone());
+            if let Err(error) = self.request_panel_anchored(
+                Some(&view),
+                output.as_deref(),
+                true,
+                None,
+                Some(anchor),
+            ) {
+                eprintln!("COMPANION_ERROR {error}");
+            }
+            return;
+        }
         if let UiEvent::CompanionSelect {
             view,
             output,
@@ -170,6 +196,11 @@ impl App {
             center,
         } = event
         {
+            if let Some(epoch) = self.panel_canvas_owner.take()
+                && let Some(sender) = &self.event_sender
+            {
+                let _ = sender.send(UiEvent::Canvas(epoch, Box::new(UiEvent::PanelDismissed)));
+            }
             // Automatic peeks stay suppressed while hidden; explicit opens clear it first.
             if self.hidden {
                 return;
@@ -198,6 +229,35 @@ impl App {
             }
             return;
         }
+        if let UiEvent::CanvasModel {
+            view,
+            output,
+            values,
+        } = event
+        {
+            let keys: Vec<_> = self
+                .canvases
+                .keys()
+                .filter(|(name, id)| {
+                    id == &view && output.as_ref().is_none_or(|output| output == name)
+                })
+                .cloned()
+                .collect();
+            for key in keys {
+                self.canvas_ui(&key, UiEvent::Model(values.clone()));
+            }
+            return;
+        }
+        if let UiEvent::CanvasOffer {
+            view,
+            output,
+            open,
+            values,
+        } = event
+        {
+            self.canvas_offer(&view, output.as_deref(), open, values);
+            return;
+        }
         if let UiEvent::CompanionOffer { view, output, open } = event {
             if self.is_overlay_view(&view) {
                 self.overlay_offer(&view, output.as_deref(), open);
@@ -216,6 +276,14 @@ impl App {
             } else if shown && self.panel_ambient {
                 self.close_panel();
             }
+            return;
+        }
+        if let UiEvent::HostModel(values) = event {
+            self.notify_panel_owner(UiEvent::Model(values));
+            return;
+        }
+        if let UiEvent::CompanionAction { name, argument } = event {
+            self.panel_ui(UiEvent::Action { name, argument });
             return;
         }
         if let UiEvent::CompanionModel(values) = event {
@@ -267,6 +335,10 @@ impl App {
                     self.overlay_ui(*event);
                 }
             }
+            return;
+        }
+        if let UiEvent::Canvas(epoch, event) = event {
+            self.canvas_event(epoch, *event);
             return;
         }
         if let UiEvent::Window(epoch, event) = event {
@@ -664,11 +736,9 @@ impl App {
                         && self.dismiss.is_none()
                         && self.panel_target
                         && self.pearl.is_none()
-                        && self
-                            .options
-                            .panel_spec
-                            .as_ref()
-                            .is_some_and(|spec| spec.keyboard_focus)
+                        && self.options.panel_spec.as_ref().is_some_and(|spec| {
+                            spec.keyboard_focus || runtime.surrounding_text().is_some()
+                        })
                         && let Some(output) = self.panel_output.clone()
                         && let Err(error) = self.create_dismiss(&output)
                     {

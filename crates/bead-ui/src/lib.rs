@@ -59,6 +59,9 @@ impl Diagnostic {
 #[serde(deny_unknown_fields)]
 pub struct Node {
     pub id: String,
+    /// View-authored, inert host data; it never creates a pointer or keyboard target.
+    #[serde(default)]
+    pub metadata: Option<Value>,
     #[serde(skip)]
     pub source: Option<(PathBuf, usize, usize)>,
     pub draw: Primitive,
@@ -111,6 +114,15 @@ pub struct Node {
     pub masked: bool,
     #[serde(default)]
     pub drag: bool,
+    /// Opaque source data captured for pointer-driven surface transfers.
+    #[serde(default)]
+    pub drag_payload: Option<Value>,
+    #[serde(default)]
+    pub drag_action: Option<String>,
+    #[serde(default)]
+    pub drop_action: Option<String>,
+    #[serde(default)]
+    pub drop_argument: Option<Value>,
     #[serde(skip)]
     pub clip: Option<Rect>,
     #[serde(default)]

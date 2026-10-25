@@ -28,6 +28,7 @@ with tempfile.TemporaryDirectory(prefix='bead-luau-') as directory:
             text=text.replace('require("'+name+'")','require('+json.dumps(relative)+')')
         # Behaviour scripts get the global tr(id,args) from the host, not from a module.
         if re.search(r'(?<![.\w])tr\(',text):text='local tr:(string,any?)->string=(nil::any);'+text
+        if re.search(r'(?<![.\w])copy_value\(',text):text='local copy_value:(any)->any=(nil::any);'+text
         f.write_text(text)
     result=subprocess.run([a.analyzer,'--mode=nonstrict',*map(str,files)],cwd=base,text=True,capture_output=True)
     print(result.stdout,end='');print(result.stderr,end='')

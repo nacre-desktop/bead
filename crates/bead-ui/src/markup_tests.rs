@@ -28,6 +28,68 @@ return ui.Panel {id="panel",width=400,height=240,padding=12,
     f
 }
 
+fn transfer_fixture() -> (Fixture, Session) {
+    let f = fixture();
+    fs::write(f.0.join("ui/main.luau"),r#"local ui=require("bead.ui")
+return ui.Box{id="root",width=160,height=80,
+ ui.Button{id="source",position="absolute",left=0,top=0,width=20,height=30,text="Move",drag_payload="widget-7",on_drag=ui.action("select","move")},
+ ui.Box{id="zone",position="absolute",left=24,top=0,width=100,height=60,on_drop=ui.action("select","drop-zone")}}"#).unwrap();
+    let s = session(&f);
+    (f, s)
+}
+
+#[test]
+fn transfer_capture_is_focus_independent_thresholded_and_carries_drop_payload() {
+    let (_f, mut s) = transfer_fixture();
+    let (x, y) = node_center(&s, "source");
+    let focused = s.stores.get("bead.focused").cloned();
+    s.capture_pointer(x, y);
+    assert_eq!(s.stores.get("bead.focused").cloned(), focused);
+    assert!(s.transfer_action(x + 3.99, y, "move").is_none());
+    assert!(s.transfer_source().is_none());
+    assert!(s.transfer_action(x + 4., y, "move").is_some());
+    assert!(s.transfer_source().is_some());
+    let (target_x, target_y) = node_center(&s, "zone");
+    let (source, action, event) = s.transfer_action(target_x, target_y, "drop").unwrap();
+    assert_eq!(source, "root.source");
+    assert_eq!(action, "select");
+    let Value::List(items) = event else {
+        panic!("transfer event must be a list")
+    };
+    assert_eq!(items[0]["source"], serde_json::json!("widget-7"));
+    assert_eq!(items[0]["target"], serde_json::json!("drop-zone"));
+    assert_eq!(items[0]["target_action"], serde_json::json!("select"));
+    assert_eq!(items[0]["phase"], serde_json::json!("drop"));
+    assert_eq!(
+        s.drop_targets()
+            .iter()
+            .map(|node| node.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["root.zone"]
+    );
+    s.finish_transfer();
+    assert!(s.transfer_source().is_none());
+}
+
+#[test]
+fn rejected_view_update_keeps_transfer_snapshot_on_committed_nodes() {
+    let (f, mut s) = transfer_fixture();
+    let (x, y) = node_center(&s, "source");
+    s.capture_pointer(x, y);
+    assert!(s.transfer_action(x + 4., y, "move").is_some());
+    fs::write(
+        f.0.join("ui/main.luau"),
+        "local ui=require('bead.ui')\nreturn ui.Box{id='bad',bogus=true}",
+    )
+    .unwrap();
+    assert!(s.reload().is_err());
+    let (target_x, target_y) = node_center(&s, "zone");
+    assert!(
+        s.transfer_action(target_x, target_y, "drop").is_some(),
+        "rejected view reload retains the committed source and drop metadata"
+    );
+}
+
 #[test]
 fn polyline_parser_rejects_out_of_range_and_oversized_points() {
     let invalid = [

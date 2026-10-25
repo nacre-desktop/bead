@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Script/CPU preparation actor; validated candidates cross the draw thread by value.
-use crate::{InputRegion, SceneSource, UiEvent};
+use crate::{InputRegion, PanelAnchor, SceneSource, UiEvent};
 use bead_render::{Rect, Scene};
 use std::{
     collections::VecDeque,
@@ -12,6 +12,7 @@ pub type Factory = Box<dyn FnOnce() -> Result<Box<dyn SceneSource>, String> + Se
 #[derive(Default)]
 struct Mirror {
     focused_dismiss: bool,
+    tracks_origin: bool,
     outside_dismiss: bool,
     wheel_step: f64,
     scroll_regions: Vec<Rect>,
@@ -32,6 +33,7 @@ impl Mirror {
         let _profile = bead_core::profile::Span::new("mirror");
         Self {
             focused_dismiss: source.focused_dismiss(),
+            tracks_origin: source.tracks_origin(),
             outside_dismiss: source.outside_dismiss(),
             wheel_step: source.wheel_step(),
             scroll_regions: source.scroll_regions(),
@@ -91,6 +93,8 @@ impl Packet {
 }
 enum Job {
     PanelCenter(Option<f32>),
+    InitialModel(std::collections::BTreeMap<String, bead_core::Value>),
+    PanelAnchor(Option<PanelAnchor>),
     Presented(u64),
     Idle(bool),
     Stage(UiEvent, Vec<f32>),
@@ -280,6 +284,12 @@ impl SceneSource for Source {
                     };
                     match job {
                         Job::PanelCenter(center) => source.panel_center(center),
+                        Job::InitialModel(values) => {
+                            if let Err(error) = source.initial_model(values) {
+                                wakeup(UiEvent::WatchError(error.to_string()));
+                            }
+                        }
+                        Job::PanelAnchor(anchor) => source.panel_anchor(anchor),
                         Job::Stop => break,
                         Job::Presented(revision) => source.presented(revision),
                         Job::Idle(value) => {
@@ -473,6 +483,15 @@ impl SceneSource for Source {
     fn panel_center(&mut self, center: Option<f32>) {
         let _ = self.send(Job::PanelCenter(center));
     }
+    fn initial_model(
+        &mut self,
+        values: std::collections::BTreeMap<String, bead_core::Value>,
+    ) -> Result<(), Box<dyn Error>> {
+        self.send(Job::InitialModel(values))
+    }
+    fn panel_anchor(&mut self, anchor: Option<PanelAnchor>) {
+        let _ = self.send(Job::PanelAnchor(anchor));
+    }
     fn scales(&mut self, scales: Vec<f32>) {
         self.scales = scales;
     }
@@ -572,6 +591,9 @@ impl SceneSource for Source {
     fn dismiss_at(&self, x: f32, y: f32) -> bool {
         self.mirror.region_at(x, y).is_some_and(|r| r.dismiss)
     }
+    fn tracks_origin(&self) -> bool {
+        self.mirror.tracks_origin
+    }
     fn focused_dismiss(&self) -> bool {
         self.mirror.focused_dismiss
     }
@@ -618,6 +640,7 @@ mod tests {
     #[test]
     fn worker_dismissal_and_cursor_use_the_topmost_clipped_polygon_hit() {
         let background = InputRegion {
+            include_in_bounds: true,
             id: "background".into(),
             rect: bead_render::Rect::new(0., 0., 100., 100.),
             clip: None,
@@ -677,6 +700,7 @@ mod tests {
         }
         fn input_regions(&self) -> Vec<InputRegion> {
             vec![InputRegion {
+                include_in_bounds: true,
                 hit_polygon: None,
                 id: "button".into(),
                 rect: bead_render::Rect::new(0., 0., 16., 16.),

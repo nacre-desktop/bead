@@ -9,6 +9,47 @@ use std::{
     rc::Rc,
     time::{Duration, Instant},
 };
+// Luau numbers are doubles. Opaque JSON integers outside their exact range stay
+// serializable scalars; authored arithmetic still receives ordinary safe numbers.
+#[derive(serde::Serialize)]
+#[serde(transparent)]
+struct OpaqueInteger(serde_json::Number);
+impl mlua::UserData for OpaqueInteger {}
+fn json_array(lua: &Lua, items: &[serde_json::Value]) -> mlua::Result<mlua::Value> {
+    let table = lua.create_table_with_capacity(items.len(), 0)?;
+    table.set_metatable(Some(lua.array_metatable()))?;
+    for (index, item) in items.iter().enumerate() {
+        table.raw_set(index + 1, json_value(lua, item)?)?;
+    }
+    Ok(mlua::Value::Table(table))
+}
+pub(crate) fn json_value(lua: &Lua, json: &serde_json::Value) -> mlua::Result<mlua::Value> {
+    match json {
+        serde_json::Value::Array(items) => json_array(lua, items),
+        serde_json::Value::Object(items) => {
+            let table = lua.create_table_with_capacity(0, items.len())?;
+            for (key, item) in items {
+                table.raw_set(key.as_str(), json_value(lua, item)?)?;
+            }
+            Ok(mlua::Value::Table(table))
+        }
+        serde_json::Value::Number(number)
+            if number.as_u64().is_some_and(|n| n > 9_007_199_254_740_991)
+                || number.as_i64().is_some_and(|n| n < -9_007_199_254_740_991) =>
+        {
+            Ok(mlua::Value::UserData(
+                lua.create_ser_userdata(OpaqueInteger(number.clone()))?,
+            ))
+        }
+        _ => lua.to_value(json),
+    }
+}
+pub(crate) fn value_to_lua(lua: &Lua, value: &Value) -> mlua::Result<mlua::Value> {
+    match value {
+        Value::List(items) => json_array(lua, items),
+        _ => lua.to_value(value),
+    }
+}
 struct Cached {
     value: Value,
     reads: BTreeMap<String, (u64, Value)>,
@@ -51,6 +92,18 @@ impl Script {
         let exports = (|| -> mlua::Result<Table> {
             lua.set_memory_limit(8 * 1024 * 1024)?;
             lua.globals().set("tr", crate::i18n::lua_function(&lua)?)?;
+            // Luau protects serde's array metatable from table.clone/getmetatable.
+            // JSON copying preserves empty containers without exposing that metatable.
+            lua.globals().set(
+                "copy_value",
+                lua.create_function(|lua, value: mlua::Value| {
+                    let json: serde_json::Value = lua.from_value_with(
+                        value,
+                        mlua::serde::DeserializeOptions::new().encode_empty_tables_as_array(false),
+                    )?;
+                    json_value(lua, &json)
+                })?,
+            )?;
             lua.sandbox(true)?;
             lua.load(bytes).set_name(format!("@{name}")).eval()
         })()
@@ -179,21 +232,37 @@ impl Script {
         let action: Function = actions.get(name).map_err(|e| lua_error(&self.path, e))?;
         let table = self
             .lua
-            .to_value(stores.values())
+            .create_table()
             .map_err(|e| lua_error(&self.path, e))?;
-        let table = match table {
-            mlua::Value::Table(table) => table,
-            _ => return Err(self.error("invalid state table")),
-        };
-        self.bounded(|| action.call::<()>((table.clone(), self.lua.to_value(&arg)?)))
+        for (key, value) in stores.values() {
+            let value = value_to_lua(&self.lua, value).map_err(|e| lua_error(&self.path, e))?;
+            table
+                .set(key.as_str(), value)
+                .map_err(|e| lua_error(&self.path, e))?;
+        }
+        self.bounded(|| action.call::<()>((table.clone(), value_to_lua(&self.lua, &arg)?)))
             .map_err(|e| lua_error(&self.path, e))?;
-        let changes: BTreeMap<String, Value> = self
-            .lua
-            .from_value_with(
-                mlua::Value::Table(table),
-                mlua::serde::DeserializeOptions::new().encode_empty_tables_as_array(true),
-            )
-            .map_err(|e| lua_error(&self.path, e))?;
+        // Decode the outer list using its durable schema. Inferring the entire
+        // untagged Value tree as JSON would turn opaque empty objects into arrays.
+        let mut changes = BTreeMap::new();
+        for pair in table.pairs::<String, mlua::Value>() {
+            let (id, value) = pair.map_err(|e| lua_error(&self.path, e))?;
+            let parsed = if matches!(stores.get(&id), Some(Value::List(_))) {
+                let items = self
+                    .lua
+                    .from_value_with::<Vec<serde_json::Value>>(
+                        value,
+                        mlua::serde::DeserializeOptions::new().encode_empty_tables_as_array(false),
+                    )
+                    .map_err(|e| lua_error(&self.path, e))?;
+                Value::list(items)
+            } else {
+                self.lua
+                    .from_value(value)
+                    .map_err(|e| lua_error(&self.path, e))?
+            };
+            changes.insert(id, parsed);
+        }
         if changes.keys().ne(stores.values().keys()) {
             return Err(self.error("actions cannot create or remove durable stores"));
         }
@@ -316,7 +385,7 @@ fn evaluate(
                 child_stack.clone(),
                 child_reads.clone(),
             )?;
-            lua.to_value(&value)
+            value_to_lua(lua, &value)
         })?,
     )?;
     meta.set(

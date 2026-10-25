@@ -2,6 +2,7 @@
 //! Compositor-neutral layer surfaces with fractional scaling and reusable SHM.
 mod accessibility;
 mod background;
+mod canvas;
 mod capture;
 pub use capture::{
     CaptureHub, Lease as CaptureLease, Preview as CapturePreview, Wake as CaptureWake,
@@ -228,6 +229,8 @@ pub enum UiEvent {
     Window(u64, Box<UiEvent>),
     /// Event for the overlay slot (epoch rejects a released overlay's late wakeups).
     Overlay(u64, Box<UiEvent>),
+    /// Event delivered to one lazily-created canvas; stale epochs are ignored.
+    Canvas(u64, Box<UiEvent>),
     PanelVisibility(bool),
     /// The panel was detached into a pearl (true) or docked back (false).
     PanelDetached(bool),
@@ -251,6 +254,11 @@ pub enum UiEvent {
         toggle: bool,
         center: Option<f32>,
     },
+    CompanionSelectAt {
+        view: String,
+        output: Option<String>,
+        anchor: PanelAnchor,
+    },
     /// Service-initiated ambient view (transient notices). A view of the overlay
     /// catalog ([`Options::overlays`]) shows in the overlay slot beside whatever the
     /// panel shows. Any other `open` shows `view` only while the panel slot is idle or
@@ -262,7 +270,30 @@ pub enum UiEvent {
         output: Option<String>,
         open: bool,
     },
+    /// Create or release one output-sized desktop canvas from the configured view catalog.
+    CanvasOffer {
+        view: String,
+        output: Option<String>,
+        open: bool,
+        values: std::collections::BTreeMap<String, bead_core::Value>,
+    },
+    CanvasModel {
+        view: String,
+        output: Option<String>,
+        values: std::collections::BTreeMap<String, bead_core::Value>,
+    },
     CompanionModel(std::collections::BTreeMap<String, bead_core::Value>),
+    /// A child view projects durable edit state onto its output's primary view.
+    HostModel(std::collections::BTreeMap<String, bead_core::Value>),
+    /// Dispatch a view-authored action without synthesizing pointer/keyboard input.
+    Action {
+        name: String,
+        argument: bead_core::Value,
+    },
+    CompanionAction {
+        name: String,
+        argument: bead_core::Value,
+    },
     ClipboardSet(String),
     ClipboardRead,
     ClipboardText(String),
@@ -351,6 +382,8 @@ impl std::fmt::Display for GpuUnavailable {
 impl Error for GpuUnavailable {}
 #[derive(Clone)]
 pub struct InputRegion {
+    /// Include transparent control hit areas in a content-sized surface's allocation.
+    pub include_in_bounds: bool,
     /// Optional normalized even-odd polygon, shared with the rendered control.
     pub hit_polygon: Option<Vec<[f32; 2]>>,
     pub id: String,
@@ -373,6 +406,14 @@ impl InputRegion {
     }
 }
 pub trait SceneSource {
+    /// Seed a lazy source before its first reload or presentation.
+    fn initial_model(
+        &mut self,
+        _values: std::collections::BTreeMap<String, bead_core::Value>,
+    ) -> Result<(), Box<dyn Error>> {
+        Ok(())
+    }
+    fn panel_anchor(&mut self, _anchor: Option<PanelAnchor>) {}
     /// Optional local-state deadline. Workers wake a source without polling idle views.
     fn wakeup_at(&self) -> Option<std::time::Instant> {
         None
@@ -451,6 +492,10 @@ pub trait SceneSource {
     fn sensitive_input(&self) -> bool {
         false
     }
+    /// Opt into output-space origin stores for authored cross-surface drop targets.
+    fn tracks_origin(&self) -> bool {
+        false
+    }
     fn viewport(&mut self, _width: u32, _height: u32) -> bool {
         false
     }
@@ -498,6 +543,11 @@ pub type DecorationFactory = std::sync::Arc<
 /// does not know a shell's frame, bar, shadow insets or attachment policy.
 pub type PanelPositioner =
     std::sync::Arc<dyn Fn(&Scene, Option<f32>, (i32, i32)) -> (i32, i32) + Send + Sync>;
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PanelAnchor {
+    pub rect: Rect,
+    pub edge: bead_core::Edge,
+}
 #[derive(Clone)]
 pub struct PanelSpec {
     /// Application-selected active decoration state; no view names in the framework.
@@ -527,6 +577,8 @@ pub struct Options {
     pub panels: Option<Panels>,
     /// B0053: views offered into the overlay slot (see [`UiEvent::CompanionOffer`]).
     pub overlays: Option<Overlays>,
+    /// Optional output-sized canvas views, created on first offer per output and name.
+    pub canvases: Option<Panels>,
     pub command_map: Option<CommandMap>,
     pub report: Option<std::path::PathBuf>,
     pub command_socket: Option<std::path::PathBuf>,
@@ -575,6 +627,8 @@ pub struct Options {
     /// panel) with those arguments at start, creates no primary surface, and ends the
     /// process when that window or panel closes.
     pub app: Option<Vec<serde_json::Value>>,
+    /// Start a panel app directly in a pearl, through the normal detach/dock lifecycle.
+    pub app_as_pearl: bool,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -587,6 +641,7 @@ impl Default for Options {
             panel_spec: None,
             panels: None,
             overlays: None,
+            canvases: None,
             command_map: None,
             command_socket: None,
             report: None,
@@ -623,6 +678,7 @@ impl Default for Options {
             window: None,
             pearls: None,
             app: None,
+            app_as_pearl: false,
         }
     }
 }

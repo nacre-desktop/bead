@@ -62,6 +62,14 @@ pub struct Session {
     pub(super) deferred_action: Option<DeferredAction>,
     pub(super) deferred_gesture: bool,
     pub(super) range_grab: Option<String>,
+    pub(super) transfer_capture: Option<TransferCapture>,
+}
+pub(super) struct TransferCapture {
+    pub(super) source: String,
+    pub(super) action: String,
+    pub(super) payload: Value,
+    pub(super) origin: (f32, f32),
+    pub(super) active: bool,
 }
 pub(super) struct DeferredAction {
     pub(super) id: String,
@@ -151,6 +159,7 @@ impl Session {
             deferred_action: None,
             deferred_gesture: false,
             range_grab: None,
+            transfer_capture: None,
         }
     }
     pub fn restore_on_start(&mut self, values: BTreeMap<String, Value>) {

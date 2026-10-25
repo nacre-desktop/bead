@@ -342,6 +342,20 @@ impl App {
             return;
         };
         self.app_pending = None;
+        if self.options.app_as_pearl {
+            let view = self
+                .options
+                .panels
+                .as_ref()
+                .and_then(|panels| panels.resolve(None).ok())
+                .map(|(view, _)| view.to_owned());
+            if let Some(view) = view
+                && let Err(error) = self.open_pearl(&view, info.name.as_deref(), None)
+            {
+                self.fail(error);
+            }
+            return;
+        }
         if let Err(error) = self.request_panel_at(None, info.name.as_deref(), true, None) {
             self.fail(error);
         }

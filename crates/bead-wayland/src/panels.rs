@@ -3,6 +3,31 @@
 use crate::PanelSpec;
 use std::collections::BTreeMap;
 
+pub(crate) fn anchored_position(
+    scene: &crate::Scene,
+    anchor: crate::PanelAnchor,
+    output: (i32, i32),
+) -> (i32, i32) {
+    use bead_core::Edge;
+    let [bx, by, w, h] = crate::rendering::content_window_rect(scene).unwrap_or([
+        0,
+        0,
+        scene.width as i32,
+        scene.bounds.h as i32,
+    ]);
+    let r = anchor.rect;
+    let (x, y) = match anchor.edge {
+        Edge::Top => (r.x + (r.w - w as f32) / 2., r.y + r.h),
+        Edge::Bottom => (r.x + (r.w - w as f32) / 2., r.y - h as f32),
+        Edge::Left => (r.x + r.w, r.y + (r.h - h as f32) / 2.),
+        Edge::Right => (r.x - w as f32, r.y + (r.h - h as f32) / 2.),
+    };
+    (
+        x.clamp(0., (output.0 - w).max(0) as f32).round() as i32 - bx,
+        y.clamp(0., (output.1 - h).max(0) as f32).round() as i32 - by,
+    )
+}
+
 pub(crate) fn validate_center(center: Option<f32>) -> Result<(), String> {
     if center.is_some_and(|n| !n.is_finite() || n.abs() > 1_000_000.) {
         return Err("invalid panel center".into());

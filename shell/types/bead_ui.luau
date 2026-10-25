@@ -3,6 +3,7 @@ export type Node = {kind:string, props:{[string]:any}, children:{Node}}
 export type Props = {
     [number]:Node,
     id:any?,
+    metadata:any?,
     width:any?,
     height:any?,
     min_width:any?,
@@ -63,6 +64,9 @@ export type Props = {
     edge:any?,
     direction:any?,
     drag:any?,
+    drag_payload:any?,
+    on_drag:any?,
+    on_drop:any?,
     blur:any?,
     start_angle:any?,
     sweep_angle:any?,

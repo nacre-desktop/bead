@@ -359,7 +359,15 @@ impl Generation {
                 *path = loader.root.join(&*path);
                 assets.insert(path.clone(), intern_asset(path, bytes));
             }
-            for action in [&node.action, &node.scroll].into_iter().flatten() {
+            for action in [
+                &node.action,
+                &node.scroll,
+                &node.drag_action,
+                &node.drop_action,
+            ]
+            .into_iter()
+            .flatten()
+            {
                 script.validate_action(action)?;
             }
             if let Some(id) = &node.input
@@ -450,9 +458,11 @@ impl Generation {
             #[serde(deny_unknown_fields)]
             struct Bundle {
                 modules: Vec<PathBuf>,
+                #[serde(default)]
+                assets: Vec<PathBuf>,
             }
             let bundle: Bundle = loader.json(&manifest)?;
-            if bundle.modules.len() + loader.sources.len() > 256 {
+            if bundle.modules.len() + bundle.assets.len() + loader.sources.len() > 256 {
                 return Err(Diagnostic::new(
                     &manifest,
                     1,
@@ -475,6 +485,24 @@ impl Generation {
                 }
                 let bytes = loader.read(&module)?;
                 script::Script::validate_source(&bytes, &module)?;
+            }
+            for asset in bundle.assets {
+                if !asset
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .is_some_and(|s| ["svg", "png", "jpg", "jpeg", "webp"].contains(&s))
+                    || !asset
+                        .components()
+                        .all(|part| matches!(part, std::path::Component::Normal(_)))
+                {
+                    return Err(Diagnostic::new(
+                        &manifest,
+                        1,
+                        1,
+                        "shared assets must be root-relative image paths",
+                    ));
+                }
+                loader.read(&asset)?;
             }
         }
         // Root assets are snapshots too, including ones initially outside the scroll viewport.
@@ -645,7 +673,10 @@ impl Generation {
             let mut result = layout::layout(&view, &resolve, palette, self.revision, viewport)?;
             drop(layout_profile);
             for node in &result.nodes {
-                if let Some(action) = &node.action {
+                for action in [&node.action, &node.drag_action, &node.drop_action]
+                    .into_iter()
+                    .flatten()
+                {
                     self.script.validate_action(action)?;
                 }
                 if let Some(input) = &node.input

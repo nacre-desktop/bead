@@ -4,10 +4,21 @@ use super::*;
 /// A closed panel stays built for this long, so reopening it shows prepared content on its first frame.
 const PANEL_KEEP_ALIVE: Duration = Duration::from_secs(120);
 impl App {
-    fn notify_panel_owner(&self, event: UiEvent) {
+    pub(super) fn notify_panel_owner(&self, event: UiEvent) {
         let Some(sender) = &self.event_sender else {
             return;
         };
+        if let Some(epoch) = self.panel_canvas_owner {
+            let notification = match &event {
+                UiEvent::PanelSelected(view) => Some(UiEvent::PanelSelected(view.clone())),
+                UiEvent::PanelDismissed => Some(UiEvent::PanelDismissed),
+                UiEvent::PointerRegion(inside) => Some(UiEvent::PointerRegion(*inside)),
+                _ => None,
+            };
+            if let Some(notification) = notification {
+                let _ = sender.send(UiEvent::Canvas(epoch, Box::new(notification)));
+            }
+        }
         let event = if self.options.primary_factory.is_some() {
             let Some(output) = self
                 .panel_output
@@ -364,6 +375,25 @@ impl App {
         open: bool,
         center: Option<f32>,
     ) -> Result<(), String> {
+        self.request_panel_anchored(name, output, open, center, None)
+    }
+    pub(super) fn request_panel_anchored(
+        &mut self,
+        name: Option<&str>,
+        output: Option<&str>,
+        open: bool,
+        center: Option<f32>,
+        anchor: Option<PanelAnchor>,
+    ) -> Result<(), String> {
+        if anchor.is_some_and(|anchor| {
+            ![anchor.rect.x, anchor.rect.y, anchor.rect.w, anchor.rect.h]
+                .iter()
+                .all(|n| n.is_finite() && n.abs() <= 1_000_000.)
+                || anchor.rect.w <= 0.
+                || anchor.rect.h <= 0.
+        }) {
+            return Err("invalid panel anchor".into());
+        }
         panels::validate_center(center)?;
         if open
             && let Some((name, control)) = name.zip(self.options.control.as_ref())
@@ -407,6 +437,13 @@ impl App {
         self.validate_panel_output(output)?;
         self.select_panel(name)?;
         self.panel_center = center;
+        self.panel_anchor = anchor;
+        if let Some(panels) = &self.options.panels
+            && let Ok((_, original)) = panels.resolve(name)
+            && let Some(spec) = &mut self.options.panel_spec
+        {
+            spec.engages_decorations = anchor.is_none() && original.engages_decorations;
+        }
         self.start_panel(output, open)
     }
     pub(super) fn open_panel(&mut self, output: Option<&str>) -> Result<(), String> {
@@ -428,6 +465,25 @@ impl App {
             eprintln!("PANEL_PREPARE_ERROR {error}");
         }
     }
+    fn notify_panel_origin(&self, scene: &Scene, x: i32, y: i32) {
+        if self
+            .panel_runtime
+            .as_ref()
+            .is_some_and(|source| source.tracks_origin())
+            && let Some(sender) = &self.event_sender
+        {
+            let _ = sender.send(UiEvent::CompanionModel(std::collections::BTreeMap::from([
+                (
+                    "bead.surface.x".into(),
+                    bead_core::Value::Number(x as f64 + scene.offset.0 as f64),
+                ),
+                (
+                    "bead.surface.y".into(),
+                    bead_core::Value::Number(y as f64 + scene.offset.1 as f64),
+                ),
+            ])));
+        }
+    }
     pub(super) fn position_panel_surface(
         &self,
         layer: &LayerSurface,
@@ -438,6 +494,16 @@ impl App {
             let (x, y) = self.pearl_margins(output, scene, info.rect);
             layer.set_anchor(Anchor::TOP | Anchor::LEFT);
             layer.set_margin(y, 0, 0, x);
+            self.notify_panel_origin(scene, x, y);
+            return;
+        }
+        if let Some(anchor) = self.panel_anchor
+            && let Some(size) = self.output.info(output).and_then(|info| info.logical_size)
+        {
+            let (x, y) = panels::anchored_position(scene, anchor, size);
+            layer.set_anchor(Anchor::TOP | Anchor::LEFT);
+            layer.set_margin(y, 0, 0, x);
+            self.notify_panel_origin(scene, x, y);
             return;
         }
         if let Some(position) = self
@@ -450,6 +516,7 @@ impl App {
             let (x, y) = position(scene, self.panel_center, size);
             layer.set_anchor(Anchor::TOP | Anchor::LEFT);
             layer.set_margin(y, 0, 0, x);
+            self.notify_panel_origin(scene, x, y);
             return;
         }
         let width = scene.bounds.w.ceil().max(1.) as u32;
@@ -504,6 +571,7 @@ impl App {
         self.edges_panel_changed(false);
         if let Some(source) = &mut self.panel_runtime {
             source.panel_center(self.panel_center);
+            source.panel_anchor(self.panel_anchor);
         }
         if open {
             self.primary_idle(&output, false);
@@ -575,6 +643,7 @@ impl App {
             let _ = notify.send(UiEvent::Panel(epoch, Box::new(event)));
         }));
         source.panel_center(self.panel_center);
+        source.panel_anchor(self.panel_anchor);
         source
             .watch(Box::new(move |result| {
                 let event = match result {
@@ -828,6 +897,7 @@ impl App {
         }
         self.panel_ambient = false;
         self.panel_center = None;
+        self.panel_anchor = None;
         self.panel_epoch = self.next_epoch();
         drop(self.dismiss.take());
         drop(self.panel_runtime.take());

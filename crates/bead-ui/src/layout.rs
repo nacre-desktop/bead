@@ -79,6 +79,7 @@ pub(crate) fn raw_bytes(raw: &RawNode) -> usize {
 }
 pub const PROPERTIES: &[&str] = &[
     "id",
+    "metadata",
     "width",
     "height",
     "min_width",
@@ -139,6 +140,9 @@ pub const PROPERTIES: &[&str] = &[
     "edge",
     "direction",
     "drag",
+    "drag_payload",
+    "on_drag",
+    "on_drop",
     "blur",
     "start_angle",
     "sweep_angle",
@@ -174,6 +178,7 @@ pub fn allowed_property(name: &str) -> bool {
 
 pub struct ViewSpec {
     pub id: String,
+    pub metadata: Option<Value>,
     pub kind: Widget,
     pub style: Style,
     pub text: String,
@@ -215,6 +220,10 @@ pub struct ViewSpec {
     pub points: Vec<[f32; 2]>,
     pub closed: bool,
     pub drag: bool,
+    pub drag_payload: Option<Value>,
+    pub drag_action: Option<String>,
+    pub drop_action: Option<String>,
+    pub drop_argument: Option<Value>,
     pub font_size: f32,
     pub font_weight: u16,
     pub family: String,
@@ -671,6 +680,49 @@ impl ViewSpec {
                     Ok::<_, Diagnostic>((name.to_owned(), argument))
                 })
                 .transpose()?;
+            let drag_payload = p
+                .get("drag_payload")
+                .cloned()
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|e| source.error(e))?;
+            let parse_action =
+                |property: &str| -> Result<Option<(String, Option<Value>)>, Diagnostic> {
+                    p.get(property)
+                        .map(|value| {
+                            let name =
+                                value.get("name").and_then(Json::as_str).ok_or_else(|| {
+                                    source.error(format!("{property} requires ui.action"))
+                                })?;
+                            if name.is_empty() || name.len() > 128 {
+                                return Err(source.error(format!(
+                                    "{property} action name must be 1 to 128 bytes"
+                                )));
+                            }
+                            let argument = value
+                                .get("argument")
+                                .cloned()
+                                .map(serde_json::from_value)
+                                .transpose()
+                                .map_err(|e| source.error(e))?;
+                            Ok((name.to_owned(), argument))
+                        })
+                        .transpose()
+                };
+            let on_drag = parse_action("on_drag")?;
+            let on_drop = parse_action("on_drop")?;
+            for value in [
+                drag_payload.as_ref(),
+                on_drag.as_ref().and_then(|action| action.1.as_ref()),
+                on_drop.as_ref().and_then(|action| action.1.as_ref()),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if serde_json::to_vec(value).map_or(true, |bytes| bytes.len() > 64 * 1024) {
+                    return Err(source.error("drag transfer metadata exceeds 64 KiB"));
+                }
+            }
             let activate_on_release = boolean(p, "activate_on_release", false, source)?;
             let focus_on_pointer = boolean(p, "focus_on_pointer", true, source)?;
             if activate_on_release && raw.kind != Widget::Button {
@@ -713,6 +765,12 @@ impl ViewSpec {
                 visible,
                 action: action.as_ref().map(|a| a.0.clone()),
                 argument: action.and_then(|a| a.1),
+                metadata: p
+                    .get("metadata")
+                    .cloned()
+                    .map(serde_json::from_value)
+                    .transpose()
+                    .map_err(|error| source.error(error))?,
                 activate_on_release,
                 focus_on_pointer,
                 focus_ring: boolean(p, "focus_ring", true, source)?,
@@ -743,6 +801,10 @@ impl ViewSpec {
                 color: p.get("color").cloned(),
                 border_color: p.get("border_color").cloned(),
                 drag: boolean(p, "drag", false, source)?,
+                drag_payload,
+                drag_action: on_drag.as_ref().map(|a| a.0.clone()),
+                drop_action: on_drop.as_ref().map(|a| a.0.clone()),
+                drop_argument: on_drop.and_then(|a| a.1),
                 border_width: number(p, "border_width", 0., source)?,
                 blur: number(p, "blur", 0., source)?.clamp(0., 32.),
                 start_angle,
@@ -1169,9 +1231,18 @@ pub fn layout(
         } else {
             scroll_limit
         };
-        if own_visible && (view.action.is_some() || view.input.is_some() || view.scroll.is_some()) {
+        if own_visible
+            && (view.action.is_some()
+                || view.input.is_some()
+                || view.scroll.is_some()
+                || view.drag_action.is_some()
+                || view.drag_payload.is_some()
+                || view.drop_action.is_some()
+                || view.metadata.is_some())
+        {
             out.nodes.push(Node {
                 id: view.id.clone(),
+                metadata: view.metadata.clone(),
                 source: Some((PathBuf::from(&source.file), source.line, 1)),
                 draw: Primitive::Rounded {
                     rect: r,
@@ -1192,6 +1263,10 @@ pub fn layout(
                 preview_expected: view.preview_expected,
                 preview_tolerance: view.preview_tolerance,
                 pointer_arg: view.pointer_arg.clone(),
+                drag_payload: view.drag_payload.clone(),
+                drag_action: view.drag_action.clone(),
+                drop_action: view.drop_action.clone(),
+                drop_argument: view.drop_argument.clone(),
                 edge_hover: view.edge_hover,
                 icon: None,
                 input: view.input.clone(),
