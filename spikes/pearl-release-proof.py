@@ -359,7 +359,7 @@ def drive(self, _names):
     report = {'method': '25ms cropped screencopy-ready PNG series, black-padded to output coordinates; not physical scanout',
               'renderer': 'cpu' if self.args.cpu else 'femtovg-gl with idle CPU fallback',
               'idle_memory_kib': self.rss(),
-              'scale': 1.5, 'size': [2880, 1800], 'trials': [], 'required_trials': 20,
+              'scale': 1.5, 'size': [2880, 1800], 'parent_hz': self.args.parent_hz, 'trials': [], 'required_trials': 20,
               'timing_method': 'release uses POINTER_RELEASE monotonic_ns to product PEARL_HANDOFF_COMMITTED monotonic_ns after native-content and source-cover commits; UI_FRAME callbacks overlapping pointer-tool launch through 1.5s after release include prewarm and post-handoff setup; not presentation timing',
               'timing_gates': {'release_to_covered_handoff_commit_p95_ms': RELEASE_TO_HANDOFF_P95_LIMIT_MS,
                                'drag_release_ui_frame_p99_ms': DRAG_RELEASE_UI_FRAME_P99_LIMIT_MS,
