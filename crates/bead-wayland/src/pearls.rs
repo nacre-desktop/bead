@@ -827,8 +827,8 @@ impl App {
     pub(super) fn place_native_pearl(&mut self, first: bool) {
         let (Some(info), Some(name), Some(native)) = (
             self.pearl,
-            self.panel_name.as_ref(),
-            self.options.pearls.as_ref().and_then(|p| p.native.as_ref()),
+            self.panel_name.clone(),
+            self.options.pearls.as_ref().and_then(|p| p.native.clone()),
         ) else {
             return;
         };
@@ -850,13 +850,32 @@ impl App {
         if initial && !requested {
             return;
         }
-        let title = (native.title)(info.id, name);
+        if initial {
+            // A cold worker can replace its provisional size while covered.
+            // Commit that complete transparent geometry before asking the
+            // compositor to place it, otherwise old min/max constraints clamp it.
+            let pending: Vec<_> = self
+                .surfaces
+                .iter()
+                .enumerate()
+                .filter(|(_, surface)| surface.handoff.is_some())
+                .map(|(index, _)| index)
+                .collect();
+            for index in pending {
+                if let Err(error) = self.map_native_pearl_transparent(index) {
+                    eprintln!("PEARL_NATIVE_ERROR {error}");
+                    self.native_pearl_placed(self.panel_epoch, info.rect, false);
+                    return;
+                }
+            }
+        }
+        let title = (native.title)(info.id, &name);
         let sender = self.event_sender.clone();
         let epoch = self.panel_epoch;
         (native.place)(
             NativePearlPlacement {
                 id: info.id,
-                view: name.clone(),
+                view: name,
                 title,
                 rect: info.rect,
                 first: first || initial,
@@ -942,17 +961,6 @@ impl App {
         surface.native_configure_size = Some((configured_width, configured_height));
         surface.redraw = true;
         let content_changed = self.sync_native_pearl_scene();
-        if first && let Err(error) = self.map_native_pearl_transparent(i) {
-            eprintln!("PEARL_NATIVE_ERROR {error}");
-            self.surfaces[i]
-                .handoff
-                .as_mut()
-                .unwrap()
-                .gate
-                .request(self.pearl.unwrap().rect);
-            self.native_pearl_placed(self.panel_epoch, self.pearl.unwrap().rect, false);
-            return;
-        }
         if first || (content_changed && self.surfaces[i].handoff.is_some()) {
             self.place_native_pearl(true);
         } else if resized {
