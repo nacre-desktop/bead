@@ -4,7 +4,8 @@
 
 Run with parity-compare.py's required --nacre/--bead-bin/--bead-shell/--out,
 plus --arms bead --pointer-tool PATH --parent-output-tool wlr-randr. Captures
-are 25 ms full-output PNG proxies; stamps are not physical scanout times.
+are full-output PNG proxies launched every 25 ms. Protocol timestamps mark
+screencopy readiness, not physical scanout.
 """
 import importlib.util
 import json
@@ -46,12 +47,14 @@ def panel_call(self, method):
 
 
 def capture_sequence(self, directory, trigger, seconds=2.0):
-    """Full output at parity's interval, with PPM captures retained losslessly as PNG."""
+    """Full output every 25 ms; record each screencopy protocol-ready timestamp."""
     shutil.rmtree(directory, ignore_errors=True)
     directory.mkdir(parents=True)
     jobs, errors, marks = [], [], {}
-    started = time.monotonic()
     marks['capture_start_monotonic_ns'] = time.monotonic_ns()
+    started = marks['capture_start_monotonic_ns'] / 1_000_000_000
+    protocol_dir = directory / 'protocol'
+    protocol_dir.mkdir()
 
     def run_trigger():
         try:
@@ -66,25 +69,50 @@ def capture_sequence(self, directory, trigger, seconds=2.0):
     while time.monotonic() - started < seconds:
         stamp = time.monotonic()
         ppm = directory / f'{index:03}.ppm'
-        process = subprocess.Popen(['grim', str(ppm)], env=self.env,
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        jobs.append((process, stamp))
+        protocol_path = protocol_dir / f'{index:03}.log'
+        protocol_file = protocol_path.open('w')
+        process = subprocess.Popen(['grim', str(ppm)], env=dict(self.env, WAYLAND_DEBUG='client'),
+                                   stdout=subprocess.DEVNULL, stderr=protocol_file)
+        jobs.append((process, stamp, protocol_file, protocol_path))
         index += 1
         time.sleep(max(0.0, stamp + interval - time.monotonic()))
     runner.join()
-    for process, _ in jobs:
-        process.wait(timeout=30)
+    for process, _, protocol_file, _ in jobs:
+        try:
+            process.wait(timeout=30)
+        finally:
+            protocol_file.close()
     stamps = []
-    for number, (_, stamp) in enumerate(jobs):
+    spawn_stamps = []
+    for number, (process, stamp, _, protocol_path) in enumerate(jobs):
+        if process.returncode:
+            raise RuntimeError(f'screencopy process {number:03} failed: {process.returncode}')
+        capture_ns = parse_capture_ns(protocol_path.read_text(errors='replace'))
         ppm = directory / f'{number:03}.ppm'
         with Image.open(ppm) as image:
             image.convert('RGB').save(directory / f'{number:03}.png')
         ppm.unlink()
-        stamps.append(round((stamp - started) * 1000))
+        stamps.append((capture_ns - marks['capture_start_monotonic_ns']) / 1_000_000)
+        spawn_stamps.append(round((stamp - started) * 1000))
     (directory / 'stamps.json').write_text(json.dumps(stamps, indent=2) + '\n')
+    (directory / 'spawn-stamps.json').write_text(json.dumps(spawn_stamps, indent=2) + '\n')
     if errors:
         raise RuntimeError(f'release trigger failed: {errors[0]}')
     return marks, stamps
+
+
+def parse_capture_ns(protocol_log):
+    """Return absolute screencopy-ready/presented monotonic ns from WAYLAND_DEBUG."""
+    patterns = (
+        r'zwlr_screencopy_frame_v1[@#]\d+\.ready\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)',
+        r'ext_image_copy_capture_frame_v1[@#]\d+\.presentation_time\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)',
+    )
+    for pattern in patterns:
+        match = re.search(pattern, protocol_log)
+        if match:
+            high, low, nsec = map(int, match.groups())
+            return (((high << 32) | low) * 1_000_000_000) + nsec
+    raise RuntimeError('screencopy protocol log has no ready/presentation timestamp')
 
 
 def dominant_fill(image_path, rect, scale):
@@ -162,11 +190,11 @@ def analyze(directory, final_path, stamps, rect, scale, post_release_start_ms, d
                 for f in visible]}
 
 
-def release_proxy_ms(pointer_stdout, capture_start_ns, pointer_start_ms):
+def release_proxy_ms(pointer_stdout, capture_start_ns):
     match = re.search(r'POINTER_RELEASE monotonic_ns=(\d+)', pointer_stdout or '')
-    if match:
-        return (int(match.group(1)) - capture_start_ns) / 1_000_000 + 100
-    return pointer_start_ms + 850
+    if not match:
+        raise RuntimeError('pointer tool emitted no POINTER_RELEASE timestamp')
+    return (int(match.group(1)) - capture_start_ns) / 1_000_000
 
 
 def drive(self, _names):
@@ -180,7 +208,7 @@ def drive(self, _names):
         raise RuntimeError(f'PEARL_TRIALS={TRIALS} is fewer than the required 20 trials')
     out = self.out / 'release-proof'
     out.mkdir(parents=True, exist_ok=True)
-    report = {'method': '25ms full-output grim PNG proxy; not physical scanout',
+    report = {'method': '25ms full-output screencopy-ready PNG proxy; not physical scanout',
               'renderer': 'cpu', 'idle_memory_kib': self.rss(),
               'scale': 1.5, 'size': [2880, 1800], 'trials': [], 'required_trials': 20}
     shell_log = self.logs / 'shell.log'
@@ -248,7 +276,9 @@ def drive(self, _names):
             trace = shell_log.read_bytes()[log_mark:].decode(errors='replace') if shell_log.exists() else ''
             (directory.parent / 'native-frame-trace.log').write_text(
                 '\n'.join(line for line in trace.splitlines()
-                          if 'wl_surface@' in line or 'UI_FRAME' in line or 'UI_PRESENTED' in line) + '\n')
+                          if re.search(r'wl_surface[@#]\d+', line) or 'UI_FRAME' in line
+                          or 'UI_PRESENTED' in line or 'PEARL_HANDOFF_' in line
+                          or 'set_window_geometry' in line) + '\n')
             pearls = panel_call(self, 'pearls')
             detached = [p for p in pearls if p.get('view') == 'launcher']
             if not detached:
@@ -271,8 +301,7 @@ def drive(self, _names):
                 raise RuntimeError(f"trial {trial + 1}: missing PEARL_HANDOFF_COMMITTED id={pearl['id']}")
             try:
                 release_ms = release_proxy_ms(marks.get('pointer_stdout'),
-                                              marks['capture_start_monotonic_ns'],
-                                              marks['pointer_start_ms'])
+                                              marks['capture_start_monotonic_ns'])
                 analysis = analyze(directory, final_screen, stamps, rect, 1.5,
                                    release_ms, [dx, dy])
             except RuntimeError as error:

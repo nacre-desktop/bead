@@ -64,5 +64,27 @@ class PearlReleaseClassifierTests(unittest.TestCase):
             self.analyze([700 + 25 * i for i in range(8)])
 
 
+class PearlReleaseTimestampTests(unittest.TestCase):
+    def test_screencopy_ready_timestamp_combines_high_low_seconds_and_nsec(self):
+        text = ' -> zwlr_screencopy_frame_v1#27.ready(1, 2, 300)'
+        self.assertEqual(proof.parse_capture_ns(text), ((1 << 32) + 2) * 1_000_000_000 + 300)
+
+    def test_ext_image_presentation_timestamp_is_supported(self):
+        text = '<- ext_image_copy_capture_frame_v1@14.presentation_time(0, 7, 900)'
+        self.assertEqual(proof.parse_capture_ns(text), 7_000_000_900)
+
+    def test_missing_screencopy_timestamp_fails(self):
+        with self.assertRaisesRegex(RuntimeError, 'no ready/presentation timestamp'):
+            proof.parse_capture_ns('wl_display.delete_id(12)')
+
+    def test_release_proxy_uses_exact_pointer_release_time(self):
+        output = 'POINTER_SENT monotonic_ns=9010000000 x=1 y=2\nPOINTER_RELEASE monotonic_ns=9123456789\n'
+        self.assertAlmostEqual(proof.release_proxy_ms(output, 9_000_000_000), 123.456789)
+
+    def test_missing_pointer_release_time_fails(self):
+        with self.assertRaisesRegex(RuntimeError, 'no POINTER_RELEASE timestamp'):
+            proof.release_proxy_ms('POINTER_SENT monotonic_ns=1 x=2 y=3', 0)
+
+
 if __name__ == '__main__':
     unittest.main()
