@@ -248,8 +248,6 @@
   "bead.dashboard.state-stale": "Dashboard panel: footer note when the shown data is out of date because the source stopped updating.",
   "bead.dashboard.system-cpu-note": "Dashboard panel: explains that the processor value of a process is its total CPU time so far, not a live percentage.",
   "bead.dashboard.system-drive-detail": "Dashboard panel: caption under a drive row whose value reads \"used / total\".",
-  "bead.dashboard.system-drives": "Dashboard panel: heading of the list of disk drives.",
-  "bead.dashboard.system-drives-none": "Dashboard panel: empty text of the drives list.",
   "bead.dashboard.system-process-cpu": "Dashboard panel: total processor time of a process in seconds, for example \"12.3 s CPU\".",
   "bead.dashboard.system-processes": "Dashboard panel: heading of the list of processes that use the most memory.",
   "bead.dashboard.system-processes-none": "Dashboard panel: empty text of the top processes list.",

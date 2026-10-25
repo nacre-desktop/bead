@@ -248,8 +248,6 @@
   "bead.dashboard.state-stale": "Stale data",
   "bead.dashboard.system-cpu-note": "CPU values are accumulated process time",
   "bead.dashboard.system-drive-detail": "Used / total",
-  "bead.dashboard.system-drives": "Drives",
-  "bead.dashboard.system-drives-none": "No drive data",
   "bead.dashboard.system-process-cpu": "{seconds} s CPU",
   "bead.dashboard.system-processes": "Top processes",
   "bead.dashboard.system-processes-none": "No process data",

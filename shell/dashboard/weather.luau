@@ -90,8 +90,8 @@ return function()
                 points=area,closed=true,stroke_width=2,color={0,0,0,0},fill=ui.alpha("primary",.08)},
             ui.Polyline{id="temperature",position="absolute",left=16,top=42,width=chartWidth,height=chartHeight,
                 points=points,stroke_width=2,color="primary",round_caps=true},
-            #hours==0 and ui.Text{id="empty",position="absolute",left=16,top=100,width=chartWidth,height=24,
-                text=ui.tr("bead.dashboard.weather-none"),font_size=13.333,text_align="center",color="onSurfaceVariant"} or nil,
+            ui.Text{id="empty",visible=#hours==0,position="absolute",left=16,top=100,width=chartWidth,height=24,
+                text=ui.tr("bead.dashboard.weather-none"),font_size=13.333,text_align="center",color="onSurfaceVariant"},
             table.unpack(labels),
         },
         ui.Box{id="outlook",position="absolute",left=580,top=0,width=360,height=562,radius=16,fill="surfaceContainer",
@@ -103,14 +103,16 @@ return function()
                     local rowHeight=496/math.max(1,#days)
                     local textY=(rowHeight-20)/2
                     local barY=(rowHeight-5)/2
+                    local rangeStart=valid and math.clamp((item.low-minimum)/span,0,1) or 0
+                    local rangeWidth=valid and math.max(3,328*.24*math.clamp((item.high-item.low)/span,0,1)) or 0
                     return ui.Box{id="day",width=328,height=rowHeight,
                         ui.Text{position="absolute",left=0,top=textY,text=weekday(item.label),width=40,height=20,font_size=12,color="onSurface"},
                         ui.Text{position="absolute",left=328*.21,top=textY,text=condition(item.code),width=24,height=20,font_size=14.667,
                             family="Material Symbols Rounded",color="secondary"},
                         ui.Text{position="absolute",left=328*.32,top=textY,text=item.low_text or item.value,width=44,height=20,font_size=12,color="onSurfaceVariant"},
                         ui.Box{position="absolute",left=328*.47,top=barY,width=328*.24,height=5,radius=3,fill=ui.alpha("primary",.12)},
-                        valid and ui.Box{position="absolute",left=328*.47+328*.24*(item.low-minimum)/span,top=barY,
-                            width=math.max(3,328*.24*(item.high-item.low)/span),height=5,radius=3,fill="primary"} or nil,
+                        ui.Box{position="absolute",visible=valid,left=328*.47+328*.24*rangeStart,top=barY,
+                            width=rangeWidth,height=5,radius=3,fill="primary"},
                         ui.Text{position="absolute",left=328*.75,top=textY,text=item.high_text or "",width=46,height=20,font_size=12,color="onSurface"},
                         ui.Text{position="absolute",right=0,top=textY,text=item.rain_text or item.detail,width=54,height=20,font_size=12,text_align="right",color="onSurfaceVariant"}}
                 end},
