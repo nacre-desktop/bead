@@ -690,6 +690,7 @@
     "candidate_binary_sha256": "1a296893a1afec3af409521a8ff4362a1675c96fff40f5c8072fe3a7dfcb7cda",
     "candidate_commit": "19b529b",
     "candidate_gl_binary_sha256": "631b461a4437bc61672933e06fb98f9d25af69a4c42ab3179ce08bd5aac01c49",
+    "capture_runtime_equal_to_original_ci": true,
     "control_binary_sha256": "1f6b7bf6728a926d4769c489f62361f703bcd0e7a3a4257752a6936f95adb0fc",
     "control_commit": "417ac32",
     "control_shared_patch": {
@@ -697,9 +698,11 @@
       "patched_worker_sha256": "3a5ba91d6ca0aa200f50b6bf23e379a90236d897cfc66a05c9b19f40c4eb7c1c"
     },
     "helper_binary_sha256": "ee2c3617fbefdec499ff06a74a425fb193f0e7200ca87239245be7868d7d592c",
-    "integrated_ci_commit": "2e7a82422f747381bd6defb53a06bf68c37ff6f2",
     "orient_commit": "3efe8d1",
+    "original_ci_commit": "2e7a82422f747381bd6defb53a06bf68c37ff6f2",
     "qml_commit": "3afcdc64ec5a2150d660bfb5aabb888d3d028ec7",
-    "runtime_equal_to_capture_commit": true
+    "rebased_ci_base": "ed9333b48166d5ad947e33a6d46b069b8d786b5d",
+    "rebased_ci_commit": "11432cb4eec07944f312d3838ee22050709a65ba",
+    "rebased_runtime_equal_to_capture": false
   }
 }

@@ -4,7 +4,7 @@
 
 Logical dragging and native-window close repairs pass the full remote Arch checks.
 Three alternating private CPU pairs fail detached/closed unreclaimable memory.
-The +2.133 MiB detached anon outlier trips the owner stop line; its cause is unresolved.
+The +2.133 MiB detached anon outlier originally tripped the owner stop line; its cause is unresolved.
 **lead-accepted 2026-10-25, follow-up memory attribution** prioritizes the unclosable-pearl fix; final parity proofs remain incomplete.
 
 | CPU debug, paired median Δ | Unreclaimable MiB | PSS MiB (info) | ≤+0.5 gate |

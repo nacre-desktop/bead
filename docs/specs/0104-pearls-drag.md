@@ -1,6 +1,6 @@
 # B0104 — Pearl drag, dock and close
 
-Status: lead-accepted for integration on 2026-10-25; rebased validation in progress.
+Status: lead-accepted for integration on 2026-10-25; full rebased remote CI passes.
 
 Decision: **lead-accepted 2026-10-25, follow-up memory attribution**. The lead
 prioritizes fixing an unclosable live pearl over the measured detached/closed
@@ -52,7 +52,7 @@ Output selection follows the released rectangle before falling back to its origi
 
 ## Validation and evidence
 
-Full `check` job replica passed on integrated code `2e7a824` in a disposable Arch container:
+Full `check` job replica passed on rebased code `11432cb` (base `ed9333b`) in a disposable Arch container:
 fmt, clippy with warnings denied, workspace/trace tests, both renderer feature
 configurations, facade/Luau checks, Python suites, packaging, wallpaper smoke,
 private services/tray lifecycle, and all dependency/license graphs. The archive
@@ -65,9 +65,11 @@ native geometry stays full-sized when reveal hit regions have zero height.
 The native handoff resets idle-buffer timers tied to the old surface. Docking
 retires GPU resources before replacing the native role with a fresh layer.
 
-Capture binaries use `19b529b`, whose runtime and shell bytes equal `2e7a824`
-(the rebase adds only upstream private capture-tool fixes). Both measurement arms
-include the shared queued-worker shutdown fix on top of
+The original memory/close cohort uses `19b529b`, whose runtime and shell bytes
+equal the original CI revision `2e7a824`. Later upstream UI/bar changes are included
+in rebased CI `11432cb`; that cohort is historical, not a measurement of the latest
+combined source. Both original measurement arms include the shared queued-worker
+shutdown fix on top of
 control `417ac32`. Stop preempts queued stages before joining the worker; its
 regression fails on the old queue and passes with the fix. Input coalescing is
 preserved. This prevents an acknowledgement wait from deadlocking pearl close.
