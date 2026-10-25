@@ -693,7 +693,10 @@ impl App {
                 if let Err(error) = self.promote_native_pearl() {
                     eprintln!("PEARL_NATIVE_ERROR {error}");
                 }
-            } else if !self.surfaces.iter().any(|surface| surface.prepared_native.is_some())
+            } else if !self
+                .surfaces
+                .iter()
+                .any(|surface| surface.prepared_native.is_some())
                 && !self.prewarm_attempted
                 && let Err(error) = self.prepare_native_pearl()
             {
@@ -736,9 +739,17 @@ impl App {
             return;
         };
         if native.prewarm.is_none()
-            || self.options.control.as_ref().is_some_and(|control| !control.pearl_allowed(name))
+            || self
+                .options
+                .control
+                .as_ref()
+                .is_some_and(|control| !control.pearl_allowed(name))
             || self.slots.iter().filter(|group| group.is_pearl()).count()
-                >= self.options.pearls.as_ref().map_or(0, |options| options.max)
+                >= self
+                    .options
+                    .pearls
+                    .as_ref()
+                    .map_or(0, |options| options.max)
         {
             return;
         }
@@ -758,7 +769,10 @@ impl App {
         let (Some(id), Some(name), Some(native)) = (
             self.pearl.map(|info| info.id).or(self.reserved_pearl_id),
             self.panel_name.clone(),
-            self.options.pearls.as_ref().and_then(|options| options.native.clone()),
+            self.options
+                .pearls
+                .as_ref()
+                .and_then(|options| options.native.clone()),
         ) else {
             return Ok(());
         };
@@ -1410,7 +1424,10 @@ impl App {
     fn place_prepared_native(&mut self, i: usize) {
         let (Some(name), Some(native), Some(prepared)) = (
             self.panel_name.clone(),
-            self.options.pearls.as_ref().and_then(|options| options.native.clone()),
+            self.options
+                .pearls
+                .as_ref()
+                .and_then(|options| options.native.clone()),
             self.surfaces
                 .get(i)
                 .and_then(|surface| surface.prepared_native.as_ref()),
@@ -1570,10 +1587,7 @@ impl App {
         if native.prewarm.is_none() {
             return false;
         }
-        let expected_id = self
-            .pearl
-            .map(|info| info.id)
-            .or(self.reserved_pearl_id);
+        let expected_id = self.pearl.map(|info| info.id).or(self.reserved_pearl_id);
         let indices: Vec<_> = self
             .surfaces
             .iter()

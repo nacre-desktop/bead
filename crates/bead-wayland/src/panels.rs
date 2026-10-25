@@ -90,8 +90,8 @@ pub(crate) fn dock_geometry(
     let axis = |offset: i32, extent: u32, span: i32, current: f64, target: f64| {
         let target = target.round() as i32 - offset;
         let extent = (span - target).clamp(1, extent.max(1) as i32);
-        let origin = (current.round() as i32 - offset)
-            .clamp(target.min(0), (span - extent).max(target));
+        let origin =
+            (current.round() as i32 - offset).clamp(target.min(0), (span - extent).max(target));
         (extent as u32, origin)
     };
     let (width, x) = axis(body_offset.0, extent.0, output.0, current.0, target.0);
@@ -149,17 +149,32 @@ mod tests {
             let final_geometry = dock_geometry((32, 32), (1164, 654), (1920, 1200), target, target);
             for step in 0..=10 {
                 let t = step as f64 / 10.;
-                let current = (from.0 + (target.0 - from.0) * t,
-                               from.1 + (target.1 - from.1) * t);
-                let (extent, origin) = dock_geometry((32, 32), (1164, 654), (1920, 1200), current, target);
-                assert_eq!(extent, final_geometry.0, "extent must stay fixed throughout return");
-                assert_eq!(origin, (current.0.round() as i32 - 32, current.1.round() as i32 - 32));
+                let current = (
+                    from.0 + (target.0 - from.0) * t,
+                    from.1 + (target.1 - from.1) * t,
+                );
+                let (extent, origin) =
+                    dock_geometry((32, 32), (1164, 654), (1920, 1200), current, target);
+                assert_eq!(
+                    extent, final_geometry.0,
+                    "extent must stay fixed throughout return"
+                );
+                assert_eq!(
+                    origin,
+                    (current.0.round() as i32 - 32, current.1.round() as i32 - 32)
+                );
                 if let Some(previous) = previous {
-                    assert_ne!(origin, previous, "return cannot stall before the terminal pose");
+                    assert_ne!(
+                        origin, previous,
+                        "return cannot stall before the terminal pose"
+                    );
                 }
                 previous = Some(origin);
             }
-            assert_eq!(final_geometry.1, (target.0 as i32 - 32, target.1 as i32 - 32));
+            assert_eq!(
+                final_geometry.1,
+                (target.0 as i32 - 32, target.1 as i32 - 32)
+            );
         }
     }
 
