@@ -92,9 +92,17 @@ mod tests {
         damage.reset(100, 100, 3);
         damage.committed(0, 7);
         assert_eq!(damage.identical_generation(2), None);
-        assert_eq!(damage.presented(6), None, "stale feedback cannot acknowledge new pixels");
+        assert_eq!(
+            damage.presented(6),
+            None,
+            "stale feedback cannot acknowledge new pixels"
+        );
         assert_eq!(damage.presented(7), Some(2));
-        assert_eq!(damage.presented(7), None, "deferred acknowledgement happens once");
+        assert_eq!(
+            damage.presented(7),
+            None,
+            "deferred acknowledgement happens once"
+        );
         assert_eq!(damage.identical_generation(3), Some(3));
         damage.committed(1, 9);
         assert_eq!(damage.identical_generation(4), None);
