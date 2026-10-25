@@ -18,7 +18,7 @@ Lead continuation authorizes N0077's additive `packages` array with
 older producers remain count-only. Invalid records are omitted and absent repo
 labels have no badge. Package records are bounded to 4096, with control-free fields
 up to 256 bytes. No package query, provider, dependency or ranking engine is added.
-The deterministic fixture is `shell/tests/fixtures/dashboard/updates-packages.json`.
+The deterministic fixture is `shell/tests/fixtures/status/updates-packages.json`.
 
 All dropdown spacing, text sizes, row sizes and the list-height cap derive from
 kit/theme tokens. Package rows use the existing virtual-list component, with a

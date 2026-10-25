@@ -128,7 +128,7 @@ fn updates_popout_projects_the_existing_daemon_topic() -> Result<()> {
 #[test]
 fn updates_dropdown_handles_optional_packages_health_and_empty_state() -> Result<()> {
     let data: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../shell/tests/fixtures/dashboard/updates-packages.json"
+        "../../../shell/tests/fixtures/status/updates-packages.json"
     ))?;
     let source = Arc::new(FakeSource::new(data.clone())?);
     let status = Status::core_updates(source.clone(), None);
@@ -184,7 +184,7 @@ fn updates_dropdown_handles_optional_packages_health_and_empty_state() -> Result
 #[test]
 fn updates_dropdown_goldens_cover_count_packages_scroll_and_empty() -> Result<()> {
     let fixture: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../shell/tests/fixtures/dashboard/updates-packages.json"
+        "../../../shell/tests/fixtures/status/updates-packages.json"
     ))?;
     for scale in [1., 1.5] {
         for case in ["count", "packages", "scroll", "empty", "unavailable"] {
