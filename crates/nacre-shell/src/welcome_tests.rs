@@ -2,11 +2,10 @@
 //! B0059: Welcome adapter (shortcut rows over a fake daemon, availability, action table), the
 //! window's navigation and close through the runtime, and goldens for every tour page.
 use super::welcome::*;
-use crate::nacre_source::{Client, Config};
-use bead::core::{Stores, Value, source::Source};
+use bead::core::{Stores, Value};
 use bead_test::{Config as HarnessConfig, Harness};
 use serde_json::{Value as Json, json};
-use std::{collections::BTreeMap, path::Path, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, path::Path, sync::Arc};
 
 fn root() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell")
@@ -28,7 +27,7 @@ fn rows_json() -> Vec<Json> {
         ("binding-4", "Capture an area", "Super + Shift + S"),
     ]
     .into_iter()
-    .map(|(id, title, key)| json!({"id": id, "title": title, "key": key}))
+    .map(|(id, title, key)| json!({"id": id, "title": title, "key": key, "group": if id == "binding-2" || id == "binding-3" { "Windows" } else { "" }, "menu": id == "binding-0" || id == "binding-1"}))
     .collect()
 }
 fn text(model: &BTreeMap<String, Value>, key: &str) -> String {
@@ -113,7 +112,7 @@ fn actions_select_from_fixed_tables_and_only_a_started_app_closes_the_window() {
 }
 
 #[test]
-fn shortcut_rows_come_from_the_menu_reply_in_engine_order_and_are_bounded() {
+fn shortcut_fixtures_keep_their_order_and_empty_state() {
     let welcome = Welcome::new(None).with_shortcuts(rows_json());
     let model = welcome.project(&stores("shortcuts"));
     assert_eq!(text(&model, "welcome.shortcuts.state"), "ready");
@@ -134,133 +133,76 @@ fn shortcut_rows_come_from_the_menu_reply_in_engine_order_and_are_bounded() {
 }
 
 /// A real client against a fake daemon: the shortcut page asks `menu.query` once for the
-/// `learn.shortcuts` route, reads name and key text, and AI and Brain count as installed while
-/// their topics are published.
-#[tokio::test(flavor = "current_thread")]
-async fn shortcuts_are_read_over_the_wire_and_published_topics_enable_ai_and_brain() {
-    use nacre_protocol::{Capability, Message, Reply, framing};
-    use std::os::unix::fs::PermissionsExt;
-    use tokio::{io::BufReader, net::UnixListener, sync::mpsc};
-    let dir = std::env::temp_dir().join(format!("welcome-wire-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
-    let socket = dir.join("daemon.sock");
-    let listener = UnixListener::bind(&socket).unwrap();
-    std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600)).unwrap();
-    let (calls_tx, mut calls) = mpsc::unbounded_channel();
-    let server = tokio::spawn(async move {
-        let (stream, _) = listener.accept().await.unwrap();
-        let (read, mut writer) = stream.into_split();
-        let mut reader = framing::Reader::new(BufReader::new(read));
-        assert!(matches!(
-            reader.next().await.unwrap().unwrap(),
-            Message::Hello { .. }
-        ));
-        let mut methods = nacre_protocol::core_methods();
-        methods.insert(
-            "menu.query".into(),
-            nacre_protocol::Method {
-                v: 1,
-                class: Capability::Desktop,
-                timeout: 3000,
-                params: json!({"type":"object"}),
-                result: json!({}),
-            },
-        );
-        let welcome = Message::Welcome {
-            proto: 1,
-            min: 1,
-            boot: "welcome-boot".into(),
-            topics: [("ai.chat".to_string(), 1), ("brain.recent".to_string(), 1)].into(),
-            methods,
-            frame_ms: None,
-        };
-        framing::write(&mut writer, &welcome).await.unwrap();
-        while let Ok(Some(message)) = reader.next().await {
-            if let Message::Call { id, m, p, .. } = message {
-                calls_tx.send((m, p)).unwrap();
-                let reply = Reply::Ok {
-                    ok: json!({"query":"","mode":"apps","route":"learn.shortcuts","catalog_rev":1,
-                        "items":{
-                            "learn.shortcuts.binding-0":{"name":"Find an application","kind":"action","description":"Super + Space","breadcrumb":"Learn › Keyboard shortcuts"},
-                            "learn.shortcuts.binding-1":{"name":"Open Settings","kind":"action","description":"Super + ,","breadcrumb":"Learn › Keyboard shortcuts"},
-                            "learn.shortcuts.binding-2":{"name":"No keys","kind":"action","description":"","breadcrumb":""}},
-                        "order":["learn.shortcuts.binding-1","learn.shortcuts.binding-0","learn.shortcuts.binding-2"],
-                        "total":3}),
-                };
-                framing::write(&mut writer, &Message::Ret { id, reply })
-                    .await
-                    .unwrap();
-            }
-        }
-    });
-    let client = Client::start(Config::new(socket, vec![])).unwrap();
-    for _ in 0..500 {
-        if client.snapshot().connected && client.status().boot.is_some() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    let welcome = Welcome::new(Some(client.clone()));
+/// N0080's repaired topic can arrive after the window opens; keep compositor order and groups.
+#[test]
+fn shortcuts_topic_updates_wake_the_window_and_preserve_submaps() {
+    use bead_test::source::FakeSource;
+    let source = Arc::new(
+        FakeSource::new(json!({"health":{"available":false},
+        "items":{"order":[],"items":{}}}))
+        .unwrap(),
+    );
+    let welcome = Welcome::new(None).with_source(source.clone());
     let woken = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let counter = woken.clone();
     welcome.subscribe(Arc::new(move || {
         counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }));
-    // Other pages never ask.
-    let first = welcome.project(&stores("welcome"));
-    assert_eq!(first["welcome.can.ai"], Value::Bool(true));
-    // Brain also needs its command; the topic alone does not say it is installed.
     assert_eq!(
-        first["welcome.can.brain"],
-        Value::Bool(std::env::var_os("PATH").is_some_and(|p| in_dirs("nacre-brain", &p)))
+        text(
+            &welcome.project(&stores("shortcuts")),
+            "welcome.shortcuts.state"
+        ),
+        "unavailable"
     );
-    assert!(calls.try_recv().is_err());
-    let at = stores("shortcuts");
-    let mut model = welcome.project(&at);
-    assert_eq!(text(&model, "welcome.shortcuts.state"), "loading");
-    for _ in 0..500 {
-        model = welcome.project(&at);
-        if text(&model, "welcome.shortcuts.state") == "ready" {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    let (method, params) = calls.recv().await.unwrap();
-    assert_eq!(method, "menu.query");
-    assert_eq!(
-        params,
-        json!({"query":"","mode":"apps","route":"learn.shortcuts"})
-    );
+    source
+        .publish(json!({"health":{"available":true,"stale":false},"items":{
+        "order":["settings","focus","empty"],"items":{
+            "settings":{"description":"Open Settings","key":"Super + ,","menu":"settings"},
+            "focus":{"description":"Move focus","key":"H J K L","submap":"Window navigation"},
+            "empty":{"description":"No keys","key":""}}}}))
+        .unwrap();
+    let model = welcome.project(&stores("shortcuts"));
     assert_eq!(text(&model, "welcome.shortcuts.state"), "ready");
     let Value::List(rows) = &model["welcome.shortcuts"] else {
         panic!()
     };
-    // Engine order is kept; a row without keys is not a shortcut.
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0]["title"], "Open Settings");
+    assert_eq!(rows[0]["menu"], true);
+    assert_eq!(rows[1]["group"], "Window navigation");
+    assert!(woken.load(std::sync::atomic::Ordering::SeqCst) > 0);
+    source.disconnect().unwrap();
     assert_eq!(
-        rows.iter()
-            .map(|r| r["title"].as_str().unwrap())
-            .collect::<Vec<_>>(),
-        ["Open Settings", "Find an application"]
+        text(
+            &welcome.project(&stores("shortcuts")),
+            "welcome.shortcuts.state"
+        ),
+        "ready",
+        "last good rows remain readable after disconnect"
     );
-    assert_eq!(rows[1]["key"], "Super + Space");
-    assert!(
-        woken.load(std::sync::atomic::Ordering::SeqCst) > 0,
-        "the reply woke the window"
-    );
-    // Projecting again never asks again for the same daemon boot.
-    welcome.project(&at);
-    assert!(calls.try_recv().is_err());
-    drop(welcome);
-    client.stop().await.unwrap();
-    server.abort();
-    std::fs::remove_dir_all(dir).ok();
 }
 
 fn harness(model: BTreeMap<String, Value>, width: u32, height: u32, scale: f32) -> Harness {
     // The built-in English table is installed once per process; do not race another test to it.
     crate::i18n::init();
-    Harness::load(
+    let mut icons = BTreeMap::new();
+    if model.get("welcome.step") == Some(&Value::Text("colors".into())) {
+        let folder = root().join("welcome/demo");
+        let bundle: Json =
+            serde_json::from_slice(&std::fs::read(folder.join("palettes.json")).unwrap()).unwrap();
+        for (index, scene) in bundle["scenes"].as_array().unwrap().iter().enumerate() {
+            icons.insert(
+                format!("colors-thumb-{index}"),
+                folder.join(scene["thumbnail"].as_str().unwrap()),
+            );
+        }
+        icons.insert(
+            "colors-card".into(),
+            folder.join(bundle["scenes"][0]["image"].as_str().unwrap()),
+        );
+    }
+    Harness::load_with_icons(
         &root(),
         Path::new("welcome/main.luau"),
         &root().join("palette.json"),
@@ -270,6 +212,7 @@ fn harness(model: BTreeMap<String, Value>, width: u32, height: u32, scale: f32) 
             height,
             scale,
         },
+        icons,
     )
     .unwrap()
 }
@@ -305,6 +248,10 @@ fn page_model(
     ] {
         model.insert(key.into(), Value::Bool(on));
     }
+    if page == "colors" {
+        let demo = crate::colors::Colors::bundled_demo(&root()).unwrap();
+        model.insert("welcome.demo".into(), Value::list(vec![demo.demo()]));
+    }
     model.insert("welcome.step".into(), Value::Text(page.into()));
     model.insert("welcome.guide".into(), Value::Text(guide.into()));
     model
@@ -312,77 +259,16 @@ fn page_model(
 
 /// The demo on the colours page with a finished preview, from fixtures (no daemon).
 #[test]
-fn welcome_colours_demo_matches_a_golden() {
-    use crate::colors::{
-        colour_map,
-        tests::{cache, colours, temp},
-    };
-    crate::i18n::init();
-    let tmp = temp("welcome-demo");
-    let mut icons = BTreeMap::new();
-    for (slot, w, h) in [
-        ("colors-card", 320, 200),
-        ("colors-thumb-0", 120, 84),
-        ("colors-thumb-1", 120, 84),
-        ("colors-thumb-2", 120, 84),
-    ] {
-        icons.insert(
-            slot.to_string(),
-            std::path::PathBuf::from(cache(&tmp, "icons", &format!("{slot}.png"), w, h)),
-        );
-    }
-    let palette = colours(0);
-    let card = colour_map(&palette, &[]);
-    let swatch = |role: &str| json!({"role": role, "color": card[role]});
-    let scenes: Vec<Json> = [
-        ("0", "Mountain lake", true),
-        ("1", "Dune ridge", false),
-        ("2", "City lights at night", false),
-    ]
-    .iter()
-    .map(|(id, name, selected)| {
-        json!({"id": id, "name": name, "selected": selected,
-            "thumb": format!("colors-thumb-{id}"), "action": format!("demo:choose:{id}")})
-    })
-    .collect();
-    let styles: Vec<Json> = ["natural", "pigment", "harmony", "pop", "mist", "vivid", "pearl", "tide"]
-        .iter()
-        .map(|id| json!({"id": id, "label": id[..1].to_uppercase() + &id[1..], "selected": *id == "harmony"}))
-        .collect();
-    let view = json!({"id": "demo", "available": true, "loading": false, "scenes": scenes, "styles": styles,
-        "style_text": "Related accents for a calm, unified desktop", "mode": "dark", "colors": card,
-        "swatches": [swatch("primary"), swatch("secondary"), swatch("tertiary"), swatch("surface")],
-        "has_photo": true, "busy": false, "error": ""});
-    let mut model = page_model("colors", "", true, true, (1020, 760));
-    model.insert("welcome.demo".into(), Value::list(vec![view]));
-    let mut h = Harness::load_with_icons(
-        &root(),
-        Path::new("welcome/main.luau"),
-        &root().join("palette.json"),
-        model,
-        HarnessConfig {
-            width: 1020,
-            height: 760,
-            scale: 1.,
-        },
-        icons,
-    )
-    .unwrap();
-    golden("welcome-colors-demo-1", &mut h);
-    let _ = std::fs::remove_dir_all(tmp);
-}
-
-#[test]
 fn welcome_pages_match_goldens() {
     for (name, page, guide, ai, colors, size, scale) in [
-        ("welcome-hero-1", "welcome", "", true, true, (1020, 760), 1.),
+        ("welcome-hero-1", "welcome", "", true, true, (1100, 800), 1.),
         (
             "welcome-colors-1",
             "colors",
             "",
             true,
             true,
-            (1020, 760),
+            (1100, 800),
             1.,
         ),
         (
@@ -391,17 +277,17 @@ fn welcome_pages_match_goldens() {
             "",
             true,
             true,
-            (1020, 760),
+            (1100, 800),
             1.,
         ),
-        ("welcome-apps-1", "apps", "", true, true, (1020, 760), 1.),
+        ("welcome-apps-1", "apps", "", true, true, (1100, 800), 1.),
         (
             "welcome-apps-optional-1",
             "apps",
             "",
             false,
             false,
-            (1020, 760),
+            (1100, 800),
             1.,
         ),
         (
@@ -410,11 +296,11 @@ fn welcome_pages_match_goldens() {
             "ai",
             false,
             false,
-            (1020, 760),
+            (1100, 800),
             1.,
         ),
-        ("welcome-ready-1", "ready", "", true, true, (1020, 760), 1.),
-        ("welcome-help-1", "help", "", true, true, (1020, 760), 1.),
+        ("welcome-ready-1", "ready", "", true, true, (1100, 800), 1.),
+        ("welcome-help-1", "help", "", true, true, (1100, 800), 1.),
         ("welcome-apps-min-1", "apps", "", true, true, (720, 540), 1.),
         (
             "welcome-hero-1.5",
@@ -422,14 +308,32 @@ fn welcome_pages_match_goldens() {
             "",
             true,
             true,
-            (1020, 760),
+            (1100, 800),
             1.5,
         ),
     ] {
         let model = page_model(page, guide, ai, colors, size);
         let mut h = harness(model, size.0, size.1, scale);
+        if size == (1100, 800) && guide.is_empty() {
+            assert_fits(&h, page);
+        }
         golden(name, &mut h);
     }
+}
+
+fn assert_fits(h: &Harness, page: &str) {
+    let canvas = h
+        .session
+        .view_nodes()
+        .iter()
+        .find(|n| n.id.ends_with(".canvas"))
+        .expect("tour scroll canvas");
+    assert_eq!(
+        canvas.scroll_limit,
+        Some(0.),
+        "{page} overflows by {:?}",
+        canvas.scroll_limit
+    );
 }
 
 fn runtime() -> (crate::reload::Runtime, Arc<std::sync::Mutex<Vec<String>>>) {
@@ -450,7 +354,7 @@ fn runtime() -> (crate::reload::Runtime, Arc<std::sync::Mutex<Vec<String>>>) {
             _ => "other".to_string(),
         });
     }));
-    runtime.viewport(1020, 760);
+    runtime.viewport(1100, 800);
     runtime
         .stage(UiEvent::Reload)
         .unwrap()

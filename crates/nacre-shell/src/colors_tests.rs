@@ -466,68 +466,6 @@ async fn the_explorer_loads_previews_one_at_a_time_and_applies_over_the_wire() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// The Welcome demo previews only: scenes from the catalog, eight styles, no apply.
-#[tokio::test(flavor = "current_thread")]
-async fn the_welcome_demo_previews_wallpapers_and_styles_and_never_applies() {
-    crate::i18n::init();
-    let tmp = temp("cache-demo");
-    let mut d = daemon("wire-demo", &tmp, true).await;
-    let colors = Colors::new(Some(d.client.clone()));
-    let waiting = colors.demo(false);
-    assert_eq!(
-        waiting["available"], false,
-        "nothing is fetched while the page is hidden"
-    );
-    assert!(d.calls.try_recv().is_err());
-    let (method, _) = next_call_demo(&colors, &mut d).await;
-    assert_eq!(method, PREVIEW);
-    d.gate.add_permits(1);
-    let mut v = colors.demo(true);
-    for _ in 0..600 {
-        if v["available"] == true {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-        v = colors.demo(true);
-    }
-    assert_eq!(v["available"], true, "{v:#}");
-    assert_eq!(v["styles"].as_array().unwrap().len(), 8);
-    assert_eq!(v["styles"][0]["selected"], true);
-    assert_eq!(v["scenes"][0]["name"], "Mountain lake");
-    assert_eq!(v["scenes"][0]["selected"], true);
-    assert_eq!(v["scenes"][0]["thumb"], "colors-thumb-0");
-    assert_eq!(v["swatches"].as_array().unwrap().len(), 4);
-    // Tide and a second scene are previews too.
-    colors.act("style:tide", &stores("studio", ""));
-    let (_, params) = next_call_demo(&colors, &mut d).await;
-    assert_eq!(params["request"]["personality"], "tide");
-    colors.act("choose:1", &stores("studio", ""));
-    let (_, params) = next_call_demo(&colors, &mut d).await;
-    assert_eq!(params["request"]["image"], "/home/me/loop.mp4");
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    while let Ok((method, _)) = d.calls.try_recv() {
-        assert_ne!(method, APPLY);
-    }
-    drop(colors);
-    d.client.stop().await.unwrap();
-    d.server.abort();
-    let _ = std::fs::remove_dir_all(&d.dir);
-    let _ = std::fs::remove_dir_all(&tmp);
-}
-async fn next_call_demo(colors: &Colors, d: &mut Daemon) -> (String, Json) {
-    for _ in 0..600 {
-        if let Ok(call) = d.calls.try_recv() {
-            if call.0 == CATALOG {
-                continue;
-            }
-            return call;
-        }
-        colors.demo(true);
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    panic!("no call reached the daemon");
-}
-
 #[tokio::test(flavor = "current_thread")]
 async fn a_daemon_without_the_methods_gets_no_calls() {
     crate::i18n::init();
@@ -917,4 +855,54 @@ fn settings_wallpaper_and_colors_pages_are_editable_registry_rows() {
             .filter(|r| r["id"].as_str().is_some_and(|id| id.contains(".targets.")))
             .all(|r| r["kind"] == "help")
     );
+}
+
+#[test]
+fn bundled_welcome_is_ready_before_first_paint_and_every_choice_is_immediate() {
+    let colors = Colors::bundled_demo(&root()).unwrap();
+    assert_eq!(colors.state.borrow().demo_cache.len(), 64);
+    let pixels: usize = colors
+        .pictures
+        .borrow()
+        .posters
+        .values()
+        .map(|i| i.as_bytes().len())
+        .sum::<usize>()
+        + colors
+            .pictures
+            .borrow()
+            .thumbs
+            .values()
+            .flatten()
+            .map(|i| i.as_bytes().len())
+            .sum::<usize>();
+    println!("B0133 decoded demo pixels: {pixels} bytes");
+    assert_eq!(colors.pictures.borrow().thumbs.len(), 4);
+    assert_eq!(colors.pictures.borrow().posters.len(), 4);
+    assert_eq!(
+        colors.demo()["available"],
+        true,
+        "cold direct link needs no pump or daemon"
+    );
+    for scene in ["0", "1", "2", "3"] {
+        colors.act(&format!("choose:{scene}"), &stores("studio", ""));
+        for mode in ["dark", "light"] {
+            colors.act(&format!("mode:{mode}"), &stores("studio", ""));
+            for (style, _, _) in STYLES.iter().chain(std::iter::once(&TIDE)) {
+                colors.act(&format!("style:{style}"), &stores("studio", ""));
+                let view = colors.demo();
+                assert_eq!(view["available"], true);
+                assert_eq!(view["busy"], false);
+                assert!(colors.state.borrow().flight.is_none());
+                assert!(!colors.state.borrow().queued);
+                assert!(
+                    view["scenes"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .all(|s| s["thumb"] != "")
+                );
+            }
+        }
+    }
 }

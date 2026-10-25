@@ -174,6 +174,12 @@ STATES = {
     # B0064: the Colors app, the Welcome colours page and the app-theming targets (generated wallpapers, see --wallpapers)
     'colors-app': ([('only', 'qml', ('qml_app', 'colorsApp', 'open', '')), ('only', 'bead', ('shell', 'colorsApp', 'open')), ('sleep', 6.0)],
     [('app_close', 'colors')], 0),
+    # B0133: every Welcome page shares the same private palette and compositor geometry.
+    'welcome-hero': ([('only', 'qml', ('qml_app', 'welcomeApp', 'open', 'home')), ('only', 'bead', ('ui', 'welcomeApp', 'open', 'home'))], [('app_close', 'welcome')], 0),
+    'welcome-shortcuts': ([('only', 'qml', ('qml_app', 'welcomeApp', 'open', 'shortcuts')), ('only', 'bead', ('ui', 'welcomeApp', 'open', 'shortcuts'))], [('app_close', 'welcome')], 0),
+    'welcome-apps': ([('only', 'qml', ('qml_app', 'welcomeApp', 'open', 'apps')), ('only', 'bead', ('ui', 'welcomeApp', 'open', 'apps'))], [('app_close', 'welcome')], 0),
+    'welcome-ready': ([('only', 'qml', ('qml_app', 'welcomeApp', 'open', 'ready')), ('only', 'bead', ('ui', 'welcomeApp', 'open', 'ready'))], [('app_close', 'welcome')], 0),
+    'welcome-help': ([('only', 'qml', ('qml_app', 'welcomeApp', 'open', 'help')), ('only', 'bead', ('ui', 'welcomeApp', 'open', 'help'))], [('app_close', 'welcome')], 0),
     'welcome-colors': ([('only', 'qml', ('qml_app', 'welcomeApp', 'open', 'colors')), ('only', 'bead', ('ui', 'welcomeApp', 'open', 'colors')), ('sleep', 6.0)],
     [('app_close', 'welcome')], 0),
     'settings-colors-app-theming': ([('only', 'qml', ('qml_settings', 'colors/app-theming')), ('only', 'bead', ('shell', 'nacre', 'settings', 'colors/app-theming')), ('sleep', 3.0)],

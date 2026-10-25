@@ -47,7 +47,7 @@ local function header(v)
     end
     modes.id="modes";modes.gap=sp.xs
     return ui.Row{id="header",width="fill",height=64,shrink=0,align="center",gap=14,padding_left=sp.xl,padding_right=sp.xl,
-        ui.Image{id="logo",path="colors/assets/nacre-colors.svg",width=T.icons.hero,height=T.icons.hero,shrink=0,aria_label=ui.tr("bead.colors.title")},
+        ui.Image{id="logo",path="colors/assets/nacre-colors.themed.svg",width=T.icons.hero,height=T.icons.hero,shrink=0,aria_label=ui.tr("bead.colors.title")},
         ui.Text{id="title",text=ui.tr("bead.colors.title"),height=28,width=200,shrink=0,font_size=px(tx.title)},
         ui.Box{id="space",grow=1,height=1},
         kit.TabStrip{id="tabs",items=tabs,on_change="colors.do",change_arg=function(id) return "page:"..id end},

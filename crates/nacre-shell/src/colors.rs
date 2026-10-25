@@ -225,6 +225,8 @@ struct Flight {
 }
 #[derive(Default)]
 struct State {
+    /// Offline demo palettes, keyed by image/mode/style; empty in the Colors app.
+    demo_cache: BTreeMap<String, Json>,
     catalog: Option<Catalog>,
     catalog_call: Option<CallTicket>,
     catalog_failed: bool,
@@ -245,6 +247,7 @@ struct State {
 #[derive(Default)]
 struct Pictures {
     poster: Option<(String, Option<image::DynamicImage>)>,
+    posters: BTreeMap<String, image::DynamicImage>,
     thumbs: BTreeMap<String, Option<image::DynamicImage>>,
     rendered: BTreeMap<String, Arc<[u8]>>,
 }
@@ -282,6 +285,70 @@ impl Colors {
             width: Cell::new(1100),
             photo_box: Cell::new((0., 0.)),
         }
+    }
+    /// Welcome's bundled demo is ready before its first frame, including cold deep links.
+    /// Generated through Nacre's helper, never through an engine implementation in Bead.
+    pub fn bundled_demo(root: &std::path::Path) -> Result<Self, Box<dyn std::error::Error>> {
+        let folder = root.join("welcome/demo");
+        let bundle: Json = serde_json::from_slice(&std::fs::read(folder.join("palettes.json"))?)?;
+        let scenes = bundle["scenes"]
+            .as_array()
+            .filter(|s| s.len() == DEMO_SCENES)
+            .ok_or("Incomplete bundled Welcome scenes")?;
+        let demo = Self::new(None);
+        let mut state = demo.state.borrow_mut();
+        let mut pictures = demo.pictures.borrow_mut();
+        let mut catalog = Catalog::default();
+        for (index, scene) in scenes.iter().enumerate() {
+            let path = folder.join(scene["image"].as_str().ok_or("Missing demo image")?);
+            let thumb = folder.join(
+                scene["thumbnail"]
+                    .as_str()
+                    .ok_or("Missing demo thumbnail")?,
+            );
+            let (path, thumb) = (
+                path.to_string_lossy().into_owned(),
+                thumb.to_string_lossy().into_owned(),
+            );
+            pictures.posters.insert(path.clone(), image::open(&path)?);
+            pictures
+                .thumbs
+                .insert(thumb.clone(), Some(image::open(&thumb)?));
+            for mode in ["dark", "light"] {
+                let palettes = scene["palettes"][mode]
+                    .as_object()
+                    .filter(|p| p.len() == 8)
+                    .ok_or("Incomplete bundled Welcome palettes")?;
+                for (style, colours) in palettes {
+                    if CARD_ROLES
+                        .iter()
+                        .any(|role| colours[*role].as_str().and_then(rgba).is_none())
+                    {
+                        return Err("Invalid bundled Welcome colour role".into());
+                    }
+                    let request = json!({"image": path, "mode": mode, "personality": style});
+                    state.demo_cache.insert(
+                        demo_key(&request),
+                        json!({
+                        "id": format!("demo-{index}-{mode}-{style}"), "request": request,
+                        "colours": colours, "thumbnail": path}),
+                    );
+                }
+            }
+            catalog.entries.push(Entry {
+                path,
+                thumbnail: thumb,
+                name: scene["name"].as_str().unwrap_or("").into(),
+                dynamic: false,
+            });
+        }
+        let first = catalog.entries[0].path.clone();
+        state.catalog = Some(catalog);
+        demo.choose(&mut state, &first, false);
+        drop(pictures);
+        drop(state);
+        demo.refresh_poster(&demo.state.borrow());
+        Ok(demo)
     }
     #[cfg(test)]
     pub fn with_sources(mut self, store: Arc<dyn Source>, active: Arc<dyn Source>) -> Self {
@@ -369,8 +436,13 @@ impl Colors {
     /// The request for a freshly chosen wallpaper: defaults, its saved choice, the image.
     fn choose(&self, st: &mut State, image: &str, compare: bool) {
         let saved = self.saved()["wallpapers"][image].clone();
+        let mode = if st.demo_cache.is_empty() {
+            self.active().1
+        } else {
+            st.options["mode"].as_str().unwrap_or("dark").into()
+        };
         let mut options = json!({
-            "mode": self.active().1, "personality": "natural", "backgroundFromWallpaper": false,
+            "mode": mode, "personality": "natural", "backgroundFromWallpaper": false,
             "overrides": {}, "brightness": 0, "saturation": 1, "hour": local_hour(),
             "autoMode": false, "tideAutomatic": false, "timeTint": false, "workspaceColors": false
         });
@@ -397,6 +469,10 @@ impl Colors {
     fn changed(&self, st: &mut State) {
         st.generation += 1;
         st.queued = true;
+        if let Some(preview) = st.demo_cache.get(&demo_key(&st.options)) {
+            st.preview = Some(preview.clone());
+            st.queued = false;
+        }
         st.error.clear();
         st.status.clear();
     }
@@ -574,23 +650,28 @@ impl Colors {
         let path = st.preview.as_ref().and_then(|p| p["thumbnail"].as_str());
         let mut pictures = self.pictures.borrow_mut();
         if pictures.poster.as_ref().map(|(held, _)| held.as_str()) != path {
-            pictures.rendered.clear();
-            pictures.poster = path.map(|p| (p.to_owned(), player_art::decode(&POSTERS, p)));
+            if st.demo_cache.is_empty() {
+                pictures.rendered.clear();
+            }
+            pictures.poster = path.map(|p| {
+                (
+                    p.to_owned(),
+                    pictures
+                        .posters
+                        .get(p)
+                        .cloned()
+                        .or_else(|| player_art::decode(&POSTERS, p)),
+                )
+            });
         }
     }
 
-    /// The Welcome colours page demo (B0064): the first wallpapers of the catalog as scenes, the
-    /// eight styles, dark/light and the preview's colours. It only previews (`colors.preview`);
-    /// nothing is applied to the desktop, so no snapshot or restore is needed. `on` is true while
-    /// the page is shown: the catalog and the first preview are fetched then, not before.
-    pub fn demo(&self, on: bool) -> Json {
-        if on {
-            self.pump();
-            self.refresh_poster(&self.state.borrow());
-        }
+    /// Welcome's offline demo: the bundled palette and pixels are prepared at app startup.
+    pub fn demo(&self) -> Json {
+        self.refresh_poster(&self.state.borrow());
         let st = self.state.borrow();
         let Some(preview) = st.preview.as_ref() else {
-            return json!({"id": "demo", "available": false, "loading": on && self.explorer() && st.error.is_empty(),
+            return json!({"id": "demo", "available": false, "loading": false,
                 "error": st.error});
         };
         let catalog = st.catalog.as_ref();
@@ -1114,6 +1195,13 @@ impl Colors {
             }
         }
     }
+}
+
+fn demo_key(request: &Json) -> String {
+    format!(
+        "{}|{}|{}",
+        request["image"], request["mode"], request["personality"]
+    )
 }
 
 /// The image fitted whole inside `w`x`h` on a transparent canvas, or cropped to fill it.

@@ -64,7 +64,7 @@ local function pill(o)
         ui.Text{id=o.id.."-label",text=o.label,height=lh,grow=1,font_size=size,text_align="center",color=ink}}
 end
 local function logo(id,size)
-    return ui.Image{id=id,path="welcome/assets/nacre-logo.svg",width=size,height=size,shrink=0,aria_label=ui.tr("bead.welcome.hero-name")}
+    return ui.Image{id=id,path="welcome/assets/nacre-logo.themed.svg",width=size,height=size,shrink=0,aria_label=ui.tr("bead.welcome.hero-name")}
 end
 local function column(id,gap,...)
     return ui.Column{id=id,width="fill",shrink=0,gap=gap,...}
@@ -111,8 +111,8 @@ function pages.welcome()
         para("hero-tagline",ui.tr("bead.welcome.hero-tagline"),tagSize,{align="center"}),
         muted("hero-tour",ui.tr("bead.welcome.hero-tour"),11,{align="center"})}
 end
--- Your colors: the live demo (wallpaper scenes, styles, dark/light, a miniature desktop and the
--- palette it gives) over `colors.preview`; without the colours methods, the window's own palette.
+-- Your colors: bundled scenes and baked palettes, ready before the first frame.
+-- The adapter provides cached data; the same kit draws the miniature desktop and role samples.
 local function demo(v)
     local labels={brand=ui.tr("bead.colors.card-brand"),files=ui.tr("bead.colors.card-files"),
         lines={ui.tr("bead.colors.card-documents"),ui.tr("bead.colors.card-pictures"),ui.tr("bead.colors.card-projects")},
@@ -141,7 +141,7 @@ local function demo(v)
             muted("demo-state",note~="" and note or ui.tr("bead.welcome.colors-more"),10),roles}
     end
     local tw=(CW-36)/4
-    local th=math.max(70,math.min(180,tw*.56,CH*.22))
+    local th=math.max(70,math.min(180,tw*.56,CH*.18))
     local scenes={}
     for _,sc in ipairs(v.scenes) do
         table.insert(scenes,ui.Column{id="scene-"..sc.id,width=tw,shrink=0,gap=7,
@@ -172,40 +172,44 @@ local function demo(v)
                 kit.ChipRow{id="styles",items=chips,per_row=CW>=900 and 8 or 4,radius=rd.full,on_change="welcome.do",change_arg=function(id) return "demo:style:"..id end}},
             ui.Row(modes)},
         muted("style-text",v.style_text,10),
-        kit.PreviewCard{id="preview",width=CW,height=math.max(210,math.min(CH-380,420)),colors=v.colors,image=v.has_photo and "colors-card" or "",
+        kit.PreviewCard{id="preview",width=CW,height=math.max(210,math.min(CH-414,280)),colors=v.colors,image=v.has_photo and "colors-card" or "",
             aria_label=ui.tr("bead.colors.preview-aria"),labels=labels},
         roles,
         muted("demo-state",status,10)}
 end
 function pages.colors()
-    local can=get("welcome.can.colors")
     return column("colors",12,
         para("colors-title",ui.tr("bead.welcome.colors-title"),25),
         muted("colors-intro",ui.tr("bead.welcome.colors-intro"),12),
-        ui.Repeat{id="demo-view",model=ui.bind("welcome.demo"),key="id",render=demo},
-        muted("colors-more",ui.tr("bead.welcome.colors-more"),10),
-        ui.Row{id="colors-actions",width="fill",height=34,shrink=0,
-            pill{id="colors-open",label=can and ui.tr("bead.welcome.colors-open") or ui.tr("bead.welcome.button-not-installed"),
-                on=can and act("route:colors") or nil}})
+        ui.Repeat{id="demo-view",model=ui.bind("welcome.demo"),key="id",render=demo})
 end
 function pages.shortcuts()
     local state=get("welcome.shortcuts.state")
     local note=state=="unavailable" and ui.tr("bead.welcome.shortcuts-unavailable")
-        or (state=="empty" and ui.tr("bead.welcome.shortcuts-empty") or (state=="loading" and ui.tr("bead.welcome.shortcuts-loading") or ""))
+        or (state=="empty" and ui.tr("bead.welcome.shortcuts-empty") or "")
     local titleW=CW*.43-20
     local keyW=CW*.57-28
     local size=px(10.5)
     local head={para("shortcuts-title",ui.tr("bead.welcome.shortcuts-title"),25),
         muted("shortcuts-intro",ui.tr("bead.welcome.shortcuts-intro"),11)}
     if note~="" then table.insert(head,muted("shortcuts-state",note,10.5)) end
-    table.insert(head,ui.Column{id="shortcut-list",width="fill",shrink=0,gap=8,
-            ui.Repeat{id="shortcut-rows",model=ui.bind("welcome.shortcuts"),key="id",render=function(item)
-                local height=math.max(58,math.max(textH(item.title,size,titleW),textH(item.key,size,keyW))+24)
-                return ui.Row{id="shortcut",width="fill",height=height,shrink=0,gap=6,radius=10,fill="surfaceContainer",
-                    padding_left=14,padding_right=14,padding_top=12,
-                    ui.Text{id="title",width=titleW,height=height-24,text=item.title,font_size=size,color="onSurface"},
-                    ui.Text{id="key",width=1,grow=1,height=height-24,text=item.key,font_size=size,family="IBM Plex Mono",color="primary"}}
-            end}})
+    local groups,order={},{}
+    for _,item in ipairs(get("welcome.shortcuts")) do
+        local group=item.group and item.group~="" and item.group or ui.tr(item.menu and "bead.welcome.shortcuts-apps" or "bead.welcome.shortcuts-other")
+        if not groups[group] then groups[group]={};table.insert(order,group) end
+        table.insert(groups[group],item)
+    end
+    for index,group in ipairs(order) do
+        local children={para("group-title",group,13)}
+        for _,item in ipairs(groups[group]) do
+            local height=math.max(58,math.max(textH(item.title,size,titleW),textH(item.key,size,keyW))+24)
+            table.insert(children,ui.Row{id=item.id,width="fill",height=height,shrink=0,gap=6,radius=10,fill="surfaceContainer",
+                padding_left=14,padding_right=14,padding_top=12,
+                ui.Text{id="title",width=titleW,height=height-24,text=item.title,font_size=size,color="onSurface"},
+                ui.Text{id="key",width=1,grow=1,height=height-24,text=item.key,font_size=size,family="IBM Plex Mono",color="primary"}})
+        end
+        table.insert(head,column("shortcut-group-"..index,8,table.unpack(children)))
+    end
     table.insert(head,muted("shortcuts-note",ui.tr("bead.welcome.shortcuts-note"),10))
     return column("shortcuts",14,table.unpack(head))
 end
@@ -287,7 +291,7 @@ local function section()
 end
 local header=ui.Column{id="header",width="fill",height=64,shrink=0,
     ui.Row{id="header-row",width="fill",height=63,align="center",padding_left=sp.xl,padding_right=sp.xl,gap=sp.lg,
-        ui.Image{id="header-logo",path="welcome/assets/nacre-logo.svg",width=ic.hero,height=ic.hero,shrink=0},
+        ui.Image{id="header-logo",path="welcome/assets/nacre-logo.themed.svg",width=ic.hero,height=ic.hero,shrink=0},
         ui.Text{id="header-title",text=ui.tr("bead.welcome.title"),height=math.ceil(px(tx.title)*1.4),font_size=px(tx.title),width=1,grow=1,color="onSurface"},
         ui.Text{id="header-section",text=section(),width=240,height=math.ceil(px(tx.caption)*1.4),font_size=px(tx.caption),
             text_align="right",color="onSurfaceVariant"}},

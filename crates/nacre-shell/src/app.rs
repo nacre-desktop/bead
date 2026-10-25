@@ -517,7 +517,10 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
     let client = daemon
         .map(|socket| {
             let mut topics: Vec<String> = TOPICS.iter().map(|t| t.to_string()).collect();
-            if name == "colors" || name == "welcome" {
+            if name == "welcome" {
+                topics.push(welcome::SHORTCUTS.into());
+            }
+            if name == "colors" {
                 topics.extend(colors_app::TOPICS.iter().map(|t| t.to_string()));
             } else {
                 // Every app wears the live palette (B0068): the wallpaper topic carries it.

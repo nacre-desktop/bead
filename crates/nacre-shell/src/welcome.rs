@@ -2,18 +2,20 @@
 //! B0059 Welcome app adapter. The tour (pages, app tiles, help, links) is `shell/welcome/*.luau`
 //! data and markup. This file supplies only what a view cannot know: the window size for the
 //! layout, which apps this desktop can open, the live shortcut rows (the daemon's
-//! `learn.shortcuts` menu route, the same bindings the launcher lists) and the effects of the
+//! `shortcuts` topic, the same bindings Settings lists) and the effects of the
 //! `welcome.do` host action. The first-run trigger and its once-only claim stay with Nacre
 //! (`nacre-helper welcome`); Bead renders the window it is asked to open.
-use crate::nacre_source::{CallGuard, CallTicket, CallWake, Client};
-use bead::core::{Stores, Value, source::Source};
+use crate::nacre_source::{CallWake, Client};
+use bead::core::{
+    Stores, Value,
+    source::{Source, Subscription},
+};
 use serde_json::{Value as Json, json};
 use std::{cell::RefCell, collections::BTreeMap, sync::Arc};
 
 /// Node id of the footer's Next button (`shell/welcome/main.luau`): Enter activates it.
 pub const NEXT: &str = "welcome.body.footer.next";
-const QUERY: &str = "menu.query";
-const SHORTCUTS_ROUTE: &str = "learn.shortcuts";
+pub const SHORTCUTS: &str = "shortcuts";
 const AI_TOPIC: &str = "ai.chat";
 const BRAIN_TOPIC: &str = "brain.recent";
 /// Brain has no daemon route yet: its window is this command (QML ran it through `uwsm app`).
@@ -28,18 +30,12 @@ const LINKS: [(&str, &str); 4] = [
     ("cachyos", "https://wiki.cachyos.org/"),
 ];
 
-#[derive(Default)]
-struct State {
-    /// Boot id the shortcut rows were last requested for: a restarted daemon asks again.
-    asked: Option<String>,
-    pending: Option<CallTicket>,
-    rows: Vec<Json>,
-    failed: bool,
-}
 pub struct Welcome {
     client: Option<Client>,
-    state: RefCell<State>,
-    wake: RefCell<Option<CallWake>>,
+    shortcuts: Option<Arc<dyn Source>>,
+    subscription: RefCell<Option<Subscription>>,
+    #[cfg(test)]
+    fixture: Option<Vec<Json>>,
     viewport: std::cell::Cell<(u32, u32)>,
     /// The colours page demo (B0064): the Colors explorer's preview loop, never applying.
     demo: crate::colors::Colors,
@@ -55,12 +51,21 @@ pub struct Outcome {
 impl Welcome {
     pub fn new(client: Option<Client>) -> Self {
         Self {
-            state: Default::default(),
-            wake: Default::default(),
-            viewport: std::cell::Cell::new((1020, 760)),
+            shortcuts: client
+                .as_ref()
+                .and_then(|c| c.topic(SHORTCUTS).ok())
+                .map(|t| Arc::new(t) as Arc<dyn Source>),
+            subscription: Default::default(),
+            #[cfg(test)]
+            fixture: None,
+            viewport: std::cell::Cell::new((1100, 800)),
             demo: crate::colors::Colors::new(client.clone()),
             client,
         }
+    }
+    fn with_demo(mut self, root: &std::path::Path) -> Result<Self, Box<dyn std::error::Error>> {
+        self.demo = crate::colors::Colors::bundled_demo(root)?;
+        Ok(self)
     }
     /// Gives the demo's image slots their pixels (`@icon:colors-*`).
     pub fn attach_images(&self, scene: &mut bead::render::Scene) {
@@ -68,12 +73,13 @@ impl Welcome {
     }
     /// Shortcut rows from a fixed list (previews and tests): no daemon call is made.
     #[cfg(test)]
-    pub fn with_shortcuts(self, rows: Vec<Json>) -> Self {
-        *self.state.borrow_mut() = State {
-            asked: Some("fixture".into()),
-            rows,
-            ..State::default()
-        };
+    pub fn with_shortcuts(mut self, rows: Vec<Json>) -> Self {
+        self.fixture = Some(rows);
+        self
+    }
+    #[cfg(test)]
+    pub fn with_source(mut self, source: Arc<dyn Source>) -> Self {
+        self.shortcuts = Some(source);
         self
     }
     pub fn set_viewport(&self, width: u32, height: u32) {
@@ -81,20 +87,10 @@ impl Welcome {
     }
     /// The reply wake: a finished daemon call projects again.
     pub fn subscribe(&self, wake: CallWake) {
-        self.demo.subscribe(wake.clone());
-        *self.wake.borrow_mut() = Some(wake);
-    }
-    fn ready(&self, method: &str) -> Option<(String, std::time::Duration)> {
-        let client = self.client.as_ref()?;
-        let status = client.status();
-        let method = status.methods.get(method).filter(|m| m.v == 1)?;
-        if !client.snapshot().connected {
-            return None;
+        if let Some(source) = &self.shortcuts {
+            let changed = wake.clone();
+            *self.subscription.borrow_mut() = source.subscribe(Arc::new(move |_| changed())).ok();
         }
-        Some((
-            status.boot?,
-            std::time::Duration::from_millis(u64::from(method.timeout).clamp(1, 10_000)),
-        ))
     }
     /// An optional component counts as installed while the daemon publishes its topic.
     fn published(&self, topic: &str) -> bool {
@@ -107,58 +103,26 @@ impl Welcome {
     fn can_colors(&self) -> bool {
         crate::app::APPS.contains(&"colors")
     }
-    fn ask(&self, state: &mut State) {
-        let Some((boot, timeout)) = self.ready(QUERY) else {
-            return;
-        };
-        let params = json!({"query": "", "mode": "apps", "route": SHORTCUTS_ROUTE});
-        if let Some(client) = &self.client
-            && let Ok(ticket) = client.begin_call(
-                QUERY.into(),
-                params,
-                timeout,
-                CallGuard {
-                    boot: boot.clone(),
-                    version: 1,
-                },
-                self.wake.borrow().clone(),
-            )
-        {
-            state.pending = Some(ticket);
-            state.asked = Some(boot);
+    pub fn project(&self, _stores: &Stores) -> BTreeMap<String, Value> {
+        let snapshot = self.shortcuts.as_ref().map(|s| s.snapshot());
+        let mut found = snapshot
+            .as_ref()
+            .map_or_else(Vec::new, |s| rows(&s.data).unwrap_or_default());
+        #[cfg(test)]
+        if let Some(fixture) = &self.fixture {
+            found = fixture.clone();
         }
-    }
-    pub fn project(&self, stores: &Stores) -> BTreeMap<String, Value> {
-        let on_shortcuts =
-            matches!(stores.get("welcome.step"), Some(Value::Text(p)) if p == "shortcuts");
-        let mut state = self.state.borrow_mut();
-        if let Some(ticket) = &mut state.pending
-            && let Some(reply) = ticket.try_take()
-        {
-            state.pending = None;
-            match reply.map(|v| rows(&v)) {
-                Ok(Some(found)) => (state.rows, state.failed) = (found, false),
-                _ => state.failed = true,
-            }
-        }
-        if on_shortcuts
-            && state.pending.is_none()
-            && let Some((boot, _)) = self.ready(QUERY)
-            && state.asked.as_deref() != Some(boot.as_str())
-        {
-            state.failed = false;
-            self.ask(&mut state);
-        }
-        let shown = if !state.rows.is_empty() {
+        let available = snapshot
+            .as_ref()
+            .is_some_and(|s| s.connected && s.data["health"]["available"] == true);
+        #[cfg(test)]
+        let available = available || self.fixture.is_some();
+        let shown = if !found.is_empty() {
             "ready"
-        } else if state.pending.is_some()
-            || (!state.failed && state.asked.is_none() && self.ready(QUERY).is_some())
-        {
-            "loading"
-        } else if state.failed || state.asked.is_none() {
-            "unavailable"
-        } else {
+        } else if available {
             "empty"
+        } else {
+            "unavailable"
         };
         let (width, height) = self.viewport.get();
         let flag = |name: &str, on: bool| (format!("welcome.can.{name}"), Value::Bool(on));
@@ -172,13 +136,11 @@ impl Welcome {
                 "brain",
                 self.published(BRAIN_TOPIC) && on_path(BRAIN_COMMAND),
             ),
+            ("welcome.demo".into(), Value::list(vec![self.demo.demo()])),
             (
-                "welcome.demo".into(),
-                Value::list(vec![self.demo.demo(
-                    matches!(stores.get("welcome.step"), Some(Value::Text(p)) if p == "colors"),
-                )]),
+                "welcome.shortcuts".into(),
+                Value::list(std::mem::take(&mut found)),
             ),
-            ("welcome.shortcuts".into(), Value::list(state.rows.clone())),
             ("welcome.shortcuts.state".into(), Value::Text(shown.into())),
         ])
     }
@@ -236,11 +198,11 @@ impl Welcome {
     }
 }
 
-/// `learn.shortcuts` rows: the action is the item name, the keys its description. `None` when the
-/// reply is not a menu result.
+/// Published shortcuts topic: preserve stable IDs, order and compositor submap headings.
 fn rows(reply: &Json) -> Option<Vec<Json>> {
-    let order = reply.get("order")?.as_array()?;
-    let items = reply.get("items")?.as_object()?;
+    let entities = reply.get("items")?;
+    let order = entities.get("order")?.as_array()?;
+    let items = entities.get("items")?.as_object()?;
     let clip = |text: &str| text.chars().take(MAX_TEXT).collect::<String>();
     Some(
         order
@@ -248,10 +210,13 @@ fn rows(reply: &Json) -> Option<Vec<Json>> {
             .filter_map(Json::as_str)
             .filter_map(|id| Some((id, items.get(id)?)))
             .filter_map(|(id, item)| {
-                let title = clip(item.get("name")?.as_str()?);
-                let key = clip(item.get("description").and_then(Json::as_str).unwrap_or(""));
-                (!title.is_empty() && !key.is_empty())
-                    .then(|| json!({"id": id, "title": title, "key": key}))
+                let title = clip(item.get("description")?.as_str()?);
+                let key = clip(item.get("key").and_then(Json::as_str).unwrap_or(""));
+                (!title.is_empty() && !key.is_empty()).then(|| {
+                    json!({"id": id, "title": title, "key": key,
+                        "group": clip(item["submap"].as_str().unwrap_or("")),
+                        "menu": item["menu"].is_string()})
+                })
             })
             .take(MAX_ROWS)
             .collect(),
@@ -306,15 +271,15 @@ pub fn window_spec(
     fallback.motion = None;
     fallback.primitives.clear();
     fallback.offset = (0., 0.);
-    fallback.width = 1020.;
-    fallback.bounds = bead::render::Rect::new(0., 0., 1020., 760.);
+    fallback.width = 1100.;
+    fallback.bounds = bead::render::Rect::new(0., 0., 1100., 800.);
     let cold = fallback.clone();
     Ok(bead::wayland::WindowSpec {
         app_id: "nacre-welcome".into(),
         title: crate::i18n::tr("bead.welcome.title", &[]),
-        size: (1020, 760),
+        size: (1100, 800),
         size_for_output: None,
-        min_size: (720, 540),
+        min_size: (1100, 800),
         fallback,
         factory: Arc::new(move |_| {
             let session = bead::ui::Session::new(
@@ -326,7 +291,11 @@ pub fn window_spec(
             );
             crate::reload::Runtime::new(session)
                 .with_trace(trace)
-                .with_welcome(Welcome::new(client.clone()))
+                .with_welcome(
+                    Welcome::new(client.clone())
+                        .with_demo(&root)
+                        .map_err(|e| e.to_string())?,
+                )
                 .map(|r| Box::new(r) as Box<dyn bead::wayland::SceneSource>)
                 .map_err(|e| e.to_string())
         }),
