@@ -3022,3 +3022,7 @@ The prototype is rejected; no runtime change is integrated.
 Pixel-error superiority and general dragging are unproven; no physical-output,
 Intel, laptop memory-cap or complete smoothness acceptance is claimed.
 [GL, five-pair memory, stage traces and rejected patch](docs/specs/0126-instant-drag.md).
+
+Owner continuation 2026-10-25: accept the measured B0126 thumb candidate and enable
+it by default. Continue dispatch, coherent fill/handle and local slider damage,
+in that order; revised 120 Hz total p95 ≤25 ms gate. Old rejection is historical.

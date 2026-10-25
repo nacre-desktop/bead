@@ -1372,6 +1372,178 @@ fn tiles_dispatch_host_actions_and_the_detail_page_opens_in_place() -> bead_test
 }
 
 #[test]
+fn control_center_slider_drag_visual_maps_thumb_to_hit_range() -> bead_test::Result<()> {
+    use bead::wayland::{SceneSource, UiEvent};
+
+    let h = harness(base(), "home", 1.)?;
+    let mut runtime = crate::reload::Runtime::new(h.session).with_control_center(offline())?;
+    let scene = runtime
+        .stage(UiEvent::Relayout)?
+        .expect("control-center relayout scene");
+    runtime.commit();
+
+    let visuals = runtime.drag_visuals();
+    let visual = visuals
+        .iter()
+        .find(|visual| visual.id.contains("tile-volume") && visual.id.ends_with(".thumb"))
+        .expect("live volume slider exports its thumb visual");
+    let layer = scene
+        .layers
+        .iter()
+        .find(|layer| layer.id == visual.id)
+        .expect("thumb has a matching scene layer");
+    assert_eq!(
+        layer.own.len(),
+        1,
+        "thumb must map to exactly one primitive"
+    );
+    assert_eq!(
+        layer.subtree_end, layer.own.end,
+        "thumb layer must have no children"
+    );
+
+    let bead::render::Primitive::Rounded { rect, fill, .. } = &scene.primitives[layer.own.start]
+    else {
+        panic!("kit slider thumb must be a rounded primitive");
+    };
+    assert!(fill[3] > 0, "the scene primitive must be visible");
+    assert!(
+        (rect.w - 8.).abs() < 0.01,
+        "thumb width must remain 8 layout px"
+    );
+    assert!(
+        (rect.h - 16.).abs() < 0.01,
+        "thumb height must remain 16 layout px"
+    );
+
+    let node = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| node.id == visual.id)
+        .expect("thumb view node");
+    let bead::core::Value::List(records) = node.metadata.as_ref().expect("thumb metadata") else {
+        panic!("thumb metadata records");
+    };
+    let motion = records[0]
+        .get("pointer_motion")
+        .expect("pointer-motion metadata");
+    let key = motion
+        .get("key")
+        .and_then(Json::as_str)
+        .expect("slider preview key");
+    let fraction = motion
+        .get("fraction")
+        .and_then(Json::as_f64)
+        .expect("slider fraction") as f32;
+    let hits: Vec<_> = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .filter(|node| node.preview_key == key)
+        .collect();
+    let first = hits.first().expect("slider hit regions");
+    let first_rect = bead::ui::rect(&first.draw);
+    let expected_pointer_start = first_rect.x + first.preview_inset;
+    let expected_pointer_end = hits
+        .iter()
+        .map(|hit| {
+            let rect = bead::ui::rect(&hit.draw);
+            rect.x + rect.w
+        })
+        .fold(f32::NEG_INFINITY, f32::max)
+        - first.preview_inset;
+    assert!((visual.pointer.0 - expected_pointer_start).abs() < 0.01);
+    assert!((visual.pointer.1 - expected_pointer_end).abs() < 0.01);
+
+    let current_left = visual.travel.0 + fraction * (visual.travel.1 - visual.travel.0);
+    assert!(
+        (rect.x - current_left).abs() < 0.01,
+        "thumb left must match slider fraction"
+    );
+    assert!(
+        (rect.x + rect.w / 2.
+            - (visual.pointer.0 + fraction * (visual.pointer.1 - visual.pointer.0)))
+            .abs()
+            < 0.01
+    );
+
+    let press_x = rect.x + rect.w / 2.;
+    let press_y = visual.grab.y + visual.grab.h / 2.;
+    runtime.stage(UiEvent::Click {
+        x: press_x,
+        y: press_y,
+    })?;
+    runtime.commit();
+    let pressed = runtime
+        .drag_visuals()
+        .into_iter()
+        .find(|candidate| candidate.id == visual.id)
+        .expect("slider visual remains available after press");
+    let target_fraction = 0.373;
+    let target_x = pressed.pointer.0 + target_fraction * (pressed.pointer.1 - pressed.pointer.0);
+    let target_y = pressed.grab.y + pressed.grab.h / 2.;
+    let travel = pressed.travel;
+    let moved_scene = runtime
+        .stage(UiEvent::Drag {
+            x: target_x,
+            y: target_y,
+        })?
+        .expect("drag scene");
+    runtime.commit();
+    let moved = runtime
+        .drag_visuals()
+        .into_iter()
+        .find(|candidate| candidate.id == visual.id)
+        .expect("slider visual remains available after local drag feedback");
+    let moved_layer = moved_scene
+        .layers
+        .iter()
+        .find(|layer| layer.id == moved.id)
+        .expect("moved layer");
+    let bead::render::Primitive::Rounded {
+        rect: moved_rect, ..
+    } = &moved_scene.primitives[moved_layer.own.start]
+    else {
+        panic!("kit slider thumb remains rounded after drag");
+    };
+    let moved_node = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| node.id == moved.id)
+        .expect("moved thumb node");
+    let bead::core::Value::List(records) = moved_node.metadata.as_ref().expect("moved metadata")
+    else {
+        panic!("moved thumb metadata records");
+    };
+    let moved_fraction = records[0]
+        .get("pointer_motion")
+        .and_then(|value| value.get("fraction"))
+        .and_then(Json::as_f64)
+        .expect("moved slider fraction") as f32;
+    assert!((moved_fraction - target_fraction).abs() < 0.002);
+    assert!(
+        moved_fraction.fract() != 0.,
+        "drag feedback must retain a continuous value"
+    );
+    // Layout snaps independently at each pose; preserve the off-step value while
+    // comparing the raster position within one logical pixel, not float epsilon.
+    assert!(
+        (moved_rect.x - (travel.0 + target_fraction * (travel.1 - travel.0))).abs() <= 1.,
+        "thumb={} expected={}",
+        moved_rect.x,
+        travel.0 + target_fraction * (travel.1 - travel.0)
+    );
+    assert!(
+        (moved_rect.x + moved_rect.w / 2. - target_x).abs() <= 1.,
+        "centre={} pointer={target_x}",
+        moved_rect.x + moved_rect.w / 2.
+    );
+    Ok(())
+}
+
+#[test]
 fn the_profile_picker_and_one_shot_tiles_dispatch_their_verbs() -> bead_test::Result<()> {
     let mut out = base();
     let Value::List(items) = out["cc.src"].clone() else {

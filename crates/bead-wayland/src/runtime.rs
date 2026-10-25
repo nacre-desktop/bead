@@ -1778,6 +1778,7 @@ impl App {
                 .info(&output)
                 .map_or(120, |i| i.scale_factor.max(1) as u32 * 120);
             Ok(Surface {
+                pointer_visual: None,
                 decorations: None,
                 background: None,
                 background_size: None,

@@ -1,6 +1,11 @@
 # B0126 — instant slider drag
 
-Status: rejected experiment; no runtime change is integrated. The preserved
+Status: owner accepted the measured candidate on 2026-10-25; the measured thumb path is now enabled by default. The new continuation gate is 120 Hz total p95 ≤25 ms with fill and
+handle derived from the same value in every frame. Improvements proceed in order:
+immediate fd dispatch, shared slider pose, then slider-only updates. The prior
+21/12 ms rejection below is historical, superseded by this explicit acceptance.
+
+The preserved
 [patch](evidence/0126/compositor-knob.rejected.patch) applies to `61e73507`.
 It is evidence for further investigation, not an accepted implementation.
 
@@ -180,10 +185,13 @@ and process SwapPss; captures and source/renderer guards passed.
 
 ## Verdict and follow-up
 
-The prototype also has a known identity defect: simultaneous SliderTiles sharing
-an action key can union hit ranges and select the first thumb. General support
-needs unique authored identity and clipped/stacked visual handling. Reintroducing
-the patch requires those fixes, complete smoothness/parity proof, and all gates.
+The earlier claim that Nacre volume/mic sliders share an action key was wrong:
+their keys already include the source-specific first/last action arguments.
+Generic instances can still reuse a key; descriptor matching now also checks
+the authored slider scope. Fill/handle identity and clipped/stacked handling
+remain part of the continuation. The owner accepted the measured candidate
+despite the old 21/12 ms gates; the new 25 ms gate applies to subsequent work.
 The task does not authorize changing the daily desktop to obtain physical-output
 measurements. No installed software, configs, daemon, widgets, picker or lips
-were changed. Product lines added/removed: **0/0**.
+were changed in the initial investigation. The default-on continuation changes
+framework pointer visuals and kit metadata, preserving existing GL policies.

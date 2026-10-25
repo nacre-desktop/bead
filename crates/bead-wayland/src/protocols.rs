@@ -148,6 +148,7 @@ impl CompositorHandler for App {
             {
                 self.draw(i, qh);
             }
+            self.pointer_visual_commit(i);
         }
     }
     fn surface_enter(
@@ -1109,20 +1110,29 @@ impl App {
         match event.kind {
             PointerEventKind::Motion { .. } | PointerEventKind::Enter { .. } => {
                 if self.pointer_pressed {
+                    if self.pointer_visual_motion(bar, x, y) {
+                        return;
+                    }
                     self.view_event(panel, UiEvent::Drag { x, y });
                 } else {
                     self.view_event(panel, UiEvent::Hover { x, y });
                 }
             }
             PointerEventKind::Leave { .. } => {
+                if self.surfaces[bar].pointer_visual.is_some() {
+                    self.pointer_visual_release(bar);
+                    self.view_event(panel, UiEvent::Release);
+                }
                 self.pointer_pressed = false;
                 self.view_event(panel, UiEvent::Hover { x: -1., y: -1. });
             }
             PointerEventKind::Press { button: 0x110, .. } => {
                 self.pointer_pressed = true;
+                self.pointer_visual_begin(bar, x, y);
                 self.view_event(panel, UiEvent::Click { x, y });
             }
             PointerEventKind::Release { button: 0x110, .. } => {
+                self.pointer_visual_release(bar);
                 self.pointer_pressed = false;
                 self.view_event(panel, UiEvent::Release);
             }

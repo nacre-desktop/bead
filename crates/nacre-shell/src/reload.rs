@@ -2453,6 +2453,57 @@ impl Runtime {
 }
 
 impl SceneSource for Runtime {
+    fn drag_visuals(&self) -> Vec<bead::wayland::DragVisual> {
+        use bead::core::Value;
+
+        self.session
+            .view_nodes()
+            .iter()
+            .filter_map(|thumb| {
+                let metadata = match thumb.metadata.as_ref()? {
+                    Value::List(records) => records.first()?,
+                    _ => return None,
+                };
+                let motion = metadata.get("pointer_motion")?;
+                let key = motion.get("key")?.as_str()?;
+                let travel = motion.get("travel")?.as_f64()? as f32;
+                let fraction = motion.get("fraction")?.as_f64()? as f32;
+                let thumb_rect = bead::ui::rect(&thumb.draw);
+                let scope = thumb.id.rsplit_once('.')?.0;
+                let hit_prefix = format!("{scope}.");
+                let mut hits = self
+                    .session
+                    .view_nodes()
+                    .iter()
+                    .filter(|node| node.preview_key == key && node.id.starts_with(&hit_prefix));
+                let first = hits.next()?;
+                let mut grab = bead::ui::rect(&first.draw);
+                for hit in hits {
+                    grab = grab.union(bead::ui::rect(&hit.draw));
+                }
+                let inset = first.preview_inset;
+                let start = thumb_rect.x - fraction * travel;
+                let end = start + travel;
+                let pointer = (grab.x + inset, grab.x + grab.w - inset);
+                (travel.is_finite()
+                    && travel > 0.
+                    && fraction.is_finite()
+                    && start.is_finite()
+                    && end.is_finite()
+                    && pointer.0.is_finite()
+                    && pointer.1.is_finite()
+                    && end > start
+                    && pointer.1 > pointer.0)
+                    .then(|| bead::wayland::DragVisual {
+                        id: thumb.id.clone(),
+                        grab,
+                        travel: (start, end),
+                        pointer,
+                    })
+            })
+            .collect()
+    }
+
     fn wakeup_at(&self) -> Option<std::time::Instant> {
         let send = self
             .slider_pending

@@ -456,7 +456,21 @@ impl App {
                 return;
             }
             std::mem::swap(&mut self.animations, &mut self.panel_animations);
+            let previous_frames = self.surfaces[index].frames;
+            let original = if !self.surfaces[index].callbacks.pending {
+                self.pointer_visual_position(index);
+                self.pointer_visual_scene(index)
+                    .map(|scene| std::mem::replace(&mut self.companion.as_mut().unwrap().0, scene))
+            } else {
+                None
+            };
             self.draw_current(index, qh);
+            if let Some(scene) = original {
+                self.companion.as_mut().unwrap().0 = scene;
+            }
+            let pending = (self.surfaces[index].frames > previous_frames)
+                .then(|| self.pointer_visual_retire(index))
+                .flatten();
             std::mem::swap(&mut self.animations, &mut self.panel_animations);
             #[cfg(feature = "native-gl")]
             if self.surfaces[index].gl_prepare_pending {
@@ -494,6 +508,9 @@ impl App {
                         self.draw(index, qh);
                     }
                 }
+            }
+            if let Some((x, y)) = pending {
+                self.view_event(true, UiEvent::Drag { x, y });
             }
             return;
         }
@@ -975,7 +992,13 @@ impl App {
                     },
                 );
                 s.callbacks.pending = true;
+                if let Some(visual) = &mut s.pointer_visual {
+                    visual.stage_commit()?;
+                }
                 if let Some(p) = &self.presentation {
+                    if let Some(visual) = &s.pointer_visual {
+                        visual.feedback(p, &wl_surface, qh);
+                    }
                     p.feedback(
                         &wl_surface,
                         qh,
@@ -1101,7 +1124,13 @@ impl App {
                         },
                     );
                     s.callbacks.pending = true;
+                    if let Some(visual) = &mut s.pointer_visual {
+                        visual.stage_commit()?;
+                    }
                     if let Some(p) = &self.presentation {
+                        if let Some(visual) = &s.pointer_visual {
+                            visual.feedback(p, &wl_surface, qh);
+                        }
                         p.feedback(
                             &wl_surface,
                             qh,
@@ -1312,7 +1341,13 @@ impl App {
                 },
             );
             s.callbacks.pending = true;
+            if let Some(visual) = &mut s.pointer_visual {
+                visual.stage_commit()?;
+            }
             if let Some(p) = &self.presentation {
+                if let Some(visual) = &s.pointer_visual {
+                    visual.feedback(p, &wl_surface, qh);
+                }
                 p.feedback(
                     &wl_surface,
                     qh,

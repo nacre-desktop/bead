@@ -15,6 +15,7 @@ mod hidden;
 pub mod intent;
 mod panel;
 mod panels;
+mod pointer_motion;
 pub use edges::{EdgeArt, EdgeChrome, LipState};
 mod pearls;
 pub use panels::Panels;
@@ -417,7 +418,19 @@ impl InputRegion {
             .hit_test(x, y, self.clip, self.hit_polygon.as_deref())
     }
 }
+/// A view-authored visual whose horizontal pose follows an absolute pointer.
+/// Geometry is in layout coordinates; the input range is independent of its painted size.
+#[derive(Clone)]
+pub struct DragVisual {
+    pub id: String,
+    pub grab: Rect,
+    pub travel: (f32, f32),
+    pub pointer: (f32, f32),
+}
 pub trait SceneSource {
+    fn drag_visuals(&self) -> Vec<DragVisual> {
+        Vec::new()
+    }
     /// Seed a lazy source before its first reload or presentation.
     fn initial_model(
         &mut self,
@@ -717,6 +730,7 @@ struct Reusable {
     painted: bool,
 }
 struct Surface {
+    pointer_visual: Option<pointer_motion::Visual>,
     decorations: Option<decorations::Tiles>,
     background:Option<wayland_protocols::ext::background_effect::v1::client::ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1>,
     background_size:Option<(i32,i32)>,

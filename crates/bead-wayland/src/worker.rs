@@ -11,6 +11,7 @@ use std::{
 pub type Factory = Box<dyn FnOnce() -> Result<Box<dyn SceneSource>, String> + Send>;
 #[derive(Default)]
 struct Mirror {
+    drag_visuals: Vec<crate::DragVisual>,
     focused_dismiss: bool,
     tracks_origin: bool,
     outside_dismiss: bool,
@@ -32,6 +33,7 @@ impl Mirror {
     fn read(source: &dyn SceneSource) -> Self {
         let _profile = bead_core::profile::Span::new("mirror");
         Self {
+            drag_visuals: source.drag_visuals(),
             focused_dismiss: source.focused_dismiss(),
             tracks_origin: source.tracks_origin(),
             outside_dismiss: source.outside_dismiss(),
@@ -578,6 +580,9 @@ impl SceneSource for Source {
     }
     fn input_regions(&self) -> Vec<InputRegion> {
         self.mirror.regions.clone()
+    }
+    fn drag_visuals(&self) -> Vec<crate::DragVisual> {
+        self.mirror.drag_visuals.clone()
     }
     fn scroll_regions(&self) -> Vec<Rect> {
         self.mirror.scroll_regions.clone()
