@@ -440,7 +440,7 @@ impl Session {
         }
         scene
     }
-    /// Deadline for expiring unacknowledged transient control feedback.
+    /// Deadline for legacy transient feedback; acknowledged ranges do not expire.
     pub fn preview_deadline(&self) -> Option<std::time::Instant> {
         if self.stores.get("bead.pressed") == Some(&Value::Bool(true)) {
             None
@@ -452,8 +452,15 @@ impl Session {
         if key.is_empty() {
             return BTreeMap::new();
         }
-        self.preview_deadline =
-            Some(std::time::Instant::now() + std::time::Duration::from_millis(750));
+        self.preview_deadline = if self
+            .current_nodes
+            .iter()
+            .any(|node| node.preview_key == key && node.preview_source.is_some())
+        {
+            None
+        } else {
+            Some(std::time::Instant::now() + std::time::Duration::from_millis(750))
+        };
         BTreeMap::from([
             ("bead.preview.key".into(), Value::Text(key)),
             ("bead.preview.value".into(), Value::Number(f64::from(value))),
@@ -513,6 +520,29 @@ impl Session {
                 .commit(changes)
                 .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
             if stores.revision() != revision {
+                (scene, nodes) = generation.materialize(&stores, &self.palette, self.viewport)?;
+            }
+        }
+        if self.preview_deadline.is_none()
+            && stores.get("bead.pressed") != Some(&Value::Bool(true))
+            && let Some(Value::Text(key)) = stores.get("bead.preview.key")
+            && !key.is_empty()
+            && let Some(Value::Number(target)) = stores.get("bead.preview.value")
+        {
+            let source = nodes.iter().find(|node| node.preview_key == *key);
+            let acknowledged = source.is_none_or(|node| {
+                node.preview_source.is_some_and(|value| {
+                    let expected = node.preview_expected.map(f64::from).unwrap_or(*target);
+                    (f64::from(value) - expected).abs() <= f64::from(node.preview_tolerance)
+                })
+            });
+            if acknowledged {
+                stores
+                    .commit(BTreeMap::from([(
+                        "bead.preview.key".into(),
+                        Value::Text(String::new()),
+                    )]))
+                    .map_err(|e| generation.script.error(e))?;
                 (scene, nodes) = generation.materialize(&stores, &self.palette, self.viewport)?;
             }
         }

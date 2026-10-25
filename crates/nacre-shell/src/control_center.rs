@@ -773,8 +773,12 @@ impl ControlCenter {
                 .filter(|_| verbs.set)
                 .map(|(id, name, active)| json!({"id": id, "name": name, "active": active}))
                 .collect();
+            let value_steps = if *source == "keyboard.backlight" {
+                self.controls().and_then(|data| data["keyboard"]["max"].as_f64()).unwrap_or(1.).max(1.)
+            } else { 0. };
             Some(json!({
                 "id": source, "available": true, "on": reading.on, "value": reading.value,
+                "value_steps": value_steps,
                 "status": reading.status, "label": reading.label, "icon": reading.icon, "toggle": verbs.toggle,
                 "set": verbs.set && choices.is_empty(), "press": verbs.press, "choices": choices,
                 "note": reading.note,

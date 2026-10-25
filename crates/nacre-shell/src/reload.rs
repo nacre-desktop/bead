@@ -2413,17 +2413,23 @@ impl SceneSource for Runtime {
             UiEvent::Drag { x, y } => self.session.drag_action(*x, *y),
             _ => None,
         };
+        let mut pointer_scene = None;
         if matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
-            && let Some((id, _, _)) = &host_action
+            && let Some((id, _, argument)) = &mut host_action
             && self.session.has_preview(id)
         {
+            // First stage the exact pointer target, then read its view-authored
+            // argument. The 34 ms cap applies to writes, never local feedback.
+            pointer_scene = self.pointer_feedback(id, &event, true)?;
+            if let Some(continuous) = self.session.pointer_argument(id) {
+                *argument = continuous;
+            }
             if self
                 .slider_sent
                 .is_some_and(|sent| sent.elapsed() < std::time::Duration::from_millis(34))
             {
-                let scene = self.pointer_feedback(id, &event, true)?;
                 self.slider_pending = Some(event);
-                return self.finish_scene(scene, false);
+                return self.finish_scene(pointer_scene, false);
             }
             self.slider_pending = None;
             self.slider_sent = Some(std::time::Instant::now());
@@ -2647,7 +2653,10 @@ impl SceneSource for Runtime {
                 return self.finish_scene(scene, false);
             }
             // A level step keeps the focus so the drag continues over the next step.
-            let scene = match self.pointer_feedback(id, &event, true) {
+            let scene = match pointer_scene.take().map_or_else(
+                || self.pointer_feedback(id, &event, true),
+                |scene| Ok(Some(scene)),
+            ) {
                 Ok(scene) => scene,
                 Err(_) => self.session.update(BTreeMap::new())?,
             };
@@ -2712,10 +2721,12 @@ impl SceneSource for Runtime {
                 );
             }
             // A slider step keeps the focus so the drag continues over the next step.
-            let scene = match arg
-                .starts_with("do:vol|")
-                .then(|| self.pointer_feedback(id, &event, true))
-            {
+            let scene = match arg.starts_with("do:vol|").then(|| {
+                pointer_scene.take().map_or_else(
+                    || self.pointer_feedback(id, &event, true),
+                    |scene| Ok(Some(scene)),
+                )
+            }) {
                 Some(Ok(scene)) => scene,
                 _ => self.session.update(changes)?,
             };
@@ -3051,7 +3062,10 @@ impl SceneSource for Runtime {
             if self.session.has_preview(id)
                 && matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
             {
-                let scene = self.pointer_feedback(id, &event, true)?;
+                let scene = pointer_scene.take().map_or_else(
+                    || self.pointer_feedback(id, &event, true),
+                    |scene| Ok(Some(scene)),
+                )?;
                 return self.finish_scene(scene, false);
             }
             return Ok(None);
@@ -3090,7 +3104,10 @@ impl SceneSource for Runtime {
             if self.session.has_preview(id)
                 && matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
             {
-                let scene = self.pointer_feedback(id, &event, true)?;
+                let scene = pointer_scene.take().map_or_else(
+                    || self.pointer_feedback(id, &event, true),
+                    |scene| Ok(Some(scene)),
+                )?;
                 return self.finish_scene(scene, false);
             }
             if !self.bar {

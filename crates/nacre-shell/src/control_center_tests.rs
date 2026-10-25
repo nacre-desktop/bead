@@ -818,6 +818,7 @@ async fn every_n0046_tile_calls_its_method_with_absolute_values() {
         "the internal panel, not the first output"
     );
     assert_eq!(source(&out, "keyboard.backlight")["value"], 33.);
+    assert_eq!(source(&out, "keyboard.backlight")["value_steps"], 3.);
     assert_eq!(source(&out, "appearance.mode")["status"], "Dark");
     assert_eq!(source(&out, "recorder.state")["status"], "Off");
     let profile = source(&out, "power.profile");

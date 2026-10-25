@@ -79,6 +79,16 @@ pub struct Node {
     pub preview_inset: f32,
     #[serde(default)]
     pub preview_value: f32,
+    /// Authoritative value and acknowledgement tolerance for latched range feedback.
+    #[serde(default)]
+    pub preview_source: Option<f32>,
+    #[serde(default)]
+    pub preview_expected: Option<f32>,
+    #[serde(default)]
+    pub preview_tolerance: f32,
+    /// Pointer argument evaluated by the view from its continuous local feedback.
+    #[serde(default)]
+    pub pointer_arg: Option<Value>,
     /// Allow this interactive region to participate in configured edge hover.
     #[serde(default)]
     pub edge_hover: bool,

@@ -1,5 +1,14 @@
 # Status
 
+## 2026-10-25 — B0107 slider tracking accepted
+
+Continuous kit arguments and staged release handling remove hit-cell snapping and late-echo
+snapback. At 2000 px/s the revised moving pixel-error p95 is 155.0 px versus QML
+156.5 px and Bead control 132.0 px; all twelve final release/write checks pass.
+Five alternating memory pairs pass the amended median gate; first-key CPU stays ≤8 ms.
+Full remote Arch CI passes. No live desktop/installation changes.
+[Measurements, source hashes and parity gaps](specs/0107-slider-tracking.md).
+
 ## 2026-10-25 — B0105 latency investigation blocked
 
 A one-replacement frame policy leaves CPU hover at 32.09 ms and drag at 66.19 ms,

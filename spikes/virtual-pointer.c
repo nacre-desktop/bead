@@ -90,8 +90,16 @@ int main(int argc, char **argv) {
             if (!ms || ms > 10000) { fprintf(stderr, "drag duration must be 1..10000 ms\n"); return 2; }
             // 250 Hz input deliberately exceeds the display rate to expose queues.
             unsigned steps = ms / 4 + 1;
+            struct timespec started;
+            clock_gettime(CLOCK_MONOTONIC, &started);
             for (unsigned i = 1; i <= steps; i++) {
-                usleep(ms * 1000 / steps);
+                // Roundtrip time must not accumulate into a slower-than-requested
+                // gesture. Absolute deadlines keep the requested pixels/second.
+                unsigned long long ns = (unsigned long long)started.tv_nsec +
+                    (unsigned long long)ms * 1000000ULL * i / steps;
+                struct timespec deadline = {started.tv_sec + ns / 1000000000ULL,
+                                            ns % 1000000000ULL};
+                clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &deadline, NULL);
                 unsigned px = (unsigned)((double)x + ((double)end_x - x) * i / steps);
                 unsigned py = (unsigned)((double)y + ((double)end_y - y) * i / steps);
                 trace_motion(px, py);

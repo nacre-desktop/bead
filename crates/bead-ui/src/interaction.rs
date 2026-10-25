@@ -94,7 +94,12 @@ impl Session {
         }
         self.deferred_action = None;
         self.deferred_gesture = false;
-        if self.stores.get("bead.pressed") != Some(&Value::Bool(true)) && deferred.is_none() {
+        let active = self
+            .pending
+            .as_ref()
+            .filter(|pending| pending.generation.is_none())
+            .map_or(&self.stores, |pending| &pending.stores);
+        if active.get("bead.pressed") != Some(&Value::Bool(true)) && deferred.is_none() {
             return Ok(None);
         }
         let Some(generation) = &self.generation else {
@@ -107,8 +112,8 @@ impl Session {
             .as_ref()
             .filter(|pending| pending.generation.is_none())
             .map_or_else(|| self.stores.clone(), |pending| pending.stores.clone());
-        // Settle a continuous drag to the action's declared step on release,
-        // rather than snapping later when the authoritative echo catches up.
+        // Legacy stepped feedback settles on release. A source-acknowledged
+        // range keeps the exact pointer target until its final write converges.
         let released_value = stores.get("bead.focused").and_then(|focused| {
             let Value::Text(id) = focused else {
                 return None;
@@ -118,6 +123,7 @@ impl Session {
                 .find(|node| {
                     &node.id == id
                         && !node.preview_key.is_empty()
+                        && node.preview_source.is_none()
                         && stores.get("bead.preview.key")
                             == Some(&Value::Text(node.preview_key.clone()))
                 })
@@ -178,6 +184,12 @@ impl Session {
         let hit = self.hit(x, y, false);
         let deferred = hit.is_some_and(|node| node.activate_on_release && node.action.is_some());
         let preserve_focus = press && hit.is_some_and(|node| !node.focus_on_pointer);
+        let pointer_id = if continuous {
+            hit.filter(|node| node.pointer_arg.is_some())
+                .map(|node| node.id.clone())
+        } else {
+            None
+        };
         let (action, focused, deferred_action, action_arg) =
             hit.map_or((None, String::new(), None, Value::Bool(true)), |node| {
                 (
@@ -239,6 +251,18 @@ impl Session {
             });
         }
         if let Some(action) = action {
+            // The view owns argument formatting (including records and strings).
+            // Re-evaluate it against this event's preview, never the previous frame.
+            let action_arg = if let Some(id) = pointer_id {
+                let (_, nodes) = generation.materialize(&stores, &self.palette, self.viewport)?;
+                nodes
+                    .iter()
+                    .find(|node| node.id == id)
+                    .and_then(|node| node.pointer_arg.clone())
+                    .unwrap_or(action_arg)
+            } else {
+                action_arg
+            };
             stores = generation.script.action(&action, &stores, action_arg)?;
         }
         if press && self.stores.get("bead.pressed").is_some() {
@@ -468,6 +492,16 @@ impl Session {
         self.current_nodes
             .iter()
             .any(|node| node.id == id && !node.preview_key.is_empty())
+    }
+    /// Argument authored by the view after staging this pointer event's feedback.
+    /// Keyboard actions continue to use the node's discrete `action_arg`.
+    pub fn pointer_argument(&self, id: &str) -> Option<Value> {
+        self.pending
+            .as_ref()
+            .map_or(self.current_nodes.as_slice(), |pending| &pending.nodes)
+            .iter()
+            .find(|node| node.id == id)
+            .and_then(|node| node.pointer_arg.clone())
     }
     pub fn pointer_focus_id(
         &mut self,

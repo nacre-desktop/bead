@@ -99,6 +99,7 @@ local function build_tile(t,w,h,embedded)
     if t.kind=="slider" then
         return kit.SliderTile{id=id,width=w,height=h,on_detail=opener,detail_label=label,icon=s.icon or t.icon,label=label,caption=s.label~="" and s.label or nil,detail=s.status,value=s.value or 0,
             on_toggle=s.toggle and act("toggle") or nil,on_change=s.set and "cc.do" or nil,
+            echo_value=type(s.value_steps)=="number" and s.value_steps>0 and function(n) return math.floor(n/100*s.value_steps+.5)/s.value_steps*100 end or nil,
             change_arg=function(n) return "set:"..t.source..":"..n end}
     elseif t.kind=="segmented" then
         -- Light | Dark | Auto as one control (QML NacreControlAppearance): a raised pill, 4 px inside, 2 px between the three

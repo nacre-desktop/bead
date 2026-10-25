@@ -109,6 +109,10 @@ pub const PROPERTIES: &[&str] = &[
     "preview_key",
     "preview_value",
     "preview_inset",
+    "preview_source",
+    "preview_expected",
+    "preview_tolerance",
+    "pointer_arg",
     "edge_hover",
     "scroll",
     "fill",
@@ -177,6 +181,10 @@ pub struct ViewSpec {
     pub preview_key: String,
     pub preview_inset: f32,
     pub preview_value: f32,
+    pub preview_source: Option<f32>,
+    pub preview_expected: Option<f32>,
+    pub preview_tolerance: f32,
+    pub pointer_arg: Option<Value>,
     pub edge_hover: bool,
     pub input: Option<String>,
     /// TextInput accepts newlines (Shift+Enter) and wraps at its width.
@@ -620,6 +628,21 @@ impl ViewSpec {
                 preview_key: text(p, "preview_key", "", source)?,
                 preview_value: number(p, "preview_value", 0., source)?,
                 preview_inset: number(p, "preview_inset", 0., source)?.max(0.),
+                preview_source: p
+                    .get("preview_source")
+                    .map(|_| number(p, "preview_source", 0., source))
+                    .transpose()?,
+                preview_expected: p
+                    .get("preview_expected")
+                    .map(|_| number(p, "preview_expected", 0., source))
+                    .transpose()?,
+                preview_tolerance: number(p, "preview_tolerance", 0., source)?.max(0.),
+                pointer_arg: p
+                    .get("pointer_arg")
+                    .cloned()
+                    .map(serde_json::from_value)
+                    .transpose()
+                    .map_err(|e| source.error(e))?,
                 edge_hover: boolean(p, "edge_hover", false, source)?,
                 input,
                 multiline: boolean(p, "multiline", false, source)?,
@@ -1047,6 +1070,10 @@ pub fn layout(
                 preview_key: view.preview_key.clone(),
                 preview_value: view.preview_value,
                 preview_inset: view.preview_inset,
+                preview_source: view.preview_source,
+                preview_expected: view.preview_expected,
+                preview_tolerance: view.preview_tolerance,
+                pointer_arg: view.pointer_arg.clone(),
                 edge_hover: view.edge_hover,
                 icon: None,
                 input: view.input.clone(),

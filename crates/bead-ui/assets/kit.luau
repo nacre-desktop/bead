@@ -76,7 +76,8 @@ return function(ui, tokens)
         local first=p.change_arg and p.change_arg(lo) or lo
         local last=p.change_arg and p.change_arg(hi) or hi
         local key=(p.id or "").."|"..(p.on_change or "").."|"..typeof(first)..":"..tostring(first).."|"..typeof(last)..":"..tostring(last)
-        local current=math.clamp(ui.preview_value(key,value(p.value,lo)),lo,hi)
+        local source=value(p.value,lo)
+        local current=math.clamp(ui.preview_value(key,source),lo,hi)
         local width=p.width or 240
         local inset,height=6,30
         local avail=width-2*inset
@@ -85,10 +86,14 @@ return function(ui, tokens)
         local opacity=live and 1 or .35
         local children={}
         if live then
+            local argument=p.change_arg and p.change_arg(current) or current
             local count=math.ceil((hi-lo)/step)
             for i=0,count do
                 local n=math.min(hi,lo+i*step)
                 children[i+1]=ui.Button{drag=true,preview_key=key,preview_value=n,preview_inset=inset+4,id="value-"..i,grow=1,shrink=0,height=height,padding=0,radius=2,
+                    preview_source=source,preview_tolerance=p.echo_tolerance or (hi-lo)*.005,
+                    preview_expected=p.echo_value and p.echo_value(current) or current,
+                    pointer_arg=argument,
                     fill=ui.alpha("surface",0),aria_label=(p.label or "Value").." "..n,
                     on_activate=ui.action(p.on_change,p.change_arg and p.change_arg(n) or n),
                     ui.Box{id="hit",width="100%",height="100%",fill=ui.alpha("surface",0)}}
@@ -96,7 +101,7 @@ return function(ui, tokens)
         end
         return ui.Box{id=p.id,width=width,height=height,position=p.position,left=p.left,top=p.top,
             ui.Box{id="track",position="absolute",left=inset,top=12,width=avail,height=6,radius=3,fill="surfaceContainerHighest"},
-            kit.Fill{id="level",position="absolute",left=inset,top=12,width=fraction*avail,height=6,radius=3,
+            kit.Fill{id="level",position="absolute",left=inset,top=12,width=4+fraction*(avail-8),height=6,radius=3,
                 from="primary",to="secondary",opacity=opacity},
             ui.Box{id="thumb",position="absolute",left=inset+fraction*(avail-8),top=7,width=8,height=16,radius=3,fill=ui.alpha("primary",opacity)},
             live and ui.Row(props(children,{id="hits",width="100%",height=height,gap=0})) or nil}
@@ -173,7 +178,8 @@ return function(ui, tokens)
         local detail=p.on_detail~=nil
         local right=detail and 40 or 8
         local control=kit.Slider{id="level",position="absolute",left=42,top=23,width=W-90-right,
-            value=p.value,min=0,max=100,step=p.step or 5,label=p.label,enabled=armed,on_change=p.on_change,change_arg=p.change_arg}
+            value=p.value,min=0,max=100,step=p.step or 5,label=p.label,enabled=armed,on_change=p.on_change,change_arg=p.change_arg,
+            echo_value=p.echo_value,echo_tolerance=p.echo_tolerance}
         local kids={
             ui.Text{id="label",position="absolute",left=46,top=7,width=W-46-(detail and 86 or 54),height=16,font_size=(tokens.text.caption-1)*4/3,
                 color="onSurfaceVariant",text=p.caption or p.label},

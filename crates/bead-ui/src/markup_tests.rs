@@ -896,7 +896,11 @@ fn framework_kit_shared_scale_edges_and_independent_tile_actions() {
             .unwrap()
             .unwrap();
         session.commit(scene);
-        assert_eq!(session.stores.get("volume"), Some(&Value::Number(75.)));
+        assert_eq!(
+            session.stores.get("volume"),
+            Some(&Value::Number(75.5)),
+            "the hit-cell centre maps to an exact pointer value, not its 75% keyboard step"
+        );
         assert_eq!(session.range_action(true).unwrap().2, Value::Number(70.));
         assert_eq!(
             session
@@ -2023,12 +2027,13 @@ return ui.Column{id="ranges",width=400,height=80,
     assert_eq!(s.stores.get("bead.preview.value"), Some(&Value::Number(0.)));
     let candidate = s.drag(x, -100.).unwrap().unwrap();
     s.commit(candidate);
+    let released = s.stores.get("bead.preview.value").cloned();
     let candidate = s.release().unwrap().unwrap();
     s.commit(candidate);
     assert_eq!(
         s.stores.get("bead.preview.value"),
-        Some(&Value::Number(25.)),
-        "release settles to its declared action step before the topic echo"
+        released.as_ref(),
+        "release keeps the exact pointer target"
     );
     assert!(
         s.drag_action(x, 15.).is_none(),
@@ -2045,7 +2050,7 @@ return ui.Column{id="ranges",width=400,height=80,
     s.commit(candidate);
     assert_eq!(
         s.stores.get("bead.preview.value"),
-        Some(&Value::Number(25.)),
+        released.as_ref(),
         "Tab focus alone must not change a level"
     );
     let next = s.range_action(false).unwrap().0;
@@ -2062,6 +2067,171 @@ return ui.Column{id="ranges",width=400,height=80,
     assert!(
         s.drag_action(x, 15.).is_none(),
         "a deferred button press must not inherit a slider's old focus"
+    );
+}
+
+#[test]
+fn kit_slider_exact_pointer_arguments_and_source_acknowledgement() {
+    let f = fixture();
+    fs::write(
+        f.0.join("palette.json"),
+        include_str!("../../../shell/palette.json"),
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+local kit=require("bead.kit")
+return kit.Slider{id="slider",width=200,value=ui.bind("scroll"),step=5,
+ on_change="select",change_arg=function(n) return string.format("level:%.5f",n) end}
+"#,
+    )
+    .unwrap();
+    let mut s = session(&f);
+    // Start off-centre within a stepped hit cell, then jump faster than a
+    // display frame across several cells in both directions and outside the row.
+    let scene = s.click(43.25, 15.).unwrap().unwrap();
+    s.commit(scene);
+    for x in [123.75, 48.25, 187.5, 102.75] {
+        let scene = s.drag(x, -50.).unwrap().unwrap();
+        s.commit(scene);
+        let Some(Value::Number(value)) = s.stores.get("bead.preview.value") else {
+            panic!("numeric preview")
+        };
+        assert!((value - (f64::from(x) - 10.) / 180. * 100.).abs() < 0.00001);
+        let Some(Value::Text(argument)) = s.stores.get("selected") else {
+            panic!("mapped argument")
+        };
+        let sent: f64 = argument.strip_prefix("level:").unwrap().parse().unwrap();
+        assert!(
+            (sent - value).abs() < 0.00001,
+            "argument must use this motion, not the preceding frame or cell"
+        );
+        let layer = s
+            .current
+            .layers
+            .iter()
+            .find(|layer| layer.id.ends_with("thumb"))
+            .unwrap();
+        let thumb = rect(&s.current.primitives[layer.own.start]);
+        assert!(
+            (thumb.x + thumb.w / 2. - x).abs() <= 0.501,
+            "absolute pointer tracking, including vertical escape"
+        );
+    }
+    let target = s.stores.get("bead.preview.value").cloned().unwrap();
+    let scene = s
+        .update(BTreeMap::from([("scroll".into(), Value::Number(20.))]))
+        .unwrap()
+        .unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("bead.preview.value"), Some(&target));
+    let scene = s.release().unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("bead.preview.value"), Some(&target));
+    assert!(
+        s.preview_deadline().is_none(),
+        "no timeout may restore an old topic value"
+    );
+    let scene = s
+        .update(BTreeMap::from([("scroll".into(), Value::Number(35.))]))
+        .unwrap()
+        .unwrap();
+    s.commit(scene);
+    assert!(!matches!(s.stores.get("bead.preview.key"),Some(Value::Text(key)) if key.is_empty()));
+    let Value::Number(target) = target else {
+        unreachable!()
+    };
+    let scene = s
+        .update(BTreeMap::from([(
+            "scroll".into(),
+            Value::Number(target.round()),
+        )]))
+        .unwrap()
+        .unwrap();
+    s.commit(scene);
+    assert_eq!(
+        s.stores.get("bead.preview.key"),
+        Some(&Value::Text(String::new())),
+        "only convergence retires feedback"
+    );
+    let scene = s
+        .update(BTreeMap::from([("scroll".into(), Value::Number(80.))]))
+        .unwrap()
+        .unwrap();
+    s.commit(scene);
+    let next = s.range_action(false).unwrap().0;
+    let scene = s.range_step_id(&next).unwrap().unwrap();
+    let Some(Value::Text(argument)) = s.pointer_argument(&next) else {
+        panic!("keyboard preview")
+    };
+    assert_eq!(
+        argument, "level:55.00000",
+        "keyboard still advances by the declared five-unit step"
+    );
+    s.commit(scene);
+}
+
+#[test]
+fn kit_slider_release_before_frame_acceptance_and_quantized_readback() {
+    let f = fixture();
+    fs::write(
+        f.0.join("palette.json"),
+        include_str!("../../../shell/palette.json"),
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+local kit=require("bead.kit")
+return kit.Slider{id="slider",width=200,value=ui.bind("scroll"),step=5,on_change="select",
+ change_arg=function(n) return tostring(n) end,
+ echo_value=function(n) return math.floor(n/100*3+.5)/3*100 end}
+"#,
+    )
+    .unwrap();
+    let mut s = session(&f);
+    let scene = s
+        .update(BTreeMap::from([("scroll".into(), Value::Number(33.))]))
+        .unwrap()
+        .unwrap();
+    s.commit(scene);
+    let id = s
+        .current_nodes
+        .iter()
+        .find(|n| n.id.ends_with("hits.value-10"))
+        .unwrap()
+        .id
+        .clone();
+    assert!(s.pointer_focus_id(&id, true, Some(100.)).unwrap().is_some());
+    assert_eq!(
+        s.stores.get("bead.pressed"),
+        Some(&Value::Bool(false)),
+        "the renderer has not accepted the press yet"
+    );
+    let release = s
+        .release()
+        .unwrap()
+        .expect("release must consume the staged gesture");
+    s.commit(release);
+    assert_eq!(s.stores.get("bead.pressed"), Some(&Value::Bool(false)));
+    assert_eq!(
+        s.stores.get("bead.preview.value"),
+        Some(&Value::Number(50.))
+    );
+    assert!(
+        !matches!(s.stores.get("bead.preview.key"),Some(Value::Text(key)) if key.is_empty()),
+        "the old 33% cannot acknowledge a target that rounds to 67%"
+    );
+    let scene = s
+        .update(BTreeMap::from([("scroll".into(), Value::Number(67.))]))
+        .unwrap()
+        .unwrap();
+    s.commit(scene);
+    assert_eq!(
+        s.stores.get("bead.preview.key"),
+        Some(&Value::Text(String::new())),
+        "a coarse device acknowledges its real quantized readback"
     );
 }
 
