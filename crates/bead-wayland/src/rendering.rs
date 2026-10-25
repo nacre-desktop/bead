@@ -314,7 +314,15 @@ impl App {
             }
             self.surfaces[index].visual_damage = Default::default();
             println!("RENDER_POLICY companion=true transition=cpu-to-gl");
-            if !self.release_timer {
+            // A retained panel keeps its prepared renderer along with its
+            // worker/layer. Replacing that single panel releases all three.
+            if !self.release_timer
+                && !self
+                    .options
+                    .panel_spec
+                    .as_ref()
+                    .is_some_and(|spec| spec.retain_when_closed)
+            {
                 let qh = qh.clone();
                 self.loop_handle.insert_source(Timer::from_duration(Duration::from_secs(2)), move |_, _, app| {
                     if !app.release_timer||app.companion.is_none(){return TimeoutAction::Drop;}

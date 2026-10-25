@@ -857,6 +857,9 @@ mod tests {
                 Message::Hello { .. }
             ));
             let mut methods = nacre_protocol::core_methods();
+            // This focused peer implements only activation, not readiness
+            // discovery for the consumer's other optional topics.
+            methods.remove("daemon.status");
             methods.insert(
                 "wallpaper.activate".into(),
                 Method {

@@ -1273,7 +1273,11 @@ pub fn panel(
         keyboard_focus: true,
         initial_open: false,
         fallback: cold.clone(),
-        renderer: bead::render::RendererKind::Cpu,
+        renderer: if kind == Kind::Wallpaper && cfg!(feature = "native-gl") {
+            bead::render::RendererKind::FemtovgGl
+        } else {
+            bead::render::RendererKind::Cpu
+        },
         factory: Arc::new(move |open| {
             let session = bead::ui::Session::new(
                 "shell".into(),
