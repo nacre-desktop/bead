@@ -2452,7 +2452,8 @@ fn resolve_icon_path(icon: &str) -> std::path::PathBuf {
     }
     let direct = std::path::PathBuf::from(icon);
     static THEME: OnceLock<String> = OnceLock::new();
-    let theme = THEME.get_or_init(|| freedesktop_icons::default_theme_gtk().unwrap_or_else(|| "Papirus".into()));
+    let theme = THEME
+        .get_or_init(|| freedesktop_icons::default_theme_gtk().unwrap_or_else(|| "Papirus".into()));
     let path = direct
         .is_absolute()
         .then_some(direct)
