@@ -357,6 +357,36 @@ fn tab_navigation_keeps_runtime_open_and_releases_previous_page_sources() -> Res
     current_update["health"]["stale"] = json!(true);
     current.publish(current_update)?;
     assert!(notifications.load(Ordering::Relaxed) > before_old_publish);
+    // A renderer/source validation rejection must restore the accepted page's
+    // projector and subscriptions, as well as its stores and entry.
+    assert!(runtime.select_dashboard_page(Page::Media)?.is_some());
+    runtime.error_scene("rejected navigation fixture".into());
+    assert_eq!(
+        runtime.session.stores.get("dashboard.page"),
+        Some(&Value::Text("weather".into()))
+    );
+    let before_rejected_publish = notifications.load(Ordering::Relaxed);
+    let mut rejected_update = fixture("media");
+    rejected_update["health"]["stale"] = json!(true);
+    next_sources
+        .lock()
+        .unwrap()
+        .last()
+        .unwrap()
+        .publish(rejected_update)?;
+    assert_eq!(
+        notifications.load(Ordering::Relaxed),
+        before_rejected_publish
+    );
+    current.publish(fixture("weather"))?;
+    assert!(notifications.load(Ordering::Relaxed) > before_rejected_publish);
+    if let Some(scene) = runtime.stage(UiEvent::Reload)? {
+        drop(scene);
+        runtime.commit();
+    }
+    assert!(!emitted.lock().unwrap().iter().any(|event| {
+        matches!(event, UiEvent::PanelNavigated(view) if view == "dashboard-media")
+    }));
     Ok(())
 }
 

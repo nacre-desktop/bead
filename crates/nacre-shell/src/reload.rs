@@ -63,6 +63,7 @@ pub struct Runtime {
     control_subscription: Vec<bead::core::source::Subscription>,
     dashboard: Option<std::rc::Rc<std::cell::RefCell<crate::dashboard::Dashboard>>>,
     dashboard_factory: Option<crate::dashboard::Factory>,
+    pending_dashboard: Option<PendingDashboard>,
     dashboard_pearl_animation: Option<DashboardPearlAnimation>,
     dashboard_pearl_deadline: Option<std::time::Instant>,
     pending_panel_navigation: Option<String>,
@@ -128,6 +129,12 @@ struct DashboardPearlAnimation {
     started: std::time::Instant,
     duration: std::time::Duration,
     easing: String,
+}
+struct PendingDashboard {
+    view: crate::dashboard::Dashboard,
+    subscriptions: Vec<bead::core::source::Subscription>,
+    animation: Option<DashboardPearlAnimation>,
+    deadline: Option<std::time::Instant>,
 }
 impl Drop for Runtime {
     fn drop(&mut self) {
@@ -355,6 +362,7 @@ impl Runtime {
             control_subscription: Vec::new(),
             dashboard: None,
             dashboard_factory: None,
+            pending_dashboard: None,
             dashboard_pearl_animation: None,
             dashboard_pearl_deadline: None,
             pending_panel_navigation: None,
@@ -2011,7 +2019,12 @@ impl Runtime {
                 return Err(error.into());
             }
         };
-        self.dashboard_subscription = subscriptions;
+        self.pending_dashboard = Some(PendingDashboard {
+            view: previous,
+            subscriptions: std::mem::replace(&mut self.dashboard_subscription, subscriptions),
+            animation: self.dashboard_pearl_animation.take(),
+            deadline: self.dashboard_pearl_deadline.take(),
+        });
         if animate {
             self.dashboard_pearl_animation = Some(DashboardPearlAnimation {
                 from,
@@ -3892,10 +3905,24 @@ impl SceneSource for Runtime {
                             }
                         }
                         (_, "state") if call.target.starts_with("windowTitle-") => {
+                            let title = match self.session.stores.get("bead.focused_title") {
+                                Some(bead::core::Value::Text(title)) => title.as_str(),
+                                _ => "",
+                            };
+                            let retained = self.backend.as_ref().is_some_and(|backend| {
+                                self.last_focused_window.is_some()
+                                    && focused_title(
+                                        &backend.snapshot(),
+                                        self.output.as_deref(),
+                                        None,
+                                    )
+                                    .1
+                                    .is_none()
+                            });
                             bead::services::ipc::Reply::ok(
                                 call.id,
                                 serde_json::Value::String(serde_json::to_string(
-                                    &serde_json::json!({"title":self.backend.as_ref().map(|b|b.snapshot()).and_then(|s|s.focused_window().map(|w|w.title.clone())).unwrap_or_default(),"retained":false}),
+                                    &serde_json::json!({"title":title,"retained":retained}),
                                 )?),
                             )
                         }
@@ -4405,6 +4432,7 @@ impl SceneSource for Runtime {
     fn commit(&mut self) -> bool {
         if let Some(scene) = self.pending.take() {
             self.session.commit(scene);
+            self.pending_dashboard = None;
             if self.launcher.is_some()
                 && let Some(memory) = &self.launcher_memory
                 && let Ok(mut saved) = memory.lock()
@@ -4433,6 +4461,15 @@ impl SceneSource for Runtime {
     }
     fn error_scene(&mut self, error: String) -> Scene {
         self.pending = None;
+        if let Some(previous) = self.pending_dashboard.take() {
+            if let Some(dashboard) = &self.dashboard {
+                *dashboard.borrow_mut() = previous.view;
+            }
+            self.dashboard_subscription = previous.subscriptions;
+            self.dashboard_pearl_animation = previous.animation;
+            self.dashboard_pearl_deadline = previous.deadline;
+            self.pending_panel_navigation = None;
+        }
         let mut scene = self.session.reject(error);
         if scene.font_files.is_empty()
             && let Ok(files) = crate::font_sources::select(&scene)
