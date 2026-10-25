@@ -241,69 +241,6 @@ impl Runtime {
             .map(|(key, value)| (key.clone(), value.clone()))
             .collect()
     }
-    fn open_widgets(&self, context: bool, selected: Option<String>) -> Result<(), Box<dyn Error>> {
-        self.actions.authorize("view.open")?;
-        let wakeup = self
-            .wakeup
-            .as_ref()
-            .ok_or("Widget event channel unavailable")?;
-        if self.session.stores.get("widgets.editing") == Some(&bead::core::Value::Bool(true)) {
-            if let Some(iid) = selected {
-                wakeup(UiEvent::CompanionModel(BTreeMap::from([(
-                    "widgets.selected".into(),
-                    bead::core::Value::Text(iid),
-                )])));
-            }
-            wakeup(UiEvent::CompanionVisibility(true));
-            return Ok(());
-        }
-        wakeup(UiEvent::CompanionSelect {
-            view: if context { "widget-menu" } else { "widgets" }.into(),
-            output: self.output.clone(),
-            toggle: false,
-            center: None,
-        });
-        let mut values = self.widget_host_values();
-        values.insert("widgets.context".into(), bead::core::Value::Bool(context));
-        values.insert(
-            "widgets.page".into(),
-            bead::core::Value::Text("layout".into()),
-        );
-        values.insert("widgets.editing".into(), bead::core::Value::Bool(!context));
-        values.insert("widgets.draft".into(), bead::core::Value::list(Vec::new()));
-        values.insert("widgets.undo".into(), bead::core::Value::list(Vec::new()));
-        let geometry = self
-            .session
-            .view_nodes()
-            .iter()
-            .filter_map(|node| {
-                let bead::core::Value::Text(iid) = node.drag_payload.as_ref()? else {
-                    return None;
-                };
-                let rect = bead::ui::rect(&node.draw);
-                Some(serde_json::json!({"iid":iid,"x":rect.x,"y":rect.y,"w":rect.w,"h":rect.h}))
-            })
-            .collect();
-        values.insert("widgets.geometry".into(), bead::core::Value::list(geometry));
-        if let Some(seed) = self.widget_seed()
-            && let Some(document) = seed.get("document")
-        {
-            values.insert(
-                "widgets.layout".into(),
-                bead::core::Value::list(vec![document.clone()]),
-            );
-        }
-        values.remove("widgets.canvas.width");
-        values.remove("widgets.canvas.height");
-        if let Some(rev) = self.session.stores.get("widgets.rev") {
-            values.insert("widgets.rev".into(), rev.clone());
-        }
-        if let Some(iid) = selected {
-            values.insert("widgets.selected".into(), bead::core::Value::Text(iid));
-        }
-        wakeup(UiEvent::CompanionModel(values));
-        Ok(())
-    }
     /// A freshly opened prompt or form takes keyboard focus on its first field, so the
     /// user can type (and press Enter) at once.
     fn focus_network_form(
@@ -3225,31 +3162,6 @@ impl SceneSource for Runtime {
                 .or_else(|| self.session.drag_action(*x, *y)),
             _ => None,
         };
-        if (self.bar || self.widget_canvas)
-            && matches!(&event, UiEvent::ContextMenu { .. })
-            && !host_action
-                .as_ref()
-                .is_some_and(|(_, name, _)| name == "services.tray")
-        {
-            let selected = host_action.as_ref().and_then(|(id, _, argument)| {
-                if let bead::core::Value::List(records) = argument
-                    && let Some(iid) = records.first().and_then(|record| record["iid"].as_str())
-                {
-                    return Some(iid.to_owned());
-                }
-                self.session
-                    .view_nodes()
-                    .iter()
-                    .find(|node| &node.id == id)
-                    .and_then(|node| match &node.drag_payload {
-                        Some(bead::core::Value::Text(iid)) => Some(iid.clone()),
-                        _ => None,
-                    })
-            });
-            self.open_widgets(true, selected)?;
-            return Ok(None);
-        }
-
         if let Some((_, name, argument)) = &mut host_action
             && name == "status.pill.open"
             && let Some(view) = crate::widgets::dropdown_view(argument)
@@ -4425,18 +4337,6 @@ impl SceneSource for Runtime {
                 let reply = match validation {
                     Err(reply) => reply,
                     Ok(()) => match (call.target.as_str(), call.method.as_str()) {
-                        ("widgets", "open" | "edit") if self.bar => {
-                            self.open_widgets(false, None)?;
-                            if call.method == "open"
-                                && let Some(wakeup) = &self.wakeup
-                            {
-                                wakeup(UiEvent::CompanionModel(BTreeMap::from([(
-                                    "widgets.page".into(),
-                                    bead::core::Value::Text("catalogue".into()),
-                                )])));
-                            }
-                            bead::services::ipc::Reply::ok(call.id, serde_json::Value::Null)
-                        }
                         ("bead.osd", "show" | "preview") => match self
                             .actions
                             .authorize("notifications.feedback")

@@ -148,13 +148,6 @@ pub fn save_file(path: &std::path::Path, document: &serde_json::Value) -> std::i
     result
 }
 
-#[derive(Clone, Copy)]
-pub enum View {
-    Editor,
-    Menu,
-    Canvas,
-}
-
 #[derive(Clone)]
 pub struct Inputs {
     pub client: Option<crate::nacre_source::Client>,
@@ -163,13 +156,12 @@ pub struct Inputs {
     pub prefs: Option<std::sync::Arc<dyn bead::core::source::Source>>,
 }
 
-/// Widget views are lazy and share the catalogue and settings kit with the bar.
-pub fn editor(
+/// The desktop canvas is lazy and shares the layout and catalogue with the bar.
+pub fn canvas(
     palette: std::path::PathBuf,
     colors: bead::render::Palette,
     inputs: Inputs,
     trace: bool,
-    view: View,
 ) -> Result<bead::wayland::PanelSpec, Box<dyn std::error::Error>> {
     use bead::{
         render::{Rect, RendererKind},
@@ -179,9 +171,7 @@ pub fn editor(
     fallback.width = 1.;
     fallback.bounds = Rect::new(0., 0., 1., 1.);
     fallback.primitives.clear();
-    if matches!(view, View::Canvas) {
-        fallback.motion = None;
-    }
+    fallback.motion = None;
     let cold = fallback.clone();
     Ok(PanelSpec {
         position: Some(
@@ -196,12 +186,7 @@ pub fn editor(
         factory: std::sync::Arc::new(move |open| {
             let session = bead::ui::Session::new(
                 "shell".into(),
-                (if matches!(view, View::Canvas) {
-                    "widgets/editor/canvas.luau"
-                } else {
-                    "widgets/editor/main.luau"
-                })
-                .into(),
+                "widgets/editor/canvas.luau".into(),
                 palette.clone(),
                 colors.clone(),
                 cold.clone(),
@@ -215,27 +200,14 @@ pub fn editor(
                 if let Some(desktop) = inputs.desktop.get() {
                     runtime = runtime.with_shared_desktop(desktop.clone(), false)?;
                 }
-                runtime = runtime
-                    .with_widget_editor(inputs.client.as_ref(), matches!(view, View::Canvas))?;
+                runtime = runtime.with_widget_editor(inputs.client.as_ref(), true)?;
                 if let Some(prefs) = &inputs.prefs {
                     runtime = runtime.with_prefs(prefs.clone())?;
                 }
                 Ok(runtime)
             })();
             let mut runtime = result.map_err(|error| error.to_string())?;
-            let mut restore = BTreeMap::from([
-                (
-                    "widgets.context".into(),
-                    Value::Bool(matches!(view, View::Menu)),
-                ),
-                ("panel.open".into(), Value::Bool(open)),
-            ]);
-            if !matches!(view, View::Canvas) {
-                restore.insert(
-                    "widgets.editing".into(),
-                    Value::Bool(matches!(view, View::Editor)),
-                );
-            }
+            let restore = BTreeMap::from([("panel.open".into(), Value::Bool(open))]);
             runtime.session.restore_on_start(restore);
             Ok(Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
         }),

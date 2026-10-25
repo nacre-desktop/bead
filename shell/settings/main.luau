@@ -69,12 +69,6 @@ function row(item)
             ui.Column{grow=1,justify="center",gap=sp.hairline,
                 ui.Text{id="label",text=item.label,height=20,font_size=tx.body*4/3,color="onSurface"},
                 ui.Text{id="detail",text=item.description,height=16,font_size=tx.caption*4/3,color="onSurfaceVariant"}}}
-        if item.page=="panels/top-bar" then
-            link.props.padding_right=sp.md
-            link.children={ui.Row{id="top-bar-actions",width="fill",height="fill",align="center",gap=sp.md,link.children[1],
-                kit.Button{id="edit-widgets",text="Edit widgets",width=sp.huge*5,height=sp.huge+sp.xs,shrink=0,
-                    focus_on_pointer=false,on_activate=act("do:open|widgets")}}}
-        end
         return link
     elseif k=="info" then
         return kit.InfoRow{id="info",label=item.label,description=item.description,value=item.value}

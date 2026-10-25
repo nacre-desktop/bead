@@ -10,6 +10,7 @@
     "widgets/pill/widget.luau",
     "widgets/power/widget.luau",
     "widgets/registry.luau",
+    "widgets/settings-form.luau",
     "widgets/sound/widget.luau",
     "widgets/title/widget.luau",
     "widgets/tray.luau",

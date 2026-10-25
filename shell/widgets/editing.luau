@@ -46,12 +46,6 @@ end
 function M.targets(document,width,height,bar)
     local nodes={}
     local header=c.header
-    if bar then
-        for tile=0,document.hosts.top_bar.tiles do
-            table.insert(nodes,ui.Box{id="tile-"..tile,position="absolute",left=tile*width/document.hosts.top_bar.tiles,top=0,
-                width=kit.tokens.spacing.hairline,height=header,fill=ui.alpha("primary",.10)})
-        end
-    end
     for index,region in {"left","centre","right"} do
         table.insert(nodes,ui.Box{id="drop-"..region,position="absolute",left=(index-1)*width/3,top=0,width=width/3,height=header,
             on_drop=M.request(document,{op="move",host="top_bar",region=region,start=0,point=true,host_width=width})})

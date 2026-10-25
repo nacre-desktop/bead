@@ -219,17 +219,22 @@ pub fn map_views(mut call: Call) -> Result<Call, Reply> {
     }
     if call.target == "widgets" && matches!(call.method.as_str(), "open" | "edit") {
         validate(&call)?;
-        return Ok(call);
+        return Err(Reply::error(
+            call.id,
+            "unavailable",
+            "Widgets app is not available yet",
+        ));
     }
     if call.target == "nacre"
         && call.method == "menu"
         && call.args.first().and_then(Value::as_str) == Some("widgets")
     {
         validate(&call)?;
-        call.target = "widgets".into();
-        call.method = "open".into();
-        call.args.clear();
-        return Ok(call);
+        return Err(Reply::error(
+            call.id,
+            "unavailable",
+            "Widgets app is not available yet",
+        ));
     }
     // Native extras have their own lazy surfaces; menu routes remain engine-owned.
     if call.target == "nacre"
@@ -640,6 +645,20 @@ mod tests {
             map_views(open).unwrap_err().error.unwrap().code,
             "unavailable"
         );
+    }
+    #[test]
+    fn widget_editor_routes_report_the_replacement_app_is_not_available_yet() {
+        for method in ["open", "edit"] {
+            let call = from_strings("widgets".into(), method.into(), &[]).unwrap();
+            let error = map_views(call).unwrap_err().error.unwrap();
+            assert_eq!(error.code, "unavailable");
+            assert_eq!(error.message, "Widgets app is not available yet");
+        }
+        let launcher =
+            from_strings("nacre".into(), "menu".into(), &["widgets".into()]).unwrap();
+        let error = map_views(launcher).unwrap_err().error.unwrap();
+        assert_eq!(error.code, "unavailable");
+        assert_eq!(error.message, "Widgets app is not available yet");
     }
     #[test]
     fn updates_control_route_opens_the_status_popout() {

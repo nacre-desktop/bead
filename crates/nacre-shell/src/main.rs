@@ -944,36 +944,14 @@ fn start(
             "widgets-canvas".into(),
             std::collections::BTreeMap::from([(
                 "widgets-canvas".into(),
-                widgets::editor(
+                widgets::canvas(
                     palette.clone(),
                     colors.clone(),
-                    widget_inputs.clone(),
+                    widget_inputs,
                     panel_trace,
-                    widgets::View::Canvas,
                 )?,
             )]),
         )?);
-        // B0047: the lips come from shell/frame/behavior.luau; a lip needs its view.
-        views.insert(
-            "widgets".into(),
-            widgets::editor(
-                palette.clone(),
-                colors.clone(),
-                widget_inputs.clone(),
-                panel_trace,
-                widgets::View::Editor,
-            )?,
-        );
-        views.insert(
-            "widget-menu".into(),
-            widgets::editor(
-                palette.clone(),
-                colors.clone(),
-                widget_inputs.clone(),
-                panel_trace,
-                widgets::View::Menu,
-            )?,
-        );
         frame_gate.configure_frame(
             frame_config::load(Path::new("shell")),
             views.keys().cloned(),
