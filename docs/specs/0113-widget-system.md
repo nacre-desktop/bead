@@ -94,7 +94,7 @@ A widget can be placed in the bar, on the desktop, or BOTH. The forms share data
 - **Detach anywhere (owner, 2026-10-25):** WITHOUT the Widgets app open, a widget can be dragged off the bar and dropped onto the desktop (workspace/canvas), like pearls detach.
   - While dragging it MORPHS from its bar form into its desktop form (animated size/shape transition, e.g. the music line grows into the visualiser).
   - Dropping attaches it to the desktop at the snapped position; dragging a desktop widget onto the bar morphs it back.
-  - Widgets without a desktop form either refuse to leave the bar (rubber-band back) or become a floating card (per-widget setting).
+  - NO floating-card form (owner, 2026-10-25): placement forms are only BAR and DESKTOP. Dragging out produces the widget's CONFIGURED desktop form (style and settings chosen in the Widgets app page or in the widget's dropdown settings, e.g. 'Music effects'); dragging back produces its configured bar form. Widgets without a desktop form rubber-band back to the bar. Dropdowns (panel forms) are NOT draggable; they are the place to control and customise. Exception: the big panels (AI chat sidebar, control panel) stay detachable as pearls.
   - A widget can still be in both places (bar + desktop) via the app.
   - The drag must be smooth and should start on a deliberate gesture (press-and-hold or drag threshold) so normal clicks are unaffected.
 
