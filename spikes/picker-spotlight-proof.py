@@ -42,8 +42,11 @@ def spawn(self, command, name, env=None, cwd=None):
     if name == "shell":
         self.env["BEAD_FRAME_TRACE"] = "1"
         self.env["WAYLAND_DEBUG"] = "client"
-        if self.name == "bead" and os.environ.get("PICKER_GL") == "1":
-            command = [*command, "--panel-renderer", "femtovg-gl"]
+        if self.name == "bead" and os.environ.get("PICKER_BAD_EGL") == "1":
+            self.env["__EGL_VENDOR_LIBRARY_FILENAMES"] = "/nonexistent/b0123-egl-vendor.json"
+        if self.name == "bead" and os.environ.get("PICKER_GL") in ("1", "panel"):
+            renderer = "auto" if os.environ["PICKER_GL"] == "panel" else "femtovg-gl"
+            command = [*command, "--renderer", renderer, "--panel-renderer", "femtovg-gl"]
     return original_spawn(self, command, name, env, cwd)
 
 m.Arm.spawn = spawn

@@ -1347,6 +1347,71 @@ impl App {
         if let Err(e) = result {
             #[cfg(any(feature = "native-gl", feature = "wgpu"))]
             if self.options.auto_fallback
+                && self.surfaces[index].companion
+                && e.downcast_ref::<GpuUnavailable>().is_some()
+            {
+                eprintln!("FALLBACK companion GPU unavailable: {e}");
+                let renderer = match bead_render::renderer(RendererKind::Cpu) {
+                    Ok(renderer) => renderer,
+                    Err(error) => {
+                        self.fail(error);
+                        return;
+                    }
+                };
+                if let Some((_, active, kind)) = &mut self.companion {
+                    *active = renderer;
+                    *kind = RendererKind::Cpu;
+                } else {
+                    self.fail("companion renderer unavailable during GPU fallback");
+                    return;
+                }
+                if let Some((_, desired)) = &mut self.options.companion {
+                    // Keep this slot on CPU after fallback instead of retrying GL
+                    // on every frame. A replacement panel may choose its own policy.
+                    *desired = RendererKind::Cpu;
+                }
+                for surface in self.surfaces.iter_mut().filter(|surface| surface.companion) {
+                    #[cfg(feature = "native-gl")]
+                    drop(surface.gl.take());
+                    #[cfg(feature = "wgpu")]
+                    drop(surface.gpu.take());
+                    surface.callbacks.invalidate();
+                    surface.visual_damage = Default::default();
+                }
+                self.release_timer = false;
+                self.companion_policy = Default::default();
+                #[cfg(feature = "native-gl")]
+                if self.options.renderer == RendererKind::Cpu
+                    && self.surfaces.iter().all(|surface| surface.gl.is_none())
+                    && let Some(transport) = self.gl.take()
+                    && let Err(error) = {
+                        // SAFETY: all companion GL surfaces were just dropped, no primary
+                        // GL surface remains, and the CPU renderer owns no EGL resources.
+                        unsafe { transport.shutdown_exclusive() }
+                    }
+                {
+                    self.fail(error);
+                    return;
+                }
+                #[cfg(feature = "wgpu")]
+                if self.surfaces.iter().all(|surface| surface.gpu.is_none()) {
+                    self.gpu = None;
+                }
+                println!("RENDER_POLICY companion=true transition=gpu-to-cpu fallback=true");
+                let indices: Vec<_> = self
+                    .surfaces
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, surface)| surface.companion)
+                    .map(|(index, _)| index)
+                    .collect();
+                for index in indices {
+                    self.draw(index, qh);
+                }
+                return;
+            }
+            #[cfg(any(feature = "native-gl", feature = "wgpu"))]
+            if self.options.auto_fallback
                 && !self.surfaces[index].companion
                 && e.downcast_ref::<GpuUnavailable>().is_some()
             {
