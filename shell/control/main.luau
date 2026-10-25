@@ -172,8 +172,8 @@ local function pill(id,label,icon,action,selected)
         ui.Row(inside)}
 end
 -- The notification summary under the tiles (the QML history popup in the full sidebar): the title with the DND and
--- Clear pills, then the newest two entries; `limit` 0 on the full page, which lists every projected entry
--- and leaves the title to the page header.
+-- Clear pills, then the newest two entries; limit 0 supplies only the heading
+-- and status text for the windowed popup list.
 local function notices(limit,page)
     local list=get("cc.notices")
     local clear=get("cc.notice_clear")
@@ -352,17 +352,18 @@ local function detail()
 end
 local body,content
 if popup then
-    local items=notices(nil,false)
-    local heading=items[1]
-    table.remove(items,1)
-    local list,list_height=stack("history",items,GAP)
-    -- QML's 440 px list ceiling at the default scale, expressed in shared row units.
-    -- Keep DND/Clear visible while every published notification remains scrollable.
+    local items=notices(0,false)
+    local heading=table.remove(items,1)
+    local prefix,prefix_height=stack("history",items,GAP)
+    local count=#get("cc.notices")
+    local prefix_gap=prefix_height>0 and count>0 and GAP or 0
+    local list_height=prefix_height+prefix_gap+math.max(0,count*(NOTICE_H+GAP)-GAP)
+    -- Keep DND/Clear visible; construct only the viewport's retained cards.
     local available=math.max(0,math.min(10*ROW,get("cc.max_height")-TOP-PAD-heading[2]-GAP))
     local visible=math.min(available,list_height)
-    if list_height>visible then
-        list=ui.Scroll{id="scroll",scroll=ui.bind("cc.scroll"),width=INNER,height=visible,list}
-    end
+    local list=require("../kit/virtual-list"){id="scroll",scroll=ui.bind("cc.scroll"),
+        width=INNER,height=visible,model=ui.bind("cc.notices"),key="id",row_height=NOTICE_H,gap=GAP,
+        before=prefix,before_height=prefix_height,before_gap=prefix_gap,render=notice_card}
     body,content=stack("history-content",{heading,{list,visible}},GAP)
 elseif page=="edit" then body,content=edit()
 elseif page=="catalog" then body,content=catalog()

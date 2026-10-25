@@ -2,6 +2,7 @@
 //! Convert Wayland axis units into logical content distances for every surface.
 use smithay_client_toolkit::seat::pointer::AxisScroll;
 use std::sync::atomic::{AtomicU64, Ordering};
+use wayland_client::protocol::wl_pointer::AxisSource;
 
 /// Output refresh period reported by the latest presentation feedback (0 = unknown).
 static REFRESH_NS: AtomicU64 = AtomicU64::new(0);
@@ -12,7 +13,7 @@ pub(super) fn note_refresh(refresh_ns: u32) {
 }
 /// Glide and fling ticks follow the output's frame period (60 Hz when unknown), so a 120 Hz panel
 /// receives a new scroll position for every frame instead of every second one.
-fn tick() -> Duration {
+pub(super) fn tick() -> Duration {
     let ns = REFRESH_NS.load(Ordering::Relaxed);
     Duration::from_nanos(if (4_000_000..=34_000_000).contains(&ns) {
         ns
@@ -24,7 +25,7 @@ fn tick() -> Duration {
 const FLING_DECELERATION: f64 = 1500.;
 const FLING_MAX_VELOCITY: f64 = 2500.;
 const FLING_MIN_VELOCITY: f64 = 100.;
-const FLING_RELEASE: Duration = Duration::from_millis(65);
+const WHEEL_DURATION: f64 = 0.125;
 
 pub(super) fn distance(axis: AxisScroll) -> f64 {
     if axis.value120 != 0 {
@@ -32,13 +33,24 @@ pub(super) fn distance(axis: AxisScroll) -> f64 {
     } else if axis.discrete != 0 {
         f64::from(axis.discrete) * 600.
     } else {
-        axis.absolute * 3.
+        axis.absolute
     }
 }
 
-fn movement(axis: AxisScroll, content: bool) -> (f64, bool) {
+fn movement(axis: AxisScroll, content: bool, source: Option<AxisSource>) -> (f64, bool) {
     if content {
-        (distance(axis), axis.value120 != 0 || axis.discrete != 0)
+        if source == Some(AxisSource::Finger) {
+            return (axis.absolute, false);
+        }
+        let wheel = matches!(source, Some(AxisSource::Wheel | AxisSource::WheelTilt))
+            || axis.value120 != 0
+            || axis.discrete != 0;
+        let delta = if wheel && axis.value120 == 0 && axis.discrete == 0 {
+            axis.absolute * 40.
+        } else {
+            distance(axis)
+        };
+        (delta, wheel)
     } else {
         // Volume, workspace and tray gestures must stay one event per physical input.
         let raw = if axis.absolute != 0. {
@@ -63,19 +75,51 @@ mod tests {
             value120: 120,
             ..Default::default()
         };
-        assert_eq!(movement(axis, false), (15., false));
-        assert_eq!(movement(axis, true), (600., true));
+        assert_eq!(movement(axis, false, None), (15., false));
+        assert_eq!(movement(axis, true, None), (600., true));
         assert_eq!(
             movement(
                 AxisScroll {
                     absolute: 2.5,
                     ..Default::default()
                 },
-                false
+                false,
+                None
             ),
             (2.5, false)
         );
     }
+    #[test]
+    fn finger_pixels_are_one_to_one_and_legacy_wheel_uses_notch_units() {
+        let axis = AxisScroll {
+            absolute: -15.,
+            ..Default::default()
+        };
+        assert_eq!(
+            movement(axis, true, Some(AxisSource::Finger)),
+            (-15., false)
+        );
+        assert_eq!(movement(axis, true, Some(AxisSource::Wheel)), (-600., true));
+        assert_eq!(
+            movement(axis, true, Some(AxisSource::Continuous)),
+            (-15., false)
+        );
+    }
+
+    #[test]
+    fn wheel_reversal_discards_pending_forward_travel() {
+        let previous = Motion {
+            serial: 0,
+            started: Instant::now(),
+            distance: 1200.,
+            delivered: 100.,
+            point: (4., 5.),
+        };
+        assert_eq!(remaining_distance(Some(&previous), (4., 5.), -1.), 0.);
+        assert_eq!(remaining_distance(Some(&previous), (4., 5.), 1.), 1100.);
+        assert_eq!(remaining_distance(Some(&previous), (8., 5.), 1.), 0.);
+    }
+
     #[test]
     fn fling_decelerates_to_rest_in_the_direction_of_release() {
         let (first, done) = fling_position(-1500., 0.1);
@@ -115,7 +159,7 @@ mod tests {
                 absolute: -2.5,
                 ..Default::default()
             }),
-            -7.5
+            -2.5
         );
         assert_eq!(distance(AxisScroll::default()), 0.);
     }
@@ -146,7 +190,6 @@ struct Fling {
 }
 /// Pixel-input history of one scroll axis; a release with speed turns into a decelerating fling.
 struct Pixels {
-    serial: u64,
     last: Instant,
     velocity: f64,
     samples: u32,
@@ -158,6 +201,12 @@ struct Motion {
     distance: f64,
     delivered: f64,
     point: (f32, f32),
+}
+/// Retarget from the current pose; reversing discards all undelivered travel.
+fn remaining_distance(previous: Option<&Motion>, point: (f32, f32), delta: f64) -> f64 {
+    previous
+        .filter(|p| p.point == point && p.distance.signum() == delta.signum())
+        .map_or(0., |p| p.distance - p.delivered)
 }
 impl App {
     pub(super) fn scroll_target(&self, panel: bool) -> Target {
@@ -172,6 +221,12 @@ impl App {
         }
     }
     fn deliver_scroll(&mut self, target: &Target, horizontal: bool, point: (f32, f32), delta: f64) {
+        bead_core::vprintln!(
+            "AXIS_DELIVER monotonic_ns={} horizontal={horizontal} x={} y={} delta={delta}",
+            bead_core::profile::monotonic_ns(),
+            point.0,
+            point.1
+        );
         let event = if horizontal {
             UiEvent::HorizontalScroll {
                 x: point.0,
@@ -201,6 +256,7 @@ impl App {
         horizontal: bool,
         point: (f32, f32),
         axis: AxisScroll,
+        source: Option<AxisSource>,
     ) {
         let settings = match &target {
             Target::Window(_) => self
@@ -234,25 +290,34 @@ impl App {
             .map(|(step, _)| step)
             .filter(|step| step.is_finite() && *step > 0.)
             .unwrap_or(600.);
-        let (delta, wheel) = movement(axis, content);
+        let (delta, wheel) = movement(axis, content, source);
         let delta = delta * if wheel { step / 600. } else { 1. };
+        let key = (target.clone(), horizontal);
         if delta == 0. {
+            if axis.stop {
+                self.release_pixels(&key);
+            }
             return;
         }
-        let key = (target.clone(), horizontal);
         let previous = self.scrolls.motions.remove(&key);
         self.scrolls.flings.remove(&key);
         if !wheel || bead_core::animation::reduced_motion() {
             self.deliver_scroll(&target, horizontal, point, delta);
-            if content && !wheel && !bead_core::animation::reduced_motion() {
-                self.track_pixels(key, point, delta);
+            if content
+                && source == Some(AxisSource::Finger)
+                && !bead_core::animation::reduced_motion()
+            {
+                self.track_pixels(key.clone(), point, delta);
+                if axis.stop {
+                    self.release_pixels(&key);
+                }
+            } else {
+                self.scrolls.pixels.remove(&key);
             }
             return;
         }
         self.scrolls.pixels.remove(&key);
-        let remaining = previous
-            .filter(|p| p.point == point)
-            .map_or(0., |p| p.distance - p.delivered);
+        let remaining = remaining_distance(previous.as_ref(), point, delta);
         self.scrolls.serial = self.scrolls.serial.wrapping_add(1);
         let serial = self.scrolls.serial;
         self.scrolls.motions.insert(
@@ -276,7 +341,8 @@ impl App {
                     else {
                         return TimeoutAction::Drop;
                     };
-                    let progress = (motion.started.elapsed().as_secs_f64() / 0.210).min(1.);
+                    let progress =
+                        (motion.started.elapsed().as_secs_f64() / WHEEL_DURATION).min(1.);
                     let next = motion.distance * (1. - (1. - progress).powi(3));
                     let delta = next - motion.delivered;
                     motion.delivered = next;
@@ -293,11 +359,13 @@ impl App {
             self.fail(error);
         }
     }
-    /// Remember touchpad speed (QML FastScroll's smoothing) and arm the release check.
+    /// Estimate release speed only; finger positions are delivered without interpolation.
     fn track_pixels(&mut self, key: (Target, bool), point: (f32, f32), delta: f64) {
         let now = Instant::now();
         let pixels = self.scrolls.pixels.remove(&key).filter(|p| {
-            now.duration_since(p.last) <= Duration::from_millis(120) && p.velocity * delta >= 0.
+            p.point == point
+                && now.duration_since(p.last) <= Duration::from_millis(120)
+                && p.velocity * delta >= 0.
         });
         let elapsed_ms = pixels
             .as_ref()
@@ -308,41 +376,24 @@ impl App {
             Some(p) if p.samples > 0 => (p.velocity * 0.55 + sample * 0.45, p.samples + 1),
             _ => (sample, 1),
         };
-        self.scrolls.serial = self.scrolls.serial.wrapping_add(1);
-        let serial = self.scrolls.serial;
         self.scrolls.pixels.insert(
             key.clone(),
             Pixels {
-                serial,
                 last: now,
                 velocity,
                 samples,
                 point,
             },
         );
-        if let Err(error) =
-            self.loop_handle
-                .insert_source(Timer::from_duration(FLING_RELEASE), move |_, _, app| {
-                    app.release_pixels(&key, serial);
-                    TimeoutAction::Drop
-                })
-        {
-            self.fail(error);
-        }
     }
-    fn release_pixels(&mut self, key: &(Target, bool), serial: u64) {
-        if self
-            .scrolls
-            .pixels
-            .get(key)
-            .is_none_or(|p| p.serial != serial)
-        {
-            return;
-        }
+    fn release_pixels(&mut self, key: &(Target, bool)) {
         let Some(pixels) = self.scrolls.pixels.remove(key) else {
             return;
         };
-        if pixels.samples < 2 || pixels.velocity.abs() <= FLING_MIN_VELOCITY {
+        if pixels.last.elapsed() > Duration::from_millis(120)
+            || pixels.samples < 2
+            || pixels.velocity.abs() <= FLING_MIN_VELOCITY
+        {
             return;
         }
         let velocity = pixels

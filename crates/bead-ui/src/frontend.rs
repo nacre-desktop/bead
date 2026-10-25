@@ -845,7 +845,16 @@ impl FrontEnd for LuauFrontEnd {
         // not a retained VM or an allocator high-water estimate.
         self.vm_build_bytes.set(lua.used_memory());
         let result = result
-            .map(std::rc::Rc::new)
+            .map(|raw| {
+                // Windowed lists read the offset to choose rows. Between row
+                // boundaries the authored tree is identical: keep its identity
+                // so the materialized cache can update the scroll pose alone.
+                self.materialized
+                    .borrow()
+                    .as_ref()
+                    .filter(|cached| *cached.raw == raw)
+                    .map_or_else(|| std::rc::Rc::new(raw), |cached| cached.raw.clone())
+            })
             .map_err(|error| diagnostic(entry, error));
         self.animations.borrow_mut().finish_build();
         if let Ok(raw) = &result {

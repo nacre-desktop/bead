@@ -22,6 +22,16 @@ struct Text {
     foreground: [u8; 4],
     muted: [u8; 4],
 }
+struct Scroll {
+    id: String,
+    binding: String,
+    limit: f64,
+    viewport: bead_render::Rect,
+}
+struct Floating {
+    index: usize,
+    node: String,
+}
 pub(super) struct Cached {
     raw: Rc<RawNode>,
     scene: Scene,
@@ -32,6 +42,8 @@ pub(super) struct Cached {
     values: BTreeMap<String, Value>,
     structural: BTreeSet<String>,
     text: Vec<Text>,
+    scroll: Vec<Scroll>,
+    floating: Vec<Floating>,
     _charge: Option<bead_core::cache::Charge>,
 }
 fn bindings(value: &serde_json::Value, out: &mut BTreeSet<String>) {
@@ -77,6 +89,8 @@ impl Cached {
                 "bead.focus_visible".into(),
             ]),
             text: vec![],
+            scroll: vec![],
+            floating: vec![],
         };
         fn walk(
             raw: &RawNode,
@@ -131,6 +145,9 @@ impl Cached {
                     } else {
                         cached.structural.extend(names);
                     }
+                } else if property == "scroll" && view.kind == Widget::Scroll {
+                    // Scroll is the only numeric binding that changes geometry
+                    // without changing the layout tree; resolve it after traversal.
                 } else {
                     cached.structural.extend(names);
                 }
@@ -169,6 +186,63 @@ impl Cached {
         }
         if !walk(&raw, view, &mut cached, palette, false)? {
             return Ok(None);
+        }
+        fn scrolls(view: &ViewSpec, scene: &Scene, nodes: &[Node], out: &mut Vec<Scroll>) {
+            if let Some(binding) = &view.scroll
+                && let Some(layer) = scene.layers.iter().find(|layer| layer.id == view.id)
+                && let Some(node) = nodes.iter().find(|node| node.id == view.id)
+            {
+                out.push(Scroll {
+                    id: view.id.clone(),
+                    binding: binding.clone(),
+                    limit: node.scroll_limit.unwrap_or(0.),
+                    viewport: layer.bounds,
+                });
+            }
+            for child in &view.children {
+                scrolls(child, scene, nodes, out);
+            }
+        }
+        scrolls(view, scene, nodes, &mut cached.scroll);
+        for scroll in &cached.scroll {
+            cached
+                .values
+                .insert(scroll.binding.clone(), resolve(&scroll.binding)?);
+        }
+        let mut owners = vec![false; scene.primitives.len()];
+        for layer in &scene.layers {
+            for index in layer.own.clone() {
+                if index < owners.len() {
+                    owners[index] = true;
+                }
+            }
+        }
+        let focused = resolve("bead.focused").ok().and_then(|value| match value {
+            Value::Text(id) => Some(id),
+            _ => None,
+        });
+        for (index, owned) in owners.iter().enumerate() {
+            if *owned {
+                continue;
+            }
+            let Some(id) = focused.as_deref() else {
+                return Ok(None);
+            };
+            let Some(node) = nodes.iter().find(|node| node.id == id) else {
+                return Ok(None);
+            };
+            let (Primitive::Rounded { rect: frame, .. }, Primitive::Rounded { rect: hit, .. }) =
+                (&scene.primitives[index], &node.draw)
+            else {
+                return Ok(None);
+            };
+            if frame.x != hit.x || frame.y != hit.y || frame.w != hit.w || frame.h != hit.h {
+                return Ok(None);
+            }
+            cached.floating.push(Floating {
+                index,
+                node: id.to_owned(),
+            });
         }
         for name in cached
             .structural
@@ -234,6 +308,17 @@ impl Cached {
                 .map(|t| {
                     t.binding.capacity() + t.placeholder.as_ref().map_or(0, String::capacity) + 128
                 })
+                .sum::<usize>()
+            + cached
+                .scroll
+                .iter()
+                .map(|s| s.id.capacity() + s.binding.capacity() + 96)
+                .sum::<usize>();
+        let bytes = bytes
+            + cached
+                .floating
+                .iter()
+                .map(|item| item.node.capacity() + 32)
                 .sum::<usize>();
         let budget = bead_core::cache::Budget::new("materialized-view", 8 * bead_core::cache::MIB);
         match budget.reserve(bytes) {
@@ -276,7 +361,11 @@ impl Cached {
         for (name, old) in &self.values {
             let value = resolve(name)?;
             if value != *old {
-                if self.structural.contains(name) || !matches!(value, Value::Text(_)) {
+                let scroll_binding = self.scroll.iter().any(|scroll| &scroll.binding == name);
+                if self.structural.contains(name)
+                    || !(matches!(value, Value::Text(_))
+                        || (scroll_binding && matches!(value, Value::Number(_))))
+                {
                     if bead_core::profile::enabled() {
                         println!("INPUT_PATCH_MISS kind=structural binding={name}");
                     }
@@ -309,6 +398,140 @@ impl Cached {
                 if let Some(node) = text.node {
                     nodes[node].label = paint.clone();
                 }
+            }
+        }
+        fn translated(mut primitive: Primitive, dy: f32) -> Primitive {
+            match &mut primitive {
+                Primitive::Arc { rect, .. }
+                | Primitive::Polyline { rect, .. }
+                | Primitive::Rounded { rect, .. }
+                | Primitive::Text { rect, .. }
+                | Primitive::Image { rect, .. }
+                | Primitive::Shadow { rect, .. } => *rect = rect.translated(0., dy),
+            }
+            primitive
+        }
+        let scroll_changed = self
+            .scroll
+            .iter()
+            .any(|scroll| changed.contains_key(&scroll.binding));
+        if scroll_changed {
+            let offsets: BTreeMap<_, _> = self
+                .scroll
+                .iter()
+                .map(|scroll| {
+                    let old = match self.values.get(&scroll.binding) {
+                        Some(Value::Number(v)) => *v,
+                        _ => 0.,
+                    };
+                    let new = match changed.get(&scroll.binding) {
+                        Some(Value::Number(v)) => *v,
+                        _ => old,
+                    };
+                    (
+                        scroll.id.clone(),
+                        (
+                            old.clamp(0., scroll.limit) as f32,
+                            new.clamp(0., scroll.limit) as f32,
+                        ),
+                    )
+                })
+                .collect();
+            let scroll_ids: BTreeSet<_> = self
+                .scroll
+                .iter()
+                .map(|scroll| scroll.id.as_str())
+                .collect();
+            let scroll_by_id: BTreeMap<_, _> = self
+                .scroll
+                .iter()
+                .map(|scroll| (scroll.id.as_str(), scroll))
+                .collect();
+            let mut ancestors = BTreeMap::<String, Vec<String>>::new();
+            for layer in &self.scene.layers {
+                let mut chain = layer
+                    .parent
+                    .as_ref()
+                    .and_then(|parent| ancestors.get(parent))
+                    .cloned()
+                    .unwrap_or_default();
+                if let Some(parent) = &layer.parent
+                    && scroll_ids.contains(parent.as_str())
+                {
+                    chain.insert(0, parent.clone());
+                }
+                ancestors.insert(layer.id.clone(), chain);
+            }
+            let ancestor_scrolls = |id: &str| ancestors.get(id).cloned().unwrap_or_default();
+            let shift = |ids: &[String]| {
+                ids.iter()
+                    .map(|id| {
+                        let (old, new) = offsets[id];
+                        old - new
+                    })
+                    .sum::<f32>()
+            };
+            let viewport_clip = |ids: &[String]| -> Option<bead_render::Rect> {
+                let mut clip = None;
+                for id in ids.iter().rev() {
+                    let scroll = scroll_by_id.get(id.as_str())?;
+                    let ancestors = ancestor_scrolls(id);
+                    let dy = shift(&ancestors);
+                    let rect = scroll.viewport.translated(0., dy);
+                    clip =
+                        Some(clip.map_or(rect, |prior: bead_render::Rect| prior.intersect(rect)));
+                }
+                clip
+            };
+            let mut owner = vec![String::new(); scene.primitives.len()];
+            for layer in &scene.layers {
+                for index in layer.own.clone() {
+                    if index < owner.len() {
+                        owner[index] = layer.id.clone();
+                    }
+                }
+            }
+            for item in &self.floating {
+                owner[item.index] = item.node.clone();
+            }
+            if owner.iter().any(String::is_empty) {
+                return Ok(None);
+            }
+            let extra_clips: BTreeMap<_, _> = scene
+                .clips
+                .iter()
+                .filter(|(index, _)| {
+                    owner
+                        .get(**index)
+                        .is_some_and(|id| ancestor_scrolls(id).is_empty())
+                })
+                .map(|(index, clip)| (*index, *clip))
+                .collect();
+            scene.clips.clear();
+            scene.clips.extend(extra_clips);
+            for (index, id) in owner.iter().enumerate() {
+                let ancestors = ancestor_scrolls(id);
+                if !ancestors.is_empty() {
+                    let dy = shift(&ancestors);
+                    scene.primitives[index] = translated(scene.primitives[index].clone(), dy);
+                    if let Some(clip) = viewport_clip(&ancestors) {
+                        scene.clips.insert(index, clip);
+                    }
+                }
+            }
+            for layer in &mut scene.layers {
+                let ancestors = ancestor_scrolls(&layer.id);
+                layer.bounds = layer.bounds.translated(0., shift(&ancestors));
+            }
+            for node in &mut nodes {
+                let ancestors = ancestor_scrolls(&node.id);
+                let dy = shift(&ancestors);
+                node.draw = translated(node.draw.clone(), dy);
+                node.clip = if ancestors.is_empty() {
+                    None
+                } else {
+                    viewport_clip(&ancestors)
+                };
             }
         }
         Ok(Some((scene, nodes)))

@@ -27,6 +27,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -66,10 +67,67 @@ ANIMS = {
                        [('wheel', 'wheel', 1, 16, 0.07)], [('wheel', 'wheel', -1, 16, 0.07)], 1.6),
     'settings-touchpad': ([('ui', 'nacre', 'settings'), ('sleep', 2.5)],
                           [('wheel', 'pixel', 14, 60, 0.016)], [('wheel', 'pixel', -14, 60, 0.016)], 1.6),
+    'settings-reversal-wheel': ([('ui', 'nacre', 'settings'), ('sleep', 2.5)],
+                                [('wheel', 'wheel-reverse', 1, 12, 0.12)], [], 1.6),
+    'settings-reversal-touchpad': ([('ui', 'nacre', 'settings'), ('sleep', 2.5)],
+                                   [('wheel', 'pixel-reverse', 7, 160, 0.008)], [], 1.6),
     'osd': ([], m.STATES['osd-volume'][0], m.STATES['osd-volume'][1], 1.6),
     'notification': ([], [('notify', 'Pacing check', 'A notification toast.')], [('ui', 'nacre', 'close')], 2.0),
 }
 CLOSE_APPS = {'settings-wheel': 'settings', 'settings-touchpad': 'settings'}
+# B0135 scroll matrix: these scenes already have private QML/Bead fixtures in
+# parity-compare. Coordinates are logical pixels in its 1920x1200 scene.
+SCROLL_SCENES = {
+    'settings-content': (m.STATES['settings'][0], 1100, 600, 80, 1.6),
+    'settings-nav': (m.STATES['settings'][0], 500, 600, 80, 1.6),
+    'launcher': (m.STATES['launcher'][0], 960, 600, 80, 1.6),
+    'keybindings': (m.STATES['keybindings'][0], 960, 600, 80, 1.6),
+    'colors-app': (m.STATES['colors-app'][0], 1450, 650, 80, 1.6),
+    'colors-rail': (m.STATES['colors-app'][0], 500, 650, 80, 1.6),
+    'welcome-hero': (m.STATES['welcome-hero'][0], 1100, 650, 80, 1.6),
+    'welcome-shortcuts': (m.STATES['welcome-shortcuts'][0], 1100, 650, 80, 1.6),
+    'welcome-apps': (m.STATES['welcome-apps'][0], 1100, 650, 80, 1.6),
+    'welcome-ready': (m.STATES['welcome-ready'][0], 1100, 650, 80, 1.6),
+    'welcome-help': (m.STATES['welcome-help'][0], 1100, 650, 80, 1.6),
+    'ai-chat': ([(step) for _ in range(12) for step in [('chat-seed',), ('sleep', 0.2)]]
+                + m.STATES['sidebar-conversation'][0], 500, 650, 80, 1.6),
+    'wallpaper-picker': (m.STATES['wallpaper-carousel'][0], 960, 980, 80, 1.6),
+    'updates-popout': ([('ui', 'nacre', 'controls', 'updates')], 1600, 600, 80, 1.6),
+    'clipboard': ([('ui', 'nacre', 'clipboard')], 960, 600, 80, 1.6),
+    # Populate the private daemon's notification list before opening its panel.
+    'notifications-list': ([('notify', f'Scroll fixture {i:02d}', f'Private synthetic notification row {i:02d}.')
+                            for i in range(20)] + [('ui', 'nacre', 'controls', 'notifications')],
+                           1600, 650, 80, 1.6),
+}
+for _scene, (_prepare, _x, _y, _count, _seconds) in SCROLL_SCENES.items():
+    ANIMS['scroll-' + _scene + '-touchpad'] = (
+        list(_prepare), [('wheel', 'pixel-reverse', 7, _count * 2, 0.008, _x, _y)], [], _seconds)
+    ANIMS['scroll-' + _scene + '-wheel'] = (
+        list(_prepare), [('wheel', 'wheel-reverse', 1, 12, 0.12, _x, _y)], [], 1.6)
+SCROLL_CLEANUPS = {
+    **{f'scroll-{name}-{device}': [('app_close', 'settings')]
+       for name in ('settings-content', 'settings-nav') for device in ('touchpad', 'wheel')},
+    **{f'scroll-{name}-{device}': [('app_close', 'colors' if name == 'colors-app' else 'welcome')]
+       for name in ('colors-app', 'welcome-hero', 'welcome-shortcuts', 'welcome-apps')
+       for device in ('touchpad', 'wheel')},
+    **{f'scroll-ai-chat-{device}': [('ui', 'nacre', 'left')]
+       for device in ('touchpad', 'wheel')},
+}
+_orig_start_daemon = m.Arm.start_daemon
+
+
+def start_daemon(self):
+    selected = os.environ.get('PACING_ANIMS')
+    names = selected.split(',') if selected else list(ANIMS)
+    if any(name.startswith('scroll-ai-chat-') for name in names):
+        self.install_chat_fixture()
+    _orig_start_daemon(self)
+
+
+m.Arm.start_daemon = start_daemon
+for _scene in SCROLL_SCENES:
+    for _device in ('touchpad', 'wheel'):
+        SCROLL_CLEANUPS.setdefault(f'scroll-{_scene}-{_device}', [('ui', 'nacre', 'close')])
 for _name in ANIMS:
     m.STATES.setdefault('pace-' + _name, ([], [], 0))
 m.STATES['pace'] = ([], [], 0)
@@ -84,6 +142,9 @@ def spawn(self, command, name, env=None, cwd=None):
         env = dict(env or self.env, WAYLAND_DEBUG='client', BEAD_FRAME_TRACE='1', BEAD_VERBOSE_LOG='1')
         if os.environ.get('PACING_PANEL_RENDERER') and self.name == 'bead':
             command = [*command, '--panel-renderer', os.environ['PACING_PANEL_RENDERER']]
+        if os.environ.get('PACING_TRACE_STATE') == '1' and self.name == 'bead':
+            env['BEAD_TRACE_STATE'] = '1'
+            command = [*command, '--trace-state']
     return _orig_spawn(self, command, name, env, cwd)
 
 
@@ -95,17 +156,51 @@ def run(self, command, timeout=15, check=True, env=None):
 def steps(self, operations):
     for step in operations:
         if step[0] == 'wheel':
-            _, kind, delta, count, interval = step
+            _, kind, delta, count, interval, *point = step
+            reverse = kind.endswith('-reverse')
+            axis_kind = kind.removesuffix('-reverse')
             scale = self.geometry['scale']
-            command = [self.args.pointer_tool, str(round(1100 * scale)), str(round(600 * scale)),
-                       str(self.args.size[0]), str(self.args.size[1]), 'stream', kind, str(delta),
+            x, y = point if point else (1100, 600)
+            command = [self.args.pointer_tool, str(round(x * scale)), str(round(y * scale)),
+                       str(self.args.size[0]), str(self.args.size[1]), 'stream-reverse' if reverse else 'stream', axis_kind, str(delta),
                        str(count), str(max(1, round(interval * 1000)))]
             self.release_pointer()
             limit = count * interval + 10
             for display in (self.env['WAYLAND_DISPLAY'], self.env['BEAD_PARENT']):
                 try:  # niri may lack wlr-virtual-pointer: the private parent labwc then forwards it
-                    if subprocess.run(command, env=dict(self.env, WAYLAND_DISPLAY=display), timeout=limit,
-                                      check=False, stdout=subprocess.DEVNULL).returncode == 0:
+                    capture_mid = reverse and getattr(self, 'scroll_mid_capture', None)
+                    if capture_mid:
+                        completed = []
+                        def inject():
+                            try:
+                                completed.append(subprocess.run(
+                                    command, env=dict(self.env, WAYLAND_DISPLAY=display), timeout=limit,
+                                    check=False, capture_output=True, text=True))
+                            except Exception as error:
+                                completed.append(error)
+                        worker = threading.Thread(target=inject)
+                        worker.start()
+                        time.sleep(0.2 + count * interval / 2)
+                        if worker.is_alive():
+                            try:
+                                self.scroll_mid_capture()
+                            except Exception as error:
+                                self.errors.append(f'mid-scroll screenshot: {error}')
+                            finally:
+                                self.scroll_mid_capture = None
+                        worker.join(timeout=limit + 1)
+                        if worker.is_alive():
+                            raise subprocess.TimeoutExpired(command, limit)
+                        result = completed[0]
+                        if isinstance(result, Exception):
+                            raise result
+                    else:
+                        result = subprocess.run(command, env=dict(self.env, WAYLAND_DISPLAY=display), timeout=limit,
+                                                check=False, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        if result.stdout:
+                            with (self.out / 'axis-input.log').open('a') as trace:
+                                trace.write(result.stdout)
                         break
                 except subprocess.TimeoutExpired:
                     self.errors.append(f'wheel injection timed out on {display}')
@@ -115,12 +210,165 @@ def steps(self, operations):
 
 m.Arm.spawn, m.Arm.run, m.Arm.steps = spawn, run, steps
 
+SCROLL_STORE_KEYS = {
+    'settings-content': 'settings.scroll', 'settings-nav': 'settings.nav.scroll',
+    'colors-app': 'colors.scroll', 'colors-rail': 'colors.rail.scroll', 'welcome-hero': 'welcome.scroll',
+    'welcome-shortcuts': 'welcome.scroll', 'welcome-apps': 'welcome.scroll',
+    'welcome-ready': 'welcome.scroll', 'welcome-help': 'welcome.scroll',
+    'ai-chat': 'chat.scroll', 'wallpaper-picker': 'extras.scroll',
+    'notifications-list': 'cc.scroll', 'updates-popout': 'status.updates_scroll',
+}
+
 
 def percentile(values, p):
     if not values:
         return None
     ordered = sorted(values)
     return ordered[min(len(ordered) - 1, math.ceil((len(ordered) - 1) * p))]
+
+
+def reversal_proof(log_paths, input_path, animation, start_ns, end_ns):
+    """Join delivered axis direction to a changed scroll store that was presented."""
+    scene = animation.removeprefix('scroll-').removesuffix('-touchpad').removesuffix('-wheel')
+    store_key = SCROLL_STORE_KEYS.get(scene)
+    if not store_key:
+        return {'status': 'missing', 'reason': 'no traced scroll store is mapped for this surface'}
+    input_lines = input_path.read_text(errors='replace').splitlines() if input_path.is_file() else []
+    inputs = []
+    for line in input_lines:
+        if not line.startswith('AXIS_SENT '):
+            continue
+        fields = dict(part.split('=', 1) for part in line.split()[1:])
+        stamp = int(fields['monotonic_ns'])
+        if start_ns <= stamp <= end_ns:
+            inputs.append((stamp, float(fields['delta'])))
+    reversal_input = next(((stamp, delta) for (_, old), (stamp, delta) in zip(inputs, inputs[1:])
+                           if old * delta < 0), None)
+    if not reversal_input:
+        return {'status': 'missing', 'reason': 'no contiguous input direction reversal in the window'}
+    input_ns, input_delta = reversal_input
+    candidates = []
+    for path in log_paths:
+        pending_state = None
+        by_update = {}
+        window_states = {}
+        window_by_id = {}
+        delivered = []
+        samples = []
+        for line in path.read_text(errors='replace').splitlines():
+            if line.startswith('UI_STATE '):
+                try:
+                    pending_state = json.loads(line.partition('UI_STATE ')[2])
+                except json.JSONDecodeError:
+                    pending_state = None
+            elif line.startswith('AXIS_DELIVER '):
+                fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
+                if 'monotonic_ns' in fields and 'delta' in fields:
+                    delivered.append((int(fields['monotonic_ns']), float(fields['delta'])))
+            elif line.startswith('WINDOW_STATE '):
+                prefix, _, state_text = line.partition(' state=')
+                fields = dict(part.split('=', 1) for part in prefix.split()[1:] if '=' in part)
+                try:
+                    state = json.loads(state_text)
+                    if store_key in state:
+                        key = (fields['epoch'], fields['update'], fields['generation'])
+                        window_states[key] = (int(fields['monotonic_ns']), float(state[store_key]))
+                except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+                    pass
+            elif line.startswith('WINDOW_COMMIT '):
+                fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
+                key = (fields.get('epoch'), fields.get('update'), fields.get('generation'))
+                if key in window_states:
+                    window_by_id[key] = window_states[key][1]
+            elif line.startswith('WINDOW_PRESENTED '):
+                fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
+                key = (fields.get('epoch'), fields.get('update'), fields.get('generation'))
+                if key in window_by_id and 'monotonic_ns' in fields:
+                    stamp = int(fields['monotonic_ns'])
+                    if start_ns <= stamp <= end_ns:
+                        samples.append((stamp, window_by_id[key]))
+            elif line.startswith('UI_COMMIT '):
+                fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
+                if pending_state is not None and 'update' in fields and store_key in pending_state:
+                    by_update[fields['update']] = float(pending_state[store_key])
+                pending_state = None
+            elif line.startswith('UI_PRESENTED '):
+                fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
+                update = fields.get('update')
+                if update in by_update and 'monotonic_ns' in fields:
+                    stamp = int(fields['monotonic_ns'])
+                    if start_ns <= stamp <= end_ns:
+                        samples.append((stamp, by_update[update]))
+        delivered.sort()
+        samples.sort()
+        flips = [(stamp, delta) for (_, old), (stamp, delta) in zip(delivered, delivered[1:])
+                 if stamp >= input_ns and old * delta < 0 and delta * input_delta < 0]
+        if not flips or len(samples) < 2:
+            continue
+        flip_ns, flip_delta = flips[0]
+        prior_moves = [b[1] - a[1] for a, b in zip(samples, samples[1:])
+                       if a[0] < flip_ns and b[1] != a[1]]
+        if not prior_moves:
+            continue
+        expected = -1 if prior_moves[-1] > 0 else 1
+        for previous, current in zip(samples, samples[1:]):
+            if current[0] >= flip_ns and (current[1] - previous[1]) * expected > 0:
+                candidates.append({'status': 'proven', 'store': store_key,
+                                   'input_reversal_ns': input_ns, 'delivered_reversal_ns': flip_ns,
+                                   'presented_direction_change_ns': current[0],
+                                   'input_to_visible_ms': round((current[0] - input_ns) / 1e6, 2),
+                                   'delivery_to_visible_ms': round((current[0] - flip_ns) / 1e6, 2),
+                                   'input_delta': input_delta, 'delivered_delta': flip_delta,
+                                   'presented_samples': len(samples)})
+                break
+    return candidates[0] if candidates else {
+        'status': 'missing', 'reason': 'no presented scroll-store direction change joined to delivered opposite axis input',
+        'store': store_key, 'input_reversal_ns': input_ns}
+
+
+def window_commit_metrics(log_paths, start_ns, end_ns):
+    """Cadence from the dedicated window renderer's frame/commit trace."""
+    by_surface = {}
+    for path in log_paths:
+        for line in path.read_text(errors='replace').splitlines():
+            if not line.startswith('WINDOW_COMMIT '):
+                continue
+            fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
+            if not {'monotonic_ns', 'epoch'} <= fields.keys():
+                continue
+            stamp = int(fields['monotonic_ns'])
+            if start_ns <= stamp <= end_ns:
+                by_surface.setdefault((path.name, fields['epoch']), []).append(stamp / 1e9)
+    if not by_surface:
+        return None
+    _, stamps = max(by_surface.items(), key=lambda item: len(item[1]))
+    stamps.sort()
+    intervals = [(b - a) * 1000 for a, b in zip(stamps, stamps[1:]) if (b - a) * 1000 < IDLE_GAP_MS]
+    if not intervals:
+        return {'commits': len(stamps), 'cadence_source': 'WINDOW_COMMIT', 'frames': len(stamps)}
+    dropped = sum(max(0, round(interval / VSYNC_MS) - 1)
+                  for interval in intervals if interval > 1.5 * VSYNC_MS)
+    return {'commits': len(stamps), 'cadence_source': 'WINDOW_COMMIT',
+            'interval_ms': {k: round(percentile(intervals, p), 2)
+                            for k, p in (('p50', .5), ('p95', .95), ('p99', .99))},
+            'longest_gap_ms': round(max(intervals), 1), 'dropped': dropped,
+            'slow_intervals': sum(interval > 1.5 * VSYNC_MS for interval in intervals),
+            'drop_rate': round(dropped / max(1, dropped + len(intervals)), 3)}
+
+
+def input_cadence(path, start_ns, end_ns):
+    stamps = []
+    if path.is_file():
+        for line in path.read_text(errors='replace').splitlines():
+            if line.startswith('AXIS_SENT '):
+                fields = dict(part.split('=', 1) for part in line.split()[1:])
+                stamp = int(fields['monotonic_ns'])
+                if start_ns <= stamp <= end_ns:
+                    stamps.append(stamp)
+    intervals = [(b - a) / 1e6 for a, b in zip(stamps, stamps[1:])]
+    return {'events': len(stamps), 'interval_ms': {
+        'p50': round(percentile(intervals, .5), 2), 'p95': round(percentile(intervals, .95), 2),
+        'max': round(max(intervals), 2)} if intervals else None}
 
 
 STAMP = re.compile(r'^\[(\d\d):(\d\d):(\d\d)\.(\d{6})\]\s+(?:\{[^}]*\}\s+)?(->\s+)?(\S+?)#(\d+)\.(\w+)\((.*)\)')
@@ -143,7 +391,9 @@ def parse_trace(path, real_ref):
             if event not in ('commit', 'done', 'presented', 'attach', 'damage', 'damage_buffer'):
                 continue
             sod = int(hh) * 3600 + int(mm) * 60 + int(ss) + int(micro) / 1e6
-            rows.append(((sod - ref_sod) % 86400, bool(arrow), interface, int(ident), event, args))
+            # Surface ids are process-local, so retain the log's process name in the key.
+            rows.append(((sod - ref_sod) % 86400, bool(arrow), interface,
+                         f'{Path(path).name}:{int(ident)}', event, args))
     return rows
 
 
@@ -203,7 +453,8 @@ def window_metrics(rows, start, end, frames):
         result['presented_interval_ms'] = {k: round(percentile(deltas, p), 2) for k, p in (('p50', .5), ('p95', .95), ('p99', .99))}
     cpu = [f['render_ms'] for f in frames if start <= f['t'] <= end]
     if cpu:
-        result['render_ms'] = {'p50': round(percentile(cpu, .5), 3), 'p99': round(percentile(cpu, .99), 3), 'max': round(max(cpu), 3)}
+        result['render_ms'] = {'p50': round(percentile(cpu, .5), 3), 'p95': round(percentile(cpu, .95), 3),
+                               'p99': round(percentile(cpu, .99), 3), 'max': round(max(cpu), 3)}
         result['render_over_vsync'] = round(sum(c > VSYNC_MS for c in cpu) / len(cpu), 3)
     return result
 
@@ -229,17 +480,37 @@ def pace_drive(self, names):
                 self.steps([('ui', 'nacre', 'close')])
                 time.sleep(0.8)
                 self.steps(prepare)
-                for phase, phase_steps in (('open', opens), ('close', closes)):
+                screenshot_base = None
+                if name.startswith('scroll-') and repeat == 0:
+                    _, _, _, _, _, x, y = next(iter(opens))
+                    screenshot_base = self.out / 'scroll-evidence' / name
+                    screenshot_base.parent.mkdir(parents=True, exist_ok=True)
+                    region = f'{max(0, x - 300)},{max(0, y - 250)} 600x500'
+                    self.grab(screenshot_base.with_name(name + '-before.png'), scale=0.5, region=region)
+                phases = [('open', opens)] if name.startswith(('scroll-', 'settings-reversal-')) else [('open', opens), ('close', closes)]
+                for phase, phase_steps in phases:
                     start = time.time()
                     mono = time.monotonic()
-                    self.steps(phase_steps)
+                    try:
+                        if screenshot_base is not None and phase == 'open':
+                            self.scroll_mid_capture = lambda: self.grab(
+                                screenshot_base.with_name(name + '-mid.png'), scale=0.5, region=region)
+                        self.steps(phase_steps)
+                    finally:
+                        if screenshot_base is not None:
+                            self.scroll_mid_capture = None
                     time.sleep(max(0, seconds - (time.monotonic() - mono)))
                     windows.append({'animation': name, 'phase': phase, 'repeat': repeat,
                                     'start': start - real_ref, 'end': time.time() - real_ref,
-                                    'mono_start': mono - mono_ref})
+                                    'mono_start': mono - mono_ref, 'mono_start_ns': int(mono * 1e9),
+                                    'mono_end_ns': int(time.monotonic() * 1e9)})
                     time.sleep(0.5)
+                    if screenshot_base is not None and phase == 'open':
+                        self.grab(screenshot_base.with_name(name + '-after.png'), scale=0.5, region=region)
                 if name in CLOSE_APPS:
                     self.steps([('app_close', CLOSE_APPS[name])])
+                if name in SCROLL_CLEANUPS:
+                    self.steps(SCROLL_CLEANUPS[name])
                 time.sleep(self.args.closed_settle)
                 try:
                     memory[name] = self.rss()
@@ -249,14 +520,28 @@ def pace_drive(self, names):
                 self.errors.append(f'{name}: {str(error)[:200]}')
     time.sleep(0.5)
     log_path = self.logs / 'shell.log'
-    rows = parse_trace(log_path, real_ref)
+    trace_logs = sorted(self.logs.glob('*.log'))
+    rows = [row for source in trace_logs for row in parse_trace(source, real_ref)]
     frames = []
-    # UI_FRAME carries monotonic_ns; map it onto the real-clock reference by the harness offset.
-    offset = real_ref - mono_ref
-    for line in log_path.read_text(errors='replace').splitlines():
-        if line.startswith('UI_FRAME '):
-            fields = dict(part.split('=', 1) for part in line.split()[1:])
-            frames.append({'t': int(fields['monotonic_ns']) / 1e9 + offset - real_ref, 'render_ms': float(fields['render_ms'])})
+    trace_paths = []
+    trace_dir = self.out / 'scroll-traces'
+    for source in trace_logs:
+        lines = source.read_text(errors='replace').splitlines()
+        selected = [line for line in lines if line.startswith((
+            'UI_STATE ', 'UI_COMMIT ', 'UI_PRESENTED ', 'AXIS_DELIVER ', 'UI_FRAME ',
+            'WINDOW_STATE ', 'WINDOW_COMMIT ', 'WINDOW_FRAME ', 'WINDOW_PRESENTED '))]
+        if selected:
+            trace_dir.mkdir(parents=True, exist_ok=True)
+            target = trace_dir / source.name
+            target.write_text('\n'.join(selected) + '\n')
+            trace_paths.append(target)
+        # Both frame record types use CLOCK_MONOTONIC_NS and report renderer CPU cost.
+        for line in selected:
+            if line.startswith(('UI_FRAME ', 'WINDOW_FRAME ')):
+                fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
+                if 'monotonic_ns' in fields and 'render_ms' in fields:
+                    frames.append({'t': int(fields['monotonic_ns']) / 1e9 - mono_ref,
+                                   'render_ms': float(fields['render_ms'])})
     commits = []  # first content-bearing frame: the panel scene's UI_COMMIT (Bead only)
     for line in log_path.read_text(errors='replace').splitlines():
         if line.startswith('UI_COMMIT ') and 'companion=true' in line:
@@ -264,6 +549,14 @@ def pace_drive(self, names):
     results = []
     for window in windows:
         metrics = window_metrics(rows, window['start'], window['end'], frames)
+        committed = window_commit_metrics(trace_paths, window['mono_start_ns'], window['mono_end_ns'])
+        if committed:
+            metrics.update(committed)
+        if window['animation'].startswith('scroll-'):
+            metrics['input_cadence'] = input_cadence(self.out / 'axis-input.log',
+                                                      window['mono_start_ns'], window['mono_end_ns'])
+            metrics['reversal'] = reversal_proof(trace_paths, self.out / 'axis-input.log',
+                                                  window['animation'], window['mono_start_ns'], window['mono_end_ns'])
         later = [c for c in commits if c >= window['mono_start']]
         if later and later[0] <= window['mono_start'] + (window['end'] - window['start']):
             metrics['content_commit_ms'] = round((later[0] - window['mono_start']) * 1000, 1)
@@ -294,14 +587,27 @@ def summarize(args, names):
                 lines.append(f'{animation} {phase} {arm}: no frames')
                 continue
             def med(key, sub=None):
-                values = [(w[key][sub] if sub else w[key]) for w in good if w.get(key) is not None and (not sub or w[key])]
+                values = []
+                for window in good:
+                    value = window.get(key)
+                    for field in sub.split('.') if sub else ():
+                        value = value.get(field) if isinstance(value, dict) else None
+                    if value is not None:
+                        values.append(value)
                 return percentile(values, .5) if values else None
             row = {'n': len(good), 'commits': med('commits'), 'dropped': sum(w['dropped'] for w in good) / len(good),
-                   'drop_rate': med('drop_rate'), 'p99': med('interval_ms', 'p99'), 'p50': med('interval_ms', 'p50'),
-                   'gap': med('longest_gap_ms'), 'first': med('first_frame_ms'), 'render_p99': med('render_ms', 'p99')}
+                   'drop_rate': med('drop_rate'), 'p99': med('interval_ms', 'p99'),
+                   'p95': med('interval_ms', 'p95'), 'p50': med('interval_ms', 'p50'),
+                   'gap': med('longest_gap_ms'), 'first': med('first_frame_ms'),
+                   'render_p95': med('render_ms', 'p95'), 'render_p99': med('render_ms', 'p99'),
+                   'input_p95': med('input_cadence', 'interval_ms.p95'),
+                   'reversal_ms': med('reversal', 'delivery_to_visible_ms')}
             rows[f'{animation}/{phase}/{arm}'] = row
             lines.append(f"{animation} {phase} {arm}: n={row['n']} commits={row['commits']} dropped={row['dropped']:.1f} "
-                         f"p50={row['p50']} p99={row['p99']} gap={row['gap']} first={row['first']} render_p99={row['render_p99']}")
+                         f"commit_p50={row['p50']} commit_p95={row['p95']} commit_p99={row['p99']} "
+                         f"gap={row['gap']} first={row['first']} "
+                         f"render_p95={row['render_p95']} render_p99={row['render_p99']} "
+                         f"input_p95={row['input_p95']} reversal_ms={row['reversal_ms']}")
     (Path(args.out) / f'pacing-summary-{HZ}hz.json').write_text(json.dumps(rows, indent=1))
     print('\n'.join(lines))
     return rows
@@ -318,7 +624,7 @@ def report(specs):
             columns.setdefault((window['animation'], window['phase']), {}).setdefault(label, []).append(window)
     labels = [spec.partition('=')[0] for spec in specs]
     print('animation/phase'.ljust(26) + ''.join(label.ljust(40) for label in labels))
-    print(''.ljust(26) + ''.join('drop% p99ms gap first content rndr99 slow%'.ljust(40) for _ in labels))
+    print(''.ljust(26) + ''.join('drop% commit95 commit99 gap first content render95 reversal'.ljust(66) for _ in labels))
     for key, by_label in sorted(columns.items()):
         cells = []
         for label in labels:
@@ -328,12 +634,18 @@ def report(specs):
                 continue
             def med(field, sub=None):
                 # A window with no dropped frame is a zero, not a missing value: it belongs in the median.
-                values = [w[field][sub] if sub else w[field] for w in good if w.get(field) is not None]
+                values = []
+                for window in good:
+                    value = window.get(field)
+                    for key in sub.split('.') if sub else ():
+                        value = value.get(key) if isinstance(value, dict) else None
+                    if value is not None:
+                        values.append(value)
                 return percentile(values, .5) if values else None
             def fmt(v):
                 return '-' if v is None else f'{v:.1f}'
             rate = med('drop_rate')
-            cells.append(f"{fmt(None if rate is None else rate * 100)} {fmt(med('interval_ms', 'p99'))} {fmt(med('longest_gap_ms'))} {fmt(med('first_frame_ms'))} {fmt(med('content_commit_ms'))} {fmt(med('render_ms', 'p99'))} {fmt(None if med('render_over_vsync') is None else med('render_over_vsync') * 100)}".ljust(40))
+            cells.append(f"{fmt(None if rate is None else rate * 100)} {fmt(med('interval_ms', 'p95'))} {fmt(med('interval_ms', 'p99'))} {fmt(med('longest_gap_ms'))} {fmt(med('first_frame_ms'))} {fmt(med('content_commit_ms'))} {fmt(med('render_ms', 'p95'))} {fmt(med('reversal', 'delivery_to_visible_ms'))}".ljust(66))
         print('/'.join(key).ljust(26) + ''.join(cells))
 
 

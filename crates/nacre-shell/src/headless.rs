@@ -658,6 +658,77 @@ mod tests {
     }
 
     #[test]
+    fn notification_stream_windows_variable_height_cards_and_reaches_both_edges()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let rows: Vec<_> = (0..120)
+            .map(|i| {
+                serde_json::json!({
+                    "id":i.to_string(), "app":"Example", "summary":format!("Notice {i}"),
+                    "body":if i % 2 == 0 { "Details\nSecond line" } else { "" },
+                    "time_str":"now", "expanded":i % 3 == 0, "urgency":1, "actions":[]
+                })
+            })
+            .collect();
+        let mut fixture = initial_models()?;
+        fixture.extend(crate::notifications::values(
+            &serde_json::json!({"rows":rows,
+            "popup_count":120,"history_count":120,"dnd":false,"inhibited":false,"timers":[]}),
+        ));
+        let mut h = bead_test::Harness::load_with_icons(
+            &root(),
+            Path::new("notifications/main.luau"),
+            &root().join("palette.json"),
+            fixture,
+            bead_test::Config {
+                width: 464,
+                height: 784,
+                scale: 1.,
+            },
+            std::collections::BTreeMap::from([(
+                "dialog-information".into(),
+                root().join("tests/icon.svg"),
+            )]),
+        )?;
+        for (name, delta, expected) in [
+            ("top", 0., "Notice 0"),
+            ("bottom", 1_000_000., "Notice 119"),
+            ("reversed", -1_000_000., "Notice 0"),
+        ] {
+            if delta != 0. {
+                h.script([bead_test::Input::Scroll {
+                    x: 200.,
+                    y: 350.,
+                    delta,
+                }])?;
+            }
+            let scene = h.scene();
+            let visible = scene.primitives.iter().filter(|p| matches!(p, bead::render::Primitive::Text {text,..} if text.starts_with("Notice "))).count();
+            assert!(
+                visible < 12,
+                "only viewport cards plus overscan should materialize: {visible}"
+            );
+            assert!(
+                scene.primitives.iter().any(
+                    |p| matches!(p, bead::render::Primitive::Text {text,..} if text==expected)
+                )
+            );
+            let frame = h.render()?;
+            let golden = root()
+                .join("tests/goldens")
+                .join(format!("notification-scroll-{name}.png"));
+            if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+                frame.save(&golden)?;
+            }
+            frame.compare(
+                &golden,
+                bead_test::Tolerance::default(),
+                &std::env::temp_dir().join(format!("notification-scroll-{name}")),
+            )?;
+        }
+        Ok(())
+    }
+
+    #[test]
     fn notification_controls_follow_current_qml_visibility()
     -> Result<(), Box<dyn std::error::Error>> {
         for (body, actions, details) in [

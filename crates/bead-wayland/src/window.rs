@@ -45,6 +45,9 @@ pub(super) struct Win {
     renderer: Box<dyn Renderer>,
     pool: Option<SlotPool>,
     buffers: Vec<Buffer>,
+    damage_history: bead_render::damage::FrameDamage,
+    pending_damage: Vec<Damage>,
+    surface_damage: Damage,
     geometry: (i32, i32),
     size: (u32, u32),
     preferred_size: (u32, u32),
@@ -58,6 +61,8 @@ pub(super) struct Win {
     timer: bool,
     drawn: u64,
     first_frame_texts: Vec<String>,
+    ui_serial: u64,
+    presented_update: Option<u64>,
 }
 impl Win {
     pub(super) fn scroll_regions(&self) -> Vec<Rect> {
@@ -177,6 +182,53 @@ impl WindowHandler for App {
 }
 
 impl App {
+    pub(super) fn window_presentation(
+        &mut self,
+        data: &PresentationData,
+        event: &wp_presentation_feedback::Event,
+    ) -> bool {
+        let Some(win) = self.window.as_mut().filter(|win| {
+            win.epoch == data.source_epoch && win.window.wl_surface() == &data.surface
+        }) else {
+            return false;
+        };
+        match event {
+            wp_presentation_feedback::Event::Presented {
+                tv_sec_hi,
+                tv_sec_lo,
+                tv_nsec,
+                refresh,
+                ..
+            } => {
+                crate::scroll::note_refresh(*refresh);
+                let monotonic_ns = ((u64::from(*tv_sec_hi) << 32) | u64::from(*tv_sec_lo))
+                    * 1_000_000_000
+                    + u64::from(*tv_nsec);
+                if bead_core::profile::frame_trace() {
+                    println!(
+                        "WINDOW_PRESENTED monotonic_ns={monotonic_ns} epoch={} update={} generation={} refresh_ns={}",
+                        win.epoch, data.update, data.generation, refresh
+                    );
+                }
+                if win.presented_update.is_none_or(|last| data.update > last) {
+                    win.source.presented(data.generation);
+                    win.presented_update = Some(data.update);
+                }
+            }
+            wp_presentation_feedback::Event::Discarded => {
+                bead_core::vprintln!(
+                    "WINDOW_DISCARDED monotonic_ns={} epoch={} update={} generation={}",
+                    super::monotonic_ns(),
+                    win.epoch,
+                    data.update,
+                    data.generation
+                );
+            }
+            _ => {}
+        }
+        true
+    }
+
     pub(super) fn bind_xdg(
         globals: &wayland_client::globals::GlobalList,
         qh: &QueueHandle<Self>,
@@ -306,6 +358,14 @@ impl App {
             renderer,
             pool: None,
             buffers: Vec::new(),
+            damage_history: Default::default(),
+            pending_damage: Vec::new(),
+            surface_damage: Damage {
+                x: 0,
+                y: 0,
+                w: 0,
+                h: 0,
+            },
             geometry: (0, 0),
             size,
             preferred_size: size,
@@ -319,6 +379,8 @@ impl App {
             timer: false,
             drawn: 0,
             first_frame_texts: Vec::new(),
+            ui_serial: 0,
+            presented_update: None,
         });
         self.window_ui(UiEvent::Reload);
         if let Some(palette) = self.wallpaper_palette.clone() {
@@ -435,6 +497,14 @@ impl App {
             && win.scale120 != scale120
         {
             win.scale120 = scale120;
+            win.damage_history = Default::default();
+            win.pending_damage =
+                vec![
+                    Damage::full(win.geometry.0.max(0) as u32, win.geometry.1.max(0) as u32);
+                    win.buffers.len()
+                ];
+            win.surface_damage =
+                Damage::full(win.geometry.0.max(0) as u32, win.geometry.1.max(0) as u32);
             self.window_ui(UiEvent::Relayout);
         }
     }
@@ -471,6 +541,20 @@ impl App {
             }
         };
         win.scene = scene;
+        win.ui_serial = win.ui_serial.wrapping_add(1);
+        let trace_window_state = self.options.trace_state
+            || (std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some()
+                && std::env::var("BEAD_TRACE_STATE").is_ok_and(|value| value == "1"));
+        if trace_window_state {
+            bead_core::vprintln!(
+                "WINDOW_STATE monotonic_ns={} epoch={} update={} generation={} state={}",
+                super::monotonic_ns(),
+                win.epoch,
+                win.ui_serial,
+                win.scene.resource_revision,
+                win.source.state_summary()
+            );
+        }
         self.window_draw();
     }
     fn window_draw(&mut self) {
@@ -480,30 +564,32 @@ impl App {
         if !win.configured {
             return;
         }
-        if let Some(last) = win.last_draw
-            && last.elapsed() < Duration::from_millis(8)
-        {
-            if !win.timer {
-                win.timer = true;
-                let epoch = win.epoch;
-                let _ = self.loop_handle.insert_source(
-                    Timer::from_duration(Duration::from_millis(8)),
-                    move |_, _, app| {
-                        if let Some(w) = app.window.as_mut().filter(|w| w.epoch == epoch) {
-                            w.timer = false;
-                            app.window_draw();
-                        }
-                        TimeoutAction::Drop
-                    },
-                );
+        if let Some(last) = win.last_draw {
+            let delay = super::scroll::tick().saturating_sub(last.elapsed());
+            if !delay.is_zero() {
+                if !win.timer {
+                    win.timer = true;
+                    let epoch = win.epoch;
+                    let _ = self.loop_handle.insert_source(
+                        Timer::from_duration(delay),
+                        move |_, _, app| {
+                            if let Some(w) = app.window.as_mut().filter(|w| w.epoch == epoch) {
+                                w.timer = false;
+                                app.window_draw();
+                            }
+                            TimeoutAction::Drop
+                        },
+                    );
+                }
+                return;
             }
-            return;
         }
         if let Err(e) = self.window_render() {
             eprintln!("WINDOW_DRAW_ERROR {e}");
         }
     }
     fn window_render(&mut self) -> Result<(), Box<dyn Error>> {
+        let frame_started = Instant::now();
         let rgba = cfg!(target_endian = "little")
             && !self.options.force_argb
             && self.shm.formats().contains(&wl_shm::Format::Abgr8888);
@@ -541,12 +627,38 @@ impl App {
             }
             win.pool = Some(pool);
             win.geometry = (w, h);
+            win.damage_history = Default::default();
+            win.pending_damage = vec![Damage::full(w as u32, h as u32); win.buffers.len()];
+            win.surface_damage = Damage::full(w as u32, h as u32);
         }
-        let pool = win.pool.as_mut().ok_or("window pool missing")?;
+        win.renderer.prepare(scene, scale)?;
+        let full = Damage::full(w as u32, h as u32);
+        let semantic = if let Some(frame) = win.renderer.prepared_frame() {
+            win.damage_history
+                .update(&frame, (0., 0.), scene.opacity, w as u32, h as u32)?
+        } else {
+            vec![full]
+        };
+        for damage in &semantic {
+            win.surface_damage = win.surface_damage.union(*damage);
+            for pending in &mut win.pending_damage {
+                *pending = pending.union(*damage);
+            }
+        }
+        if win.surface_damage.w == 0 || win.surface_damage.h == 0 {
+            return Ok(());
+        }
         let Some(slot) = win
             .buffers
             .iter()
-            .position(|b| !b.slot().has_active_buffers())
+            .enumerate()
+            .find(|(index, b)| {
+                !b.slot().has_active_buffers() && {
+                    let pending = win.pending_damage[*index];
+                    pending.w > 0 && pending.h > 0
+                }
+            })
+            .map(|(index, _)| index)
         else {
             // All buffers still held by the compositor: try again shortly.
             if !win.timer {
@@ -565,7 +677,9 @@ impl App {
             }
             return Ok(());
         };
-        win.renderer.prepare(scene, scale)?;
+        let damage = win.pending_damage[slot];
+        let surface_damage = win.surface_damage;
+        let pool = win.pool.as_mut().ok_or("window pool missing")?;
         let canvas = win.buffers[slot]
             .canvas(pool)
             .ok_or("compositor owns buffer")?;
@@ -578,7 +692,7 @@ impl App {
                 scale,
                 format,
             }),
-            Damage::full(w as u32, h as u32),
+            damage,
         )?;
         let surface = win.window.wl_surface();
         if win.viewport.is_some() {
@@ -586,9 +700,38 @@ impl App {
         } else {
             surface.set_buffer_scale((win.scale120 / 120).max(1) as i32);
         }
-        surface.damage_buffer(0, 0, w, h);
+        surface.damage_buffer(
+            surface_damage.x as i32,
+            surface_damage.y as i32,
+            surface_damage.w as i32,
+            surface_damage.h as i32,
+        );
+        if let Some(presentation) = &self.presentation {
+            presentation.feedback(
+                surface,
+                &self.qh,
+                PresentationData {
+                    source_epoch: win.epoch,
+                    update: win.ui_serial,
+                    surface: surface.clone(),
+                    generation: scene.resource_revision,
+                },
+            );
+        }
         win.buffers[slot].attach_to(surface)?;
         win.window.commit();
+        win.pending_damage[slot] = Damage {
+            x: 0,
+            y: 0,
+            w: 0,
+            h: 0,
+        };
+        win.surface_damage = Damage {
+            x: 0,
+            y: 0,
+            w: 0,
+            h: 0,
+        };
         win.last_draw = Some(Instant::now());
         if win.drawn == 0 && std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some() {
             win.first_frame_texts = win
@@ -605,6 +748,29 @@ impl App {
                 .collect();
         }
         win.drawn += 1;
+        if bead_core::profile::frame_trace() {
+            println!(
+                "WINDOW_FRAME monotonic_ns={} epoch={} update={} generation={} frame={} render_ms={:.3} damage={},{},{},{}",
+                super::monotonic_ns(),
+                win.epoch,
+                win.ui_serial,
+                win.scene.resource_revision,
+                win.drawn,
+                frame_started.elapsed().as_secs_f64() * 1000.,
+                surface_damage.x,
+                surface_damage.y,
+                surface_damage.w,
+                surface_damage.h
+            );
+            println!(
+                "WINDOW_COMMIT monotonic_ns={} epoch={} update={} generation={} frame={}",
+                super::monotonic_ns(),
+                win.epoch,
+                win.ui_serial,
+                win.scene.resource_revision,
+                win.drawn
+            );
+        }
         Ok(())
     }
     pub(super) fn window_key(&mut self, event: &KeyEvent) {
@@ -664,11 +830,12 @@ impl App {
             PointerEventKind::Axis {
                 vertical,
                 horizontal,
+                source,
                 ..
             } => {
                 let target = crate::scroll::Target::Window(win.epoch);
-                self.axis_scroll(target.clone(), false, (x, y), vertical);
-                self.axis_scroll(target, true, (x, y), horizontal);
+                self.axis_scroll(target.clone(), false, (x, y), vertical, source);
+                self.axis_scroll(target, true, (x, y), horizontal, source);
                 None
             }
             _ => None,

@@ -646,11 +646,12 @@ impl App {
             PointerEventKind::Axis {
                 vertical,
                 horizontal,
+                source,
                 ..
             } => {
                 let target = crate::scroll::Target::Overlay(o.epoch);
-                self.axis_scroll(target.clone(), false, (x, y), vertical);
-                self.axis_scroll(target, true, (x, y), horizontal);
+                self.axis_scroll(target.clone(), false, (x, y), vertical, source);
+                self.axis_scroll(target, true, (x, y), horizontal, source);
                 None
             }
             _ => None,

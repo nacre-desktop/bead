@@ -60,5 +60,7 @@ local height=math.max(0,#rows-1)*8
 for _,n in rows do height+=noticeHeight(n) end
 return ui.Column{edge="right",id="notifications",width=400,height=math.max(1,math.min(720,height)),fill="transparent",radius=0,
     open=ui.bind("notifications.open"),duration=.160,slide_distance=0,
-    ui.Scroll{id="stream",grow=1,scroll=ui.bind("notifications.scroll.y"),ui.Column{shrink=0,gap=8,ui.Repeat{id="notices",model=ui.bind("notifications.rows"),key="id",render=notice}}},
+    require("../kit/virtual-list"){id="stream",width=400,height=math.max(1,math.min(720,height)),
+        scroll=ui.bind("notifications.scroll.y"),model=ui.bind("notifications.rows"),key="id",
+        row_height=noticeHeight,gap=8,render=notice},
 }

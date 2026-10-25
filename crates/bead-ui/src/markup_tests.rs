@@ -124,6 +124,97 @@ fn session(f: &Fixture) -> Session {
 }
 
 #[test]
+fn nested_scroll_offset_cache_matches_full_layout_and_preserves_viewport_clips() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        r#"return {stores={query="",scroll=0,inner=0,selected=""},actions={},computed={}}"#,
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Panel{id="panel",width=240,height=200,
+ ui.Scroll{id="outer",width=220,height=80,scroll=ui.bind("scroll"),
+  ui.Column{id="outer-content",gap=4,
+   ui.Button{id="before",height=30,text="Before"},
+   ui.Scroll{id="inner",width=180,height=60,scroll=ui.bind("inner"),
+    ui.Column{id="inner-content",gap=3,
+     ui.Button{id="a",height=28,text="A"},ui.Button{id="b",height=28,text="B"},
+     ui.Button{id="c",height=28,text="C"},ui.Button{id="d",height=28,text="D"},
+     ui.Button{id="e",height=28,text="E"}}},
+   ui.Button{id="after",height=30,text="After"}}}}"#,
+    )
+    .unwrap();
+    let mut s = session(&f);
+    assert!(
+        s.current_nodes
+            .iter()
+            .find(|node| node.id.ends_with("outer"))
+            .unwrap()
+            .scroll_limit
+            .unwrap()
+            > 0.
+    );
+    assert!(
+        s.current_nodes
+            .iter()
+            .find(|node| node.id.ends_with("inner"))
+            .unwrap()
+            .scroll_limit
+            .unwrap()
+            > 0.
+    );
+    for (outer, inner) in [(23., 0.), (23., 31.), (47., 14.), (0., 48.)] {
+        #[cfg(feature = "test-counters")]
+        let passes = layout::layout_passes();
+        let cached = s
+            .update(BTreeMap::from([
+                ("scroll".into(), Value::Number(outer)),
+                ("inner".into(), Value::Number(inner)),
+            ]))
+            .unwrap()
+            .unwrap();
+        #[cfg(feature = "test-counters")]
+        assert_eq!(
+            layout::layout_passes(),
+            passes,
+            "scroll offset should reuse layout"
+        );
+        s.commit(cached.clone());
+        let cached_nodes = s.current_nodes.clone();
+        let full = s.reload().unwrap();
+        s.commit(full.clone());
+        assert_eq!(
+            serde_json::to_value(&cached.primitives).unwrap(),
+            serde_json::to_value(&full.primitives).unwrap(),
+            "primitive positions differ at outer={outer}, inner={inner}"
+        );
+        assert_eq!(
+            cached.clips, full.clips,
+            "clips differ at outer={outer}, inner={inner}"
+        );
+        assert_eq!(cached.layers.len(), full.layers.len());
+        for (cached, full) in cached.layers.iter().zip(&full.layers) {
+            assert_eq!(cached.id, full.id);
+            assert_eq!(cached.parent, full.parent);
+            assert_eq!(cached.own, full.own);
+            assert_eq!(cached.subtree_end, full.subtree_end);
+            assert_eq!(cached.bounds, full.bounds);
+        }
+        assert_eq!(cached_nodes.len(), s.current_nodes.len());
+        for (cached, full) in cached_nodes.iter().zip(&s.current_nodes) {
+            assert_eq!(cached.id, full.id);
+            assert_eq!(
+                serde_json::to_value(&cached.draw).unwrap(),
+                serde_json::to_value(&full.draw).unwrap()
+            );
+            assert_eq!(cached.clip, full.clip, "hit clip differs for {}", cached.id);
+        }
+    }
+}
+
+#[test]
 fn host_policy_resolves_staged_computed_values_and_reject_keeps_previous_state() {
     let f = fixture();
     let path = f.0.join("ui/behavior.luau");
@@ -1710,10 +1801,31 @@ return ui.Panel{id="panel",width=400,height=240,kit.VirtualGrid{id="grid",width=
         .unwrap()
         .id
         .clone();
+    #[cfg(feature = "test-counters")]
+    let passes = layout::layout_passes();
+    let within_window = s
+        .update(BTreeMap::from([("scroll".into(), Value::Number(3.))]))
+        .unwrap()
+        .unwrap();
+    #[cfg(feature = "test-counters")]
+    assert_eq!(
+        layout::layout_passes(),
+        passes,
+        "same virtual window should reuse layout"
+    );
+    s.commit(within_window);
+    assert!(s.view_nodes().iter().any(|n| n.id == first));
+    #[cfg(feature = "test-counters")]
+    let passes = layout::layout_passes();
     let next = s
         .update(BTreeMap::from([("scroll".into(), Value::Number(1000.))]))
         .unwrap()
         .unwrap();
+    #[cfg(feature = "test-counters")]
+    assert!(
+        layout::layout_passes() > passes,
+        "a virtual window change must relayout"
+    );
     s.commit(next);
     assert!(s.view_nodes().len() < 35);
     assert!(!s.view_nodes().iter().any(|n| n.id == first));

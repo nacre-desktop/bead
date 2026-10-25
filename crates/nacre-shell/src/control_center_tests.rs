@@ -2731,6 +2731,19 @@ fn notification_dropdown_scrolls_every_published_row() -> bead_test::Result<()> 
         })).collect()));
         let mut h = harness(out, "home", scale)?;
         assert_eq!(h.session.scroll_regions().len(), 1);
+        assert!(
+            h.scene()
+                .layers
+                .iter()
+                .filter(|l| l
+                    .id
+                    .rsplit('.')
+                    .next()
+                    .is_some_and(|id| id.starts_with("notice-n")))
+                .count()
+                < 18,
+            "the retained history must window its cards"
+        );
         golden("notifications-full", &mut h, scale)?;
         let toolbar = centre(&h, "notices-dnd");
         h.script([Input::Scroll {

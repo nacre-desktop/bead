@@ -46,7 +46,7 @@ impl Widget {
         ]
     }
 }
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Source {
     pub file: String,
     pub line: usize,
@@ -56,7 +56,7 @@ impl Source {
         Diagnostic::new(Path::new(&self.file), self.line, 1, msg)
     }
 }
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct RawNode {
     pub kind: Widget,
@@ -1079,6 +1079,7 @@ pub fn layout(
         parent: (f32, f32),
         parent_layer: Option<&str>,
         clip: Option<Rect>,
+        retain_offscreen: bool,
         scroll_store: Option<&str>,
         scroll_limit: Option<f64>,
         resolve: &Resolve<'_>,
@@ -1101,7 +1102,7 @@ pub fn layout(
         let own_visible = r.w > 0. && r.h > 0. && !clip.is_some_and(|c| intersect(c, r).is_none());
         // Containers may have overflowing/absolute descendants outside their
         // assigned box. Cull leaves; retain traversal through such containers.
-        if !own_visible && view.children.is_empty() {
+        if !own_visible && view.children.is_empty() && !retain_offscreen {
             return Ok(());
         }
         let layer_index = out.scene.layers.len();
@@ -1145,7 +1146,7 @@ pub fn layout(
             source,
         )?;
         let mut emit = |primitive: Primitive| {
-            if !own_visible {
+            if !own_visible && !retain_offscreen {
                 return;
             }
             let index = out.scene.primitives.len();
@@ -1261,7 +1262,7 @@ pub fn layout(
         } else {
             scroll_limit
         };
-        if own_visible
+        if (own_visible || retain_offscreen)
             && (view.action.is_some()
                 || view.input.is_some()
                 || view.scroll.is_some()
@@ -1337,7 +1338,7 @@ pub fn layout(
             };
             children_pos.1 -= offset.clamp(0., scroll_limit.unwrap_or(f64::MAX)) as f32;
             child_clip = Some(if let Some(c) = child_clip {
-                intersect(c, r).unwrap_or(Rect::new(0., 0., 0., 0.))
+                c.intersect(r)
             } else {
                 r
             });
@@ -1350,6 +1351,7 @@ pub fn layout(
                 children_pos,
                 Some(&view.id),
                 child_clip,
+                retain_offscreen || view.scroll.is_some(),
                 inherited_scroll,
                 scroll_limit,
                 resolve,
@@ -1368,6 +1370,7 @@ pub fn layout(
         (0., 0.),
         None,
         None,
+        false,
         None,
         None,
         resolve,

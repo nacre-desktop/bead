@@ -355,6 +355,9 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
             }
             return;
         }
+        if state.window_presentation(data, &event) {
+            return;
+        }
         if let Some(id) = state.slot_of_surface(&data.surface) {
             state.in_slot(id, |app| Self::event(app, proxy, event, data, conn, qh));
             return;
@@ -1270,11 +1273,12 @@ impl App {
             PointerEventKind::Axis {
                 vertical,
                 horizontal,
+                source,
                 ..
             } => {
                 let target = self.scroll_target(panel);
-                self.axis_scroll(target.clone(), false, (x, y), vertical);
-                self.axis_scroll(target, true, (x, y), horizontal);
+                self.axis_scroll(target.clone(), false, (x, y), vertical, source);
+                self.axis_scroll(target, true, (x, y), horizontal, source);
             }
             _ => {}
         }

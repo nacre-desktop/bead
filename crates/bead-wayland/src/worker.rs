@@ -100,6 +100,7 @@ enum Job {
     Presented(u64),
     Idle(bool),
     Stage(UiEvent, Vec<f32>),
+    ContentScroll(UiEvent, Vec<f32>),
     Viewport(u32, u32),
     Watch(Box<dyn Fn(Result<(), String>) + Send>),
     Ack(u64, Result<(), String>),
@@ -107,7 +108,45 @@ enum Job {
 }
 // Pointer positions are replaceable only within the same gesture. Every other
 // job is an ordering barrier (especially press, release and model updates).
-fn enqueue(queue: &mut VecDeque<Job>, job: Job) {
+fn enqueue(queue: &mut VecDeque<Job>, mut job: Job) {
+    // Combine content travel before doing layout, without combining wheel actions
+    // on volume/workspace/tray controls or crossing an input/acknowledgement barrier.
+    if let (Some(Job::ContentScroll(previous, old_scales)), Job::ContentScroll(next, scales)) =
+        (queue.back(), &mut job)
+        && old_scales == scales
+    {
+        let pair = match (previous, next) {
+            (
+                UiEvent::Scroll {
+                    x: ax,
+                    y: ay,
+                    delta: a,
+                },
+                UiEvent::Scroll {
+                    x: bx,
+                    y: by,
+                    delta: b,
+                },
+            )
+            | (
+                UiEvent::HorizontalScroll {
+                    x: ax,
+                    y: ay,
+                    delta: a,
+                },
+                UiEvent::HorizontalScroll {
+                    x: bx,
+                    y: by,
+                    delta: b,
+                },
+            ) if ax == bx && ay == by && a.signum() == b.signum() => Some((*a, b)),
+            _ => None,
+        };
+        if let Some((previous, next)) = pair {
+            *next += previous;
+            queue.pop_back();
+        }
+    }
     let replace = matches!(
         (queue.back(), &job),
         (
@@ -325,7 +364,7 @@ impl SceneSource for Source {
                             }
                         }
                         Job::Ack(_, _) => {}
-                        Job::Stage(event, scales) => {
+                        Job::Stage(event, scales) | Job::ContentScroll(event, scales) => {
                             source.scales(scales.clone());
                             active_scales.clone_from(&scales);
                             match &event {
@@ -544,7 +583,19 @@ impl SceneSource for Source {
             self.candidate = packet.scene.clone();
             return Ok(packet.scene.clone());
         }
-        self.send(Job::Stage(event, self.scales.clone()))?;
+        let content_scroll = match &event {
+            UiEvent::Scroll { x, y, .. } | UiEvent::HorizontalScroll { x, y, .. } => self
+                .mirror
+                .scroll_regions
+                .iter()
+                .any(|r| *x >= r.x && *y >= r.y && *x < r.x + r.w && *y < r.y + r.h),
+            _ => false,
+        };
+        self.send(if content_scroll {
+            Job::ContentScroll(event, self.scales.clone())
+        } else {
+            Job::Stage(event, self.scales.clone())
+        })?;
         Ok(None)
     }
     fn validate(&self) -> Result<(), Box<dyn Error>> {
@@ -759,6 +810,68 @@ mod tests {
             scene()
         }
     }
+    #[test]
+    fn content_scroll_queue_preserves_travel_without_replaying_every_sample() {
+        let mut queue = VecDeque::new();
+        for delta in [8., 8., -3.] {
+            enqueue(
+                &mut queue,
+                Job::ContentScroll(
+                    UiEvent::Scroll {
+                        x: 10.,
+                        y: 20.,
+                        delta,
+                    },
+                    vec![1.],
+                ),
+            );
+        }
+        assert_eq!(
+            queue.len(),
+            2,
+            "a reversal preserves clamping at the content edge"
+        );
+        assert!(matches!(
+            queue.pop_front(),
+            Some(Job::ContentScroll(UiEvent::Scroll { delta: 16., .. }, _))
+        ));
+        assert!(matches!(
+            queue.pop_front(),
+            Some(Job::ContentScroll(UiEvent::Scroll { delta: -3., .. }, _))
+        ));
+        for _ in 0..2 {
+            enqueue(
+                &mut queue,
+                Job::Stage(
+                    UiEvent::Scroll {
+                        x: 10.,
+                        y: 20.,
+                        delta: 1.,
+                    },
+                    vec![1.],
+                ),
+            );
+        }
+        assert_eq!(
+            queue.len(),
+            2,
+            "action scrolls must retain every physical event"
+        );
+        enqueue(&mut queue, Job::Stage(UiEvent::Release, vec![1.]));
+        enqueue(
+            &mut queue,
+            Job::ContentScroll(
+                UiEvent::Scroll {
+                    x: 10.,
+                    y: 20.,
+                    delta: -1.,
+                },
+                vec![1.],
+            ),
+        );
+        assert_eq!(queue.len(), 4, "release is an ordering barrier");
+    }
+
     #[test]
     fn pointer_queue_keeps_latest_position_and_gesture_barriers() {
         let mut queue = VecDeque::new();
