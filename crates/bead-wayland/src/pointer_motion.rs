@@ -718,7 +718,7 @@ impl App {
         let mut scene = self.companion.as_ref()?.0.clone();
         let layer = scene.layers.iter().find(|layer| layer.id == visual.spec.id);
         visual.retiring |= !self.panel_target
-            || s.prepared_native.is_some()
+            || (s.prepared_native.is_some() && self.pearl.is_some())
             || s.handoff.is_some()
             || self.animations.active(self.started.elapsed().as_secs_f64())
             || visual.scale120 != s.scale120
