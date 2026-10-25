@@ -152,7 +152,7 @@ fn expand_fragments(
     Ok(())
 }
 pub struct LuauFrontEnd {
-    text_meter: crate::transcript::Meter,
+    text_meters: RefCell<BTreeMap<String, crate::transcript::Meter>>,
     compiled: Sources,
     fragments: RefCell<bead_core::cache::Lru<(String, String), std::rc::Rc<Fragment>>>,
     fragment_budget: bead_core::cache::Budget,
@@ -200,10 +200,7 @@ impl LuauFrontEnd {
             .reserve(bytes)
             .map_err(|e| Diagnostic::new(entry, 1, 1, e))?;
         Ok(Self {
-            text_meter: FONT_PICKER.get().map_or_else(
-                || crate::transcript::Meter::fixed(vec![]),
-                |picker| crate::transcript::Meter::new(picker.clone()),
-            ),
+            text_meters: Default::default(),
             _compiled_charge: charge,
             values_budget: bead_core::cache::Budget::new(
                 "markup-values",
@@ -286,7 +283,17 @@ impl FrontEnd for LuauFrontEnd {
                             return Err(mlua::Error::runtime("invalid text measurement"));
                         }
                         let started = Instant::now();
-                        let width = self.text_meter.width(&text, &family, size);
+                        let mut meters = self.text_meters.borrow_mut();
+                        if meters.len() >= 8 && !meters.contains_key(&family) {
+                            meters.clear();
+                        }
+                        let meter = meters.entry(family.clone()).or_insert_with(|| {
+                            FONT_PICKER.get().map_or_else(
+                                || crate::transcript::Meter::fixed(vec![]),
+                                |picker| crate::transcript::Meter::new(picker.clone()),
+                            )
+                        });
+                        let width = meter.width(&text, &family, size);
                         native_time.set(native_time.get() + started.elapsed());
                         Ok(width)
                     })?,
