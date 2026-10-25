@@ -1631,7 +1631,8 @@ fn panel_hover_lifecycle_does_not_add_undeclared_popout_state() -> Result<()> {
 }
 
 #[test]
-fn configured_form_styles_are_validated_and_seconds_demand_follows_the_visible_host() -> Result<()> {
+fn configured_form_styles_are_validated_and_seconds_demand_follows_the_visible_host() -> Result<()>
+{
     use serde_json::{Value as Json, json};
     fn clock_style(document: &mut Json, style: &str) {
         document["hosts"]["top_bar"]["instances"][3]["children"][6]["style"] = style.into();
@@ -1645,51 +1646,119 @@ fn configured_form_styles_are_validated_and_seconds_demand_follows_the_visible_h
     let mut document: Json = serde_json::from_str(include_str!("../tests/widgets-default.json"))?;
     let mut values = super::initial_models()?;
     values.insert("bead.desktop.clock".into(), Value::Text("12:34".into()));
-    values.insert("bead.desktop.clock.seconds".into(), Value::Text("12:34:56".into()));
+    values.insert(
+        "bead.desktop.clock.seconds".into(),
+        Value::Text("12:34:56".into()),
+    );
     values.insert("widgets.layout".into(), Value::list(vec![document.clone()]));
-    let config = Config { width: 1920, height: 1080, scale: 1.5 };
-    let mut bar = Harness::load(&root(), Path::new("bar/main.luau"), &root().join("palette.json"), values.clone(), config)?;
+    let config = Config {
+        width: 1920,
+        height: 1080,
+        scale: 1.5,
+    };
+    let mut bar = Harness::load(
+        &root(),
+        Path::new("bar/main.luau"),
+        &root().join("palette.json"),
+        values.clone(),
+        config,
+    )?;
     assert!(!seconds(&bar));
     clock_style(&mut document, "seconds");
-    bar.update(BTreeMap::from([("widgets.layout".into(), Value::list(vec![document.clone()]))]))?;
+    bar.update(BTreeMap::from([(
+        "widgets.layout".into(),
+        Value::list(vec![document.clone()]),
+    )]))?;
     assert!(seconds(&bar));
     assert!(bar.scene().primitives.iter().any(|p| matches!(p,
         bead::render::Primitive::Text {text,..} if text == "12:34:56")));
     let accepted = document.clone();
     clock_style(&mut document, "nonexistent");
-    assert!(bar.update(BTreeMap::from([("widgets.layout".into(), Value::list(vec![document]))])).is_err());
-    assert_eq!(bar.session.stores.get("widgets.layout"), Some(&Value::list(vec![accepted.clone()])));
+    assert!(
+        bar.update(BTreeMap::from([(
+            "widgets.layout".into(),
+            Value::list(vec![document])
+        )]))
+        .is_err()
+    );
+    assert_eq!(
+        bar.session.stores.get("widgets.layout"),
+        Some(&Value::list(vec![accepted.clone()]))
+    );
     document = accepted;
     clock_style(&mut document, "time");
     document["hosts"]["canvas"] = json!({"width":1920,"height":1080,"instances":[{
         "iid":"desktop-clock","widget":"clock","host":"canvas","style":"seconds",
         "settings":{},"slot":{"x":96,"y":96,"w":240,"h":96}}]});
-    bar.update(BTreeMap::from([("widgets.layout".into(), Value::list(vec![document.clone()]))]))?;
-    assert!(!seconds(&bar), "desktop-only seconds must not lease the bar clock");
+    bar.update(BTreeMap::from([(
+        "widgets.layout".into(),
+        Value::list(vec![document.clone()]),
+    )]))?;
+    assert!(
+        !seconds(&bar),
+        "desktop-only seconds must not lease the bar clock"
+    );
     values.insert("widgets.layout".into(), Value::list(vec![document.clone()]));
     values.insert("widgets.editing".into(), Value::Bool(false));
-    let mut canvas = Harness::load(&root(), Path::new("widgets/editor/canvas.luau"), &root().join("palette.json"), values, config)?;
+    let mut canvas = Harness::load(
+        &root(),
+        Path::new("widgets/editor/canvas.luau"),
+        &root().join("palette.json"),
+        values,
+        config,
+    )?;
     assert!(seconds(&canvas));
     document["hosts"]["canvas"]["instances"][0]["widget"] = "workspaces".into();
     document["hosts"]["canvas"]["instances"][0]["style"] = "pearls".into();
-    assert!(canvas.update(BTreeMap::from([("widgets.layout".into(), Value::list(vec![document]))])).is_err(),
-        "a widget without a desktop form cannot become a floating card");
+    assert!(
+        canvas
+            .update(BTreeMap::from([(
+                "widgets.layout".into(),
+                Value::list(vec![document])
+            )]))
+            .is_err(),
+        "a widget without a desktop form cannot become a floating card"
+    );
     Ok(())
 }
 
 #[test]
 fn title_width_reservation_uses_configured_instance_settings() -> Result<()> {
-    let mut document: serde_json::Value = serde_json::from_str(include_str!("../tests/widgets-default.json"))?;
-    document["hosts"]["top_bar"]["instances"][2]["settings"] = serde_json::json!({"min_width":0,"max_width":128});
+    let mut document: serde_json::Value =
+        serde_json::from_str(include_str!("../tests/widgets-default.json"))?;
+    document["hosts"]["top_bar"]["instances"][2]["settings"] =
+        serde_json::json!({"min_width":0,"max_width":128});
     let mut values = super::initial_models()?;
     values.insert("widgets.layout".into(), Value::list(vec![document]));
-    let bar = Harness::load(&root(), Path::new("bar/main.luau"), &root().join("palette.json"), values,
-        Config { width:1920,height:70,scale:1.5 })?;
-    let width = bar.session.view_nodes().iter().find_map(|node| {
-        let Some(Value::List(records)) = &node.metadata else { return None };
-        records.first()?["reservations"].as_array()?.iter()
-            .find(|reservation| reservation["iid"] == "title")?["width"].as_f64()
-    }).ok_or("title reservation missing")?;
-    assert!(width >= 128. && width < 200., "configured title reserved {width} px");
+    let bar = Harness::load(
+        &root(),
+        Path::new("bar/main.luau"),
+        &root().join("palette.json"),
+        values,
+        Config {
+            width: 1920,
+            height: 70,
+            scale: 1.5,
+        },
+    )?;
+    let width = bar
+        .session
+        .view_nodes()
+        .iter()
+        .find_map(|node| {
+            let Some(Value::List(records)) = &node.metadata else {
+                return None;
+            };
+            records.first()?["reservations"]
+                .as_array()?
+                .iter()
+                .find(|reservation| reservation["iid"] == "title")?["width"]
+                .as_f64()
+        })
+        .ok_or("title reservation missing")?;
+    assert!(
+        (128. ..200.).contains(&width),
+        "configured title reserved {width} px"
+    );
     Ok(())
 }

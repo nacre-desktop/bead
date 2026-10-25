@@ -189,7 +189,9 @@ impl Desktop {
     }
     /// Request 1 Hz clock updates for as long as the returned guard is held.
     pub fn clock_seconds_lease(&self) -> ClockSecondsLease {
-        self.shared.clock_seconds_leases.fetch_add(1, Ordering::AcqRel);
+        self.shared
+            .clock_seconds_leases
+            .fetch_add(1, Ordering::AcqRel);
         let _ = self.sender.try_send(Command::ClockResolutionChanged);
         ClockSecondsLease {
             shared: Arc::downgrade(&self.shared),
@@ -345,14 +347,29 @@ mod clock_lease_tests {
             audio: false,
             bus: false,
         });
-        assert_eq!(desktop.shared.clock_seconds_leases.load(Ordering::Acquire), 0);
+        assert_eq!(
+            desktop.shared.clock_seconds_leases.load(Ordering::Acquire),
+            0
+        );
         let first = desktop.clock_seconds_lease();
-        assert_eq!(desktop.shared.clock_seconds_leases.load(Ordering::Acquire), 1);
+        assert_eq!(
+            desktop.shared.clock_seconds_leases.load(Ordering::Acquire),
+            1
+        );
         let second = desktop.clock_seconds_lease();
-        assert_eq!(desktop.shared.clock_seconds_leases.load(Ordering::Acquire), 2);
+        assert_eq!(
+            desktop.shared.clock_seconds_leases.load(Ordering::Acquire),
+            2
+        );
         drop(first);
-        assert_eq!(desktop.shared.clock_seconds_leases.load(Ordering::Acquire), 1);
+        assert_eq!(
+            desktop.shared.clock_seconds_leases.load(Ordering::Acquire),
+            1
+        );
         drop(second);
-        assert_eq!(desktop.shared.clock_seconds_leases.load(Ordering::Acquire), 0);
+        assert_eq!(
+            desktop.shared.clock_seconds_leases.load(Ordering::Acquire),
+            0
+        );
     }
 }

@@ -249,8 +249,14 @@ mod tests {
             ..Default::default()
         };
         let state = values(&snapshot, "");
-        assert_eq!(state["bead.desktop.clock.seconds"], Value::Text("09:08:07".into()));
-        assert_eq!(state["bead.desktop.clock.date"], Value::Text("2026-10-25".into()));
+        assert_eq!(
+            state["bead.desktop.clock.seconds"],
+            Value::Text("09:08:07".into())
+        );
+        assert_eq!(
+            state["bead.desktop.clock.date"],
+            Value::Text("2026-10-25".into())
+        );
     }
     /// The real bar bundle at 1920 px with these workspace rows, reloaded but not yet committed.
     fn bar_session(rows: Vec<serde_json::Value>) -> (bead::ui::Session, bead::render::Scene) {
