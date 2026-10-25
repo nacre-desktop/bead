@@ -307,10 +307,11 @@ mod tests {
             &json!(null),
         ));
         assert!(gate.bar_enabled() && gate.panel_allowed("dashboard-today"));
-        // The bar going off and on again changes the header, so the tiles rebuilt twice.
-        assert_eq!(gate.decoration_variant(), 2);
+        // Count this gate's settings rebuilds independently of external app
+        // visibility revisions changed by other tests in the same process.
+        assert_eq!(gate.variant.load(SeqCst), 2);
         gate.apply(&Prefs::decode(&json!({"frameSheen": false}), &json!(null)));
-        assert_eq!(gate.decoration_variant(), 3);
+        assert_eq!(gate.variant.load(SeqCst), 3);
     }
 
     fn lips() -> FrameConfig {
