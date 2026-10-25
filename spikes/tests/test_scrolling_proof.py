@@ -209,6 +209,7 @@ class ScrollReversalProofTests(unittest.TestCase):
                     "INPUT_PATCH_MISS kind=budget bytes=512",
                     "INPUT_PROFILE stage=project wall_ms=278.4 cpu_ms=40.5",
                     "UI_TIMELINE stage=worker_paint_ready monotonic_ns=1000000000 thread=ThreadId(3)",
+                    "RECOVERY_BUNDLE_RECORDED generation=9",
                 ]
             )
             + "\n"
@@ -221,6 +222,7 @@ class ScrollReversalProofTests(unittest.TestCase):
         self.assertEqual(metrics["input_profile_wall_ms_by_stage"]["project"]["max"], 278.4)
         self.assertEqual(metrics["input_profile_cpu_ms_by_stage"]["project"]["max"], 40.5)
         self.assertEqual(metrics["timeline_marks_by_stage"]["worker_paint_ready"], 1)
+        self.assertEqual(metrics["recovery_bundle_generations"], [9])
 
     def test_native_scroll_scenes_close_the_app_they_open(self):
         for scene in ("colors-app", "colors-rail"):

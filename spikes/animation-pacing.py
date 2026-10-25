@@ -25,6 +25,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -595,6 +596,7 @@ def trace_profile_metrics(log_paths):
     profile_wall_ms = {}
     profile_cpu_ms = {}
     timeline_marks = {}
+    recovery_generations = []
     for path in log_paths:
         for line in path.read_text(errors='replace').splitlines():
             fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
@@ -618,6 +620,10 @@ def trace_profile_metrics(log_paths):
                 fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
                 stage = fields.get('stage', 'unknown')
                 timeline_marks[stage] = timeline_marks.get(stage, 0) + 1
+            elif line.startswith('RECOVERY_BUNDLE_RECORDED '):
+                fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
+                if fields.get('generation', '').isdigit():
+                    recovery_generations.append(int(fields['generation']))
     return {
         'worker_prepare_count': len(worker_ms),
         'worker_prepare_ms': ({key: round(percentile(worker_ms, p), 3)
@@ -632,6 +638,7 @@ def trace_profile_metrics(log_paths):
                                                   'max': round(max(values), 3)}
                                           for stage, values in profile_cpu_ms.items()},
         'timeline_marks_by_stage': timeline_marks,
+        'recovery_bundle_generations': recovery_generations,
     }
 
 
@@ -835,7 +842,7 @@ def pace_drive(self, names):
             'WINDOW_STATE ', 'WINDOW_COMMIT ', 'WINDOW_FRAME ', 'WINDOW_PRESENTED ',
             'WINDOW_DISCARDED ', 'UI_DISCARDED ', 'PRESENTATION clock_id=',
             'QML_PRESENTATION clock_id=', 'WORKER_PREPARE ', 'INPUT_PATCH_MISS ',
-            'INPUT_PROFILE ', 'UI_TIMELINE ', 'UI_POINTER '))]
+            'INPUT_PROFILE ', 'UI_TIMELINE ', 'UI_POINTER ', 'RECOVERY_BUNDLE_RECORDED '))]
         if selected:
             trace_dir.mkdir(parents=True, exist_ok=True)
             target = trace_dir / source.name
