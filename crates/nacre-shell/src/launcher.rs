@@ -535,6 +535,7 @@ struct QueryCompletion {
 struct QueryActor {
     latest: tokio::sync::watch::Sender<Option<QueryTask>>,
     completion: Arc<std::sync::Mutex<Option<QueryCompletion>>>,
+    completion_ready: Arc<std::sync::Condvar>,
     wake: Arc<std::sync::Mutex<Option<source::Callback>>>,
     favorites: Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>,
     preferences_error: Arc<std::sync::Mutex<Option<String>>>,
@@ -551,6 +552,7 @@ impl QueryActor {
     fn new(source: Arc<dyn Source>) -> Result<Self, String> {
         let (latest, mut receiver) = tokio::sync::watch::channel(None::<QueryTask>);
         let completion = Arc::new(std::sync::Mutex::new(None::<QueryCompletion>));
+        let completion_ready = Arc::new(std::sync::Condvar::new());
         let wake = Arc::new(std::sync::Mutex::new(None::<source::Callback>));
         let favorites = Arc::new(std::sync::Mutex::new(std::collections::BTreeSet::new()));
         let preferences_error = Arc::new(std::sync::Mutex::new(None::<String>));
@@ -560,6 +562,7 @@ impl QueryActor {
         let groups = Arc::new(std::sync::Mutex::new(Vec::<Json>::new()));
         let worker_groups = groups.clone();
         let done = completion.clone();
+        let done_ready = completion_ready.clone();
         let notify = wake.clone();
         let worker_favorites = favorites.clone();
         let worker_preferences_error = preferences_error.clone();
@@ -677,6 +680,7 @@ impl QueryActor {
                         if let Some(result) = result {
                             if let Ok(mut slot) = done.lock() {
                                 *slot = Some(QueryCompletion { task, result });
+                                done_ready.notify_all();
                             }
                             if let Some(callback) = notify.lock().ok().and_then(|slot| slot.clone()) {
                                 callback(source.snapshot());
@@ -689,6 +693,7 @@ impl QueryActor {
         Ok(Self {
             latest,
             completion,
+            completion_ready,
             wake,
             favorites,
             preferences_error,
@@ -1607,7 +1612,16 @@ impl Menu {
                 );
                 return Ok(delta);
             }
-            std::thread::sleep(Duration::from_millis(1));
+            if let Some(actor) = &self.query_actor
+                && let Ok(slot) = actor.completion.lock()
+            {
+                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                drop(
+                    actor
+                        .completion_ready
+                        .wait_timeout_while(slot, remaining, |slot| slot.is_none()),
+                );
+            }
         }
     }
 }
@@ -1730,7 +1744,13 @@ mod tests {
         }
         menu.prime_initial(&stores).unwrap();
         assert!(menu.view.borrow().request.is_none());
-        apply_projection(&menu, &mut stores);
+        // A notification may arrive before the initial wait starts. A zero
+        // budget must still consume an already-published matching completion.
+        let delta = menu.project_initial(&stores, Duration::ZERO).unwrap();
+        assert_eq!(delta.get("launcher.pending"), Some(&Value::Bool(false)));
+        assert!(!delta.contains_key("launcher.icon_placeholder"));
+        stores = stores.reconcile(&delta).unwrap();
+        stores.commit(delta).unwrap();
         assert_eq!(source.calls.lock().unwrap().len(), 1);
 
         let menu = Menu::new(Some(prefix_source(false, false))).unwrap();
