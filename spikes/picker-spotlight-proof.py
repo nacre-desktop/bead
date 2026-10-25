@@ -56,6 +56,8 @@ m.Arm.run = run
 original_sequence = m.Arm.sequence
 
 def sequence(self, name, trigger, seconds):
+    if name == "palette-sync-open":
+        self.grab(self.out / "shots" / "palette-sync-before.png")
     panel_before = self.socket_call(self.runtime / "bead-command.sock", "bead.panel", "state", []).get("result") if self.name == "bead" else None
     real, mono = time.time(), time.monotonic()
     if os.environ.get("PICKER_PACING_ONLY") == "1":

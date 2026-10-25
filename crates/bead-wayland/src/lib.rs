@@ -799,8 +799,10 @@ struct WallpaperSurface {
 }
 struct WallpaperTransition {
     commit: Option<(u64, std::sync::Arc<dyn std::any::Any + Send + Sync>)>,
+    palette: bead_render::Palette,
     pixels: Vec<u8>,
-    target: Vec<u8>,
+    // None retains an already-final snap while both SHM buffers are busy.
+    target: Option<Vec<u8>>,
     remaining: u8,
 }
 impl Drop for Surface {

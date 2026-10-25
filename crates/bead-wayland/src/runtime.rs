@@ -1112,7 +1112,7 @@ impl App {
         let old_pixels = surface
             .transition
             .take()
-            .map(|transition| transition.pixels)
+            .and_then(|transition| transition.target.is_some().then_some(transition.pixels))
             .or_else(|| surface.pixels.take())
             .or(frame.previous_rgba);
         // A colour-scheme change is one coordinated swap. Fading only the
@@ -1126,8 +1126,9 @@ impl App {
         if transitioning {
             surface.transition = Some(WallpaperTransition {
                 commit: Some((frame.revision, frame.commit_token.clone())),
+                palette: frame.palette.clone(),
                 pixels: old_pixels.unwrap(),
-                target: frame.rgba,
+                target: Some(frame.rgba),
                 remaining: 14,
             });
             surface.pixels = None;
@@ -1147,6 +1148,18 @@ impl App {
             )
             .is_err()
             {
+                // The accepted pair must survive buffer backpressure. Reuse the
+                // transition retry slot without a second raster or a fade.
+                surface.transition = Some(WallpaperTransition {
+                    commit: Some((frame.revision, frame.commit_token)),
+                    palette: frame.palette,
+                    pixels: frame.rgba,
+                    target: None,
+                    remaining: 0,
+                });
+                surface.pixels = old_pixels;
+                surface.release_wait_ms = 0;
+                self.schedule_wallpaper_tick(frame.output);
                 return;
             }
             surface.pixels = self.options.animate.then_some(frame.rgba);
@@ -1206,13 +1219,16 @@ impl App {
             let Some(transition) = surface.transition.as_mut() else {
                 return;
             };
-            let remaining = transition.remaining.max(1) as u16;
-            for (current, target) in transition.pixels.iter_mut().zip(transition.target.iter()) {
-                *current = ((*current as u16 * (remaining - 1) + *target as u16) / remaining) as u8;
-            }
-            transition.remaining = transition.remaining.saturating_sub(1);
-            if transition.remaining == 0 {
-                transition.pixels.copy_from_slice(&transition.target);
+            if let Some(target) = &transition.target {
+                let remaining = transition.remaining.max(1) as u16;
+                for (current, target) in transition.pixels.iter_mut().zip(target.iter()) {
+                    *current =
+                        ((*current as u16 * (remaining - 1) + *target as u16) / remaining) as u8;
+                }
+                transition.remaining = transition.remaining.saturating_sub(1);
+                if transition.remaining == 0 {
+                    transition.pixels.copy_from_slice(target);
+                }
             }
             if attach_wallpaper_buffer(
                 WallpaperBufferTarget {
@@ -1231,7 +1247,14 @@ impl App {
             {
                 (false, None)
             } else {
-                let commit = transition.commit.take();
+                surface.palette = Some(transition.palette.clone());
+                if let Some((revision, _)) = &transition.commit {
+                    surface.revision = *revision;
+                }
+                let commit = transition
+                    .commit
+                    .take()
+                    .map(|(revision, token)| (revision, token, transition.target.is_some()));
                 if transition.remaining == 0 {
                     let transition = surface.transition.take().unwrap();
                     surface.pixels = Some(transition.pixels);
@@ -1241,8 +1264,8 @@ impl App {
                 }
             }
         };
-        if let Some((revision, token)) = commit {
-            self.wallpaper_committed(output, revision, &token, true);
+        if let Some((revision, token, fading)) = commit {
+            self.wallpaper_committed(output, revision, &token, fading);
         }
         if !finished {
             self.schedule_wallpaper_tick(output.to_owned());
