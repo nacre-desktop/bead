@@ -394,6 +394,12 @@ impl App {
             return;
         }
         if self.surfaces[index].companion {
+            // No dark or empty first frame: wait for the panel's own scene (bounded, so a failing
+            // worker still shows its error scene).
+            if !self.panel_ready && self.panel_started.elapsed() < Duration::from_millis(750) {
+                self.surfaces[index].redraw = true;
+                return;
+            }
             std::mem::swap(&mut self.animations, &mut self.panel_animations);
             self.draw_current(index, qh);
             std::mem::swap(&mut self.animations, &mut self.panel_animations);
@@ -443,6 +449,8 @@ impl App {
         }
         let previous_frames = self.surfaces[index].frames;
         let mut busy = false;
+        // (motion id, clock of this frame) once this frame is the first to show a motion.
+        let mut motion_clock: Option<(String, f64)> = None;
         let result = (|| -> Result<(), Box<dyn Error>> {
             let s = &mut self.surfaces[index];
             let wl_surface = s.wl_surface().clone();
@@ -504,6 +512,7 @@ impl App {
                     }),
                 );
                 let (progress, active) = self.animations.value(&motion.id, now).unwrap();
+                motion_clock = Some((motion.id.clone(), now));
                 // A callback can arrive after the motion expires. Keep it armed
                 // until we have drawn the terminal pose, rather than making the
                 // next input finish the motion and invalidate the whole surface.
@@ -1176,6 +1185,14 @@ impl App {
             s.frames += 1;
             Ok(())
         })();
+        if let Some((id, drawn)) = motion_clock
+            && self.surfaces[index].frames > previous_frames
+            && frame_started.elapsed() > Duration::from_millis(4)
+        {
+            // Baking textures for a motion's first frame can take several frames' time.
+            self.animations
+                .rebase_fresh(&id, drawn, self.started.elapsed().as_secs_f64());
+        }
         if busy {
             let qh = qh.clone();
             let retry = self.loop_handle.insert_source(
@@ -1194,6 +1211,14 @@ impl App {
         if self.surfaces[index].frames > previous_frames
             && self.started.elapsed().as_secs_f64() > 2.
         {
+            if bead_core::profile::frame_trace() {
+                println!(
+                    "UI_FRAME monotonic_ns={} render_ms={:.3} companion={}",
+                    monotonic_ns(),
+                    frame_started.elapsed().as_secs_f64() * 1000.,
+                    self.surfaces[index].companion
+                );
+            }
             if self.options.debug_luau_stall_ms.is_some() {
                 bead_core::vprintln!(
                     "DEBUG_FRAME monotonic_ns={} companion={}",

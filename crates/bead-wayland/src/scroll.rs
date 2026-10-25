@@ -1,6 +1,30 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Convert Wayland axis units into logical content distances for every surface.
 use smithay_client_toolkit::seat::pointer::AxisScroll;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// Output refresh period reported by the latest presentation feedback (0 = unknown).
+static REFRESH_NS: AtomicU64 = AtomicU64::new(0);
+pub(super) fn note_refresh(refresh_ns: u32) {
+    if refresh_ns > 0 {
+        REFRESH_NS.store(u64::from(refresh_ns), Ordering::Relaxed);
+    }
+}
+/// Glide and fling ticks follow the output's frame period (60 Hz when unknown), so a 120 Hz panel
+/// receives a new scroll position for every frame instead of every second one.
+fn tick() -> Duration {
+    let ns = REFRESH_NS.load(Ordering::Relaxed);
+    Duration::from_nanos(if (4_000_000..=34_000_000).contains(&ns) {
+        ns
+    } else {
+        16_000_000
+    })
+}
+/// Qt Flickable defaults, which the QML shell's FastScroll inherits after a touchpad release.
+const FLING_DECELERATION: f64 = 1500.;
+const FLING_MAX_VELOCITY: f64 = 2500.;
+const FLING_MIN_VELOCITY: f64 = 100.;
+const FLING_RELEASE: Duration = Duration::from_millis(65);
 
 pub(super) fn distance(axis: AxisScroll) -> f64 {
     if axis.value120 != 0 {
@@ -53,6 +77,16 @@ mod tests {
         );
     }
     #[test]
+    fn fling_decelerates_to_rest_in_the_direction_of_release() {
+        let (first, done) = fling_position(-1500., 0.1);
+        assert!(first < 0. && !done);
+        let (end, done) = fling_position(-1500., 5.);
+        assert!(done);
+        assert!((end + 1500. * 1500. / (2. * FLING_DECELERATION)).abs() < 1e-9);
+        assert!(fling_position(900., 0.2).0 > 0.);
+    }
+
+    #[test]
     fn wheel_units_take_precedence_over_pixel_fallback() {
         assert_eq!(
             distance(AxisScroll {
@@ -100,6 +134,23 @@ pub(super) enum Target {
 pub(super) struct State {
     serial: u64,
     motions: std::collections::BTreeMap<(Target, bool), Motion>,
+    pixels: std::collections::BTreeMap<(Target, bool), Pixels>,
+    flings: std::collections::BTreeMap<(Target, bool), Fling>,
+}
+struct Fling {
+    serial: u64,
+    started: Instant,
+    velocity: f64,
+    delivered: f64,
+    point: (f32, f32),
+}
+/// Pixel-input history of one scroll axis; a release with speed turns into a decelerating fling.
+struct Pixels {
+    serial: u64,
+    last: Instant,
+    velocity: f64,
+    samples: u32,
+    point: (f32, f32),
 }
 struct Motion {
     serial: u64,
@@ -190,10 +241,15 @@ impl App {
         }
         let key = (target.clone(), horizontal);
         let previous = self.scrolls.motions.remove(&key);
+        self.scrolls.flings.remove(&key);
         if !wheel || bead_core::animation::reduced_motion() {
             self.deliver_scroll(&target, horizontal, point, delta);
+            if content && !wheel && !bead_core::animation::reduced_motion() {
+                self.track_pixels(key, point, delta);
+            }
             return;
         }
+        self.scrolls.pixels.remove(&key);
         let remaining = previous
             .filter(|p| p.point == point)
             .map_or(0., |p| p.distance - p.delivered);
@@ -209,32 +265,136 @@ impl App {
                 point,
             },
         );
-        if let Err(error) = self.loop_handle.insert_source(
-            Timer::from_duration(Duration::from_millis(16)),
-            move |_, _, app| {
-                let Some(motion) = app
-                    .scrolls
-                    .motions
-                    .get_mut(&key)
-                    .filter(|m| m.serial == serial)
-                else {
-                    return TimeoutAction::Drop;
-                };
-                let progress = (motion.started.elapsed().as_secs_f64() / 0.210).min(1.);
-                let next = motion.distance * (1. - (1. - progress).powi(3));
-                let delta = next - motion.delivered;
-                motion.delivered = next;
-                let point = motion.point;
-                app.deliver_scroll(&key.0, key.1, point, delta);
-                if progress >= 1. {
-                    app.scrolls.motions.remove(&key);
-                    TimeoutAction::Drop
-                } else {
-                    TimeoutAction::ToDuration(Duration::from_millis(16))
-                }
-            },
-        ) {
+        if let Err(error) =
+            self.loop_handle
+                .insert_source(Timer::from_duration(tick()), move |_, _, app| {
+                    let Some(motion) = app
+                        .scrolls
+                        .motions
+                        .get_mut(&key)
+                        .filter(|m| m.serial == serial)
+                    else {
+                        return TimeoutAction::Drop;
+                    };
+                    let progress = (motion.started.elapsed().as_secs_f64() / 0.210).min(1.);
+                    let next = motion.distance * (1. - (1. - progress).powi(3));
+                    let delta = next - motion.delivered;
+                    motion.delivered = next;
+                    let point = motion.point;
+                    app.deliver_scroll(&key.0, key.1, point, delta);
+                    if progress >= 1. {
+                        app.scrolls.motions.remove(&key);
+                        TimeoutAction::Drop
+                    } else {
+                        TimeoutAction::ToDuration(tick())
+                    }
+                })
+        {
             self.fail(error);
         }
     }
+    /// Remember touchpad speed (QML FastScroll's smoothing) and arm the release check.
+    fn track_pixels(&mut self, key: (Target, bool), point: (f32, f32), delta: f64) {
+        let now = Instant::now();
+        let pixels = self.scrolls.pixels.remove(&key).filter(|p| {
+            now.duration_since(p.last) <= Duration::from_millis(120) && p.velocity * delta >= 0.
+        });
+        let elapsed_ms = pixels
+            .as_ref()
+            .map_or(16., |p| now.duration_since(p.last).as_secs_f64() * 1000.)
+            .clamp(8., 50.);
+        let sample = delta * 1000. / elapsed_ms;
+        let (velocity, samples) = match &pixels {
+            Some(p) if p.samples > 0 => (p.velocity * 0.55 + sample * 0.45, p.samples + 1),
+            _ => (sample, 1),
+        };
+        self.scrolls.serial = self.scrolls.serial.wrapping_add(1);
+        let serial = self.scrolls.serial;
+        self.scrolls.pixels.insert(
+            key.clone(),
+            Pixels {
+                serial,
+                last: now,
+                velocity,
+                samples,
+                point,
+            },
+        );
+        if let Err(error) =
+            self.loop_handle
+                .insert_source(Timer::from_duration(FLING_RELEASE), move |_, _, app| {
+                    app.release_pixels(&key, serial);
+                    TimeoutAction::Drop
+                })
+        {
+            self.fail(error);
+        }
+    }
+    fn release_pixels(&mut self, key: &(Target, bool), serial: u64) {
+        if self
+            .scrolls
+            .pixels
+            .get(key)
+            .is_none_or(|p| p.serial != serial)
+        {
+            return;
+        }
+        let Some(pixels) = self.scrolls.pixels.remove(key) else {
+            return;
+        };
+        if pixels.samples < 2 || pixels.velocity.abs() <= FLING_MIN_VELOCITY {
+            return;
+        }
+        let velocity = pixels
+            .velocity
+            .clamp(-FLING_MAX_VELOCITY, FLING_MAX_VELOCITY);
+        self.scrolls.serial = self.scrolls.serial.wrapping_add(1);
+        let serial = self.scrolls.serial;
+        let key = key.clone();
+        self.scrolls.flings.insert(
+            key.clone(),
+            Fling {
+                serial,
+                started: Instant::now(),
+                velocity,
+                delivered: 0.,
+                point: pixels.point,
+            },
+        );
+        if let Err(error) =
+            self.loop_handle
+                .insert_source(Timer::from_duration(tick()), move |_, _, app| {
+                    let Some(fling) = app
+                        .scrolls
+                        .flings
+                        .get_mut(&key)
+                        .filter(|f| f.serial == serial)
+                    else {
+                        return TimeoutAction::Drop;
+                    };
+                    let (next, done) =
+                        fling_position(fling.velocity, fling.started.elapsed().as_secs_f64());
+                    let delta = next - fling.delivered;
+                    fling.delivered = next;
+                    let point = fling.point;
+                    app.deliver_scroll(&key.0, key.1, point, delta);
+                    if done {
+                        app.scrolls.flings.remove(&key);
+                        TimeoutAction::Drop
+                    } else {
+                        TimeoutAction::ToDuration(tick())
+                    }
+                })
+        {
+            self.fail(error);
+        }
+    }
+}
+
+/// Distance travelled `t` seconds after release at `velocity`, decelerating uniformly; `true` at rest.
+fn fling_position(velocity: f64, t: f64) -> (f64, bool) {
+    let stop = velocity.abs() / FLING_DECELERATION;
+    let t = t.min(stop);
+    let travelled = velocity.abs() * t - FLING_DECELERATION * t * t / 2.;
+    (travelled.copysign(velocity), t >= stop)
 }

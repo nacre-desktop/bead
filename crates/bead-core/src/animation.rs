@@ -65,6 +65,16 @@ impl Animations {
             },
         );
     }
+    /// A motion that began at clock `drawn` (the frame that first showed it) restarts at `now`: a first
+    /// frame that had to bake textures must not spend the opening of its own animation.
+    pub fn rebase_fresh(&mut self, id: &str, drawn: f64, now: f64) {
+        if let Some(motion) = self.states.get_mut(id)
+            && motion.started == drawn
+            && now > drawn
+        {
+            motion.started = now;
+        }
+    }
     pub fn value(&self, id: &str, now: f64) -> Option<(f32, bool)> {
         let motion = self.states.get(id)?;
         let t = ((now - motion.started) / motion.duration).clamp(0., 1.) as f32;
@@ -93,6 +103,18 @@ impl Animations {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_slow_first_frame_does_not_spend_the_motion_but_a_running_motion_is_untouched() {
+        let mut a = Animations::default();
+        a.target("panel", 0., 1., 0.4, Curve::EaseOut);
+        a.target("panel", 1., 1., 0.4, Curve::EaseOut);
+        // The frame drawn at clock 1.0 took 80 ms: the motion restarts when it was presented.
+        a.rebase_fresh("panel", 1., 1.08);
+        assert_eq!(a.value("panel", 1.08).map(|v| v.0), Some(0.));
+        // A later frame must not shift a motion that began earlier.
+        a.rebase_fresh("panel", 1., 1.5);
+        assert!(a.value("panel", 1.28).is_some_and(|v| v.0 > 0.));
+    }
     #[test]
     fn cubic_in_out_has_symmetric_endpoints_midpoint_and_quarters() {
         let mut a = Animations::default();

@@ -1602,39 +1602,158 @@ impl Renderer for TreeCpuRenderer {
             scale,
             format,
         } = target;
-        let mut mask = Mask::new(width, height).ok_or("opacity damage mask")?;
-        for y in damage.y..damage.y + damage.h {
-            let i = (y * width + damage.x) as usize;
-            mask.data_mut()[i..i + damage.w as usize].fill(255);
-            bytes[i * 4..(i + damage.w as usize) * 4].fill(0);
-        }
-        let mut target = PixmapMut::from_bytes(bytes, width, height).ok_or("SHM opacity target")?;
-        target.draw_pixmap(
-            ((scene.offset.0 + scene.bounds.x) * scale).round() as i32,
-            ((scene.offset.1 + scene.bounds.y) * scale).round() as i32,
+        blit_with_opacity(
+            bytes,
+            (width, height),
+            damage,
             pixels.as_ref(),
-            &PixmapPaint {
-                opacity: scene.opacity.clamp(0., 1.),
-                ..Default::default()
-            },
-            Transform::identity(),
-            Some(&mask),
+            (
+                ((scene.offset.0 + scene.bounds.x) * scale).round() as i32,
+                ((scene.offset.1 + scene.bounds.y) * scale).round() as i32,
+            ),
+            scene.opacity.clamp(0., 1.),
+            format == PixelFormat::Bgra,
         );
-        if format == PixelFormat::Bgra {
-            for y in damage.y..damage.y + damage.h {
-                for x in damage.x..damage.x + damage.w {
-                    bytes[(y * width + x) as usize * 4..(y * width + x) as usize * 4 + 4]
-                        .swap(0, 2);
-                }
-            }
-        }
         Ok(())
+    }
+}
+
+/// Writes `pixels * opacity` at `origin` into the cleared `damage` rectangle of a `size` target.
+/// The target is transparent there, so source-over reduces to a premultiplied scale: no mask, no
+/// per-frame allocation, and the BGRA swap rides along (this is the per-frame cost of every fade).
+fn blit_with_opacity(
+    bytes: &mut [u8],
+    (width, height): (u32, u32),
+    damage: Damage,
+    pixels: tiny_skia::PixmapRef<'_>,
+    (dx, dy): (i32, i32),
+    opacity: f32,
+    swap_red_blue: bool,
+) {
+    let alpha = u32::from((opacity * 255.).round() as u8);
+    let (src_w, src_h) = (pixels.width() as i64, pixels.height() as i64);
+    let src = pixels.data();
+    for y in damage.y.min(height)..(damage.y + damage.h).min(height) {
+        let row = y as usize * width as usize;
+        let x0 = damage.x.min(width) as usize;
+        let x1 = (damage.x + damage.w).min(width) as usize;
+        let out = &mut bytes[(row + x0) * 4..(row + x1) * 4];
+        let sy = i64::from(y) - i64::from(dy);
+        // Source columns covering target columns x0..x1.
+        let first = (i64::from(dx) - x0 as i64).clamp(0, (x1 - x0) as i64) as usize;
+        let last =
+            (i64::from(dx) + src_w - x0 as i64).clamp(first as i64, (x1 - x0) as i64) as usize;
+        if sy < 0 || sy >= src_h || first == last {
+            out.fill(0);
+            continue;
+        }
+        out[..first * 4].fill(0);
+        out[last * 4..].fill(0);
+        let from = ((sy * src_w + (x0 + first) as i64 - i64::from(dx)) * 4) as usize;
+        let source = &src[from..from + (last - first) * 4];
+        for (d, s) in out[first * 4..last * 4]
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(source.as_chunks::<4>().0)
+        {
+            let scale = |v: u8| (((u32::from(v) * alpha + 128) * 257) >> 16) as u8;
+            let (r, b) = (scale(s[0]), scale(s[2]));
+            d[0] = if swap_red_blue { b } else { r };
+            d[1] = scale(s[1]);
+            d[2] = if swap_red_blue { r } else { b };
+            d[3] = scale(s[3]);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn opacity_blit_matches_the_masked_pixmap_composite_and_swaps_channels() {
+        let mut source = Pixmap::new(20, 10).unwrap();
+        for (i, px) in source
+            .data_mut()
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .enumerate()
+        {
+            let a = (i * 13 % 256) as u8;
+            *px = [
+                (i as u8).min(a),
+                (i * 7 % 256) as u8 % a.max(1),
+                (i * 3 % 256) as u8 % a.max(1),
+                a,
+            ];
+        }
+        let (width, height) = (40, 30);
+        let damage = Damage {
+            x: 3,
+            y: 4,
+            w: 30,
+            h: 20,
+        };
+        let origin = (8, 9);
+        for opacity in [0.25, 0.5, 1.0] {
+            let mut expected = vec![0xAA_u8; (width * height * 4) as usize];
+            let mut mask = Mask::new(width, height).unwrap();
+            for y in damage.y..damage.y + damage.h {
+                let i = (y * width + damage.x) as usize;
+                mask.data_mut()[i..i + damage.w as usize].fill(255);
+                expected[i * 4..(i + damage.w as usize) * 4].fill(0);
+            }
+            PixmapMut::from_bytes(&mut expected, width, height)
+                .unwrap()
+                .draw_pixmap(
+                    origin.0,
+                    origin.1,
+                    source.as_ref(),
+                    &PixmapPaint {
+                        opacity,
+                        ..Default::default()
+                    },
+                    Transform::identity(),
+                    Some(&mask),
+                );
+            let mut rgba = vec![0xAA_u8; (width * height * 4) as usize];
+            blit_with_opacity(
+                &mut rgba,
+                (width, height),
+                damage,
+                source.as_ref(),
+                origin,
+                opacity,
+                false,
+            );
+            let mut bgra = vec![0xAA_u8; (width * height * 4) as usize];
+            blit_with_opacity(
+                &mut bgra,
+                (width, height),
+                damage,
+                source.as_ref(),
+                origin,
+                opacity,
+                true,
+            );
+            for ((e, r), b) in expected
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .zip(rgba.as_chunks::<4>().0)
+                .zip(bgra.as_chunks::<4>().0)
+            {
+                for c in 0..4 {
+                    assert!(
+                        e[c].abs_diff(r[c]) <= 2,
+                        "opacity {opacity}: {e:?} vs {r:?}"
+                    );
+                }
+                assert_eq!([r[0], r[1], r[2], r[3]], [b[2], b[1], b[0], b[3]]);
+            }
+        }
+    }
     #[test]
     fn unclipped_arc_remains_visible_without_a_damage_mask() {
         let mut scene = scene();

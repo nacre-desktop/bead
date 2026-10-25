@@ -1903,10 +1903,7 @@ impl Runtime {
                             .map(std::path::PathBuf::from)
                             .unwrap_or_else(|| "@bead-icon-fallback.svg".into())
                     } else {
-                        freedesktop_icons::lookup(icon)
-                            .with_size(48)
-                            .find()
-                            .unwrap_or_else(|| "@bead-icon-fallback.svg".into())
+                        resolve_icon_path(icon)
                     };
                     let data = if path.as_path() == std::path::Path::new("@bead-icon-fallback.svg")
                     {
@@ -1944,6 +1941,36 @@ impl Runtime {
         self.pending = scene.clone();
         Ok(scene)
     }
+}
+/// Icon names resolve through the theme directories (stat-heavy); a launcher grid asks for the same
+/// few dozen names on every scene, so remember the answer. Bounded; only paths are kept, never bytes.
+fn resolve_icon_path(icon: &str) -> std::path::PathBuf {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static PATHS: OnceLock<Mutex<HashMap<String, std::path::PathBuf>>> = OnceLock::new();
+    let cache = PATHS.get_or_init(Default::default);
+    // A package removal must not leave a dead path behind: one stat revalidates a hit.
+    if let Some(path) = cache
+        .lock()
+        .ok()
+        .and_then(|map| map.get(icon).cloned())
+        .filter(|path| path.exists())
+    {
+        return path;
+    }
+    let path = freedesktop_icons::lookup(icon)
+        .with_size(48)
+        .find()
+        .unwrap_or_else(|| "@bead-icon-fallback.svg".into());
+    if path.as_path() != std::path::Path::new("@bead-icon-fallback.svg")
+        && let Ok(mut map) = cache.lock()
+    {
+        if map.len() >= 4096 {
+            map.clear();
+        }
+        map.insert(icon.to_owned(), path.clone());
+    }
+    path
 }
 impl Runtime {
     fn pointer_feedback(

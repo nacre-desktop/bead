@@ -1477,12 +1477,34 @@ fn shadow_pixmap(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixma
     if cut == 0 || w < side || h < side {
         return svg_pixmap(shadow_svg(rect.w, rect.h, radius, blur).as_bytes(), w, h);
     }
-    let logical_side = side as f32 / scale;
-    let template = svg_pixmap(
-        shadow_svg(logical_side, logical_side, radius, blur).as_bytes(),
-        side,
-        side,
-    )?;
+    // The Gaussian template depends on radius, blur and scale only. A revealing panel re-shapes its
+    // shadow every frame, so rendering the template again each time cost tens of milliseconds.
+    type Templates = Vec<((u32, u32, u32), std::sync::Arc<Pixmap>)>;
+    static TEMPLATES: std::sync::Mutex<Templates> = std::sync::Mutex::new(Vec::new());
+    let template_key = (radius.to_bits(), blur.to_bits(), scale.to_bits());
+    let cached = TEMPLATES.lock().ok().and_then(|templates| {
+        templates
+            .iter()
+            .find(|(key, _)| *key == template_key)
+            .map(|(_, pixmap)| pixmap.clone())
+    });
+    let template = if let Some(template) = cached {
+        template
+    } else {
+        let logical_side = side as f32 / scale;
+        let template = std::sync::Arc::new(svg_pixmap(
+            shadow_svg(logical_side, logical_side, radius, blur).as_bytes(),
+            side,
+            side,
+        )?);
+        if let Ok(mut templates) = TEMPLATES.lock() {
+            if templates.len() >= 6 {
+                templates.remove(0);
+            }
+            templates.push((template_key, template.clone()));
+        }
+        template
+    };
     let mut result = Pixmap::new(w, h).ok_or("shadow allocation")?;
     let src = [0, cut, side - cut, side];
     let xs = [0, cut, w - cut, w];
@@ -1615,9 +1637,16 @@ fn load_image(
     let mut raw = {
         let decoded = image::load_from_memory(bytes)?;
         match fit {
-            ImageFit::Fill => decoded
-                .resize_exact(w, h, image::imageops::FilterType::Lanczos3)
-                .into_rgba8(),
+            ImageFit::Fill => {
+                // Large raster icons (256-512 px) shrunk to ~50 px cost tens of milliseconds with
+                // Lanczos3; a two-lobe cubic is visually equivalent at that reduction.
+                let filter = if decoded.width() >= 2 * w || decoded.height() >= 2 * h {
+                    image::imageops::FilterType::CatmullRom
+                } else {
+                    image::imageops::FilterType::Lanczos3
+                };
+                decoded.resize_exact(w, h, filter).into_rgba8()
+            }
             ImageFit::Cover => decoded.into_rgba8(),
         }
     };

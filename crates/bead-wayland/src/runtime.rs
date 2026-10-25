@@ -22,6 +22,9 @@ pub(super) struct App {
     pub(super) panel_name: Option<String>,
     pub(super) panel_center: Option<f32>,
     pub(super) panel_close_epoch: u64,
+    /// The panel's own scene has been committed at least once (no dark/empty first frame before).
+    pub(super) panel_ready: bool,
+    pub(super) panel_started: Instant,
     pub(super) panel_reload_pending: bool,
     pub(super) panel_target: bool,
     /// The shown view was offered by a service (see `UiEvent::CompanionOffer`).
@@ -212,6 +215,8 @@ pub fn run_runtime(
         panel_name,
         panel_center: None,
         panel_close_epoch: 0,
+        panel_ready: true,
+        panel_started: Instant::now(),
         panel_reload_pending: false,
         panel_target: false,
         panel_ambient: false,

@@ -302,6 +302,7 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
                 } => {
                     let ns = ((u64::from(tv_sec_hi) << 32) | u64::from(tv_sec_lo)) * 1_000_000_000
                         + u64::from(tv_nsec);
+                    crate::scroll::note_refresh(refresh);
                     if state.started.elapsed().as_secs_f64() > 2.
                         && let Some(last) = s.last_presented
                         && ns > last

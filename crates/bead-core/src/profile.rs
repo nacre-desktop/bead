@@ -12,6 +12,14 @@ pub fn verbose() -> bool {
             || enabled()
     })
 }
+/// Per-rendered-frame timing (`UI_FRAME`); harness-only, via `BEAD_FRAME_TRACE=1`.
+pub fn frame_trace() -> bool {
+    static TRACE: OnceLock<bool> = OnceLock::new();
+    *TRACE.get_or_init(|| {
+        std::env::var_os("BEAD_FRAME_TRACE")
+            .is_some_and(|v| v.as_os_str() != std::ffi::OsStr::new("0"))
+    })
+}
 /// `println!` that only writes when [`verbose`] logging is enabled.
 #[macro_export]
 macro_rules! vprintln {

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Dynamic view ownership: only small durable state survives a closed/idle view.
 use super::*;
+/// A closed panel stays built for this long, so reopening it shows prepared content on its first frame.
+const PANEL_KEEP_ALIVE: Duration = Duration::from_secs(120);
 impl App {
     fn notify_panel_owner(&self, event: UiEvent) {
         let Some(sender) = &self.event_sender else {
@@ -526,6 +528,8 @@ impl App {
         self.panel_epoch = self.next_epoch();
         let epoch = self.panel_epoch;
         self.panel_reload_pending = false;
+        self.panel_ready = false;
+        self.panel_started = Instant::now();
         self.panel_output = Some(output.clone());
         if open && spec.keyboard_focus && self.pearl.is_none() {
             self.create_dismiss(&output)?;
@@ -693,6 +697,30 @@ impl App {
             self.draw(i, &qh);
         }
     }
+    /// The first real scene of a panel has arrived: its reveal starts now, not while a blank fallback was all there was.
+    pub(super) fn panel_content_ready(&mut self) {
+        self.panel_ready = true;
+        self.panel_animations = Default::default();
+        let reveal = self
+            .options
+            .panel_spec
+            .as_ref()
+            .and_then(|spec| spec.fallback.motion.as_ref())
+            .filter(|m| m.reveal)
+            .map(|m| (m.id.clone(), m.duration, m.curve));
+        if let Some((id, duration, curve)) = reveal {
+            let now = self.started.elapsed().as_secs_f64();
+            let curve = curve.unwrap_or(bead_core::animation::Curve::EaseOut);
+            self.panel_animations.target(&id, 0., now, duration, curve);
+            self.panel_animations.target(
+                &id,
+                if self.panel_target { 1. } else { 0. },
+                now,
+                duration,
+                curve,
+            );
+        }
+    }
     pub(super) fn close_panel(&mut self) {
         if self.panel_runtime.is_none() {
             return;
@@ -720,7 +748,7 @@ impl App {
         let qh = self.qh.clone();
         let epoch = self.panel_epoch;
         if let Err(e) = self.loop_handle.insert_source(
-            Timer::from_duration(Duration::from_millis(2200)),
+            Timer::from_duration(PANEL_KEEP_ALIVE),
             move |_, _, app| {
                 if !app.panel_target && app.panel_epoch == epoch && app.panel_close_epoch == token {
                     app.release_panel();

@@ -724,6 +724,9 @@ impl App {
                     }
                 }
                 self.scene = scene;
+                if self.processing_panel && !self.panel_ready {
+                    self.panel_content_ready();
+                }
                 if self.options.panel && (self.processing_panel || self.scene.motion.is_some()) {
                     let anchor = self.scene.motion.as_ref().map(|motion| match motion.edge {
                         bead_core::Edge::Left => Anchor::LEFT | Anchor::TOP,
