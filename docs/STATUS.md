@@ -1,5 +1,15 @@
 # Status
 
+## 2026-10-25 — B0124 pill clicks and compact updates
+
+The status pill background and gaps are inert; widget-owned targets retain the
+click default. Updates now has a content-sized count/checked header, health,
+existing updater/refresh routes and an optional bounded package list for N0077.
+Full remote CI stages pass; ten goldens and private paired interaction captures
+verify the layout and routes. The sampled CPU development-build reveal remains
+later than QML; animation/latency acceptance is not claimed.
+[Evidence and limits](specs/0124-pill-click-updates.md). No live deployment.
+
 ## 2026-10-25 — B0109 wallpaper picker repairs (review candidate)
 
 Toolbar layouts and Dynamic persist through the published provider contract;

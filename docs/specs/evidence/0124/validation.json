@@ -1,0 +1,660 @@
+{
+  "artifacts": {
+    "cpu_capture_bundle_sha256": "922729ed3aa63c5ca41e1a1d1ca98599317c1c48b80ada849af91685e3f02a85",
+    "nacre_helper_provenance": "B0114 staged; source revision not recorded",
+    "nacre_helper_sha256": "edb33b6780ff9db4b65ee95737beec4f28644b3daec77039e4401385699aae76",
+    "nacre_shell_binary_sha256": "a13fd383ab0b40e6fcec89e3893dc3d2e3327cb874fa05e2445e9e5812c99e2d",
+    "swaybg_sha256": "e36544a1faf6cb4f91493062684f0c4c5d95bce5454e1739a5ccde925ceffe27"
+  },
+  "capture": {
+    "logical_pixels": [
+      1920,
+      1200
+    ],
+    "opening_sequence": {
+      "bead": {
+        "edge": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            25,
+            0,
+            0
+          ],
+          [
+            50,
+            0,
+            0
+          ],
+          [
+            75,
+            0,
+            0
+          ],
+          [
+            101,
+            0,
+            0
+          ],
+          [
+            126,
+            0,
+            0
+          ],
+          [
+            151,
+            0,
+            0
+          ],
+          [
+            176,
+            0,
+            0
+          ],
+          [
+            201,
+            0,
+            0
+          ],
+          [
+            226,
+            0,
+            0
+          ],
+          [
+            251,
+            27,
+            895
+          ],
+          [
+            276,
+            27,
+            895
+          ],
+          [
+            303,
+            27,
+            895
+          ],
+          [
+            328,
+            27,
+            895
+          ],
+          [
+            353,
+            27,
+            895
+          ],
+          [
+            378,
+            27,
+            895
+          ],
+          [
+            403,
+            27,
+            895
+          ],
+          [
+            428,
+            27,
+            895
+          ],
+          [
+            453,
+            27,
+            895
+          ],
+          [
+            480,
+            31,
+            895
+          ],
+          [
+            505,
+            31,
+            895
+          ],
+          [
+            535,
+            31,
+            895
+          ],
+          [
+            560,
+            110,
+            896
+          ],
+          [
+            585,
+            110,
+            896
+          ],
+          [
+            610,
+            110,
+            896
+          ],
+          [
+            636,
+            110,
+            896
+          ],
+          [
+            662,
+            110,
+            896
+          ],
+          [
+            688,
+            110,
+            896
+          ],
+          [
+            714,
+            110,
+            896
+          ],
+          [
+            740,
+            110,
+            896
+          ],
+          [
+            766,
+            110,
+            896
+          ],
+          [
+            792,
+            110,
+            896
+          ]
+        ],
+        "end": 535,
+        "frames": 32,
+        "progress": {
+          "t10": 536,
+          "t50": 547,
+          "t90": 557
+        },
+        "start": 560
+      },
+      "contact_sheet": "updates-open-sequence.png",
+      "frames_per_arm": 32,
+      "interpretation": "The images show a longer Bead CPU-debug panel reveal than QML, with content clipped during the sampled transition. They do not show a count-only fallback followed by package reflow; no physical scanout or smoothness acceptance claim is made.",
+      "qml": {
+        "edge": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            26,
+            0,
+            0
+          ],
+          [
+            51,
+            12,
+            792
+          ],
+          [
+            76,
+            20,
+            794
+          ],
+          [
+            101,
+            20,
+            801
+          ],
+          [
+            126,
+            20,
+            801
+          ],
+          [
+            151,
+            20,
+            801
+          ],
+          [
+            176,
+            304,
+            959
+          ],
+          [
+            201,
+            304,
+            959
+          ],
+          [
+            226,
+            304,
+            959
+          ],
+          [
+            251,
+            304,
+            959
+          ],
+          [
+            276,
+            304,
+            959
+          ],
+          [
+            302,
+            304,
+            959
+          ],
+          [
+            327,
+            304,
+            959
+          ],
+          [
+            352,
+            304,
+            959
+          ],
+          [
+            377,
+            304,
+            959
+          ],
+          [
+            402,
+            304,
+            959
+          ],
+          [
+            427,
+            304,
+            959
+          ],
+          [
+            452,
+            304,
+            959
+          ],
+          [
+            477,
+            304,
+            959
+          ],
+          [
+            505,
+            304,
+            959
+          ],
+          [
+            530,
+            304,
+            959
+          ],
+          [
+            555,
+            304,
+            959
+          ],
+          [
+            580,
+            304,
+            959
+          ],
+          [
+            607,
+            304,
+            959
+          ],
+          [
+            632,
+            304,
+            959
+          ],
+          [
+            657,
+            304,
+            959
+          ],
+          [
+            682,
+            304,
+            959
+          ],
+          [
+            707,
+            304,
+            959
+          ],
+          [
+            732,
+            304,
+            959
+          ],
+          [
+            757,
+            304,
+            959
+          ],
+          [
+            783,
+            304,
+            959
+          ]
+        ],
+        "end": 302,
+        "frames": 32,
+        "progress": {
+          "t10": 159,
+          "t50": 208,
+          "t90": 322
+        },
+        "start": 176
+      },
+      "sampled_content": {
+        "bead": [
+          {
+            "at_ms": 0,
+            "content": "no panel"
+          },
+          {
+            "at_ms": 251,
+            "content": "no panel; pointer is over the updates target"
+          },
+          {
+            "at_ms": 585,
+            "content": "correct count/checked header and top package rows visible; lower rows/actions clipped by the panel reveal"
+          },
+          {
+            "at_ms": 792,
+            "content": "header and top package rows remain visible; lower content is still clipped"
+          },
+          {
+            "after_sequence": "settled screenshot after the additional 0.8 s dwell shows all three rows and both actions"
+          }
+        ],
+        "qml": [
+          {
+            "at_ms": 0,
+            "content": "no panel"
+          },
+          {
+            "at_ms": 251,
+            "content": "Updates heading and count visible; lower content still revealing"
+          },
+          {
+            "at_ms": 580,
+            "content": "count and both legacy actions visible"
+          },
+          {
+            "at_ms": 783,
+            "content": "settled legacy count/actions panel"
+          }
+        ]
+      },
+      "scheduled_interval_ms": 25,
+      "timestamp_method": "grim process spawn times relative to click; image-sampling proxy, not scanout time"
+    },
+    "output": "winit",
+    "physical_pixels": [
+      2880,
+      1800
+    ],
+    "renderer": {
+      "bead": "CPU",
+      "qml": "Quickshell default renderer"
+    },
+    "scale": 1.5,
+    "sessions": "separate private HOME/XDG trees, D-Bus sessions and nested niri sessions under private labwc parents",
+    "source_and_palette": "same Nacre origin/main source and read-only presentation record in both arms",
+    "states": {
+      "bar-idle": {
+        "pair_pixel_difference": {
+          "bar_rmse": 5.92,
+          "bbox": [
+            15,
+            16,
+            2865,
+            1785
+          ],
+          "changed_pct": 1.698,
+          "rmse": 2.35
+        },
+        "paired_image": "bar-idle-paired.png",
+        "ui_state": {
+          "bead": {
+            "controlSection": null,
+            "edgeMenu": "",
+            "errors": [],
+            "osd": null
+          },
+          "qml": {
+            "controlSection": null,
+            "edgeMenu": "",
+            "errors": [],
+            "osd": null
+          }
+        }
+      },
+      "pill-gap-click": {
+        "pair_pixel_difference": {
+          "bar_rmse": 5.92,
+          "bbox": [
+            15,
+            16,
+            2865,
+            1785
+          ],
+          "changed_pct": 1.698,
+          "rmse": 2.35
+        },
+        "paired_image": "pill-gap-click-paired.png",
+        "ui_state": {
+          "bead": {
+            "controlSection": "home",
+            "edgeMenu": "",
+            "errors": [],
+            "osd": false
+          },
+          "qml": {
+            "controlSection": "updates",
+            "edgeMenu": "",
+            "errors": [],
+            "osd": false
+          }
+        }
+      },
+      "updates-hover": {
+        "pair_pixel_difference": {
+          "bar_rmse": 15.696,
+          "bbox": [
+            15,
+            15,
+            2865,
+            1785
+          ],
+          "changed_pct": 2.723,
+          "rmse": 8.801
+        },
+        "paired_image": "updates-hover-paired.png",
+        "ui_state": {
+          "bead": {
+            "controlSection": "home",
+            "edgeMenu": "",
+            "errors": [],
+            "osd": false
+          },
+          "qml": {
+            "controlSection": "home",
+            "edgeMenu": "",
+            "errors": [],
+            "osd": false
+          }
+        }
+      },
+      "updates-open": {
+        "pair_pixel_difference": {
+          "bar_rmse": 13.0,
+          "bbox": [
+            15,
+            15,
+            2878,
+            1785
+          ],
+          "changed_pct": 6.235,
+          "rmse": 16.83
+        },
+        "paired_image": "updates-open-paired.png",
+        "ui_state": {
+          "bead": {
+            "controlSection": "home",
+            "edgeMenu": "updates",
+            "errors": [],
+            "osd": false
+          },
+          "qml": {
+            "controlSection": "updates",
+            "edgeMenu": "osd",
+            "errors": [],
+            "osd": true
+          }
+        }
+      },
+      "updates-pressed": {
+        "pair_pixel_difference": {
+          "bar_rmse": 9.325,
+          "bbox": [
+            15,
+            15,
+            2865,
+            1785
+          ],
+          "changed_pct": 1.783,
+          "rmse": 2.852
+        },
+        "paired_image": "updates-pressed-paired.png",
+        "ui_state": {
+          "bead": {
+            "controlSection": "home",
+            "edgeMenu": "",
+            "errors": [],
+            "osd": false
+          },
+          "qml": {
+            "controlSection": "home",
+            "edgeMenu": "",
+            "errors": [],
+            "osd": false
+          }
+        }
+      }
+    }
+  },
+  "fixture": {
+    "checked_epoch_seconds": 1800000000,
+    "count": 3,
+    "package_shim_smoke": "passed: checkupdates resolves to private fixture shim and emits three rows; pacman/paru/yay are silent no-ops",
+    "package_tool_shims": {
+      "bead": {
+        "checkupdates": 1,
+        "pacman": 2,
+        "paru": 1
+      },
+      "checkupdates": "fixture output only",
+      "pacman_paru_yay": "silent no-op shims",
+      "qml": {
+        "checkupdates": 1,
+        "pacman": 4,
+        "paru": 1
+      }
+    },
+    "packages": [
+      {
+        "name": "linux",
+        "new": "6.17.5-1",
+        "old": "6.17.4-1",
+        "repo": "core"
+      },
+      {
+        "name": "firefox",
+        "new": "144.0.1-1",
+        "old": "144.0-1",
+        "repo": "extra"
+      },
+      {
+        "name": "example-theme",
+        "new": "1.3",
+        "old": "1.2",
+        "repo": "AUR"
+      }
+    ],
+    "protocol_version": 1,
+    "proxy_smoke": {
+      "blocked_calls": [
+        "dashboard.updates.refresh",
+        "tools.launch(updates)"
+      ],
+      "blocked_calls_forwarded": false,
+      "ordinary_call_forwarded": "daemon.status",
+      "topic_snapshot": "count 3, three packages",
+      "welcome_bytes": 100134
+    },
+    "routes_clicked_during_capture": [],
+    "same_count_and_checked_time_in_qml_cache_and_bead_topic": true,
+    "sha256": "c4feb87f5c944100998963787db716f14d775da764d2bdfd06baa3101cee5b79",
+    "topic": "dashboard.updates"
+  },
+  "known_differences": [
+    "The requested compact Bead dropdown adds checked time, package versions and repository badges; the origin/main QML popup shows the legacy count and actions only.",
+    "The Bead open sequence reveals the package rows and actions later than the QML panel in the captured grim-sampling proxy; this is an image-timing observation, not a physical presentation measurement.",
+    "The existing helper producer does not supply this fixture topic in the capture. A private proxy publishes the checked-in dashboard.updates/v1 fixture so the capture validates the UI consumer and does not claim producer parity."
+  ],
+  "revisions": {
+    "bead_cpu_candidate": "3e30eb0875ec46c3d94504ad971c8ef5f414ea65",
+    "bead_display_clock_fixture": {
+      "after_sha256": "3b9c219cc40e74e27e76aec285ab305f4f36198643df02dba24d1db2dc82af29",
+      "before_sha256": "e364096841e832d693b1373340e7bcd81d0cfd0dfa888c53d7adadc492b052ad",
+      "file": "shell/bar/behavior.luau",
+      "value": "12:34"
+    },
+    "later_test_fixture_path_only_commit": "72b4ab1c; fixture path relocation only, runtime unchanged",
+    "nacre_qml_origin_main": "1ab8bcdad8a54ce9d96f3e608a0c47297825d6e1",
+    "qml_display_clock_fixture": {
+      "after_sha256": "321b1fd8276d3bd2f936166bde3f25df86cbfb20a0a8895e73726df4b646e7be",
+      "before_sha256": "c92f2d7d737e6f0991ff8620e61b6079ed52032f05a543059bc2a61c106f90aa",
+      "file": "nacre/shell/services/NacreTime.qml",
+      "value": "12:34 local time"
+    }
+  },
+  "safety": {
+    "capture_returncode": 0,
+    "guard_status": "complete",
+    "minimum_memavailable_kib": 11111648,
+    "oom_delta": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "scope_memory_max_bytes": 12884901888,
+    "scope_memory_swap_max_bytes": 0,
+    "scope_peak_bytes": 1009410048,
+    "swap_in_delta_each_arm": {
+      "bead": 0,
+      "qml": 0
+    },
+    "swap_used_before_each_arm_kib": {
+      "bead": 0,
+      "qml": 0
+    },
+    "watchdog_samples": 52
+  },
+  "schema": "B0124 private visual capture v1",
+  "setup_audit": "Some failed private setup attempts before package shims were added included a real read-only checkupdates invocation. No updater, refresh, install or upgrade route was clicked. All final captures used private package-tool shims."
+}
