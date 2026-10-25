@@ -164,7 +164,7 @@ local function setting_row(item,key,schema,value)
             text("value",tostring(value or schema.min),22,tx.body),button("plus","+",edit("setting",{iid=item.iid,key=key,value=math.min(schema.max,(value or schema.min)+step)}),40)}
     elseif schema.type=="text" or schema.type=="color" or schema.type=="icon" then
         local editing=ui.resolve_for_check(ui.bind("widgets.select"))==key
-        return kit.TextRow{id="field-"..key,label=label,text=tostring(value or ""),editing=editing,enabled=true,
+        return kit.TextRow{id="field-"..key,label=label,text=(value~=nil and tostring(value)~="") and tostring(value) or "Set value",editing=editing,enabled=true,
             field=ui.bind("widgets.field"),on_edit=edit("field",{iid=item.iid,key=key,value=value or ""}),
             on_save=edit("setting",{iid=item.iid,key=key,from_field=true}),on_cancel=edit("select",{iid=item.iid})}
     end

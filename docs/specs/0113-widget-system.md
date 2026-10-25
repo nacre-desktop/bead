@@ -149,11 +149,13 @@ atomic replacements are watched without polling. Launcher icon choices use the
 bundled Nacre mark, theme icons `distributor-logo-archlinux` / `cachyos`, or a
 custom icon path; actions select launcher, dashboard, or a custom view route.
 
-## Phase 2 candidate — B0114: stopped at the memory gate
+## Phase 2 candidate — B0114: staged integration
 
-Candidate `23d2ffbc` is local only, on control `4925b6e8` including the B0111,
-B0117, B0119 and B0120 integrations. No feature slice was pushed. Full remote
-Arch CI passes, including the regenerated and visually reviewed Panels golden.
+The lead resumed B0114 under a 2 MiB always-on feature budget. The original
+`23d2ffbc` measurements below use control `4925b6e8`; their maximum median cost
+is 0.820 MiB, within that budget. The resumed candidate is rebased onto current
+main including B0109, B0111, B0117, B0119 and B0120. Fresh integration checks are
+in progress; the earlier full Arch CI and reviewed Panels golden remain recorded.
 The editor, catalogue and launcher settings were inspected in private nested
 CPU sessions at 2880×1800 / 1.5. Twelve accepted arms pass containment and swap
 checks. No live session or installed files were changed.
@@ -170,7 +172,9 @@ views; empty canvases allocate no layer, and visible content uses tight bounds.
 | Unreclaimable | +0.554688 | +0.820312 | +0.753906 | +0.722656 |
 | Clean file-backed PSS (informational) | +0.203125 | +0.236328 | +0.237305 | +0.237305 |
 
-Every unreclaimable median exceeds +0.5 MiB: the standing rule requires **STOP**.
+The earlier +0.5 MiB stop was superseded by the lead’s feature-budget decision.
+The +0.5 MiB rule still guards regressions of existing behavior; the widget
+feature’s total always-on allowance is 2 MiB. These measurements fit it.
 The increases are anonymous; SHM is identical and DRM/SwapPss are zero. All five
 pairs, including the near-zero fourth pair, remain in the medians. No allocation
 attribution or measured jank-removal trade has been established.
@@ -178,9 +182,9 @@ First-key UI CPU is 3.578 ms median / 4.067 ms max; the first matching nested
 presentation is 5.460 / 6.042 ms. These are first-response measurements with the
 real menu service, not completed-query, daemon CPU or physical scanout timings.
 
-Default parity is not accepted: the matched control's IPC status-open path emits
-`unknown state panel.anchor_hovered` after the B0111 integration. Drag pacing was
-not measured before the memory stop. Further phase-2 gaps are animated flexible
+The resumed integration fixes IPC status-open sending undeclared sidebar hover
+stores to ordinary popouts. A generic lifecycle event lets each view project
+only its declared policy state. Default parity and drag pacing are being rerun. Further phase-2 gaps are animated flexible
 width, resize affordances, review of the new empty-value text controls, and
 nested AI/control detach/re-dock validation.
 The N0075 widget-store registration is still unpublished; standalone persistence
