@@ -4589,10 +4589,6 @@ fn focused_title(
         return (window.title.clone(), Some(window.id.clone()));
     }
 
-    let active_workspace = snapshot.workspaces.iter().find(|workspace| {
-        (workspace.focused || workspace.active)
-            && (output_id.is_none() || workspace.output.as_ref() == output_id)
-    });
     let retained = previous.and_then(|id| {
         snapshot
             .windows
@@ -4600,7 +4596,11 @@ fn focused_title(
             .filter(window_matches)
             .find(|window| {
                 &window.id == id
-                    && window.workspace.as_ref() == active_workspace.map(|workspace| &workspace.id)
+                    && snapshot.workspaces.iter().any(|workspace| {
+                        (workspace.focused || workspace.active)
+                            && (output_id.is_none() || workspace.output.as_ref() == output_id)
+                            && window.workspace.as_ref() == Some(&workspace.id)
+                    })
             })
     });
     retained.map_or_else(

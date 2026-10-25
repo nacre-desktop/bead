@@ -130,6 +130,17 @@ fn title_survives_transient_focus_clear_only_while_its_window_stays_active() {
     assert!(title.is_empty(), "unknown outputs fail closed");
     assert_eq!(remembered, None);
 
+    let unscoped = snapshot.windows[0].id.clone();
+    snapshot.windows[0].workspace = None;
+    snapshot.windows[0].output = Some(Id("output-1".into()));
+    snapshot.workspaces.clear();
+    let (title, remembered) = focused_title(&snapshot, Some("right"), Some(&unscoped));
+    assert!(
+        title.is_empty(),
+        "no active workspace cannot justify retaining a title"
+    );
+    assert_eq!(remembered, None);
+
     snapshot.connected = false;
     let (title, remembered) = focused_title(&snapshot, Some("right"), Some(&previous));
     assert!(
