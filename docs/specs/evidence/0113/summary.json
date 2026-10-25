@@ -1,0 +1,768 @@
+{
+  "backend": "cpu",
+  "output_physical": [
+    2880,
+    1800
+  ],
+  "scale": 1.5,
+  "pairs": 5,
+  "samples_per_phase": 5,
+  "unreclaimable_formula": "Pss_Anon + Pss_Shmem + DRM + SwapPss",
+  "runs": {
+    "control": [
+      {
+        "pair": 1,
+        "source_revision": "bf1f097e3550c3c3f66df8ffd497482604cd8785",
+        "first_key": {
+          "ui_cpu_ms": 3.723267,
+          "presented_ms": 4.222546,
+          "source": "real daemon menu.query; first committed key presentation"
+        },
+        "phases_kib": {
+          "idle": {
+            "Pss": 50589,
+            "Pss_Anon": 18956,
+            "Pss_File": 20797,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 29792
+          },
+          "launcher": {
+            "Pss": 68809,
+            "Pss_Anon": 27872,
+            "Pss_File": 21387,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 47422
+          },
+          "typed": {
+            "Pss": 71708,
+            "Pss_Anon": 30772,
+            "Pss_File": 21386,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 50322
+          },
+          "closed": {
+            "Pss": 50662,
+            "Pss_Anon": 19840,
+            "Pss_File": 19986,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 30676
+          }
+        }
+      },
+      {
+        "pair": 2,
+        "source_revision": "bf1f097e3550c3c3f66df8ffd497482604cd8785",
+        "first_key": {
+          "ui_cpu_ms": 4.189129,
+          "presented_ms": 4.670886,
+          "source": "real daemon menu.query; first committed key presentation"
+        },
+        "phases_kib": {
+          "idle": {
+            "Pss": 50357,
+            "Pss_Anon": 18564,
+            "Pss_File": 20957,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 29400
+          },
+          "launcher": {
+            "Pss": 68689,
+            "Pss_Anon": 27524,
+            "Pss_File": 21615,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 47074
+          },
+          "typed": {
+            "Pss": 71649,
+            "Pss_Anon": 30472,
+            "Pss_File": 21627,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 50022
+          },
+          "closed": {
+            "Pss": 50415,
+            "Pss_Anon": 19360,
+            "Pss_File": 20219,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 30196
+          }
+        }
+      },
+      {
+        "pair": 3,
+        "source_revision": "bf1f097e3550c3c3f66df8ffd497482604cd8785",
+        "first_key": {
+          "ui_cpu_ms": 3.764488,
+          "presented_ms": 4.261636,
+          "source": "real daemon menu.query; first committed key presentation"
+        },
+        "phases_kib": {
+          "idle": {
+            "Pss": 49937,
+            "Pss_Anon": 18504,
+            "Pss_File": 20597,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 29340
+          },
+          "launcher": {
+            "Pss": 68324,
+            "Pss_Anon": 27580,
+            "Pss_File": 21194,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 47130
+          },
+          "typed": {
+            "Pss": 71232,
+            "Pss_Anon": 30488,
+            "Pss_File": 21194,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 50038
+          },
+          "closed": {
+            "Pss": 49962,
+            "Pss_Anon": 19368,
+            "Pss_File": 19758,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 30204
+          }
+        }
+      },
+      {
+        "pair": 4,
+        "source_revision": "bf1f097e3550c3c3f66df8ffd497482604cd8785",
+        "first_key": {
+          "ui_cpu_ms": 3.687617,
+          "presented_ms": 4.133977,
+          "source": "real daemon menu.query; first committed key presentation"
+        },
+        "phases_kib": {
+          "idle": {
+            "Pss": 49840,
+            "Pss_Anon": 18564,
+            "Pss_File": 20440,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 29400
+          },
+          "launcher": {
+            "Pss": 68117,
+            "Pss_Anon": 27532,
+            "Pss_File": 21035,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 47082
+          },
+          "typed": {
+            "Pss": 71092,
+            "Pss_Anon": 30508,
+            "Pss_File": 21034,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 50058
+          },
+          "closed": {
+            "Pss": 49866,
+            "Pss_Anon": 19340,
+            "Pss_File": 19690,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 30176
+          }
+        }
+      },
+      {
+        "pair": 5,
+        "source_revision": "bf1f097e3550c3c3f66df8ffd497482604cd8785",
+        "first_key": {
+          "ui_cpu_ms": 3.681847,
+          "presented_ms": 4.170736,
+          "source": "real daemon menu.query; first committed key presentation"
+        },
+        "phases_kib": {
+          "idle": {
+            "Pss": 50205,
+            "Pss_Anon": 18592,
+            "Pss_File": 20777,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 29428
+          },
+          "launcher": {
+            "Pss": 68449,
+            "Pss_Anon": 27528,
+            "Pss_File": 21371,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 47078
+          },
+          "typed": {
+            "Pss": 71376,
+            "Pss_Anon": 30456,
+            "Pss_File": 21370,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 50006
+          },
+          "closed": {
+            "Pss": 50173,
+            "Pss_Anon": 19352,
+            "Pss_File": 19985,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 30188
+          }
+        }
+      }
+    ],
+    "candidate": [
+      {
+        "pair": 1,
+        "source_revision": "af5615d561c1138076a9df4e98f7a423c6daa739",
+        "first_key": {
+          "ui_cpu_ms": 3.797107,
+          "presented_ms": 4.111117,
+          "source": "real daemon menu.query; first committed key presentation"
+        },
+        "phases_kib": {
+          "idle": {
+            "Pss": 48841,
+            "Pss_Anon": 18728,
+            "Pss_File": 19277,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 29564
+          },
+          "launcher": {
+            "Pss": 67326,
+            "Pss_Anon": 27704,
+            "Pss_File": 20072,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 47254
+          },
+          "typed": {
+            "Pss": 68420,
+            "Pss_Anon": 28800,
+            "Pss_File": 20070,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 48350
+          },
+          "closed": {
+            "Pss": 49058,
+            "Pss_Anon": 19560,
+            "Pss_File": 18662,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 30396
+          }
+        }
+      },
+      {
+        "pair": 2,
+        "source_revision": "af5615d561c1138076a9df4e98f7a423c6daa739",
+        "first_key": {
+          "ui_cpu_ms": 3.741067,
+          "presented_ms": 4.197107,
+          "source": "real daemon menu.query; first committed key presentation"
+        },
+        "phases_kib": {
+          "idle": {
+            "Pss": 48777,
+            "Pss_Anon": 18744,
+            "Pss_File": 19197,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 29580
+          },
+          "launcher": {
+            "Pss": 67184,
+            "Pss_Anon": 27720,
+            "Pss_File": 19914,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 47270
+          },
+          "typed": {
+            "Pss": 70103,
+            "Pss_Anon": 30640,
+            "Pss_File": 19913,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 50190
+          },
+          "closed": {
+            "Pss": 48945,
+            "Pss_Anon": 19592,
+            "Pss_File": 18517,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 30428
+          }
+        }
+      },
+      {
+        "pair": 3,
+        "source_revision": "af5615d561c1138076a9df4e98f7a423c6daa739",
+        "first_key": {
+          "ui_cpu_ms": 3.681987,
+          "presented_ms": 4.169736,
+          "source": "real daemon menu.query; first committed key presentation"
+        },
+        "phases_kib": {
+          "idle": {
+            "Pss": 48935,
+            "Pss_Anon": 18756,
+            "Pss_File": 19343,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 29592
+          },
+          "launcher": {
+            "Pss": 67321,
+            "Pss_Anon": 27708,
+            "Pss_File": 20063,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 47258
+          },
+          "typed": {
+            "Pss": 70089,
+            "Pss_Anon": 30476,
+            "Pss_File": 20063,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 50026
+          },
+          "closed": {
+            "Pss": 49071,
+            "Pss_Anon": 19520,
+            "Pss_File": 18715,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 30356
+          }
+        }
+      },
+      {
+        "pair": 4,
+        "source_revision": "af5615d561c1138076a9df4e98f7a423c6daa739",
+        "first_key": {
+          "ui_cpu_ms": 3.880889,
+          "presented_ms": 4.361106,
+          "source": "real daemon menu.query; first committed key presentation"
+        },
+        "phases_kib": {
+          "idle": {
+            "Pss": 48590,
+            "Pss_Anon": 18780,
+            "Pss_File": 18974,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 29616
+          },
+          "launcher": {
+            "Pss": 67114,
+            "Pss_Anon": 27740,
+            "Pss_File": 19824,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 47290
+          },
+          "typed": {
+            "Pss": 70097,
+            "Pss_Anon": 30660,
+            "Pss_File": 19887,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 50210
+          },
+          "closed": {
+            "Pss": 48883,
+            "Pss_Anon": 19596,
+            "Pss_File": 18451,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 30432
+          }
+        }
+      },
+      {
+        "pair": 5,
+        "source_revision": "af5615d561c1138076a9df4e98f7a423c6daa739",
+        "first_key": {
+          "ui_cpu_ms": 3.988039,
+          "presented_ms": 4.503235,
+          "source": "real daemon menu.query; first committed key presentation"
+        },
+        "phases_kib": {
+          "idle": {
+            "Pss": 48566,
+            "Pss_Anon": 18788,
+            "Pss_File": 18942,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 29624
+          },
+          "launcher": {
+            "Pss": 67057,
+            "Pss_Anon": 27716,
+            "Pss_File": 19791,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 47266
+          },
+          "typed": {
+            "Pss": 70028,
+            "Pss_Anon": 30624,
+            "Pss_File": 19854,
+            "Pss_Shmem": 19550,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 50174
+          },
+          "closed": {
+            "Pss": 48879,
+            "Pss_Anon": 19568,
+            "Pss_File": 18475,
+            "Pss_Shmem": 10836,
+            "DRM": 0,
+            "SwapPss": 0,
+            "unreclaimable_kib": 30404
+          }
+        }
+      }
+    ]
+  },
+  "memory": {
+    "idle": {
+      "median_delta_mib": 0.19140625,
+      "pair_deltas_mib": [
+        -0.22265625,
+        0.17578125,
+        0.24609375,
+        0.2109375,
+        0.19140625
+      ],
+      "anon_pair_deltas_mib": [
+        -0.22265625,
+        0.17578125,
+        0.24609375,
+        0.2109375,
+        0.19140625
+      ],
+      "pass": true,
+      "control": {
+        "unreclaimable_mib": 28.7109375,
+        "pss_mib": 49.0283203125,
+        "anon_mib": 18.12890625,
+        "shmem_mib": 10.58203125,
+        "file_pss_mib": 20.2900390625,
+        "drm_mib": 0.0,
+        "swap_pss_mib": 0.0
+      },
+      "candidate": {
+        "unreclaimable_mib": 28.8984375,
+        "pss_mib": 47.6337890625,
+        "anon_mib": 18.31640625,
+        "shmem_mib": 10.58203125,
+        "file_pss_mib": 18.7470703125,
+        "drm_mib": 0.0,
+        "swap_pss_mib": 0.0
+      }
+    },
+    "launcher": {
+      "median_delta_mib": 0.18359375,
+      "pair_deltas_mib": [
+        -0.1640625,
+        0.19140625,
+        0.125,
+        0.203125,
+        0.18359375
+      ],
+      "anon_pair_deltas_mib": [
+        -0.1640625,
+        0.19140625,
+        0.125,
+        0.203125,
+        0.18359375
+      ],
+      "pass": true,
+      "control": {
+        "unreclaimable_mib": 45.978515625,
+        "pss_mib": 66.8447265625,
+        "anon_mib": 26.88671875,
+        "shmem_mib": 19.091796875,
+        "file_pss_mib": 20.8701171875,
+        "drm_mib": 0.0,
+        "swap_pss_mib": 0.0
+      },
+      "candidate": {
+        "unreclaimable_mib": 46.158203125,
+        "pss_mib": 65.609375,
+        "anon_mib": 27.06640625,
+        "shmem_mib": 19.091796875,
+        "file_pss_mib": 19.447265625,
+        "drm_mib": 0.0,
+        "swap_pss_mib": 0.0
+      }
+    },
+    "typed": {
+      "median_delta_mib": 0.1484375,
+      "pair_deltas_mib": [
+        -1.92578125,
+        0.1640625,
+        -0.01171875,
+        0.1484375,
+        0.1640625
+      ],
+      "anon_pair_deltas_mib": [
+        -1.92578125,
+        0.1640625,
+        -0.01171875,
+        0.1484375,
+        0.1640625
+      ],
+      "pass": true,
+      "control": {
+        "unreclaimable_mib": 48.865234375,
+        "pss_mib": 69.703125,
+        "anon_mib": 29.7734375,
+        "shmem_mib": 19.091796875,
+        "file_pss_mib": 20.869140625,
+        "drm_mib": 0.0,
+        "swap_pss_mib": 0.0
+      },
+      "candidate": {
+        "unreclaimable_mib": 48.998046875,
+        "pss_mib": 68.4462890625,
+        "anon_mib": 29.90625,
+        "shmem_mib": 19.091796875,
+        "file_pss_mib": 19.4462890625,
+        "drm_mib": 0.0,
+        "swap_pss_mib": 0.0
+      }
+    },
+    "closed": {
+      "median_delta_mib": 0.2109375,
+      "pair_deltas_mib": [
+        -0.2734375,
+        0.2265625,
+        0.1484375,
+        0.25,
+        0.2109375
+      ],
+      "anon_pair_deltas_mib": [
+        -0.2734375,
+        0.2265625,
+        0.1484375,
+        0.25,
+        0.2109375
+      ],
+      "pass": true,
+      "control": {
+        "unreclaimable_mib": 29.48828125,
+        "pss_mib": 48.9970703125,
+        "anon_mib": 18.90625,
+        "shmem_mib": 10.58203125,
+        "file_pss_mib": 19.5166015625,
+        "drm_mib": 0.0,
+        "swap_pss_mib": 0.0
+      },
+      "candidate": {
+        "unreclaimable_mib": 29.69140625,
+        "pss_mib": 47.7978515625,
+        "anon_mib": 19.109375,
+        "shmem_mib": 10.58203125,
+        "file_pss_mib": 18.0830078125,
+        "drm_mib": 0.0,
+        "swap_pss_mib": 0.0
+      }
+    }
+  },
+  "first_key": {
+    "control": {
+      "ui_cpu_ms": [
+        3.723267,
+        4.189129,
+        3.764488,
+        3.687617,
+        3.681847
+      ],
+      "median_ui_cpu_ms": 3.723267,
+      "max_ui_cpu_ms": 4.189129,
+      "median_presented_ms": 4.222546,
+      "max_presented_ms": 4.670886,
+      "pass": true
+    },
+    "candidate": {
+      "ui_cpu_ms": [
+        3.797107,
+        3.741067,
+        3.681987,
+        3.880889,
+        3.988039
+      ],
+      "median_ui_cpu_ms": 3.797107,
+      "max_ui_cpu_ms": 3.988039,
+      "median_presented_ms": 4.197107,
+      "max_presented_ms": 4.503235,
+      "pass": true
+    }
+  },
+  "parity": {
+    "idle": {
+      "control": {
+        "bar_rmse_pct": 5.926469041496249,
+        "clock_neutral_diagnostic_rmse_pct": 5.778019125296477
+      },
+      "candidate": {
+        "bar_rmse_pct": 5.724581296427581,
+        "clock_neutral_diagnostic_rmse_pct": 5.778019125296477
+      },
+      "raw_pass": true,
+      "clock_neutral_diagnostic_pass": true
+    },
+    "bar-title-hover": {
+      "control": {
+        "bar_rmse_pct": 5.914454868121796,
+        "clock_neutral_diagnostic_rmse_pct": 5.765388302898238
+      },
+      "candidate": {
+        "bar_rmse_pct": 5.676417700034865,
+        "clock_neutral_diagnostic_rmse_pct": 5.729111006410934
+      },
+      "raw_pass": true,
+      "clock_neutral_diagnostic_pass": true
+    },
+    "bar-title-open": {
+      "control": {
+        "bar_rmse_pct": 5.899686496587598,
+        "clock_neutral_diagnostic_rmse_pct": 5.950844687254517
+      },
+      "candidate": {
+        "bar_rmse_pct": 5.896304120881183,
+        "clock_neutral_diagnostic_rmse_pct": 5.950844687254517
+      },
+      "raw_pass": true,
+      "clock_neutral_diagnostic_pass": true
+    },
+    "popout-audio": {
+      "control": {
+        "bar_rmse_pct": 5.777255703993109,
+        "clock_neutral_diagnostic_rmse_pct": 5.826433039266906
+      },
+      "candidate": {
+        "bar_rmse_pct": 5.853189872938239,
+        "clock_neutral_diagnostic_rmse_pct": 5.826433039266906
+      },
+      "raw_pass": false,
+      "clock_neutral_diagnostic_pass": true
+    }
+  },
+  "safety": {
+    "capture_reports_passed": 12,
+    "host_swap_in_pages": 0,
+    "process_swap_pss_kib": 0,
+    "oom_events": 0,
+    "containment_verified": true
+  },
+  "gate_pass": true,
+  "render_difference": {
+    "idle": {
+      "clock_excluded_changed_pixels": 0,
+      "clock_excluded_bbox": null,
+      "clock_excluded_rmse_pct": 0.0
+    },
+    "bar-title-hover": {
+      "clock_excluded_changed_pixels": 10759,
+      "clock_excluded_bbox": [
+        1317,
+        12,
+        1564,
+        63
+      ],
+      "clock_excluded_rmse_pct": 0.6360014113545219
+    },
+    "bar-title-open": {
+      "clock_excluded_changed_pixels": 0,
+      "clock_excluded_bbox": null,
+      "clock_excluded_rmse_pct": 0.0
+    },
+    "popout-audio": {
+      "clock_excluded_changed_pixels": 0,
+      "clock_excluded_bbox": null,
+      "clock_excluded_rmse_pct": 0.0
+    }
+  },
+  "sources": {
+    "candidate": "af5615d561c1138076a9df4e98f7a423c6daa739",
+    "control": "bf1f097e3550c3c3f66df8ffd497482604cd8785",
+    "qml_and_daemon": "713d38b3a0421b42da995f6cc562650510807e88",
+    "candidate_binary_sha256": "c69556f473a25c649a8d89acf8eff79f3e306e3536692dbadef2ba15b98b42ae",
+    "control_binary_sha256": "f2e61cedfc88e0b1c744dd0ced51838aaf96be09ef47971f35bc50a008403b76",
+    "build": "Rust 1.99.0; checked-in release profile; separate target directories; native bar --check passed"
+  },
+  "fixtures": {
+    "updates": 12,
+    "wallpaper": "generated gradient 1; palette from the matching daemon",
+    "clock_exclusion_physical": [
+      2730,
+      0,
+      2800,
+      75
+    ],
+    "clock_exclusion_usage": "secondary diagnostic only; core-state raw RMSE gates passed without it"
+  },
+  "batch_elapsed_seconds": 381
+}

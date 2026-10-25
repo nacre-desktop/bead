@@ -2928,3 +2928,25 @@ Full Arch CI and private capture gates passed; no live desktop changes.
 
 Remote relative memory gate passed; no populated-panel/laptop acceptance claimed.
 All residual differences and source/timing gaps are in B0073 with paired evidence.
+
+## B0113 phase 1 — widget model and bar host (2026-10-25)
+
+The existing bar now lives in validated Luau packages on a general strip host; its default drawing expressions and IDs are preserved.
+Four regenerated bar goldens are byte-identical. Private nested CPU pairs at 2880×1800/1.5 meet the existing-main idle/hover/active RMSE gate.
+Five alternating pairs pass the +0.5 MiB median unreclaimable gate; growth is anonymous, SHM is identical, and DRM/SwapPss are zero.
+Verdict: phase 1 passes with Nacre opaque store registration requested; the laptop reference cap remains with the lead.
+
+| Metric | Control | Widgets | Gate |
+| --- | ---: | ---: | --- |
+| Header RMSE %, idle/hover/active | 5.926/5.914/5.900 | 5.725/5.676/5.896 | no worse |
+| First-key UI CPU median/max ms | 3.723/4.189 | 3.797/3.988 | ≤8 |
+| Nested first presentation median/max ms | 4.223/4.671 | 4.197/4.503 | reported |
+| Idle paired median Δ unreclaimable MiB | — | +0.191 | ≤+0.5 |
+| Launcher paired median Δ MiB | — | +0.184 | ≤+0.5 |
+| Typed paired median Δ MiB | — | +0.148 | ≤+0.5 |
+| Closed paired median Δ MiB | — | +0.211 | ≤+0.5 |
+| Idle/closed clean-file PSS MiB (info) | 20.290/19.517 | 18.747/18.083 | not gated |
+
+Full remote CI and isolated release bar checks pass on `af5615d`; no new system build dependency. The direct `notify` dependency was already transitive.
+The audio pair crosses a clock minute; all other native audio bar pixels match control. A typed control anonymous outlier stays in the median calculation.
+[Sources, component accounting, failed-attempt exclusions and paired screenshots](docs/specs/0113-widget-system.md).

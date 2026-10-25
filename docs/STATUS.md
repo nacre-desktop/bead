@@ -5,6 +5,16 @@
 Bar status now follows reconnecting daemon sources; workspace origins reuse the
 notifications compositor subscription. Wallpaper consumers survive a late daemon.
 Full remote Arch CI passes. [Scope and recovery proof](specs/0118-daemon-reconnect.md).
+## 2026-10-25 — B0113 phase 1 gates pass
+
+The bar now composes validated Luau widget packages through a general strip host.
+The default preset preserves all four bar goldens byte-for-byte; native idle, hover
+and active QML pair RMSE is no worse than control. Five alternating CPU pairs
+pass at +0.191/+0.184/+0.148/+0.211 MiB unreclaimable median (idle/open/typed/closed);
+first-key UI CPU peaks at 3.988 ms. Full remote CI and isolated release bar checks
+pass on `af5615d`. Nacre opaque `widgets` store registration is requested; phase 2
+remains separate. Evidence is private/nested, with the laptop cap left to the lead.
+[API, measurements, paired crops and excluded attempts](specs/0113-widget-system.md).
 
 ## 2026-10-25 — B0108 title/tabs, lead-accepted
 

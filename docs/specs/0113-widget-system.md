@@ -1,6 +1,6 @@
 # B0113 — Widget system: detachable widgets, tile-grid bars, widget menu, music widget
 
-Status: design accepted by the owner, 2026-10-25. Phase 1 is in progress. Owner request: "everything on the bar is detachable … the top bar is gonna be a grid … start with a music widget … we need a widget menu … make a good spec."
+Status: design accepted by the owner, 2026-10-25. Phase 1 is implemented and its worker gates pass; phase 2 remains separate. Owner request: "everything on the bar is detachable … the top bar is gonna be a grid … start with a music widget … we need a widget menu … make a good spec."
 Builds on: ROADMAP "widget hosts and movable widgets" (2026-10-23), pearls (B0048/B0054/B0104), kit, tokens, ADR 0004 (the Generalization list) and ADR 0005 (one UI process).
 
 ## Goals
@@ -114,7 +114,8 @@ Side bars and the bottom bar as widget hosts (after phase 2), a third-party widg
 ## Phase 1 API and persistence
 
 `ui.Host{shape="strip-h",grid={tiles,gap,regions,mode},layout,catalogue,render}`
-resolves each package's `bar` (or optional `compact`) size contract. Tile slots
+accepts a resolved instance list or live binding and resolves each package's
+`bar` (or optional `compact`) size contract, including compact minima. Tile slots
 are zero-based and region-relative; right slots count inward from the right.
 Regions supply `{start,span}` in host tiles. Grid placement uses general
 `column_start`/`column_span` properties, including real inter-tile gaps.
@@ -132,7 +133,7 @@ The first copy retains legacy view IDs/anchors; extra copies receive IID scopes.
 
 Nacre transport is `settings.store.widgets` with `data.layout` (null resets the
 preset), `widgets.rev`, and revisioned writes through
-`settings.set {store:"widgets",key:"layout",value:<document>,rev:<revision>}`.
+`settings.set {store:"widgets",key:["layout"],value:<document>,rev:<revision>}`.
 Registration request to Nacre: add an opaque `widgets` settings store with a
 writable `layout` JSON value defaulting to null; the daemon must not interpret it.
 Older daemons retain the default bar. Standalone uses
@@ -141,5 +142,52 @@ atomic replacements are watched without polling. Launcher icon choices use the
 bundled Nacre mark, theme icons `distributor-logo-archlinux` / `cachyos`, or a
 custom icon path; actions select launcher, dashboard, or a custom view route.
 
-Phase 1 acceptance evidence is pending remote parity, timing and median-memory
-gates. Implementation alone does not authorize integration or the phase 2 UI.
+## Phase 1 evidence — 2026-10-25
+
+Candidate `af5615d`, control `bf1f097`, QML/daemon `713d38b3`; Rust 1.99.0,
+checked-in release profile, separate target directories. Native bar `--check`
+and the complete remote Arch CI-equivalent pass. Four regenerated bar goldens
+are byte-identical and inspected. Captures are private nested CPU at
+2880×1800/1.5, with a generated wallpaper/palette and twelve fixture updates.
+
+| Bar header RMSE % | Control | Widgets |
+| --- | ---: | ---: |
+| Idle | 5.926469 | 5.724581 |
+| Title hover | 5.914455 | 5.676418 |
+| Title active | 5.899686 | 5.896304 |
+| Audio open (clock minute changed) | 5.777256 | 5.853190 |
+
+All three required raw gates pass. The additional audio variation is clock text:
+excluding only its physical x=2730..2799 diagnostic strip gives exactly
+5.826433% for both. Direct Bead control/candidate pixels outside that strip are
+identical for idle, active and audio. Hover differences occupy only the cue
+(physical bbox 1317,12–1564,63), sampled at different animation phases; its raw
+and clock-neutral QML RMSE both improve. Dwell/peek/anchor and hit-rectangle
+regressions pass with the original timings and IDs. The native title trace loses
+its focused title zero times after fixture readiness.
+
+| Five alternating pairs, median Δ MiB | Idle | Launcher | Typed | Closed |
+| --- | ---: | ---: | ---: | ---: |
+| Unreclaimable (candidate − control) | +0.191406 | +0.183594 | +0.148438 | +0.210938 |
+
+All are below +0.5 MiB. The increase is anonymous residency from the additional
+widget source/bytecode and VM/build bookkeeping; SHM is identical and DRM and
+SwapPss are zero. Clean file PSS is informational: idle control/widgets
+20.290/18.747 MiB, closed 19.517/18.083 MiB. Pair 1 has a typed control anonymous
+outlier (−1.926 MiB paired delta); it remains in the five-pair median.
+First-key UI CPU is 3.797 ms median / 3.988 ms max; nested first presentation is
+4.197 / 4.503 ms. These are private nested timings; the laptop absolute cap is
+left to the lead's reference capture. Twelve containment reports pass with no
+OOM, host swap-in or process SwapPss; the active batch lasts 381 seconds.
+
+[Full components, paired deltas, timing samples and source/binary hashes](evidence/0113/summary.json).
+Paired crops are QML, Bead, then amplified diff:
+[idle](evidence/0113/idle-pair.png), [hover](evidence/0113/hover-pair.png),
+[active](evidence/0113/active-pair.png), [audio](evidence/0113/audio-pair.png).
+
+Earlier native attempts are excluded: a legacy guard wrapper duplicated the
+current driver's containment, and a shared Cargo target reused a control SDK
+without `ui.Host`. Owned aborted scopes were cleaned; isolated release targets,
+native bar admission and explicit fixture readiness now precede measurement.
+Nacre store registration remains the one-line request above. Phase 2 owns the
+edit/menu/settings UI, content-preset grid editing policy and canvas host.
