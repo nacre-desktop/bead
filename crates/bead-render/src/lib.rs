@@ -10,7 +10,8 @@ use std::{
     time::Instant,
 };
 use tiny_skia::{
-    FillRule, Mask, Paint, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Stroke, Transform,
+    FillRule, FilterQuality, Mask, Paint, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Stroke,
+    Transform,
 };
 pub mod damage;
 #[cfg(feature = "native-gl")]
@@ -1504,20 +1505,40 @@ fn load_image(
     let mut raw = {
         let decoded = image::load_from_memory(bytes)?;
         match fit {
-            ImageFit::Fill => decoded.resize_exact(w, h, image::imageops::FilterType::Lanczos3),
-            ImageFit::Cover => decoded.resize_to_fill(w, h, image::imageops::FilterType::Lanczos3),
+            ImageFit::Fill => decoded
+                .resize_exact(w, h, image::imageops::FilterType::Lanczos3)
+                .into_rgba8(),
+            ImageFit::Cover => decoded.into_rgba8(),
         }
-        .into_rgba8()
     };
     for pixel in raw.as_mut().as_chunks_mut::<4>().0 {
-        let a = u16::from(pixel[3]);
+        let alpha = u16::from(pixel[3]);
         for channel in pixel.iter_mut().take(3) {
-            *channel = ((u16::from(*channel) * a + 127) / 255) as u8;
+            *channel = ((u16::from(*channel) * alpha + 127) / 255) as u8;
         }
     }
-    let size = tiny_skia::IntSize::from_wh(w, h).ok_or("image allocation")?;
-    let pix = Pixmap::from_vec(raw.into_raw(), size).ok_or("image allocation")?;
-    Ok(pix)
+    let source_size =
+        tiny_skia::IntSize::from_wh(raw.width(), raw.height()).ok_or("image allocation")?;
+    let source = Pixmap::from_vec(raw.into_raw(), source_size).ok_or("image allocation")?;
+    if matches!(fit, ImageFit::Fill) {
+        return Ok(source);
+    }
+    let cover_scale = (w as f32 / source.width() as f32).max(h as f32 / source.height() as f32);
+    let offset_x = (w as f32 - source.width() as f32 * cover_scale) * 0.5;
+    let offset_y = (h as f32 - source.height() as f32 * cover_scale) * 0.5;
+    let mut target = Pixmap::new(w, h).ok_or("image allocation")?;
+    target.draw_pixmap(
+        0,
+        0,
+        source.as_ref(),
+        &PixmapPaint {
+            quality: FilterQuality::Bilinear,
+            ..PixmapPaint::default()
+        },
+        Transform::from_scale(cover_scale, cover_scale).post_translate(offset_x, offset_y),
+        None,
+    );
+    Ok(target)
 }
 /// Reads Orient format 1 only. Unknown metadata is intentionally ignored.
 #[derive(Clone)]
@@ -1743,7 +1764,7 @@ fn boundary_x(
 mod tests {
     use super::*;
     #[test]
-    fn cover_image_premultiplication_preserves_exact_lanczos_pixels() {
+    fn fill_image_premultiplication_preserves_exact_lanczos_pixels() {
         use image::ImageEncoder;
 
         let source = image::RgbaImage::from_raw(
@@ -1768,7 +1789,7 @@ mod tests {
         // Keep the former conversion path as the pixel-for-pixel reference.
         let decoded = image::load_from_memory(&bytes).unwrap();
         let reference = decoded
-            .resize_to_fill(5, 3, image::imageops::FilterType::Lanczos3)
+            .resize_exact(5, 3, image::imageops::FilterType::Lanczos3)
             .to_rgba8();
         let mut expected = Pixmap::new(5, 3).unwrap();
         for (dst, src) in expected
@@ -1790,11 +1811,63 @@ mod tests {
             Rect::new(0., 0., 5., 3.),
             1.,
             Some(&bytes),
-            ImageFit::Cover,
+            ImageFit::Fill,
         )
         .unwrap();
         assert_eq!((actual.width(), actual.height()), (5, 3));
         assert_eq!(actual.data(), expected.data());
+    }
+    #[test]
+    fn cover_image_centers_crop_and_keeps_premultiplied_alpha() {
+        use image::ImageEncoder;
+
+        let source = image::RgbaImage::from_raw(
+            4,
+            2,
+            vec![
+                255, 0, 255, 255, 255, 0, 0, 0, 0, 255, 0, 128, 0, 0, 0, 255, 255, 255, 0, 255, 0,
+                0, 255, 255, 255, 255, 255, 64, 0, 255, 255, 255,
+            ],
+        )
+        .unwrap();
+        let mut bytes = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut bytes)
+            .write_image(
+                source.as_raw(),
+                source.width(),
+                source.height(),
+                image::ExtendedColorType::Rgba8,
+            )
+            .unwrap();
+
+        let actual = load_image(
+            Path::new("wallpaper-preview.png"),
+            Rect::new(0., 0., 2., 2.),
+            1.,
+            Some(&bytes),
+            ImageFit::Cover,
+        )
+        .unwrap();
+        let premultiplied = |pixel: [u8; 4]| {
+            let alpha = u16::from(pixel[3]);
+            [
+                ((u16::from(pixel[0]) * alpha + 127) / 255) as u8,
+                ((u16::from(pixel[1]) * alpha + 127) / 255) as u8,
+                ((u16::from(pixel[2]) * alpha + 127) / 255) as u8,
+                pixel[3],
+            ]
+        };
+        let expected = [
+            premultiplied([255, 0, 0, 0]),
+            premultiplied([0, 255, 0, 128]),
+            premultiplied([0, 0, 255, 255]),
+            premultiplied([255, 255, 255, 64]),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+        assert_eq!((actual.width(), actual.height()), (2, 2));
+        assert_eq!(actual.data(), expected);
     }
     #[test]
     fn polygon_image_mask_clears_pixels_outside_hexagon() {
