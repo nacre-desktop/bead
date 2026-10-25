@@ -44,19 +44,23 @@ return function()
     end
     local chartWidth,chartHeight=style.width-32,160
     local points,area,labels={},{},{}
+    local slots=0
+    for i in ipairs(hours) do if (i-1)%4==0 or i==#hours then slots+=1 end end
+    local cell=1/math.max(1,slots)
+    local slotWidth=math.max(28,chartWidth*cell*.75)
     for i,item in ipairs(hours) do
-        local x=1/6+(i-1)/math.max(1,#hours-1)*2/3
+        local x=cell/2+(i-1)/math.max(1,#hours-1)*(1-cell)
         local y=(16+(1-(item.temperature-low)/math.max(1,high-low))*(chartHeight-24))/chartHeight
         table.insert(points,{x,y})
         if (i-1)%4==0 or i==#hours then
             table.insert(labels,ui.Text{id="temperature-"..item.id,position="absolute",left=16+x*chartWidth-34,
                 top=42+y*chartHeight-22,width=68,height=20,text=item.value,font_size=12,text_align="center",color="onSurface"})
-            table.insert(labels,ui.Column{id="time-"..item.id,position="absolute",left=16+x*chartWidth-50,
-                top=210,width=100,height=40,gap=4,align="center",
-                ui.Row{width=100,height=18,gap=4,justify="center",
+            table.insert(labels,ui.Column{id="time-"..item.id,position="absolute",left=16+x*chartWidth-slotWidth/2,
+                top=210,width=slotWidth,height=40,gap=4,align="center",
+                ui.Row{width=slotWidth,height=18,gap=4,justify="center",
                     ui.Text{text=condition(item.code),width=20,height=18,font_size=16,family="Material Symbols Rounded",color="secondary"},
-                    ui.Text{text=item.rain_text or item.detail,width=40,height=18,font_size=10.667,color="onSurface"}},
-                ui.Text{text=item.label,width=100,height=16,font_size=10.667,text_align="center",color="onSurfaceVariant"}})
+                    ui.Text{text=item.rain_text or item.detail,height=18,font_size=10.667,color="onSurface"}},
+                ui.Text{text=item.label,width=slotWidth,height=16,font_size=10.667,text_align="center",color="onSurfaceVariant"}})
         end
     end
     if #points>=2 then

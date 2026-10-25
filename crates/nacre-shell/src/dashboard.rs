@@ -988,7 +988,7 @@ impl Dashboard {
                     80,
                 );
                 let rain = tr("bead.dashboard.weather-rain-unit", &[]);
-                let hours = current.hours.order.iter().take(8).filter_map(|id| current.hours.items.get(id).map(|h| json!({
+                let hours = current.hours.order.iter().take(24).filter_map(|id| current.hours.items.get(id).map(|h| json!({
                     "id":id,"label":line(h.time.get(11..16).unwrap_or(&h.time),20),"temperature":h.temperature,"code":h.wmo,
                     "rain_text":number(h.rain,"%"),"value":self.degrees(h.temperature),"detail":number(h.rain,&rain)
                 }))).collect();

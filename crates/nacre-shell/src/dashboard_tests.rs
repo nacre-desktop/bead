@@ -457,6 +457,47 @@ fn dashboard_disconnect_keeps_last_good_stale() -> Result<()> {
 }
 
 #[test]
+fn hourly_chart_preserves_a_full_day_of_samples() -> Result<()> {
+    let mut data = fixture("weather");
+    let template = data["current"]["hours"]["items"]["hour-0"].clone();
+    let mut items = serde_json::Map::new();
+    let mut order = Vec::new();
+    for hour in 0..24 {
+        let id = format!("hour-{hour}");
+        let mut row = template.clone();
+        row["time"] = json!(format!("2024-02-29T{hour:02}:00:00"));
+        items.insert(id.clone(), row);
+        order.push(id);
+    }
+    data["current"]["hours"] = json!({"items":items,"order":order});
+    let model = view(Page::Weather, data, None).project();
+    let Value::List(rows) = &model["dashboard.rows"] else {
+        panic!("hour rows")
+    };
+    assert_eq!(rows.len(), 24);
+    let harness = Harness::load(
+        &root(),
+        Path::new("dashboard/weather/main.luau"),
+        &root().join("palette.json"),
+        model,
+        Config {
+            width: 1048,
+            height: 714,
+            scale: 1.5,
+        },
+    )?;
+    assert!(
+        harness
+            .scene()
+            .primitives
+            .iter()
+            .any(|primitive| matches!(primitive,
+        bead::render::Primitive::Polyline { points, closed:false, .. } if points.len()==24))
+    );
+    Ok(())
+}
+
+#[test]
 fn dashboard_long_rows_scroll_without_clipping() -> Result<()> {
     let mut system_data = fixture("system");
     for index in 0..5 {
