@@ -104,6 +104,9 @@ pub struct Snapshot {
     #[serde(default)]
     pub revision: u64,
     pub clock: String,
+    /// Local clock with seconds, updated at 1 Hz only while a consumer leases it.
+    #[serde(default)]
+    pub clock_seconds: String,
     #[serde(default)]
     pub date: Option<LocalDate>,
     pub audio: Audio,
@@ -121,7 +124,7 @@ pub mod files;
 pub mod ipc;
 pub mod process;
 mod runtime;
-pub use runtime::{Action, Config, Desktop, Subscription};
+pub use runtime::{Action, ClockSecondsLease, Config, Desktop, Subscription};
 
 #[cfg(test)]
 mod tests;

@@ -50,6 +50,7 @@ pub enum Action {
 pub(crate) enum Command {
     Action(Action, std::sync::mpsc::Sender<Result<(), String>>),
     Tasks(std::sync::mpsc::Sender<(usize, usize)>),
+    ClockResolutionChanged,
     Stop,
 }
 /// Immutable snapshots are published atomically; poisoned read/bookkeeping locks
@@ -64,6 +65,7 @@ pub(crate) struct Shared {
     callbacks: Mutex<BTreeMap<u64, Callback>>,
     next: AtomicU64,
     pub stop: AtomicBool,
+    pub clock_seconds_leases: std::sync::atomic::AtomicUsize,
     pub audio_sender: Mutex<Option<pipewire::channel::Sender<super::audio::Command>>>,
     pub audio_wait: (Mutex<()>, std::sync::Condvar),
 }
@@ -128,6 +130,19 @@ pub struct Desktop {
     sender: mpsc::Sender<Command>,
     workers: Mutex<Vec<JoinHandle<()>>>,
 }
+/// Keeps the shared desktop clock at second resolution while held.
+pub struct ClockSecondsLease {
+    shared: Weak<Shared>,
+    sender: mpsc::Sender<Command>,
+}
+impl Drop for ClockSecondsLease {
+    fn drop(&mut self) {
+        if let Some(shared) = self.shared.upgrade() {
+            shared.clock_seconds_leases.fetch_sub(1, Ordering::AcqRel);
+            let _ = self.sender.try_send(Command::ClockResolutionChanged);
+        }
+    }
+}
 fn validate_volume(volume: f64) -> Result<(), String> {
     if !volume.is_finite() || !(0.0..=1.5).contains(&volume) {
         return Err("volume must be finite and in 0..1.5".into());
@@ -144,6 +159,7 @@ impl Desktop {
             callbacks: Mutex::new(BTreeMap::new()),
             next: AtomicU64::new(1),
             stop: AtomicBool::new(false),
+            clock_seconds_leases: std::sync::atomic::AtomicUsize::new(0),
             audio_sender: Mutex::new(None),
             audio_wait: (Mutex::new(()), std::sync::Condvar::new()),
         });
@@ -170,6 +186,15 @@ impl Desktop {
             .lock()
             .unwrap_or_else(crate::runtime::poisoned)
             .clone()
+    }
+    /// Request 1 Hz clock updates for as long as the returned guard is held.
+    pub fn clock_seconds_lease(&self) -> ClockSecondsLease {
+        self.shared.clock_seconds_leases.fetch_add(1, Ordering::AcqRel);
+        let _ = self.sender.try_send(Command::ClockResolutionChanged);
+        ClockSecondsLease {
+            shared: Arc::downgrade(&self.shared),
+            sender: self.sender.clone(),
+        }
     }
     pub fn subscribe(
         &self,
@@ -307,5 +332,27 @@ mod volume_queue_tests {
         for bad in [f64::NAN, f64::INFINITY, -0.1, 1.6] {
             assert!(desktop.queue_volume(bad).is_err());
         }
+    }
+}
+
+#[cfg(test)]
+mod clock_lease_tests {
+    use super::*;
+
+    #[test]
+    fn seconds_clock_leases_share_demand_and_release_to_minute_mode() {
+        let desktop = Desktop::start_config(Config {
+            audio: false,
+            bus: false,
+        });
+        assert_eq!(desktop.shared.clock_seconds_leases.load(Ordering::Acquire), 0);
+        let first = desktop.clock_seconds_lease();
+        assert_eq!(desktop.shared.clock_seconds_leases.load(Ordering::Acquire), 1);
+        let second = desktop.clock_seconds_lease();
+        assert_eq!(desktop.shared.clock_seconds_leases.load(Ordering::Acquire), 2);
+        drop(first);
+        assert_eq!(desktop.shared.clock_seconds_leases.load(Ordering::Acquire), 1);
+        drop(second);
+        assert_eq!(desktop.shared.clock_seconds_leases.load(Ordering::Acquire), 0);
     }
 }

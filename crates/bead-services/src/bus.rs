@@ -56,6 +56,7 @@ pub fn run(shared: Arc<Shared>, mut receiver: mpsc::Receiver<Command>) {
                 Command::Tasks(reply) => {
                     let _ = reply.send((0, 0));
                 }
+                Command::ClockResolutionChanged => {}
                 Command::Action(_, reply) => {
                     let _ = reply.send(Err("D-Bus disconnected".into()));
                 }
@@ -105,16 +106,20 @@ async fn connect(
         if shared.stop.load(Ordering::SeqCst) {
             return Ok(());
         }
-        let delay = 60
-            - SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs()
-                % 60;
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        let seconds_enabled = shared.clock_seconds_leases.load(Ordering::Acquire) > 0;
+        let delay = if seconds_enabled {
+            Duration::from_millis(1000 - u64::from(now.subsec_millis()))
+        } else {
+            Duration::from_secs(60 - now.as_secs() % 60)
+        };
         tokio::select! {
-            _=tokio::time::sleep(Duration::from_secs(delay))=>shared.change(update_clock),
+            _=tokio::time::sleep(delay)=>shared.change(update_clock),
             command=receiver.recv()=>match command {
                 Some(Command::Stop)|None=>return Ok(()),
+                Some(Command::ClockResolutionChanged)=>shared.change(update_clock),
                 Some(Command::Tasks(reply))=>{ let retained=tray.retained_watcher_tasks().await.unwrap_or(0); let _=reply.send((tokio::runtime::Handle::current().metrics().num_alive_tasks(),retained)); },
                 Some(Command::Action(action,reply))=>{
                     let result=tokio::time::timeout(Duration::from_secs(2),tray_action(shared, &tray, &tray_actions, action)).await.map_err(|_|"D-Bus action timeout".to_string()).and_then(|r|r);
@@ -171,27 +176,29 @@ async fn refresh_lock(shared: &Shared, connection: &Connection) {
     shared.change(|s| s.session.locked = locked);
 }
 fn update_clock(snapshot: &mut crate::Snapshot) {
-    let (text, date) = clock();
+    let (text, seconds_text, date) = clock();
     snapshot.clock = text;
+    snapshot.clock_seconds = seconds_text;
     snapshot.date = date;
 }
-fn clock() -> (String, Option<crate::LocalDate>) {
+fn clock() -> (String, String, Option<crate::LocalDate>) {
     let seconds = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .ok()
         .and_then(|value| libc::time_t::try_from(value.as_secs()).ok());
     let Some(seconds) = seconds else {
-        return ("--:--".into(), None);
+        return ("--:--".into(), "--:--:--".into(), None);
     };
     let mut tm = std::mem::MaybeUninit::<libc::tm>::uninit();
     // SAFETY: valid distinct pointers; localtime_r initializes tm on success.
     unsafe {
         if libc::localtime_r(&seconds, tm.as_mut_ptr()).is_null() {
-            return ("--:--".into(), None);
+            return ("--:--".into(), "--:--:--".into(), None);
         }
         let tm = tm.assume_init();
         (
             format!("{:02}:{:02}", tm.tm_hour, tm.tm_min),
+            format!("{:02}:{:02}:{:02}", tm.tm_hour, tm.tm_min, tm.tm_sec),
             civil_date(&tm),
         )
     }
@@ -692,8 +699,24 @@ mod clock_tests {
     fn existing_snapshot_json_without_date_still_decodes() {
         let mut old = serde_json::to_value(crate::Snapshot::default()).unwrap();
         old.as_object_mut().unwrap().remove("date");
+        old.as_object_mut().unwrap().remove("clock_seconds");
         let decoded: crate::Snapshot = serde_json::from_value(old).unwrap();
         assert!(decoded.date.is_none());
+        assert!(decoded.clock_seconds.is_empty());
+    }
+
+    #[test]
+    fn clock_snapshot_publishes_valid_second_resolution_and_calendar_date() {
+        let (minute, seconds, date) = clock();
+        assert_eq!(minute.len(), 5);
+        assert_eq!(minute.as_bytes()[2], b':');
+        assert_eq!(seconds.len(), 8);
+        assert_eq!(seconds.as_bytes()[2], b':');
+        assert_eq!(seconds.as_bytes()[5], b':');
+        assert!(seconds[..2].parse::<u8>().is_ok_and(|hour| hour < 24));
+        assert!(seconds[3..5].parse::<u8>().is_ok_and(|minute| minute < 60));
+        assert!(seconds[6..].parse::<u8>().is_ok_and(|second| second < 60));
+        assert!(date.is_some_and(|date| date.is_valid()));
     }
 
     #[test]

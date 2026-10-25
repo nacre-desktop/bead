@@ -31,6 +31,16 @@ pub fn values(s: &Snapshot, menu_item: &str) -> BTreeMap<String, Value> {
         ("bead.desktop.audio.label".into(),Value::Text(s.audio.volume.map(|v|format!("{:.0}%",v*100.)).unwrap_or_else(||"Unavailable".into()))),
         ("bead.desktop.titlevisible".into(),Value::Bool(menu.is_empty())),
         ("bead.desktop.clock".into(), Value::Text(s.clock.clone())),
+        (
+            "bead.desktop.clock.seconds".into(),
+            Value::Text(s.clock_seconds.clone()),
+        ),
+        (
+            "bead.desktop.clock.date".into(),
+            Value::Text(s.date.map_or_else(String::new, |date| {
+                format!("{:04}-{:02}-{:02}", date.year, date.month, date.day)
+            })),
+        ),
         ("bead.desktop.audio".into(), Value::Text(audio.into())),
         ("bead.desktop.audio.available".into(), Value::Bool(s.audio.volume.is_some())),
         ("bead.desktop.battery".into(), Value::Text(if !s.battery.available { "battery_unknown" } else if s.battery.charging { "battery_charging_full" } else { "battery_full" }.into())),
@@ -226,6 +236,22 @@ pub fn icons(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn clock_style_projection_exposes_seconds_and_iso_local_date() {
+        let snapshot = Snapshot {
+            clock: "09:08".into(),
+            clock_seconds: "09:08:07".into(),
+            date: Some(bead::services::LocalDate {
+                year: 2026,
+                month: 10,
+                day: 25,
+            }),
+            ..Default::default()
+        };
+        let state = values(&snapshot, "");
+        assert_eq!(state["bead.desktop.clock.seconds"], Value::Text("09:08:07".into()));
+        assert_eq!(state["bead.desktop.clock.date"], Value::Text("2026-10-25".into()));
+    }
     /// The real bar bundle at 1920 px with these workspace rows, reloaded but not yet committed.
     fn bar_session(rows: Vec<serde_json::Value>) -> (bead::ui::Session, bead::render::Scene) {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shell");
