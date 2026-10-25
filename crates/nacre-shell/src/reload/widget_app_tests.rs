@@ -282,6 +282,7 @@ fn clock_detail_stage_and_style_previews_keep_all_content_inside_their_clips() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
     let mut stores = crate::desktop::values(&Default::default(), "");
     stores.insert("widgets.selected".into(), Value::Text("clock".into()));
+    stores.insert("widgets.preview".into(), Value::list(Vec::new()));
     stores.insert("bar.clock.text".into(), Value::Text("09:08".into()));
     stores.insert("bead.desktop.clock".into(), Value::Text("09:08".into()));
     stores.insert(
