@@ -605,7 +605,7 @@ fn with_art(path: &std::path::Path) -> Dashboard {
 }
 
 #[test]
-fn album_art_is_decoded_once_held_while_visible_and_released_when_hidden() -> Result<()> {
+fn album_art_is_stable_through_close_and_released_on_retirement() -> Result<()> {
     let root = art_dir();
     let good = root.join("nacre/shell/player-art/good.png");
     image::RgbaImage::from_pixel(300, 200, image::Rgba([10, 120, 200, 255])).save(&good)?;
@@ -629,7 +629,18 @@ fn album_art_is_decoded_once_held_while_visible_and_released_when_hidden() -> Re
     let closed = bead::core::Stores::default()
         .reconcile(&BTreeMap::from([("panel.open".into(), Value::Bool(false))]))?;
     dashboard.project_with_stores(&closed);
-    assert!(dashboard.art.borrow().is_none(), "released when hidden");
+    assert!(
+        Arc::ptr_eq(
+            &held,
+            dashboard.art.borrow().as_ref().unwrap().1.as_ref().unwrap()
+        ),
+        "closing must keep the prepared blur's asset identity"
+    );
+    let retired = Arc::downgrade(&held);
+    drop(held);
+    drop(again);
+    drop(dashboard);
+    assert!(retired.upgrade().is_none(), "retirement releases art bytes");
     // A file outside the daemon cache, or no art at all, shows the placeholder.
     let outside = root.join("outside.png");
     std::fs::copy(&good, &outside)?;

@@ -620,9 +620,10 @@ impl Dashboard {
         let live = matches!(values.get("dashboard.state"), Some(Value::Text(t)) if t == "running" || (t == "playing" && self.page == Page::Media))
             && open;
         self.tick(live);
+        // Keep art stable through the closing reveal: clearing it invalidates
+        // Media's prepared blur just before the UI joins the retiring worker.
+        // Runtime retirement drops the thumbnail after the existing close grace.
         if !open {
-            // Hidden: the art thumbnail is released with the card.
-            *self.art.borrow_mut() = None;
             *self.photo.borrow_mut() = None;
             self.shots.borrow_mut().clear();
         }

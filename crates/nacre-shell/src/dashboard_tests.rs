@@ -362,9 +362,14 @@ fn dashboard_navigation_routes_every_core_tab() -> Result<()> {
         )?;
         for tab in Page::ALL {
             if tab == page {
+                let title = if tab == Page::Today {
+                    tr("bead.dashboard.nav-dashboard", &[])
+                } else {
+                    tab.title()
+                };
                 assert!(
                     harness.scene().primitives.iter().any(|primitive| {
-                        matches!(primitive, bead::render::Primitive::Text { text, .. } if *text == tab.title())
+                        matches!(primitive, bead::render::Primitive::Text { text, .. } if *text == title)
                     }),
                     "selected {} tab must render its label",
                     tab.name()

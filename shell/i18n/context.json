@@ -231,6 +231,7 @@
   "bead.dashboard.page-screenshots": "Dashboard panel: name of a page in the tab strip and the page heading. Keep it short; tabs lose their label when the strip is crowded.",
   "bead.dashboard.page-system": "Dashboard panel: name of a page in the tab strip and the page heading. Keep it short; tabs lose their label when the strip is crowded.",
   "bead.dashboard.page-today": "Dashboard panel: name of a page in the tab strip and the page heading. Keep it short; tabs lose their label when the strip is crowded.",
+  "bead.dashboard.nav-dashboard": "Dashboard panel: navigation label for the Today overview. Distinct from the page heading; match the QML Dashboard tab.",
   "bead.dashboard.page-toggle": "Dashboard panel: accessible name of the button that shows or hides a dashboard page (its visible text is On or Off).",
   "bead.dashboard.page-unavailable": "Dashboard panel: heading of a page whose data is missing; {page} is the translated page name.",
   "bead.dashboard.page-up": "Dashboard panel: accessible name of the button that moves a page earlier in the tab strip.",
