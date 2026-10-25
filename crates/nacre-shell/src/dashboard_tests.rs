@@ -353,7 +353,10 @@ fn tab_navigation_keeps_runtime_open_and_releases_previous_page_sources() -> Res
             .unwrap()
             .to_owned()
     };
-    assert_eq!(source_count(&runtime.session), source_count(&weather.session));
+    assert_eq!(
+        source_count(&runtime.session),
+        source_count(&weather.session)
+    );
     assert!(emitted.lock().unwrap().iter().any(|event| {
         matches!(event, UiEvent::PanelNavigated(view) if view == "dashboard-weather")
     }));
