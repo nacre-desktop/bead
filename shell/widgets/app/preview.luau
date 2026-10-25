@@ -81,12 +81,12 @@ function M.render_bar(document,width,height,factor,selected,style,settings)
     local scale=factor or 1
     local regions={}
     for name,region in layout.regions do regions[name]=table.clone(region) end
-    regions.left.props={id="left",height=34*scale,gap=12*scale,shrink=1,align="center"}
+    regions.left.props={id="left",height=34,gap=12,shrink=1,align="center"}
     regions.centre.inline=true
-    regions.right.props={id="right",height=34*scale,gap=12*scale,shrink=0,align="center"}
+    regions.right.props={id="right",height=34,gap=12,shrink=0,align="center"}
     regions.right.before={}
     for _,node in require("../tray") do
-        table.insert(regions.right.before,prepare(copy_node(node),scale))
+        table.insert(regions.right.before,copy_node(node))
     end
     local function copy_item(item)
         local copy=table.clone(item)

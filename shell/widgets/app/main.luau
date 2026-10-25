@@ -294,7 +294,11 @@ local function form_action(widget,placement)
     end
 end
 local function style_tile(widget,placement,package,style_id,style,settings,is_selected)
-    local tile_preview=preview.render(widget,placement,style_id,settings,76,44)
+    local count=0
+    for _ in package.forms[placement].styles do count+=1 end
+    local columns=math.max(1,math.min(4,count))
+    local preview_width=math.max(76,math.min(240,(width-2*spacing.lg-(columns-1)*spacing.sm)/columns-2*spacing.xs))
+    local tile_preview=preview.render(widget,placement,style_id,settings,preview_width,44)
     return ui.Button{id="style-"..style_id,width="fill",height=104,shrink=0,padding=spacing.xs,
         radius=kit.tokens.radii.small,fill=is_selected and ui.alpha("primary",.15) or "surfaceContainer",
         hover_fill="surfaceContainerHigh",selected=is_selected,focus_on_pointer=false,
