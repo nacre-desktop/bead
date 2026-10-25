@@ -1,0 +1,244 @@
+{
+  "capture_source": "existing final private pair; no new captures",
+  "output_physical_px": [
+    2880,
+    1800
+  ],
+  "output_logical_px": [
+    1920,
+    1200
+  ],
+  "scale": 1.5,
+  "public_crop_logical_px": [
+    260,
+    110
+  ],
+  "public_crop_files": [
+    "bead-detached-bottom.png",
+    "bead-detached.png",
+    "bead-drag-held.png",
+    "bead-hover.png",
+    "bead-idle.png",
+    "bead-open-bottom.png",
+    "bead-open.png",
+    "bead-redocked-bottom.png",
+    "bead-redocked.png",
+    "qml-detached-bottom.png",
+    "qml-detached.png",
+    "qml-drag-held.png",
+    "qml-hover.png",
+    "qml-idle.png",
+    "qml-open-bottom.png",
+    "qml-open.png",
+    "qml-redocked-bottom.png",
+    "qml-redocked.png"
+  ],
+  "arms": {
+    "qml": {
+      "initial_rect_logical": [
+        410,
+        600,
+        1100,
+        590
+      ],
+      "released_rect_logical": [
+        530.0,
+        440.0,
+        1100,
+        590
+      ],
+      "delta_logical": [
+        120,
+        -160
+      ],
+      "redock_endpoint_pixel_check": {
+        "sample_count": 10,
+        "exact_matches_to_open": 0,
+        "max_channel_diff_per_sample": [
+          32,
+          38,
+          28,
+          61,
+          22,
+          29,
+          11,
+          58,
+          115,
+          99
+        ],
+        "interpretation": "sparse static pixel comparison at expected docked body points; not a temporal/presentation measurement"
+      },
+      "redock_sequence_ready_frame_count": 34,
+      "redock_sequence_ready_span_ms": 1968.157,
+      "meta_held_during_drag": true,
+      "redock_endpoint_visible": false,
+      "redock_limitation": "redocked endpoint has no sampled panel pixels; do not count as a successful visual return",
+      "held_drag_sample": {
+        "image": "qml-drag-held.png",
+        "frame_index": 17,
+        "ready_stamp_ms": 794.769488,
+        "pointer_release_relative_ms": 852.209123,
+        "basis": "latest screencopy-ready timestamp before exact POINTER_RELEASE; header crop placed at expected released-body rect",
+        "expected_release_rect_logical": [
+          530.0,
+          440.0,
+          1100,
+          590
+        ],
+        "caveat": "crop is placed at expected final rect; an in-flight surface can be partly clipped if still approaching that position"
+      },
+      "bottom_left_crop_logical": {
+        "size": [
+          260,
+          110
+        ],
+        "basis": "body bottom-left corner and generic left search field; right provider area excluded"
+      }
+    },
+    "bead": {
+      "initial_rect_logical": [
+        410.0,
+        600.0,
+        1100.0,
+        590.0
+      ],
+      "released_rect_logical": [
+        530.0,
+        440.0,
+        1100.0,
+        590.0
+      ],
+      "delta_logical": [
+        120,
+        -160
+      ],
+      "redock_endpoint_pixel_check": {
+        "sample_count": 10,
+        "exact_matches_to_open": 10,
+        "max_channel_diff_per_sample": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "interpretation": "sparse static pixel comparison at expected docked body points; not a temporal/presentation measurement"
+      },
+      "redock_sequence_ready_frame_count": 63,
+      "redock_sequence_ready_span_ms": 1971.285,
+      "panel_api_checks": {
+        "control": {
+          "view": "control",
+          "pearl_id": 3,
+          "opened": {
+            "target_open": true,
+            "view": "control",
+            "size": [
+              466,
+              364
+            ]
+          },
+          "detach_listed": true,
+          "native_content_committed": true,
+          "dock_restored": true,
+          "detached_flag_after_dock": null
+        },
+        "chat": {
+          "view": "chat",
+          "pearl_id": 1,
+          "opened": {
+            "target_open": true,
+            "view": "chat",
+            "size": [
+              534,
+              714
+            ]
+          },
+          "detach_listed": true,
+          "native_content_committed": true,
+          "dock_restored": true,
+          "detached_flag_after_dock": false
+        }
+      },
+      "redock_margin_trajectory": {
+        "surface_id": 76,
+        "initial_margin_top_right_bottom_left": [
+          408,
+          0,
+          0,
+          498
+        ],
+        "first_changed": {
+          "time": "20:51:30.696062",
+          "margin": [
+            409,
+            0,
+            0,
+            497
+          ]
+        },
+        "last_changed": {
+          "time": "20:51:31.002309",
+          "margin": [
+            568,
+            0,
+            0,
+            378
+          ]
+        },
+        "interpolation_ms": 306.247,
+        "coordinate_delta_from_margin": {
+          "y": 160,
+          "x": -120
+        },
+        "configured_launcher_motion": {
+          "duration_ms": 300,
+          "easing": "OutCubic",
+          "fade": false
+        },
+        "method": "protocol set_margin timestamp interval, not physical scanout",
+        "final_margin_reaffirmed": {
+          "time": "20:51:31.127920",
+          "margin": [
+            568,
+            0,
+            0,
+            378
+          ]
+        }
+      },
+      "configured_launcher_motion": {
+        "duration_ms": 300,
+        "easing": "OutCubic",
+        "fade": false
+      },
+      "held_drag_sample": {
+        "image": "bead-drag-held.png",
+        "frame_index": 17,
+        "ready_stamp_ms": 793.877225,
+        "pointer_release_relative_ms": 852.58246,
+        "basis": "latest screencopy-ready timestamp before exact POINTER_RELEASE; header crop placed at expected released-body rect",
+        "expected_release_rect_logical": [
+          530.0,
+          440.0,
+          1100.0,
+          590.0
+        ],
+        "caveat": "crop is placed at expected final rect; an in-flight surface can be partly clipped if still approaching that position"
+      },
+      "bottom_left_crop_logical": {
+        "size": [
+          260,
+          110
+        ],
+        "basis": "body bottom-left corner and generic left search field; right provider area excluded"
+      }
+    }
+  },
+  "timing_limit": "protocol/screencopy UI timestamps are proxies, not physical scanout"
+}

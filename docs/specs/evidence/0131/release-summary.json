@@ -1,0 +1,141 @@
+{
+  "cohort": "release-proof-final",
+  "trials": 20,
+  "required_trials": 20,
+  "renderer": "cpu",
+  "output_px": [
+    2880,
+    1800
+  ],
+  "scale": 1.5,
+  "logical_window_rect": [
+    530,
+    440,
+    1100,
+    590
+  ],
+  "logical_window_size_px_at_scale_1_5": [
+    1650,
+    885
+  ],
+  "body_fill_bbox_px_counts": {
+    "(1644, 879)": 20
+  },
+  "capture_method": "25ms cropped screencopy-ready PNG series, black-padded to output coordinates; not physical scanout",
+  "capture_samples_per_trial_min_median_max": [
+    68,
+    73.0,
+    73
+  ],
+  "capture_adjacent_gap_ms_n_p50_p95_p99_max": [
+    1426,
+    25.207,
+    79.846,
+    143.368,
+    446.489
+  ],
+  "pointer_input_duration_ms_n_p50_p95_p99_min_max": [
+    20,
+    751.0,
+    751.044,
+    751.044,
+    750.89116,
+    751.157879
+  ],
+  "post_release_blank_frames_total": 0,
+  "post_release_reversals_total": 0,
+  "post_release_moving_trials": 20,
+  "post_handoff_blank_frames_total": 0,
+  "post_handoff_moving_trials": 0,
+  "final_unstable_trials": 0,
+  "memory_kib": {
+    "docked_memory_kib": {
+      "unreclaimable_kib_median_min_max": [
+        66308.0,
+        61018,
+        67894
+      ],
+      "clean_file_pss_kib_median_min_max": [
+        50066.0,
+        50020,
+        50309
+      ]
+    },
+    "handoff_memory_kib": {
+      "unreclaimable_kib_median_min_max": [
+        64712.0,
+        62174,
+        66106
+      ],
+      "clean_file_pss_kib_median_min_max": [
+        48969.0,
+        48921,
+        50295
+      ]
+    },
+    "detached_memory_kib": {
+      "unreclaimable_kib_median_min_max": [
+        59266.0,
+        56926,
+        60570
+      ],
+      "clean_file_pss_kib_median_min_max": [
+        49809.5,
+        49764,
+        50299
+      ]
+    },
+    "closed_memory_kib": {
+      "unreclaimable_kib_median_min_max": [
+        46908.0,
+        44408,
+        47512
+      ],
+      "clean_file_pss_kib_median_min_max": [
+        48981.0,
+        48915,
+        48994
+      ]
+    }
+  },
+  "guard": {
+    "host_swap_used_before_kib": 0,
+    "host_pswpin_delta": 0,
+    "capture_returncode": 0,
+    "scope_runner_returncode": 0,
+    "scope_status": "complete",
+    "oom_delta": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "watchdog_samples": 222,
+    "effective_memory_swap_max_bytes": 0
+  },
+  "nacre_shell_sha256": "8c8ae791cf51aff1e09eacf2f7e622fc9090063a7695b7b8da98cac0b9e6e346",
+  "source_ci_manifest_sha256": "32a25e6e8cbfab58f7905ccd7d5ac81827507db6a342f45ee9166c9ddfdaec3a",
+  "software_present_callback_gap_ms_n_p50_p95_p99_max": [
+    196,
+    32.026,
+    32.061,
+    32.092,
+    32.192
+  ],
+  "software_present_refresh_ns_values": [
+    0
+  ],
+  "software_render_ms_n_p50_p95_p99_max": [
+    296,
+    0.093,
+    441.467,
+    442.215,
+    442.988
+  ],
+  "timing_limit": "capture stamps are screencopy-ready, not physical scanout; UI_PRESENTED refresh_ns=0; UI_FRAME is render duration; these metrics do not establish physical scanout pacing",
+  "release_to_handoff_ms_n_p50_p95_min_max": [
+    20,
+    1031.144,
+    1049.697,
+    1024.171,
+    1072.792
+  ]
+}

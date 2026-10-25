@@ -20,6 +20,14 @@ within the declared 1 MiB budget; absolute GL retention is substantial. Pixel
 error, general dragging and complete smoothness remain unproven.
 [Stages, GL/memory results, excluded attempts and validation](specs/0126-instant-drag.md).
 No live deployment or physical-output/laptop-cap acceptance.
+## 2026-10-25 — B0131 covered pearl release
+
+The dragged layer remains visible until native placement succeeds and its first
+content frame commits; stale geometry cannot uncover a window at the wrong pose.
+Re-docking uses the scene's easing after its first covered destination frame.
+The final private CPU cohort passes 20/20 sampled releases with no blanks or reversals.
+Pacing acceptance remains open: render preparation has long outliers and software
+feedback has no refresh timing. No live deployment. [Evidence and limits](specs/0131-pearl-release.md).
 
 ## 2026-10-25 — B0133 Welcome fixes
 
