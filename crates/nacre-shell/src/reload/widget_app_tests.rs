@@ -222,7 +222,7 @@ fn real_widgets_gallery_starts_with_content_and_a_style_click_updates_the_previe
         h.scene().primitives.iter().any(|primitive|
         matches!(primitive, bead::render::Primitive::Text {text,..} if text == value))
     };
-    assert!(has_text(&harness, "Choose a widget"), "first scene: {:?}; nodes: {:?}", harness.scene().primitives, harness.session.view_nodes());
+    assert!(has_text(&harness, "Choose a widget"), "first scene: {:?}; nodes: {:?}", harness.scene().primitives.iter().filter_map(|p| match p { bead::render::Primitive::Text{text,..}=>Some(text.as_str()), _=>None }).collect::<Vec<_>>(), harness.session.view_nodes().iter().map(|n| (&n.label, bead::ui::rect(&n.draw))).collect::<Vec<_>>());
     assert!(has_text(&harness, "Clock"));
     assert!(
         harness
