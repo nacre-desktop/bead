@@ -2406,8 +2406,6 @@ impl Runtime {
                     let data = if path.as_path() == std::path::Path::new("@bead-icon-fallback.svg")
                     {
                         fallback()
-                    } else if !reload && let Some(data) = self.session.asset_snapshot(path) {
-                        data
                     } else if let Ok(bytes) = std::fs::read(&*path)
                         && bead::render::validate_asset(path, &bytes).is_ok()
                     {
