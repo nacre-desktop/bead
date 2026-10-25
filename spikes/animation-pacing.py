@@ -98,7 +98,7 @@ SCROLL_SCENES = {
     # Populate the private daemon's notification list before opening its panel.
     'notifications-list': ([('notify', f'Scroll fixture {i:02d}', f'Private synthetic notification row {i:02d}.')
                             for i in range(20)] + [('sleep', 2.0), ('close-fixture-notices',),
-                                                   ('ui', 'nacre', 'controls', 'notifications'), ('sleep', 2.0)],
+                                                   ('ui', 'nacre', 'controls', 'notifications')],
                            1600, 650, 80, 1.6),
     'notifications-popup': ([('notify', f'Scroll fixture {i:02d}', f'Private synthetic notification row {i:02d}.')
                              for i in range(20)] + [('sleep', 2.0)], 1715, 650, 80, 1.6),
@@ -761,6 +761,8 @@ def pace_drive(self, names):
                     self.fixture_active_ids = []
                     self.fixture_closed_ids = []
                 self.steps(prepare)
+                if name.startswith('scroll-'):
+                    time.sleep(2.0)  # Wait for the opened view/panel to paint before visual or input sampling.
                 screenshot_base = None
                 screenshot_mid_enabled = os.environ.get('PACING_CAPTURE_MID') == '1'
                 if name.startswith('scroll-') and repeat == 0:

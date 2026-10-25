@@ -235,7 +235,7 @@ class ScrollReversalProofTests(unittest.TestCase):
     def test_notification_history_closes_active_fixture_rows_before_open(self):
         prepare = pacing.SCROLL_SCENES["notifications-list"][0]
         self.assertLess(prepare.index(("close-fixture-notices",)), prepare.index(("ui", "nacre", "controls", "notifications")))
-        self.assertEqual(prepare[-1], ("sleep", 2.0))
+        self.assertEqual(prepare[-1], ("ui", "nacre", "controls", "notifications"))
         self.assertEqual(pacing.SCROLL_STORE_KEYS["notifications-list"], "notifications.scroll.y")
         calls = []
 
