@@ -24,6 +24,7 @@ use std::{
     sync::{Arc, OnceLock},
     time::Duration,
 };
+use std::os::unix::fs::FileTypeExt;
 
 /// Apps the shell can start. A third-party app adds a branch to [`run`] and a route in
 /// `commands::map_views`; the launch, single-instance and exit rules are shared.
@@ -115,6 +116,59 @@ fn configure_child(
     palette: PathBuf,
 ) {
     configure_host(command_socket, parent, Some(app_name), daemon, palette);
+}
+#[derive(Debug,PartialEq,Eq)]
+struct WidgetRuntimePaths {
+    directory:PathBuf,
+    daemon:PathBuf,
+    command:PathBuf,
+    parent:PathBuf,
+    palette:PathBuf,
+}
+fn widget_runtime_paths(runtime_dir:Option<&Path>,daemon_env:Option<&Path>)->Option<WidgetRuntimePaths> {
+    let runtime_dir=runtime_dir.filter(|path|path.is_absolute());
+    let daemon_env=daemon_env.filter(|path|path.is_absolute());
+    let directory=runtime_dir.map(|path|path.join("nacre"))
+        .or_else(||daemon_env.and_then(Path::parent).map(Path::to_path_buf))?;
+    Some(WidgetRuntimePaths {
+        daemon:daemon_env.map(Path::to_path_buf).unwrap_or_else(||directory.join("daemon.sock")),
+        command:directory.join("app-widgets.sock"),
+        parent:directory.join("bead-command.sock"),
+        palette:directory.join("palette-live.json"),
+        directory,
+    })
+}
+fn is_socket(path:&Path)->bool {
+    std::fs::symlink_metadata(path).is_ok_and(|metadata|metadata.file_type().is_socket())
+}
+/// Fill only absent paths for the no-argument Widgets entry. Other app modes and explicit/private
+/// app invocations keep their caller-owned sockets, palette, output and daemon settings.
+fn apply_widget_runtime_defaults(
+    name:&str,daemon:&mut Option<PathBuf>,command:&mut Option<PathBuf>,parent:&mut Option<PathBuf>,
+    palette:&mut PathBuf,palette_explicit:bool,runtime_dir:Option<&Path>,daemon_env:Option<&Path>,
+)->bool {
+    if name!="widgets" {return false}
+    let Some(paths)=widget_runtime_paths(runtime_dir,daemon_env) else {return false};
+    if daemon.is_none() {
+        if is_socket(&paths.daemon) { *daemon=Some(paths.daemon.clone()); }
+    }
+    if paths.directory.is_dir() {
+        if command.is_none() { *command=Some(paths.command.clone()); }
+        if parent.is_none() && is_socket(&paths.parent) { *parent=Some(paths.parent.clone()); }
+    }
+    if !palette_explicit && paths.palette.is_file() { *palette=paths.palette; }
+    true
+}
+fn open_existing_widget(socket:&Path)->Result<bool,String> {
+    if !is_socket(socket) {return Ok(false)}
+    let call=Call {version:1,id:1,target:"bead.window".into(),method:"open".into(),args:Vec::new(),output:None};
+    match ipc::call(socket,&call,Duration::from_millis(300)) {
+        Ok(reply)=>match reply.error {
+            Some(error)=>Err(error.message),
+            None=>Ok(true),
+        },
+        Err(_)=>Ok(false),
+    }
 }
 /// Runs a no-argument `nacre <method>` command through the shell's own socket (a tile that opens the launcher).
 pub fn command(method: &str) -> bool {
@@ -482,6 +536,7 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
     let mut command_socket = None;
     let mut parent_socket = None;
     let mut palette = PathBuf::from("shell/palette.json");
+    let mut palette_explicit=false;
     let mut output = None;
     let mut hover_open = false;
     let mut rest = cli[1..].iter();
@@ -492,13 +547,26 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
             "--daemon-socket" => daemon = Some(PathBuf::from(value("a path")?)),
             "--command-socket" => command_socket = Some(PathBuf::from(value("a path")?)),
             "--host-socket" => parent_socket = Some(PathBuf::from(value("a path")?)),
-            "--palette" => palette = value("a path")?.into(),
+            "--palette" => {palette = value("a path")?.into();palette_explicit=true;},
             "--output" => output = Some(value("a name")?),
             "--hover-open" => hover_open = true,
             flag if flag.starts_with("--") => {
                 return Err(format!("unknown argument: {flag}").into());
             }
             positional => args.push(json!(positional)),
+        }
+    }
+    if name=="widgets" && cli.len()==1 {
+        let runtime_dir=std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
+        let daemon_env=std::env::var_os("NACRE_DAEMON_SOCKET").map(PathBuf::from);
+        apply_widget_runtime_defaults(name,&mut daemon,&mut command_socket,&mut parent_socket,&mut palette,
+            palette_explicit,runtime_dir.as_deref(),daemon_env.as_deref());
+        if let Some(socket)=command_socket.as_deref() {
+            match open_existing_widget(socket) {
+                Ok(true)=>return Ok(()),
+                Ok(false)=>{},
+                Err(error)=>return Err(error.into()),
+            }
         }
     }
     let colors = Palette::read(&palette)
@@ -694,7 +762,7 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::{fs::PermissionsExt,net::UnixListener};
 
     fn host(dir: &Path, exe: &Path) -> Host {
         Host {
@@ -713,6 +781,72 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
         dir
+    }
+    #[test]
+    fn bare_widgets_defaults_follow_packaged_runtime_sockets() {
+        let dir=private_dir("widget-defaults");
+        let runtime=dir.join("runtime");
+        let socket_dir=runtime.join("nacre");
+        std::fs::create_dir_all(&socket_dir).unwrap();
+        let parent=UnixListener::bind(socket_dir.join("bead-command.sock")).unwrap();
+        let daemon=UnixListener::bind(socket_dir.join("daemon.sock")).unwrap();
+        let palette=socket_dir.join("palette-live.json");
+        std::fs::write(&palette,"{}").unwrap();
+        let mut daemon_socket=None;
+        let mut command_socket=None;
+        let mut parent_socket=None;
+        let mut selected_palette=PathBuf::from("shell/palette.json");
+        assert!(apply_widget_runtime_defaults("widgets",&mut daemon_socket,&mut command_socket,
+            &mut parent_socket,&mut selected_palette,false,Some(&runtime),None));
+        assert_eq!(command_socket,Some(socket_dir.join("app-widgets.sock")));
+        assert_eq!(parent_socket,Some(socket_dir.join("bead-command.sock")));
+        assert_eq!(daemon_socket,Some(socket_dir.join("daemon.sock")));
+        assert_eq!(selected_palette,palette);
+
+        let external_daemon=dir.join("custom-daemon.sock");
+        let _custom=UnixListener::bind(&external_daemon).unwrap();
+        let paths=widget_runtime_paths(None,Some(&external_daemon)).unwrap();
+        assert_eq!(paths.directory,dir);
+        assert_eq!(paths.daemon,external_daemon);
+        drop((parent,daemon));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn explicit_widget_paths_and_non_widget_modes_are_preserved() {
+        let dir=private_dir("widget-explicit");
+        let mut daemon=Some(dir.join("explicit-daemon.sock"));
+        let mut command=Some(dir.join("explicit-app.sock"));
+        let mut parent=Some(dir.join("explicit-parent.sock"));
+        let mut palette=PathBuf::from("private-palette.json");
+        assert!(apply_widget_runtime_defaults("widgets",&mut daemon,&mut command,&mut parent,
+            &mut palette,true,Some(&dir),None));
+        assert_eq!(daemon,Some(dir.join("explicit-daemon.sock")));
+        assert_eq!(command,Some(dir.join("explicit-app.sock")));
+        assert_eq!(parent,Some(dir.join("explicit-parent.sock")));
+        assert_eq!(palette,PathBuf::from("private-palette.json"));
+        let before=(daemon.clone(),command.clone(),parent.clone(),palette.clone());
+        assert!(!apply_widget_runtime_defaults("settings",&mut daemon,&mut command,&mut parent,
+            &mut palette,false,Some(&dir),None));
+        assert_eq!((daemon,command,parent,palette),before);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn bare_widgets_opens_an_existing_window_socket() {
+        let dir=private_dir("widget-existing");
+        let socket=dir.join("app-widgets.sock");
+        let (tx,rx)=std::sync::mpsc::channel();
+        let server=ipc::Server::bind(socket.clone(),move|call|{
+            tx.send(call.clone()).unwrap();
+            Reply::ok(call.id,Value::Null)
+        }).unwrap();
+        assert!(open_existing_widget(&socket).unwrap());
+        let call=rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert_eq!(call.target,"bead.window");
+        assert_eq!(call.method,"open");
+        drop(server);
+        std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]
     fn unknown_apps_are_refused_and_an_unconfigured_shell_says_so() {
