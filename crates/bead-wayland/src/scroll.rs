@@ -11,14 +11,15 @@ pub(super) fn note_refresh(refresh_ns: u32) {
         REFRESH_NS.store(u64::from(refresh_ns), Ordering::Relaxed);
     }
 }
-/// Glide and fling ticks follow the output's frame period (60 Hz when unknown), so a 120 Hz panel
-/// receives a new scroll position for every frame instead of every second one.
+/// Glide, fling and native frames follow presentation feedback. With unknown refresh,
+/// retain a 120 Hz opportunity; an arbitrary 60 Hz cap would skip alternate frames
+/// on fast outputs (including compositors that report no refresh prediction).
 pub(super) fn tick() -> Duration {
     let ns = REFRESH_NS.load(Ordering::Relaxed);
     Duration::from_nanos(if (4_000_000..=34_000_000).contains(&ns) {
         ns
     } else {
-        16_000_000
+        8_333_333
     })
 }
 /// Qt Flickable defaults, which the QML shell's FastScroll inherits after a touchpad release.
