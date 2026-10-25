@@ -1776,6 +1776,7 @@ dependencies = [
  "nacre-protocol",
  "niri-ipc",
  "nix",
+ "notify",
  "raw-window-handle",
  "serde",
  "serde_json",

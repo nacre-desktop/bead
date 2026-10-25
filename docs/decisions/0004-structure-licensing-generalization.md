@@ -78,6 +78,10 @@ After Bead's core switch on Nacre, plan support for:
 
 ## Generalization list (framework pieces added by feature work)
 
+- B0113: `ui.Host` expands a horizontal strip into region-local tile spans or content-packed rows,
+  resolves bar/compact variants, and preserves unknown packages in the caller's document;
+  `column_start`/`column_span` expose general grid placement. Packages, presets and persistence stay in the shell.
+
 - B0107: `pointer_arg` lets a range view format continuous pointer actions while keyboard actions keep their steps;
   `preview_source`/`preview_expected`/`preview_tolerance` acknowledge local feedback without a timeout restoring stale values.
 - B0106: `ui.Polyline` paints at most 256 normalized points with optional closed fill on CPU/GL; shell markup owns series, normalization and labels.

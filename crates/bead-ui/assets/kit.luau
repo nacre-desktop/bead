@@ -368,6 +368,7 @@ return function(ui, tokens)
     function kit.ListRow(p) return kit.Button(props(p,{height=40,width="fill",text_align="left"})) end
     function kit.Card(p) return ui.Column(props(p,{padding=tokens.spacing.md,gap=tokens.spacing.sm,radius=tokens.radii.medium,fill="surfaceContainer"})) end
     function kit.TextInput(p) return ui.TextInput(props(p,{height=40,padding=tokens.spacing.sm,radius=tokens.radii.small,font_size=tokens.text.body*4/3})) end
+    function kit.Pill(p) return ui.Row(p) end
     function kit.Bar(p)
         local e=edge(p);local vertical=e=="left" or e=="right"
         return (vertical and ui.Column or ui.Row)(props(p,{width=vertical and 50 or "100%",height=vertical and "100%" or 50,

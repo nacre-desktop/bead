@@ -91,6 +91,10 @@ pub struct Runtime {
     updates_subscription: Option<bead::core::source::Subscription>,
     bar_daemon: Option<std::sync::Arc<bar_daemon::BarDaemon>>,
     bar_daemon_subscriptions: Vec<bead::core::source::Subscription>,
+    widgets_topic: Option<std::sync::Arc<dyn bead::core::source::Source>>,
+    widgets_subscription: Option<bead::core::source::Subscription>,
+    widgets_file: Option<std::path::PathBuf>,
+    widgets_watch: Option<notify::RecommendedWatcher>,
     origins_topic: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     origins_subscription: Option<bead::core::source::Subscription>,
     backend: Option<std::sync::Arc<crate::backends::Native>>,
@@ -387,6 +391,10 @@ impl Runtime {
             tray_topic: None,
             tray_topic_subscription: None,
             daemon_tray: Default::default(),
+            widgets_file: None,
+            widgets_watch: None,
+            widgets_topic: None,
+            widgets_subscription: None,
             updates_topic: None,
             updates_subscription: None,
             bar_daemon: None,
@@ -476,6 +484,27 @@ impl Runtime {
                 )]))?;
         }
         Ok(())
+    }
+    pub fn with_widget_file(mut self) -> Self {
+        self.widgets_file = crate::widgets::file_path();
+        self
+    }
+    /// The daemon stores an opaque JSON document; Luau validates it in a staged update.
+    pub fn with_widgets(
+        mut self,
+        client: &crate::nacre_source::Client,
+    ) -> Result<Self, Box<dyn Error>> {
+        let topic = match client.lease_topic(crate::widgets::TOPIC) {
+            Ok(topic) => std::sync::Arc::new(topic),
+            Err(_) => {
+                eprintln!("SOURCE_ERROR code=widgets_lease");
+                return Ok(self);
+            }
+        };
+        let values = crate::widgets::values(&bead::core::source::Source::snapshot(&*topic));
+        self.session.stores = self.session.stores.reconcile(&values)?;
+        self.widgets_topic = Some(topic);
+        Ok(self)
     }
     /// Optional bar item; one daemon lease, no local polling or provider.
     pub fn with_bar_updates(
@@ -2214,6 +2243,55 @@ impl SceneSource for Runtime {
             })) {
                 Ok(subscription) => self.tray_topic_subscription = Some(subscription),
                 Err(_) => eprintln!("SOURCE_ERROR code=tray_topic_subscription"),
+            }
+        }
+        if let Some(path) = &self.widgets_file {
+            use notify::Watcher;
+            let path = path.clone();
+            let watched = path.clone();
+            let wake = wakeup.clone();
+            let watch = || -> Result<notify::RecommendedWatcher, Box<dyn Error>> {
+                let parent = path.parent().ok_or("widget file needs a parent")?;
+                std::fs::create_dir_all(parent)?;
+                let mut watcher =
+                    notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+                        if let Ok(event) = event
+                            && !event.kind.is_access()
+                            && (event.need_rescan() || event.paths.iter().any(|p| p == &watched))
+                        {
+                            let values = crate::widgets::file_values(&watched);
+                            if !values.is_empty() {
+                                wake(UiEvent::Model(values));
+                            }
+                        }
+                    })?;
+                watcher.watch(parent, notify::RecursiveMode::NonRecursive)?;
+                Ok(watcher)
+            };
+            match watch() {
+                Ok(watcher) => {
+                    self.widgets_watch = Some(watcher);
+                    let values = crate::widgets::file_values(&path);
+                    if !values.is_empty() {
+                        wakeup(UiEvent::Model(values));
+                    }
+                }
+                Err(error) => eprintln!(
+                    "WIDGET_LAYOUT_ERROR file={} line=1 message={error}",
+                    path.display()
+                ),
+            }
+        }
+        if let Some(topic) = &self.widgets_topic {
+            let wakeup = wakeup.clone();
+            match topic.subscribe(std::sync::Arc::new(move |snapshot| {
+                let values = crate::widgets::values(&snapshot);
+                if !values.is_empty() {
+                    wakeup(UiEvent::Model(values));
+                }
+            })) {
+                Ok(subscription) => self.widgets_subscription = Some(subscription),
+                Err(_) => eprintln!("SOURCE_ERROR code=widgets_subscription"),
             }
         }
         if let Some(topic) = &self.updates_topic {

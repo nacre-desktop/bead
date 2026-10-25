@@ -2438,3 +2438,52 @@ fn scroll_notches_clamp_at_both_content_edges() {
         assert_eq!(session.stores.get(&key), Some(&Value::Number(expected)));
     }
 }
+
+#[test]
+fn strip_host_regions_spans_and_compact_variants_scale_with_width() {
+    for width in [600, 960, 1920] {
+        let f = fixture();
+        fs::write(f.0.join("ui/main.luau"),format!(r#"
+local ui=require("bead.ui")
+local normal={{min_span=1,max_span=6,preferred_span=3,render=function() return ui.Button{{id="tile",text="normal",on_activate=ui.action("select","a"),width="100%",height=30}} end}}
+local compact={{min_span=1,max_span=2,preferred_span=1,render=function() return ui.Button{{id="tile",text="compact",on_activate=ui.action("select","a"),width="100%",height=30}} end}}
+return ui.Host{{id="host",shape="strip-h",width={width},height=50,
+ grid={{tiles=12,regions={{left={{start=0,span=4}},centre={{start=4,span=4}},right={{start=8,span=4}}}}}},
+ catalogue={{sample={{variants={{bar=normal,compact=compact}}}}}},
+ layout={{{{iid="a",widget="sample",slot={{region="left",start=1,span=2}}}},{{iid="b",widget="sample",slot={{region="centre",start=0,span=3}}}},{{iid="c",widget="sample",slot={{region="right",start=0,span=2}}}}}},
+ render=function(item,variant) return variant.render() end}}
+"#)).unwrap();
+        let s = session(&f);
+        let unit = width as f32 / 12.;
+        for (iid, x, span, label) in [
+            ("a", unit, 2., "compact"),
+            ("b", 4. * unit, 3., "normal"),
+            ("c", 10. * unit, 2., "compact"),
+        ] {
+            let node = s
+                .view_nodes()
+                .iter()
+                .find(|n| n.id.ends_with(&format!(".{iid}.tile")))
+                .unwrap();
+            let r = rect(&node.draw);
+            assert!((r.x - x).abs() < 1., "{iid}: {r:?}, expected x={x}");
+            assert!((r.w - span * unit).abs() < 1., "{iid}: {r:?}");
+            assert_eq!(node.label, label);
+        }
+    }
+}
+
+#[test]
+fn strip_host_rejects_invalid_shape_overlap_and_region_overflow() {
+    for (shape, second) in [("canvas", 3), ("strip-h", 1), ("strip-h", 11)] {
+        let f = fixture();
+        fs::write(f.0.join("ui/main.luau"),format!(r#"
+local ui=require("bead.ui")
+return ui.Host{{shape="{shape}",grid={{tiles=12}},catalogue={{sample={{variants={{bar={{min_span=1,max_span=4,preferred_span=2}}}}}}}},
+layout={{{{iid="a",widget="sample",slot={{region="left",start=0,span=2}}}},{{iid="b",widget="sample",slot={{region="left",start={second},span=2}}}}}},render=function() return ui.Box{{width=20,height=20}} end}}
+"#)).unwrap();
+        let mut s = f.session();
+        s.entry = "ui/main.luau".into();
+        assert!(s.reload().is_err());
+    }
+}

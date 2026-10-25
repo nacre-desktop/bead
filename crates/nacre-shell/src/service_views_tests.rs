@@ -1111,3 +1111,86 @@ fn session_menu_goldens_idle_confirming_and_disabled() -> Result<()> {
     }
     Ok(())
 }
+
+#[test]
+fn widget_preset_roundtrip_live_move_unknown_preservation_and_atomic_rejection() -> Result<()> {
+    use serde_json::{Value as Json, json};
+    let mut h = Harness::load(
+        &root(),
+        Path::new("bar/main.luau"),
+        &root().join("palette.json"),
+        super::initial_models()?,
+        Config {
+            width: 1920,
+            height: 50,
+            scale: 1.5,
+        },
+    )?;
+    let baseline = serde_json::to_value(&h.scene().primitives)?;
+    let preset: Json = serde_json::from_str(include_str!("../tests/widgets-default.json"))?;
+    let roundtrip: Json = serde_json::from_str(&serde_json::to_string(&preset)?)?;
+    let apply = |doc: Json| BTreeMap::from([("widgets.layout".into(), Value::list(vec![doc]))]);
+    h.update(apply(roundtrip))?;
+    assert_eq!(
+        serde_json::to_value(&h.scene().primitives)?,
+        baseline,
+        "explicit preset must reproduce the implicit preset"
+    );
+    let mut edited = preset.clone();
+    let instances = edited["hosts"]["top_bar"]["instances"]
+        .as_array_mut()
+        .unwrap();
+    let mut clock = instances[3]["children"].as_array_mut().unwrap().remove(6);
+    clock["host"] = "top_bar".into();
+    clock["slot"] = json!({"region":"left","start":2,"span":1});
+    instances.push(clock);
+    instances.push(json!({"iid":"future","widget":"future-package","host":"top_bar","slot":{"region":"right","start":3,"span":1},"settings":{"opaque":[1,{"x":true}]}}));
+    h.update(apply(edited.clone()))?;
+    assert!(
+        h.scene()
+            .layers
+            .iter()
+            .any(|l| l.id == "bar.left.clock.time")
+    );
+    assert_eq!(
+        h.session.stores.get("widgets.layout"),
+        Some(&Value::list(vec![edited.clone()]))
+    );
+    let accepted = serde_json::to_value(&h.scene().primitives)?;
+    for invalid in [
+        {
+            let mut d = edited.clone();
+            d["version"] = json!(99);
+            d
+        },
+        {
+            let mut d = edited.clone();
+            d["hosts"]["top_bar"]["instances"][0]["iid"] = json!("clock");
+            d
+        },
+        {
+            let mut d = edited.clone();
+            d["hosts"]["top_bar"]["instances"][0]["settings"]["icon"] = json!("invalid");
+            d
+        },
+        {
+            let mut d = edited.clone();
+            d["hosts"]["top_bar"]["instances"][0]["slot"]["span"] = json!(61);
+            d
+        },
+    ] {
+        assert!(h.update(apply(invalid)).is_err());
+        assert_eq!(serde_json::to_value(&h.scene().primitives)?, accepted);
+        assert_eq!(
+            h.session.stores.get("widgets.layout"),
+            Some(&Value::list(vec![edited.clone()]))
+        );
+    }
+    h.update(apply(preset))?;
+    assert_eq!(
+        serde_json::to_value(&h.scene().primitives)?,
+        baseline,
+        "moving the clock back must restore the bar"
+    );
+    Ok(())
+}

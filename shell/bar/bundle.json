@@ -1,0 +1,20 @@
+{
+  "modules": [
+    "widgets/battery/widget.luau",
+    "widgets/bluetooth/widget.luau",
+    "widgets/clock/widget.luau",
+    "widgets/context.luau",
+    "widgets/default.luau",
+    "widgets/launcher/widget.luau",
+    "widgets/notifications/widget.luau",
+    "widgets/pill/widget.luau",
+    "widgets/power/widget.luau",
+    "widgets/registry.luau",
+    "widgets/sound/widget.luau",
+    "widgets/title/widget.luau",
+    "widgets/tray.luau",
+    "widgets/updates/widget.luau",
+    "widgets/wifi/widget.luau",
+    "widgets/workspaces/widget.luau"
+  ]
+}

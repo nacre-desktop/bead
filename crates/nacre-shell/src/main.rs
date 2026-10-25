@@ -55,6 +55,7 @@ mod wallpaper_motion;
 mod welcome;
 #[cfg(test)]
 mod welcome_tests;
+mod widgets;
 mod workspace_rows;
 use bead::render::{Palette, Primitive, Rect, Scene, Slide};
 use bead::wayland::{Options, run};
@@ -1137,6 +1138,9 @@ fn start(
                             .with_bar_routes(client.clone(), tray)?
                             .with_workspace_origins(&client)?
                             .with_bar_updates(&client)?
+                            .with_widgets(&client)?
+                    } else if bar {
+                        runtime.with_widget_file()
                     } else {
                         runtime
                     };

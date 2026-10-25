@@ -98,6 +98,8 @@ pub const PROPERTIES: &[&str] = &[
     "align",
     "justify",
     "columns",
+    "column_start",
+    "column_span",
     "min_cell_width",
     "row_height",
     "text",
@@ -586,6 +588,27 @@ impl ViewSpec {
                 "space-between" => AlignContent::SPACE_BETWEEN,
                 _ => return Err(source.error("unsupported justify")),
             };
+            if p.contains_key("column_start") || p.contains_key("column_span") {
+                let start = number(p, "column_start", 1., source)?;
+                let columns = number(p, "column_span", 1., source)?;
+                if !(1. ..=4096.).contains(&start)
+                    || start.fract() != 0.
+                    || !(1. ..=4096.).contains(&columns)
+                    || columns.fract() != 0.
+                    || start + columns > 4097.
+                {
+                    return Err(source
+                        .error("column_start/column_span need integer1..4096 within the grid"));
+                }
+                style.grid_column = taffy::geometry::Line {
+                    start: line(start as i16),
+                    end: span(columns as u16),
+                };
+                style.grid_row = taffy::geometry::Line {
+                    start: line(1),
+                    end: span(1),
+                };
+            }
             if raw.kind == Widget::Grid {
                 if p.contains_key("min_cell_width") {
                     let minimum = number(p, "min_cell_width", 116., source)?;
@@ -598,8 +621,8 @@ impl ViewSpec {
                     )];
                 } else {
                     let columns = number(p, "columns", 3., source)?;
-                    if !(1. ..=64.).contains(&columns) || columns.fract() != 0. {
-                        return Err(source.error("columns needs integer1..64"));
+                    if !(1. ..=4096.).contains(&columns) || columns.fract() != 0. {
+                        return Err(source.error("columns needs integer1..4096"));
                     }
                     style.grid_template_columns =
                         std::iter::repeat_n(fr(1.), columns as usize).collect();

@@ -13,6 +13,7 @@ pub fn luau() -> String {
     }
     for (name, ty) in [
         ("Repeat", "(any)->Node"),
+        ("Host", "(any)->Node"),
         ("bind", "(string)->any"),
         ("action", "(string,any?)->any"),
         ("alpha", "(string,number)->any"),

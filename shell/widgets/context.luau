@@ -1,0 +1,37 @@
+-- SPDX-License-Identifier: GPL-3.0-only
+local ui=require("bead.ui")
+local kit=require("bead.kit")
+local t=require("../bar/tokens")
+local function centered_text(p)
+    local lift=p.family=="Material Symbols Rounded" and 0 or t.text_lift
+    p.height=p.font_size*t.line_height+2*lift
+    if p.position=="absolute" then p.top=(p.top or 0)-lift end
+    return ui.Text(p)
+end
+local launcher=ui.resolve_for_check(ui.bind("bar.launcher"))
+local popouts=ui.resolve_for_check(ui.bind("bar.popouts"))
+local ws_on=ui.resolve_for_check(ui.bind("bar.workspace.enabled"))
+local tray_on=ui.resolve_for_check(ui.bind("bar.tray.enabled"))
+local dash_on=ui.resolve_for_check(ui.bind("bar.dashboard.enabled"))
+local focus_on=ui.resolve_for_check(ui.bind("bar.window.focus.enabled"))
+local updates_on=ui.resolve_for_check(ui.bind("bar.updates.enabled"))
+local updates_n=ui.resolve_for_check(ui.bind("bar.updates.count"))
+local header=ui.resolve_for_check(ui.bind("bar.height"))
+local title=ui.resolve_for_check(ui.bind("bar.title"))
+local title_width=math.min(t.title_max_width,math.ceil(ui.text_width(title,"IBM Plex Sans",t.title_font))+kit.tokens.spacing.hairline/2)
+local cue_extent=math.min(t.title_cue_max,title_width+t.icon_width+t.title_gap+10)
+local dwell=ui.resolve_for_check(ui.bind("bead.edge.dwell"))
+local ws_count=ui.resolve_for_check(ui.bind("bar.workspace.count"))
+local ws_icons=ui.resolve_for_check(ui.bind("bar.workspace.icons"))
+local thread=true
+for _,entry in ws_icons do if entry.icon~="" then thread=false end end
+-- QML NacreWorkspaceRow.tint: pearls blend primary -> secondary -> tertiary by position along the row.
+local function pearl_accent(at)
+    local position=math.min(1,at/math.max(1,ws_count-1))
+    if position<=0.5 then return ui.tint("primary","secondary",position*2) end
+    return ui.tint("secondary","tertiary",(position-0.5)*2)
+end
+local function glyph(id,text,color)
+    return centered_text{id=id,text=text,width=t.icon_width,shrink=0,family="Material Symbols Rounded",font_size=t.icon_font,color=color or "secondary",text_align="center"}
+end
+return {ui=ui,kit=kit,t=t,centered_text=centered_text,launcher=launcher,popouts=popouts,ws_on=ws_on,tray_on=tray_on,dash_on=dash_on,focus_on=focus_on,updates_on=updates_on,updates_n=updates_n,header=header,title=title,title_width=title_width,cue_extent=cue_extent,dwell=dwell,ws_count=ws_count,ws_icons=ws_icons,thread=thread,pearl_accent=pearl_accent,glyph=glyph}

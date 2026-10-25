@@ -110,3 +110,36 @@ Inspired by the owner's reference (r/unixporn "desktop dances to the music"): a 
 ## Non-goals (now)
 
 Side bars and the bottom bar as widget hosts (after phase 2), a third-party widget sandbox/permissions model (needed before sharing widgets publicly), and a widget store.
+
+## Phase 1 API and persistence
+
+`ui.Host{shape="strip-h",grid={tiles,gap,regions,mode},layout,catalogue,render}`
+resolves each package's `bar` (or optional `compact`) size contract. Tile slots
+are zero-based and region-relative; right slots count inward from the right.
+Regions supply `{start,span}` in host tiles. Grid placement uses general
+`column_start`/`column_span` properties, including real inter-tile gaps.
+`grid.tile_size` can derive a count from a numeric width. The default preset
+instead uses `mode="content"`: slots order naturally sized content, preserving
+all historic bar geometry; switching a host to `mode="tiles"` sizes its spans.
+The implicit default derives about 32 dp tiles from the current viewport.
+
+The shell validates v1 documents and known package settings before accepting a
+view transaction; bad edits retain the accepted view/stores. IIDs are unique
+across hosts/children. Unknown packages, settings and extra fields remain opaque
+and survive export. `pill.children` contains ordinary instances with the pill's
+IID as their host. Empty settings schemas explicitly mean no controls yet.
+The first copy retains legacy view IDs/anchors; extra copies receive IID scopes.
+
+Nacre transport is `settings.store.widgets` with `data.layout` (null resets the
+preset), `widgets.rev`, and revisioned writes through
+`settings.set {store:"widgets",key:"layout",value:<document>,rev:<revision>}`.
+Registration request to Nacre: add an opaque `widgets` settings store with a
+writable `layout` JSON value defaulting to null; the daemon must not interpret it.
+Older daemons retain the default bar. Standalone uses
+`$XDG_CONFIG_HOME/bead/widgets.json` (override `BEAD_WIDGET_LAYOUT`); edits and
+atomic replacements are watched without polling. Launcher icon choices use the
+bundled Nacre mark, theme icons `distributor-logo-archlinux` / `cachyos`, or a
+custom icon path; actions select launcher, dashboard, or a custom view route.
+
+Phase 1 acceptance evidence is pending remote parity, timing and median-memory
+gates. Implementation alone does not authorize integration or the phase 2 UI.

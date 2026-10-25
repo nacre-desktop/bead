@@ -437,6 +437,11 @@ impl FrontEnd for LuauFrontEnd {
                     .set_name("@bead.ui")
                     .eval()?;
                 install.call::<()>((sdk.clone(), constructors, allowed, lua.array_metatable()))?;
+                let host_factory: Function = lua
+                    .load(include_str!("../assets/host.luau"))
+                    .set_name("@bead.host")
+                    .eval()?;
+                sdk.set("Host", host_factory.call::<Function>(sdk.clone())?)?;
                 let group: Function = sdk.get("Group")?;
                 sdk.set(
                     "Repeat",
