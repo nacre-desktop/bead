@@ -2343,11 +2343,7 @@ impl Runtime {
             .map_err(|error| error.to_string())?;
         Ok(self)
     }
-    fn finish_scene(
-        &mut self,
-        mut scene: Option<Scene>,
-        reload: bool,
-    ) -> Result<Option<Scene>, Box<dyn Error>> {
+    fn finish_scene(&mut self, mut scene: Option<Scene>) -> Result<Option<Scene>, Box<dyn Error>> {
         if self.popup_anchor_changed && scene.is_none() {
             scene = self.session.relayout()?;
         }
@@ -3366,7 +3362,7 @@ impl SceneSource for Runtime {
                 changes
             };
             let scene = self.session.update(changes)?;
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let UiEvent::Click { x, y } = &event {
             self.session.capture_pointer(*x, *y);
@@ -3436,7 +3432,7 @@ impl SceneSource for Runtime {
                     values.extend(prompt.act(&request, &self.session.stores));
                 }
                 let scene = self.session.update(values)?;
-                return self.finish_scene(scene, false);
+                return self.finish_scene(scene);
             }
         }
         if self.extras.is_some() {
@@ -3452,7 +3448,7 @@ impl SceneSource for Runtime {
                     .session
                     .action_values("extras.select", bead::core::Value::Text(id.into()))?;
                 let scene = self.session.update(values)?;
-                return self.finish_scene(scene, false);
+                return self.finish_scene(scene);
             }
             let action = match &event {
                 UiEvent::Command { command, .. } => match command.as_str() {
@@ -3536,7 +3532,7 @@ impl SceneSource for Runtime {
                     );
                 }
                 let scene = self.session.update(values)?;
-                return self.finish_scene(scene, false);
+                return self.finish_scene(scene);
             }
         }
         // Welcome: Enter advances the tour, except on a tile of the page itself (QML parity).
@@ -3600,7 +3596,7 @@ impl SceneSource for Runtime {
                 } else {
                     None
                 };
-                return self.finish_scene(released, false);
+                return self.finish_scene(released);
             }
             let changes = self
                 .session
@@ -3609,7 +3605,7 @@ impl SceneSource for Runtime {
                 self.session.release()?;
             }
             let scene = self.session.update(changes)?;
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let Some((_, name, argument)) = &host_action
             && name == "widgets.navigate"
@@ -3653,7 +3649,7 @@ impl SceneSource for Runtime {
                 } else {
                     None
                 };
-                return self.finish_scene(released, false);
+                return self.finish_scene(released);
             }
             if self.widgets_write.is_some() {
                 return Ok(None);
@@ -3871,7 +3867,7 @@ impl SceneSource for Runtime {
                         ("widgets.editing".into(), bead::core::Value::Bool(true)),
                         ("widgets.error".into(), bead::core::Value::Text(error)),
                     ]))?;
-                    return self.finish_scene(failed.or(scene), false);
+                    return self.finish_scene(failed.or(scene));
                 }
             }
             if self.widgets_write.is_none()
@@ -3880,7 +3876,7 @@ impl SceneSource for Runtime {
                 self.widgets_close_on_commit = true;
             }
             let final_scene = self.session.update(changes)?.or(scene);
-            return self.finish_scene(final_scene, false);
+            return self.finish_scene(final_scene);
         }
         if matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
             && let Some((id, action_name, argument)) = &mut host_action
@@ -3961,7 +3957,7 @@ impl SceneSource for Runtime {
                 } else {
                     event
                 });
-                return self.finish_scene(pointer_scene, false);
+                return self.finish_scene(pointer_scene);
             }
             self.slider_pending = None;
             self.slider_sent = Some(std::time::Instant::now());
@@ -4038,7 +4034,7 @@ impl SceneSource for Runtime {
             self.schedule_status_pill();
             let status_scene = self.publish_status_pill()?;
             let scene = self.select_dashboard_page(page)?.or(status_scene);
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let Some((id, name, bead::core::Value::Text(view))) = &host_action
             && name == "status.pill.open"
@@ -4054,7 +4050,7 @@ impl SceneSource for Runtime {
             let scene = self.publish_status_pill()?;
             self.actions.authorize(name)?;
             self.sync_status_peek_route()?;
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let Some((_, name, _)) = &host_action
             && matches!(name.as_str(), "updates.refresh" | "updates.open")
@@ -4073,7 +4069,7 @@ impl SceneSource for Runtime {
                 status.updates_action(name, callback);
             }
             let scene = self.session.update(BTreeMap::new())?;
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let Some((id, name, bead::core::Value::Text(view))) = &host_action
             && name == "view.open"
@@ -4093,7 +4089,7 @@ impl SceneSource for Runtime {
                 toggle: true,
                 center: self.popout_center(id, view),
             });
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let Some((_, name, _)) = &host_action
             && matches!(name.as_str(), "network.toggle_wifi" | "network.scan")
@@ -4116,7 +4112,7 @@ impl SceneSource for Runtime {
                 }
             }
             let scene = self.session.update(BTreeMap::new())?;
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let Some((node, name, arg)) = &host_action
             && matches!(
@@ -4166,7 +4162,7 @@ impl SceneSource for Runtime {
             clear.insert("network.reveal".into(), bead::core::Value::Bool(false));
             let scene = self.session.update(clear.clone())?;
             let scene = self.focus_network_form(scene, clear)?;
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let Some((_, name, bead::core::Value::Text(key))) = &host_action
             && (name == "network.connect" || name == "network.disconnect")
@@ -4186,7 +4182,7 @@ impl SceneSource for Runtime {
             }
             let scene = self.session.update(BTreeMap::new())?;
             let scene = self.focus_network_form(scene, BTreeMap::new())?;
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let (Some(dashboard), Some((_, name, bead::core::Value::Text(arg)))) =
             (&self.dashboard, &host_action)
@@ -4209,7 +4205,7 @@ impl SceneSource for Runtime {
                 None
             };
             let scene = self.session.update(BTreeMap::new())?.or(released);
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let (Some(control), Some((id, name, bead::core::Value::Text(arg)))) =
             (&self.control, &host_action)
@@ -4225,11 +4221,11 @@ impl SceneSource for Runtime {
                     "panel.open".into(),
                     bead::core::Value::Bool(false),
                 )]))?;
-                return self.finish_scene(scene, false);
+                return self.finish_scene(scene);
             }
             if local {
                 return if pointer_scene.is_some() {
-                    self.finish_scene(pointer_scene, false)
+                    self.finish_scene(pointer_scene)
                 } else {
                     Ok(None)
                 };
@@ -4242,7 +4238,7 @@ impl SceneSource for Runtime {
                 Ok(scene) => scene,
                 Err(_) => self.session.update(BTreeMap::new())?,
             };
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let (Some(chat), Some((id, name, bead::core::Value::Text(arg)))) =
             (&self.chat, &host_action)
@@ -4269,7 +4265,7 @@ impl SceneSource for Runtime {
                 );
             }
             let scene = self.session.update(outcome.stores)?;
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let (Some(settings), Some((id, name, bead::core::Value::Text(arg)))) =
             (&self.settings, &host_action)
@@ -4319,7 +4315,7 @@ impl SceneSource for Runtime {
                     _ => self.session.update(changes)?,
                 }
             };
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let (Some(colors), Some((id, name, bead::core::Value::Text(arg)))) =
             (&self.colors, &host_action)
@@ -4335,7 +4331,7 @@ impl SceneSource for Runtime {
                 Some(Ok(scene)) => scene,
                 _ => self.session.update(changes)?,
             };
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let (Some(welcome), Some((_, name, bead::core::Value::Text(arg)))) =
             (&self.welcome, &host_action)
@@ -4354,7 +4350,7 @@ impl SceneSource for Runtime {
                 );
             }
             let scene = self.session.update(outcome.changes)?;
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let (Some(prompt), Some((_, name, bead::core::Value::Text(request)))) =
             (&self.prompt, &host_action)
@@ -4370,7 +4366,7 @@ impl SceneSource for Runtime {
                 None
             };
             let scene = self.session.update(changes)?.or(released);
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let (Some(extras), Some((_, name, bead::core::Value::Text(request)))) =
             (&self.extras, &host_action)
@@ -4408,7 +4404,7 @@ impl SceneSource for Runtime {
             } else {
                 self.session.update(changes)?
             };
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let (Some(menu), Some((_, name, arg))) = (&self.session_menu, &host_action)
             && name.starts_with("session.")
@@ -4437,7 +4433,7 @@ impl SceneSource for Runtime {
                 )])
             });
             let scene = self.session.update(focus)?;
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let Some((_, name, _)) = &host_action
             && name == "bluetooth.toggle_power"
@@ -4456,7 +4452,7 @@ impl SceneSource for Runtime {
                 status.bluetooth_action(callback);
             }
             let scene = self.session.update(BTreeMap::new())?;
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let Some((node, name, arg)) = &host_action
             && matches!(
@@ -4511,7 +4507,7 @@ impl SceneSource for Runtime {
                 BTreeMap::new()
             };
             let scene = self.session.update(changes)?;
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let Some((_, name, _)) = &host_action
             && name == "launcher.open"
@@ -4538,7 +4534,7 @@ impl SceneSource for Runtime {
             } else {
                 self.session.update(BTreeMap::new())?
             };
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let (Some(menu), Some((_, name, bead::core::Value::Text(row_id)))) =
             (&self.launcher, &host_action)
@@ -4553,7 +4549,7 @@ impl SceneSource for Runtime {
                 )]),
             };
             let scene = self.session.update(changes)?;
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let (Some(menu), UiEvent::Command { command, .. }) = (&self.launcher, &event)
             && (self.session.surrounding_text().is_some()
@@ -4596,7 +4592,7 @@ impl SceneSource for Runtime {
                 };
                 if let Some(changes) = menu.navigate(&self.session.stores, command, geometry) {
                     let scene = self.session.update(changes)?;
-                    let scene = self.finish_scene(scene, false)?;
+                    let scene = self.finish_scene(scene)?;
                     if bead::core::profile::enabled() {
                         println!("MENU_NAV_DONE changed={}", scene.is_some());
                     }
@@ -4626,7 +4622,7 @@ impl SceneSource for Runtime {
                 )]),
             };
             let scene = self.session.update(changes)?;
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let Some((_, name, arg)) = host_action.as_ref()
             && name.starts_with("notifications.")
@@ -4670,7 +4666,7 @@ impl SceneSource for Runtime {
                     || self.pointer_feedback(id, &event, true),
                     |scene| Ok(Some(scene)),
                 )?;
-                return self.finish_scene(scene, false);
+                return self.finish_scene(scene);
             }
             return Ok(None);
         }
@@ -4712,7 +4708,7 @@ impl SceneSource for Runtime {
                     || self.pointer_feedback(id, &event, true),
                     |scene| Ok(Some(scene)),
                 )?;
-                return self.finish_scene(scene, false);
+                return self.finish_scene(scene);
             }
             if !self.bar {
                 self.pending_focus = Some(id.clone());
@@ -4731,7 +4727,7 @@ impl SceneSource for Runtime {
             self.backend_action(&name, arg)?;
             if !self.bar {
                 let scene = self.session.focus_id(&id)?;
-                return self.finish_scene(scene, false);
+                return self.finish_scene(scene);
             }
             event = UiEvent::Relayout;
         }
@@ -5765,7 +5761,7 @@ impl SceneSource for Runtime {
                 )]))?
                 .or(scene);
         }
-        self.finish_scene(scene, reload)
+        self.finish_scene(scene)
     }
     fn validate(&self) -> Result<(), Box<dyn Error>> {
         self.session.check_sources()?;
