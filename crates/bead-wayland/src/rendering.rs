@@ -349,7 +349,7 @@ impl App {
                                 surface.callbacks.invalidate();
                             }
                             #[cfg(feature="native-gl")]
-                            if app.surfaces.iter().all(|s| s.gl.is_none()) && app.options.renderer == RendererKind::Cpu
+                            if !app.has_gl_surfaces() && app.options.renderer == RendererKind::Cpu
                                 && let Some(transport) = app.gl.take() {
                                     // SAFETY: the CPU bar/companion own no GL resources;
                                     // this process owns one EGL display and all EGL surfaces are gone.
@@ -358,7 +358,7 @@ impl App {
                                     }
                             }
                             #[cfg(feature="wgpu")]
-                            if app.surfaces.iter().all(|s| s.gpu.is_none()) { app.gpu = None; }
+                            if !app.has_gpu_surfaces() { app.gpu = None; }
                         }
                         println!("RENDER_POLICY companion=true transition=gl-to-cpu shared_context_released={}", app.options.renderer == RendererKind::Cpu);
                         app.release_timer = false;
@@ -539,6 +539,13 @@ impl App {
             .is_some_and(|h| !h.gate.can_draw())
         {
             return;
+        }
+        if self.surfaces[index].companion
+            && self.panel_dock_transition.is_some()
+            && let Some((scene, _, _)) = self.companion.as_ref()
+        {
+            let output = self.surfaces[index].output.clone();
+            self.position_panel_surface(&self.surfaces[index].layer, &output, scene);
         }
         let decoration_result = if self.surfaces[index].companion {
             self.sync_all_decorations()
@@ -1327,6 +1334,23 @@ impl App {
             s.frames += 1;
             Ok(())
         })();
+        if result.is_ok()
+            && self.surfaces[index].companion
+            && self.surfaces[index].frames > previous_frames
+        {
+            if self
+                .panel_dock_transition
+                .as_ref()
+                .is_some_and(|t| !t.started)
+            {
+                self.start_dock_transition_after_commit();
+            } else if self
+                .dock_transition_progress(self.started.elapsed().as_secs_f64())
+                .is_some_and(|progress| progress >= 1.)
+            {
+                self.panel_dock_transition = None;
+            }
+        }
         self.retire_native_cover(
             index,
             result.is_ok() && self.surfaces[index].frames > previous_frames,

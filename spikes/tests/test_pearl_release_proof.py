@@ -63,6 +63,38 @@ class PearlReleaseClassifierTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'at least 8'):
             self.analyze([700 + 25 * i for i in range(8)])
 
+    def test_forward_pending_input_before_handoff_does_not_fail_native_stability(self):
+        self.write_frames([32, 36] + [40] * 8)
+        stamps = [810, 835] + [900 + 25 * i for i in range(8)]
+        result = proof.analyze(self.frames, self.final, stamps, self.rect, 1.0, 800,
+                               [1, 0], handoff_start_ms=900)
+        self.assertTrue(result['post_release_moving'])
+        self.assertFalse(result['post_release_reversals'])
+        self.assertFalse(result['post_handoff_moving'])
+        self.assertTrue(result['final_body_stable'])
+        self.assertEqual(proof.handoff_gate_failures(result), [])
+
+    def test_pre_handoff_blank_and_reversal_remain_raw_failures(self):
+        self.write_frames([44, None, 36] + [40] * 8)
+        stamps = [810, 835, 860] + [900 + 25 * i for i in range(8)]
+        result = proof.analyze(self.frames, self.final, stamps, self.rect, 1.0, 800,
+                               [1, 0], handoff_start_ms=900)
+        self.assertEqual(result['post_release_blank_frames'], 1)
+        self.assertGreater(result['post_release_reversals'], 0)
+        self.assertTrue(result['final_body_stable'])
+        failures = proof.handoff_gate_failures(result)
+        self.assertTrue(any('blank' in failure for failure in failures))
+        self.assertTrue(any('reversal' in failure for failure in failures))
+
+    def test_wrong_position_after_handoff_fails_native_stability(self):
+        self.write_frames([44] * 8)
+        stamps = [900 + 25 * i for i in range(8)]
+        result = proof.analyze(self.frames, self.final, stamps, self.rect, 1.0, 800,
+                               [1, 0], handoff_start_ms=900)
+        self.assertTrue(result['post_handoff_moving'])
+        self.assertFalse(result['final_body_stable'])
+        self.assertTrue(proof.handoff_gate_failures(result))
+
 
 class PearlReleaseTimestampTests(unittest.TestCase):
     def test_screencopy_ready_timestamp_combines_high_low_seconds_and_nsec(self):
@@ -84,6 +116,28 @@ class PearlReleaseTimestampTests(unittest.TestCase):
     def test_missing_pointer_release_time_fails(self):
         with self.assertRaisesRegex(RuntimeError, 'no POINTER_RELEASE timestamp'):
             proof.release_proxy_ms('POINTER_SENT monotonic_ns=1 x=2 y=3', 0)
+
+    def test_cropped_frame_is_padded_at_scaled_output_origin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'padded.png'
+            crop = Image.new('RGB', (8, 10), (201, 211, 221))
+            proof.pad_capture(crop, path, [2, 3, 4, 5], 2.0, (30, 30))
+            with Image.open(path) as image:
+                self.assertEqual(image.getpixel((4, 6)), (201, 211, 221))
+                self.assertEqual(image.getpixel((3, 6)), (0, 0, 0))
+
+    def test_handoff_uses_first_following_companion_frame(self):
+        trace = ('PEARL_HANDOFF_COMMITTED id=7 rect=[0, 0, 1, 1]\n'
+                 'UI_FRAME monotonic_ns=10 render_ms=1.0 companion=false\n'
+                 'UI_FRAME monotonic_ns=20 render_ms=1.0 companion=true\n')
+        self.assertEqual(proof.native_handoff_frame_ns(trace, 7), 20)
+
+    def test_missing_handoff_marker_or_companion_frame_fails(self):
+        with self.assertRaisesRegex(RuntimeError, 'missing PEARL_HANDOFF_COMMITTED'):
+            proof.native_handoff_frame_ns('UI_FRAME monotonic_ns=20 companion=true', 7)
+        trace = 'PEARL_HANDOFF_COMMITTED id=7\nUI_FRAME monotonic_ns=20 companion=false'
+        with self.assertRaisesRegex(RuntimeError, 'no following companion UI_FRAME'):
+            proof.native_handoff_frame_ns(trace, 7)
 
 
 if __name__ == '__main__':

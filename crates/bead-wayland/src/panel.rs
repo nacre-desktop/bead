@@ -484,6 +484,20 @@ impl App {
         output: &wl_output::WlOutput,
         scene: &Scene,
     ) {
+        if let Some(progress) = self.dock_transition_progress(self.started.elapsed().as_secs_f64())
+            && progress < 1.
+            && let Some(transition) = self.panel_dock_transition.as_ref()
+        {
+            let target = self.dock_target_body(output, scene);
+            let rect = pearls::interpolate_dock_rect(transition.from, target, progress);
+            let (x, y) = self.pearl_margins(output, scene, rect);
+            layer.set_anchor(Anchor::TOP | Anchor::LEFT);
+            layer.set_margin(y, 0, 0, x);
+            if !transition.started {
+                self.notify_panel_origin(scene, x, y);
+            }
+            return;
+        }
         if let Some(info) = self.pearl.filter(|i| i.kind == pearls::Kind::Pearl) {
             let (x, y) = self.pearl_margins(output, scene, info.rect);
             layer.set_anchor(Anchor::TOP | Anchor::LEFT);
@@ -526,6 +540,71 @@ impl App {
         );
         layer.set_anchor(anchor);
         layer.set_margin(top, right, bottom, left);
+    }
+
+    fn dock_target_body(
+        &self,
+        output: &wl_output::WlOutput,
+        scene: &Scene,
+    ) -> bead_core::pearl::Rect {
+        let body = rendering::content_input_rect(scene).unwrap_or([0; 4]);
+        let output_info = self.output.info(output);
+        let output_size = output_info
+            .as_ref()
+            .and_then(|info| info.logical_size)
+            .unwrap_or((i32::MAX / 2, i32::MAX / 2));
+        let (anchor, margins) = if let Some(anchor) = self.panel_anchor {
+            let (x, y) = panels::anchored_position(scene, anchor, output_size);
+            (Anchor::TOP | Anchor::LEFT, [y, 0, 0, x])
+        } else if let Some((position, size)) = self
+            .options
+            .panel_spec
+            .as_ref()
+            .and_then(|spec| spec.position.as_ref())
+            .zip(output_info.and_then(|info| info.logical_size))
+        {
+            let (x, y) = position(scene, self.panel_center, size);
+            (Anchor::TOP | Anchor::LEFT, [y, 0, 0, x])
+        } else {
+            let width = scene.bounds.w.ceil().max(1.) as u32;
+            let height = (scene.bounds.y + scene.bounds.h + scene.offset.1)
+                .ceil()
+                .max(1.) as u32;
+            panels::placement(
+                scene
+                    .motion
+                    .as_ref()
+                    .map_or(self.options.edge, |motion| motion.edge),
+                self.panel_center,
+                (width, height),
+                Some(output_size),
+            )
+        };
+        let width = scene.bounds.w.ceil().max(1.) as i32;
+        let height = (scene.bounds.y + scene.bounds.h + scene.offset.1)
+            .ceil()
+            .max(1.) as i32;
+        let x = if anchor.contains(Anchor::LEFT) {
+            margins[3]
+        } else if anchor.contains(Anchor::RIGHT) {
+            output_size.0 - width - margins[1]
+        } else {
+            (output_size.0 - width) / 2
+        };
+        let y = if anchor.contains(Anchor::TOP) {
+            margins[0]
+        } else if anchor.contains(Anchor::BOTTOM) {
+            output_size.1 - height - margins[2]
+        } else {
+            (output_size.1 - height) / 2
+        };
+        let (ox, oy) = self.output_origin(output);
+        bead_core::pearl::Rect::new(
+            ox + f64::from(x + body[0]),
+            oy + f64::from(y + body[1]),
+            f64::from(body[2]),
+            f64::from(body[3]),
+        )
     }
     pub(super) fn start_panel(&mut self, output: Option<&str>, open: bool) -> Result<(), String> {
         bead_core::profile::mark("panel_admission");
@@ -923,6 +1002,7 @@ impl App {
     }
     pub(super) fn release_panel(&mut self) {
         self.panel_cover = None;
+        self.panel_dock_transition = None;
         // Trace probes are weak: observing retirement must not extend raster lifetime.
         #[cfg(all(target_os = "linux", target_env = "gnu"))]
         let retired_images = self.options.trace_state.then(|| {
@@ -992,14 +1072,14 @@ impl App {
         self.release_timer = false;
         self.wallpaper_panel_released(retired_panel_epoch);
         #[cfg(feature = "native-gl")]
-        if self.surfaces.iter().all(|s| s.gl.is_none())
+        if !self.has_gl_surfaces()
             && let Some(gl) = self.gl.take()
             && let Err(e) = unsafe { gl.shutdown_exclusive() }
         {
             self.fail(e);
         }
         #[cfg(feature = "wgpu")]
-        if self.surfaces.iter().all(|s| s.gpu.is_none()) {
+        if !self.has_gpu_surfaces() {
             self.gpu = None;
         }
         if self.options.primary_factory.is_none()

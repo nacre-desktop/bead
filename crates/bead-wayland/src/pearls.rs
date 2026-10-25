@@ -153,6 +153,7 @@ pub(crate) struct Group {
     canvas_owner: Option<u64>,
     close_epoch: u64,
     cover: Option<(u64, Vec<Surface>)>,
+    dock_transition: Option<DockTransition>,
     reload_pending: bool,
     target: bool,
     output: Option<wl_output::WlOutput>,
@@ -179,6 +180,7 @@ impl Group {
             canvas_owner: None,
             close_epoch: 0,
             cover: None,
+            dock_transition: None,
             reload_pending: false,
             target: false,
             output: None,
@@ -206,6 +208,29 @@ impl Group {
     }
 }
 
+/// One reverse handoff. The animation clock starts only after the first
+/// accepted destination content commit, so a slow first raster cannot consume it.
+#[derive(Clone)]
+pub(crate) struct DockTransition {
+    pub from: pearl::Rect,
+    pub animation_id: String,
+    pub started: bool,
+}
+
+pub(super) fn interpolate_dock_rect(
+    from: pearl::Rect,
+    to: pearl::Rect,
+    progress: f32,
+) -> pearl::Rect {
+    let t = f64::from(progress.clamp(0., 1.));
+    pearl::Rect::new(
+        from.x + (to.x - from.x) * t,
+        from.y + (to.y - from.y) * t,
+        from.w + (to.w - from.w) * t,
+        from.h + (to.h - from.h) * t,
+    )
+}
+
 /// A press that may become a drag, and the drag it became.
 pub(crate) struct Gesture {
     surface: wl_surface::WlSurface,
@@ -215,6 +240,29 @@ pub(crate) struct Gesture {
 }
 
 impl App {
+    /// Renderer retirement must include parked panels and both sides of a handoff.
+    #[cfg(any(feature = "native-gl", feature = "wgpu"))]
+    fn retained_surfaces(&self) -> impl Iterator<Item = &Surface> {
+        self.surfaces
+            .iter()
+            .chain(self.panel_cover.iter().flat_map(|(_, surfaces)| surfaces))
+            .chain(self.slots.iter().flat_map(|group| {
+                group
+                    .surfaces
+                    .iter()
+                    .chain(group.cover.iter().flat_map(|(_, surfaces)| surfaces))
+            }))
+    }
+    #[cfg(feature = "native-gl")]
+    pub(super) fn has_gl_surfaces(&self) -> bool {
+        self.retained_surfaces()
+            .any(|s| s.gl.is_some() || s.handoff.as_ref().is_some_and(|h| h.gl.is_some()))
+    }
+    #[cfg(feature = "wgpu")]
+    pub(super) fn has_gpu_surfaces(&self) -> bool {
+        self.retained_surfaces()
+            .any(|s| s.gpu.is_some() || s.handoff.as_ref().is_some_and(|h| h.gpu.is_some()))
+    }
     pub(super) fn next_epoch(&mut self) -> u64 {
         self.epoch_seq += 1;
         self.epoch_seq
@@ -229,6 +277,7 @@ impl App {
         swap(&mut self.panel_canvas_owner, &mut g.canvas_owner);
         swap(&mut self.panel_close_epoch, &mut g.close_epoch);
         swap(&mut self.panel_cover, &mut g.cover);
+        swap(&mut self.panel_dock_transition, &mut g.dock_transition);
         swap(&mut self.panel_reload_pending, &mut g.reload_pending);
         swap(&mut self.panel_target, &mut g.target);
         swap(&mut self.panel_output, &mut g.output);
@@ -257,6 +306,46 @@ impl App {
         };
         self.surfaces.append(&mut g.surfaces);
         g.surfaces = mine;
+    }
+
+    pub(super) fn dock_transition_progress(&self, now: f64) -> Option<f32> {
+        let transition = self.panel_dock_transition.as_ref()?;
+        if !transition.started {
+            return Some(0.);
+        }
+        Some(
+            self.animations
+                .value(&transition.animation_id, now)
+                .or_else(|| self.panel_animations.value(&transition.animation_id, now))
+                .map_or(1., |(progress, _)| progress),
+        )
+    }
+
+    /// Start the shell-selected easing after the destination's first content frame.
+    pub(super) fn start_dock_transition_after_commit(&mut self) {
+        let Some(transition) = self.panel_dock_transition.as_mut() else {
+            return;
+        };
+        if transition.started {
+            return;
+        }
+        let now = self.started.elapsed().as_secs_f64();
+        if let Some(motion) = self
+            .companion
+            .as_ref()
+            .and_then(|(scene, _, _)| scene.motion.as_ref())
+        {
+            let curve = motion.curve.unwrap_or(if motion.spring {
+                bead_core::animation::Curve::Spring
+            } else {
+                bead_core::animation::Curve::EaseOut
+            });
+            self.animations
+                .target(&transition.animation_id, 0., now, motion.duration, curve);
+            self.animations
+                .target(&transition.animation_id, 1., now, motion.duration, curve);
+        }
+        transition.started = true;
     }
     fn blank_group(&self) -> Group {
         let (name, spec) = match self
@@ -366,7 +455,7 @@ impl App {
             })
             .collect()
     }
-    fn output_origin(&self, output: &wl_output::WlOutput) -> (f64, f64) {
+    pub(super) fn output_origin(&self, output: &wl_output::WlOutput) -> (f64, f64) {
         self.output
             .info(output)
             .and_then(|i| i.logical_position)
@@ -1098,6 +1187,10 @@ impl App {
             .iter()
             .position(|g| g.id() == Some(id) && g.is_pearl())
             .ok_or("no such pearl")?;
+        let dropped = self.slots[at]
+            .info
+            .filter(|info| info.kind == Kind::Pearl)
+            .map(|info| info.rect);
         let target = output
             .and_then(|n| self.output_named(n))
             .or_else(|| self.slots[at].surfaces.first().map(|s| s.output.clone()))
@@ -1117,6 +1210,11 @@ impl App {
             .ok_or("pearl lost its view")?;
         self.panel_target = true;
         self.panel_center = None;
+        self.panel_dock_transition = dropped.map(|from| DockTransition {
+            from,
+            animation_id: format!("bead.pearl.dock.{id}"),
+            started: false,
+        });
         drop(self.dismiss.take());
         let moved = self.panel_output.as_ref() != Some(&target);
         // Native EGL/wgpu resources must retire before their xdg role. A fresh
@@ -1729,5 +1827,20 @@ mod placement_tests {
             "B"
         );
         assert!(placement_monitor(stale, Some("B"), &[]).is_none());
+    }
+
+    #[test]
+    fn dock_transition_interpolates_monotonically_and_reaches_the_policy_endpoint() {
+        let from = pearl::Rect::new(1400., 500., 600., 400.);
+        let to = pearl::Rect::new(0., 70., 600., 400.);
+        let mut previous = from;
+        for progress in [0.25, 0.5, 0.75, 1.0] {
+            let current = interpolate_dock_rect(from, to, progress);
+            assert!(current.x <= previous.x);
+            assert!(current.y <= previous.y);
+            previous = current;
+        }
+        assert_eq!(previous, to);
+        assert_eq!(interpolate_dock_rect(from, to, 0.), from);
     }
 }

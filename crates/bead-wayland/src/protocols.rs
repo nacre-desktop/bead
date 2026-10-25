@@ -101,7 +101,7 @@ impl CompositorHandler for App {
         if let Some(i) = self.surfaces.iter().position(|s| s.wl_surface() == surface) {
             let now_seconds = self.started.elapsed().as_secs_f64();
             let animation_active = if self.surfaces[i].companion {
-                self.panel_animations.active(now_seconds)
+                self.panel_animations.active(now_seconds) || self.panel_dock_transition.is_some()
             } else if self.options.primary_factory.is_some() {
                 self.output_sessions
                     .get(&self.surfaces[i].output_name)

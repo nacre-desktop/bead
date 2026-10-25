@@ -819,6 +819,8 @@ struct WallpaperTransition {
 }
 impl Drop for Surface {
     fn drop(&mut self) {
+        // A pending cover can still own EGL resources for the original layer.
+        drop(self.handoff.take());
         if let Some(effect) = self.background.take() {
             println!("BACKGROUND_EFFECT destroyed={}", effect.id().protocol_id());
             effect.destroy();

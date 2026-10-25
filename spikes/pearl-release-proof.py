@@ -9,6 +9,7 @@ screencopy readiness, not physical scanout.
 """
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -46,8 +47,8 @@ def panel_call(self, method):
     return json.loads(reply) if isinstance(reply, str) else reply
 
 
-def capture_sequence(self, directory, trigger, seconds=2.0):
-    """Full output every 25 ms; record each screencopy protocol-ready timestamp."""
+def capture_sequence(self, directory, trigger, seconds=2.0, region=None, follow_release=False):
+    """Capture every 25 ms with a small in-flight cap and protocol-ready timestamps."""
     shutil.rmtree(directory, ignore_errors=True)
     directory.mkdir(parents=True)
     jobs, errors, marks = [], [], {}
@@ -55,6 +56,8 @@ def capture_sequence(self, directory, trigger, seconds=2.0):
     started = marks['capture_start_monotonic_ns'] / 1_000_000_000
     protocol_dir = directory / 'protocol'
     protocol_dir.mkdir()
+    if region is not None:
+        (directory / 'capture-region.json').write_text(json.dumps(region) + '\n')
 
     def run_trigger():
         try:
@@ -66,12 +69,38 @@ def capture_sequence(self, directory, trigger, seconds=2.0):
     runner.start()
     index = 0
     interval = 0.025
-    while time.monotonic() - started < seconds:
+    minimum_end_ns = marks['capture_start_monotonic_ns'] + int(seconds * 1_000_000_000)
+    maximum_end_ns = marks['capture_start_monotonic_ns'] + 15_000_000_000
+    timed_out = False
+    while True:
+        now_ns = time.monotonic_ns()
+        if now_ns >= maximum_end_ns:
+            timed_out = True
+            break
+        release_ns = None
+        if follow_release and marks.get('pointer_stdout'):
+            try:
+                release_ns = parse_pointer_release_ns(marks['pointer_stdout'])
+            except RuntimeError:
+                if not runner.is_alive():
+                    break
+        elif follow_release and not runner.is_alive():
+            break
+        if follow_release:
+            if release_ns is not None and now_ns >= max(minimum_end_ns, release_ns + 1_500_000_000):
+                break
+        elif now_ns >= minimum_end_ns:
+            break
+        active = [job for job in jobs if job[0].poll() is None]
+        if len(active) >= 3:
+            active[0][0].wait(timeout=30)
+            continue
         stamp = time.monotonic()
         ppm = directory / f'{index:03}.ppm'
         protocol_path = protocol_dir / f'{index:03}.log'
         protocol_file = protocol_path.open('w')
-        process = subprocess.Popen(['grim', str(ppm)], env=dict(self.env, WAYLAND_DEBUG='client'),
+        command = ['grim'] + (['-g', f'{region[0]},{region[1]} {region[2]}x{region[3]}'] if region else []) + [str(ppm)]
+        process = subprocess.Popen(command, env=dict(self.env, WAYLAND_DEBUG='client'),
                                    stdout=subprocess.DEVNULL, stderr=protocol_file)
         jobs.append((process, stamp, protocol_file, protocol_path))
         index += 1
@@ -89,8 +118,13 @@ def capture_sequence(self, directory, trigger, seconds=2.0):
             raise RuntimeError(f'screencopy process {number:03} failed: {process.returncode}')
         capture_ns = parse_capture_ns(protocol_path.read_text(errors='replace'))
         ppm = directory / f'{number:03}.ppm'
+        png = directory / f'{number:03}.png'
         with Image.open(ppm) as image:
-            image.convert('RGB').save(directory / f'{number:03}.png')
+            frame = image.convert('RGB')
+        if region:
+            pad_capture(frame, png, region, self.geometry['scale'], self.args.size)
+        else:
+            frame.save(png)
         ppm.unlink()
         stamps.append((capture_ns - marks['capture_start_monotonic_ns']) / 1_000_000)
         spawn_stamps.append(round((stamp - started) * 1000))
@@ -98,7 +132,27 @@ def capture_sequence(self, directory, trigger, seconds=2.0):
     (directory / 'spawn-stamps.json').write_text(json.dumps(spawn_stamps, indent=2) + '\n')
     if errors:
         raise RuntimeError(f'release trigger failed: {errors[0]}')
+    if follow_release:
+        release_ns = parse_pointer_release_ns(marks.get('pointer_stdout', ''))
+        if timed_out or time.monotonic_ns() < release_ns + 1_500_000_000:
+            raise RuntimeError('capture reached 15 s before covering 1.5 s after pointer release')
     return marks, stamps
+
+
+def pad_capture(frame, output_path, region, scale, output_size):
+    """Paste a logical-region capture into its original full-output pixel coordinates."""
+    canvas = Image.new('RGB', output_size, (0, 0, 0))
+    x = round(region[0] * scale)
+    y = round(region[1] * scale)
+    canvas.paste(frame.convert('RGB'), (x, y))
+    canvas.save(output_path)
+
+
+def parse_pointer_release_ns(pointer_stdout):
+    match = re.search(r'POINTER_RELEASE monotonic_ns=(\d+)', pointer_stdout or '')
+    if not match:
+        raise RuntimeError('pointer tool emitted no POINTER_RELEASE timestamp')
+    return int(match.group(1))
 
 
 def parse_capture_ns(protocol_log):
@@ -148,7 +202,8 @@ def locate_body(image_path, rect, scale, fill):
     return fill, [sx0 + bbox[0], sy0 + bbox[1], sx0 + bbox[2], sy0 + bbox[3]]
 
 
-def analyze(directory, final_path, stamps, rect, scale, post_release_start_ms, delta):
+def analyze(directory, final_path, stamps, rect, scale, post_release_start_ms, delta,
+            handoff_start_ms=None):
     fill = dominant_fill(final_path, rect, scale)
     if fill is None:
         raise RuntimeError('final screenshot has no measurable pearl body fill')
@@ -156,8 +211,9 @@ def analyze(directory, final_path, stamps, rect, scale, post_release_start_ms, d
     frames = []
     for path, stamp in zip(paths, stamps):
         _, bbox = locate_body(path, rect, scale, fill)
-        frames.append({'stamp_ms': stamp, 'bbox_px': bbox,
+        frames.append({'image': path.name, 'stamp_ms': stamp, 'bbox_px': bbox,
                        'post_release_proxy': stamp >= post_release_start_ms})
+    frames.sort(key=lambda frame: frame['stamp_ms'])
     post = [frame for frame in frames if frame['post_release_proxy']]
     if len(post) < 8:
         raise RuntimeError(f'only {len(post)} post-release proxy frames; at least 8 required')
@@ -173,17 +229,29 @@ def analyze(directory, final_path, stamps, rect, scale, post_release_start_ms, d
     if not reference_bbox:
         raise RuntimeError('fixed dominant RGB did not produce a final-body bbox')
     reference_size = [reference_bbox[2] - reference_bbox[0], reference_bbox[3] - reference_bbox[1]]
+    stationary_window = (post if handoff_start_ms is None else
+                         [f for f in post if f['stamp_ms'] >= handoff_start_ms])
+    if len(stationary_window) < 8:
+        raise RuntimeError(f'only {len(stationary_window)} native post-handoff proxy frames; at least 8 required')
+    stationary_visible = [f for f in stationary_window if f['bbox_px']]
     moving = any(not f['bbox_px'] or
                  max(abs(f['bbox_px'][i] - reference_bbox[i]) for i in range(4)) > 2
                  for f in visible)
+    native_blank = len(stationary_window) - len(stationary_visible)
+    post_handoff_moving = bool(native_blank) or any(not f['bbox_px'] or
+                              max(abs(f['bbox_px'][i] - reference_bbox[i]) for i in range(4)) > 2
+                              for f in stationary_visible)
     unstable_size = any(not f['bbox_px'] or
                         max(abs((f['bbox_px'][2] - f['bbox_px'][0]) - reference_size[0]),
                             abs((f['bbox_px'][3] - f['bbox_px'][1]) - reference_size[1])) > 2
-                        for f in visible)
+                        for f in stationary_visible)
     return {'fill_rgb': fill, 'frames': frames, 'post_release_frame_count': len(post),
             'post_release_blank_frames': blank, 'post_release_reversals': reversals,
             'post_release_moving': moving, 'final_body_bbox_px': reference_bbox,
-            'final_body_stable': blank == 0 and not unstable_size and not moving,
+            'post_handoff_frame_count': len(stationary_window),
+            'post_handoff_blank_frames': native_blank,
+            'post_handoff_moving': post_handoff_moving,
+            'final_body_stable': not unstable_size and not post_handoff_moving,
             'post_release_positions_px': centers,
             'post_release_sizes_px': [
                 [f['bbox_px'][2] - f['bbox_px'][0], f['bbox_px'][3] - f['bbox_px'][1]]
@@ -191,10 +259,32 @@ def analyze(directory, final_path, stamps, rect, scale, post_release_start_ms, d
 
 
 def release_proxy_ms(pointer_stdout, capture_start_ns):
-    match = re.search(r'POINTER_RELEASE monotonic_ns=(\d+)', pointer_stdout or '')
-    if not match:
-        raise RuntimeError('pointer tool emitted no POINTER_RELEASE timestamp')
-    return (int(match.group(1)) - capture_start_ns) / 1_000_000
+    return (parse_pointer_release_ns(pointer_stdout) - capture_start_ns) / 1_000_000
+
+
+def native_handoff_frame_ns(trace, pearl_id):
+    lines = trace.splitlines()
+    marker = f'PEARL_HANDOFF_COMMITTED id={pearl_id}'
+    marker_index = next((i for i, line in enumerate(lines)
+                         if re.search(re.escape(marker) + r'(?=\s|$)', line)), None)
+    if marker_index is None:
+        raise RuntimeError(f'missing {marker} in native trace')
+    for line in lines[marker_index + 1:]:
+        match = re.search(r'UI_FRAME monotonic_ns=(\d+).*\bcompanion=true(?:\s|$)', line)
+        if match:
+            return int(match.group(1))
+    raise RuntimeError(f'{marker} has no following companion UI_FRAME timestamp')
+
+
+def handoff_gate_failures(analysis):
+    failures = []
+    if analysis['post_release_blank_frames']:
+        failures.append(f"{analysis['post_release_blank_frames']} post-release blank frames")
+    if analysis['post_release_reversals']:
+        failures.append(f"{analysis['post_release_reversals']} post-release reversals")
+    if analysis['post_handoff_moving'] or not analysis['final_body_stable']:
+        failures.append('native post-handoff body is moving or unstable')
+    return failures
 
 
 def drive(self, _names):
@@ -202,13 +292,15 @@ def drive(self, _names):
         raise RuntimeError('pearl-release-proof requires --arms bead')
     if not self.args.pointer_tool:
         raise RuntimeError('--pointer-tool is required')
+    if not self.args.cpu:
+        raise RuntimeError('release proof requires --cpu so memory and pacing have a known backend')
     if tuple(self.args.size) != (2880, 1800) or self.geometry['scale'] != 1.5:
         raise RuntimeError('release proof requires 2880x1800 at scale 1.5')
     if TRIALS < 20:
         raise RuntimeError(f'PEARL_TRIALS={TRIALS} is fewer than the required 20 trials')
     out = self.out / 'release-proof'
     out.mkdir(parents=True, exist_ok=True)
-    report = {'method': '25ms full-output screencopy-ready PNG proxy; not physical scanout',
+    report = {'method': '25ms cropped screencopy-ready PNG series, black-padded to output coordinates; not physical scanout',
               'renderer': 'cpu', 'idle_memory_kib': self.rss(),
               'scale': 1.5, 'size': [2880, 1800], 'trials': [], 'required_trials': 20}
     shell_log = self.logs / 'shell.log'
@@ -257,6 +349,11 @@ def drive(self, _names):
                 raise RuntimeError(f'trial {trial + 1}: no in-bounds drag away from panel edge')
             start = [round(v * 1.5) for v in start_logical]
             end = [round((start_logical[0] + dx) * 1.5), round((start_logical[1] + dy) * 1.5)]
+            region_x = max(0, math.floor(body_x + dx - 24))
+            region_y = max(0, math.floor(body_y + dy - 24))
+            region_r = min(logical_w, math.ceil(body_x + dx + body_w + 24))
+            region_b = min(logical_h, math.ceil(body_y + dy + body_h + 24))
+            capture_region = [region_x, region_y, max(1, region_r - region_x), max(1, region_b - region_y)]
             log_mark = shell_log.stat().st_size if shell_log.exists() else 0
             self.release_pointer()
 
@@ -272,7 +369,8 @@ def drive(self, _names):
                 time.sleep(1)
 
             directory = out / f'trial-{trial + 1:02d}' / 'sequence'
-            marks, stamps = capture_sequence(self, directory, trigger)
+            marks, stamps = capture_sequence(self, directory, trigger, region=capture_region,
+                                             follow_release=True)
             trace = shell_log.read_bytes()[log_mark:].decode(errors='replace') if shell_log.exists() else ''
             (directory.parent / 'native-frame-trace.log').write_text(
                 '\n'.join(line for line in trace.splitlines()
@@ -287,6 +385,7 @@ def drive(self, _names):
                                          'failure': 'release did not detach a launcher pearl',
                                          'handoff_committed': False,
                                          'pointer_stdout': marks.get('pointer_stdout'),
+                                         'capture_region_logical': capture_region,
                                          'sequence_stamps_ms': stamps})
                 raise RuntimeError(f'trial {trial + 1}: release did not detach a launcher pearl')
             pearl = detached[-1]
@@ -302,8 +401,10 @@ def drive(self, _names):
             try:
                 release_ms = release_proxy_ms(marks.get('pointer_stdout'),
                                               marks['capture_start_monotonic_ns'])
+                handoff_ns = native_handoff_frame_ns(trace, pearl['id'])
+                handoff_ms = (handoff_ns - marks['capture_start_monotonic_ns']) / 1_000_000
                 analysis = analyze(directory, final_screen, stamps, rect, 1.5,
-                                   release_ms, [dx, dy])
+                                   release_ms, [dx, dy], handoff_start_ms=handoff_ms)
             except RuntimeError as error:
                 report['trials'].append({'trial': trial + 1, 'detached': True,
                                          'handoff_committed': True, 'pearl_id': pearl['id'],
@@ -311,6 +412,9 @@ def drive(self, _names):
                 raise
             result = {'trial': trial + 1, 'detached': True, 'handoff_committed': True,
                       'initial_body_bounds_logical': [body_x, body_y, body_w, body_h],
+                      'capture_region_logical': capture_region,
+                      'native_handoff_frame_monotonic_ns': handoff_ns,
+                      'native_handoff_frame_ms': handoff_ms,
                       'pointer_start_px': start, 'pointer_end_px': end, 'delta_logical': [dx, dy],
                       'pearl': pearl, 'pointer_stdout': marks['pointer_stdout'],
                       'docked_memory_kib': docked_memory,
@@ -324,12 +428,13 @@ def drive(self, _names):
             if analysis['post_release_frame_count'] < 8:
                 raise RuntimeError(f"trial {trial + 1}: only {analysis['post_release_frame_count']} "
                                    'post-release proxy frames; at least 8 required')
-            if (analysis['post_release_blank_frames'] or analysis['post_release_reversals'] or
-                    analysis['post_release_moving'] or not analysis['final_body_stable']):
+            failures = handoff_gate_failures(analysis)
+            if failures:
                 raise RuntimeError(f'trial {trial + 1}: post-release handoff failure: '
-                                   f"blank={analysis['post_release_blank_frames']} "
-                                   f"reversals={analysis['post_release_reversals']} "
-                                   f"moving={analysis['post_release_moving']} stable={analysis['final_body_stable']}")
+                                   + '; '.join(failures)
+                                   + f" (raw-moving={analysis['post_release_moving']}, "
+                                   f"post-handoff-moving={analysis['post_handoff_moving']}, "
+                                   f"stable={analysis['final_body_stable']})")
     finally:
         try:
             self.dispatch('pearls', 'close', 'all')

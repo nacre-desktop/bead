@@ -4,7 +4,7 @@
 //     positions are in the parent output's pixels, W H its size; drag holds left while moving
 //     relative-drag sends relative deltas while holding left; optional SCALE divides physical travel
 //   virtual-pointer X Y W H stream wheel|pixel DELTA COUNT MS   COUNT axis events, one every MS ms (B0110)
-// It connects to $WAYLAND_DISPLAY (the harness points it at its own headless labwc, never the live session),
+// It connects to $WAYLAND_DISPLAY (private labwc or nested niri, never the live session),
 // creates a wlr virtual pointer, sends one absolute motion and, with `press`, holds the left button until killed.
 // Build (needs wayland-scanner and wlr-protocols):
 //   P=/usr/share/wlr-protocols/unstable/wlr-virtual-pointer-unstable-v1.xml
