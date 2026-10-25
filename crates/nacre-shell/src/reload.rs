@@ -3624,7 +3624,7 @@ impl SceneSource for Runtime {
                 .session
                 .action_values(name, self.widget_argument(name, argument.clone()))?;
             let scene = self.session.update(changes)?;
-            return self.finish_scene(scene, false);
+            return self.finish_scene(scene);
         }
         if let Some((id, name, argument)) = &host_action
             && name == "widgets.edit"
@@ -3695,7 +3695,7 @@ impl SceneSource for Runtime {
                     _ => None,
                 }) else {
                     let scene = self.session.update(changes)?;
-                    return self.finish_scene(scene, false);
+                    return self.finish_scene(scene);
                 };
                 let before = match &old_layout {
                     bead::core::Value::List(records) => records.first(),
@@ -3703,7 +3703,7 @@ impl SceneSource for Runtime {
                 };
                 if !persistent || before == Some(&document) {
                     let scene = self.session.update(changes)?;
-                    return self.finish_scene(scene, false);
+                    return self.finish_scene(scene);
                 }
                 let old_revision = match self.session.stores.get("widgets.rev") {
                     Some(bead::core::Value::Number(revision)) => *revision as u64,
@@ -3796,7 +3796,7 @@ impl SceneSource for Runtime {
                             .or(scene)
                     }
                 };
-                return self.finish_scene(final_scene, false);
+                return self.finish_scene(final_scene);
             }
             let mut changes = self
                 .session
