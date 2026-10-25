@@ -320,7 +320,9 @@ pub fn primitive_bytes(p: &Primitive) -> usize {
     std::mem::size_of::<Primitive>()
         + match p {
             Primitive::Text { text, family, .. } => text.capacity() + family.capacity(),
-            Primitive::Polyline { points, .. } => points.capacity() * std::mem::size_of::<[f32; 2]>(),
+            Primitive::Polyline { points, .. } => {
+                points.capacity() * std::mem::size_of::<[f32; 2]>()
+            }
             Primitive::Image {
                 path, clip_polygon, ..
             } => {
