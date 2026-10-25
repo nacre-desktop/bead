@@ -1,5 +1,17 @@
 # Status
 
+## 2026-10-25 — B0105 latency investigation blocked
+
+A one-replacement frame policy leaves CPU hover at 32.09 ms and drag at 66.19 ms,
+above the 24.7 ms target. QML in the same nested chain is 95.72/98.13 ms hover/drag.
+Changing only the private parent to 120 Hz halves control hover while niri still
+advertises 60 Hz; that diagnostic is not a canonical-gate or physical-scanout pass.
+Three Home pairs pass first-key CPU, but an unexplained +1.516 MiB anonymous closed
+outlier triggered the memory stop and the queued GL candidate was canceled.
+The engine experiment is retained as a rejected patch. Only the opt-in QML probe
+and [source-pinned measurements](specs/0105-present-latency.md) are integrated; full
+probe-only remote Arch CI passes. No live desktop or installed software changed.
+
 ## 2026-10-25 — B0104 pearl drag/close (lead-accepted)
 
 Logical relative dragging, native close, bounded recovery and view-state persistence

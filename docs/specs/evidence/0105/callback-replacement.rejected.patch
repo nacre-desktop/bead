@@ -1,0 +1,230 @@
+diff --git a/crates/bead-wayland/src/policy.rs b/crates/bead-wayland/src/policy.rs
+index 3b8f061..a67624d 100644
+--- a/crates/bead-wayland/src/policy.rs
++++ b/crates/bead-wayland/src/policy.rs
+@@ -64,8 +64,27 @@ mod tests {
+ pub(crate) struct Callbacks {
+     pub pending: bool,
+     epoch: u64,
++    content: Option<u64>,
++    replaced: bool,
+ }
+ impl Callbacks {
++    /// One newly accepted scene may replace an outstanding submission. Animation
++    /// ticks still wait for the callback; a second update coalesces until then.
++    /// Presentation feedback is required so the old callback cannot acknowledge
++    /// newer content through the callback-only persistence fallback.
++    pub fn can_draw(&self, content: u64, presentation: bool) -> bool {
++        !self.pending || (presentation && !self.replaced && self.content != Some(content))
++    }
++    pub fn request_content(&mut self, content: u64) -> Option<u64> {
++        self.content = Some(content);
++        if self.pending {
++            self.replaced = true;
++            None
++        } else {
++            self.replaced = false;
++            Some(self.request())
++        }
++    }
+     pub fn request(&mut self) -> u64 {
+         self.epoch = self.epoch.wrapping_add(1);
+         self.pending = true;
+@@ -98,4 +117,23 @@ mod callback_tests {
+         assert!(c.accept(current));
+         assert!(!c.accept(current));
+     }
++    #[test]
++    fn fresh_content_can_replace_once_without_another_callback() {
++        let mut c = Callbacks::default();
++        assert!(c.can_draw(1, true));
++        let first = c.request_content(1).unwrap();
++        assert!(!c.can_draw(1, true));
++        assert!(!c.can_draw(2, false));
++        assert!(c.can_draw(2, true));
++        assert_eq!(c.request_content(2), None);
++        assert!(!c.can_draw(3, true));
++        assert!(c.accept(first));
++        assert!(c.can_draw(3, true));
++        let next = c.request_content(3).unwrap();
++        assert_ne!(next, first);
++        assert!(c.can_draw(4, true));
++        c.invalidate();
++        assert!(!c.accept(next));
++        assert!(c.can_draw(4, false));
++    }
+ }
+diff --git a/crates/bead-wayland/src/protocols.rs b/crates/bead-wayland/src/protocols.rs
+index 0b71651..c09e2ff 100644
+--- a/crates/bead-wayland/src/protocols.rs
++++ b/crates/bead-wayland/src/protocols.rs
+@@ -98,6 +98,7 @@ impl CompositorHandler for App {
+                 self.animations.active(now_seconds)
+             };
+             let s = &mut self.surfaces[i];
++            bead_core::profile::mark("frame_callback");
+             s.callbacks.pending = false;
+             let now = Instant::now();
+             if self.started.elapsed().as_secs_f64() > 2.
+diff --git a/crates/bead-wayland/src/rendering.rs b/crates/bead-wayland/src/rendering.rs
+index 7adeb91..5e36d14 100644
+--- a/crates/bead-wayland/src/rendering.rs
++++ b/crates/bead-wayland/src/rendering.rs
+@@ -439,10 +439,17 @@ impl App {
+             if !s.configured {
+                 return Ok(());
+             }
+-            if s.callbacks.pending {
++            if !s
++                .callbacks
++                .can_draw(s.ui_serial, self.presentation.is_some())
++            {
++                bead_core::profile::mark("frame_deferred");
+                 s.redraw = true;
+                 return Ok(());
+             }
++            if s.callbacks.pending {
++                bead_core::profile::mark("frame_replaced");
++            }
+             s.redraw = false;
+             let mut opaque_motion = self.options.animate;
+             let mut reveal_progress = None;
+@@ -740,22 +747,25 @@ impl App {
+                 }
+                 let surface = s.gl.as_ref().unwrap();
+                 let activate_started = Instant::now();
++                let acquire_profile = bead_core::profile::Span::new("buffer_acquire");
+                 transport.activate(surface, w as u32, h as u32)?;
++                drop(acquire_profile);
+                 if self.started.elapsed().as_secs_f64() > 2. {
+                     s.activate_ms
+                         .push(activate_started.elapsed().as_secs_f64() * 1000.);
+                 }
+                 if regions.is_empty() {
+-                    s.layer.wl_surface().frame(
+-                        qh,
+-                        FrameData {
+-                            surface: s.layer.wl_surface().clone(),
+-                            epoch: s.callbacks.request(),
+-                            generation: scene.resource_revision,
+-                            source_epoch: if s.companion { self.panel_epoch } else { 0 },
+-                        },
+-                    );
+-                    s.callbacks.pending = true;
++                    if let Some(epoch) = s.callbacks.request_content(s.ui_serial) {
++                        s.layer.wl_surface().frame(
++                            qh,
++                            FrameData {
++                                surface: s.layer.wl_surface().clone(),
++                                epoch,
++                                generation: scene.resource_revision,
++                                source_epoch: if s.companion { self.panel_epoch } else { 0 },
++                            },
++                        );
++                    }
+                     s.layer.commit();
+                     s.frames += 1;
+                     return Ok(());
+@@ -783,16 +793,17 @@ impl App {
+                         region.h as i32,
+                     );
+                 }
+-                s.layer.wl_surface().frame(
+-                    qh,
+-                    FrameData {
+-                        surface: s.layer.wl_surface().clone(),
+-                        epoch: s.callbacks.request(),
+-                        generation: scene.resource_revision,
+-                        source_epoch: if s.companion { self.panel_epoch } else { 0 },
+-                    },
+-                );
+-                s.callbacks.pending = true;
++                if let Some(epoch) = s.callbacks.request_content(s.ui_serial) {
++                    s.layer.wl_surface().frame(
++                        qh,
++                        FrameData {
++                            surface: s.layer.wl_surface().clone(),
++                            epoch,
++                            generation: scene.resource_revision,
++                            source_epoch: if s.companion { self.panel_epoch } else { 0 },
++                        },
++                    );
++                }
+                 if let Some(p) = &self.presentation {
+                     p.feedback(
+                         s.layer.wl_surface(),
+@@ -909,16 +920,17 @@ impl App {
+                         s.acquire_ms.push(acquire_ms);
+                     }
+                     s.layer.wl_surface().damage_buffer(0, 0, w, h);
+-                    s.layer.wl_surface().frame(
+-                        qh,
+-                        FrameData {
+-                            surface: s.layer.wl_surface().clone(),
+-                            epoch: s.callbacks.request(),
+-                            generation: scene.resource_revision,
+-                            source_epoch: if s.companion { self.panel_epoch } else { 0 },
+-                        },
+-                    );
+-                    s.callbacks.pending = true;
++                    if let Some(epoch) = s.callbacks.request_content(s.ui_serial) {
++                        s.layer.wl_surface().frame(
++                            qh,
++                            FrameData {
++                                surface: s.layer.wl_surface().clone(),
++                                epoch,
++                                generation: scene.resource_revision,
++                                source_epoch: if s.companion { self.panel_epoch } else { 0 },
++                            },
++                        );
++                    }
+                     if let Some(p) = &self.presentation {
+                         p.feedback(
+                             s.layer.wl_surface(),
+@@ -1003,6 +1015,7 @@ impl App {
+             }
+             // Animation history needs the fresher-pixel policy. Ordinary surfaces
+             // keep the cheap first-free path (and the existing unpainted adoption).
++            let acquire_profile = bead_core::profile::Span::new("buffer_acquire");
+             let plan = if scene.motion.is_some() {
+                 repair_plan(
+                     s.buffers.iter().map(|b| {
+@@ -1030,8 +1043,10 @@ impl App {
+                 // resize): try again shortly rather than ending the whole shell.
+                 s.redraw = true;
+                 busy = true;
++                bead_core::profile::mark("buffer_busy");
+                 return Ok(());
+             };
++            drop(acquire_profile);
+             // An older painted slot can still owe an entire animation repaint.
+             // Copy fresher pixels and their matching repairs together, just as
+             // for an unpainted spare left by pool compaction.
+@@ -1120,16 +1135,17 @@ impl App {
+                     region.h as i32,
+                 );
+             }
+-            s.layer.wl_surface().frame(
+-                qh,
+-                FrameData {
+-                    surface: s.layer.wl_surface().clone(),
+-                    epoch: s.callbacks.request(),
+-                    generation: scene.resource_revision,
+-                    source_epoch: if s.companion { self.panel_epoch } else { 0 },
+-                },
+-            );
+-            s.callbacks.pending = true;
++            if let Some(epoch) = s.callbacks.request_content(s.ui_serial) {
++                s.layer.wl_surface().frame(
++                    qh,
++                    FrameData {
++                        surface: s.layer.wl_surface().clone(),
++                        epoch,
++                        generation: scene.resource_revision,
++                        source_epoch: if s.companion { self.panel_epoch } else { 0 },
++                    },
++                );
++            }
+             if let Some(p) = &self.presentation {
+                 p.feedback(
+                     s.layer.wl_surface(),

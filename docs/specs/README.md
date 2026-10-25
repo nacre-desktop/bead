@@ -12,6 +12,7 @@ acceptance remains open. The dated transfer and execution receipts below remain 
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
+| 0 | [B0105 Present latency](0105-present-latency.md) | Blocked — CPU latency gates unmet; unexplained +1.516 MiB anonymous outlier stops the rejected scheduling candidate | Probe and frozen-source evidence only. GL candidate stopped before execution; needs a verified capture cadence and a live-equivalent lag reproduction. |
 | 0 | [B0098 Sidebar and Settings](0098-sidebar-settings-owner.md) | Review candidate — Pin/outside/unpin pointer proof, QML controls/lip, output-aware Settings size, shared scroll conversion/bounds | Full remote Arch CI; paired evidence and explicit physical-wheel, kinetic-scroll and integration gaps. No live change. |
 | 4 | [B0099 Video wallpaper at the QML cost](0099-wallpaper-hwdec.md) | Review - `bead-wallpaper-video` presents through EGL + libmpv OpenGL with zero-copy VA-API, automatic shared-memory fallback without a GPU; desktop bench against the QML wallpaper (spikes/wallpaper-video-bench.py) | Laptop (Intel xe) run by the lead; full remote CI; smoke proves the fallback. |
 | 0 | [B0101 Bar follow-up](0101-bar-followup.md) | Review - blended pearl enamel and workspace thread, live title cue animated with the dwell, hover no longer lost within an event; status pill matches QML | Full CI on dev-2; QML/Bead pairs in `evidence/0101` |

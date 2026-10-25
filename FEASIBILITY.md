@@ -1,5 +1,24 @@
 # Feasibility
 
+## 2026-10-25 — B0105 rejected callback replacement
+
+An extra pending-frame replacement increases matched updates but leaves CPU latency above target.
+QML is slower in this private chain, so the live comparison is not reproduced.
+A private-parent refresh diagnostic shows the nominal niri mode is insufficient to establish cadence.
+One +1.516 MiB anonymous closed-memory outlier requires a stop; the GL candidate was canceled.
+No engine scheduling change is integrated. Full probe-only remote Arch CI passes.
+
+| Measurement | Control | Rejected experiment |
+| --- | ---: | ---: |
+| CPU hover p50/p99 | 32.09/32.13 ms | 32.09/32.12 ms |
+| CPU drag p50/p99 | 66.45/77.15 ms | 66.19/71.62 ms |
+| QML hover / drag p50 | reference | 95.72 / 98.13 ms |
+| Home first-key CPU median | 7.313 ms | 7.323 ms |
+| Home idle/open/closed paired unreclaimable Δ | reference | −0.035/−0.156/+0.090 MiB |
+| Same control, parent 60→120 Hz, hover p50 | 32.09 ms | 16.08 ms (diagnostic) |
+
+[Stages, gates, memory outlier, sources and paired images](docs/specs/0105-present-latency.md).
+
 ## 2026-10-25 — B0104 pearl drag/close, lead-accepted memory exception
 
 Logical dragging and native-window close repairs pass the full remote Arch checks.
