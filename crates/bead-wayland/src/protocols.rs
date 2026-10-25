@@ -205,6 +205,19 @@ impl Dispatch<WpFractionalScaleV1, wl_surface::WlSurface> for App {
             return;
         }
         if let wp_fractional_scale_v1::Event::PreferredScale { scale } = event
+            && let Some(i) = state.surfaces.iter().position(|surface_state| {
+                surface_state
+                    .prepared_native
+                    .as_ref()
+                    .is_some_and(|prepared| {
+                        prepared.window.as_ref().is_some_and(|window| window.wl_surface() == surface)
+                    })
+            })
+        {
+            state.prepared_native_scale_changed(i, scale);
+            return;
+        }
+        if let wp_fractional_scale_v1::Event::PreferredScale { scale } = event
             && let Some(i) = state
                 .surfaces
                 .iter()

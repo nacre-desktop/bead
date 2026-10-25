@@ -1018,6 +1018,7 @@ impl App {
     pub(super) fn release_panel(&mut self) {
         self.panel_cover = None;
         self.panel_dock_transition = None;
+        self.cancel_prepared_native();
         // Trace probes are weak: observing retirement must not extend raster lifetime.
         #[cfg(all(target_os = "linux", target_env = "gnu"))]
         let retired_images = self.options.trace_state.then(|| {

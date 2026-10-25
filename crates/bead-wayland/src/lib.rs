@@ -253,6 +253,15 @@ pub enum UiEvent {
         rect: bead_core::pearl::Rect,
         success: bool,
     },
+    /// Completion of the hidden fixed-anchor prewarm; generation rejects a late
+    /// result after a size change during the drag.
+    NativePearlPrewarmed {
+        id: u32,
+        epoch: u64,
+        generation: u64,
+        rect: bead_core::pearl::Rect,
+        success: bool,
+    },
     CompanionVisibility(bool),
     /// Shell-wide hide: `None` toggles. Wallpaper surfaces are never affected.
     ShellHidden(Option<bool>),
@@ -769,6 +778,7 @@ struct Surface {
     /// Fresh xdg role used while detached. The layer role remains available for
     /// docking because Wayland surfaces cannot change roles.
     native: Option<smithay_client_toolkit::shell::xdg::window::Window>,
+    prepared_native: Option<pearls::PreparedNative>,
     handoff: Option<pearls::Handoff>,
     pool: SlotPool,
     #[cfg(feature = "wgpu")]
@@ -830,6 +840,13 @@ impl Surface {
     fn commit(&self) {
         self.wl_surface().commit();
     }
+    fn owns_surface(&self, surface: &wl_surface::WlSurface) -> bool {
+        self.wl_surface() == surface
+            || self
+                .prepared_native
+                .as_ref()
+                .is_some_and(|prepared| prepared.window.wl_surface() == surface)
+    }
 }
 struct WallpaperSurface {
     palette: Option<bead_render::Palette>,
@@ -859,6 +876,7 @@ struct WallpaperTransition {
 }
 impl Drop for Surface {
     fn drop(&mut self) {
+        drop(self.prepared_native.take());
         // A pending cover can still own EGL resources for the original layer.
         drop(self.handoff.take());
         if let Some(effect) = self.background.take() {

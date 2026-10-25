@@ -606,6 +606,47 @@ impl App {
         let result = (|| -> Result<(), Box<dyn Error>> {
             let s = &mut self.surfaces[index];
             let wl_surface = s.wl_surface().clone();
+            if s.configured
+                && !s.callbacks.pending
+                && let Some(first_frame) = s
+                    .handoff
+                    .as_ref()
+                    .and_then(|handoff| handoff.first_frame.as_ref())
+            {
+                let generation = self.companion.as_ref().map_or(self.scene.resource_revision, |(scene, _, _)| scene.resource_revision);
+                let source_epoch = if s.companion { self.panel_epoch } else { 0 };
+                let (w, h, _, _) = buffer_dimensions(s.width, s.height, s.scale120)?;
+                wl_surface.damage_buffer(0, 0, w, h);
+                wl_surface.frame(
+                    qh,
+                    FrameData {
+                        surface: wl_surface.clone(),
+                        epoch: s.callbacks.request(),
+                        generation,
+                        source_epoch,
+                    },
+                );
+                s.callbacks.pending = true;
+                s.redraw = false;
+                s.presented_generation = None;
+                if let Some(presentation) = &self.presentation {
+                    presentation.feedback(
+                        &wl_surface,
+                        qh,
+                        PresentationData {
+                            source_epoch,
+                            update: s.ui_serial,
+                            surface: wl_surface.clone(),
+                            generation,
+                        },
+                    );
+                }
+                first_frame.attach_to(&wl_surface)?;
+                bead_core::profile::mark("panel_commit");
+                wl_surface.commit();
+                s.frames += 1;
+                return Ok(());
+            }
             let (scene, renderer, _kind, panel) = if s.companion {
                 let (scene, renderer, kind) =
                     self.companion.as_mut().ok_or("missing companion scene")?;
@@ -1393,11 +1434,38 @@ impl App {
                 bead_core::profile::mark("panel_commit");
             }
             wl_surface.commit();
+            if s.native.is_none() && s.prepared_native.is_some() {
+                let slot = b.buffer.slot();
+                let snapshot = s
+                    .pool
+                    .create_buffer_in(
+                        &slot,
+                        w,
+                        h,
+                        stride,
+                        if format == PixelFormat::Rgba {
+                            wl_shm::Format::Abgr8888
+                        } else {
+                            wl_shm::Format::Argb8888
+                        },
+                    )
+                    .ok();
+                if let Some(prepared) = s.prepared_native.as_mut() {
+                    prepared.snapshot = snapshot;
+                    prepared.snapshot_size_generation = prepared.size_generation;
+                    prepared.snapshot_ui_serial = s.ui_serial;
+                    prepared.snapshot_size = (s.width, s.height);
+                    prepared.snapshot_scale120 = s.scale120;
+                }
+            }
             b.pending.clear();
             s.previous = Some(current);
             s.frames += 1;
             Ok(())
         })();
+        if result.is_ok() && self.surfaces[index].frames > previous_frames {
+            self.log_prepared_native_ready(index);
+        }
         if result.is_ok()
             && self.surfaces[index].companion
             && self.surfaces[index].frames > previous_frames

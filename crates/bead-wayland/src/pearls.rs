@@ -44,6 +44,9 @@ pub struct NativePearlOptions {
     /// Complete only once the compositor has applied and settled the requested geometry.
     pub place: std::sync::Arc<dyn Fn(NativePearlPlacement, NativePearlComplete) + Send + Sync>,
     pub watch: Option<NativePearlWatch>,
+    /// The host can move floating toplevels with `wl_surface.offset` on release.
+    /// Opt in only when this backend behavior has been verified.
+    pub surface_offset_positioning: bool,
 }
 
 /// Pins the old layer's last frame, including fractional viewport and renderer
@@ -54,6 +57,7 @@ pub(crate) struct Handoff {
     viewport: Option<WpViewport>,
     pool: SlotPool,
     buffers: Vec<Reusable>,
+    pub(super) first_frame: Option<Buffer>,
     #[cfg(feature = "wgpu")]
     gpu: Option<bead_render::gpu::Surface>,
     #[cfg(feature = "native-gl")]
@@ -69,6 +73,42 @@ impl Drop for Handoff {
         if let Some(effect) = self.background.take() {
             effect.destroy();
         }
+        if let Some(f) = self.fractional.take() {
+            f.destroy();
+        }
+        if let Some(v) = self.viewport.take() {
+            v.destroy();
+        }
+    }
+}
+
+/// A configured, transparent native target prepared while its source layer keeps
+/// rendering and following the drag. Its last SHM snapshot is never attached
+/// until the release geometry has been applied.
+pub(crate) struct PreparedNative {
+    // Destroy surface-attached protocol objects before SCTK's owned wl_surface.
+    pub(super) fractional: Option<WpFractionalScaleV1>,
+    pub(super) viewport: Option<WpViewport>,
+    pub(super) window: Option<smithay_client_toolkit::shell::xdg::window::Window>,
+    pub(super) pool: Option<SlotPool>,
+    pub(super) buffers: Vec<Reusable>,
+    pub(super) snapshot: Option<Buffer>,
+    pub(super) anchor: pearl::Rect,
+    pub(super) request: pearl::Rect,
+    pub(super) epoch: u64,
+    pub(super) size_generation: u64,
+    pub(super) source_size: (u32, u32),
+    pub(super) scale120: u32,
+    pub(super) configured: bool,
+    pub(super) placed: bool,
+    pub(super) snapshot_size_generation: u64,
+    pub(super) snapshot_ui_serial: u64,
+    pub(super) snapshot_size: (u32, u32),
+    pub(super) snapshot_scale120: u32,
+    pub(super) ready_logged_generation: Option<u64>,
+}
+impl Drop for PreparedNative {
+    fn drop(&mut self) {
         if let Some(f) = self.fractional.take() {
             f.destroy();
         }
@@ -201,7 +241,7 @@ impl Group {
         self.info.map(|i| i.id)
     }
     pub(crate) fn owns(&self, surface: &wl_surface::WlSurface) -> bool {
-        self.surfaces.iter().any(|s| s.wl_surface() == surface)
+        self.surfaces.iter().any(|s| s.owns_surface(surface))
     }
     pub(crate) fn alive(&self) -> bool {
         self.runtime.is_some() && !self.surfaces.is_empty()
@@ -596,11 +636,15 @@ impl App {
     /// With the slot swapped in: reposition, hand focus to click, tell the view.
     fn become_pearl(&mut self, native: bool) {
         self.panel_ui(UiEvent::PanelDetached(true));
-        if native
-            && self.native_pearls_enabled()
-            && let Err(error) = self.promote_native_pearl()
-        {
-            eprintln!("PEARL_NATIVE_ERROR {error}");
+        if self.native_pearls_enabled() {
+            let result = if native {
+                self.promote_native_pearl()
+            } else {
+                self.prepare_native_pearl()
+            };
+            if let Err(error) = result {
+                eprintln!("PEARL_NATIVE_ERROR {error}");
+            }
         }
         self.place_pearl_surfaces();
     }
@@ -611,6 +655,110 @@ impl App {
                 .pearls
                 .as_ref()
                 .is_some_and(|p| p.native.is_some())
+    }
+
+    /// Create the native target while the current layer remains the active
+    /// renderer and input surface. The target stays transparent until release.
+    fn prepare_native_pearl(&mut self) -> Result<(), String> {
+        let (Some(info), Some(name), Some(native)) = (
+            self.pearl,
+            self.panel_name.clone(),
+            self.options.pearls.as_ref().and_then(|p| p.native.clone()),
+        ) else {
+            return Ok(());
+        };
+        if !native.surface_offset_positioning {
+            return Ok(());
+        }
+        let id = info.id;
+        let xdg = self.xdg.as_ref().ok_or("compositor has no xdg-shell")?;
+        let qh = self.qh.clone();
+        for i in 0..self.surfaces.len() {
+            if !self.surfaces[i].companion || self.surfaces[i].native.is_some() {
+                continue;
+            }
+            if self.surfaces[i].prepared_native.is_some() {
+                continue;
+            }
+            let surface = self.compositor.create_surface(&qh);
+            if surface.version() < 5 {
+                continue;
+            }
+            let fractional = if self.viewporter.is_some() {
+                self.fractional
+                    .as_ref()
+                    .map(|manager| manager.get_fractional_scale(&surface, &qh, surface.clone()))
+            } else {
+                None
+            };
+            let viewport = if fractional.is_some() {
+                self.viewporter
+                    .as_ref()
+                    .map(|manager| manager.get_viewport(&surface, &qh, ()))
+            } else {
+                None
+            };
+            let window = xdg.create_window(
+                surface,
+                smithay_client_toolkit::shell::xdg::window::WindowDecorations::RequestClient,
+                &qh,
+            );
+            window.set_title((native.title)(id, &name));
+            window.set_app_id("bead.pearl");
+            let body = self
+                .companion
+                .as_ref()
+                .and_then(|(scene, _, _)| rendering::content_window_rect(scene));
+            let (min_width, min_height) = body
+                .map(|[_, _, w, h]| (w.max(1) as u32, h.max(1) as u32))
+                .unwrap_or((self.surfaces[i].width.max(1), self.surfaces[i].height.max(1)));
+            window.set_min_size(Some((min_width, min_height)));
+            window.set_max_size(Some((min_width, min_height)));
+            if let Some([x, y, w, h]) = body {
+                smithay_client_toolkit::shell::xdg::XdgSurface::set_window_geometry(
+                    &window,
+                    x.max(0) as u32,
+                    y.max(0) as u32,
+                    w.max(1) as u32,
+                    h.max(1) as u32,
+                );
+            }
+            window.commit();
+            self.surfaces[i].prepared_native = Some(PreparedNative {
+                fractional,
+                viewport,
+                window,
+                pool: Some(SlotPool::new(4096, &self.shm).map_err(|e| e.to_string())?),
+                buffers: Vec::new(),
+                snapshot: None,
+                anchor: info.rect,
+                request: info.rect,
+                epoch: self.panel_epoch,
+                size_generation: 1,
+                source_size: (self.surfaces[i].width, self.surfaces[i].height),
+                scale120: self.surfaces[i].scale120,
+                configured: false,
+                placed: false,
+                snapshot_size_generation: 0,
+                snapshot_ui_serial: 0,
+                snapshot_size: (0, 0),
+                snapshot_scale120: 0,
+                ready_logged_generation: None,
+            });
+        }
+        if self.pearl_watch.is_none()
+            && let Some(watch) = native.watch
+        {
+            let sender = self
+                .event_sender
+                .clone()
+                .ok_or("UI event channel unavailable")?;
+            let notify: Box<dyn Fn(NativePearlMotion) + Send + Sync> = Box::new(move |motion| {
+                let _ = sender.send(UiEvent::NativePearlMotion(motion));
+            });
+            self.pearl_watch = watch(notify);
+        }
+        Ok(())
     }
     fn promote_native_pearl(&mut self) -> Result<(), String> {
         let id = self.pearl.ok_or("no pearl to promote")?.id;
@@ -686,6 +834,7 @@ impl App {
                     SlotPool::new(4096, &self.shm).map_err(|e| e.to_string())?,
                 ),
                 buffers: std::mem::take(&mut s.buffers),
+                first_frame: None,
                 #[cfg(feature = "wgpu")]
                 gpu: s.gpu.take(),
                 #[cfg(feature = "native-gl")]
@@ -773,33 +922,31 @@ impl App {
     /// A restored pearl can map before its worker replaces the placeholder scene.
     /// Keep native buffer size and window geometry in step with accepted content.
     pub(super) fn sync_native_pearl_scene(&mut self) -> bool {
-        if !self
-            .surfaces
-            .iter()
-            .any(|s| s.companion && s.native.is_some())
-        {
+        if !self.surfaces.iter().any(|surface| {
+            surface.companion
+                && (surface.native.is_some() || surface.prepared_native.is_some())
+        }) {
             return false;
         }
         let Some((scene, _, _)) = &self.companion else {
             return false;
         };
         let width = scene.bounds.w.ceil().max(1.) as u32;
-        let height =
-            (scene.bounds.y + scene.bounds.h + scene.slide.map_or(scene.offset.1, |s| s.open_y))
-                .ceil()
-                .max(1.) as u32;
+        let height = (scene.bounds.y + scene.bounds.h + scene.slide.map_or(scene.offset.1, |s| s.open_y))
+            .ceil()
+            .max(1.) as u32;
         let body = rendering::content_window_rect(scene);
         let previous = self.pearl.map(|info| info.rect);
         if let Some([_, _, w, h]) = body {
             self.bound_native_pearl_body(w, h);
         }
         let mut changed = previous != self.pearl.map(|info| info.rect);
-        for surface in self
-            .surfaces
-            .iter_mut()
-            .filter(|s| s.companion && s.native.is_some())
-        {
-            if surface.width != width || surface.height != height {
+        for surface in self.surfaces.iter_mut().filter(|surface| {
+            surface.companion
+                && (surface.native.is_some() || surface.prepared_native.is_some())
+        }) {
+            let size_changed = surface.width != width || surface.height != height;
+            if size_changed {
                 surface.callbacks.invalidate();
                 surface.width = width;
                 surface.height = height;
@@ -809,17 +956,56 @@ impl App {
             if let Some(viewport) = &surface.viewport {
                 viewport.set_destination(width as i32, height as i32);
             }
-            let window = surface.native.as_ref().unwrap();
-            if let Some([x, y, w, h]) = body {
-                smithay_client_toolkit::shell::xdg::XdgSurface::set_window_geometry(
-                    window,
-                    x.max(0) as u32,
-                    y.max(0) as u32,
-                    w.max(1) as u32,
-                    h.max(1) as u32,
-                );
-                window.set_min_size(Some((w.max(1) as u32, h.max(1) as u32)));
-                window.set_max_size(Some((w.max(1) as u32, h.max(1) as u32)));
+            if let Some(window) = surface.native.as_ref() {
+                if let Some([x, y, w, h]) = body {
+                    smithay_client_toolkit::shell::xdg::XdgSurface::set_window_geometry(
+                        window,
+                        x.max(0) as u32,
+                        y.max(0) as u32,
+                        w.max(1) as u32,
+                        h.max(1) as u32,
+                    );
+                    window.set_min_size(Some((w.max(1) as u32, h.max(1) as u32)));
+                    window.set_max_size(Some((w.max(1) as u32, h.max(1) as u32)));
+                }
+            }
+            if let Some(prepared) = surface.prepared_native.as_mut()
+                && (size_changed
+                    || prepared.source_size != (width, height)
+                    || self.pearl.is_some_and(|info| {
+                        prepared.anchor.w != info.rect.w || prepared.anchor.h != info.rect.h
+                    }))
+            {
+                if let Some(window) = prepared.window.as_ref()
+                    && let Some([x, y, w, h]) = body
+                {
+                    smithay_client_toolkit::shell::xdg::XdgSurface::set_window_geometry(
+                        window,
+                        x.max(0) as u32,
+                        y.max(0) as u32,
+                        w.max(1) as u32,
+                        h.max(1) as u32,
+                    );
+                    window.set_min_size(Some((w.max(1) as u32, h.max(1) as u32)));
+                    window.set_max_size(Some((w.max(1) as u32, h.max(1) as u32)));
+                    window.commit();
+                }
+                prepared.size_generation = prepared.size_generation.wrapping_add(1);
+                prepared.source_size = (width, height);
+                prepared.configured = false;
+                prepared.placed = false;
+                prepared.snapshot = None;
+                prepared.snapshot_size_generation = 0;
+                prepared.ready_logged_generation = None;
+                if let Some(info) = self.pearl {
+                    prepared.anchor = pearl::Rect::new(
+                        prepared.anchor.x,
+                        prepared.anchor.y,
+                        info.rect.w,
+                        info.rect.h,
+                    );
+                    prepared.request = prepared.anchor;
+                }
             }
         }
         changed
@@ -930,14 +1116,50 @@ impl App {
                 info.rect = rect;
             }
             app.reposition_companions(false);
-            app.place_native_pearl(false);
+            if !app
+                .surfaces
+                .iter()
+                .any(|surface| surface.prepared_native.is_some())
+            {
+                app.place_native_pearl(false);
+            }
         });
     }
+    pub(super) fn prepared_native_scale_changed(&mut self, i: usize, scale120: u32) {
+        let Some(prepared) = self
+            .surfaces
+            .get_mut(i)
+            .and_then(|surface| surface.prepared_native.as_mut())
+        else {
+            return;
+        };
+        if prepared.scale120 == scale120 {
+            return;
+        }
+        prepared.size_generation = prepared.size_generation.wrapping_add(1);
+        prepared.scale120 = scale120;
+        prepared.configured = false;
+        prepared.placed = false;
+        prepared.snapshot = None;
+        prepared.snapshot_size_generation = 0;
+        prepared.ready_logged_generation = None;
+        self.prepared_window_configure(i);
+    }
+
     pub(super) fn native_window_configure(
         &mut self,
         window: &smithay_client_toolkit::shell::xdg::window::Window,
         configure: smithay_client_toolkit::shell::xdg::window::WindowConfigure,
     ) {
+        if let Some(i) = self.surfaces.iter().position(|surface| {
+            surface
+                .prepared_native
+                .as_ref()
+                .is_some_and(|prepared| prepared.window.as_ref() == Some(window))
+        }) {
+            self.prepared_window_configure(i);
+            return;
+        }
         let Some(i) = self
             .surfaces
             .iter()
@@ -968,6 +1190,323 @@ impl App {
         }
         let qh = self.qh.clone();
         self.draw(i, &qh);
+    }
+
+    fn prepared_window_configure(&mut self, i: usize) {
+        let s = &mut self.surfaces[i];
+        let Some(prepared) = s.prepared_native.as_mut() else {
+            return;
+        };
+        if prepared.configured
+            && prepared.source_size == (s.width, s.height)
+            && prepared.scale120 == s.scale120
+        {
+            return;
+        }
+        let snapshot_current = prepared.snapshot.is_some()
+            && prepared.snapshot_size_generation == prepared.size_generation
+            && prepared.snapshot_size == (s.width, s.height)
+            && prepared.snapshot_scale120 == s.scale120
+            && prepared.snapshot_ui_serial == s.ui_serial;
+        let Some(window) = prepared.window.as_ref() else {
+            return;
+        };
+        let surface = window.wl_surface().clone();
+        let (buffer_width, buffer_height) = if prepared.viewport.is_some() {
+            (1, 1)
+        } else {
+            (s.width as i32, s.height as i32)
+        };
+        let scale120 = if prepared.viewport.is_some() { 120 } else { prepared.scale120 };
+        let (w, h, stride, _) = match buffer_dimensions(buffer_width as u32, buffer_height as u32, scale120) {
+            Ok(dimensions) => dimensions,
+            Err(error) => {
+                eprintln!("PEARL_PREWARM_ERROR {error}");
+                return;
+            }
+        };
+        let Some(pool) = prepared.pool.as_mut() else {
+            eprintln!("PEARL_PREWARM_ERROR bootstrap pool is unavailable");
+            return;
+        };
+        let Ok((buffer, canvas)) = pool.create_buffer(w, h, stride, wl_shm::Format::Argb8888)
+        else {
+            eprintln!("PEARL_PREWARM_ERROR transparent bootstrap allocation failed");
+            return;
+        };
+        canvas.fill(0);
+        let Ok(empty) = Region::new(&self.compositor) else {
+            eprintln!("PEARL_PREWARM_ERROR input region allocation failed");
+            return;
+        };
+        surface.set_input_region(Some(empty.wl_region()));
+        if let Some(viewport) = &prepared.viewport {
+            surface.set_buffer_scale(1);
+            viewport.set_destination(s.width as i32, s.height as i32);
+        } else {
+            surface.set_buffer_scale((prepared.scale120 / 120) as i32);
+        }
+        if let Err(error) = buffer.attach_to(&surface) {
+            eprintln!("PEARL_PREWARM_ERROR {error}");
+            return;
+        }
+        surface.damage_buffer(0, 0, w, h);
+        surface.commit();
+        prepared.buffers.push(Reusable {
+            buffer,
+            pending: Vec::new(),
+            painted: false,
+        });
+        prepared.source_size = (s.width, s.height);
+        prepared.configured = true;
+        prepared.placed = false;
+        if !snapshot_current {
+            prepared.snapshot = None;
+        }
+        if let Some(info) = self.pearl {
+            prepared.anchor = pearl::Rect::new(
+                prepared.anchor.x,
+                prepared.anchor.y,
+                info.rect.w,
+                info.rect.h,
+            );
+            prepared.request = prepared.anchor;
+        }
+        self.place_prepared_native(i);
+    }
+
+    fn place_prepared_native(&mut self, i: usize) {
+        let (Some(info), Some(name), Some(native), Some(prepared)) = (
+            self.pearl,
+            self.panel_name.clone(),
+            self.options.pearls.as_ref().and_then(|p| p.native.clone()),
+            self.surfaces.get(i).and_then(|s| s.prepared_native.as_ref()),
+        ) else {
+            return;
+        };
+        if !prepared.configured {
+            return;
+        }
+        let rect = prepared.request;
+        let epoch = prepared.epoch;
+        let generation = prepared.size_generation;
+        let sender = self.event_sender.clone();
+        (native.place)(
+            NativePearlPlacement {
+                id: info.id,
+                view: name.clone(),
+                title: (native.title)(info.id, &name),
+                rect,
+                first: true,
+            },
+            Box::new(move |success| {
+                if let Some(sender) = sender {
+                    let _ = sender.send(UiEvent::NativePearlPrewarmed {
+                        id: info.id,
+                        epoch,
+                        generation,
+                        rect,
+                        success,
+                    });
+                }
+            }),
+        );
+    }
+
+    pub(super) fn native_pearl_prewarmed(
+        &mut self,
+        epoch: u64,
+        generation: u64,
+        rect: pearl::Rect,
+        success: bool,
+    ) {
+        if self.panel_epoch != epoch {
+            return;
+        }
+        let index = self.surfaces.iter_mut().position(|surface| {
+            let Some(prepared) = surface.prepared_native.as_mut() else {
+                return false;
+            };
+            if prepared.epoch != epoch
+                || prepared.size_generation != generation
+                || prepared.request != rect
+                || !prepared.configured
+            {
+                return false;
+            }
+            if success {
+                prepared.placed = true;
+            }
+            true
+        });
+        let Some(index) = index else {
+            return;
+        };
+        if !success {
+            for surface in &mut self.surfaces {
+                if surface
+                    .prepared_native
+                    .as_ref()
+                    .is_some_and(|prepared| {
+                        prepared.epoch == epoch && prepared.size_generation == generation
+                    })
+                {
+                    surface.prepared_native = None;
+                }
+            }
+            eprintln!("PEARL_PREWARM_FAILED; release will use covered fallback");
+        } else {
+            self.log_prepared_native_ready(index);
+        }
+    }
+
+    pub(super) fn log_prepared_native_ready(&mut self, i: usize) {
+        let id = self.pearl.map_or(0, |info| info.id);
+        let Some(surface) = self.surfaces.get_mut(i) else {
+            return;
+        };
+        let Some(prepared) = surface.prepared_native.as_mut() else {
+            return;
+        };
+        let snapshot = prepared.snapshot.as_ref().map(|_| policy::PreparedFrameKey {
+            generation: prepared.snapshot_size_generation,
+            ui_serial: prepared.snapshot_ui_serial,
+            size: prepared.snapshot_size,
+            scale120: prepared.snapshot_scale120,
+        });
+        let current = policy::PreparedFrameKey {
+            generation: prepared.size_generation,
+            ui_serial: surface.ui_serial,
+            size: (surface.width, surface.height),
+            scale120: surface.scale120,
+        };
+        if prepared.placed
+            && policy::prepared_frame_ready(prepared.configured, prepared.placed, snapshot, current)
+            && prepared.ready_logged_generation != Some(prepared.size_generation)
+        {
+            prepared.ready_logged_generation = Some(prepared.size_generation);
+            bead_core::vprintln!(
+                "PEARL_PREWARM_READY id={} epoch={} generation={} ui_serial={} monotonic_ns={}",
+                id,
+                prepared.epoch,
+                prepared.size_generation,
+                surface.ui_serial,
+                bead_core::profile::monotonic_ns()
+            );
+        }
+    }
+
+    fn cancel_prepared_native(&mut self) {
+        for surface in &mut self.surfaces {
+            surface.prepared_native = None;
+        }
+    }
+
+    fn activate_prepared_native(&mut self, rect: pearl::Rect) -> bool {
+        let Some(native) = self.options.pearls.as_ref().and_then(|p| p.native.as_ref()) else {
+            return false;
+        };
+        if !native.surface_offset_positioning {
+            return false;
+        }
+        let indices: Vec<_> = self
+            .surfaces
+            .iter()
+            .enumerate()
+            .filter(|(_, surface)| surface.companion)
+            .map(|(index, _)| index)
+            .collect();
+        if indices.is_empty()
+            || indices.iter().any(|&i| {
+                let surface = &self.surfaces[i];
+                let Some(prepared) = surface.prepared_native.as_ref() else {
+                    return true;
+                };
+                prepared
+                    .window
+                    .as_ref()
+                    .is_none_or(|window| window.wl_surface().version() < 5)
+                    || !policy::prepared_frame_ready(
+                        prepared.configured,
+                        prepared.placed,
+                        prepared.snapshot.as_ref().map(|_| policy::PreparedFrameKey {
+                            generation: prepared.snapshot_size_generation,
+                            ui_serial: prepared.snapshot_ui_serial,
+                            size: prepared.snapshot_size,
+                            scale120: prepared.snapshot_scale120,
+                        }),
+                        policy::PreparedFrameKey {
+                            generation: prepared.size_generation,
+                            ui_serial: surface.ui_serial,
+                            size: (surface.width, surface.height),
+                            scale120: surface.scale120,
+                        },
+                    )
+                    || prepared.source_size != (surface.width, surface.height)
+            })
+        {
+            return false;
+        }
+        if let Some(info) = &mut self.pearl {
+            info.rect = rect;
+        }
+        for i in indices {
+            let s = &mut self.surfaces[i];
+            let mut prepared = s.prepared_native.take().unwrap();
+            let surface = prepared.window.as_ref().unwrap().wl_surface().clone();
+            let dx = (rect.x - prepared.anchor.x).round() as i32;
+            let dy = (rect.y - prepared.anchor.y).round() as i32;
+            surface.offset(dx, dy);
+            if let Some([x, y, w, h]) = s.input_rect.filter(|_| s.input_visible == Some(true)) {
+                if let Ok(region) = Region::new(&self.compositor) {
+                    if w > 0 && h > 0 {
+                        region.add(x, y, w, h);
+                    }
+                    surface.set_input_region(Some(region.wl_region()));
+                }
+            } else if let Ok(empty) = Region::new(&self.compositor) {
+                surface.set_input_region(Some(empty.wl_region()));
+            }
+            let snapshot = prepared.snapshot.take();
+            let mut handoff = Handoff {
+                gate: Default::default(),
+                fractional: s.fractional.take(),
+                viewport: s.viewport.take(),
+                pool: prepared.pool.take().unwrap(),
+                buffers: std::mem::take(&mut prepared.buffers),
+                first_frame: snapshot,
+                #[cfg(feature = "wgpu")]
+                gpu: s.gpu.take(),
+                #[cfg(feature = "native-gl")]
+                gl: s.gl.take(),
+                decorations: s.decorations.take(),
+                background: s.background.take(),
+                background_size: s.background_size.take(),
+                size: (s.width, s.height),
+                scale120: s.scale120,
+            };
+            let _ = handoff.gate.request(rect);
+            handoff.gate.placed(rect);
+            s.fractional = prepared.fractional.take();
+            s.viewport = prepared.viewport.take();
+            s.native = prepared.window.take();
+            s.native_configure_size = Some((s.width, s.height));
+            s.configured = true;
+            s.callbacks.invalidate();
+            s.callbacks.pending = false;
+            // The native target received the source's current input region above.
+            // Keep the cache so the first-frame fast path does not expose a full window.
+            s.redraw = true;
+            s.handoff = Some(handoff);
+            drop(prepared);
+        }
+        let qh = self.qh.clone();
+        for i in 0..self.surfaces.len() {
+            if self.surfaces[i].companion && self.surfaces[i].handoff.is_some() {
+                self.draw(i, &qh);
+            }
+        }
+        true
     }
 
     fn map_native_pearl_transparent(&mut self, i: usize) -> Result<(), Box<dyn Error>> {
@@ -1063,17 +1602,29 @@ impl App {
 
     pub(super) fn retire_native_cover(&mut self, i: usize, committed: bool) {
         let s = &mut self.surfaces[i];
-        if s.handoff
+        let retire = s
+            .handoff
             .as_mut()
-            .is_some_and(|h| h.gate.finish_frame(committed))
-        {
+            .is_some_and(|handoff| handoff.gate.finish_frame(committed));
+        if retire {
             s.layer.wl_surface().attach(None, 0, 0);
             s.layer.commit();
-            drop(s.handoff.take());
+            let mut handoff = s.handoff.take().unwrap();
+            if let Some(buffer) = handoff.first_frame.take() {
+                // The first native frame aliases the active source SlotPool. Keep
+                // its distinct wl_buffer in the active vector until compositor release.
+                s.buffers.push(Reusable {
+                    buffer,
+                    pending: Vec::new(),
+                    painted: true,
+                });
+            }
+            drop(handoff);
             bead_core::vprintln!(
-                "PEARL_HANDOFF_COMMITTED id={} rect={:?}",
+                "PEARL_HANDOFF_COMMITTED id={} rect={:?} monotonic_ns={}",
                 self.pearl.map_or(0, |info| info.id),
-                self.pearl.map(|info| info.rect)
+                self.pearl.map(|info| info.rect),
+                bead_core::profile::monotonic_ns()
             );
         }
     }
@@ -1209,6 +1760,7 @@ impl App {
             self.release_panel();
         }
         self.swap_group(&mut g);
+        self.cancel_prepared_native();
         drop(g);
         self.pearl = None;
         let spec = self
@@ -1655,14 +2207,20 @@ impl App {
                 }
             }
             (Outcome::Detach { rect, .. } | Outcome::Moved { rect }, Some(id)) => {
-                self.move_pearl(id, rect);
-                self.in_slot(id, |app| {
-                    if app.native_pearls_enabled()
-                        && let Err(error) = app.promote_native_pearl()
-                    {
-                        eprintln!("PEARL_NATIVE_ERROR {error}");
-                    }
-                });
+                let activated = self
+                    .in_slot(id, |app| app.activate_prepared_native(rect))
+                    .unwrap_or(false);
+                if !activated {
+                    self.in_slot(id, |app| app.cancel_prepared_native());
+                    self.move_pearl(id, rect);
+                    self.in_slot(id, |app| {
+                        if app.native_pearls_enabled()
+                            && let Err(error) = app.promote_native_pearl()
+                        {
+                            eprintln!("PEARL_NATIVE_ERROR {error}");
+                        }
+                    });
+                }
                 self.save_pearls();
             }
             // Never pulled: the press was only a press.

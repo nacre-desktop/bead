@@ -1,5 +1,22 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Per-surface CPU-first / warm GPU / idle CPU lifecycle.
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PreparedFrameKey {
+    pub generation: u64,
+    pub ui_serial: u64,
+    pub size: (u32, u32),
+    pub scale120: u32,
+}
+
+pub(crate) fn prepared_frame_ready(
+    configured: bool,
+    placed: bool,
+    snapshot: Option<PreparedFrameKey>,
+    current: PreparedFrameKey,
+) -> bool {
+    configured && placed && snapshot == Some(current)
+}
 /// An initial native frame is hidden until the latest complete geometry was
 /// placed. Replies for superseded rectangles cannot uncover an older pose.
 #[derive(Default)]
@@ -38,6 +55,30 @@ impl Handoff {
 
 #[cfg(test)]
 mod handoff_tests {
+    use super::{PreparedFrameKey, prepared_frame_ready};
+
+    #[test]
+    fn prewarm_requires_current_placement_configuration_and_snapshot() {
+        let current = PreparedFrameKey {
+            generation: 3,
+            ui_serial: 41,
+            size: (1280, 720),
+            scale120: 180,
+        };
+        assert!(!prepared_frame_ready(false, true, Some(current), current));
+        assert!(!prepared_frame_ready(true, false, Some(current), current));
+        assert!(!prepared_frame_ready(true, true, None, current));
+        for stale in [
+            PreparedFrameKey { generation: 2, ..current },
+            PreparedFrameKey { ui_serial: 40, ..current },
+            PreparedFrameKey { size: (640, 360), ..current },
+            PreparedFrameKey { scale120: 120, ..current },
+        ] {
+            assert!(!prepared_frame_ready(true, true, Some(stale), current));
+        }
+        assert!(prepared_frame_ready(true, true, Some(current), current));
+    }
+
     use super::*;
     use bead_core::pearl::Rect;
     #[test]

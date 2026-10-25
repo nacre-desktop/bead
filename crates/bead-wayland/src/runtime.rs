@@ -1790,6 +1790,7 @@ impl App {
                 layer,
                 panel_position: std::cell::Cell::new(None),
                 native: None,
+                prepared_native: None,
                 handoff: None,
                 pool: SlotPool::new(4096, &self.shm)?,
                 #[cfg(feature = "wgpu")]

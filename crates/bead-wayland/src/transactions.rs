@@ -31,6 +31,19 @@ impl App {
             self.in_slot(id, |app| app.native_pearl_placed(epoch, rect, success));
             return;
         }
+        if let UiEvent::NativePearlPrewarmed {
+            id,
+            epoch,
+            generation,
+            rect,
+            success,
+        } = event
+        {
+            self.in_slot(id, |app| {
+                app.native_pearl_prewarmed(epoch, generation, rect, success)
+            });
+            return;
+        }
         if let UiEvent::NativePearlMotion(motion) = event {
             self.native_pearl_motion(motion);
             return;
