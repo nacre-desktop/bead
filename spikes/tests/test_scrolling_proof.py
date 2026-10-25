@@ -5,7 +5,9 @@ import importlib.util
 import os
 import pathlib
 import sys
+from subprocess import CompletedProcess
 import tempfile
+from types import SimpleNamespace
 import unittest
 
 
@@ -151,6 +153,48 @@ class ScrollReversalProofTests(unittest.TestCase):
         self.assertEqual(metrics["presentation_interval_ms"]["p95"], 8.33)
         self.assertEqual(metrics["presented_dropped"], 0)
         self.assertEqual(metrics["presented_discarded"], 1)
+
+    def test_app_log_archiving_preserves_each_spawn_and_open_writer(self):
+        log_dir = self.root / "logs"
+        log_dir.mkdir()
+        current = log_dir / "app-settings.log"
+        current.write_text("first spawn\n")
+        writer = current.open("a")
+        first = pacing.archive_app_logs(log_dir, "scroll-settings-content-touchpad", 0)[0]
+        writer.write("late first-spawn line\n")
+        writer.close()
+        current.write_text("second spawn\n")
+        second = pacing.archive_app_logs(log_dir, "scroll-settings-content-touchpad", 1)[0]
+        self.assertEqual(first.read_text(), "first spawn\nlate first-spawn line\n")
+        self.assertEqual(second.read_text(), "second spawn\n")
+        self.assertFalse(current.exists())
+
+    def test_scroll_notification_fixture_uses_long_ttl_and_closes_exact_ids(self):
+        calls = []
+
+        def run(command, check=False):
+            calls.append(command)
+            output = "(uint32 17,)" if command[-9].endswith(".Notify") else "()"
+            return CompletedProcess(command, 0, stdout=output, stderr="")
+
+        arm = SimpleNamespace(scroll_notice_fixture=True, fixture_notice_ids=[], errors=[], run=run)
+        pacing.notify(arm, "Scroll fixture", "Private test row")
+        self.assertEqual(calls[0][-1], "60000")
+        self.assertEqual(arm.fixture_notice_ids, [17])
+        self.assertEqual(pacing.close_fixture_notifications(arm, [17]), [17])
+        self.assertTrue(calls[1][-2].endswith(".CloseNotification"))
+        self.assertEqual(calls[1][-1], "17")
+
+    def test_existing_notification_animation_keeps_original_ttl(self):
+        calls = []
+
+        def run(command, check=False):
+            calls.append(command)
+            return CompletedProcess(command, 0, stdout="(uint32 7,)", stderr="")
+
+        arm = SimpleNamespace(scroll_notice_fixture=False, run=run)
+        pacing.notify(arm, "Pacing check", "Existing animation fixture")
+        self.assertEqual(calls[0][-1], "8000")
 
 
 if __name__ == "__main__":

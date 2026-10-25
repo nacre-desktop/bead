@@ -79,7 +79,7 @@ CLOSE_APPS = {'settings-wheel': 'settings', 'settings-touchpad': 'settings'}
 # parity-compare. Coordinates are logical pixels in its 1920x1200 scene.
 SCROLL_SCENES = {
     'settings-content': (m.STATES['settings'][0], 1100, 600, 80, 1.6),
-    'settings-nav': (m.STATES['settings'][0], 500, 600, 80, 1.6),
+    'settings-nav': (m.STATES['settings'][0], 150, 600, 80, 1.6),
     'launcher': (m.STATES['launcher'][0], 960, 600, 80, 1.6),
     'keybindings': (m.STATES['keybindings'][0], 960, 600, 80, 1.6),
     'colors-app': (m.STATES['colors-app'][0], 1450, 650, 80, 1.6),
@@ -91,15 +91,15 @@ SCROLL_SCENES = {
     'welcome-help': (m.STATES['welcome-help'][0], 1100, 650, 80, 1.6),
     'ai-chat': ([(step) for _ in range(12) for step in [('chat-seed',), ('sleep', 0.2)]]
                 + m.STATES['sidebar-conversation'][0], 500, 650, 80, 1.6),
-    'wallpaper-picker': (m.STATES['wallpaper-carousel'][0], 960, 980, 80, 1.6),
+    'wallpaper-picker': (m.STATES['wallpaper-hexagons'][0], 960, 650, 80, 1.6),
     'updates-popout': ([('ui', 'nacre', 'controls', 'updates')], 1600, 600, 80, 1.6),
     'clipboard': ([('ui', 'nacre', 'clipboard')], 960, 600, 80, 1.6),
     # Populate the private daemon's notification list before opening its panel.
     'notifications-list': ([('notify', f'Scroll fixture {i:02d}', f'Private synthetic notification row {i:02d}.')
-                            for i in range(20)] + [('ui', 'nacre', 'controls', 'notifications')],
+                            for i in range(20)] + [('sleep', 2.0), ('ui', 'nacre', 'controls', 'notifications')],
                            1600, 650, 80, 1.6),
     'notifications-popup': ([('notify', f'Scroll fixture {i:02d}', f'Private synthetic notification row {i:02d}.')
-                             for i in range(20)] + [('click', 1715, 25)], 1715, 650, 80, 1.6),
+                             for i in range(20)] + [('sleep', 2.0)], 1715, 650, 80, 1.6),
 }
 for _scene, (_prepare, _x, _y, _count, _seconds) in SCROLL_SCENES.items():
     ANIMS['scroll-' + _scene + '-touchpad'] = (
@@ -139,6 +139,42 @@ def start_shell(self):
 
 
 m.Arm.start_shell = start_shell
+
+_orig_notify = m.Arm.notify
+
+def notify(self, summary, body):
+    if not getattr(self, 'scroll_notice_fixture', False):
+        return _orig_notify(self, summary, body)
+    reply = self.run([
+        'gdbus', 'call', '--session', '--dest', 'org.freedesktop.Notifications',
+        '--object-path', '/org/freedesktop/Notifications',
+        '--method', 'org.freedesktop.Notifications.Notify', 'parity', '0', '',
+        summary, body, '[]', '{}', '60000'
+    ], check=False)
+    match = re.search(r'uint32\s+(\d+)', reply.stdout or '')
+    if reply.returncode == 0 and match:
+        self.fixture_notice_ids = getattr(self, 'fixture_notice_ids', [])
+        self.fixture_notice_ids.append(int(match.group(1)))
+    else:
+        self.errors.append(f'notification fixture failed: {reply.stderr.strip()[:160]}')
+
+
+def close_fixture_notifications(self, notice_ids):
+    closed = []
+    for notice_id in notice_ids:
+        reply = self.run([
+            'gdbus', 'call', '--session', '--dest', 'org.freedesktop.Notifications',
+            '--object-path', '/org/freedesktop/Notifications',
+            '--method', 'org.freedesktop.Notifications.CloseNotification', str(notice_id)
+        ], check=False)
+        if reply.returncode == 0:
+            closed.append(notice_id)
+        else:
+            self.errors.append(f'notification fixture cleanup failed for id {notice_id}')
+    return closed
+
+
+m.Arm.notify = notify
 
 _orig_app_rss = m.Arm.app_rss
 
@@ -257,6 +293,20 @@ SCROLL_STORE_KEYS = {
     'notifications-list': 'cc.scroll', 'notifications-popup': 'notifications.scroll.y',
     'updates-popout': 'status.updates_scroll',
 }
+
+
+def archive_app_logs(log_dir, scene, repeat):
+    """Preserve app subprocess logs before the next spawn truncates app-NAME.log."""
+    archived = []
+    for source in sorted(Path(log_dir).glob('app-*.log')):
+        if '--' in source.stem or not source.is_file():
+            continue
+        target = source.with_name(f'{source.stem}--{scene}--repeat-{repeat}{source.suffix}')
+        if target.exists():
+            raise FileExistsError(f'refusing to overwrite archived app trace {target.name}')
+        source.rename(target)
+        archived.append(target)
+    return archived
 
 
 def percentile(values, p):
@@ -597,6 +647,8 @@ def pace_drive(self, names):
     memory = {}
     memory_phase = {}
     self.errors = []
+    notification_fixture_runs = []
+    self.fixture_notice_ids = []
     try:  # shell process components (Pss, Pss_Anon, Pss_Shmem, DRM, SwapPss ...) in KiB
         memory['idle'] = self.rss()
     except Exception as error:
@@ -609,6 +661,7 @@ def pace_drive(self, names):
             try:
                 self.steps([('ui', 'nacre', 'close')])
                 time.sleep(0.8)
+                self.scroll_notice_fixture = name.startswith('scroll-notifications')
                 self.steps(prepare)
                 screenshot_base = None
                 screenshot_mid_enabled = os.environ.get('PACING_CAPTURE_MID') == '1'
@@ -654,6 +707,22 @@ def pace_drive(self, names):
                     self.errors.append(f'rss {name}: {error}')
             except Exception as error:
                 self.errors.append(f'{name}: {str(error)[:200]}')
+            finally:
+                try:
+                    archive_app_logs(self.logs, name, repeat)
+                except Exception as error:
+                    self.errors.append(f'archiving app logs {name}: {error}')
+                if name.startswith('scroll-notifications'):
+                    notice_ids = list(self.fixture_notice_ids)
+                    closed_ids = close_fixture_notifications(self, notice_ids)
+                    notification_fixture_runs.append({
+                        'scene': name, 'repeat': repeat, 'posted_ids': notice_ids,
+                        'closed_ids': closed_ids, 'ttl_ms': 60000
+                    })
+                    self.fixture_notice_ids = []
+                    (self.out / 'notification-fixtures.json').write_text(
+                        json.dumps(notification_fixture_runs, indent=1) + '\n')
+                self.scroll_notice_fixture = False
     time.sleep(0.5)
     log_path = self.logs / 'shell.log'
     trace_logs = sorted(self.logs.glob('*.log'))
