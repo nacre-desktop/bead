@@ -3,7 +3,7 @@
 use super::tests::{extra_harness, fixture, root};
 use super::*;
 use crate::nacre_source::{CallWake, Client, Config as ClientConfig};
-use bead_test::{Harness, Result, source::FakeSource};
+use bead_test::{Harness, Input, Result, source::FakeSource};
 use nacre_protocol::{Capability, ErrorCode, Failure, Message, Reply, framing};
 use std::{os::unix::fs::PermissionsExt, time::Duration};
 use tokio::{io::BufReader, net::UnixListener, sync::mpsc};
@@ -288,6 +288,163 @@ fn pages_have_deterministic_pixels_and_only_declared_actions() -> Result<()> {
             )?;
         }
     }
+    Ok(())
+}
+
+#[test]
+fn notifications_page_preserves_its_existing_pixels() -> Result<()> {
+    for scale in [1., 1.5] {
+        let model = page_view(Page::Notifications, fixture("notifications")).project();
+        let mut harness = extra_harness(Page::Notifications, model, scale)?;
+        let frame = harness.render()?;
+        let golden = root().join(format!("tests/goldens/dashboard-notifications-{scale}.png"));
+        frame.compare(
+            &golden,
+            Default::default(),
+            &std::env::temp_dir().join(format!("bead-dashboard-notifications-{scale}-diff")),
+        )?;
+    }
+    Ok(())
+}
+
+fn notification_rows(harness: &Harness) -> Vec<(String, String)> {
+    harness
+        .session
+        .view_nodes()
+        .iter()
+        .filter_map(|node| {
+            let Some(Value::Text(action)) = node.action_arg.as_ref() else {
+                return None;
+            };
+            let id = action.strip_prefix("notif.forget:")?.split('|').next()?;
+            Some((id.to_string(), node.id.clone()))
+        })
+        .collect()
+}
+
+fn notification_heading_rect(harness: &Harness, heading: &str) -> bead::render::Rect {
+    harness
+        .scene()
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            bead::render::Primitive::Text { text, rect, .. } if text == heading => Some(*rect),
+            _ => None,
+        })
+        .expect("notification heading is visible")
+}
+
+fn notification_scroll_limit(harness: &Harness) -> f64 {
+    harness
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| node.scroll_store.as_deref() == Some("dashboard.notifications.scroll"))
+        .and_then(|node| node.scroll_limit)
+        .expect("notification list owns its scroll store")
+}
+
+#[test]
+fn notification_history_scrolls_both_edges_virtualizes_and_keeps_header_fixed() -> Result<()> {
+    let make_rows = |count| {
+        (0..count)
+            .map(|index| {
+                serde_json::json!({
+                    "id": format!("row-{index:03}"),
+                    "label": format!("App {index:03}: Notification {index:03}"),
+                    "value": "Forget",
+                    "act": format!("notif.forget:row-{index:03}|1"),
+                })
+            })
+            .collect::<Vec<_>>()
+    };
+    let mut model = page_view(Page::Notifications, fixture("notifications")).project();
+    let heading = match &model["dashboard.heading"] {
+        Value::Text(text) => text.clone(),
+        other => panic!("unexpected notification heading: {other:?}"),
+    };
+    model.insert("dashboard.rows".into(), Value::list(make_rows(120)));
+    model.insert("dashboard.control".into(), Value::Bool(true));
+    model.insert("dashboard.notifications.scroll".into(), Value::Number(0.));
+    let mut harness = extra_harness(Page::Notifications, model, 1.)?;
+    assert_eq!(
+        harness.session.stores.get("dashboard.notifications.scroll"),
+        Some(&Value::Number(0.))
+    );
+
+    let heading_rect = notification_heading_rect(&harness, &heading);
+    let rows_at_top = notification_rows(&harness);
+    assert!(rows_at_top.iter().any(|(id, _)| id == "row-000"));
+    assert!(
+        rows_at_top.len() <= 12,
+        "viewport plus overscan should materialize at most 12 rows, got {}",
+        rows_at_top.len()
+    );
+    assert!(!rows_at_top.iter().any(|(id, _)| id == "row-119"));
+
+    let viewport = harness
+        .session
+        .scroll_regions()
+        .into_iter()
+        .find(|rect| rect.h > 400.)
+        .expect("notification viewport is scrollable");
+    let scroll = |delta| Input::Scroll {
+        x: viewport.x + viewport.w / 2.,
+        y: viewport.y + viewport.h / 2.,
+        delta,
+    };
+    let full_limit = notification_scroll_limit(&harness);
+    assert!(full_limit > 4_000.);
+    harness.script([scroll(100_000.)])?;
+    let rows_at_bottom = notification_rows(&harness);
+    assert_eq!(
+        harness.session.stores.get("dashboard.notifications.scroll"),
+        Some(&Value::Number(full_limit))
+    );
+    let last_id = rows_at_bottom
+        .iter()
+        .find(|(id, _)| id == "row-119")
+        .map(|(_, node_id)| node_id.clone())
+        .expect("last notification reaches the viewport");
+    let last_node = harness
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| node.id == last_id)
+        .expect("last row has a hit target");
+    let last_rect = bead::ui::rect(&last_node.draw);
+    assert!(last_node.contains(
+        last_rect.x + last_rect.w / 2.,
+        last_rect.y + last_rect.h / 2.
+    ));
+    assert!(rows_at_bottom.len() <= 12);
+    assert_eq!(
+        notification_heading_rect(&harness, &heading),
+        heading_rect,
+        "the page header stays fixed while history scrolls"
+    );
+
+    harness.script([scroll(-100_000.)])?;
+    let reversed = notification_rows(&harness);
+    assert!(reversed.iter().any(|(id, _)| id == "row-000"));
+    assert!(!reversed.iter().any(|(id, _)| id == "row-119"));
+    assert_eq!(notification_heading_rect(&harness, &heading), heading_rect);
+    harness.script([scroll(100_000.)])?;
+    assert!(
+        notification_rows(&harness)
+            .iter()
+            .any(|(id, node_id)| id == "row-119" && node_id == &last_id)
+    );
+
+    harness.update(BTreeMap::from([(
+        "dashboard.rows".into(),
+        Value::list(make_rows(6)),
+    )]))?;
+    assert_eq!(notification_scroll_limit(&harness), 0.);
+    let after_update = notification_rows(&harness);
+    assert_eq!(after_update.len(), 6);
+    assert!(after_update.iter().any(|(id, _)| id == "row-005"));
+    assert_eq!(notification_heading_rect(&harness, &heading), heading_rect);
     Ok(())
 }
 

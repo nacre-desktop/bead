@@ -10,7 +10,7 @@ return function()
                 ui.Text{id="title",text=ui.bind("dashboard.heading"),width=520-160-130-20,height=28,font_size=20,color="onSurface"},
                 C.button("dnd",dnd and ui.tr("bead.dashboard.dnd-on") or ui.tr("bead.dashboard.dnd-off"),control and ui.action("dashboard.do","notif.dnd") or nil,130,dnd),
                 C.button("clear",ui.tr("bead.dashboard.notifications-clear"),control and ui.action("dashboard.do","notif.clear") or nil,160)},
-            C.lines("items","dashboard.rows",520,440,ui.tr("bead.dashboard.notifications-none"),true,control),
+            C.lines("items","dashboard.rows",520,440,ui.tr("bead.dashboard.notifications-none"),true,control,ui.bind("dashboard.notifications.scroll")),
         },
         ui.Column{id="status",position="absolute",left=580,top=0,width=360,height=562,padding=16,gap=12,radius=16,fill="surfaceContainerLow",
             ui.Text{text="notifications",family="Material Symbols Rounded",font_size=32,width=40,height=40,color="primary"},
