@@ -45,3 +45,15 @@ after the renderer/reconnect rebase: five pairs, 15 phases, shell-only and
 combined shell-plus-cached-chat sums. Today/Quick exceed the median limit.
 Changing Today samples prevent a settled-memory claim; a separate fixed-extra-3s
 series is predeclared in the spec and does not erase this failure.
+
+- `sidebar-verification.json`: seven final passing panel-state cases and the
+  failed physical-key input-injection limitation.
+- `sidebar-pinned-header-qml-left-bead-right.png` / matching JSON: common
+  absolute header crop; existing typography/capability differences remain.
+- `memory-warm-delayed.json` / table: three completed fixed-extra-3s pairs;
+  repeated flat-window Quick growth triggered the stop. This is not a completed
+  five-pair median. Sources, before/after hashes, all phase/component ranges and
+  the interrupted command-deadline attempt are retained.
+
+The final integrated-renderer peek/keybind-action refresh was stopped at the
+memory gate. Earlier motion contacts remain source-pinned control evidence.

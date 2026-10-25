@@ -1,0 +1,2687 @@
+{
+  "status": "acceptance blocked; stopped under repeated-growth rule after three valid pairs",
+  "five_pair_median_claimed": false,
+  "planned_pairs": 5,
+  "completed_pairs": 3,
+  "backend": "cpu",
+  "output_px": [
+    2880,
+    1800
+  ],
+  "scale": 1.5,
+  "additional_sample_settle_seconds": 3,
+  "gate_limit_mib": 0.5,
+  "sources": {
+    "control": "2e523f2deec3c5c0f4e9a0f106d6a7e684888803",
+    "candidate": "6e054307d5b0e664b04f0f67fb7247dc8738127e"
+  },
+  "hashes_before": {
+    "control_shell": "1c10f28ea21a5b05d60d30b85d121ddd267b6327b0978f737709f705d844255b",
+    "candidate_shell": "834f34a7773ce9815a81ed1aa238c051c1addc60a037722f0767e137ce7dace2",
+    "helper_both": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+    "wallpaper_decoder_both": "7aa35c110410a4830c6d85edf7d67d219547abab0f3c1f8eb91ea54d1c681b4e",
+    "swaybg_both": "5becb0ae9dccbddf9d5bbc0c0fbcddfde9fba76a3987766434c126fc7b9ef6f0"
+  },
+  "hashes_after": {
+    "control_shell": "1c10f28ea21a5b05d60d30b85d121ddd267b6327b0978f737709f705d844255b",
+    "candidate_shell": "834f34a7773ce9815a81ed1aa238c051c1addc60a037722f0767e137ce7dace2",
+    "helper_both": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+    "wallpaper_decoder_both": "7aa35c110410a4830c6d85edf7d67d219547abab0f3c1f8eb91ea54d1c681b4e",
+    "swaybg_both": "5becb0ae9dccbddf9d5bbc0c0fbcddfde9fba76a3987766434c126fc7b9ef6f0"
+  },
+  "pairs": [
+    {
+      "pair": 1,
+      "phases": {
+        "idle": {
+          "control": {
+            "shell_unreclaimable_mib": 31.77734375,
+            "combined_ui_unreclaimable_mib": 31.77734375,
+            "file_pss_mib": 52.0498046875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                21704,
+                21704
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                53299,
+                53299
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 31.64453125,
+            "combined_ui_unreclaimable_mib": 31.64453125,
+            "file_pss_mib": 52.046875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                21568,
+                21568
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                53296,
+                53296
+              ]
+            }
+          },
+          "shell_delta_mib": -0.1328125,
+          "combined_ui_delta_mib": -0.1328125
+        },
+        "sidebar_open": {
+          "control": {
+            "shell_unreclaimable_mib": 31.73046875,
+            "combined_ui_unreclaimable_mib": 57.283203125,
+            "file_pss_mib": 28.841796875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                21656,
+                22704
+              ],
+              "Pss_Shmem": [
+                10836,
+                11258
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29534,
+                29534
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 32.44140625,
+            "combined_ui_unreclaimable_mib": 57.986328125,
+            "file_pss_mib": 28.640625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22384,
+                22384
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29328,
+                29328
+              ]
+            }
+          },
+          "shell_delta_mib": 0.7109375,
+          "combined_ui_delta_mib": 0.703125
+        },
+        "sidebar_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 31.7734375,
+            "combined_ui_unreclaimable_mib": 52.21484375,
+            "file_pss_mib": 28.841796875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                21700,
+                21700
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29534,
+                29534
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 32.455078125,
+            "combined_ui_unreclaimable_mib": 52.931640625,
+            "file_pss_mib": 28.5771484375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22392,
+                22392
+              ],
+              "Pss_Shmem": [
+                10842,
+                10842
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29263,
+                29263
+              ]
+            }
+          },
+          "shell_delta_mib": 0.681640625,
+          "combined_ui_delta_mib": 0.716796875
+        },
+        "sidebar_reopened": {
+          "control": {
+            "shell_unreclaimable_mib": 31.7734375,
+            "combined_ui_unreclaimable_mib": 58.716796875,
+            "file_pss_mib": 28.482421875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                21700,
+                21700
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29166,
+                29166
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 32.462890625,
+            "combined_ui_unreclaimable_mib": 59.27734375,
+            "file_pss_mib": 28.16796875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22400,
+                22400
+              ],
+              "Pss_Shmem": [
+                10842,
+                10842
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28844,
+                28844
+              ]
+            }
+          },
+          "shell_delta_mib": 0.689453125,
+          "combined_ui_delta_mib": 0.560546875
+        },
+        "sidebar_reopened_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 31.77734375,
+            "combined_ui_unreclaimable_mib": 52.2890625,
+            "file_pss_mib": 28.865234375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                21704,
+                21704
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29558,
+                29558
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 32.462890625,
+            "combined_ui_unreclaimable_mib": 53.076171875,
+            "file_pss_mib": 28.5654296875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22400,
+                22400
+              ],
+              "Pss_Shmem": [
+                10842,
+                10842
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29251,
+                29251
+              ]
+            }
+          },
+          "shell_delta_mib": 0.685546875,
+          "combined_ui_delta_mib": 0.787109375
+        },
+        "control_center_open": {
+          "control": {
+            "shell_unreclaimable_mib": 46.703125,
+            "combined_ui_unreclaimable_mib": 67.21484375,
+            "file_pss_mib": 29.5966796875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                31808,
+                31808
+              ],
+              "Pss_Shmem": [
+                16016,
+                16016
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                30307,
+                30307
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 46.68359375,
+            "combined_ui_unreclaimable_mib": 67.296875,
+            "file_pss_mib": 29.4140625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                31788,
+                31788
+              ],
+              "Pss_Shmem": [
+                16016,
+                16016
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                30120,
+                30120
+              ]
+            }
+          },
+          "shell_delta_mib": -0.01953125,
+          "combined_ui_delta_mib": 0.08203125
+        },
+        "control_center_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 45.068359375,
+            "combined_ui_unreclaimable_mib": 65.580078125,
+            "file_pss_mib": 29.5966796875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                32892,
+                32892
+              ],
+              "Pss_Shmem": [
+                13258,
+                13258
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                30307,
+                30307
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 44.541015625,
+            "combined_ui_unreclaimable_mib": 65.154296875,
+            "file_pss_mib": 29.4140625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                32352,
+                32352
+              ],
+              "Pss_Shmem": [
+                13258,
+                13258
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                30120,
+                30120
+              ]
+            }
+          },
+          "shell_delta_mib": -0.52734375,
+          "combined_ui_delta_mib": -0.42578125
+        },
+        "dashboard_today_open": {
+          "control": {
+            "shell_unreclaimable_mib": 57.189453125,
+            "combined_ui_unreclaimable_mib": 77.701171875,
+            "file_pss_mib": 28.8330078125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                40388,
+                40420
+              ],
+              "Pss_Shmem": [
+                18142,
+                18142
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29525,
+                29525
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 59.021484375,
+            "combined_ui_unreclaimable_mib": 79.634765625,
+            "file_pss_mib": 28.4130859375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                42296,
+                42296
+              ],
+              "Pss_Shmem": [
+                18142,
+                18142
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29095,
+                29095
+              ]
+            }
+          },
+          "shell_delta_mib": 1.83203125,
+          "combined_ui_delta_mib": 1.93359375
+        },
+        "dashboard_today_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 52.248046875,
+            "combined_ui_unreclaimable_mib": 72.783203125,
+            "file_pss_mib": 28.46484375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                39376,
+                39376
+              ],
+              "Pss_Shmem": [
+                14126,
+                14126
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29148,
+                29148
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 52.154296875,
+            "combined_ui_unreclaimable_mib": 72.787109375,
+            "file_pss_mib": 28.107421875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                39280,
+                39280
+              ],
+              "Pss_Shmem": [
+                14126,
+                14126
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28782,
+                28782
+              ]
+            }
+          },
+          "shell_delta_mib": -0.09375,
+          "combined_ui_delta_mib": 0.00390625
+        },
+        "launcher_quick": {
+          "control": {
+            "shell_unreclaimable_mib": 50.771484375,
+            "combined_ui_unreclaimable_mib": 71.306640625,
+            "file_pss_mib": 29.55859375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                33984,
+                33984
+              ],
+              "Pss_Shmem": [
+                18006,
+                18006
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                30268,
+                30268
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 52.279296875,
+            "combined_ui_unreclaimable_mib": 72.912109375,
+            "file_pss_mib": 29.216796875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                35528,
+                35528
+              ],
+              "Pss_Shmem": [
+                18006,
+                18006
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29918,
+                29918
+              ]
+            }
+          },
+          "shell_delta_mib": 1.5078125,
+          "combined_ui_delta_mib": 1.60546875
+        },
+        "launcher_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 46.826171875,
+            "combined_ui_unreclaimable_mib": 67.361328125,
+            "file_pss_mib": 28.49609375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                33880,
+                33880
+              ],
+              "Pss_Shmem": [
+                14070,
+                14070
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29180,
+                29180
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 46.931640625,
+            "combined_ui_unreclaimable_mib": 67.564453125,
+            "file_pss_mib": 28.173828125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                33988,
+                33988
+              ],
+              "Pss_Shmem": [
+                14070,
+                14070
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28850,
+                28850
+              ]
+            }
+          },
+          "shell_delta_mib": 0.10546875,
+          "combined_ui_delta_mib": 0.203125
+        },
+        "audio_peek": {
+          "control": {
+            "shell_unreclaimable_mib": 35.30859375,
+            "combined_ui_unreclaimable_mib": 55.84375,
+            "file_pss_mib": 28.4951171875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                25056,
+                25056
+              ],
+              "Pss_Shmem": [
+                11100,
+                11100
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29179,
+                29179
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 35.796875,
+            "combined_ui_unreclaimable_mib": 56.4296875,
+            "file_pss_mib": 28.1728515625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                25556,
+                25556
+              ],
+              "Pss_Shmem": [
+                11100,
+                11100
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28849,
+                28849
+              ]
+            }
+          },
+          "shell_delta_mib": 0.48828125,
+          "combined_ui_delta_mib": 0.5859375
+        },
+        "audio_peek_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 35.609375,
+            "combined_ui_unreclaimable_mib": 56.14453125,
+            "file_pss_mib": 28.845703125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                25364,
+                25364
+              ],
+              "Pss_Shmem": [
+                11100,
+                11100
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29537,
+                29540
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 35.8125,
+            "combined_ui_unreclaimable_mib": 56.4453125,
+            "file_pss_mib": 28.1728515625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                25572,
+                25572
+              ],
+              "Pss_Shmem": [
+                11100,
+                11100
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28849,
+                28849
+              ]
+            }
+          },
+          "shell_delta_mib": 0.203125,
+          "combined_ui_delta_mib": 0.30078125
+        },
+        "notifications_panel_open": {
+          "control": {
+            "shell_unreclaimable_mib": 37.2890625,
+            "combined_ui_unreclaimable_mib": 57.82421875,
+            "file_pss_mib": 28.498046875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                26552,
+                26552
+              ],
+              "Pss_Shmem": [
+                11632,
+                11632
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29182,
+                29182
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 37.40234375,
+            "combined_ui_unreclaimable_mib": 58.03515625,
+            "file_pss_mib": 28.1748046875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                26676,
+                26676
+              ],
+              "Pss_Shmem": [
+                11624,
+                11624
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28851,
+                28851
+              ]
+            }
+          },
+          "shell_delta_mib": 0.11328125,
+          "combined_ui_delta_mib": 0.2109375
+        },
+        "notifications_panel_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 36.833984375,
+            "combined_ui_unreclaimable_mib": 57.369140625,
+            "file_pss_mib": 28.498046875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                26464,
+                26464
+              ],
+              "Pss_Shmem": [
+                11254,
+                11254
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29182,
+                29182
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 36.986328125,
+            "combined_ui_unreclaimable_mib": 57.619140625,
+            "file_pss_mib": 28.1748046875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                26620,
+                26620
+              ],
+              "Pss_Shmem": [
+                11254,
+                11254
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28851,
+                28851
+              ]
+            }
+          },
+          "shell_delta_mib": 0.15234375,
+          "combined_ui_delta_mib": 0.25
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "phases": {
+        "idle": {
+          "control": {
+            "shell_unreclaimable_mib": 31.6875,
+            "combined_ui_unreclaimable_mib": 31.6875,
+            "file_pss_mib": 51.8916015625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                21612,
+                21612
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                53137,
+                53137
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 31.69921875,
+            "combined_ui_unreclaimable_mib": 31.69921875,
+            "file_pss_mib": 51.5185546875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                21624,
+                21624
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                52755,
+                52755
+              ]
+            }
+          },
+          "shell_delta_mib": 0.01171875,
+          "combined_ui_delta_mib": 0.01171875
+        },
+        "sidebar_open": {
+          "control": {
+            "shell_unreclaimable_mib": 32.49609375,
+            "combined_ui_unreclaimable_mib": 58.048828125,
+            "file_pss_mib": 28.841796875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22440,
+                22440
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29534,
+                29534
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 32.5,
+            "combined_ui_unreclaimable_mib": 58.025390625,
+            "file_pss_mib": 28.3193359375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22444,
+                22444
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28999,
+                28999
+              ]
+            }
+          },
+          "shell_delta_mib": 0.00390625,
+          "combined_ui_delta_mib": -0.0234375
+        },
+        "sidebar_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 32.51953125,
+            "combined_ui_unreclaimable_mib": 52.9609375,
+            "file_pss_mib": 28.8408203125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22464,
+                22464
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29533,
+                29533
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 32.525390625,
+            "combined_ui_unreclaimable_mib": 52.958984375,
+            "file_pss_mib": 28.2880859375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22464,
+                22464
+              ],
+              "Pss_Shmem": [
+                10842,
+                10842
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28967,
+                28967
+              ]
+            }
+          },
+          "shell_delta_mib": 0.005859375,
+          "combined_ui_delta_mib": -0.001953125
+        },
+        "sidebar_reopened": {
+          "control": {
+            "shell_unreclaimable_mib": 32.5234375,
+            "combined_ui_unreclaimable_mib": 59.431640625,
+            "file_pss_mib": 28.498046875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22468,
+                22468
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29182,
+                29182
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 31.697265625,
+            "combined_ui_unreclaimable_mib": 58.7734375,
+            "file_pss_mib": 27.9619140625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                21616,
+                21616
+              ],
+              "Pss_Shmem": [
+                10842,
+                10842
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28633,
+                28633
+              ]
+            }
+          },
+          "shell_delta_mib": -0.826171875,
+          "combined_ui_delta_mib": -0.658203125
+        },
+        "sidebar_reopened_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 32.53125,
+            "combined_ui_unreclaimable_mib": 53.01953125,
+            "file_pss_mib": 28.8671875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22476,
+                22476
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29560,
+                29560
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 32.509765625,
+            "combined_ui_unreclaimable_mib": 53.087890625,
+            "file_pss_mib": 28.3427734375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22448,
+                22448
+              ],
+              "Pss_Shmem": [
+                10842,
+                10842
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29023,
+                29023
+              ]
+            }
+          },
+          "shell_delta_mib": -0.021484375,
+          "combined_ui_delta_mib": 0.068359375
+        },
+        "control_center_open": {
+          "control": {
+            "shell_unreclaimable_mib": 46.6484375,
+            "combined_ui_unreclaimable_mib": 67.13671875,
+            "file_pss_mib": 29.7060546875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                31752,
+                31752
+              ],
+              "Pss_Shmem": [
+                16016,
+                16016
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                30419,
+                30419
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 46.6328125,
+            "combined_ui_unreclaimable_mib": 67.2109375,
+            "file_pss_mib": 29.1962890625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                31736,
+                31736
+              ],
+              "Pss_Shmem": [
+                16016,
+                16016
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29897,
+                29897
+              ]
+            }
+          },
+          "shell_delta_mib": -0.015625,
+          "combined_ui_delta_mib": 0.07421875
+        },
+        "control_center_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 44.947265625,
+            "combined_ui_unreclaimable_mib": 65.435546875,
+            "file_pss_mib": 29.7060546875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                32768,
+                32768
+              ],
+              "Pss_Shmem": [
+                13258,
+                13258
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                30419,
+                30419
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 45.025390625,
+            "combined_ui_unreclaimable_mib": 65.603515625,
+            "file_pss_mib": 29.1962890625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                32848,
+                32848
+              ],
+              "Pss_Shmem": [
+                13258,
+                13258
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29897,
+                29897
+              ]
+            }
+          },
+          "shell_delta_mib": 0.078125,
+          "combined_ui_delta_mib": 0.16796875
+        },
+        "dashboard_today_open": {
+          "control": {
+            "shell_unreclaimable_mib": 56.970703125,
+            "combined_ui_unreclaimable_mib": 77.458984375,
+            "file_pss_mib": 28.732421875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                40132,
+                40196
+              ],
+              "Pss_Shmem": [
+                18142,
+                18142
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29422,
+                29422
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 57.064453125,
+            "combined_ui_unreclaimable_mib": 77.642578125,
+            "file_pss_mib": 28.333984375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                40276,
+                40292
+              ],
+              "Pss_Shmem": [
+                18142,
+                18142
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29014,
+                29014
+              ]
+            }
+          },
+          "shell_delta_mib": 0.09375,
+          "combined_ui_delta_mib": 0.18359375
+        },
+        "dashboard_today_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 52.126953125,
+            "combined_ui_unreclaimable_mib": 72.634765625,
+            "file_pss_mib": 28.3994140625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                39252,
+                39252
+              ],
+              "Pss_Shmem": [
+                14126,
+                14126
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29081,
+                29081
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 52.103515625,
+            "combined_ui_unreclaimable_mib": 72.701171875,
+            "file_pss_mib": 27.9658203125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                39228,
+                39228
+              ],
+              "Pss_Shmem": [
+                14126,
+                14126
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28637,
+                28637
+              ]
+            }
+          },
+          "shell_delta_mib": -0.0234375,
+          "combined_ui_delta_mib": 0.06640625
+        },
+        "launcher_quick": {
+          "control": {
+            "shell_unreclaimable_mib": 49.208984375,
+            "combined_ui_unreclaimable_mib": 69.716796875,
+            "file_pss_mib": 29.4462890625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                32384,
+                32384
+              ],
+              "Pss_Shmem": [
+                18006,
+                18006
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                30153,
+                30153
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 51.712890625,
+            "combined_ui_unreclaimable_mib": 72.310546875,
+            "file_pss_mib": 28.9658203125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                34948,
+                34948
+              ],
+              "Pss_Shmem": [
+                18006,
+                18006
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29661,
+                29661
+              ]
+            }
+          },
+          "shell_delta_mib": 2.50390625,
+          "combined_ui_delta_mib": 2.59375
+        },
+        "launcher_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 46.818359375,
+            "combined_ui_unreclaimable_mib": 67.326171875,
+            "file_pss_mib": 29.4462890625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                33872,
+                33872
+              ],
+              "Pss_Shmem": [
+                14070,
+                14070
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                30153,
+                30153
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 46.705078125,
+            "combined_ui_unreclaimable_mib": 67.302734375,
+            "file_pss_mib": 27.9658203125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                33756,
+                33756
+              ],
+              "Pss_Shmem": [
+                14070,
+                14070
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28637,
+                28637
+              ]
+            }
+          },
+          "shell_delta_mib": -0.11328125,
+          "combined_ui_delta_mib": -0.0234375
+        },
+        "audio_peek": {
+          "control": {
+            "shell_unreclaimable_mib": 35.1953125,
+            "combined_ui_unreclaimable_mib": 55.703125,
+            "file_pss_mib": 28.3984375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                24940,
+                24940
+              ],
+              "Pss_Shmem": [
+                11100,
+                11100
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29080,
+                29080
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 35.17578125,
+            "combined_ui_unreclaimable_mib": 55.7734375,
+            "file_pss_mib": 27.9658203125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                24920,
+                24920
+              ],
+              "Pss_Shmem": [
+                11100,
+                11100
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28637,
+                28637
+              ]
+            }
+          },
+          "shell_delta_mib": -0.01953125,
+          "combined_ui_delta_mib": 0.0703125
+        },
+        "audio_peek_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 35.48046875,
+            "combined_ui_unreclaimable_mib": 55.98828125,
+            "file_pss_mib": 28.3984375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                25232,
+                25232
+              ],
+              "Pss_Shmem": [
+                11100,
+                11100
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29080,
+                29080
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 35.42578125,
+            "combined_ui_unreclaimable_mib": 56.0234375,
+            "file_pss_mib": 27.9658203125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                25176,
+                25176
+              ],
+              "Pss_Shmem": [
+                11100,
+                11100
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28627,
+                28637
+              ]
+            }
+          },
+          "shell_delta_mib": -0.0546875,
+          "combined_ui_delta_mib": 0.03515625
+        },
+        "notifications_panel_open": {
+          "control": {
+            "shell_unreclaimable_mib": 37.26953125,
+            "combined_ui_unreclaimable_mib": 57.77734375,
+            "file_pss_mib": 28.400390625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                26532,
+                26532
+              ],
+              "Pss_Shmem": [
+                11632,
+                11632
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29082,
+                29082
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 37.05078125,
+            "combined_ui_unreclaimable_mib": 57.6484375,
+            "file_pss_mib": 27.9677734375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                26316,
+                26316
+              ],
+              "Pss_Shmem": [
+                11624,
+                11624
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28639,
+                28639
+              ]
+            }
+          },
+          "shell_delta_mib": -0.21875,
+          "combined_ui_delta_mib": -0.12890625
+        },
+        "notifications_panel_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 36.845703125,
+            "combined_ui_unreclaimable_mib": 57.353515625,
+            "file_pss_mib": 28.400390625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                26476,
+                26476
+              ],
+              "Pss_Shmem": [
+                11254,
+                11254
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29082,
+                29082
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 36.626953125,
+            "combined_ui_unreclaimable_mib": 57.224609375,
+            "file_pss_mib": 28.3427734375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                26252,
+                26252
+              ],
+              "Pss_Shmem": [
+                11254,
+                11254
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29023,
+                29023
+              ]
+            }
+          },
+          "shell_delta_mib": -0.21875,
+          "combined_ui_delta_mib": -0.12890625
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "phases": {
+        "idle": {
+          "control": {
+            "shell_unreclaimable_mib": 31.7109375,
+            "combined_ui_unreclaimable_mib": 31.7109375,
+            "file_pss_mib": 52.22265625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                21636,
+                21636
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                53476,
+                53476
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 31.6875,
+            "combined_ui_unreclaimable_mib": 31.6875,
+            "file_pss_mib": 51.8037109375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                21612,
+                21612
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                53047,
+                53047
+              ]
+            }
+          },
+          "shell_delta_mib": -0.0234375,
+          "combined_ui_delta_mib": -0.0234375
+        },
+        "sidebar_open": {
+          "control": {
+            "shell_unreclaimable_mib": 32.21484375,
+            "combined_ui_unreclaimable_mib": 57.744140625,
+            "file_pss_mib": 29.1142578125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22152,
+                22152
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29813,
+                29813
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 31.66796875,
+            "combined_ui_unreclaimable_mib": 57.263671875,
+            "file_pss_mib": 28.7392578125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                21592,
+                21592
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29429,
+                29429
+              ]
+            }
+          },
+          "shell_delta_mib": -0.546875,
+          "combined_ui_delta_mib": -0.48046875
+        },
+        "sidebar_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 32.24609375,
+            "combined_ui_unreclaimable_mib": 52.67578125,
+            "file_pss_mib": 29.11328125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22184,
+                22184
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29812,
+                29812
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 32.486328125,
+            "combined_ui_unreclaimable_mib": 52.998046875,
+            "file_pss_mib": 28.7275390625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22424,
+                22424
+              ],
+              "Pss_Shmem": [
+                10842,
+                10842
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29417,
+                29417
+              ]
+            }
+          },
+          "shell_delta_mib": 0.240234375,
+          "combined_ui_delta_mib": 0.322265625
+        },
+        "sidebar_reopened": {
+          "control": {
+            "shell_unreclaimable_mib": 32.24609375,
+            "combined_ui_unreclaimable_mib": 59.142578125,
+            "file_pss_mib": 28.744140625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22184,
+                22184
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29434,
+                29434
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 32.490234375,
+            "combined_ui_unreclaimable_mib": 59.62890625,
+            "file_pss_mib": 28.3525390625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22428,
+                22428
+              ],
+              "Pss_Shmem": [
+                10842,
+                10842
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29033,
+                29033
+              ]
+            }
+          },
+          "shell_delta_mib": 0.244140625,
+          "combined_ui_delta_mib": 0.486328125
+        },
+        "sidebar_reopened_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 32.24609375,
+            "combined_ui_unreclaimable_mib": 52.73828125,
+            "file_pss_mib": 29.1376953125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22184,
+                22184
+              ],
+              "Pss_Shmem": [
+                10836,
+                10836
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29837,
+                29837
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 32.494140625,
+            "combined_ui_unreclaimable_mib": 53.087890625,
+            "file_pss_mib": 28.7509765625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                22432,
+                22432
+              ],
+              "Pss_Shmem": [
+                10842,
+                10842
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29441,
+                29441
+              ]
+            }
+          },
+          "shell_delta_mib": 0.248046875,
+          "combined_ui_delta_mib": 0.349609375
+        },
+        "control_center_open": {
+          "control": {
+            "shell_unreclaimable_mib": 46.62890625,
+            "combined_ui_unreclaimable_mib": 67.12109375,
+            "file_pss_mib": 29.8583984375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                31732,
+                31732
+              ],
+              "Pss_Shmem": [
+                16016,
+                16016
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                30575,
+                30575
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 46.60546875,
+            "combined_ui_unreclaimable_mib": 67.19921875,
+            "file_pss_mib": 29.5673828125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                31708,
+                31708
+              ],
+              "Pss_Shmem": [
+                16016,
+                16016
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                30277,
+                30277
+              ]
+            }
+          },
+          "shell_delta_mib": -0.0234375,
+          "combined_ui_delta_mib": 0.078125
+        },
+        "control_center_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 45.017578125,
+            "combined_ui_unreclaimable_mib": 65.509765625,
+            "file_pss_mib": 29.8583984375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                32840,
+                32840
+              ],
+              "Pss_Shmem": [
+                13258,
+                13258
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                30575,
+                30575
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 45.017578125,
+            "combined_ui_unreclaimable_mib": 65.611328125,
+            "file_pss_mib": 29.56640625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                32840,
+                32840
+              ],
+              "Pss_Shmem": [
+                13258,
+                13258
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                30276,
+                30276
+              ]
+            }
+          },
+          "shell_delta_mib": 0.0,
+          "combined_ui_delta_mib": 0.1015625
+        },
+        "dashboard_today_open": {
+          "control": {
+            "shell_unreclaimable_mib": 57.033203125,
+            "combined_ui_unreclaimable_mib": 77.525390625,
+            "file_pss_mib": 28.8759765625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                38304,
+                40260
+              ],
+              "Pss_Shmem": [
+                18142,
+                18142
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29569,
+                29569
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 57.017578125,
+            "combined_ui_unreclaimable_mib": 77.611328125,
+            "file_pss_mib": 28.6103515625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                40152,
+                40244
+              ],
+              "Pss_Shmem": [
+                18142,
+                18142
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29297,
+                29297
+              ]
+            }
+          },
+          "shell_delta_mib": -0.015625,
+          "combined_ui_delta_mib": 0.0859375
+        },
+        "dashboard_today_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 52.162109375,
+            "combined_ui_unreclaimable_mib": 72.673828125,
+            "file_pss_mib": 28.8828125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                39288,
+                39288
+              ],
+              "Pss_Shmem": [
+                14126,
+                14126
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29576,
+                29576
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 52.138671875,
+            "combined_ui_unreclaimable_mib": 72.755859375,
+            "file_pss_mib": 28.2548828125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                39264,
+                39264
+              ],
+              "Pss_Shmem": [
+                14126,
+                14126
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28933,
+                28933
+              ]
+            }
+          },
+          "shell_delta_mib": -0.0234375,
+          "combined_ui_delta_mib": 0.08203125
+        },
+        "launcher_quick": {
+          "control": {
+            "shell_unreclaimable_mib": 50.802734375,
+            "combined_ui_unreclaimable_mib": 71.314453125,
+            "file_pss_mib": 29.58203125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                34016,
+                34016
+              ],
+              "Pss_Shmem": [
+                18006,
+                18006
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                30292,
+                30292
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 51.888671875,
+            "combined_ui_unreclaimable_mib": 72.505859375,
+            "file_pss_mib": 29.3486328125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                35128,
+                35128
+              ],
+              "Pss_Shmem": [
+                18006,
+                18006
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                30053,
+                30053
+              ]
+            }
+          },
+          "shell_delta_mib": 1.0859375,
+          "combined_ui_delta_mib": 1.19140625
+        },
+        "launcher_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 46.876953125,
+            "combined_ui_unreclaimable_mib": 67.388671875,
+            "file_pss_mib": 28.5380859375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                33932,
+                33932
+              ],
+              "Pss_Shmem": [
+                14070,
+                14070
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29221,
+                29223
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 46.853515625,
+            "combined_ui_unreclaimable_mib": 67.470703125,
+            "file_pss_mib": 28.2861328125,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                33908,
+                33908
+              ],
+              "Pss_Shmem": [
+                14070,
+                14070
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28965,
+                28965
+              ]
+            }
+          },
+          "shell_delta_mib": -0.0234375,
+          "combined_ui_delta_mib": 0.08203125
+        },
+        "audio_peek": {
+          "control": {
+            "shell_unreclaimable_mib": 35.1953125,
+            "combined_ui_unreclaimable_mib": 55.70703125,
+            "file_pss_mib": 28.5341796875,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                24940,
+                24940
+              ],
+              "Pss_Shmem": [
+                11100,
+                11100
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29214,
+                29222
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 35.234375,
+            "combined_ui_unreclaimable_mib": 55.8515625,
+            "file_pss_mib": 28.28515625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                24980,
+                24980
+              ],
+              "Pss_Shmem": [
+                11100,
+                11100
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28964,
+                28964
+              ]
+            }
+          },
+          "shell_delta_mib": 0.0390625,
+          "combined_ui_delta_mib": 0.14453125
+        },
+        "audio_peek_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 35.46484375,
+            "combined_ui_unreclaimable_mib": 55.9765625,
+            "file_pss_mib": 28.537109375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                25216,
+                25216
+              ],
+              "Pss_Shmem": [
+                11100,
+                11100
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29222,
+                29222
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 35.49609375,
+            "combined_ui_unreclaimable_mib": 56.11328125,
+            "file_pss_mib": 28.66015625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                25248,
+                25248
+              ],
+              "Pss_Shmem": [
+                11100,
+                11100
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29348,
+                29348
+              ]
+            }
+          },
+          "shell_delta_mib": 0.03125,
+          "combined_ui_delta_mib": 0.13671875
+        },
+        "notifications_panel_open": {
+          "control": {
+            "shell_unreclaimable_mib": 37.2578125,
+            "combined_ui_unreclaimable_mib": 57.76953125,
+            "file_pss_mib": 28.5400390625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                26520,
+                26520
+              ],
+              "Pss_Shmem": [
+                11632,
+                11632
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29225,
+                29225
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 37.19140625,
+            "combined_ui_unreclaimable_mib": 57.80859375,
+            "file_pss_mib": 28.2880859375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                26460,
+                26460
+              ],
+              "Pss_Shmem": [
+                11624,
+                11624
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28967,
+                28967
+              ]
+            }
+          },
+          "shell_delta_mib": -0.06640625,
+          "combined_ui_delta_mib": 0.0390625
+        },
+        "notifications_panel_closed": {
+          "control": {
+            "shell_unreclaimable_mib": 36.791015625,
+            "combined_ui_unreclaimable_mib": 57.302734375,
+            "file_pss_mib": 28.5400390625,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                26420,
+                26420
+              ],
+              "Pss_Shmem": [
+                11254,
+                11254
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                29225,
+                29225
+              ]
+            }
+          },
+          "candidate": {
+            "shell_unreclaimable_mib": 36.759765625,
+            "combined_ui_unreclaimable_mib": 57.376953125,
+            "file_pss_mib": 28.2880859375,
+            "sample_ranges_kib": {
+              "Pss_Anon": [
+                26388,
+                26388
+              ],
+              "Pss_Shmem": [
+                11254,
+                11254
+              ],
+              "DRM": [
+                0,
+                0
+              ],
+              "SwapPss": [
+                0,
+                0
+              ],
+              "Pss_File": [
+                28967,
+                28967
+              ]
+            }
+          },
+          "shell_delta_mib": -0.03125,
+          "combined_ui_delta_mib": 0.07421875
+        }
+      }
+    }
+  ],
+  "quick_deltas_mib": {
+    "shell": [
+      1.5078125,
+      2.50390625,
+      1.0859375
+    ],
+    "combined_ui": [
+      1.60546875,
+      2.59375,
+      1.19140625
+    ]
+  },
+  "quick_five_pair_median_lower_bound_mib": {
+    "shell": 1.0859375,
+    "combined_ui": 1.19140625
+  },
+  "stopping_reason": "Three observed Quick deltas exceed the gate; adding two arbitrarily negative values cannot put the third order statistic at or below +0.5 MiB. No five-pair aggregate is claimed.",
+  "settlement_limit": "Delayed windows are flatter, but Today control pair3 still spans 1956 KiB anonymous memory. Quick is flat within all six observed process sample windows.",
+  "interrupted_attempt": {
+    "pair": 3,
+    "candidate_exit": 1,
+    "error": "ui.dispatch command execution deadline exceeded during Today close",
+    "frame_processing_ms": 1013.287,
+    "image_resource_processing_ms": 535.43,
+    "oom": false,
+    "retry": "whole pair repeated once unchanged; both roles exit0; interrupted originals retained privately",
+    "cause_limit": "Rendering pressure is plausible; dispatch/timeout timestamps do not prove causation."
+  }
+}

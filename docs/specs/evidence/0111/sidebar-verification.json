@@ -1,0 +1,157 @@
+{
+  "source": "6e054307d5b0e664b04f0f67fb7247dc8738127e",
+  "backend": "cpu",
+  "output_px": [
+    2880,
+    1800
+  ],
+  "scale": 1.5,
+  "cases": {
+    "sidebar-lip-hover-exit": {
+      "errors": [],
+      "pass": true,
+      "raw_panel_state": {
+        "dismiss_active": false,
+        "hidden": false,
+        "keyboard_focus": true,
+        "prepared": true,
+        "resident": true,
+        "size": [
+          534,
+          874
+        ],
+        "surfaces": 1,
+        "target_open": false,
+        "view": "chat"
+      }
+    },
+    "sidebar-lip-cancel": {
+      "errors": [],
+      "pass": true,
+      "raw_panel_state": {
+        "dismiss_active": false,
+        "hidden": false,
+        "keyboard_focus": true,
+        "prepared": true,
+        "resident": true,
+        "size": [
+          534,
+          874
+        ],
+        "surfaces": 1,
+        "target_open": false,
+        "view": "chat"
+      }
+    },
+    "sidebar-lip-click": {
+      "errors": [],
+      "pass": true,
+      "raw_panel_state": {
+        "dismiss_active": true,
+        "hidden": false,
+        "keyboard_focus": true,
+        "prepared": true,
+        "resident": true,
+        "size": [
+          534,
+          874
+        ],
+        "surfaces": 1,
+        "target_open": true,
+        "view": "chat"
+      }
+    },
+    "sidebar-hover": {
+      "errors": [],
+      "pass": true,
+      "raw_panel_state": {
+        "dismiss_active": true,
+        "hidden": false,
+        "keyboard_focus": true,
+        "prepared": true,
+        "resident": true,
+        "size": [
+          534,
+          874
+        ],
+        "surfaces": 1,
+        "target_open": true,
+        "view": "chat"
+      }
+    },
+    "sidebar-pressed": {
+      "errors": [],
+      "pass": true
+    },
+    "sidebar-lip-hover-reopen": {
+      "errors": [],
+      "pass": true,
+      "raw_panel_state": {
+        "dismiss_active": true,
+        "hidden": false,
+        "keyboard_focus": true,
+        "prepared": true,
+        "resident": true,
+        "size": [
+          534,
+          874
+        ],
+        "surfaces": 1,
+        "target_open": true,
+        "view": "chat"
+      }
+    },
+    "sidebar-pinned-warm": {
+      "errors": [],
+      "pass": true,
+      "open_proof": {
+        "raw_state": {
+          "dismiss_active": false,
+          "hidden": false,
+          "keyboard_focus": true,
+          "prepared": true,
+          "resident": true,
+          "size": [
+            534,
+            874
+          ],
+          "surfaces": 1,
+          "target_open": true,
+          "view": "chat"
+        },
+        "contract": {
+          "target_open": true,
+          "dismiss_active": false,
+          "chat_pinned_store_present": false,
+          "chat_pinned_store": null
+        }
+      },
+      "close_proof": {
+        "raw_state": {
+          "dismiss_active": false,
+          "hidden": false,
+          "keyboard_focus": true,
+          "prepared": true,
+          "resident": true,
+          "size": [
+            534,
+            874
+          ],
+          "surfaces": 1,
+          "target_open": false,
+          "view": "chat"
+        },
+        "target_open": false,
+        "same_chat_process_alive_after_unpin_close": true
+      }
+    }
+  },
+  "physical_keybind": {
+    "status": "not validated",
+    "failed_capture_case": "sidebar-keybind",
+    "error": [
+      "external chat view was not prepared/open: {\"dismiss_active\": false, \"hidden\": false, \"keyboard_focus\": true, \"prepared\": true, \"resident\": true, \"size\": [534, 874], \"surfaces\": 1, \"target_open\": false, \"view\": \"chat\"}"
+    ],
+    "diagnostic": "Child virtual keyboard, parent modifier-only and parent explicit-Super-key attempts did not invoke the timestamped helper wrapper. These are failed input-injection proofs, not a passed keybind test."
+  }
+}

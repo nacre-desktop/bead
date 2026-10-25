@@ -1,6 +1,7 @@
 # B0111 — Daily-use sidebar, tabs and notification bugs
 
-Final renderer integration validation is in progress; earlier proofs are source-pinned below.
+Acceptance is blocked by repeated anonymous-memory growth. The notification fix
+is on main; the remaining source/test/evidence commits stay unpublished for review.
 No live shell, installed configuration or daemon contract changes are included.
 
 ## Notifications
@@ -68,6 +69,14 @@ the existing private app IPC lane; late geometry cannot resurrect a closed panel
 This preserves warm workers rather than reverting the smoothness cache.
 Regressions exercise close/reopen ordering, hidden cached geometry, late geometry,
 and validation of the private visibility route.
+Seven final nested states pass: hover departure, cancelled dwell, click persistence,
+body hover/pressed, physical cached hover reopen, and pin/outside/unpin closure.
+Raw app state confirms the cached process survives close.
+[State proofs](evidence/0111/sidebar-verification.json) distinguish these passes
+from failed Super+A input injection: child-seat and parent-seat attempts never
+invoked the logged helper wrapper. Physical keybind delivery is unvalidated;
+that failure does not establish a sidebar command-routing defect.
+
 Capture cases close the external app directly between states: the existing
 `nacre close` route closes resident bar panels only, so it is not used as proof
 that the external sidebar closed. That existing global-close routing gap is
@@ -78,6 +87,7 @@ capability presentation differs: Brain and composer attachment/screenshot action
 are enabled in QML but disabled in this Bead fixture. The warm pin test seeds
 the conversation twice, so its extra message pair is fixture content, not a
 layout parity claim. Paired pin crops therefore compare the common header.
+Small existing header text-baseline and tab-width differences also remain visible.
 
 ## Dashboard caption alignment
 
@@ -112,17 +122,22 @@ At 25 ms screencopy sampling, image-progress 10–90% spans are QML
 100–101 ms and Bead 76–102 ms. These are image-distance proxies, not contour
 geometry or physical scanout timings. Native captures cross the 5% image-progress
 threshold 232–261 ms later (median 246.5 ms); edge pixels can appear earlier, so
-this is not exact first-pixel latency. That captured-progress gap remains for the
-separate smoothness unit B0110. The sampled native progress is also coarser:
+this is not exact first-pixel latency. These reported-control gaps were assigned
+to B0110. The sampled native progress is also coarser:
 audio repeats a partial-height pose before jumping to full height, whereas QML
 has more intermediate poses. This is not a claim of smooth-motion parity.
 Earlier exit sequences started before the
-native pane was fully prepared and are excluded from duration claims.
+native pane was fully prepared and are excluded from duration claims. The final
+integrated renderer refresh was stopped at the memory gate; these earlier
+captures do not establish its motion parity.
 
 ## Validation
 
-Paired final QML/Bead captures, persisted-history daemon reproduction, refreshed
-goldens, full remote CI and five alternating memory pairs are being collected.
+The full remote Arch CI-equivalent passes on `4f9590b` (production binary from
+`6e05430`; the difference is test-only). It ends `CI_ALL_OK`, including 602
+nacre-shell tests, renderer configurations, Luau analysis, packaging/lifecycle
+checks and all dependency/license graphs. All 36 refreshed dashboard goldens were
+visually reviewed. [Exact commands and results](evidence/0111/checks.txt).
 Captures use private nested sessions at 2880×1800, scale 1.5, CPU rendering,
 the same wallpaper/palette and real fonts. No laptop or live-shell acceptance
 is claimed. Raw harness failures remain private and are not product evidence.
@@ -153,10 +168,28 @@ The excess in these phases is anonymous memory; DRM/SwapPss deltas are zero.
 Those windows start only 0.4 seconds after preparation. Today anonymous memory
 changes by several MiB inside them, and closed Today changes shared-memory
 buffers inside its window after a 2.5-second wait. They do not establish settled
-memory. One follow-up is predeclared: five new pairs with an extra fixed three
-seconds before every phase's five samples, keeping both roles, sources, fixtures
-and the +0.5 MiB gate unchanged. No adaptive waits or threshold changes are used.
-The failed snapshot result will remain recorded regardless of that outcome.
+memory. The predeclared follow-up adds an extra fixed three seconds before every
+phase's
+five samples, keeping both roles, sources, fixtures and the +0.5 MiB gate unchanged.
+No adaptive waits or threshold changes are used. Three matched pairs completed:
+Quick shell deltas are +1.508, +2.504 and +1.086 MiB; combined UI deltas are
++1.605, +2.594 and +1.191 MiB. Those Quick windows are flat. Even if the remaining
+two pairs were arbitrarily negative, the planned five-pair median would remain above the gate
+(lower bounds +1.0859375 MiB shell / +1.19140625 MiB combined). Remaining captures were stopped
+under the repeated-growth rule; no five-pair follow-up aggregate is claimed.
+Today control pair 3 still varies by 1,956 KiB inside its delayed window.
+[All delayed pair/component data](evidence/0111/memory-warm-delayed.json) and
+[summary](evidence/0111/memory-warm-delayed-table.md) retain these limits.
+The extra Quick cost is shell anonymous memory; file PSS, DRM and SwapPss do not
+explain it. Its cause is not isolated. Both roles already use B0110's 120-second
+cache, so this is not attributed to a new cache policy or accepted as a measured
+smoothness tradeoff. The earlier failed five-pair snapshot remains recorded.
+The follow-up's third candidate arm hit a UI command deadline while closing Today;
+its log records a 1,013 ms panel-frame processing interval and no OOM. It produced
+no memory record. The whole matched pair was retried once with identical settings,
+preserving the interrupted control/candidate attempt separately. The retry
+completed both arms. This timeout remains a known runtime failure, independently
+of the memory stop. No further keybind/peek captures followed the stop.
 
 Product source changes total +481/−73 lines across the standalone notification
 fix and this unit's remaining patches, including comments and blank lines,
@@ -164,4 +197,5 @@ excluding tests, docs and golden images. The engine addition is a reusable
 behavior-controlled pointer-leave deadline; Nacre app IPC remains at the GPL edge.
 
 Private capture harness/source copies are temporary: delete 7 days after the
-replacement is trusted. Remote copies are removed after evidence transfer.
+replacement is trusted. Remote copies were removed after evidence transfer; owned jobs, scopes and
+containers were cleaned up. No live session or installed configuration changed.

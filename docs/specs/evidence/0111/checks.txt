@@ -35,3 +35,21 @@ BEAD_UPDATE_GOLDENS=1 nice -n 10 cargo test -p nacre-shell --locked -j2 dashboar
 PASS 63/63
 36 regenerated dashboard goldens visually reviewed; all changed pixels confined
 to pearl strip y73..85 at1x / y109..128 at1.5x. No non-dashboard goldens changed.
+
+Final private capture checks (CPU, 2880x1800/1.5):
+`bash b0111-capture-memory-pairs.sh` with prefix post-b0110-memory, WARM_CACHE=1,
+control 2e523f2 / candidate 6e05430: all ten arms exit0, 15 phases, five pairs.
+`python3 b0111-capture-memory-analyze.py` with the same prefix/revisions:
+FAIL (exit1); Today-open and Quick paired medians exceed +0.5 MiB.
+`bash b0111-capture-run-settled3.sh`: fixed extra3s before every sample window;
+three matched pairs completed, with one interrupted pair3 retried whole once.
+The loop was stopped at the owned pair4 waiter (exit143) under repeated-growth
+rule: all three Quick deltas exceed +1 MiB; no five-pair aggregate is claimed.
+Exact raw sources, samples, before/after hashes and within-window ranges are in
+the memory-warm-*.json artifacts. All process SwapPss and host swap-in checks pass.
+Seven final sidebar state cases pass; Super+A input injection never invoked the
+private helper wrapper, so physical keybind validation failed. See sidebar JSON.
+Final integrated-renderer peek refresh was stopped at the memory gate.
+Remote cleanup: owned container/build directory and desktop task directory removed;
+no owned jobs, tmux sessions, scopes or recorded temporary paths remain. Shared
+desktop lock and other workers' jobs were untouched. No live-session changes.

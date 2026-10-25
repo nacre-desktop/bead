@@ -1,0 +1,27 @@
+{
+  "file": "sidebar-pinned-header-qml-left-bead-right.png",
+  "source_revisions": {
+    "qml": "713d38b3a0421b42da995f6cc562650510807e88",
+    "bead": "6e054307d5b0e664b04f0f67fb7247dc8738127e"
+  },
+  "source_images": [
+    "private QML sidebar-pinned capture",
+    "private Bead sidebar-pinned-warm capture"
+  ],
+  "source_resolution_px": [
+    2880,
+    1800
+  ],
+  "roi_absolute_px": [
+    0,
+    320,
+    730,
+    465
+  ],
+  "placement": "QML left, Bead right; identical absolute crop origin and bounds; no image alignment or scaling",
+  "canvas_px": [
+    1460,
+    173
+  ],
+  "purpose": "common pin-header comparison crop; full originals remain private"
+}
