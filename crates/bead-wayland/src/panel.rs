@@ -223,16 +223,10 @@ impl App {
                                 Ok(())
                             } else {
                                 self.request_panel_at(name, output, true, center)?;
-                                self.panel_ui(UiEvent::Model(std::collections::BTreeMap::from([
-                                    (
-                                        "panel.hover_opened".into(),
-                                        bead_core::Value::Bool(call.method == "hover-open"),
-                                    ),
-                                    (
-                                        "panel.anchor_hovered".into(),
-                                        bead_core::Value::Bool(call.method == "hover-open"),
-                                    ),
-                                ])));
+                                self.panel_ui(UiEvent::PanelHover {
+                                    opened: Some(call.method == "hover-open"),
+                                    anchor: call.method == "hover-open",
+                                });
                                 Ok(())
                             }
                         })
@@ -240,10 +234,10 @@ impl App {
                 }
             }
             "hover-enter" | "hover-leave" => {
-                self.panel_ui(UiEvent::Model(std::collections::BTreeMap::from([(
-                    "panel.anchor_hovered".into(),
-                    bead_core::Value::Bool(call.method == "hover-enter"),
-                )])));
+                self.panel_ui(UiEvent::PanelHover {
+                    opened: None,
+                    anchor: call.method == "hover-enter",
+                });
                 Ok(serde_json::Value::Null)
             }
             "close" => {

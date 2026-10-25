@@ -244,6 +244,11 @@ pub enum UiEvent {
     /// Shell-wide hide: `None` toggles. Wallpaper surfaces are never affected.
     ShellHidden(Option<bool>),
     PointerRegion(bool),
+    /// Hover origin and anchor contact; views choose how to project this lifecycle input.
+    PanelHover {
+        opened: Option<bool>,
+        anchor: bool,
+    },
     PanelDismissed,
     PanelSelected(String),
     /// Update the active view name without replacing the panel surface or worker.

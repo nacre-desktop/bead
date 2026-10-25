@@ -4352,6 +4352,27 @@ impl SceneSource for Runtime {
             | UiEvent::Output(_, _, _) => {
                 return Err("session envelope reached script".into());
             }
+            UiEvent::PanelHover { opened, anchor } => {
+                // Lifecycle input is optional. Only views declaring hover policy
+                // receive these authored stores; ordinary popouts keep their schema.
+                let mut values = BTreeMap::new();
+                if self.session.stores.get("panel.anchor_hovered").is_some() {
+                    values.insert(
+                        "panel.anchor_hovered".into(),
+                        bead::core::Value::Bool(anchor),
+                    );
+                }
+                if let Some(opened) = opened
+                    && self.session.stores.get("panel.hover_opened").is_some()
+                {
+                    values.insert("panel.hover_opened".into(), bead::core::Value::Bool(opened));
+                }
+                if values.is_empty() {
+                    None
+                } else {
+                    self.session.update(values)?
+                }
+            }
             UiEvent::PanelVisibility(open) => {
                 if self.chat.is_some() {
                     crate::app::notify_panel_visibility(open);

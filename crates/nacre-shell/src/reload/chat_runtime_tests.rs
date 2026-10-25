@@ -356,3 +356,26 @@ fn lip_and_body_hover_are_a_union_even_when_startup_delays_lip_events() {
         "lip reentry cancels grace"
     );
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn panel_hover_lifecycle_preserves_sidebar_warm_policy() {
+    let _guard = serial();
+    let lab = lab(false, json!({"available":true,"channels":{}})).await;
+    let mut runtime = runtime(chat_for(&lab).await);
+    for (opened, anchor, want_opened) in [
+        (Some(true), true, true),
+        (None, false, true),
+        (Some(false), false, false),
+        (None, true, false),
+    ] {
+        step(&mut runtime, UiEvent::PanelHover { opened, anchor });
+        assert_eq!(
+            runtime.session.stores.get("panel.hover_opened"),
+            Some(&bead::core::Value::Bool(want_opened))
+        );
+        assert_eq!(
+            runtime.session.stores.get("panel.anchor_hovered"),
+            Some(&bead::core::Value::Bool(anchor))
+        );
+    }
+}

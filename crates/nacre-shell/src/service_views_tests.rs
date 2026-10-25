@@ -1600,3 +1600,34 @@ fn widget_editor_primary_controls_stay_visible_and_do_not_overlap() -> Result<()
     }
     Ok(())
 }
+
+#[test]
+fn panel_hover_lifecycle_does_not_add_undeclared_popout_state() -> Result<()> {
+    use bead::wayland::{SceneSource, UiEvent};
+    for entry in ["sound/main.luau", "status/main.luau"] {
+        let h = Harness::load(
+            &root(),
+            Path::new(entry),
+            &root().join("palette.json"),
+            super::initial_models()?,
+            Config {
+                width: 1920,
+                height: 1200,
+                scale: 1.5,
+            },
+        )?;
+        let mut runtime = crate::reload::Runtime::new(h.session);
+        for (opened, anchor) in [
+            (Some(false), false),
+            (Some(true), true),
+            (None, false),
+            (None, true),
+        ] {
+            runtime.stage(UiEvent::PanelHover { opened, anchor })?;
+            runtime.commit();
+            assert!(runtime.session.stores.get("panel.anchor_hovered").is_none());
+            assert!(runtime.session.stores.get("panel.hover_opened").is_none());
+        }
+    }
+    Ok(())
+}
