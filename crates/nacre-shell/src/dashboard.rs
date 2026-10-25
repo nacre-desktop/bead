@@ -614,6 +614,9 @@ impl Dashboard {
         self.clock = clock;
         self
     }
+    pub fn raster_scale(&self) -> f32 {
+        self.raster_scale.get() as f32
+    }
     pub fn set_raster_scale(&self, scale: f32) {
         if scale.is_finite() && scale > 0. {
             self.raster_scale.set(f64::from(scale));

@@ -1994,6 +1994,7 @@ impl Runtime {
         };
         let reduced_motion = bead::core::animation::reduced_motion();
         let next = factory(page).map_err(std::io::Error::other)?;
+        next.set_raster_scale(current.borrow().raster_scale());
         let wakeup = self
             .wakeup
             .clone()
@@ -2425,7 +2426,7 @@ impl SceneSource for Runtime {
                 .filter(|scale| scale.is_finite() && *scale > 0.)
                 .max_by(f32::total_cmp)
         {
-            dashboard.set_raster_scale(scale);
+            dashboard.borrow().set_raster_scale(scale);
         }
     }
     fn viewport(&mut self, width: u32, height: u32) -> bool {
