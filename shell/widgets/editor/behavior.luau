@@ -129,7 +129,9 @@ local function tile_document(doc,req)
         for _,item in items do
             local rect=geometry[item.iid]
             local span=math.max(1,math.ceil((reservations[item.iid] or (rect and rect.w) or (item.slot.span*tile))/tile))
-            local start=rect and math.floor((region=="right" and width-rect.x-rect.w or rect.x)/tile) or item.slot.start
+            local position=rect and (region=="right" and width-rect.x-rect.w or rect.x)
+            if rect and region=="centre" then position=rect.x+rect.w/2-span*tile/2 end
+            local start=position and math.floor(position/tile) or item.slot.start
             start=math.max(previous,start)
             if start+span>host.regions[region].span then return end
             item.slot.start=start; item.slot.span=span; previous=start+span
@@ -264,8 +266,10 @@ return {
                 local doc=s["widgets.draft"][1] or target.document
                 local span=type(event.source)=="string" and (find_doc(doc,event.source) or {}).slot
                 span=span and span.span or 1
-                local x=event.x+(target.origin_x or 0)
-                if target.region=="right" then x=width-x end
+                local bounds=doc.hosts.top_bar.regions[target.region]
+                local tile=width/doc.hosts.top_bar.tiles
+                local x=event.x+(target.origin_x or 0)-bounds.start*tile
+                if target.region=="right" then x=bounds.span*tile-x end
                 target.start=math.max(0,math.min(doc.hosts.top_bar.regions[target.region].span-span,math.floor((x-(event.width or 0)/2)*doc.hosts.top_bar.tiles/width)))
             end
             handle(s,{target})

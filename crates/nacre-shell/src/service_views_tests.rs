@@ -1561,3 +1561,42 @@ fn widget_canvas_move_roundtrip_snaps_preserves_ids_and_rejects_duplicates() -> 
     );
     Ok(())
 }
+
+#[test]
+fn widget_editor_primary_controls_stay_visible_and_do_not_overlap() -> Result<()> {
+    let h = Harness::load(
+        &root(),
+        Path::new("widgets/editor/main.luau"),
+        &root().join("palette.json"),
+        super::initial_models()?,
+        Config {
+            width: 1920,
+            height: 1200,
+            scale: 1.5,
+        },
+    )?;
+    for labels in [
+        vec!["Undo", "Reset", "Cancel", "Done"],
+        vec!["Layout", "Catalogue", "Settings", "Trash"],
+    ] {
+        let mut previous = None;
+        for label in labels {
+            let node = h
+                .session
+                .view_nodes()
+                .iter()
+                .find(|node| node.label == label)
+                .ok_or("editor control missing")?;
+            let rect = bead::ui::rect(&node.draw);
+            assert!(
+                rect.w >= 32. && rect.x >= 0. && rect.x + rect.w <= h.scene().width,
+                "{label} must have a visible usable target: {rect:?}"
+            );
+            if let Some(right) = previous {
+                assert!(rect.x >= right, "editor controls overlap");
+            }
+            previous = Some(rect.x + rect.w);
+        }
+    }
+    Ok(())
+}

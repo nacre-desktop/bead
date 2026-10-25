@@ -24,10 +24,12 @@ local function edit(op,extra)
     return ui.action("widgets.edit",{request})
 end
 local function text(id,value,height,size,color)
-    return ui.Text{id=id,text=value or "",height=height or 20,font_size=size or tx.body*4/3,color=color or "onSurface"}
+    local font_size=size or tx.body*4/3
+    return ui.Text{id=id,text=value or "",width=math.ceil(ui.text_width(value or "","IBM Plex Sans",font_size))+sp.hairline,
+        height=height or 20,font_size=font_size,color=color or "onSurface"}
 end
 local function button(id,label,action,width)
-    local node=kit.Button{id=id,text=label,width=width,height=sp.huge+sp.xs,shrink=0,padding=sp.xs,
+    local node=kit.Button{id=id,text=label,width=width or math.ceil(ui.text_width(label,"IBM Plex Sans",tx.body*4/3))+sp.lg,height=sp.huge+sp.xs,shrink=0,padding=sp.xs,
         focus_on_pointer=false,on_activate=action}
     local request=action and action.argument and action.argument[1]
     if request and (request.op=="move" or request.op=="remove" or request.op=="add") then node.props.on_drop=action end
@@ -272,9 +274,16 @@ add_outside_drop("drop-canvas",{0,context.header,viewport_width,viewport_height-
 -- Bar targets follow the document's actual region slots; the transfer engine adds
 -- source origin before the behavior maps output coordinates back to tiles.
 local tile_width=viewport_width/document.hosts.top_bar.tiles
-for region,bounds in document.hosts.top_bar.regions do
+local shared_regions=true
+for _,bounds in document.hosts.top_bar.regions do
+    if bounds.start~=0 or bounds.span~=document.hosts.top_bar.tiles then shared_regions=false end
+end
+for index,region in {"left","centre","right"} do
+    local bounds=document.hosts.top_bar.regions[region]
+    local left=shared_regions and (index-1)*viewport_width/3 or bounds.start*tile_width
+    local width=shared_regions and viewport_width/3 or bounds.span*tile_width
     add_outside_drop("drop-bar-"..region,
-        {bounds.start*tile_width,0,bounds.span*tile_width,context.header},
+        {left,0,width,context.header},
         {host="top_bar",region=region,start=bounds.start,point=true,host_width=viewport_width,
             region_start=bounds.start,region_span=bounds.span})
 end
