@@ -34,4 +34,19 @@ end
 local function glyph(id,text,color)
     return centered_text{id=id,text=text,width=t.icon_width,shrink=0,family="Material Symbols Rounded",font_size=t.icon_font,color=color or "secondary",text_align="center"}
 end
-return {ui=ui,kit=kit,t=t,centered_text=centered_text,launcher=launcher,popouts=popouts,ws_on=ws_on,tray_on=tray_on,dash_on=dash_on,focus_on=focus_on,updates_on=updates_on,updates_n=updates_n,header=header,title=title,title_width=title_width,cue_extent=cue_extent,dwell=dwell,ws_count=ws_count,ws_icons=ws_icons,thread=thread,pearl_accent=pearl_accent,glyph=glyph}
+local function status_glyph(id,text,kind,color)
+    local width=t.status_symbol_ink[ui.resolve_for_check(text)] or t.status_ink[kind]
+    return ui.Box{id=id,width=width,height=t.icon_font*t.line_height,shrink=0,
+        ui.Text{id="ink",position="absolute",left=(width-t.icon_width)/2,top=0,width=t.icon_width,height=t.icon_font*t.line_height,
+            text=text,family="Material Symbols Rounded",font_size=t.icon_font,color=color or "secondary",text_align="center"},
+    }
+end
+local function status_text(p)
+    -- Text paints from the top of its line box; centering a shorter box lowers
+    -- the baseline without changing the group's hit area or the icon's centre.
+    local offset=p.font_size==t.clock_font and t.clock_text_offset or t.status_text_offset
+    p.height=p.font_size*t.line_height-2*offset
+    p.family="IBM Plex Sans"
+    return ui.Text(p)
+end
+return {ui=ui,kit=kit,t=t,centered_text=centered_text,launcher=launcher,popouts=popouts,ws_on=ws_on,tray_on=tray_on,dash_on=dash_on,focus_on=focus_on,updates_on=updates_on,updates_n=updates_n,header=header,title=title,title_width=title_width,cue_extent=cue_extent,dwell=dwell,ws_count=ws_count,ws_icons=ws_icons,thread=thread,pearl_accent=pearl_accent,glyph=glyph,status_glyph=status_glyph,status_text=status_text}

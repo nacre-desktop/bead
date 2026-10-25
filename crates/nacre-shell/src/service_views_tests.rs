@@ -313,8 +313,25 @@ fn real_bar_calendar_action_enqueues_a_view_and_audio_scroll_does_not_toggle_it(
         time.y >= clock.y && time.y + time.h <= clock.y + clock.h,
         "time must fit vertically inside the bar clock button"
     );
+    let calendar_icon = h
+        .scene()
+        .layers
+        .iter()
+        .find(|layer| layer.id.ends_with(".clock.calendar.ink"))
+        .and_then(|layer| {
+            h.scene().primitives[layer.own.clone()]
+                .iter()
+                .find_map(|p| {
+                    if let bead::render::Primitive::Text { rect, .. } = p {
+                        Some(*rect)
+                    } else {
+                        None
+                    }
+                })
+        })
+        .ok_or("calendar icon geometry missing")?;
     assert!(
-        time.x >= clock.x + 24.,
+        time.x + 0.01 >= calendar_icon.x + calendar_icon.w,
         "time must follow the calendar icon horizontally"
     );
     let host = bead::services::Desktop::start_config(bead::services::Config {
@@ -393,10 +410,10 @@ fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
         values.extend(BTreeMap::from([
             ("bar.popouts".into(), Value::Bool(true)),
             ("bar.launcher".into(), Value::Bool(true)),
-            ("bar.updates.count".into(), Value::Number(12.)),
-            ("bar.notifications.count".into(), Value::Number(7.)),
-            ("bead.desktop.battery.value".into(), Value::Text("77".into())),
-            ("bead.desktop.clock".into(), Value::Text("12:34".into())),
+            ("bar.updates.count".into(), Value::Number(9.)),
+            ("bar.notifications.count".into(), Value::Number(15.)),
+            ("bead.desktop.battery.value".into(), Value::Text("56".into())),
+            ("bead.desktop.clock".into(), Value::Text("11:02".into())),
             ("bead.desktop.battery.value.width".into(), Value::Number(30.)),
             ("bead.workspaces".into(), Value::list(vec![
                 serde_json::json!({"id":"one","index":1,"label":"1","active":true,"hinted":true,"shown":1,"app1":"terminal"}),
