@@ -29,6 +29,42 @@ pub fn configure() {
                 eprintln!("MEMORY_POLICY_ERROR code=mmap_threshold");
             }
         }
+
+        // Avoid implicit transparent huge pages for future anonymous mappings while
+        // preserving callers' explicit MADV_HUGEPAGE/VM_HUGEPAGE requests. Do not
+        // overwrite a parent policy that already disabled THP.
+        // libc 0.2.190 does not export these THP prctl constants for GNU/Linux;
+        // values are from the kernel UAPI in include/uapi/linux/prctl.h and
+        // /usr/include/linux/prctl.h. See https://docs.kernel.org/admin-guide/mm/transhuge.html.
+        const PR_SET_THP_DISABLE: nix::libc::c_int = 41;
+        const PR_GET_THP_DISABLE: nix::libc::c_int = 42;
+        // PR_THP_DISABLE_EXCEPT_ADVISED preserves MADV_HUGEPAGE / VM_HUGEPAGE.
+        const PR_THP_DISABLE_EXCEPT_ADVISED: nix::libc::c_ulong = 1 << 1;
+        // SAFETY: `prctl` receives the Linux UAPI integer option and unsigned-long
+        // arguments. A zero result means no inherited THP-disable mode is active.
+        let thp_mode = unsafe {
+            nix::libc::prctl(
+                PR_GET_THP_DISABLE,
+                0 as nix::libc::c_ulong,
+                0 as nix::libc::c_ulong,
+                0 as nix::libc::c_ulong,
+                0 as nix::libc::c_ulong,
+            )
+        };
+        if thp_mode == 0 {
+            // Keep explicit huge-page advice (MADV_HUGEPAGE / VM_HUGEPAGE) available.
+            // SAFETY: option and arguments follow Linux <linux/prctl.h>; failure is
+            // best-effort only and must not prevent the shell from starting.
+            let _ = unsafe {
+                nix::libc::prctl(
+                    PR_SET_THP_DISABLE,
+                    1 as nix::libc::c_ulong,
+                    PR_THP_DISABLE_EXCEPT_ADVISED,
+                    0 as nix::libc::c_ulong,
+                    0 as nix::libc::c_ulong,
+                )
+            };
+        }
     }
 }
 
