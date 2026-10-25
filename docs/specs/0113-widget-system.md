@@ -91,6 +91,13 @@ A widget can be placed in the bar, on the desktop, or BOTH. The forms share data
 - Removal: drag off, or the hover ×. Removed widgets always stay in the gallery. Undo, plus "Reset to Nacre default" in the app header. Nothing is lost silently.
 - Smoothness: every drag, reflow and drop is animated at the full frame rate (SMOOTHNESS FIRST); the app opens with content on the first frame.
 - Containers: drag status items into or out of a pill; the pill animates its width.
+- **Detach anywhere (owner, 2026-10-25):** WITHOUT the Widgets app open, a widget can be dragged off the bar and dropped onto the desktop (workspace/canvas), like pearls detach.
+  - While dragging it MORPHS from its bar form into its desktop form (animated size/shape transition, e.g. the music line grows into the visualiser).
+  - Dropping attaches it to the desktop at the snapped position; dragging a desktop widget onto the bar morphs it back.
+  - Widgets without a desktop form either refuse to leave the bar (rubber-band back) or become a floating card (per-widget setting).
+  - A widget can still be in both places (bar + desktop) via the app.
+  - The drag must be smooth and should start on a deliberate gesture (press-and-hold or drag threshold) so normal clicks are unaffected.
+
 
 ## Music widget (first rich widget)
 
