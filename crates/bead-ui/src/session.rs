@@ -34,7 +34,7 @@ pub struct Session {
     pub(super) preview_deadline: Option<std::time::Instant>,
     pointer_inside: bool,
     pointer_seen: bool,
-    hover_close_deadline: Option<std::time::Instant>,
+    edge_hover: bead_core::edge_hover::EdgeHover,
     coalesce_projection: bool,
     recovery_path: Option<PathBuf>,
     recovered: Option<bead_core::recovery::Restored>,
@@ -144,7 +144,7 @@ impl Session {
             preview_deadline: None,
             pointer_inside: false,
             pointer_seen: false,
-            hover_close_deadline: None,
+            edge_hover: Default::default(),
             coalesce_projection: false,
             recovery_path: None,
             recovered: None,
@@ -542,18 +542,15 @@ impl Session {
                     .and_then(Generation::animation_snapshot)
             })
     }
-    /// Panels opt into leave dismissal in behavior with `panel.close_on_leave`
-    /// and `panel.leave_delay` (seconds). Enter/reentry cancels the grace timer.
+    /// Shared edge-panel hover controller. Authored `panel.close_on_leave` and
+    /// `panel.leave_delay` select the policy; lip/body reentry or input focus holds it.
     pub fn pointer_region(&mut self, inside: bool) -> Result<Option<Scene>, Diagnostic> {
         self.pointer_inside = inside;
         self.pointer_seen = true;
-        if inside {
-            self.hover_close_deadline = None;
-        }
         self.update(BTreeMap::new())
     }
     pub fn hover_close_deadline(&self) -> Option<std::time::Instant> {
-        self.hover_close_deadline
+        self.edge_hover.deadline()
     }
     pub(super) fn preview_changes(&mut self, key: String, value: f32) -> BTreeMap<String, Value> {
         if key.is_empty() {
@@ -631,32 +628,37 @@ impl Session {
                 .resolve("panel.close_on_leave", &stores)
                 .ok()
                 == Some(Value::Bool(true));
-        if stores.get("panel.open") == Some(&Value::Bool(false)) {
+        let open = stores.get("panel.open") != Some(&Value::Bool(false));
+        if !open {
+            self.pointer_inside = false;
             self.pointer_seen = false;
-            self.hover_close_deadline = None;
-        } else if !hover_close
-            || self.pointer_inside
-            || stores.get("panel.anchor_hovered") == Some(&Value::Bool(true))
-            || !self.pointer_seen
-        {
-            self.hover_close_deadline = None;
-        } else {
-            let now = std::time::Instant::now();
-            if let Some(deadline) = self.hover_close_deadline {
-                if now >= deadline {
-                    self.hover_close_deadline = None;
-                    self.pointer_seen = false;
-                    stores
-                        .commit(BTreeMap::from([("panel.open".into(), Value::Bool(false))]))
-                        .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+        }
+        let delay = generation
+            .script
+            .resolve("panel.leave_delay", &stores)
+            .ok()
+            .and_then(|value| match value {
+                Value::Number(delay) if delay.is_finite() && (0.0..=60.0).contains(&delay) => {
+                    Some(std::time::Duration::from_secs_f64(delay))
                 }
-            } else if let Ok(Value::Number(delay)) =
-                generation.script.resolve("panel.leave_delay", &stores)
-                && delay.is_finite()
-                && (0.0..=60.0).contains(&delay)
-            {
-                self.hover_close_deadline = Some(now + std::time::Duration::from_secs_f64(delay));
-            }
+                _ => None,
+            });
+        let focused = matches!(stores.get("bead.focused"), Some(Value::Text(id))
+            if self.current_nodes.iter().any(|node| &node.id == id && node.input.is_some()));
+        if self.edge_hover.update(
+            open && hover_close && delay.is_some(),
+            (
+                stores.get("panel.anchor_hovered") == Some(&Value::Bool(true)),
+                self.pointer_inside,
+            ),
+            focused,
+            std::time::Instant::now(),
+            delay.unwrap_or_default(),
+        ) {
+            self.pointer_seen = false;
+            stores
+                .commit(BTreeMap::from([("panel.open".into(), Value::Bool(false))]))
+                .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
         }
         // A service notification may carry no local store edits. Consult the
         // external projector before deciding that its wakeup changed nothing.
@@ -792,7 +794,7 @@ impl Session {
         // An empty/unused model delta may be a wakeup for external data. Read
         // its projector before deciding there is no view change.
         if self.projector.is_none()
-            && self.hover_close_deadline.is_none()
+            && self.edge_hover.deadline().is_none()
             && self
                 .preview_deadline()
                 .is_none_or(|deadline| std::time::Instant::now() < deadline)

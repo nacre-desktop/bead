@@ -1359,10 +1359,12 @@ impl Runtime {
             "bead.focused".into(),
             bead::core::Value::Text(String::new()),
         )]))?;
-        self.session.stores.commit(BTreeMap::from([(
-            "bead.focused".into(),
-            bead::core::Value::Text("chat.composer".into()),
-        )]))?;
+        if self.session.stores.get("panel.hover_opened") != Some(&bead::core::Value::Bool(true)) {
+            self.session.stores.commit(BTreeMap::from([(
+                "bead.focused".into(),
+                bead::core::Value::Text("chat.composer".into()),
+            )]))?;
+        }
         let chat = std::rc::Rc::new(chat);
         let projector = chat.clone();
         self.session
@@ -4855,6 +4857,21 @@ impl SceneSource for Runtime {
                 {
                     values.insert("panel.hover_opened".into(), bead::core::Value::Bool(opened));
                 }
+                if let Some(opened) = opened {
+                    if self.chat.is_some() {
+                        values.insert(
+                            "bead.focused".into(),
+                            bead::core::Value::Text(
+                                if opened { "" } else { "chat.composer" }.into(),
+                            ),
+                        );
+                    } else if opened && self.session.stores.get("bead.focused").is_some() {
+                        values.insert(
+                            "bead.focused".into(),
+                            bead::core::Value::Text(String::new()),
+                        );
+                    }
+                }
                 if values.is_empty() {
                     None
                 } else {
@@ -4869,6 +4886,13 @@ impl SceneSource for Runtime {
                     self.tray_requested_close = false;
                 }
                 let mut values = panel_visibility_changes(open, self.launcher.is_some());
+                if !open {
+                    for key in ["panel.hover_opened", "panel.anchor_hovered"] {
+                        if self.session.stores.get(key).is_some() {
+                            values.insert(key.into(), bead::core::Value::Bool(false));
+                        }
+                    }
+                }
                 if !open && self.chat.is_some() {
                     values.extend(
                         self.session
@@ -5269,7 +5293,9 @@ impl SceneSource for Runtime {
             // Notice and OSD sessions have no status-pill stores; their hover is the
             // card/OSD hover key above.
             UiEvent::PointerRegion(_) if self.notifications.is_some() => None,
-            UiEvent::PointerRegion(entered) if self.chat.is_some() => {
+            UiEvent::PointerRegion(entered)
+                if self.session.stores.get("panel.hover_opened").is_some() =>
+            {
                 self.session.pointer_region(entered)?
             }
             UiEvent::PointerRegion(entered) => {

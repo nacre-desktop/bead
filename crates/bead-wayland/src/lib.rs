@@ -201,6 +201,10 @@ pub trait ShellControl: Send + Sync {
     fn edge_chrome(&self) -> EdgeChrome {
         EdgeChrome::default()
     }
+    /// Keep these output-space input regions reachable through outside-click backdrops.
+    fn edge_input_regions(&self, output: (i32, i32)) -> Vec<Rect> {
+        self.edge_chrome().input_regions(output)
+    }
     /// An externally hosted panel: None means the local panel registry owns it.
     fn external_panel_open(&self, _view: &str, _output: &str) -> Option<bool> {
         None

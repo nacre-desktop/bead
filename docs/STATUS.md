@@ -1,5 +1,14 @@
 # Status
 
+## 2026-10-26 — B0137 shared edge-panel hover
+
+AI and control panels share lip/body/focus exit grace. Backdrops preserve stable
+lip input and artwork, replacing the remap race. Final private CPU proof passes
+20/20 trials per panel with ≥5.12 s body holds, exit closure and composer focus
+hold. Full remote Arch CI passes; paired QML states and regenerated goldens were
+inspected. Animation/content parity limits and unmeasured memory are explicit in
+[the spec and evidence](specs/0137-ai-hover.md). No live change.
+
 ## 2026-10-25 — B0132 Today controls
 
 Today has the Colors button and clickable palette dots through the existing app

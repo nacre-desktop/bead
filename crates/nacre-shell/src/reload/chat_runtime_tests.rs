@@ -223,6 +223,13 @@ fn unpinned_sidebar_leaves_with_grace_reentry_and_detached_exemption() {
     let _guard = serial();
     let (_, chat) = crate::chat::tests::offline(json!({"available":true,"channels":{}}));
     let mut runtime = runtime(chat);
+    step(
+        &mut runtime,
+        UiEvent::Model(BTreeMap::from([(
+            "bead.focused".into(),
+            bead::core::Value::Text(String::new()),
+        )])),
+    );
     // Explicit key/click opens stay open on leave; only hover opens auto-close.
     step(&mut runtime, UiEvent::PointerRegion(false));
     assert!(runtime.session.hover_close_deadline().is_none());
@@ -294,6 +301,13 @@ fn hover_open_leaving_the_lip_without_visiting_the_body_still_closes() {
     step(
         &mut runtime,
         UiEvent::Model(BTreeMap::from([(
+            "bead.focused".into(),
+            bead::core::Value::Text(String::new()),
+        )])),
+    );
+    step(
+        &mut runtime,
+        UiEvent::Model(BTreeMap::from([(
             "panel.hover_opened".into(),
             bead::core::Value::Bool(true),
         )])),
@@ -322,6 +336,13 @@ fn lip_and_body_hover_are_a_union_even_when_startup_delays_lip_events() {
     let _guard = serial();
     let (_, chat) = crate::chat::tests::offline(json!({"available":true,"channels":{}}));
     let mut runtime = runtime(chat);
+    step(
+        &mut runtime,
+        UiEvent::Model(BTreeMap::from([(
+            "bead.focused".into(),
+            bead::core::Value::Text(String::new()),
+        )])),
+    );
     step(
         &mut runtime,
         UiEvent::Model(BTreeMap::from([
@@ -378,4 +399,35 @@ async fn panel_hover_lifecycle_preserves_sidebar_warm_policy() {
             Some(&bead::core::Value::Bool(anchor))
         );
     }
+}
+
+#[test]
+fn hover_sidebar_keeps_a_focused_composer_open_outside_both_regions() {
+    let _guard = serial();
+    let (_, chat) = crate::chat::tests::offline(json!({"available":true,"channels":{}}));
+    let mut runtime = runtime(chat);
+    step(
+        &mut runtime,
+        UiEvent::PanelHover {
+            opened: Some(true),
+            anchor: false,
+        },
+    );
+    step(
+        &mut runtime,
+        UiEvent::Model(BTreeMap::from([(
+            "bead.focused".into(),
+            bead::core::Value::Text("chat.composer".into()),
+        )])),
+    );
+    step(&mut runtime, UiEvent::PointerRegion(false));
+    assert!(runtime.session.hover_close_deadline().is_none());
+    step(
+        &mut runtime,
+        UiEvent::Model(BTreeMap::from([(
+            "bead.focused".into(),
+            bead::core::Value::Text(String::new()),
+        )])),
+    );
+    assert!(runtime.session.hover_close_deadline().is_some());
 }

@@ -783,6 +783,9 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
                     .and_then(|path| path.parent().map(|parent| parent.join("chat-pearls.json"))),
                 client.clone(),
             ));
+            if parent_socket.is_some() {
+                panel_gate.parent_lips(crate::frame_config::load(Path::new("shell")));
+            }
             options.control = Some(panel_gate);
             options.panels = Some(Panels::new(
                 "chat".into(),

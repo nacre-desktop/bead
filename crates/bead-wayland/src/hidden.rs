@@ -82,6 +82,14 @@ impl App {
             }
         }
         self.sync_edges();
+        let dismiss = self.panel_target
+            && self
+                .panel_runtime
+                .as_ref()
+                .is_some_and(|r| r.outside_dismiss());
+        if let Err(error) = self.set_dismiss_enabled(dismiss) {
+            eprintln!("DISMISS_INPUT_ERROR {error}");
+        }
         let variant = control.decoration_variant();
         if variant != self.decoration_variant {
             self.decoration_variant = variant;

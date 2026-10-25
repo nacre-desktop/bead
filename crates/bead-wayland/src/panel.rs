@@ -871,6 +871,9 @@ impl App {
             std::mem::swap(&mut self.scene, scene);
             std::mem::swap(&mut self.renderer, renderer);
         }
+        if self.pearl.is_none() {
+            self.settle_edge_exit();
+        }
         if !changed && !force_draw {
             return;
         }
@@ -1131,6 +1134,10 @@ impl App {
 
 pub(super) struct Dismiss {
     pub(super) enabled: bool,
+    output: wl_output::WlOutput,
+    pub(super) size: Option<(i32, i32)>,
+    bounds: Option<[i32; 4]>,
+    holes: Vec<[i32; 4]>,
     pub layer: LayerSurface,
     pub viewport: WpViewport,
     pub buffer: smithay_client_toolkit::shm::slot::Buffer,
@@ -1144,24 +1151,86 @@ impl Drop for Dismiss {
 }
 impl App {
     pub(super) fn set_dismiss_enabled(&mut self, enabled: bool) -> Result<(), String> {
-        let enabled = enabled && !self.options.test_passive;
-        let Some(dismiss) = self.dismiss.as_mut() else {
+        let Some(output) = self.dismiss.as_ref().map(|d| d.output.clone()) else {
             return Ok(());
         };
-        if dismiss.enabled == enabled {
+        let size = self
+            .dismiss
+            .as_ref()
+            .and_then(|d| d.size)
+            .or_else(|| self.output.info(&output).and_then(|info| info.logical_size));
+        let enabled = enabled && !self.options.test_passive;
+        let bounds = size.filter(|_| enabled).map(|(width, height)| {
+            let extent = if self.options.bar {
+                self.surfaces
+                    .iter()
+                    .find(|s| !s.companion && s.output == output)
+                    .map(|s| match self.options.edge {
+                        bead_core::Edge::Top | bead_core::Edge::Bottom => s.height as i32,
+                        bead_core::Edge::Left | bead_core::Edge::Right => s.width as i32,
+                    })
+                    .unwrap_or(0)
+            } else {
+                0
+            }
+            .clamp(
+                0,
+                if matches!(
+                    self.options.edge,
+                    bead_core::Edge::Top | bead_core::Edge::Bottom
+                ) {
+                    height
+                } else {
+                    width
+                },
+            );
+            match self.options.edge {
+                bead_core::Edge::Top => [0, extent, width, height - extent],
+                bead_core::Edge::Bottom => [0, 0, width, height - extent],
+                bead_core::Edge::Left => [extent, 0, width - extent, height],
+                bead_core::Edge::Right => [0, 0, width - extent, height],
+            }
+        });
+        let holes: Vec<_> = if let Some(size) = size.filter(|_| enabled) {
+            self.options
+                .control
+                .as_ref()
+                .filter(|c| {
+                    c.edge_hover_allowed(
+                        self.panel_target
+                            .then_some(self.panel_name.as_deref())
+                            .flatten(),
+                    )
+                })
+                .map(|c| c.edge_input_regions(size))
+                .unwrap_or_default()
+                .iter()
+                .map(|r| [r.x as i32, r.y as i32, r.w as i32, r.h as i32])
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let dismiss = self.dismiss.as_mut().unwrap();
+        if dismiss.enabled == enabled && dismiss.bounds == bounds && dismiss.holes == holes {
             return Ok(());
         }
-        let empty = if enabled {
-            None
-        } else {
-            Some(Region::new(&self.compositor).map_err(|e| e.to_string())?)
-        };
+        let region = Region::new(&self.compositor).map_err(|e| e.to_string())?;
+        if let Some([x, y, w, h]) = bounds {
+            if w > 0 && h > 0 {
+                region.add(x, y, w, h);
+            }
+            for [x, y, w, h] in &holes {
+                region.wl_region().subtract(*x, *y, *w, *h);
+            }
+        }
         dismiss
             .layer
             .wl_surface()
-            .set_input_region(empty.as_ref().map(|r| r.wl_region()));
+            .set_input_region(Some(region.wl_region()));
         dismiss.layer.commit();
         dismiss.enabled = enabled;
+        dismiss.holes = holes;
+        dismiss.bounds = bounds;
         Ok(())
     }
     pub(super) fn create_dismiss(&mut self, output: &wl_output::WlOutput) -> Result<(), String> {
@@ -1191,10 +1260,8 @@ impl App {
         layer.set_size(0, 0);
         layer.set_exclusive_zone(-1);
         layer.set_keyboard_interactivity(KeyboardInteractivity::None);
-        if self.options.test_passive {
-            let empty = Region::new(&self.compositor).map_err(|e| e.to_string())?;
-            layer.wl_surface().set_input_region(Some(empty.wl_region()));
-        }
+        let empty = Region::new(&self.compositor).map_err(|e| e.to_string())?;
+        layer.wl_surface().set_input_region(Some(empty.wl_region()));
         let mut pool = SlotPool::new(4096, &self.shm).map_err(|e| e.to_string())?;
         let (buffer, bytes) = pool
             .create_buffer(1, 1, 4, wl_shm::Format::Argb8888)
@@ -1202,13 +1269,18 @@ impl App {
         bytes.fill(0);
         layer.commit();
         self.dismiss = Some(Dismiss {
-            enabled: !self.options.test_passive,
+            enabled: false,
+            output: output.clone(),
+            size: None,
+            bounds: None,
+            holes: Vec::new(),
             layer,
             viewport,
             buffer,
             attached: false,
             _pool: pool,
         });
+        self.set_dismiss_enabled(true)?;
         Ok(())
     }
 }

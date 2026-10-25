@@ -22,6 +22,28 @@ pub struct EdgeChrome {
     /// Open on click only (`clickEdgeMenus`).
     pub click_to_open: bool,
 }
+impl EdgeChrome {
+    /// Output-space regions that backdrops must leave available for the lips.
+    pub fn input_regions(&self, output: (i32, i32)) -> Vec<Rect> {
+        self.lips
+            .iter()
+            .map(|lip| {
+                let g = lip_geometry(lip, output);
+                let x = if g.anchor.contains(Anchor::RIGHT) {
+                    output.0 - g.size.0 as i32 - g.margin[1]
+                } else {
+                    g.margin[3]
+                };
+                let y = if g.anchor.contains(Anchor::BOTTOM) {
+                    output.1 - g.size.1 as i32 - g.margin[2]
+                } else {
+                    g.margin[0]
+                };
+                Rect::new(x as f32, y as f32, g.size.0 as f32, g.size.1 as f32)
+            })
+            .collect()
+    }
+}
 /// The artwork inputs for one lip.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LipState {
@@ -84,6 +106,7 @@ pub(super) struct EdgeState {
     hover_opened: Option<String>,
     panel_hovered: bool,
     exit_epoch: u64,
+    exit: bead_core::edge_hover::EdgeHover,
     /// The bar-hosted dwell cue's opacity (0..1) and its fade timer.
     cue_fade: f32,
     cue_epoch: u64,
@@ -448,6 +471,7 @@ impl App {
         self.edge.exit_epoch = self.edge.exit_epoch.wrapping_add(1);
         let entered = self.edge.hovered.as_deref() != Some(k.as_str());
         self.edge.hovered = Some(k.clone());
+        self.settle_edge_exit();
         if entered && let Some(control) = &self.options.control {
             control.external_panel_hover(&lip.opens, output, true);
         }
@@ -546,6 +570,7 @@ impl App {
             self.redraw_lip(&k);
             return;
         }
+        self.edge.exit = Default::default();
         self.edge.hover_opened = Some(k.clone());
         if let Err(error) = self.request_panel_at(Some(&lip.opens), Some(&output), true, None) {
             eprintln!("EDGE_OPEN_ERROR {error}");
@@ -687,22 +712,55 @@ impl App {
         let Some(opened) = self.edge.hover_opened.clone() else {
             return;
         };
-        if !self.panel_target
-            || self.edge.panel_hovered
-            || self.edge.hovered.as_deref() == Some(opened.as_str())
-        {
+        let held = self.edge.hovered.as_deref() == Some(opened.as_str());
+        let focused = self
+            .panel_runtime
+            .as_ref()
+            .is_some_and(|r| r.surrounding_text().is_some() || !r.outside_dismiss());
+        let enabled = self.panel_target && self.pearl.is_none();
+        if self.options.trace_state {
+            println!(
+                "EDGE_HOVER lip={held} body={} focused={focused} enabled={enabled}",
+                self.edge.panel_hovered
+            );
+        }
+        let delay = Duration::from_millis(EXIT_MS);
+        if self.edge.exit.update(
+            enabled,
+            (held, self.edge.panel_hovered),
+            focused,
+            Instant::now(),
+            delay,
+        ) {
+            self.edge.hover_opened = None;
+            self.close_panel();
             return;
         }
+        let Some(deadline) = self.edge.exit.deadline() else {
+            return;
+        };
         self.edge.exit_epoch = self.edge.exit_epoch.wrapping_add(1);
         let epoch = self.edge.exit_epoch;
         let _ = self.loop_handle.insert_source(
-            Timer::from_duration(Duration::from_millis(EXIT_MS)),
+            Timer::from_duration(deadline.saturating_duration_since(Instant::now())),
             move |_, _, app| {
+                let focused = app
+                    .panel_runtime
+                    .as_ref()
+                    .is_some_and(|r| r.surrounding_text().is_some() || !r.outside_dismiss());
                 if app.edge.exit_epoch == epoch
-                    && app.edge.hover_opened.as_deref() == Some(opened.as_str())
-                    && app.panel_target
-                    && !app.edge.panel_hovered
-                    && app.edge.hovered.as_deref() != Some(opened.as_str())
+                    && app.edge.exit.update(
+                        app.panel_target
+                            && app.edge.hover_opened.as_deref() == Some(opened.as_str())
+                            && app.pearl.is_none(),
+                        (
+                            app.edge.hovered.as_deref() == Some(opened.as_str()),
+                            app.edge.panel_hovered,
+                        ),
+                        focused,
+                        Instant::now(),
+                        delay,
+                    )
                 {
                     app.edge.hover_opened = None;
                     app.close_panel();
@@ -713,11 +771,12 @@ impl App {
     }
     /// The pointer entered or left a companion (panel) surface.
     pub(super) fn edge_panel_hover(&mut self, inside: bool) {
+        if self.pearl.is_some() {
+            return;
+        }
         self.edge.panel_hovered = inside;
         self.edge.exit_epoch = self.edge.exit_epoch.wrapping_add(1);
-        if !inside {
-            self.settle_edge_exit();
-        }
+        self.settle_edge_exit();
     }
     /// A panel opened or closed: lips redraw their active state; a panel dismissed under a
     /// resting pointer must not reopen until the pointer leaves (`NacreHoverIntent.dismiss`).
@@ -726,6 +785,8 @@ impl App {
             return;
         }
         if closed {
+            self.edge.exit = Default::default();
+            self.edge.panel_hovered = false;
             self.edge.hover_opened = None;
             if let Some(k) = self.edge.hovered.clone() {
                 self.edge.gate.dismiss(&k);
@@ -735,23 +796,6 @@ impl App {
             self.edge.dwell_epoch = self.edge.dwell_epoch.wrapping_add(1);
         }
         self.redraw_lips();
-        if !closed {
-            // The panel's output is recorded a moment later in the open path.
-            let _ = self.loop_handle.insert_source(
-                Timer::from_duration(Duration::from_millis(30)),
-                |_, _, app| {
-                    // Surfaces created later stack above earlier ones in a layer: the
-                    // panel now covers the lips, so recreate them on top (QML: lips z 3).
-                    if app.panel_target {
-                        app.edge_surfaces
-                            .retain(|s| !matches!(s.kind, Kind::Lip(_)));
-                        app.sync_edges();
-                    }
-                    app.redraw_lips();
-                    TimeoutAction::Drop
-                },
-            );
-        }
     }
     /// Pointer events on a lip strip surface. Returns false for any other surface.
     pub(super) fn edge_pointer(&mut self, event: &PointerEvent) -> bool {
@@ -900,5 +944,26 @@ mod tests {
         // Odd output sizes round to whole pixels and never produce a zero-sized strip.
         let odd = lip_geometry(&lip(Edge::Left, 0., 0.), (1919, 1081));
         assert_eq!(odd.size, (1, 1));
+    }
+    #[test]
+    fn input_exclusions_match_rounded_layer_placement() {
+        let lip = |edge, length, thickness| Lip {
+            id: "test".into(),
+            opens: "panel".into(),
+            edge,
+            length,
+            thickness,
+        };
+        let chrome = EdgeChrome {
+            lips: vec![lip(Edge::Right, 144., 10.6), lip(Edge::Left, 144., 10.6)],
+            ..Default::default()
+        };
+        assert_eq!(
+            chrome.input_regions((1920, 1200)),
+            vec![
+                Rect::new(1909., 528., 11., 144.),
+                Rect::new(0., 528., 11., 144.)
+            ]
+        );
     }
 }

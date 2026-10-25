@@ -1,0 +1,81 @@
+{
+  "geometry": {
+    "physical": [
+      2880,
+      1800
+    ],
+    "scale": 1.5
+  },
+  "renderer": "cpu",
+  "arms": {
+    "qml": {
+      "panels": {
+        "sidebar": {
+          "trials": 1,
+          "minimum_body_seconds": 5.255260403035209,
+          "minimum_hold_seconds": 6.498187868972309,
+          "exit_observation_median_seconds": 0.23311615199781954,
+          "exit_observation_max_seconds": 0.23311615199781954
+        },
+        "control": {
+          "trials": 1,
+          "minimum_body_seconds": 5.258572197984904,
+          "minimum_hold_seconds": 6.506935321027413,
+          "exit_observation_median_seconds": 0.23189508204814047,
+          "exit_observation_max_seconds": 0.23189508204814047
+        }
+      },
+      "host_swap": {
+        "swap_used_before_kib": 0,
+        "pswpin_delta": 0
+      }
+    },
+    "bead": {
+      "panels": {
+        "sidebar": {
+          "trials": 20,
+          "minimum_body_seconds": 5.1213630239944905,
+          "minimum_hold_seconds": 6.176223306916654,
+          "exit_observation_median_seconds": 0.20125959650613368,
+          "exit_observation_max_seconds": 0.20146409992594272
+        },
+        "control": {
+          "trials": 20,
+          "minimum_body_seconds": 5.1296304950956255,
+          "minimum_hold_seconds": 6.187348957057111,
+          "exit_observation_median_seconds": 0.20138755155494437,
+          "exit_observation_max_seconds": 0.20207590505015105
+        }
+      },
+      "host_swap": {
+        "swap_used_before_kib": 0,
+        "pswpin_delta": 0
+      }
+    }
+  },
+  "focused_composer_outside_seconds_at_least": 5.1,
+  "safety": {
+    "qml": {
+      "capture_returncode": 0,
+      "oom_delta": {
+        "oom": 0,
+        "oom_kill": 0
+      },
+      "child_membership_verified": true,
+      "effective_memory_swap_max": "0"
+    },
+    "bead": {
+      "capture_returncode": 0,
+      "oom_delta": {
+        "oom": 0,
+        "oom_kill": 0
+      },
+      "child_membership_verified": true,
+      "effective_memory_swap_max": "0"
+    }
+  },
+  "binary_sha256": {
+    "nacre-helper": "744f6fa2d9a8cc6fdd26d3631248a7665fb89f82913ed17fcb552aeb85914d48",
+    "nacre-shell": "558f551703bcbf64f4b3487565514e7a32f192970b2154ca57c1153e31c6b123"
+  }
+}

@@ -69,8 +69,15 @@ pub fn edge_tab(
 }
 pub fn art(colors: &Palette) -> Result<EdgeArt, Box<dyn std::error::Error>> {
     let (accent, secondary) = (colors.get("primary")?, colors.get("secondary")?);
+    let surface = rgb(colors.get("surface")?);
     Ok(Arc::new(move |lip, size, state| {
-        edge_tab(lip, size, state, accent, secondary).map(|svg| Arc::from(svg.into_bytes()))
+        edge_tab(lip, size, state, accent, secondary).map(|svg| {
+            // Popup films leave this stable surface uncovered, including its material.
+            Arc::from(format!(
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="{}" height="{}"><rect width="100%" height="100%" fill="{surface}"/>{svg}</svg>"#,
+                size.0, size.1
+            ).into_bytes())
+        })
     }))
 }
 
@@ -93,6 +100,33 @@ mod tests {
             progress: 0.,
             active: false,
         }
+    }
+    #[test]
+    fn lip_material_remains_opaque_when_the_popup_film_is_cut_out() {
+        use bead::render::{PixelFormat, ShmTarget, svg_into};
+        let surface = [21, 18, 23, 255];
+        let colors = Palette(
+            std::collections::HashMap::from([
+                ("surface".into(), surface),
+                ("primary".into(), A),
+                ("secondary".into(), S),
+            ])
+            .into(),
+        );
+        let svg = art(&colors).unwrap()(&lip(Edge::Left), (10., 144.), idle()).unwrap();
+        let mut bytes = vec![0; 10 * 144 * 4];
+        svg_into(
+            &svg,
+            ShmTarget {
+                bytes: &mut bytes,
+                width: 10,
+                height: 144,
+                scale: 1.,
+                format: PixelFormat::Rgba,
+            },
+        )
+        .unwrap();
+        assert_eq!(&bytes[..4], &surface);
     }
     #[test]
     fn only_side_lips_have_a_tab() {

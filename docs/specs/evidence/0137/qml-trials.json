@@ -1,0 +1,16 @@
+[
+  {
+    "panel": "sidebar",
+    "trial": 1,
+    "held_seconds": 6.498187868972309,
+    "body_seconds": 5.255260403035209,
+    "close_seconds": 0.23311615199781954
+  },
+  {
+    "panel": "control",
+    "trial": 1,
+    "held_seconds": 6.506935321027413,
+    "body_seconds": 5.258572197984904,
+    "close_seconds": 0.23189508204814047
+  }
+]

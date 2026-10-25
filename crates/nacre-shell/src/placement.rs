@@ -62,6 +62,12 @@ impl Frame {
 }
 /// The presentation palette the frame art follows (surface, primary, secondary); `None` until
 /// the wallpaper palette arrives, when each chrome keeps the colours it was built with.
+static FRAME_LIPS: std::sync::Mutex<Vec<crate::frame_config::LipConfig>> =
+    std::sync::Mutex::new(Vec::new());
+pub(crate) fn set_frame_lips(lips: &[crate::frame_config::LipConfig]) {
+    *FRAME_LIPS.lock().unwrap_or_else(|p| p.into_inner()) = lips.to_vec();
+}
+
 static LIVE_COLORS: std::sync::Mutex<Option<[[u8; 4]; 3]>> = std::sync::Mutex::new(None);
 /// Publish the live presentation palette; true when the frame art colours changed.
 pub fn set_live_palette(palette: &std::collections::BTreeMap<String, [u8; 4]>) -> bool {
@@ -394,8 +400,23 @@ impl Chrome {
         } else {
             String::new()
         };
+        let holes = if crate::app::configured() {
+            bead::wayland::EdgeChrome {
+                lips: FRAME_LIPS
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .iter()
+                    .filter_map(|l| crate::shell_control::configured_lip(l, frame))
+                    .collect(),
+                ..Default::default()
+            }
+            .input_regions((output.0 as i32, output.1 as i32))
+        } else {
+            Vec::new()
+        };
+        let cutouts = crate::contour::geometry(output.0 as f64, output.1 as f64, &holes, 0.)?.body;
         Ok(format!(
-            r#"<svg xmlns="http://www.w3.org/2000/svg" width="{}" height="{}" viewBox="{} {} {} {}"><defs><linearGradient id="rim" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="{}" y2="{}"><stop stop-color="{}"/><stop offset=".38" stop-color="{}"/><stop offset="1" stop-color="{}"/></linearGradient></defs><path d="{}" fill="{}" fill-rule="evenodd"/>{}</svg>"#,
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="{}" height="{}" viewBox="{} {} {} {}"><defs><linearGradient id="rim" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="{}" y2="{}"><stop stop-color="{}"/><stop offset=".38" stop-color="{}"/><stop offset="1" stop-color="{}"/></linearGradient></defs><path d="{}{cutouts}" fill="{}" fill-rule="evenodd"/>{}</svg>"#,
             crop.w,
             crop.h,
             crop.x,
@@ -1311,5 +1332,35 @@ mod tests {
         let scene = crate::sound::fallback([20, 20, 20, 255]);
         let position = frame.positioner(Attachment::ControlCenter);
         assert_eq!(position(&scene, None, (1920, 1200)), (1478, 18));
+    }
+    #[test]
+    fn panel_film_keeps_lip_art_visible_without_cutting_the_body() {
+        use bead::render::{PixelFormat, ShmTarget, svg_into};
+        let cuts = crate::contour::geometry(
+            20.,
+            20.,
+            &[Rect::new(0., 5., 4., 10.), Rect::new(0., 7., 4., 4.)],
+            0.,
+        )
+        .unwrap()
+        .body;
+        let svg = format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><path d="M0 0H20V20H0Z{cuts}" fill="red" fill-rule="evenodd"/></svg>"#
+        );
+        let mut pixels = vec![0; 20 * 20 * 4];
+        svg_into(
+            svg.as_bytes(),
+            ShmTarget {
+                bytes: &mut pixels,
+                width: 20,
+                height: 20,
+                scale: 1.,
+                format: PixelFormat::Rgba,
+            },
+        )
+        .unwrap();
+        assert_eq!(pixels[(10 * 20 + 1) * 4 + 3], 0);
+        assert_eq!(pixels[(10 * 20 + 10) * 4 + 3], 255);
+        assert_eq!(pixels[(2 * 20 + 1) * 4 + 3], 255);
     }
 }

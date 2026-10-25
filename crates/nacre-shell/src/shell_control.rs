@@ -3,7 +3,7 @@
 //! switches. Nacre keys stay in `prefs`; this maps decoded values onto the generic
 //! `ShellControl` answers (bar present, panel allowed, decoration variant).
 use crate::{
-    frame_config::FrameConfig,
+    frame_config::{FrameConfig, LipConfig},
     placement::{Frame, FrameSettings},
     prefs::Prefs,
 };
@@ -21,8 +21,39 @@ struct FrameState {
     delay: u32,
     click: bool,
     config: FrameConfig,
+    /// The parent owns these lips; child app backdrops only preserve their input.
+    parent_lips: Option<Vec<LipConfig>>,
     /// Panel views that exist; a lip whose view is missing is not shown.
     views: std::collections::BTreeSet<String>,
+}
+
+impl FrameState {
+    fn settings(&self, bar: bool) -> FrameSettings {
+        self.settings.unwrap_or(FrameSettings {
+            width: 10.,
+            rounding: 25.,
+            left: true,
+            right: true,
+            bottom: true,
+            top: true,
+            bar,
+        })
+    }
+}
+pub(crate) fn configured_lip(config: &LipConfig, frame: Frame) -> Option<Lip> {
+    let thickness = match config.edge {
+        bead::core::Edge::Top => frame.top,
+        bead::core::Edge::Bottom => frame.bottom,
+        bead::core::Edge::Left => frame.left,
+        bead::core::Edge::Right => frame.right,
+    };
+    (thickness > 0.).then(|| Lip {
+        id: config.id.clone(),
+        edge: config.edge,
+        length: config.length,
+        thickness,
+        opens: config.opens.clone(),
+    })
 }
 
 pub struct Gate {
@@ -74,6 +105,28 @@ impl Gate {
         let mut frame = self.frame.lock().unwrap_or_else(|p| p.into_inner());
         frame.config = config;
         frame.views = views.into_iter().collect();
+        drop(frame);
+        crate::placement::set_frame_lips(&self.visible_frame_lips());
+    }
+    pub fn parent_lips(&self, config: FrameConfig) {
+        self.frame_lock().parent_lips = Some(config.lips);
+        crate::placement::set_frame_lips(&self.visible_frame_lips());
+    }
+    fn visible_frame_lips(&self) -> Vec<LipConfig> {
+        let frame = self.frame_lock();
+        frame
+            .parent_lips
+            .as_ref()
+            .unwrap_or(&frame.config.lips)
+            .iter()
+            .filter(|l| {
+                self.panel_allowed(&l.opens)
+                    && (frame.parent_lips.is_some()
+                        || frame.views.contains(&l.opens)
+                        || (l.opens == "assistant" && crate::app::configured()))
+            })
+            .cloned()
+            .collect()
     }
     fn frame_lock(&self) -> std::sync::MutexGuard<'_, FrameState> {
         self.frame.lock().unwrap_or_else(|p| p.into_inner())
@@ -89,6 +142,7 @@ impl Gate {
             changed |= cell.swap(value, SeqCst) != value;
         }
         changed |= self.ai.swap(p.ai_sidebar_enabled, SeqCst) != p.ai_sidebar_enabled;
+        let lips_changed = changed;
         self.pearls.store(p.detachable_panels, SeqCst);
         self.pearl_drag.store(p.drag_panels, SeqCst);
         *self.pearl_views.lock().unwrap_or_else(|p| p.into_inner()) = crate::pearls::Policy {
@@ -108,7 +162,9 @@ impl Gate {
             changed |= lips;
             moved
         };
-        if self.sheen.swap(p.frame_sheen, SeqCst) != p.frame_sheen || frame_changed {
+        crate::placement::set_frame_lips(&self.visible_frame_lips());
+        if self.sheen.swap(p.frame_sheen, SeqCst) != p.frame_sheen || frame_changed || lips_changed
+        {
             self.variant.fetch_add(1, SeqCst);
             // Open panels carry their own frame art: rebuild them too.
             bead::ui::text_style::refresh();
@@ -191,16 +247,9 @@ impl ShellControl for Gate {
         }
     }
     fn edge_chrome(&self) -> EdgeChrome {
+        crate::placement::set_frame_lips(&self.visible_frame_lips());
         let frame = self.frame_lock();
-        let settings = frame.settings.unwrap_or(FrameSettings {
-            width: 10.,
-            rounding: 25.,
-            left: true,
-            right: true,
-            bottom: true,
-            top: true,
-            bar: self.bar.load(SeqCst),
-        });
+        let settings = frame.settings(self.bar.load(SeqCst));
         let geometry = Frame::from_settings(&settings);
         // With the bar its surface holds the header's zone; without it the top edge needs
         // its own strip.
@@ -214,21 +263,7 @@ impl ShellControl for Gate {
                     || (l.opens == "assistant" && crate::app::configured()))
                     && self.panel_allowed(&l.opens)
             })
-            .filter_map(|l| {
-                let thickness = match l.edge {
-                    bead::core::Edge::Top => geometry.top,
-                    bead::core::Edge::Bottom => geometry.bottom,
-                    bead::core::Edge::Left => geometry.left,
-                    bead::core::Edge::Right => geometry.right,
-                };
-                (thickness > 0.).then(|| Lip {
-                    id: l.id.clone(),
-                    edge: l.edge,
-                    length: l.length,
-                    thickness,
-                    opens: l.opens.clone(),
-                })
-            })
+            .filter_map(|l| configured_lip(l, geometry))
             .collect();
         EdgeChrome {
             reserved: [
@@ -240,6 +275,24 @@ impl ShellControl for Gate {
             lips,
             hover_delay_ms: frame.delay,
             click_to_open: frame.click,
+        }
+    }
+    fn edge_input_regions(&self, output: (i32, i32)) -> Vec<bead::render::Rect> {
+        let frame = self.frame_lock();
+        if let Some(lips) = &frame.parent_lips {
+            let geometry = Frame::from_settings(&frame.settings(self.bar.load(SeqCst)));
+            EdgeChrome {
+                lips: lips
+                    .iter()
+                    .filter(|l| self.panel_allowed(&l.opens))
+                    .filter_map(|l| configured_lip(l, geometry))
+                    .collect(),
+                ..Default::default()
+            }
+            .input_regions(output)
+        } else {
+            drop(frame);
+            self.edge_chrome().input_regions(output)
         }
     }
     fn pearls_enabled(&self) -> bool {
@@ -399,5 +452,40 @@ mod tests {
         assert_eq!(woke.load(SeqCst), 1);
         assert_eq!(gate.decoration_variant(), variant);
         assert_eq!(gate.edge_chrome().hover_delay_ms, 500);
+    }
+    #[test]
+    fn child_backdrops_preserve_parent_lips_without_creating_duplicate_lips() {
+        let gate = Gate::new();
+        gate.parent_lips(
+            crate::frame_config::parse(
+                include_bytes!("../../../shell/frame/behavior.luau"),
+                std::path::Path::new("frame/behavior.luau"),
+            )
+            .unwrap(),
+        );
+        assert!(gate.edge_chrome().lips.is_empty());
+        let regions = gate.edge_input_regions((1920, 1200));
+        let covers = |x: f32, y: f32| {
+            regions
+                .iter()
+                .any(|r| x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h)
+        };
+        assert!(covers(3., 600.) && covers(1917., 600.) && covers(960., 3.));
+        assert!(!covers(200., 600.));
+        gate.apply(&Prefs::decode(
+            &serde_json::json!({"aiSidebarEnabled":false}),
+            &serde_json::Value::Null,
+        ));
+        assert!(
+            gate.visible_frame_lips()
+                .iter()
+                .all(|l| l.edge != bead::core::Edge::Left)
+        );
+        assert!(
+            !gate
+                .edge_input_regions((1920, 1200))
+                .iter()
+                .any(|r| r.x == 0.)
+        );
     }
 }

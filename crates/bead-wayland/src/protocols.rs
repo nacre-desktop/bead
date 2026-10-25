@@ -606,78 +606,28 @@ impl LayerShellHandler for App {
             }
             return;
         }
-        if let Some(dismiss) = &mut self.dismiss
-            && dismiss.layer == *layer
-        {
-            if self.options.trace_state {
-                println!(
-                    "DISMISS_CONFIG width={} height={}",
-                    config.new_size.0, config.new_size.1
-                );
-            }
-            dismiss.viewport.set_destination(
+        if self.dismiss.as_ref().is_some_and(|d| d.layer == *layer) {
+            let dismiss = self.dismiss.as_mut().unwrap();
+            let size = (
                 config.new_size.0.max(1) as i32,
                 config.new_size.1.max(1) as i32,
             );
-            let region = match Region::new(&self.compositor) {
-                Ok(r) => r,
-                Err(e) => {
-                    self.fail(e);
-                    return;
-                }
-            };
-            if dismiss.enabled && !self.options.test_passive {
-                let width = config.new_size.0.max(1) as i32;
-                let height = config.new_size.1.max(1) as i32;
-                let bar_extent = if self.options.bar {
-                    self.surfaces
-                        .iter()
-                        .find(|surface| {
-                            !surface.companion
-                                && self.panel_output.as_ref() == Some(&surface.output)
-                        })
-                        .map(|surface| match self.options.edge {
-                            bead_core::Edge::Top | bead_core::Edge::Bottom => surface.height as i32,
-                            bead_core::Edge::Left | bead_core::Edge::Right => surface.width as i32,
-                        })
-                        .unwrap_or(0)
-                        .clamp(
-                            0,
-                            if matches!(
-                                self.options.edge,
-                                bead_core::Edge::Top | bead_core::Edge::Bottom
-                            ) {
-                                height
-                            } else {
-                                width
-                            },
-                        )
-                } else {
-                    0
-                };
-                let (x, y, w, h) = match self.options.edge {
-                    bead_core::Edge::Top => (0, bar_extent, width, height - bar_extent),
-                    bead_core::Edge::Bottom => (0, 0, width, height - bar_extent),
-                    bead_core::Edge::Left => (bar_extent, 0, width - bar_extent, height),
-                    bead_core::Edge::Right => (0, 0, width - bar_extent, height),
-                };
-                if w > 0 && h > 0 {
-                    region.add(x, y, w, h);
-                }
-            }
-            layer
-                .wl_surface()
-                .set_input_region(Some(region.wl_region()));
+            let enabled = dismiss.enabled;
+            dismiss.size = Some(size);
+            dismiss.viewport.set_destination(size.0, size.1);
             layer.wl_surface().damage_buffer(0, 0, 1, 1);
-            // The transparent pixel remains attached across configure events.
-            // Reattaching its active SCTK buffer before release is an error;
-            // only viewport and input-region state change on later configures.
+            // Reuse the attached transparent pixel; update the same input mask
+            // used for open/close and preference changes.
             if !dismiss.attached {
-                if let Err(e) = dismiss.buffer.attach_to(layer.wl_surface()) {
-                    self.fail(e);
+                if let Err(error) = dismiss.buffer.attach_to(layer.wl_surface()) {
+                    self.fail(error);
                     return;
                 }
                 dismiss.attached = true;
+            }
+            if let Err(error) = self.set_dismiss_enabled(enabled) {
+                self.fail(error);
+                return;
             }
             layer.commit();
             return;
