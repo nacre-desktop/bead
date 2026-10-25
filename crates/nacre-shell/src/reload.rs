@@ -3697,13 +3697,6 @@ impl SceneSource for Runtime {
                 scene
             }
             UiEvent::Backend(snapshot) => {
-                println!(
-                    "BACKEND_UPDATE backend={} connected={} workspaces={} windows={}",
-                    snapshot.backend,
-                    snapshot.connected,
-                    snapshot.workspaces.len(),
-                    snapshot.windows.len()
-                );
                 let mut values =
                     backend_values(&snapshot, self.output.as_deref(), &self.workspaces)?;
                 let (title, focused_window) = focused_title(
@@ -3712,7 +3705,20 @@ impl SceneSource for Runtime {
                     self.last_focused_window.as_ref(),
                 );
                 self.last_focused_window = focused_window;
+                let title_only =
+                    backend_title_only(&values, |id| self.session.stores.get(id).cloned());
+                if !title_only {
+                    println!(
+                        "BACKEND_UPDATE backend={} connected={} workspaces={} windows={}",
+                        snapshot.backend,
+                        snapshot.connected,
+                        snapshot.workspaces.len(),
+                        snapshot.windows.len()
+                    );
+                }
                 values.insert("bead.focused_title".into(), bead::core::Value::Text(title));
+                // Keep the complete backend model current (including window titles); the
+                // view-read filter in update_model prevents unrelated bar work.
                 self.session.update_model(values)?
             }
             UiEvent::CompanionModel(_) => {
@@ -4715,6 +4721,91 @@ fn backend_values(
         values.insert(format!("bead.cap.{name}"), Value::Bool(*supported));
     }
     Ok(values)
+}
+
+fn backend_title_only(
+    values: &BTreeMap<String, bead::core::Value>,
+    mut current: impl FnMut(&str) -> Option<bead::core::Value>,
+) -> bool {
+    values.iter().all(|(id, value)| {
+        if id == "bead.focused_title" {
+            return true;
+        }
+        let Some(old) = current(id) else {
+            return false;
+        };
+        if id == "bead.windows" {
+            return same_windows_except_titles(value, &old);
+        }
+        old == *value
+    })
+}
+
+fn same_windows_except_titles(new: &bead::core::Value, old: &bead::core::Value) -> bool {
+    let (bead::core::Value::List(new), bead::core::Value::List(old)) = (new, old) else {
+        return new == old;
+    };
+    let without_titles = |items: &[serde_json::Value]| {
+        items
+            .iter()
+            .map(|item| {
+                let mut item = item.clone();
+                if let Some(object) = item.as_object_mut() {
+                    object.remove("title");
+                }
+                item
+            })
+            .collect::<Vec<_>>()
+    };
+    without_titles(new) == without_titles(old)
+}
+
+#[cfg(test)]
+mod backend_title_update_tests {
+    use super::*;
+
+    #[test]
+    fn backend_window_title_churn_is_title_only_but_keeps_window_values() {
+        use bead::core::Value;
+        let make_snapshot = |title: &str| bead::backends::Snapshot {
+            backend: "fixture".into(),
+            connected: true,
+            windows: vec![bead::backends::Window {
+                id: bead::backends::Id("w".into()),
+                title: title.into(),
+                app_id: "chat".into(),
+                workspace: None,
+                output: None,
+                focused: true,
+                floating: false,
+                fullscreen: None,
+                urgent: false,
+            }],
+            ..Default::default()
+        };
+        let before = backend_values(
+            &make_snapshot("◐ …"),
+            None,
+            &crate::workspace_rows::Rows::default(),
+        )
+        .unwrap();
+        let after = backend_values(
+            &make_snapshot("◑ …"),
+            None,
+            &crate::workspace_rows::Rows::default(),
+        )
+        .unwrap();
+        assert!(backend_title_only(&after, |id| before.get(id).cloned()));
+        assert_ne!(before.get("bead.windows"), after.get("bead.windows"));
+
+        let changed_identity = BTreeMap::from([(
+            "bead.windows".into(),
+            Value::list(vec![serde_json::json!({"id": "other", "title": "◑ …"})]),
+        )]);
+        assert!(!backend_title_only(&changed_identity, |id| before
+            .get(id)
+            .cloned()));
+    }
 }
 
 /// Retains the last caption through a transient focus clear while its window

@@ -670,7 +670,7 @@ struct Surface {
     callbacks: policy::Callbacks,
     input_visible: Option<bool>,
     input_rect: Option<[i32; 4]>,
-    keyboard_visible: Option<bool>,
+    keyboard_visible: Option<KeyboardInteractivity>,
     redraw: bool,
     fractional: Option<WpFractionalScaleV1>,
     viewport: Option<WpViewport>,

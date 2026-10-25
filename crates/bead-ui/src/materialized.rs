@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! Text-only candidate patching. Any structural binding, focus, hover, viewport
+//! Fixed-box text candidate patching. Any structural binding, focus, hover, viewport
 //! or markup change falls back to validated full layout. Text has no intrinsic
 //! Taffy measure in this frontend; its fixed box never depends on the string.
 use crate::{
@@ -84,12 +84,15 @@ impl Cached {
             cached: &mut Cached,
             palette: &Palette,
             implicit_parent_label: bool,
-        ) -> Result<(), Diagnostic> {
+        ) -> Result<bool, Diagnostic> {
+            if raw.kind != view.kind {
+                return Ok(false);
+            }
             for (property, value) in &raw.props {
                 let mut names = BTreeSet::new();
                 bindings(value, &mut names);
                 let text = property == "text"
-                    && view.kind == Widget::TextInput
+                    && matches!(view.kind, Widget::Text | Widget::TextInput)
                     && view.children.is_empty()
                     && !implicit_parent_label
                     && value.get("__bind").is_some();
@@ -132,18 +135,41 @@ impl Cached {
                     cached.structural.extend(names);
                 }
             }
-            for (raw, view) in raw.children.iter().zip(&view.children) {
-                walk(
+            // ViewSpec flattens transparent Groups. Match the same child
+            // sequence instead of silently zipping a Group onto a Text node.
+            fn children<'a>(raw: &'a RawNode, out: &mut Vec<&'a RawNode>, cached: &mut Cached) {
+                for child in &raw.children {
+                    if child.kind == Widget::Group {
+                        for value in child.props.values() {
+                            bindings(value, &mut cached.structural);
+                        }
+                        children(child, out, cached);
+                    } else {
+                        out.push(child);
+                    }
+                }
+            }
+            let mut flattened = Vec::new();
+            children(raw, &mut flattened, cached);
+            if flattened.len() != view.children.len() {
+                return Ok(false);
+            }
+            for (raw, view) in flattened.into_iter().zip(&view.children) {
+                if !walk(
                     raw,
                     view,
                     cached,
                     palette,
                     implicit_parent_label || (view.action.is_some() && view.aria_label.is_empty()),
-                )?;
+                )? {
+                    return Ok(false);
+                }
             }
-            Ok(())
+            Ok(true)
         }
-        walk(&raw, view, &mut cached, palette, false)?;
+        if !walk(&raw, view, &mut cached, palette, false)? {
+            return Ok(None);
+        }
         for name in cached
             .structural
             .iter()

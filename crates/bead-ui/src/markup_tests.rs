@@ -1619,6 +1619,171 @@ fn text_patch_updates_pixels_label_and_structural_bindings_still_relayout() {
 }
 
 #[test]
+fn fixed_box_text_binding_patches_paint_and_accessible_label_without_moving_node() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        "return {stores={title='◐ …'},actions={select=function(_) end},computed={}}",
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Panel{id="panel",width=300,height=80,ui.Group{ui.Group{},ui.Group{ui.Text{id="title",text=ui.bind("title"),width=220,height=32,on_activate=ui.action("select","a")}}}}"#,
+    )
+    .unwrap();
+    let mut s = session(&f);
+    let before_primitives = s.current.primitives.clone();
+    let before_rect = s
+        .current
+        .primitives
+        .iter()
+        .find_map(|p| match p {
+            Primitive::Text { text, rect, .. } if text == "◐ …" => Some(*rect),
+            _ => None,
+        })
+        .unwrap();
+    let before_node_rect = crate::rect(
+        &s.view_nodes()
+            .iter()
+            .find(|n| n.id == "panel.title")
+            .unwrap()
+            .draw,
+    );
+    let next = s
+        .update(BTreeMap::from([(
+            "title".into(),
+            Value::Text("◑ …".into()),
+        )]))
+        .unwrap()
+        .unwrap();
+    s.commit(next);
+    let after_rect = s
+        .current
+        .primitives
+        .iter()
+        .find_map(|p| match p {
+            Primitive::Text { text, rect, .. } if text == "◑ …" => Some(*rect),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(after_rect, before_rect);
+    let after_node_rect = crate::rect(
+        &s.view_nodes()
+            .iter()
+            .find(|n| n.id == "panel.title")
+            .unwrap()
+            .draw,
+    );
+    assert_eq!(after_node_rect, before_node_rect);
+    let mut expected_primitives = before_primitives;
+    for primitive in &mut expected_primitives {
+        if let Primitive::Text { text, .. } = primitive {
+            *text = "◑ …".into();
+        }
+    }
+    assert_eq!(
+        serde_json::to_value(&s.current.primitives).unwrap(),
+        serde_json::to_value(&expected_primitives).unwrap()
+    );
+    let title = s
+        .view_nodes()
+        .iter()
+        .find(|n| n.id == "panel.title")
+        .unwrap();
+    assert_eq!(title.label, "◑ …");
+}
+
+#[test]
+fn frontend_reuses_raw_node_for_equal_width_bound_title_markup() {
+    use crate::frontend::{FrontEnd, LuauFrontEnd};
+    use std::cell::RefCell;
+    let entry = PathBuf::from("ui/main.luau");
+    let sources = BTreeMap::from([(
+        entry.clone(),
+        br#"local ui=require("bead.ui")
+local width=math.ceil(ui.text_width(ui.bind("title"),"IBM Plex Sans",16))
+return ui.Panel{id="panel",width=300,height=80,
+ ui.Text{id="title",text=ui.bind("title"),width=width,height=32}}"#
+            .to_vec(),
+    )]);
+    let fonts = Path::new(env!("CARGO_MANIFEST_DIR")).join("../bead-test/fonts");
+    let font_files = vec![
+        fonts.join("IBMPlexSans.ttf"),
+        fonts.join("FixtureSymbols.ttf"),
+    ];
+    let picker: crate::transcript::Picker = std::sync::Arc::new(move |_| font_files.clone());
+    let frontend = LuauFrontEnd::new_with_picker(&entry, &sources, Some(picker)).unwrap();
+    let title = RefCell::new("◐ …".to_string());
+    let resolve = |name: &str| {
+        if name == "title" {
+            Ok(Value::Text(title.borrow().clone()))
+        } else {
+            Err(Diagnostic::new(&entry, 1, 1, name))
+        }
+    };
+    let before = frontend.build(&entry, &resolve).unwrap();
+    title.replace("◑ …".into());
+    let after = frontend.build(&entry, &resolve).unwrap();
+    assert!(std::rc::Rc::ptr_eq(&before, &after));
+    title.replace("a much longer title".into());
+    let wider = frontend.build(&entry, &resolve).unwrap();
+    assert!(!std::rc::Rc::ptr_eq(&after, &wider));
+    let width = |raw: &crate::layout::RawNode| raw.children[0].props["width"].as_f64().unwrap();
+    assert!(width(&wider) > width(&after));
+}
+
+#[test]
+fn memo_invalidates_bound_text_measurement_when_another_store_rebuilds_outer_markup() {
+    use crate::frontend::{FrontEnd, LuauFrontEnd};
+    use std::cell::RefCell;
+    let entry = PathBuf::from("ui/main.luau");
+    let sources = BTreeMap::from([(
+        entry.clone(),
+        br#"local ui=require("bead.ui")
+local title=ui.memo("title",{},function()
+ local width=math.ceil(ui.text_width(ui.bind("title"),"IBM Plex Sans",16))
+ return ui.Text{id="title",text=ui.bind("title"),width=width,height=32}
+end)
+local height=40+ui.resolve_for_check(ui.bind("tick"))
+return ui.Panel{id="panel",width=300,height=height,title}"#
+            .to_vec(),
+    )]);
+    let fonts = Path::new(env!("CARGO_MANIFEST_DIR")).join("../bead-test/fonts");
+    let font_files = vec![
+        fonts.join("IBMPlexSans.ttf"),
+        fonts.join("FixtureSymbols.ttf"),
+    ];
+    let picker: crate::transcript::Picker = std::sync::Arc::new(move |_| font_files.clone());
+    let frontend = LuauFrontEnd::new_with_picker(&entry, &sources, Some(picker)).unwrap();
+    let stores: RefCell<BTreeMap<String, Value>> = RefCell::new(BTreeMap::from([
+        ("title".into(), Value::Text("short".into())),
+        ("tick".into(), Value::Number(0.)),
+    ]));
+    let resolve = |name: &str| {
+        stores
+            .borrow()
+            .get(name)
+            .cloned()
+            .ok_or_else(|| Diagnostic::new(&entry, 1, 1, name))
+    };
+    let before = frontend.build(&entry, &resolve).unwrap();
+    let before_width = before.children[0].props["width"].as_f64().unwrap();
+    stores.borrow_mut().insert("tick".into(), Value::Number(1.));
+    let reused = frontend.build(&entry, &resolve).unwrap();
+    assert_eq!(
+        reused.children[0].props["width"].as_f64().unwrap(),
+        before_width
+    );
+    stores
+        .borrow_mut()
+        .insert("title".into(), Value::Text("a much longer title".into()));
+    let after = frontend.build(&entry, &resolve).unwrap();
+    let after_width = after.children[0].props["width"].as_f64().unwrap();
+    assert!(after_width > before_width);
+}
+
+#[test]
 fn widget_constructors_preserve_empty_children_and_callsite_diagnostics() {
     use crate::frontend::{FrontEnd, LuauFrontEnd};
     let entry = PathBuf::from("ui/main.luau");

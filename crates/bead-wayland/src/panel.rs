@@ -734,6 +734,28 @@ impl App {
         self.panel_target = false;
         self.edges_panel_changed(true);
         drop(self.dismiss.take());
+        // Release the seat before waiting for a worker/animation frame. Closed
+        // workers remain alive and may publish new models during keep-alive.
+        for surface in self.surfaces.iter_mut().filter(|s| s.companion) {
+            surface
+                .layer
+                .set_keyboard_interactivity(KeyboardInteractivity::None);
+            surface.keyboard_visible = Some(KeyboardInteractivity::None);
+            match Region::new(&self.compositor) {
+                Ok(empty) => {
+                    surface
+                        .wl_surface()
+                        .set_input_region(Some(empty.wl_region()));
+                    surface.input_visible = Some(false);
+                }
+                Err(error) => {
+                    eprintln!("PANEL_INPUT_ERROR {error}");
+                    surface.input_visible = None;
+                }
+            }
+            surface.input_rect = None;
+            surface.commit();
+        }
         if let Err(error) = self.sync_all_decorations() {
             self.fail(error);
         }

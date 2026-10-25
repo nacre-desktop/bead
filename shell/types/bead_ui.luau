@@ -107,7 +107,7 @@ export type SDK = {
     memo:(string,any,any)->Node,
     resolve_for_check:(any)->any,
     preview_value:(string,number)->number,
-    text_width:(string,string,number)->number,
+    text_width:(string|{__bind:string},string,number)->number,
     model_count:(any)->number,
     tr:(string,any?)->string,
 }

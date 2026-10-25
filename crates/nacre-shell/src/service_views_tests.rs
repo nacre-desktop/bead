@@ -404,6 +404,90 @@ fn real_bar_calendar_action_enqueues_a_view_and_audio_scroll_does_not_toggle_it(
 }
 
 #[test]
+fn real_bar_equal_width_title_spinner_patches_only_the_text_primitive() -> Result<()> {
+    let mut values = super::initial_models()?;
+    values.insert("bead.focused_title".into(), Value::Text("◐ …".into()));
+    let mut h = Harness::load(
+        &root(),
+        Path::new("bar/main.luau"),
+        &root().join("palette.json"),
+        values,
+        Config {
+            width: 1920,
+            height: 70,
+            scale: 1.5,
+        },
+    )?;
+    let before = h.scene().primitives.clone();
+    let before_rect = before
+        .iter()
+        .find_map(|primitive| match primitive {
+            bead::render::Primitive::Text { text, rect, .. } if text == "◐ …" => Some(*rect),
+            _ => None,
+        })
+        .ok_or("initial bar title primitive missing")?;
+    let node_geometry = |h: &Harness| {
+        h.session
+            .view_nodes()
+            .iter()
+            .map(|node| {
+                (
+                    node.id.clone(),
+                    (bead::ui::rect(&node.draw), node.label.clone()),
+                )
+            })
+            .collect::<BTreeMap<_, _>>()
+    };
+    let before_nodes = node_geometry(&h);
+    let before_layouts = h.counters().layouts;
+    assert!(
+        h.session
+            .update_model(BTreeMap::from([(
+                "bead.focused_title".into(),
+                Value::Text("◐ …".into()),
+            )]))?
+            .is_none()
+    );
+    h.update(BTreeMap::from([(
+        "bead.focused_title".into(),
+        Value::Text("◑ …".into()),
+    )]))?;
+    assert_eq!(
+        h.counters().layouts,
+        before_layouts,
+        "spinner ran Taffy layout"
+    );
+    let after = h.scene();
+    let after_rect = after
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            bead::render::Primitive::Text { text, rect, .. } if text == "◑ …" => Some(*rect),
+            _ => None,
+        })
+        .ok_or("updated bar title primitive missing")?;
+    assert_eq!(
+        after_rect, before_rect,
+        "equal-width spinner moved the title"
+    );
+    assert_eq!(node_geometry(&h), before_nodes);
+    let mut expected = before;
+    for primitive in &mut expected {
+        if let bead::render::Primitive::Text { text, .. } = primitive
+            && text == "◐ …"
+        {
+            *text = "◑ …".into();
+        }
+    }
+    assert_eq!(
+        serde_json::to_value(&after.primitives)?,
+        serde_json::to_value(&expected)?
+    );
+    assert!(before_nodes.keys().any(|id| id.ends_with(".title-band")));
+    Ok(())
+}
+
+#[test]
 fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
     for scale in [1., 1.5] {
         let mut values = super::initial_models()?;

@@ -2,6 +2,42 @@
 //! Per-surface rendering, GPU staging and idle release.
 use super::*;
 
+/// Hidden content never requests a keyboard, including retained warm panels.
+fn panel_keyboard_mode(visible: bool, click_focus: bool, exclusive: bool) -> KeyboardInteractivity {
+    if !visible {
+        KeyboardInteractivity::None
+    } else if click_focus || !exclusive {
+        KeyboardInteractivity::OnDemand
+    } else {
+        KeyboardInteractivity::Exclusive
+    }
+}
+
+#[cfg(test)]
+mod keyboard_policy_tests {
+    use super::*;
+
+    #[test]
+    fn warm_updates_never_reacquire_keyboard_and_pinning_changes_mode() {
+        for pinned in [false, true] {
+            for typing in [false, true] {
+                assert_eq!(
+                    panel_keyboard_mode(false, pinned, typing),
+                    KeyboardInteractivity::None
+                );
+            }
+        }
+        assert_eq!(
+            panel_keyboard_mode(true, false, true),
+            KeyboardInteractivity::Exclusive
+        );
+        assert_eq!(
+            panel_keyboard_mode(true, true, true),
+            KeyboardInteractivity::OnDemand
+        );
+    }
+}
+
 fn content_body(scene: &Scene) -> Option<bead_render::Rect> {
     scene
         .layers
@@ -151,7 +187,10 @@ fn advise_frame_pages(bytes: &mut [u8], include_edges: bool) {
 const SHM_COMPACT_IDLE: Duration = Duration::from_millis(250);
 const SHM_COMPACT_FOCUSED_IDLE: Duration = Duration::from_secs(5);
 fn shm_compact_idle(surface: &Surface) -> Duration {
-    if surface.keyboard_visible == Some(true) {
+    if surface
+        .keyboard_visible
+        .is_some_and(|mode| mode != KeyboardInteractivity::None)
+    {
         SHM_COMPACT_FOCUSED_IDLE
     } else {
         SHM_COMPACT_IDLE
@@ -604,7 +643,6 @@ impl App {
             if panel
                 && self.options.interactive
                 && (!s.companion || self.options.panel_spec.is_some())
-                && scene.motion.is_some()
             {
                 let spec = self.options.panel_spec.as_ref();
                 let passive = s.companion && spec.is_some_and(|spec| spec.passive);
@@ -648,25 +686,19 @@ impl App {
                     } else {
                         self.options.keyboard_focus || self.options.test_keyboard
                     };
-                if s.keyboard_visible != Some(focus_visible) {
-                    let interactivity = if !focus_visible {
-                        KeyboardInteractivity::None
-                    } else if s.companion
+                let interactivity = panel_keyboard_mode(
+                    focus_visible,
+                    s.companion
                         && (self.pearl.is_some()
                             || self
                                 .panel_runtime
                                 .as_ref()
-                                .is_some_and(|source| !source.outside_dismiss()))
-                    {
-                        // A pearl or pinned panel takes focus when clicked.
-                        KeyboardInteractivity::OnDemand
-                    } else if self.options.test_keyboard || s.companion {
-                        KeyboardInteractivity::Exclusive
-                    } else {
-                        KeyboardInteractivity::OnDemand
-                    };
+                                .is_some_and(|source| !source.outside_dismiss())),
+                    self.options.test_keyboard || s.companion,
+                );
+                if s.keyboard_visible != Some(interactivity) {
                     s.layer.set_keyboard_interactivity(interactivity);
-                    s.keyboard_visible = Some(focus_visible);
+                    s.keyboard_visible = Some(interactivity);
                 }
             }
             s.offset = scene.offset;

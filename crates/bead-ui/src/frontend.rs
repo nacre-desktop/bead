@@ -110,11 +110,18 @@ return function(ui, constructors, allowed, arrayMarker)
 end
 "#;
 /// Immutable generation-owned bytecode; evaluation always uses a fresh sandbox.
-type Materialized = (
-    std::rc::Rc<RawNode>,
-    BTreeMap<String, Value>,
-    bead_core::cache::Charge,
-);
+struct WidthDependency {
+    binding: String,
+    family: String,
+    size: f32,
+    width: f32,
+}
+struct Materialized {
+    raw: std::rc::Rc<RawNode>,
+    reads: BTreeMap<String, Value>,
+    widths: Vec<WidthDependency>,
+    _charge: bead_core::cache::Charge,
+}
 struct Fragment {
     bytes: usize,
     raw: RawNode,
@@ -223,6 +230,19 @@ impl LuauFrontEnd {
             install,
         })
     }
+    fn measured_width(&self, text: &str, family: &str, size: f32) -> f32 {
+        let mut meters = self.text_meters.borrow_mut();
+        if meters.len() >= 8 && !meters.contains_key(family) {
+            meters.clear();
+        }
+        let meter = meters.entry(family.to_owned()).or_insert_with(|| {
+            self.font_picker.as_ref().map_or_else(
+                || crate::transcript::Meter::fixed(vec![]),
+                |picker| crate::transcript::Meter::new(picker.clone()),
+            )
+        });
+        meter.width(text, family, size)
+    }
     pub(super) fn resource_bytes(&self) -> (usize, usize, usize) {
         (
             self._compiled_charge.bytes(),
@@ -239,14 +259,26 @@ impl FrontEnd for LuauFrontEnd {
         entry: &Path,
         resolve: &Resolve<'_>,
     ) -> Result<std::rc::Rc<RawNode>, Diagnostic> {
-        if let Some((raw, reads, _)) = &*self.materialized.borrow()
-            && reads
+        if let Some(cached) = &*self.materialized.borrow()
+            && cached
+                .reads
                 .iter()
                 .all(|(name, value)| resolve(name).is_ok_and(|next| next == *value))
+            && cached.widths.iter().all(|dependency| {
+                matches!(resolve(&dependency.binding), Ok(Value::Text(text))
+                    if text.len() <= 16 * 1024
+                        && dependency.binding.len() <= 2048
+                        && dependency.family.len() <= 128
+                        && (1. ..=256.).contains(&dependency.size)
+                        && self.measured_width(&text, &dependency.family, dependency.size).to_bits()
+                        == dependency.width.to_bits())
+            })
         {
-            return Ok(raw.clone());
+            return Ok(cached.raw.clone());
         }
         let reads = RefCell::new(BTreeMap::new());
+        let widths = RefCell::new(Vec::<WidthDependency>::new());
+        let width_overflow = std::cell::Cell::new(false);
         let scopes = RefCell::new(Vec::<BTreeMap<String, Value>>::new());
         let fragments = RefCell::new(Vec::<std::rc::Rc<Fragment>>::new());
         let fragment_remaining = std::cell::Cell::new(8 * bead_core::cache::MIB);
@@ -280,28 +312,68 @@ impl FrontEnd for LuauFrontEnd {
                 let sdk = lua.create_table()?;
                 sdk.set(
                     "text_width",
-                    scope.create_function(|_, (text, family, size): (String, String, f32)| {
-                        if text.len() > 16 * 1024
-                            || family.len() > 128
-                            || !(1. ..=256.).contains(&size)
-                        {
-                            return Err(mlua::Error::runtime("invalid text measurement"));
-                        }
-                        let started = Instant::now();
-                        let mut meters = self.text_meters.borrow_mut();
-                        if meters.len() >= 8 && !meters.contains_key(&family) {
-                            meters.clear();
-                        }
-                        let meter = meters.entry(family.clone()).or_insert_with(|| {
-                            self.font_picker.as_ref().map_or_else(
-                                || crate::transcript::Meter::fixed(vec![]),
-                                |picker| crate::transcript::Meter::new(picker.clone()),
-                            )
-                        });
-                        let width = meter.width(&text, &family, size);
-                        native_time.set(native_time.get() + started.elapsed());
-                        Ok(width)
-                    })?,
+                    scope.create_function(
+                        |_, (input, family, size): (mlua::Value, String, f32)| {
+                            if family.len() > 128 || !(1. ..=256.).contains(&size) {
+                                return Err(mlua::Error::runtime("invalid text measurement"));
+                            }
+                            let (text, binding) = match input {
+                                mlua::Value::String(text) => (text.to_str()?.to_owned(), None),
+                                mlua::Value::Table(table) => {
+                                    let binding = table.get::<String>("__bind")?;
+                                    if binding.is_empty() || binding.len() > 2048 {
+                                        return Err(mlua::Error::runtime(
+                                            "invalid text measurement",
+                                        ));
+                                    }
+                                    // Memo fragments cache their own read set. Record a bound
+                                    // measurement there so title-driven geometry invalidates
+                                    // the fragment; outside memo it stays a width-only dependency.
+                                    let in_memo = !scopes.borrow().is_empty();
+                                    let measured = if in_memo {
+                                        resolve(&binding)
+                                    } else {
+                                        upstream(&binding)
+                                    };
+                                    let Value::Text(text) =
+                                        measured.map_err(mlua::Error::external)?
+                                    else {
+                                        return Err(mlua::Error::runtime(
+                                            "bound text measurement needs a text store",
+                                        ));
+                                    };
+                                    (text, Some(binding))
+                                }
+                                _ => return Err(mlua::Error::runtime("invalid text measurement")),
+                            };
+                            if text.len() > 16 * 1024 {
+                                return Err(mlua::Error::runtime("invalid text measurement"));
+                            }
+                            let started = Instant::now();
+                            let width = self.measured_width(&text, &family, size);
+                            native_time.set(native_time.get() + started.elapsed());
+                            if let Some(binding) = binding {
+                                let mut dependencies = widths.borrow_mut();
+                                if !dependencies.iter().any(|dependency| {
+                                    dependency.binding == binding
+                                        && dependency.family == family
+                                        && dependency.size == size
+                                }) {
+                                    if dependencies.len() == 4096 {
+                                        width_overflow.set(true);
+                                    } else {
+                                        dependencies.push(WidthDependency {
+                                            binding,
+                                            family,
+                                            size,
+                                            width,
+                                        });
+                                    }
+                                }
+                            }
+                            Ok(width)
+                        },
+                    )?,
                 )?;
                 let constructors = lua.create_table()?;
                 for (name, kind) in Widget::constructors() {
@@ -574,14 +646,31 @@ impl FrontEnd for LuauFrontEnd {
             .map_err(|error| diagnostic(entry, error));
         if let Ok(raw) = &result {
             let reads = reads.into_inner();
+            let widths = widths.into_inner();
             let bytes = crate::layout::raw_bytes(raw)
                 + reads
                     .iter()
                     .map(|(k, v)| k.capacity() + 64 + bead_core::cache::value_bytes(v))
+                    .sum::<usize>()
+                + widths
+                    .iter()
+                    .map(|dependency| {
+                        dependency.binding.capacity()
+                            + dependency.family.capacity()
+                            + std::mem::size_of::<WidthDependency>()
+                            + 64
+                    })
                     .sum::<usize>();
             *self.materialized.borrow_mut() = None;
-            if let Ok(charge) = self.values_budget.reserve(bytes) {
-                *self.materialized.borrow_mut() = Some((raw.clone(), reads, charge));
+            if !width_overflow.get()
+                && let Ok(charge) = self.values_budget.reserve(bytes)
+            {
+                *self.materialized.borrow_mut() = Some(Materialized {
+                    raw: raw.clone(),
+                    reads,
+                    widths,
+                    _charge: charge,
+                });
             }
         }
         result

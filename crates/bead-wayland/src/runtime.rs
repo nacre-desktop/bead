@@ -1458,7 +1458,8 @@ impl App {
             let empty = Region::new(&self.compositor)?;
             if !self.options.interactive
                 || (companion
-                    && (self.options.panel_spec.is_none()
+                    && (!self.panel_target
+                        || self.options.panel_spec.is_none()
                         || self.options.panel_spec.as_ref().is_some_and(|s| s.passive)))
             {
                 surface.set_input_region(Some(empty.wl_region()));
@@ -1542,7 +1543,9 @@ impl App {
                 0
             });
             layer.set_keyboard_interactivity(
-                if !self.options.test_passive
+                if self.options.test_passive || (companion && !self.panel_target) {
+                    KeyboardInteractivity::None
+                } else if !self.options.test_passive
                     && ((companion
                         && self.pearl.is_none()
                         && self

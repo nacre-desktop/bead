@@ -655,24 +655,9 @@ impl App {
                     return false;
                 }
                 if self.processing_panel {
-                    if self.pearl.is_none()
-                        && self
-                            .options
-                            .panel_spec
-                            .as_ref()
-                            .is_some_and(|spec| spec.keyboard_focus)
-                    {
-                        for surface in self.surfaces.iter().filter(|s| s.companion) {
-                            surface.layer.set_keyboard_interactivity(
-                                if runtime.outside_dismiss() {
-                                    KeyboardInteractivity::Exclusive
-                                } else {
-                                    KeyboardInteractivity::OnDemand
-                                },
-                            );
-                            surface.layer.commit();
-                        }
-                    }
+                    // Drawing owns interactivity, including its cached protocol
+                    // state. A warm worker can commit while its panel is closed;
+                    // a model publication must never reacquire keyboard focus.
                     // Keep the catcher below the panel when pinning, then restore its input.
                     // Recreating it on unpin would map a newer surface above the panel.
                     if runtime.outside_dismiss()
@@ -689,7 +674,9 @@ impl App {
                     {
                         self.fail(error);
                     }
-                    if let Err(error) = self.set_dismiss_enabled(runtime.outside_dismiss()) {
+                    if let Err(error) =
+                        self.set_dismiss_enabled(self.panel_target && runtime.outside_dismiss())
+                    {
                         self.fail(error);
                     }
                 }

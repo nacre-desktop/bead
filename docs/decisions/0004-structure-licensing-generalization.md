@@ -193,6 +193,10 @@ After Bead's core switch on Nacre, plan support for:
   without replacing the host surface. Page names and lease policy stay in the shell.
   Workers retire unused rasters and baker scratch after a resource generation is accepted.
 
+- B0119: `ui.text_width(ui.bind(name), family, size)` tracks measured geometry;
+  equal-width text changes reuse markup and patch only the text primitive.
+  Memoized fragments conservatively track the text value; all metrics remain shell-selected.
+
 ## Housekeeping (later)
 
 - Move the GPL `nacre-shell` crate and `shell/` assets from Bead to Nacre at a
