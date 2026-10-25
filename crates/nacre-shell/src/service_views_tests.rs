@@ -1549,8 +1549,8 @@ fn widget_canvas_move_roundtrip_snaps_preserves_ids_and_rejects_duplicates() -> 
             .scene()
             .layers
             .iter()
-            .any(|layer| layer.id.contains("clock.time")),
-        "bar fallback must render the moved clock"
+            .any(|layer| layer.id.contains("clock-desktop")),
+        "the moved clock must render its desktop form"
     );
     assert!(
         canvas
