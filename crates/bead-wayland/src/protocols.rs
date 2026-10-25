@@ -107,6 +107,13 @@ impl CompositorHandler for App {
             };
             let s = &mut self.surfaces[i];
             s.callbacks.pending = false;
+            if bead_core::profile::frame_trace() {
+                println!(
+                    "UI_CALLBACK monotonic_ns={} companion={}",
+                    bead_core::profile::monotonic_ns(),
+                    s.companion
+                );
+            }
             let now = Instant::now();
             if self.started.elapsed().as_secs_f64() > 2.
                 && let Some(last) = s.last_callback

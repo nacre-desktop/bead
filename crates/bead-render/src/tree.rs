@@ -70,7 +70,23 @@ pub struct TreeCache {
     raster_budget: Option<bead_core::cache::Budget>,
     node_budget: Option<bead_core::cache::Budget>,
     frame_budget: Option<bead_core::cache::Budget>,
+    /// B0117: the pre-rasterised growing edge of the reveal artwork (None inside: unusable, draw per frame).
+    edge: Option<(u64, Option<EdgeTemplate>)>,
 }
+/// The artwork's growing edge, rasterised once per size and scale and slid along the growth axis every frame.
+struct EdgeTemplate {
+    pixels: Arc<Pixmap>,
+    /// Leading edge in the artwork raster's pixel grid, and the first band row/column of the template.
+    lead: f32,
+    start: i64,
+    key: u64,
+    charge: bead_core::cache::Charge,
+}
+/// Logical extent of the template on the body side (covers the corner radius) and outside the edge (rim).
+const EDGE_INSIDE: f32 = 44.;
+const EDGE_OUTSIDE: f32 = 8.;
+/// Revealed length below which the top join and the growing edge interact: drawn the slow way.
+const EDGE_MIN_REVEALED: f32 = EDGE_INSIDE + 40.;
 pub fn rect(primitive: &Primitive) -> Rect {
     match primitive {
         Primitive::Arc { rect, .. }
@@ -299,6 +315,7 @@ impl TreeCache {
         self.nodes.retain(|(_, bits), _| current(*bits));
         if stale_frame {
             self.frame = None;
+            self.edge = None;
         }
         if discarded {
             let fonts = self.raster.fonts.take();
@@ -328,6 +345,271 @@ impl TreeCache {
     /// open-state clips and shapes, so the presenter derives the frame for this progress: the body fill and its
     /// shadow take the reshaped primitives of `Scene::reveal` (the shadow gets a raster of its new size), everything
     /// else is clipped to the reveal window. None when the scene is not revealing or does not match the frame.
+    /// B0117: the reveal artwork of a growing panel without rasterising anything per frame. The artwork of the
+    /// open state (already prepared) shows up to the growing edge; the edge itself is a band rasterised once
+    /// and slid by whole pixels. Returns the clipped artwork item and the band item, or None to draw the
+    /// artwork the slow way (small reveals, templates that do not match the open-state artwork).
+    fn edge_items(
+        &mut self,
+        scene: &Scene,
+        item: &Item,
+        scale: f32,
+    ) -> Result<Option<(Item, Item)>> {
+        let Some(motion) = scene.motion.as_ref() else {
+            return Ok(None);
+        };
+        let (Some(art), Some(base)) = (motion.art.as_ref(), item.raster.as_ref()) else {
+            return Ok(None);
+        };
+        let (ix, iy) = motion.edge.inward();
+        let (vertical, far) = (iy != 0., ix > 0. || iy > 0.);
+        let f = rect(&item.primitive);
+        let (origin, extent) = if vertical {
+            (f.y, base.pixels.height() as i64)
+        } else {
+            (f.x, base.pixels.width() as i64)
+        };
+        let lead_of = |r: Rect| match (vertical, far) {
+            (true, true) => r.y + r.h,
+            (true, false) => r.y,
+            (false, true) => r.x + r.w,
+            (false, false) => r.x,
+        };
+        let body = art.body;
+        let length = if vertical { body.h } else { body.w };
+        let now = lead_of(Scene::revealed(body, motion.edge, motion.progress));
+        let full = lead_of(body);
+        let revealed = length - (now - full).abs();
+        if revealed < EDGE_MIN_REVEALED || length < 2. * EDGE_MIN_REVEALED || motion.progress >= 1.
+        {
+            return Ok(None);
+        }
+        self.ensure_edge(scene, item, scale);
+        let Some((_, Some(template))) = self.edge.as_ref() else {
+            bead_core::vprintln!("REVEAL_EDGE no template");
+            return Ok(None);
+        };
+        let shift = ((now - origin) * scale - template.lead).round() as i64;
+        let band = if vertical {
+            template.pixels.height()
+        } else {
+            template.pixels.width()
+        } as i64;
+        let start = template.start + shift;
+        if start < 0 || start + band > extent {
+            return Ok(None);
+        }
+        const M: f32 = 4096.;
+        let (cut_start, cut_end) = (start as f32 / scale, (start + band) as f32 / scale);
+        let clip = match (vertical, far) {
+            (true, true) => Rect::new(f.x - M, f.y - M, f.w + 2. * M, origin + cut_start - f.y + M),
+            (true, false) => Rect::new(
+                f.x - M,
+                origin + cut_end,
+                f.w + 2. * M,
+                f.y + f.h - origin - cut_end + M,
+            ),
+            (false, true) => {
+                Rect::new(f.x - M, f.y - M, origin + cut_start - f.x + M, f.h + 2. * M)
+            }
+            (false, false) => Rect::new(
+                origin + cut_end,
+                f.y - M,
+                f.x + f.w - origin - cut_end + M,
+                f.h + 2. * M,
+            ),
+        };
+        let mut clipped = item.clone();
+        clipped.clip = Some(clip);
+        let mut key = std::collections::hash_map::DefaultHasher::new();
+        (template.key, start).hash(&mut key);
+        let (w, h) = (template.pixels.width(), template.pixels.height());
+        let piece = Item {
+            id: format!("{}/edge", item.id),
+            primitive: item.primitive.clone(),
+            clip: None,
+            raster: Some(Arc::new(Raster {
+                pixels: template.pixels.clone(),
+                origin: if vertical {
+                    (0, start as u32)
+                } else {
+                    (start as u32, 0)
+                },
+                key: key.finish(),
+                base_key: None,
+                changed: Damage::full(w, h),
+                _charge: template.charge.clone(),
+            })),
+        };
+        Ok(Some((clipped, piece)))
+    }
+    /// Build the edge template for this artwork now unless it is already cached (called when a prepared frame
+    /// arrives, so the first reveal frame does not pay for it).
+    fn ensure_edge(&mut self, scene: &Scene, item: &Item, scale: f32) {
+        let (Some(motion), Some(base)) = (scene.motion.as_ref(), item.raster.as_ref()) else {
+            return;
+        };
+        let Some(art) = motion.art.as_ref() else {
+            return;
+        };
+        let f = rect(&item.primitive);
+        let body = art.body;
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        (base.key, scale.to_bits(), motion.edge as u8).hash(&mut hash);
+        for v in [body.x, body.y, body.w, body.h, f.x, f.y, f.w, f.h] {
+            v.to_bits().hash(&mut hash);
+        }
+        let key = hash.finish();
+        if self.edge.as_ref().is_none_or(|(k, _)| *k != key) {
+            let built = self
+                .build_edge(art, motion.edge, item, scale, key)
+                .ok()
+                .flatten();
+            self.edge = Some((key, built));
+        }
+    }
+    /// Rasterise the growing edge once, at a ghost progress where it is clear of the top join, and check that it
+    /// is a faithful copy of the open-state artwork's own edge (else None: the slow path stays correct).
+    fn build_edge(
+        &mut self,
+        art: &crate::RevealArt,
+        edge: bead_core::Edge,
+        item: &Item,
+        scale: f32,
+        key: u64,
+    ) -> Result<Option<EdgeTemplate>> {
+        let _profile = bead_core::profile::Span::new("reveal_edge_build");
+        let Some(base) = item.raster.as_ref() else {
+            return Ok(None);
+        };
+        let (ix, iy) = edge.inward();
+        let (vertical, far) = (iy != 0., ix > 0. || iy > 0.);
+        let f = rect(&item.primitive);
+        let body = art.body;
+        let length = if vertical { body.h } else { body.w };
+        let (origin, extent) = if vertical {
+            (f.y, base.pixels.height())
+        } else {
+            (f.x, base.pixels.width())
+        };
+        let lead_of = |r: Rect| match (vertical, far) {
+            (true, true) => r.y + r.h,
+            (true, false) => r.y,
+            (false, true) => r.x + r.w,
+            (false, false) => r.x,
+        };
+        let ghost_progress = ((EDGE_MIN_REVEALED + 24.) / length).clamp(0.5, 0.9);
+        let ghost = lead_of(Scene::revealed(body, edge, ghost_progress));
+        let (low, high) = if far {
+            (ghost - EDGE_INSIDE, ghost + EDGE_OUTSIDE)
+        } else {
+            (ghost - EDGE_OUTSIDE, ghost + EDGE_INSIDE)
+        };
+        let first = (((low - origin) * scale).floor() as i64).max(0);
+        let last = (((high - origin) * scale).ceil() as i64).min(i64::from(extent));
+        if last - first < 4 {
+            return Ok(None);
+        }
+        let (a, b) = (first as f32 / scale, last as f32 / scale);
+        let crop = if vertical {
+            Rect::new(f.x, origin + a, f.w, b - a)
+        } else {
+            Rect::new(origin + a, f.y, b - a, f.h)
+        };
+        let (_, bytes) = (art.draw)(Scene::revealed(body, edge, ghost_progress), Some(crop));
+        let (w, h) = if vertical {
+            (base.pixels.width(), (last - first) as u32)
+        } else {
+            ((last - first) as u32, base.pixels.height())
+        };
+        let pixels = crate::svg_pixmap(&bytes, w, h)?;
+        let at = |p: &Pixmap, x: u32, y: u32| {
+            let i = (y * p.width() + x) as usize * 4;
+            [
+                p.data()[i],
+                p.data()[i + 1],
+                p.data()[i + 2],
+                p.data()[i + 3],
+            ]
+        };
+        let close = |a: [u8; 4], b: [u8; 4], tolerance: i32| {
+            a.iter()
+                .zip(b)
+                .all(|(a, b)| (i32::from(*a) - i32::from(b)).abs() <= tolerance)
+        };
+        // The band must start in plain interior (rows beside the body side are identical) ...
+        let (inner, next) = if far {
+            (0, 1)
+        } else {
+            (last - first - 1, last - first - 2)
+        };
+        let uniform = if vertical {
+            (0..w).all(|x| close(at(&pixels, x, inner as u32), at(&pixels, x, next as u32), 2))
+        } else {
+            (0..h).all(|y| close(at(&pixels, inner as u32, y), at(&pixels, next as u32, y), 2))
+        };
+        // ... and equal (colour gradient aside) to the open-state artwork around its own edge.
+        let shift = (((lead_of(body) - ghost) * scale).round() as i64).max(-first);
+        // The edge may sit half a pixel off the artwork's own (whole-pixel shifts), so each template channel
+        // must lie between the artwork's neighbouring pixels along the growth axis (plus a gradient margin).
+        let within = |template: [u8; 4], around: [[u8; 4]; 3]| {
+            (0..4).all(|c| {
+                let low = around.iter().map(|p| i32::from(p[c])).min().unwrap_or(0) - 28;
+                let high = around.iter().map(|p| i32::from(p[c])).max().unwrap_or(0) + 28;
+                (low..=high).contains(&i32::from(template[c]))
+            })
+        };
+        let matches = shift + last < i64::from(extent)
+            && first + shift >= 1
+            && if vertical {
+                (0..h).all(|y| {
+                    (0..w).step_by(3).all(|x| {
+                        let row = (i64::from(y) + first + shift) as u32;
+                        within(
+                            at(&pixels, x, y),
+                            [
+                                at(&base.pixels, x, row - 1),
+                                at(&base.pixels, x, row),
+                                at(&base.pixels, x, row + 1),
+                            ],
+                        )
+                    })
+                })
+            } else {
+                (0..w).all(|x| {
+                    (0..h).step_by(3).all(|y| {
+                        let column = (i64::from(x) + first + shift) as u32;
+                        within(
+                            at(&pixels, x, y),
+                            [
+                                at(&base.pixels, column - 1, y),
+                                at(&base.pixels, column, y),
+                                at(&base.pixels, column + 1, y),
+                            ],
+                        )
+                    })
+                })
+            };
+        if !uniform || !matches {
+            bead_core::vprintln!(
+                "REVEAL_EDGE unusable uniform={uniform} matches={matches} band={first}..{last} shift={shift} extent={extent} ghost={ghost}"
+            );
+            return Ok(None);
+        }
+        let charge = self
+            .raster_budget
+            .get_or_insert_with(|| {
+                bead_core::cache::Budget::new("retained-cpu-rasters", 64 * bead_core::cache::MIB)
+            })
+            .reserve(pixels.data().len() + 192)?;
+        Ok(Some(EdgeTemplate {
+            pixels: Arc::new(pixels),
+            lead: (ghost - origin) * scale,
+            start: first,
+            key,
+            charge,
+        }))
+    }
     fn revealed_frame(
         &mut self,
         scene: &Scene,
@@ -348,8 +630,16 @@ impl TreeCache {
             return Ok(None);
         }
         let mut items = frame.items.clone();
+        let mut edge_piece = None;
         for (index, item) in items.iter_mut().enumerate() {
             if motion.parts.iter().any(|(i, _)| *i == index) {
+                if motion.art.as_ref().is_some_and(|art| art.index == index)
+                    && let Some((clipped, piece)) = self.edge_items(scene, item, scale)?
+                {
+                    *item = clipped;
+                    edge_piece = Some((index + 1, piece));
+                    continue;
+                }
                 let shaped = scene.primitives[index].clone();
                 if matches!(shaped, Primitive::Shadow { .. } | Primitive::Image { .. }) {
                     let content = Scene {
@@ -371,16 +661,43 @@ impl TreeCache {
                         offset: (0., 0.),
                         bounds: scene.bounds,
                     };
-                    self.raster.prepare(&content, scale)?;
-                    let texture = crate::key(&content.primitives[0], scale);
-                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                    texture.hash(&mut hasher);
-                    let key = hasher.finish();
-                    let pixels = self
-                        .raster
-                        .textures
-                        .remove(&texture)
-                        .ok_or("missing prepared reveal raster")?;
+                    let raster_profile = bead_core::profile::Span::new("reveal_art_raster");
+                    let sliced = match (&shaped, motion.art.as_ref()) {
+                        (Primitive::Image { rect, .. }, Some(art)) if art.index == index => {
+                            let open = Scene::revealed(art.body, motion.edge, motion.progress);
+                            if open.w.min(open.h) < 1. {
+                                // The closing tail: under a pixel of panel shows nothing (a blank pixel).
+                                Pixmap::new(1, 1)
+                            } else {
+                                sliced_art(art, motion.edge, motion.progress, *rect, scale)
+                            }
+                        }
+                        _ => None,
+                    };
+                    let (pixels, key) = if let Some(pixels) = sliced {
+                        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                        (
+                            motion.progress.to_bits(),
+                            scale.to_bits(),
+                            pixels.width(),
+                            pixels.height(),
+                        )
+                            .hash(&mut hasher);
+                        (pixels, hasher.finish())
+                    } else {
+                        self.raster.prepare(&content, scale)?;
+                        let texture = crate::key(&content.primitives[0], scale);
+                        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                        texture.hash(&mut hasher);
+                        let key = hasher.finish();
+                        let pixels = self
+                            .raster
+                            .textures
+                            .remove(&texture)
+                            .ok_or("missing prepared reveal raster")?;
+                        (pixels, key)
+                    };
+                    drop(raster_profile);
                     let bytes = pixels.data().len() + 192;
                     let charge = self
                         .raster_budget
@@ -406,6 +723,9 @@ impl TreeCache {
                 item.primitive = scene.primitives[index].translated(dx, dy);
                 item.clip = scene.clip_at(index);
             }
+        }
+        if let Some((at, piece)) = edge_piece {
+            items.insert(at, piece);
         }
         let mut key = std::collections::hash_map::DefaultHasher::new();
         frame.key.hash(&mut key);
@@ -946,6 +1266,140 @@ impl RepairScratch {
     }
 }
 
+/// B0117: the artwork of a small reveal without rasterising its whole length across the growth axis. Both ends
+/// (corners, joins) are drawn, the middle stays uniform along that length and is one drawn line stretched
+/// across. None when the artwork is too short for that or its middle is not uniform (the caller draws the
+/// whole crop).
+fn sliced_art(
+    art: &crate::RevealArt,
+    edge: bead_core::Edge,
+    progress: f32,
+    crop: Rect,
+    scale: f32,
+) -> Option<Pixmap> {
+    const END: f32 = 96.;
+    const MID: f32 = 16.;
+    // Vertical growth leaves the width as the long side; horizontal growth the height.
+    let across = edge.inward().1 != 0.;
+    let (w, h) = (
+        (crop.w * scale).ceil() as u32,
+        (crop.h * scale).ceil() as u32,
+    );
+    let (end, mid) = (
+        (END * scale).round() as u32,
+        ((MID * scale).round() as u32).max(2),
+    );
+    let long = if across { w } else { h };
+    if long < 2 * end + mid + 8 || w == 0 || h == 0 {
+        return None;
+    }
+    let revealed = Scene::revealed(art.body, edge, progress);
+    let slice = |at: u32, size: u32| {
+        let rect = if across {
+            Rect::new(
+                crop.x + at as f32 / scale,
+                crop.y,
+                size as f32 / scale,
+                crop.h,
+            )
+        } else {
+            Rect::new(
+                crop.x,
+                crop.y + at as f32 / scale,
+                crop.w,
+                size as f32 / scale,
+            )
+        };
+        let (_, bytes) = (art.draw)(revealed, Some(rect));
+        let (sw, sh) = if across { (size, h) } else { (w, size) };
+        crate::svg_pixmap(&bytes, sw, sh).ok()
+    };
+    let (first, last, middle) = (slice(0, end)?, slice(long - end, end)?, slice(end, mid)?);
+    let pixel = |p: &Pixmap, x: u32, y: u32| {
+        let i = (y * p.width() + x) as usize * 4;
+        [
+            p.data()[i],
+            p.data()[i + 1],
+            p.data()[i + 2],
+            p.data()[i + 3],
+        ]
+    };
+    let close = |a: [u8; 4], b: [u8; 4]| {
+        a.iter()
+            .zip(b)
+            .all(|(a, b)| (i32::from(*a) - i32::from(b)).abs() <= 4)
+    };
+    let uniform = if across {
+        (0..h).all(|y| close(pixel(&middle, 0, y), pixel(&middle, mid - 1, y)))
+    } else {
+        (0..w).all(|x| close(pixel(&middle, x, 0), pixel(&middle, x, mid - 1)))
+    };
+    if !uniform {
+        bead_core::vprintln!("REVEAL_SLICE middle not uniform width={w} height={h}");
+        return None;
+    }
+    let mut out = Pixmap::new(w, h)?;
+    let stride = w as usize * 4;
+    if across {
+        let e = end as usize * 4;
+        for y in 0..h as usize {
+            let row = &mut out.data_mut()[y * stride..(y + 1) * stride];
+            row[..e].copy_from_slice(&first.data()[y * e..(y + 1) * e]);
+            row[stride - e..].copy_from_slice(&last.data()[y * e..(y + 1) * e]);
+            let fill = pixel(&middle, mid / 2, y as u32);
+            for chunk in row[e..stride - e].as_chunks_mut::<4>().0 {
+                *chunk = fill;
+            }
+        }
+    } else {
+        let data = out.data_mut();
+        data[..end as usize * stride].copy_from_slice(first.data());
+        data[(h - end) as usize * stride..].copy_from_slice(last.data());
+        let line = &middle.data()[(mid / 2) as usize * stride..(mid / 2 + 1) as usize * stride];
+        for y in end as usize..(h - end) as usize {
+            data[y * stride..(y + 1) * stride].copy_from_slice(line);
+        }
+    }
+    Some(out)
+}
+/// Premultiplied source-over of a raster into a damage strip (identical results to tiny-skia's pipeline); opaque and empty source pixels short-circuit, which is most of a panel artwork.
+fn blend_over(
+    strip: &mut [u8],
+    width: u32,
+    strip_y: u32,
+    clip: Damage,
+    raster: &Raster,
+    dx: i64,
+    dy: i64,
+) {
+    let source_width = raster.pixels.width() as usize;
+    let source = raster.pixels.data();
+    for row in clip.y..clip.y + clip.h {
+        let from =
+            ((i64::from(row) - dy) as usize * source_width + (i64::from(clip.x) - dx) as usize) * 4;
+        let to = ((row - strip_y) as usize * width as usize + clip.x as usize) * 4;
+        let len = clip.w as usize * 4;
+        let (source, target) = (&source[from..from + len], &mut strip[to..to + len]);
+        for (s, d) in source
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(target.as_chunks_mut::<4>().0)
+        {
+            match s[3] {
+                255 => *d = *s,
+                0 => {}
+                alpha => {
+                    // tiny-skia's float pipeline, bit for bit: source + destination x (1 - alpha), rounded.
+                    let inverse = 1. - f32::from(alpha) / 255.;
+                    for c in 0..4 {
+                        d[c] = (f32::from(d[c]) * inverse + f32::from(s[c]) + 0.5) as u8;
+                    }
+                }
+            }
+        }
+    }
+}
 pub fn paint(
     frame: &Frame,
     offset: (f32, f32),
@@ -1129,17 +1583,8 @@ fn paint_with_scratch(
             }
             continue;
         }
-        let r = rect(&item.primitive);
-        let mask_needed = if let Some(raster) = &item.raster {
-            let x = ((r.x + offset.0) * scale).round() as i64 + i64::from(raster.origin.0);
-            let y = ((r.y + offset.1) * scale).round() as i64 + i64::from(raster.origin.1);
-            !(x >= i64::from(clip.x)
-                && y >= i64::from(clip.y)
-                && x + i64::from(raster.pixels.width()) <= i64::from(clip.x + clip.w)
-                && y + i64::from(raster.pixels.height()) <= i64::from(clip.y + clip.h))
-        } else {
-            true
-        };
+        // Rasters are blended into their clip rectangle directly; only drawn primitives use the mask.
+        let mask_needed = item.raster.is_none();
         if mask_needed && mask_clip != Some(clip) {
             if let Some(previous) = mask_clip {
                 for y in previous.y..previous.y + previous.h {
@@ -1156,16 +1601,15 @@ fn paint_with_scratch(
         let r = rect(&item.primitive);
         if let Some(raster) = &item.raster {
             painted = true;
-            let mut strip = PixmapMut::from_bytes(&mut bytes[begin..end], width, damage.h)
-                .ok_or("invalid SHM strip")?;
-            strip.draw_pixmap(
-                ((r.x + offset.0) * scale).round() as i32 + raster.origin.0 as i32,
-                ((r.y + offset.1) * scale).round() as i32 + raster.origin.1 as i32
-                    - damage.y as i32,
-                raster.pixels.as_ref().as_ref(),
-                &PixmapPaint::default(),
-                Transform::identity(),
-                mask_needed.then_some(&mask),
+            // `clip` is already inside the raster and the damage: a plain source-over of that rectangle.
+            blend_over(
+                &mut bytes[begin..end],
+                width,
+                damage.y,
+                clip,
+                raster,
+                ((r.x + offset.0) * scale).round() as i64 + i64::from(raster.origin.0),
+                ((r.y + offset.1) * scale).round() as i64 + i64::from(raster.origin.1),
             );
         } else if let Primitive::Arc {
             start_angle,
@@ -1670,6 +2114,74 @@ fn blit_with_opacity(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn raster_blend_matches_the_masked_pixmap_composite() {
+        let mut source = Pixmap::new(24, 12).unwrap();
+        for (i, px) in source
+            .data_mut()
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .enumerate()
+        {
+            let a = match i % 5 {
+                0 => 0,
+                1 => 255,
+                _ => (i * 29 % 256) as u8,
+            };
+            *px = [
+                (i * 5 % 256) as u8 % a.max(1),
+                (i * 3 % 256) as u8 % a.max(1),
+                (i % 256) as u8 % a.max(1),
+                a,
+            ];
+        }
+        let budget = bead_core::cache::Budget::new("blend-test", 1 << 20);
+        let raster = Raster {
+            pixels: Arc::new(source.clone()),
+            origin: (0, 0),
+            key: 1,
+            base_key: None,
+            changed: Damage::full(24, 12),
+            _charge: budget.reserve(source.data().len()).unwrap(),
+        };
+        let (width, rows) = (40u32, 20u32);
+        let clip = Damage {
+            x: 6,
+            y: 3,
+            w: 15,
+            h: 7,
+        };
+        let (dx, dy) = (4i64, 2i64);
+        let background: Vec<u8> = (0..width * rows * 4)
+            .map(|i| (i * 11 % 251) as u8)
+            .collect();
+        let mut expected = background.clone();
+        let mut mask = Mask::new(width, rows).unwrap();
+        for y in clip.y..clip.y + clip.h {
+            let i = (y * width + clip.x) as usize;
+            mask.data_mut()[i..i + clip.w as usize].fill(255);
+        }
+        PixmapMut::from_bytes(&mut expected, width, rows)
+            .unwrap()
+            .draw_pixmap(
+                dx as i32,
+                dy as i32,
+                source.as_ref(),
+                &PixmapPaint::default(),
+                Transform::identity(),
+                Some(&mask),
+            );
+        let mut actual = background;
+        blend_over(&mut actual, width, 0, clip, &raster, dx, dy);
+        let worst = expected
+            .iter()
+            .zip(&actual)
+            .map(|(a, b)| (i32::from(*a) - i32::from(*b)).abs())
+            .max()
+            .unwrap();
+        assert_eq!(worst, 0, "blend differs from tiny-skia");
+    }
     #[test]
     fn opacity_blit_matches_the_masked_pixmap_composite_and_swaps_channels() {
         let mut source = Pixmap::new(20, 10).unwrap();

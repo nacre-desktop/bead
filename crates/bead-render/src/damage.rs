@@ -37,6 +37,37 @@ fn intersect(a: Damage, b: Damage) -> Damage {
         h: (a.y + a.h).min(b.y + b.h).saturating_sub(y),
     }
 }
+/// The pixels in exactly one of two rectangles when they differ along one axis only (else both rectangles).
+fn clip_difference(a: Damage, b: Damage) -> Vec<Damage> {
+    let strip = |from: u32, to: u32| (from.min(to), from.max(to));
+    if a.x == b.x && a.w == b.w && (a.y == b.y || a.y + a.h == b.y + b.h) {
+        let (from, to) = if a.y == b.y {
+            strip(a.y + a.h, b.y + b.h)
+        } else {
+            strip(a.y, b.y)
+        };
+        return vec![Damage {
+            x: a.x,
+            y: from,
+            w: a.w,
+            h: to - from,
+        }];
+    }
+    if a.y == b.y && a.h == b.h && (a.x == b.x || a.x + a.w == b.x + b.w) {
+        let (from, to) = if a.x == b.x {
+            strip(a.x + a.w, b.x + b.w)
+        } else {
+            strip(a.x, b.x)
+        };
+        return vec![Damage {
+            x: from,
+            y: a.y,
+            w: to - from,
+            h: a.h,
+        }];
+    }
+    vec![a, b]
+}
 fn add(regions: &mut Vec<Damage>, mut next: Damage) {
     if next.w == 0 || next.h == 0 {
         return;
@@ -202,6 +233,15 @@ impl FrameDamage {
                             changed = intersect(changed, c.pixels(frame.scale, width, height));
                         }
                         add(&mut dirty, changed);
+                    } else if old.key == next.key
+                        && old.geometry == next.geometry
+                        && old.opacity == next.opacity
+                        && old.clip != next.clip
+                    {
+                        // Only the clip moved (a reveal window): the pixels between the two clip edges.
+                        for part in clip_difference(old.bounds, next.bounds) {
+                            add(&mut dirty, part);
+                        }
                     } else {
                         add(&mut dirty, old.bounds);
                         add(&mut dirty, next.bounds);
@@ -239,6 +279,23 @@ impl FrameDamage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_moving_clip_edge_damages_only_the_strip_between_the_edges() {
+        let rect = |y, h| Damage { x: 10, y, w: 50, h };
+        assert_eq!(
+            clip_difference(rect(0, 100), rect(0, 130)),
+            vec![rect(100, 30)]
+        );
+        assert_eq!(
+            clip_difference(rect(30, 70), rect(0, 100)),
+            vec![rect(0, 30)]
+        );
+        let moved = Damage {
+            x: 12,
+            ..rect(0, 100)
+        };
+        assert_eq!(clip_difference(rect(0, 100), moved).len(), 2);
+    }
     #[test]
     fn ordered_pixel_damage_handles_ids_insertion_removal_and_overlap() {
         use crate::{

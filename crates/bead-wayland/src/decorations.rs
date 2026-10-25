@@ -27,6 +27,13 @@ struct Key {
     panel: Option<PanelKey>,
     variant: u64,
 }
+/// B0117: decoration tiles already rasterised, per key (idle frame, joined frame of a panel), newest last. Opening
+/// and closing a panel swaps tile sets; rasterising them took 10-20 ms on the main thread right at the animation
+/// start. A set is at most 2 MiB; four are kept.
+type Raster = (Rect, u32, u32, std::sync::Arc<[u8]>);
+#[derive(Default)]
+pub(super) struct RasterCache(Vec<(Key, Vec<Raster>)>);
+const RASTER_SETS: usize = 4;
 pub(super) struct Tiles {
     key: Key,
     pub bytes: usize,
@@ -95,6 +102,7 @@ impl App {
         if surface.decorations.as_ref().is_some_and(|d| d.key == key) {
             return Ok(());
         }
+        let _sync_profile = bead_core::profile::Span::new("decorations_sync");
         let subcompositor = self
             .subcompositor
             .as_ref()
@@ -103,7 +111,29 @@ impl App {
             .viewporter
             .as_ref()
             .ok_or("Static decorations need wp_viewporter")?;
-        let specs = factory((width as u32, height as u32), engaged, panel)?;
+        let cached = self
+            .decoration_cache
+            .0
+            .iter()
+            .position(|(k, _)| *k == key)
+            .map(|i| self.decoration_cache.0.remove(i));
+        let (specs, rasters): (Vec<Decoration>, Vec<_>) = match cached {
+            Some((_, rasters)) => (
+                rasters
+                    .iter()
+                    .map(|(rect, _, _, _)| Decoration {
+                        rect: *rect,
+                        svg: std::sync::Arc::from(&[][..]),
+                    })
+                    .collect(),
+                rasters,
+            ),
+            None => (
+                factory((width as u32, height as u32), engaged, panel)?,
+                Vec::new(),
+            ),
+        };
+        let mut fresh = Vec::new();
         if specs.len() > 16 {
             return Err("Too many static decorations".into());
         }
@@ -151,17 +181,24 @@ impl App {
             let (buffer, bytes) = pool
                 .create_buffer(w as i32, h as i32, (w * 4) as i32, wl_shm::Format::Argb8888)
                 .map_err(|e| e.to_string())?;
-            bead_render::svg_into(
-                &spec.svg,
-                ShmTarget {
-                    bytes,
-                    width: w,
-                    height: h,
-                    scale,
-                    format: PixelFormat::Bgra,
-                },
-            )
-            .map_err(|e| e.to_string())?;
+            if let Some((_, _, _, pixels)) =
+                rasters.get(children.len()).filter(|r| r.1 == w && r.2 == h)
+            {
+                bytes.copy_from_slice(pixels);
+            } else {
+                bead_render::svg_into(
+                    &spec.svg,
+                    ShmTarget {
+                        bytes: &mut *bytes,
+                        width: w,
+                        height: h,
+                        scale,
+                        format: PixelFormat::Bgra,
+                    },
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            fresh.push((spec.rect, w, h, std::sync::Arc::<[u8]>::from(&*bytes)));
             role.set_position(spec.rect.x.round() as i32, spec.rect.y.round() as i32);
             role.set_desync();
             // The half-stroke inside the bar must remain visible too. Tiles
@@ -178,6 +215,10 @@ impl App {
                 viewport,
                 _buffer: buffer,
             });
+        }
+        self.decoration_cache.0.push((key, fresh));
+        if self.decoration_cache.0.len() > RASTER_SETS {
+            self.decoration_cache.0.remove(0);
         }
         self.surfaces[index].decorations = Some(Tiles {
             key,

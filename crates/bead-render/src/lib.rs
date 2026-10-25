@@ -350,7 +350,9 @@ pub type RevealFrame = (Rect, std::sync::Arc<[u8]>);
 pub struct RevealArt {
     pub body: Rect,
     pub index: usize,
-    pub draw: std::sync::Arc<dyn Fn(Rect) -> RevealFrame + Send + Sync>,
+    /// `draw(revealed, crop)`: artwork for the revealed body; with `crop` (scene coordinates) exactly that
+    /// rectangle is drawn (the pre-rasterised edge template), else the closure picks a trimmed crop.
+    pub draw: std::sync::Arc<dyn Fn(Rect, Option<Rect>) -> RevealFrame + Send + Sync>,
 }
 #[derive(Clone)]
 pub struct Motion {
@@ -538,7 +540,9 @@ impl Scene {
                 return;
             }
             use std::hash::{Hash, Hasher};
-            let (rect, bytes) = (art.draw)(now);
+            let draw_profile = bead_core::profile::Span::new("reveal_art_draw");
+            let (rect, bytes) = (art.draw)(now, None);
+            drop(draw_profile);
             let mut hash = std::collections::hash_map::DefaultHasher::new();
             bytes.hash(&mut hash);
             let path = std::path::PathBuf::from(format!("@reveal-art-{:x}.svg", hash.finish()));
@@ -587,7 +591,7 @@ impl Scene {
         }
     }
     /// The part of `body` that is open at `progress`, growing out of `edge`.
-    fn revealed(body: Rect, edge: bead_core::Edge, progress: f32) -> Rect {
+    pub(crate) fn revealed(body: Rect, edge: bead_core::Edge, progress: f32) -> Rect {
         let p = progress.clamp(0., 1.);
         let (ix, iy) = edge.inward();
         if iy > 0. {

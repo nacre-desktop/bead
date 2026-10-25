@@ -651,7 +651,7 @@ impl Chrome {
             motion.art = Some(bead::render::RevealArt {
                 body,
                 index,
-                draw: Arc::new(move |revealed| {
+                draw: Arc::new(move |revealed, exact| {
                     let mut rectangles = frame.material(output);
                     rectangles.push(Rect::new(
                         panel.x + revealed.x - body.x,
@@ -673,7 +673,9 @@ impl Chrome {
                         .min(crop.x + crop.w);
                     let bottom = (crop.y + ((visible.y + visible.h - crop.y) / 120.).ceil() * 120.)
                         .min(crop.y + crop.h);
-                    let trimmed = Rect::new(x, y, right - x, bottom - y);
+                    let trimmed = exact.map_or(Rect::new(x, y, right - x, bottom - y), |c| {
+                        Rect::new(panel.x + c.x - body.x, panel.y + c.y - body.y, c.w, c.h)
+                    });
                     let local = |r: Rect| {
                         Rect::new(body.x + r.x - panel.x, body.y + r.y - panel.y, r.w, r.h)
                     };
@@ -922,32 +924,30 @@ mod tests {
             cache.prepare(&scene, 1.).unwrap();
             let frame = cache.frame.as_ref().unwrap();
             let item = &frame.items[index];
-            assert!(
-                item.clip.is_none(),
-                "art must keep its curved edge beyond the content clip"
-            );
-            let pixels = &item.raster.as_ref().unwrap().pixels;
+            // B0117: the growing edge is a pre-rasterised band slid over the open-state art (the art is
+            // clipped above it); compose the frame the way the presenter does and look at its pixels.
+            let canvas_rect = bead::render::tree::rect(&item.primitive);
+            let (canvas_w, canvas_h) = (canvas_rect.w as u32, canvas_rect.h as u32);
+            let mut canvas = vec![0u8; (canvas_w * canvas_h * 4) as usize];
+            bead::render::tree::paint(
+                frame,
+                (-canvas_rect.x, -canvas_rect.y),
+                bead::render::ShmTarget {
+                    bytes: &mut canvas,
+                    width: canvas_w,
+                    height: canvas_h,
+                    scale: 1.,
+                    format: bead::render::PixelFormat::Rgba,
+                },
+                bead::render::Damage::full(canvas_w, canvas_h),
+            )
+            .unwrap();
+            let alpha = |x: u32, y: u32| canvas[((y * canvas_w + x) * 4 + 3) as usize];
             let bottom = (2. + full_body.h * progress).round() as u32;
-            assert!(
-                pixels
-                    .pixel((32. + full_body.w / 2.) as u32, bottom - 2)
-                    .unwrap()
-                    .alpha()
-                    > 0
-            );
-            assert_eq!(
-                pixels.pixel(33, bottom - 2).unwrap().alpha(),
-                0,
-                "growing corner stays rounded"
-            );
-            assert_eq!(
-                pixels
-                    .pixel((32. + full_body.w / 2.) as u32, bottom + 2)
-                    .unwrap()
-                    .alpha(),
-                0
-            );
-            if progress == 0.25 {
+            assert!(alpha((32. + full_body.w / 2.) as u32, bottom - 2) > 0);
+            assert_eq!(alpha(33, bottom - 2), 0, "growing corner stays rounded");
+            assert_eq!(alpha((32. + full_body.w / 2.) as u32, bottom + 2), 0);
+            if progress == 0.25 && item.clip.is_none() {
                 // Reference is the same contour in the former full-height SVG
                 // viewport. Cropping must preserve every rasterized pixel at 1.5.
                 let mut reference = scene.clone();

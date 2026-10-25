@@ -350,9 +350,16 @@ impl Host {
         if let Some(daemon) = &self.daemon {
             command.arg("--daemon-socket").arg(daemon);
         }
+        // Harness only: keep an app's profile output (BEAD_APP_LOG_DIR) instead of discarding it.
+        let stdout = std::env::var_os("BEAD_APP_LOG_DIR")
+            .and_then(|dir| {
+                std::fs::File::create(std::path::Path::new(&dir).join(format!("app-{name}.log")))
+                    .ok()
+            })
+            .map_or_else(Stdio::null, Stdio::from);
         let mut child = command
             .stdin(Stdio::null())
-            .stdout(Stdio::null())
+            .stdout(stdout)
             .process_group(0)
             .spawn()
             .map_err(|e| format!("{name}: {e}"))?;

@@ -15,6 +15,7 @@ pub(super) struct App {
     pub(super) hidden: bool,
     pub(super) bar_off: bool,
     pub(super) decoration_variant: u64,
+    pub(super) decoration_cache: super::decorations::RasterCache,
     pub(super) edge_surfaces: Vec<edges::EdgeSurface>,
     pub(super) edge: edges::EdgeState,
     pub(super) panel_runtime: Option<Box<dyn SceneSource>>,
@@ -208,6 +209,7 @@ pub fn run_runtime(
         // App mode never creates the bar-shaped primary surface; its one window or panel is the UI.
         bar_off: options.app.is_some(),
         decoration_variant: 0,
+        decoration_cache: Default::default(),
         edge_surfaces: Vec::new(),
         edge: Default::default(),
         panel_runtime: None,
