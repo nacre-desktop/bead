@@ -43,15 +43,15 @@ Arch CI passes. The private capture lease remained unavailable for over 90 minut
 CPU/GL presentation, matched QML, first-key and memory gates are all unmeasured.
 [B0103](specs/0103-control-latency.md) records the candidate and remaining proofs.
 No integration, live test or performance acceptance.
-## 2026-10-24 — B0102 dashboard reload fixed; Today candidate pending captures
+## 2026-10-25 — B0102 dashboard fixes (review candidate)
 
-The bar-only `status.hovered` update no longer breaks dashboard pointer entry;
-`ac194d7` is published with coverage for all 13 pages through the real runtime.
-The Today wallpaper/host/media summary candidate passes full remote Arch CI,
-including poster reuse and release checks. Required private paired captures were
-blocked by an occupied capture slot; RMSE and relative memory remain unmeasured.
-The Today candidate is unpublished and is not accepted parity. See
-[B0102](specs/0102-dashboard-owner.md) for scope and remaining gaps.
+The bar-only `status.hovered` reload failure is fixed in published `ac194d7`;
+companion tab commands now dispatch through the host after lifetime validation.
+Today restores its wallpaper and calendar/host/media columns. Full remote Arch
+CI and seven-state private QML/CPU-Bead captures pass their functional checks.
+The relative memory gate fails: Today open +7.551 MiB; closed Media/Weather/System
++1.055/+0.945/+1.195 MiB. Memory and timing parity remain unaccepted. [B0102](specs/0102-dashboard-owner.md) contains the evidence and remaining
+Media/Weather/System and visual-polish gaps. No live change or laptop-cap claim.
 
 
 ## 2026-10-24 — B0096 owner bar parity (review candidate)

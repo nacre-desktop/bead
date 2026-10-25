@@ -1,0 +1,58 @@
+{
+  "candidate": "3efe724",
+  "control_base": "44a2004",
+  "control_addition": "18dc581 (same companion host-routing fix)",
+  "qml_reference": "3afcdc64ec5a2150d660bfb5aabb888d3d028ec7",
+  "backend": "CPU",
+  "build": "cargo build --locked -j2 -p nacre-shell --no-default-features --bins; strip",
+  "binary_sha256": {
+    "candidate": "ed316d7759c2df6a3390c24ad7dcaa5230f6a8fc1ae1d0019efdb3d1afc77be2",
+    "control": "fc20fd7e4eda499a51a777c557e14398472ae442ca5d9274437cc90bdc2f92b3",
+    "shared_native_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5"
+  },
+  "output": {
+    "physical": [
+      2880,
+      1800
+    ],
+    "logical": [
+      1920,
+      1200
+    ],
+    "scale": 1.5
+  },
+  "fixtures": {
+    "system_display": {
+      "cpu_percent": 37,
+      "memory_percent": 38,
+      "gpu_percent": 12,
+      "os": "Fixture Linux",
+      "kernel": "6.0.0-fixture"
+    },
+    "mpris": {
+      "status": "Playing",
+      "title": "Preview track",
+      "artist": "Preview artist",
+      "album": "Preview album",
+      "artwork": true,
+      "position": "monotonic from 42 seconds",
+      "length_seconds": 180
+    },
+    "weather": "offline cached Harbour fixture",
+    "calendar": "no configured ICS"
+  },
+  "checks": [
+    "semantic page and canonical tab",
+    "companion scene commit",
+    "playing artwork on Today/Media",
+    "actual System module alias and fixture-store verification",
+    "full-window dimensions",
+    "no UI_ERROR or drive errors"
+  ],
+  "memory_method": "Three alternating same-host CPU control/candidate pairs; five component samples per phase; closed+idle waits six seconds. Gated sum: Pss_Anon + Pss_Shmem + DRM + SwapPss. Pss_File informational.",
+  "limitations": [
+    "Clock and playing-track position advance between arms.",
+    "No physical scanout or laptop-cap acceptance claim.",
+    "System fixture replaces displayed bindings; real source transport and its allocations remain active."
+  ]
+}

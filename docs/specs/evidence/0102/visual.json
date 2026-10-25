@@ -1,0 +1,113 @@
+{
+  "geometry": {
+    "name": "winit",
+    "mode": [
+      2880,
+      1800
+    ],
+    "scale": 1.5,
+    "logical": [
+      1920,
+      1200
+    ]
+  },
+  "dashboard_crop_physical": [
+    702,
+    75,
+    2178,
+    1050
+  ],
+  "states": {
+    "idle": {
+      "page": "Idle",
+      "whole_window_rmse_0_255": 9.561,
+      "dashboard_crop_rmse_0_255": null,
+      "png_sha256": {
+        "qml": "62802d7865445d8b207d9c719aa5d346f2040e82c682d3624f7bdc8b37304f9e",
+        "bead": "d229a4503087a04fc01ef4fa8881f258f4812939d8a12957a5a4e173b63b0366"
+      },
+      "png_size": [
+        2880,
+        1800
+      ]
+    },
+    "dashboard-0": {
+      "page": "Today",
+      "whole_window_rmse_0_255": 15.196,
+      "dashboard_crop_rmse_0_255": 23.1519,
+      "png_sha256": {
+        "qml": "d82aba2eade163f3b1bf36d2f624d1bcd776406a6211982350c801bf472177f7",
+        "bead": "3d9f4336ba0ad8ff5965f3f08ee28e41de3d5157b4579f8fe7a61a04254e15d8"
+      },
+      "png_size": [
+        2880,
+        1800
+      ]
+    },
+    "dashboard-1": {
+      "page": "Media",
+      "whole_window_rmse_0_255": 15.5028,
+      "dashboard_crop_rmse_0_255": 23.8734,
+      "png_sha256": {
+        "qml": "99a633a1c6ee872548d3ebd2bc15f484e3b522bfc0d7ee2558e1d4b30eba4597",
+        "bead": "a4072e1898b9ab09f428f4d267fb3a4e9866f916b689bfa73be5c8491b500665"
+      },
+      "png_size": [
+        2880,
+        1800
+      ]
+    },
+    "dashboard-2": {
+      "page": "Weather",
+      "whole_window_rmse_0_255": 17.309,
+      "dashboard_crop_rmse_0_255": 27.9897,
+      "png_sha256": {
+        "qml": "7f8b8d9d0566cf5e4db60a482098f94daf8be25d1d3531d908d1030cdf2a68b5",
+        "bead": "ede194251172871cceefcf5bff712e269d3546522e1ead1cf41d555024491bbe"
+      },
+      "png_size": [
+        2880,
+        1800
+      ]
+    },
+    "dashboard-3": {
+      "page": "System",
+      "whole_window_rmse_0_255": 19.8144,
+      "dashboard_crop_rmse_0_255": 33.4434,
+      "png_sha256": {
+        "qml": "e60c6cef0fe59d58c4234f2ff1578a3c46ef7fa76d231980a03acdd4f7fbd80e",
+        "bead": "c7a788e694e005d5a96399c15eb39256b8a812d25312f477194985c6b931c98f"
+      },
+      "png_size": [
+        2880,
+        1800
+      ]
+    },
+    "dashboard-hover": {
+      "page": "Today hover",
+      "whole_window_rmse_0_255": 15.2909,
+      "dashboard_crop_rmse_0_255": 23.3698,
+      "png_sha256": {
+        "qml": "104f2fd41a1541fd3ad72549c388d1d6156f45687a6c106907fb18051a7fda11",
+        "bead": "cb083956f84420799f5ebafe54d2abfeb939d7b359129a2bfa90cd0d92865b4e"
+      },
+      "png_size": [
+        2880,
+        1800
+      ]
+    },
+    "dashboard-pressed": {
+      "page": "Today pressed",
+      "whole_window_rmse_0_255": 15.3477,
+      "dashboard_crop_rmse_0_255": 23.5036,
+      "png_sha256": {
+        "qml": "755d82c1c88374f2ce045e790a5b4c9809298bcde4d5065d798b9141cdc19b1b",
+        "bead": "0db8efb6e0bab68676874b47d366db3e47193ca76a1c33b94281b46eaa33ec76"
+      },
+      "png_size": [
+        2880,
+        1800
+      ]
+    }
+  }
+}

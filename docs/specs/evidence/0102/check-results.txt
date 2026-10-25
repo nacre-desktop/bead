@@ -1,17 +1,17 @@
-Source: 6c65d8c (product candidate; urgent fix ac194d7 included)
+Source: 3efe724 (integrated candidate; urgent ac194d7 already published)
 Environment: remote ghcr.io/archlinux/archlinux:latest, Rust 1.99.0
-Container limits: 12 CPUs / 24 GiB; nice 10; Cargo -j2
-Command: docker exec b0102-ci nice -n 10 bash /w/in/full-ci.sh
+Container limits: 12 CPUs / 24 GiB; Cargo -j2
+Command: docker exec b0102-ci nice -n 10 bash /w/in/check.sh
 Exit: 0
 
 Formatting: PASS
 Clippy workspace/all-targets, warnings denied: PASS
 HEADLESS_SERVICE_BOUNDARY_OK default+all-features
-Workspace tests: PASS (nacre-shell: 553 passed, 0 failed, 1 ignored)
+Workspace tests: PASS (nacre-shell: 563 passed, 0 failed, 1 ignored)
 Trace memory-policy tests: PASS
 Renderer configurations (no-default and all-features): PASS
 Facade/minimal and shell UI check: PASS
-LUAU_ANALYZE_OK 141 modules; actual source mirror, generated Rust SDK
+LUAU_ANALYZE_OK 142 modules; actual source mirror, generated Rust SDK
 Capture-window / engine trace / arm / reference / preview / fake-system suites: PASS
 Packaging staging and launcher: PASS
 Motion wallpaper renderer smoke: PASS (all checks true)
@@ -20,7 +20,12 @@ Private SNI/DBusMenu lifecycle: 3 passed
 Workspace and every independent bead-* license/dependency graph: PASS
 CI_ALL_OK
 
-Dashboard-focused suite: 57 passed, 0 failed
-Eight affected goldens regenerated at 1x/1.5x and visually inspected.
-Paired desktop capture: NOT RUN, shared capture slot remained occupied.
-RMSE / relative unreclaimable memory: NOT MEASURED; candidate remains unpublished.
+Dashboard lifecycle coverage includes real fallback geometry and companion host-routing regressions (passed).
+Twelve affected goldens regenerated at 1x/1.5x and visually inspected.
+Paired desktop visual capture: PASS (QML and Bead; all seven requested states).
+Strict semantic page/commit/artwork/System fixture and full-window checks: PASS.
+Whole-output RMSE 0..255 Today/Media/Weather/System: 15.1960 / 15.5028 / 17.3090 / 19.8144.
+Final three alternating relative unreclaimable-memory pairs: captured successfully; relative gate FAIL.
+Median paired MiB open/closed Today: +7.5508/+0.3555; Media: +0.9531/+1.0547.
+Weather: +0.7109/+0.9453; System: +1.4727/+1.1953.
+No live/laptop acceptance; remaining visual and timing gaps are listed in the spec.

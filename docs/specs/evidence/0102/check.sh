@@ -49,7 +49,7 @@ echo '=== Packaging staging and launcher'
 python3 -m unittest discover -s packaging/tests
 echo '=== Motion wallpaper renderer smoke'
 cargo build -p nacre-shell --bin bead-wallpaper-video --locked -j2
-python3 spikes/wallpaper-video-smoke.py --engine target/debug/bead-wallpaper-video
+python3 spikes/wallpaper-video-smoke.py --engine target/debug/bead-wallpaper-video --expect-presentation shm
 
 echo '=== Private service owner lifecycle'
 python3 spikes/services-check.py

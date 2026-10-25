@@ -1,0 +1,897 @@
+{
+  "method": "sum of each captured phase's component medians: Pss_Anon + Pss_Shmem + DRM + SwapPss; all stored in KiB, converted to MiB; Pss_File is informational only",
+  "pairs": {
+    "memory-A1": {
+      "role": "control",
+      "states": {
+        "idle": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 20932,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.0234375,
+            "clean_file_pss_mib_informational": 50.841796875
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 20960,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.05078125,
+            "clean_file_pss_mib_informational": 50.841796875
+          }
+        },
+        "dashboard-0": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 32540,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 49.4921875,
+            "clean_file_pss_mib_informational": 51.3759765625
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 21432,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.51171875,
+            "clean_file_pss_mib_informational": 50.140625
+          }
+        },
+        "dashboard-1": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 33020,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 49.9609375,
+            "clean_file_pss_mib_informational": 50.986328125
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 21796,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.8671875,
+            "clean_file_pss_mib_informational": 50.1337890625
+          }
+        },
+        "dashboard-2": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 36172,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 53.0390625,
+            "clean_file_pss_mib_informational": 50.9658203125
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 21980,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 32.046875,
+            "clean_file_pss_mib_informational": 50.150390625
+          }
+        },
+        "dashboard-3": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 31996,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 48.9609375,
+            "clean_file_pss_mib_informational": 51.46484375
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 22428,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 32.484375,
+            "clean_file_pss_mib_informational": 50.212890625
+          }
+        }
+      }
+    },
+    "memory-B1": {
+      "role": "candidate",
+      "states": {
+        "idle": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 21196,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.28125,
+            "clean_file_pss_mib_informational": 50.548828125
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 20956,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.046875,
+            "clean_file_pss_mib_informational": 50.548828125
+          }
+        },
+        "dashboard-0": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 42100,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 58.828125,
+            "clean_file_pss_mib_informational": 51.1533203125
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 21884,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.953125,
+            "clean_file_pss_mib_informational": 49.7265625
+          }
+        },
+        "dashboard-1": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 33996,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 50.9140625,
+            "clean_file_pss_mib_informational": 50.6826171875
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 22376,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 32.43359375,
+            "clean_file_pss_mib_informational": 49.7265625
+          }
+        },
+        "dashboard-2": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 36900,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 53.75,
+            "clean_file_pss_mib_informational": 50.55859375
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 23424,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 33.45703125,
+            "clean_file_pss_mib_informational": 49.744140625
+          }
+        },
+        "dashboard-3": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 33504,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 50.43359375,
+            "clean_file_pss_mib_informational": 50.99609375
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 23672,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 33.69921875,
+            "clean_file_pss_mib_informational": 49.744140625
+          }
+        }
+      }
+    },
+    "memory-A2": {
+      "role": "control",
+      "states": {
+        "idle": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 21280,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.36328125,
+            "clean_file_pss_mib_informational": 50.923828125
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 21280,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.36328125,
+            "clean_file_pss_mib_informational": 50.9228515625
+          }
+        },
+        "dashboard-0": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 32716,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 49.6640625,
+            "clean_file_pss_mib_informational": 51.51953125
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 21652,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.7265625,
+            "clean_file_pss_mib_informational": 50.25390625
+          }
+        },
+        "dashboard-1": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 33300,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 50.234375,
+            "clean_file_pss_mib_informational": 51.123046875
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 22072,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 32.13671875,
+            "clean_file_pss_mib_informational": 50.25390625
+          }
+        },
+        "dashboard-2": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 36372,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 53.234375,
+            "clean_file_pss_mib_informational": 51.111328125
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 22344,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 32.40234375,
+            "clean_file_pss_mib_informational": 50.25390625
+          }
+        },
+        "dashboard-3": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 34960,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 51.85546875,
+            "clean_file_pss_mib_informational": 51.611328125
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 22412,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 32.46875,
+            "clean_file_pss_mib_informational": 50.3154296875
+          }
+        }
+      }
+    },
+    "memory-B2": {
+      "role": "candidate",
+      "states": {
+        "idle": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 20996,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.0859375,
+            "clean_file_pss_mib_informational": 50.5498046875
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 21020,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.109375,
+            "clean_file_pss_mib_informational": 50.548828125
+          }
+        },
+        "dashboard-0": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 40212,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 56.984375,
+            "clean_file_pss_mib_informational": 51.283203125
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 22016,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 32.08203125,
+            "clean_file_pss_mib_informational": 49.8447265625
+          }
+        },
+        "dashboard-1": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 34024,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 50.94140625,
+            "clean_file_pss_mib_informational": 50.80078125
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 24992,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 34.98828125,
+            "clean_file_pss_mib_informational": 49.8447265625
+          }
+        },
+        "dashboard-2": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 37668,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 54.5,
+            "clean_file_pss_mib_informational": 50.736328125
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 23312,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 33.34765625,
+            "clean_file_pss_mib_informational": 49.8583984375
+          }
+        },
+        "dashboard-3": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 38748,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 55.5546875,
+            "clean_file_pss_mib_informational": 51.236328125
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 23636,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 33.6640625,
+            "clean_file_pss_mib_informational": 49.9208984375
+          }
+        }
+      }
+    },
+    "memory-A3": {
+      "role": "control",
+      "states": {
+        "idle": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 21016,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.10546875,
+            "clean_file_pss_mib_informational": 50.5625
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 21044,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.1328125,
+            "clean_file_pss_mib_informational": 50.5625
+          }
+        },
+        "dashboard-0": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 32680,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 49.62890625,
+            "clean_file_pss_mib_informational": 51.08203125
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 21596,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.671875,
+            "clean_file_pss_mib_informational": 49.84375
+          }
+        },
+        "dashboard-1": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 33144,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 50.08203125,
+            "clean_file_pss_mib_informational": 50.708984375
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 22088,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 32.15234375,
+            "clean_file_pss_mib_informational": 49.84375
+          }
+        },
+        "dashboard-2": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 36400,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 53.26171875,
+            "clean_file_pss_mib_informational": 50.7197265625
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 22192,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 32.25390625,
+            "clean_file_pss_mib_informational": 49.8544921875
+          }
+        },
+        "dashboard-3": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 34624,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 51.52734375,
+            "clean_file_pss_mib_informational": 51.1572265625
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 22520,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 32.57421875,
+            "clean_file_pss_mib_informational": 49.853515625
+          }
+        }
+      }
+    },
+    "memory-B3": {
+      "role": "candidate",
+      "states": {
+        "idle": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 21264,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.34765625,
+            "clean_file_pss_mib_informational": 50.544921875
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 21264,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.34765625,
+            "clean_file_pss_mib_informational": 50.541015625
+          }
+        },
+        "dashboard-0": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 40412,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 57.1796875,
+            "clean_file_pss_mib_informational": 51.2109375
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 21868,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 31.9375,
+            "clean_file_pss_mib_informational": 49.7421875
+          }
+        },
+        "dashboard-1": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 34308,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 51.21875,
+            "clean_file_pss_mib_informational": 50.6943359375
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 23168,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 33.20703125,
+            "clean_file_pss_mib_informational": 49.7421875
+          }
+        },
+        "dashboard-2": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 35384,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 52.26953125,
+            "clean_file_pss_mib_informational": 50.638671875
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 22548,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 32.6015625,
+            "clean_file_pss_mib_informational": 49.76171875
+          }
+        },
+        "dashboard-3": {
+          "open": {
+            "components_kib": {
+              "Pss_Anon": 32848,
+              "Pss_Shmem": 18140,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 49.79296875,
+            "clean_file_pss_mib_informational": 51.138671875
+          },
+          "closed": {
+            "components_kib": {
+              "Pss_Anon": 22436,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0
+            },
+            "unreclaimable_mib": 32.4921875,
+            "clean_file_pss_mib_informational": 49.82421875
+          }
+        }
+      }
+    }
+  },
+  "medians": {
+    "idle:open": {
+      "control_median_unreclaimable_mib": 31.10546875,
+      "candidate_median_unreclaimable_mib": 31.28125,
+      "paired_delta_median_mib": 0.2421875,
+      "paired_deltas_mib": [
+        0.2578125,
+        -0.27734375,
+        0.2421875
+      ],
+      "control_clean_file_pss_mib_informational": [
+        50.841796875,
+        50.923828125,
+        50.5625
+      ],
+      "candidate_clean_file_pss_mib_informational": [
+        50.548828125,
+        50.5498046875,
+        50.544921875
+      ]
+    },
+    "idle:closed": {
+      "control_median_unreclaimable_mib": 31.1328125,
+      "candidate_median_unreclaimable_mib": 31.109375,
+      "paired_delta_median_mib": -0.00390625,
+      "paired_deltas_mib": [
+        -0.00390625,
+        -0.25390625,
+        0.21484375
+      ],
+      "control_clean_file_pss_mib_informational": [
+        50.841796875,
+        50.9228515625,
+        50.5625
+      ],
+      "candidate_clean_file_pss_mib_informational": [
+        50.548828125,
+        50.548828125,
+        50.541015625
+      ]
+    },
+    "dashboard-0:open": {
+      "control_median_unreclaimable_mib": 49.62890625,
+      "candidate_median_unreclaimable_mib": 57.1796875,
+      "paired_delta_median_mib": 7.55078125,
+      "paired_deltas_mib": [
+        9.3359375,
+        7.3203125,
+        7.55078125
+      ],
+      "control_clean_file_pss_mib_informational": [
+        51.3759765625,
+        51.51953125,
+        51.08203125
+      ],
+      "candidate_clean_file_pss_mib_informational": [
+        51.1533203125,
+        51.283203125,
+        51.2109375
+      ]
+    },
+    "dashboard-0:closed": {
+      "control_median_unreclaimable_mib": 31.671875,
+      "candidate_median_unreclaimable_mib": 31.953125,
+      "paired_delta_median_mib": 0.35546875,
+      "paired_deltas_mib": [
+        0.44140625,
+        0.35546875,
+        0.265625
+      ],
+      "control_clean_file_pss_mib_informational": [
+        50.140625,
+        50.25390625,
+        49.84375
+      ],
+      "candidate_clean_file_pss_mib_informational": [
+        49.7265625,
+        49.8447265625,
+        49.7421875
+      ]
+    },
+    "dashboard-1:open": {
+      "control_median_unreclaimable_mib": 50.08203125,
+      "candidate_median_unreclaimable_mib": 50.94140625,
+      "paired_delta_median_mib": 0.953125,
+      "paired_deltas_mib": [
+        0.953125,
+        0.70703125,
+        1.13671875
+      ],
+      "control_clean_file_pss_mib_informational": [
+        50.986328125,
+        51.123046875,
+        50.708984375
+      ],
+      "candidate_clean_file_pss_mib_informational": [
+        50.6826171875,
+        50.80078125,
+        50.6943359375
+      ]
+    },
+    "dashboard-1:closed": {
+      "control_median_unreclaimable_mib": 32.13671875,
+      "candidate_median_unreclaimable_mib": 33.20703125,
+      "paired_delta_median_mib": 1.0546875,
+      "paired_deltas_mib": [
+        0.56640625,
+        2.8515625,
+        1.0546875
+      ],
+      "control_clean_file_pss_mib_informational": [
+        50.1337890625,
+        50.25390625,
+        49.84375
+      ],
+      "candidate_clean_file_pss_mib_informational": [
+        49.7265625,
+        49.8447265625,
+        49.7421875
+      ]
+    },
+    "dashboard-2:open": {
+      "control_median_unreclaimable_mib": 53.234375,
+      "candidate_median_unreclaimable_mib": 53.75,
+      "paired_delta_median_mib": 0.7109375,
+      "paired_deltas_mib": [
+        0.7109375,
+        1.265625,
+        -0.9921875
+      ],
+      "control_clean_file_pss_mib_informational": [
+        50.9658203125,
+        51.111328125,
+        50.7197265625
+      ],
+      "candidate_clean_file_pss_mib_informational": [
+        50.55859375,
+        50.736328125,
+        50.638671875
+      ]
+    },
+    "dashboard-2:closed": {
+      "control_median_unreclaimable_mib": 32.25390625,
+      "candidate_median_unreclaimable_mib": 33.34765625,
+      "paired_delta_median_mib": 0.9453125,
+      "paired_deltas_mib": [
+        1.41015625,
+        0.9453125,
+        0.34765625
+      ],
+      "control_clean_file_pss_mib_informational": [
+        50.150390625,
+        50.25390625,
+        49.8544921875
+      ],
+      "candidate_clean_file_pss_mib_informational": [
+        49.744140625,
+        49.8583984375,
+        49.76171875
+      ]
+    },
+    "dashboard-3:open": {
+      "control_median_unreclaimable_mib": 51.52734375,
+      "candidate_median_unreclaimable_mib": 50.43359375,
+      "paired_delta_median_mib": 1.47265625,
+      "paired_deltas_mib": [
+        1.47265625,
+        3.69921875,
+        -1.734375
+      ],
+      "control_clean_file_pss_mib_informational": [
+        51.46484375,
+        51.611328125,
+        51.1572265625
+      ],
+      "candidate_clean_file_pss_mib_informational": [
+        50.99609375,
+        51.236328125,
+        51.138671875
+      ]
+    },
+    "dashboard-3:closed": {
+      "control_median_unreclaimable_mib": 32.484375,
+      "candidate_median_unreclaimable_mib": 33.6640625,
+      "paired_delta_median_mib": 1.1953125,
+      "paired_deltas_mib": [
+        1.21484375,
+        1.1953125,
+        -0.08203125
+      ],
+      "control_clean_file_pss_mib_informational": [
+        50.212890625,
+        50.3154296875,
+        49.853515625
+      ],
+      "candidate_clean_file_pss_mib_informational": [
+        49.744140625,
+        49.9208984375,
+        49.82421875
+      ]
+    }
+  }
+}
