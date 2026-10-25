@@ -796,7 +796,9 @@ impl App {
             return;
         }
         if changed && self.sync_native_pearl_scene() {
-            self.place_native_pearl(true);
+            if self.surfaces.iter().any(|s| s.handoff.is_some()) {
+                self.place_native_pearl(true);
+            }
             self.schedule_pearl_save();
         }
         let qh = self.qh.clone();
@@ -920,6 +922,7 @@ impl App {
         }
     }
     pub(super) fn release_panel(&mut self) {
+        self.panel_cover = None;
         // Trace probes are weak: observing retirement must not extend raster lifetime.
         #[cfg(all(target_os = "linux", target_env = "gnu"))]
         let retired_images = self.options.trace_state.then(|| {

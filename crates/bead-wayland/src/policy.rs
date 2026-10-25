@@ -1,5 +1,87 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Per-surface CPU-first / warm GPU / idle CPU lifecycle.
+/// An initial native frame is hidden until the latest complete geometry was
+/// placed. Replies for superseded rectangles cannot uncover an older pose.
+#[derive(Default)]
+pub(crate) struct Handoff {
+    requested: Option<bead_core::pearl::Rect>,
+    placed: bool,
+}
+impl Handoff {
+    pub fn request(&mut self, rect: bead_core::pearl::Rect) -> bool {
+        if self.requested == Some(rect) {
+            return false;
+        }
+        self.requested = Some(rect);
+        self.placed = false;
+        true
+    }
+    pub fn accepts(&self, rect: bead_core::pearl::Rect) -> bool {
+        self.requested == Some(rect)
+    }
+    pub fn placed(&mut self, rect: bead_core::pearl::Rect) {
+        if self.accepts(rect) {
+            self.placed = true;
+        }
+    }
+    pub fn can_draw(&self) -> bool {
+        self.placed
+    }
+    pub fn finish_frame(&mut self, committed: bool) -> bool {
+        if !committed || !self.placed {
+            return false;
+        }
+        self.placed = false;
+        true
+    }
+}
+
+#[cfg(test)]
+mod handoff_tests {
+    use super::*;
+    use bead_core::pearl::Rect;
+    #[test]
+    fn content_waits_for_complete_final_geometry_and_stale_replies_do_not_uncover() {
+        let mut gate = Handoff::default();
+        let drop = Rect::new(410., 250., 1100., 590.);
+        let previous = drop.translated(-100., -100.);
+        assert!(
+            !gate.can_draw(),
+            "configure/transparent map cannot retire source"
+        );
+        assert!(
+            !gate.finish_frame(true),
+            "a transparent map keeps the cover"
+        );
+        assert!(gate.request(previous));
+        assert!(gate.request(drop));
+        gate.placed(previous);
+        assert!(!gate.can_draw(), "stale persisted placement cannot uncover");
+        assert!(
+            !gate.request(drop),
+            "configure repeats do not requeue placement"
+        );
+        assert!(!gate.can_draw(), "failed placement leaves source visible");
+        gate.placed(drop);
+        assert!(
+            gate.can_draw(),
+            "only the final content commit may retire source"
+        );
+        assert!(
+            !gate.finish_frame(false),
+            "busy buffers and failed draws keep the cover"
+        );
+        assert!(gate.can_draw());
+        assert!(
+            gate.finish_frame(true),
+            "content commits before the source unmaps"
+        );
+        assert!(
+            !gate.finish_frame(true),
+            "late/duplicate frames cannot retire twice"
+        );
+    }
+}
 #[derive(Default)]
 pub(crate) struct Policy {
     first: bool,

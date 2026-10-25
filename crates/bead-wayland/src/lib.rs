@@ -19,8 +19,8 @@ pub use edges::{EdgeArt, EdgeChrome, LipState};
 mod pearls;
 pub use panels::Panels;
 pub use pearls::{
-    Film, Guide, NativePearlMotion, NativePearlOptions, NativePearlPlacement, NativePearlTitle,
-    NativePearlWatch, PearlOptions,
+    Film, Guide, NativePearlComplete, NativePearlMotion, NativePearlOptions, NativePearlPlacement,
+    NativePearlTitle, NativePearlWatch, PearlOptions,
 };
 mod overlay;
 mod policy;
@@ -240,6 +240,13 @@ pub enum UiEvent {
     Restore(serde_json::Value),
     /// Geometry/move state from a compositor adapter for a native pearl.
     NativePearlMotion(NativePearlMotion),
+    /// Completion of an adapter's initial native placement, scoped to its panel lifetime.
+    NativePearlPlaced {
+        id: u32,
+        epoch: u64,
+        rect: bead_core::pearl::Rect,
+        success: bool,
+    },
     CompanionVisibility(bool),
     /// Shell-wide hide: `None` toggles. Wallpaper surfaces are never affected.
     ShellHidden(Option<bool>),
@@ -722,6 +729,7 @@ struct Surface {
     /// Fresh xdg role used while detached. The layer role remains available for
     /// docking because Wayland surfaces cannot change roles.
     native: Option<smithay_client_toolkit::shell::xdg::window::Window>,
+    handoff: Option<pearls::Handoff>,
     pool: SlotPool,
     #[cfg(feature = "wgpu")]
     gpu: Option<bead_render::gpu::Surface>,

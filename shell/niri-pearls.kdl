@@ -1,0 +1,8 @@
+// Native pearl chrome is client-rendered, including its transparent bootstrap.
+window-rule {
+    match app-id="^bead[.]pearl$"
+    open-floating true
+    border { off; }
+    focus-ring { off; }
+    shadow { off; }
+}

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // B0067 parity harness: move (and optionally press) a virtual pointer on a PRIVATE parent compositor.
-//   virtual-pointer X Y W H [hover|press|click]     positions are in the parent output's pixels, W H its size
+//   virtual-pointer X Y W H [hover|press|click|drag X2 Y2 MS|relative-drag X2 Y2 MS [SCALE]]
+//     positions are in the parent output's pixels, W H its size; drag holds left while moving
+//     relative-drag sends relative deltas while holding left; optional SCALE divides physical travel
 //   virtual-pointer X Y W H stream wheel|pixel DELTA COUNT MS   COUNT axis events, one every MS ms (B0110)
 // It connects to $WAYLAND_DISPLAY (the harness points it at its own headless labwc, never the live session),
 // creates a wlr virtual pointer, sends one absolute motion and, with `press`, holds the left button until killed.
@@ -14,6 +16,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <math.h>
 #include <linux/input-event-codes.h>
 #include <wayland-client.h>
 #include "wlr-vp.h"
@@ -48,7 +51,7 @@ static void trace_motion(unsigned x, unsigned y) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 5) { fprintf(stderr, "usage: %s X Y W H [hover|press|click|drag X2 Y2 MS]\n", argv[0]); return 2; }
+    if (argc < 5) { fprintf(stderr, "usage: %s X Y W H [hover|press|click|drag X2 Y2 MS|relative-drag X2 Y2 MS [SCALE]]\n", argv[0]); return 2; }
     struct wl_display *display = wl_display_connect(NULL);
     if (!display) { fprintf(stderr, "no wayland display\n"); return 1; }
     struct wl_registry *registry = wl_display_get_registry(display);
@@ -112,11 +115,19 @@ int main(int argc, char **argv) {
         zwlr_virtual_pointer_v1_button(pointer, now_ms(), BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
         zwlr_virtual_pointer_v1_frame(pointer);
         wl_display_roundtrip(display);
-        if (!strcmp(argv[5], "drag")) {
-            if (argc != 9) { fprintf(stderr, "drag requires X2 Y2 MS\n"); return 2; }
+        if (!strcmp(argv[5], "drag") || !strcmp(argv[5], "relative-drag")) {
+            int relative = !strcmp(argv[5], "relative-drag");
+            if (argc != 9 && !(relative && argc == 10)) {
+                fprintf(stderr, "%s requires X2 Y2 MS%s\n", argv[5], relative ? " [SCALE]" : ""); return 2;
+            }
             unsigned end_x = (unsigned)atoi(argv[6]), end_y = (unsigned)atoi(argv[7]);
             unsigned ms = (unsigned)atoi(argv[8]);
+            char *scale_end = NULL;
+            double scale = argc == 10 ? strtod(argv[9], &scale_end) : 1.0;
             if (!ms || ms > 10000) { fprintf(stderr, "drag duration must be 1..10000 ms\n"); return 2; }
+            if (relative && (!isfinite(scale) || scale <= 0.0 || (argc == 10 && (!scale_end || *scale_end)))) {
+                fprintf(stderr, "relative-drag scale must be finite and positive\n"); return 2;
+            }
             // 250 Hz input deliberately exceeds the display rate to expose queues.
             unsigned steps = ms / 4 + 1;
             struct timespec started;
@@ -132,9 +143,24 @@ int main(int argc, char **argv) {
                 unsigned px = (unsigned)((double)x + ((double)end_x - x) * i / steps);
                 unsigned py = (unsigned)((double)y + ((double)end_y - y) * i / steps);
                 trace_motion(px, py);
-                zwlr_virtual_pointer_v1_motion_absolute(pointer, now_ms(), px, py, w, h);
+                if (relative) {
+                    unsigned prev_x = (unsigned)((double)x + ((double)end_x - x) * (i - 1) / steps);
+                    unsigned prev_y = (unsigned)((double)y + ((double)end_y - y) * (i - 1) / steps);
+                    zwlr_virtual_pointer_v1_motion(pointer, now_ms(),
+                        wl_fixed_from_double(((double)px - prev_x) / scale),
+                        wl_fixed_from_double(((double)py - prev_y) / scale));
+                } else {
+                    zwlr_virtual_pointer_v1_motion_absolute(pointer, now_ms(), px, py, w, h);
+                }
                 zwlr_virtual_pointer_v1_frame(pointer);
                 wl_display_roundtrip(display);
+            }
+            if (relative) {
+                struct timespec released;
+                clock_gettime(CLOCK_MONOTONIC, &released);
+                fprintf(stdout, "POINTER_RELEASE monotonic_ns=%llu\n",
+                        (unsigned long long)released.tv_sec * 1000000000ULL + released.tv_nsec);
+                fflush(stdout);
             }
             zwlr_virtual_pointer_v1_button(pointer, now_ms(), BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
             zwlr_virtual_pointer_v1_frame(pointer);

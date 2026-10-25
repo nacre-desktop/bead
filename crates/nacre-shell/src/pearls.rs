@@ -7,8 +7,8 @@ use bead::{
     core::Edge,
     render::{Palette, Primitive, Rect, Scene},
     wayland::{
-        Guide, NativePearlMotion, NativePearlOptions, NativePearlPlacement, PanelSpec,
-        PearlOptions, SceneSource, UiEvent,
+        Guide, NativePearlComplete, NativePearlMotion, NativePearlOptions, NativePearlPlacement,
+        PanelSpec, PearlOptions, SceneSource, UiEvent,
     },
 };
 use std::{
@@ -83,9 +83,10 @@ pub fn options(
 /// Reuse Nacre's owned-window placement tool. Only the latest pending position
 /// for each pearl matters; the UI never waits for compositor IPC or a helper.
 fn native_options(client: Option<crate::nacre_source::Client>) -> NativePearlOptions {
+    type Pending = (NativePearlPlacement, NativePearlComplete);
     #[derive(Default)]
     struct Queue {
-        pending: std::collections::BTreeMap<u32, NativePearlPlacement>,
+        pending: std::collections::BTreeMap<u32, Pending>,
         running: bool,
     }
     let queue = Arc::new(std::sync::Mutex::new(Queue::default()));
@@ -125,13 +126,14 @@ fn native_options(client: Option<crate::nacre_source::Client>) -> NativePearlOpt
             };
             format!("Nacre Pearl {kind} {id}")
         }),
-        place: Arc::new(move |placement| {
+        place: Arc::new(move |placement, complete| {
             let mut state = queue.lock().unwrap_or_else(|p| p.into_inner());
             let mut placement = placement;
-            if let Some(previous) = state.pending.get(&placement.id) {
+            if let Some((previous, cancelled)) = state.pending.remove(&placement.id) {
                 placement.first |= previous.first;
+                cancelled(false);
             }
-            state.pending.insert(placement.id, placement);
+            state.pending.insert(placement.id, (placement, complete));
             if state.running {
                 return;
             }
@@ -148,7 +150,7 @@ fn native_options(client: Option<crate::nacre_source::Client>) -> NativePearlOpt
                         }
                         next
                     };
-                    let Some((_, event)) = next else {
+                    let Some((_, (event, complete))) = next else {
                         break;
                     };
                     let rect = event.rect;
@@ -174,15 +176,56 @@ fn native_options(client: Option<crate::nacre_source::Client>) -> NativePearlOpt
                         .stdin(std::process::Stdio::null())
                         .stdout(std::process::Stdio::null())
                         .output();
-                    match result {
-                        Ok(output) if output.status.success() => {}
-                        Ok(_) => eprintln!("PEARL_PLACE_ERROR id={} helper failed", event.id),
-                        Err(error) => eprintln!("PEARL_PLACE_ERROR id={} {error}", event.id),
+                    let mut success = match result {
+                        Ok(output) if output.status.success() => true,
+                        Ok(_) => {
+                            eprintln!("PEARL_PLACE_ERROR id={} helper failed", event.id);
+                            false
+                        }
+                        Err(error) => {
+                            eprintln!("PEARL_PLACE_ERROR id={} {error}", event.id);
+                            false
+                        }
+                    };
+                    // Match NacrePearlWindow's niri placement-settle barrier:
+                    // IPC reports target geometry before its movement spring ends.
+                    if success && event.first {
+                        std::thread::sleep(std::time::Duration::from_millis(400));
+                        success = std::process::Command::new(crate::prompt::helper_binary())
+                            .args([
+                                "pearl-window",
+                                "geometry",
+                                &event.title,
+                                &std::process::id().to_string(),
+                            ])
+                            .stdin(std::process::Stdio::null())
+                            .output()
+                            .is_ok_and(|output| {
+                                output.status.success() && placement_matches(&output.stdout, rect)
+                            });
+                        if !success {
+                            eprintln!("PEARL_PLACE_ERROR id={} geometry did not settle", event.id);
+                        }
                     }
+                    complete(success);
                 }
             });
         }),
     }
+}
+
+fn placement_matches(bytes: &[u8], rect: bead::core::pearl::Rect) -> bool {
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+        return false;
+    };
+    ["x", "y", "width", "height"]
+        .into_iter()
+        .zip([rect.x, rect.y, rect.w, rect.h])
+        .all(|(key, expected)| {
+            value[key]
+                .as_f64()
+                .is_some_and(|actual| (actual - expected.round()).abs() <= 0.5)
+        })
 }
 
 /// Niri exposes the completed body, not a live drag cursor. Follow QML's
@@ -673,6 +716,23 @@ impl Policy {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn initial_placement_requires_the_complete_final_geometry() {
+        let rect = bead::core::pearl::Rect::new(410., 250., 1100., 590.);
+        assert!(placement_matches(
+            br#"{"x":410,"y":250,"width":1100,"height":590}"#,
+            rect
+        ));
+        for wrong in [
+            br#"{"x":510,"y":250,"width":1100,"height":590}"#.as_slice(),
+            br#"{"x":410,"y":250,"width":1000,"height":590}"#.as_slice(),
+            br#"{"x":410,"y":250}"#.as_slice(),
+            b"not json".as_slice(),
+        ] {
+            assert!(!placement_matches(wrong, rect));
+        }
+    }
 
     #[test]
     fn compositor_moves_require_owned_identity_and_completed_geometry() {

@@ -21,6 +21,16 @@ fn panel_event_belongs_to_host(event: &UiEvent) -> bool {
 
 impl App {
     pub(super) fn ui(&mut self, event: UiEvent) {
+        if let UiEvent::NativePearlPlaced {
+            id,
+            epoch,
+            rect,
+            success,
+        } = event
+        {
+            self.in_slot(id, |app| app.native_pearl_placed(epoch, rect, success));
+            return;
+        }
         if let UiEvent::NativePearlMotion(motion) = event {
             self.native_pearl_motion(motion);
             return;

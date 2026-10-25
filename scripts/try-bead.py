@@ -31,7 +31,7 @@ CHEAT_SHEET = 'Bead preview (private nested window). Keys, with the nested compo
     'Standalone daemon with fixture data: no real network, audio, battery or accounts; your session is untouched.')
 
 
-def write_niri_config(private):
+def write_niri_config(private, shell):
     ctl = CTL.format(bin=private / 'bin')
     lines = ['input {', '    keyboard {', '        xkb {', '            layout "us"', '        }', '    }', '}',
              'prefer-no-csd', 'hotkey-overlay {', '    skip-at-startup', '}', 'binds {']
@@ -43,6 +43,7 @@ def write_niri_config(private):
     lines.append(f'    Alt+N repeat=false {{ spawn-sh {json.dumps(notify)}; }}')
     lines.append('    Alt+Shift+Q { quit skip-confirmation=true; }')
     lines.append('}')
+    lines.append((shell / 'niri-pearls.kdl').read_text())
     path = private / 'niri.kdl'
     path.write_text('\n'.join(lines) + '\n')
     return path
@@ -90,7 +91,7 @@ def main():
             (private / 'bin/nacrectl').symlink_to(args.daemon.resolve())
             env['BEAD_PREVIEW_FULL'] = '1'
             env['BEAD_PREVIEW_NACRECTL'] = str(private / 'bin/nacrectl')
-            env['BEAD_PREVIEW_NIRI_CONFIG'] = str(write_niri_config(private))
+            env['BEAD_PREVIEW_NIRI_CONFIG'] = str(write_niri_config(private, args.shell))
             env['BEAD_PREVIEW_CPU'] = '1' if args.cpu else '0'
             if args.tools:
                 env['BEAD_PREVIEW_TOOLS'] = str(args.tools.resolve())

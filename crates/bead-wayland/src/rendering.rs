@@ -525,6 +525,21 @@ impl App {
         self.draw_current(index, qh);
     }
     fn draw_current(&mut self, index: usize, qh: &QueueHandle<Self>) {
+        if self.surfaces[index].companion
+            && self
+                .panel_cover
+                .as_ref()
+                .is_some_and(|(serial, _)| self.panel_ui_serial < *serial)
+        {
+            return;
+        }
+        if self.surfaces[index]
+            .handoff
+            .as_ref()
+            .is_some_and(|h| !h.gate.can_draw())
+        {
+            return;
+        }
         let decoration_result = if self.surfaces[index].companion {
             self.sync_all_decorations()
         } else {
@@ -1312,6 +1327,18 @@ impl App {
             s.frames += 1;
             Ok(())
         })();
+        self.retire_native_cover(
+            index,
+            result.is_ok() && self.surfaces[index].frames > previous_frames,
+        );
+        if result.is_ok()
+            && self.surfaces[index].companion
+            && self.surfaces[index].frames > previous_frames
+        {
+            // Reverse handoff: native resources retire only after the attached
+            // destination has committed accepted content, never on dock request.
+            self.panel_cover = None;
+        }
         if let Some((id, drawn)) = motion_clock
             && self.surfaces[index].frames > previous_frames
             && frame_started.elapsed() > Duration::from_millis(4)

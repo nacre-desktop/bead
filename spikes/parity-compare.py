@@ -403,6 +403,9 @@ class Arm:
         # Use the shipped floating app rules in both private arms, including Bead app IDs.
         rules = Path(a.nacre).resolve() / 'niri/window-rules.kdl'
         config_text = NIRI_CONFIG + ('include ' + json.dumps(str(rules)) + '\n' if rules.is_file() else '')
+        pearl_rules = Path(a.bead_shell).resolve() / 'niri-pearls.kdl'
+        if pearl_rules.is_file():
+            config_text += pearl_rules.read_text()
         if getattr(a, "shortcut_fixture", False):
             # Real private bindings, read by BOTH desktop-extras keys and shortcuts.refresh.
             # Their actions are harmless even if a key is accidentally sent during capture.

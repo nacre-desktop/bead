@@ -35,13 +35,47 @@ pub type NativePearlWatch = std::sync::Arc<
     dyn Fn(Box<dyn Fn(NativePearlMotion) + Send + Sync>) -> Option<Box<dyn Send>> + Send + Sync,
 >;
 pub type NativePearlTitle = std::sync::Arc<dyn Fn(u32, &str) -> String + Send + Sync>;
+pub type NativePearlComplete = Box<dyn FnOnce(bool) + Send>;
 
 /// Product supplied identity and asynchronous placement for native pearl windows.
 #[derive(Clone)]
 pub struct NativePearlOptions {
     pub title: NativePearlTitle,
-    pub place: std::sync::Arc<dyn Fn(NativePearlPlacement) + Send + Sync>,
+    /// Complete only once the compositor has applied and settled the requested geometry.
+    pub place: std::sync::Arc<dyn Fn(NativePearlPlacement, NativePearlComplete) + Send + Sync>,
     pub watch: Option<NativePearlWatch>,
+}
+
+/// Pins the old layer's last frame, including fractional viewport and renderer
+/// resources, until a placed native content frame replaces it in one flush.
+pub(crate) struct Handoff {
+    pub(super) gate: policy::Handoff,
+    fractional: Option<WpFractionalScaleV1>,
+    viewport: Option<WpViewport>,
+    pool: SlotPool,
+    buffers: Vec<Reusable>,
+    #[cfg(feature = "wgpu")]
+    gpu: Option<bead_render::gpu::Surface>,
+    #[cfg(feature = "native-gl")]
+    gl: Option<bead_render::gl::Surface>,
+    decorations: Option<decorations::Tiles>,
+    background: Option<wayland_protocols::ext::background_effect::v1::client::ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1>,
+    background_size: Option<(i32, i32)>,
+    size: (u32, u32),
+    scale120: u32,
+}
+impl Drop for Handoff {
+    fn drop(&mut self) {
+        if let Some(effect) = self.background.take() {
+            effect.destroy();
+        }
+        if let Some(f) = self.fractional.take() {
+            f.destroy();
+        }
+        if let Some(v) = self.viewport.take() {
+            v.destroy();
+        }
+    }
 }
 
 /// What the application decides about pearls.
@@ -118,6 +152,7 @@ pub(crate) struct Group {
     anchor: Option<PanelAnchor>,
     canvas_owner: Option<u64>,
     close_epoch: u64,
+    cover: Option<(u64, Vec<Surface>)>,
     reload_pending: bool,
     target: bool,
     output: Option<wl_output::WlOutput>,
@@ -143,6 +178,7 @@ impl Group {
             anchor: None,
             canvas_owner: None,
             close_epoch: 0,
+            cover: None,
             reload_pending: false,
             target: false,
             output: None,
@@ -192,6 +228,7 @@ impl App {
         swap(&mut self.panel_anchor, &mut g.anchor);
         swap(&mut self.panel_canvas_owner, &mut g.canvas_owner);
         swap(&mut self.panel_close_epoch, &mut g.close_epoch);
+        swap(&mut self.panel_cover, &mut g.cover);
         swap(&mut self.panel_reload_pending, &mut g.reload_pending);
         swap(&mut self.panel_target, &mut g.target);
         swap(&mut self.panel_output, &mut g.output);
@@ -551,25 +588,32 @@ impl App {
             }
             window.commit();
             let s = &mut self.surfaces[i];
-            if let Some(old) = s.fractional.take() {
-                old.destroy();
-            }
-            if let Some(old) = s.viewport.take() {
-                old.destroy();
-            }
+            s.handoff = Some(Handoff {
+                gate: Default::default(),
+                fractional: s.fractional.take(),
+                viewport: s.viewport.take(),
+                pool: std::mem::replace(
+                    &mut s.pool,
+                    SlotPool::new(4096, &self.shm).map_err(|e| e.to_string())?,
+                ),
+                buffers: std::mem::take(&mut s.buffers),
+                #[cfg(feature = "wgpu")]
+                gpu: s.gpu.take(),
+                #[cfg(feature = "native-gl")]
+                gl: s.gl.take(),
+                decorations: s.decorations.take(),
+                background: s.background.take(),
+                background_size: s.background_size.take(),
+                size: (s.width, s.height),
+                scale120: s.scale120,
+            });
             s.fractional = fractional;
             s.viewport = viewport;
             s.native = Some(window);
             s.native_configure_size = None;
             s.configured = false;
             s.redraw = true;
-            if let Some(background) = s.background.take() {
-                background.destroy();
-            }
-            s.background_size = None;
-            s.decorations = None;
             s.callbacks.invalidate();
-            s.buffers.clear();
             // Idle-pool timers belong to the old wl_surface identity. They cannot
             // compact this replacement surface or clear its pending flag.
             s.shm_trim_pending = false;
@@ -577,18 +621,8 @@ impl App {
             s.previous = None;
             s.visual_damage = Default::default();
             s.presented_generation = None;
-            #[cfg(feature = "wgpu")]
-            drop(s.gpu.take());
-            #[cfg(feature = "native-gl")]
-            drop(s.gl.take());
-            s.pool = SlotPool::new(4096, &self.shm).map_err(|e| e.to_string())?;
-            let empty = Region::new(&self.compositor).map_err(|e| e.to_string())?;
-            s.layer
-                .wl_surface()
-                .set_input_region(Some(empty.wl_region()));
-            s.layer.wl_surface().attach(None, 0, 0);
-            s.layer.wl_surface().damage_buffer(0, 0, 1, 1);
-            s.layer.commit();
+            // The old layer stays mapped. The destination first maps with a
+            // transparent buffer so compositor placement cannot show a wrong pose.
         }
         if self.pearl_watch.is_none()
             && let Some(watch) = native.watch
@@ -698,11 +732,10 @@ impl App {
                 window.set_min_size(Some((w.max(1) as u32, h.max(1) as u32)));
                 window.set_max_size(Some((w.max(1) as u32, h.max(1) as u32)));
             }
-            window.commit();
         }
         changed
     }
-    pub(super) fn place_native_pearl(&self, first: bool) {
+    pub(super) fn place_native_pearl(&mut self, first: bool) {
         let (Some(info), Some(name), Some(native)) = (
             self.pearl,
             self.panel_name.as_ref(),
@@ -720,14 +753,36 @@ impl App {
         {
             return;
         }
+        let initial = self.surfaces.iter().any(|s| s.handoff.is_some());
+        let mut requested = false;
+        for h in self.surfaces.iter_mut().filter_map(|s| s.handoff.as_mut()) {
+            requested |= h.gate.request(info.rect);
+        }
+        if initial && !requested {
+            return;
+        }
         let title = (native.title)(info.id, name);
-        (native.place)(NativePearlPlacement {
-            id: info.id,
-            view: name.clone(),
-            title,
-            rect: info.rect,
-            first,
-        });
+        let sender = self.event_sender.clone();
+        let epoch = self.panel_epoch;
+        (native.place)(
+            NativePearlPlacement {
+                id: info.id,
+                view: name.clone(),
+                title,
+                rect: info.rect,
+                first: first || initial,
+            },
+            Box::new(move |success| {
+                if initial && let Some(sender) = sender {
+                    let _ = sender.send(UiEvent::NativePearlPlaced {
+                        id: info.id,
+                        epoch,
+                        rect: info.rect,
+                        success,
+                    });
+                }
+            }),
+        );
     }
     /// Re-anchor every surface of the swapped-in pearl and redraw it.
     fn place_pearl_surfaces(&mut self) {
@@ -798,13 +853,132 @@ impl App {
         surface.native_configure_size = Some((configured_width, configured_height));
         surface.redraw = true;
         let content_changed = self.sync_native_pearl_scene();
-        if first || content_changed {
+        if first && let Err(error) = self.map_native_pearl_transparent(i) {
+            eprintln!("PEARL_NATIVE_ERROR {error}");
+            self.surfaces[i]
+                .handoff
+                .as_mut()
+                .unwrap()
+                .gate
+                .request(self.pearl.unwrap().rect);
+            self.native_pearl_placed(self.panel_epoch, self.pearl.unwrap().rect, false);
+            return;
+        }
+        if first || (content_changed && self.surfaces[i].handoff.is_some()) {
             self.place_native_pearl(true);
         } else if resized {
             self.save_pearls();
         }
         let qh = self.qh.clone();
         self.draw(i, &qh);
+    }
+
+    fn map_native_pearl_transparent(&mut self, i: usize) -> Result<(), Box<dyn Error>> {
+        let s = &mut self.surfaces[i];
+        let surface = s.wl_surface().clone();
+        let (w, h, stride, _) = buffer_dimensions(s.width, s.height, s.scale120)?;
+        let (buffer, canvas) = s
+            .pool
+            .create_buffer(w, h, stride, wl_shm::Format::Argb8888)?;
+        canvas.fill(0);
+        let empty = Region::new(&self.compositor)?;
+        surface.set_input_region(Some(empty.wl_region()));
+        s.layer
+            .wl_surface()
+            .set_input_region(Some(empty.wl_region()));
+        s.layer.commit();
+        if let Some(viewport) = &s.viewport {
+            surface.set_buffer_scale(1);
+            viewport.set_destination(s.width as i32, s.height as i32);
+        } else {
+            surface.set_buffer_scale((s.scale120 / 120) as i32);
+        }
+        buffer.attach_to(&surface)?;
+        surface.damage_buffer(0, 0, w, h);
+        surface.commit();
+        s.buffers.push(Reusable {
+            buffer,
+            pending: vec![],
+            painted: false,
+        });
+        // Its current transparent slot is compositor-owned until replaced. The
+        // first content draw needs a fresh reusable pool, even at the same size.
+        s.geometry = (0, 0);
+        Ok(())
+    }
+
+    pub(super) fn native_pearl_placed(&mut self, epoch: u64, rect: pearl::Rect, success: bool) {
+        if self.panel_epoch != epoch {
+            return;
+        }
+        let Some(i) = self
+            .surfaces
+            .iter()
+            .position(|s| s.handoff.as_ref().is_some_and(|h| h.gate.accepts(rect)))
+        else {
+            return;
+        };
+        if !success {
+            // The cover never went away. Restore its resources and keep the
+            // dropped layer usable when the adapter cannot place a native window.
+            let s = &mut self.surfaces[i];
+            let mut h = s.handoff.take().unwrap();
+            #[cfg(feature = "wgpu")]
+            std::mem::swap(&mut s.gpu, &mut h.gpu);
+            #[cfg(feature = "native-gl")]
+            std::mem::swap(&mut s.gl, &mut h.gl);
+            s.native = None;
+            if let Some(f) = s.fractional.take() {
+                f.destroy();
+            }
+            if let Some(v) = s.viewport.take() {
+                v.destroy();
+            }
+            s.fractional = h.fractional.take();
+            s.viewport = h.viewport.take();
+            std::mem::swap(&mut s.pool, &mut h.pool);
+            std::mem::swap(&mut s.buffers, &mut h.buffers);
+            s.decorations = h.decorations.take();
+            s.background = h.background.take();
+            s.background_size = h.background_size;
+            (s.width, s.height) = h.size;
+            s.scale120 = h.scale120;
+            s.native_configure_size = None;
+            s.callbacks.invalidate();
+            s.previous = None;
+            s.visual_damage = Default::default();
+            s.input_visible = None;
+            s.keyboard_visible = None;
+            s.redraw = true;
+            eprintln!("PEARL_HANDOFF_FAILED source retained");
+        } else {
+            if self.pearl.is_some_and(|info| info.rect != rect) {
+                self.place_native_pearl(true);
+                return;
+            }
+            self.surfaces[i].handoff.as_mut().unwrap().gate.placed(rect);
+            self.surfaces[i].input_visible = None;
+            self.surfaces[i].redraw = true;
+        }
+        let qh = self.qh.clone();
+        self.draw(i, &qh);
+    }
+
+    pub(super) fn retire_native_cover(&mut self, i: usize, committed: bool) {
+        let s = &mut self.surfaces[i];
+        if s.handoff
+            .as_mut()
+            .is_some_and(|h| h.gate.finish_frame(committed))
+        {
+            s.layer.wl_surface().attach(None, 0, 0);
+            s.layer.commit();
+            drop(s.handoff.take());
+            bead_core::vprintln!(
+                "PEARL_HANDOFF_COMMITTED id={} rect={:?}",
+                self.pearl.map_or(0, |info| info.id),
+                self.pearl.map(|info| info.rect)
+            );
+        }
     }
     pub(super) fn native_pearl_motion(&mut self, motion: NativePearlMotion) {
         if self.slot_of_id(motion.id).is_none() {
@@ -952,7 +1126,9 @@ impl App {
             .iter()
             .any(|s| s.companion && s.native.is_some());
         if moved || spec.keyboard_focus || native {
-            self.surfaces.retain(|s| !s.companion);
+            let (cover, primary) = self.surfaces.drain(..).partition(|s| s.companion);
+            self.surfaces = primary;
+            self.panel_cover = Some((self.panel_ui_serial.wrapping_add(1), cover));
             self.panel_output = Some(target.clone());
             if spec.keyboard_focus {
                 self.create_dismiss(&target)?;

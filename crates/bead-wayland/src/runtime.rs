@@ -25,6 +25,7 @@ pub(super) struct App {
     pub(super) panel_anchor: Option<PanelAnchor>,
     pub(super) panel_canvas_owner: Option<u64>,
     pub(super) panel_close_epoch: u64,
+    pub(super) panel_cover: Option<(u64, Vec<Surface>)>,
     /// The panel's own scene has been committed at least once (no dark/empty first frame before).
     pub(super) panel_ready: bool,
     pub(super) panel_reload_pending: bool,
@@ -241,6 +242,7 @@ pub fn run_runtime(
         panel_anchor: None,
         panel_canvas_owner: None,
         panel_close_epoch: 0,
+        panel_cover: None,
         panel_ready: true,
         panel_reload_pending: false,
         panel_target: false,
@@ -1784,6 +1786,7 @@ impl App {
                 output_name: output_id.clone(),
                 layer,
                 native: None,
+                handoff: None,
                 pool: SlotPool::new(4096, &self.shm)?,
                 #[cfg(feature = "wgpu")]
                 gpu: None,
