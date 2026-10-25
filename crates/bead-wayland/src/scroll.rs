@@ -363,6 +363,10 @@ impl App {
     /// Estimate release speed only; finger positions are delivered without interpolation.
     fn track_pixels(&mut self, key: (Target, bool), point: (f32, f32), delta: f64) {
         let now = Instant::now();
+        // A disappearing focus target may never receive axis_stop.
+        self.scrolls.pixels.retain(|_, pixels| {
+            now.duration_since(pixels.last) <= Duration::from_millis(120)
+        });
         let pixels = self.scrolls.pixels.remove(&key).filter(|p| {
             p.point == point
                 && now.duration_since(p.last) <= Duration::from_millis(120)
