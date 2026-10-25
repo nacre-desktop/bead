@@ -1796,7 +1796,7 @@ fn decode_image(path: &Path, bytes: &[u8], w: u32, h: u32, fit: ImageFit) -> Res
     Ok(target)
 }
 
-const IMAGE_CACHE_LIMIT: usize = 1024 * 1024;
+const IMAGE_CACHE_LIMIT: usize = 1536 * 1024;
 const IMAGE_CACHE_MAX_ENTRIES: usize = 256;
 const IMAGE_CACHE_MAX_PATH_BYTES: usize = 1024;
 

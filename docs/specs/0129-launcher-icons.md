@@ -8,7 +8,7 @@ second catalog or view alive.
 
 Budget: prefer **1 MiB** additional always-on unreclaimable memory; this unit
 permits up to **4 MiB** only with a measured smoothness benefit and an explanation.
-The general raster LRU is capped at 1 MiB including conservative entry charges;
+The general raster LRU is capped at 1.5 MiB including conservative entry charges;
 resident worker/allocator overhead must be measured separately. Clean file PSS is
 informational. Compare CPU renderer, identical full-release flags, same private
 output geometry, at least five alternating control/candidate pairs.
@@ -21,7 +21,7 @@ Overview, palette, picker thumbnails, widgets, and drag latency are out of scope
 
 The renderer shares a small-image raster LRU across panel workers, keyed by
 immutable contents, physical dimensions, fit and path. It admits images at most
-128×128 physical pixels, with at most 256 entries and a 1 MiB charged-byte cap.
+128×128 physical pixels, with at most 256 entries and a 1.5 MiB charged-byte cap.
 SVG and PNG use the same decoder for warming and drawing. All visible images
 already bake synchronously before a worker's Ready packet reaches the presenter;
 that existing transaction is the per-open raster readiness fence.
@@ -35,6 +35,10 @@ view reads the same image dimensions as the visible launcher. The first menu
 projection waits up to 20 ms for data; later typing never waits. Known invalid
 or unreadable icons use the existing fallback, and a query timeout shows themed
 skeletons. The worker is joined on shutdown and checks stop between work units.
+Both grid and search-row variants are warmed for every selected icon. At scale
+1.5 their pixels alone need about 1.21 MiB for 64 distinct icons, explaining the
+cache allowance above the preferred 1 MiB rather than leaving recents cold when
+the first keystroke switches to the row view.
 
 Validation and measurements are pending. `spikes/launcher-icons-proof.py` uses
 64 private SVG/PNG desktop entries, 12 favorites and 8 recents, with the real menu

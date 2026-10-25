@@ -194,8 +194,7 @@ fn warm_pages(
         if bead::render::prewarm_image(&path, &bytes, grid, scale, ImageFit::Fill).is_ok() {
             warmed += 1;
         }
-        if result_warmed < 8
-            && let Some(result) = result
+        if let Some(result) = result
             && bead::render::prewarm_image(&path, &bytes, result, scale, ImageFit::Fill).is_ok()
         {
             result_warmed += 1;
