@@ -82,24 +82,28 @@ SCROLL_SCENES = {
     'settings-content': (m.STATES['settings'][0], 500, 600, 80, 1.6),
     'settings-nav': (m.STATES['settings'][0], 150, 600, 80, 1.6),
     'launcher': (m.STATES['launcher'][0], 960, 600, 80, 1.6),
-    'keybindings': (m.STATES['keybindings'][0], 960, 600, 80, 1.6),
-    'colors-app': (m.STATES['colors-app'][0], 1450, 650, 80, 1.6),
-    'colors-rail': (m.STATES['colors-app'][0], 500, 650, 80, 1.6),
-    'welcome-hero': (m.STATES['welcome-hero'][0], 1100, 650, 80, 1.6),
-    'welcome-shortcuts': (m.STATES['welcome-shortcuts'][0], 1100, 650, 80, 1.6),
-    'welcome-apps': (m.STATES['welcome-apps'][0], 1100, 650, 80, 1.6),
-    'welcome-ready': (m.STATES['welcome-ready'][0], 1100, 650, 80, 1.6),
-    'welcome-help': (m.STATES['welcome-help'][0], 1100, 650, 80, 1.6),
+    # The private popup begins around logical y=628; y=900 lands in its list.
+    'keybindings': (m.STATES['keybindings'][0], 960, 900, 80, 1.6),
+    'colors-app': (m.STATES['colors-app'][0], 500, 650, 80, 1.6),
+    'colors-rail': (m.STATES['colors-app'][0], 150, 650, 80, 1.6),
+    'welcome-hero': (m.STATES['welcome-hero'][0], 500, 650, 80, 1.6),
+    'welcome-shortcuts': (m.STATES['welcome-shortcuts'][0], 500, 650, 80, 1.6),
+    'welcome-apps': (m.STATES['welcome-apps'][0], 500, 650, 80, 1.6),
+    'welcome-ready': (m.STATES['welcome-ready'][0], 500, 650, 80, 1.6),
+    'welcome-help': (m.STATES['welcome-help'][0], 500, 650, 80, 1.6),
     'ai-chat': ([(step) for _ in range(12) for step in [('chat-seed',), ('sleep', 0.2)]]
-                + m.STATES['sidebar-conversation'][0], 500, 650, 80, 1.6),
-    'wallpaper-picker': (m.STATES['wallpaper-hexagons'][0], 960, 650, 80, 1.6),
+                + m.STATES['sidebar-conversation'][0], 240, 650, 80, 1.6),
+    # The picker is bottom-docked; scroll the hexagon grid, not the carousel.
+    'wallpaper-picker': (m.STATES['wallpaper-hexagons'][0] + [('sleep', 1.0), ('click', 1070, 900)],
+                         960, 1000, 80, 1.6),
     'updates-popout': ([('ui', 'nacre', 'controls', 'updates')], 1600, 600, 80, 1.6),
-    'clipboard': ([('ui', 'nacre', 'clipboard')], 960, 600, 80, 1.6),
+    'clipboard': ([('only', 'qml', ('ui', 'drawers', 'toggle', 'dashboard')),
+                   ('ui', 'nacre', 'tab', '6')], 500, 600, 80, 1.6),
     # Populate the private daemon's notification list before opening its panel.
     'notifications-list': ([('notify', f'Scroll fixture {i:02d}', f'Private synthetic notification row {i:02d}.')
                             for i in range(20)] + [('sleep', 2.0), ('close-fixture-notices',),
                                                    ('ui', 'nacre', 'controls', 'notifications')],
-                           1600, 650, 80, 1.6),
+                           500, 300, 80, 1.6),
     'notifications-popup': ([('notify', f'Scroll fixture {i:02d}', f'Private synthetic notification row {i:02d}.')
                              for i in range(20)] + [('sleep', 2.0)], 1715, 650, 80, 1.6),
 }
@@ -126,6 +130,19 @@ def start_daemon(self):
     names = selected.split(',') if selected else list(ANIMS)
     if any(name.startswith('scroll-ai-chat-') for name in names):
         self.install_chat_fixture()
+    if selected and any(name.startswith('scroll-clipboard-') for name in names):
+        self.clipboard_fixture_dir = seed_clipboard_fixture(self)
+        bin_dir = self.root / 'cliphist-bin'
+        bin_dir.mkdir(exist_ok=True)
+        cliphist = bin_dir / 'cliphist'
+        cliphist.write_text(
+            '#!/bin/sh\n'
+            'test "$1" = list || exit 2\n'
+            'i=120\n'
+            'while test "$i" -gt 0; do printf "%s\\tSynthetic clipboard row %03d\\n" "$i" "$i"; i=$((i - 1)); done\n'
+        )
+        cliphist.chmod(0o700)
+        self.env['PATH'] = str(bin_dir) + os.pathsep + self.env['PATH']
     _orig_start_daemon(self)
 
 
@@ -190,6 +207,43 @@ def close_active_fixture_notifications(arm):
 
 m.Arm.notify = notify
 
+
+def seed_clipboard_fixture(arm):
+    """Seed equivalent private text rows for QML cliphist and Bead's fixture topic."""
+    fixture_root = arm.root / 'clipboard-fixtures' / 'dashboard'
+    extras = fixture_root.with_name('dashboard-extras')
+    fixture_root.mkdir(parents=True, exist_ok=True)
+    extras.mkdir(parents=True, exist_ok=True)
+    now_ms = int(time.time() * 1000)
+    ids = [f'c{index:03d}' for index in range(120, 0, -1)]
+    items = {
+        item_id: {'kind': 'text', 'preview': f'Synthetic clipboard row {int(item_id[1:]):03d}',
+                  'created_ms': now_ms - offset}
+        for offset, item_id in enumerate(ids)
+    }
+    (extras / 'clipboard.json').write_text(json.dumps({
+        'health': {'available': True, 'stale': False},
+        'entries': {'items': items, 'order': ids},
+    }, indent=2) + '\n')
+    return fixture_root
+
+
+def append_scroll_shortcut_fixture(path):
+    """Add many harmless rows inside the existing private Niri binds block."""
+    modifiers = (
+        'Super+Ctrl', 'Super+Shift', 'Super+Alt', 'Ctrl+Shift', 'Ctrl+Alt', 'Shift+Alt',
+        'Super+Ctrl+Shift', 'Super+Ctrl+Alt', 'Super+Shift+Alt', 'Ctrl+Shift+Alt',
+    )
+    rows = [f'    {modifier}+F{key} repeat=false hotkey-overlay-title="Nacre:scroll fixture {index:03d}" {{ spawn-sh "true"; }}'
+            for index, (modifier, key) in enumerate(
+                ((modifier, key) for modifier in modifiers for key in range(1, 13)), start=1)]
+    source = path.read_text()
+    prefix, separator, suffix = source.rpartition('\n}')
+    if not separator:
+        raise ValueError(f'expected closing brace in private shortcut fixture {path.name}')
+    path.write_text(prefix + '\n' + '\n'.join(rows) + separator + suffix)
+
+
 _orig_app_rss = m.Arm.app_rss
 
 
@@ -224,8 +278,15 @@ _orig_steps = m.Arm.steps
 
 
 def spawn(self, command, name, env=None, cwd=None):
+    selected = os.environ.get('PACING_ANIMS', '').split(',')
+    if name == 'niri' and any(item.startswith(('scroll-keybindings-', 'scroll-welcome-shortcuts-')) for item in selected):
+        bindings = self.root / 'fixture-bindings.kdl'
+        if bindings.is_file():
+            append_scroll_shortcut_fixture(bindings)
     if name == 'shell':  # only the shell: niri/labwc must not trace as clients
         env = shell_trace_env(self.name, self.logs, env or self.env)
+        if self.name == 'bead' and any(item.startswith('scroll-clipboard-') for item in selected):
+            command = [*command, '--dashboard-fixtures', str(self.clipboard_fixture_dir)]
         if os.environ.get('PACING_PANEL_RENDERER') and self.name == 'bead':
             command = [*command, '--panel-renderer', os.environ['PACING_PANEL_RENDERER']]
         if os.environ.get('PACING_TRACE_STATE') == '1' and self.name == 'bead':
@@ -303,14 +364,14 @@ def steps(self, operations):
 m.Arm.spawn, m.Arm.run, m.Arm.steps = spawn, run, steps
 
 SCROLL_STORE_KEYS = {
-    'launcher': 'launcher.scroll.y', 'clipboard': 'launcher.scroll.y',
+    'launcher': 'launcher.scroll.y', 'clipboard': 'dashboard.clipboard.scroll',
     'keybindings': 'extras.scroll',
     'settings-content': 'settings.scroll', 'settings-nav': 'settings.nav.scroll',
     'colors-app': 'colors.scroll', 'colors-rail': 'colors.rail.scroll', 'welcome-hero': 'welcome.scroll',
     'welcome-shortcuts': 'welcome.scroll', 'welcome-apps': 'welcome.scroll',
     'welcome-ready': 'welcome.scroll', 'welcome-help': 'welcome.scroll',
     'ai-chat': 'chat.scroll', 'wallpaper-picker': 'extras.scroll',
-    'notifications-list': 'notifications.scroll.y', 'notifications-popup': 'notifications.scroll.y',
+    'notifications-list': 'dashboard.notifications.scroll', 'notifications-popup': 'notifications.scroll.y',
     'updates-popout': 'status.updates_scroll',
 }
 
@@ -410,8 +471,8 @@ def reversal_proof(log_paths, input_path, animation, start_ns, end_ns):
                 key = (fields.get('epoch'), fields.get('update'), fields.get('generation'))
                 if key in window_by_id and 'monotonic_ns' in fields:
                     stamp = int(fields['monotonic_ns'])
-                    if start_ns <= stamp <= end_ns:
-                        samples.append((stamp, window_by_id[key]))
+                    if stamp <= end_ns:
+                        samples.append((stamp, window_by_id[key], ('window', fields.get('epoch'))))
             elif line.startswith('UI_COMMIT '):
                 fields = dict(part.split('=', 1) for part in line.split()[1:] if '=' in part)
                 if pending_state is not None and 'update' in fields and store_key in pending_state:
@@ -423,10 +484,21 @@ def reversal_proof(log_paths, input_path, animation, start_ns, end_ns):
                 key = (fields.get('companion'), fields.get('generation'), fields.get('update'))
                 if key in by_ui_update and 'monotonic_ns' in fields:
                     stamp = int(fields['monotonic_ns'])
-                    if start_ns <= stamp <= end_ns:
-                        samples.append((stamp, by_ui_update[key]))
+                    if stamp <= end_ns:
+                        samples.append((stamp, by_ui_update[key], ('ui', fields.get('companion'))))
         delivered.sort()
         samples.sort()
+        # Keep two last actually-presented pre-window offsets only for a native
+        # window epoch; UI_* has no source epoch, so it cannot safely seed a baseline.
+        active = [sample for sample in samples if start_ns <= sample[0] <= end_ns]
+        active_series = {sample[2] for sample in active}
+        prior = {}
+        for sample in samples:
+            if (sample[0] < start_ns and sample[2] in active_series
+                    and sample[2][0] == 'window'):
+                prior.setdefault(sample[2], []).append(sample)
+        preceding = [sample for values in prior.values() for sample in values[-2:]]
+        samples = sorted([*preceding, *active])
         forward_input = inputs[0][1] if inputs else 0
         prior_delivery = next(((stamp, delta) for stamp, delta in reversed(delivered)
                                if inputs and inputs[0][0] <= stamp < input_ns), None)
@@ -1051,6 +1123,10 @@ if __name__ == '__main__':
     if sys.argv[1:2] == ['rescore']:
         rescore(sys.argv[2], sys.argv[3])
         sys.exit(0)
+    selected = os.environ.get('PACING_ANIMS', '').split(',')
+    if any(item.startswith(('scroll-keybindings-', 'scroll-welcome-shortcuts-')) for item in selected):
+        if '--shortcut-fixture' not in sys.argv:
+            sys.argv.append('--shortcut-fixture')
     if '--states' not in sys.argv:
         sys.argv += ['--states', 'pace']
     sys.exit(m.main())

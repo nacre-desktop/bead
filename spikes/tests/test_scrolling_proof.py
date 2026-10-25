@@ -135,6 +135,38 @@ class ScrollReversalProofTests(unittest.TestCase):
         proof = self.proof(log)
         self.assertEqual(proof["status"], "missing")
 
+    def test_window_reversal_uses_presented_offsets_before_capture_start(self):
+        inputs = self.root / "wheel-input.log"
+        inputs.write_text(
+            "\n".join(
+                [
+                    "AXIS_SENT monotonic_ns=260000000 source=wheel direction=down index=0 delta=1",
+                    "AXIS_SENT monotonic_ns=280000000 source=wheel direction=down index=1 delta=1",
+                    "AXIS_SENT monotonic_ns=300000000 source=wheel direction=up index=2 delta=-1",
+                ]
+            )
+            + "\n"
+        )
+        log = self.root / "window-baseline.log"
+        values = [(120_000_000, 1, 0), (220_000_000, 2, 10), (318_333_333, 3, 9)]
+        lines = [
+            "AXIS_DELIVER monotonic_ns=261000000 horizontal=false x=4 y=8 delta=7",
+            "AXIS_DELIVER monotonic_ns=281000000 horizontal=false x=4 y=8 delta=7",
+            "AXIS_DELIVER monotonic_ns=307000000 horizontal=false x=4 y=8 delta=-7",
+        ]
+        for stamp, update, value in values:
+            lines.extend(
+                [
+                    f'WINDOW_STATE monotonic_ns={stamp - 8_000_000} epoch=3 update={update} generation=9 state={{"notifications.scroll.y":{value}}}',
+                    f"WINDOW_COMMIT monotonic_ns={stamp - 4_000_000} epoch=3 update={update} generation=9 frame={update}",
+                    f"WINDOW_PRESENTED monotonic_ns={stamp} refresh_ns=8333333 epoch=3 update={update} generation=9",
+                ]
+            )
+        log.write_text("\n".join(lines) + "\n")
+        proof = pacing.reversal_proof([log], inputs, "scroll-notifications-popup-wheel", 250_000_000, 400_000_000)
+        self.assertEqual(proof["status"], "proven")
+        self.assertAlmostEqual(proof["delivery_to_visible_ms"], 11.33, places=2)
+
     def test_presented_cadence_counts_feedback_discards_not_commits(self):
         log = self.root / "presentation.log"
         log.write_text(
@@ -236,7 +268,17 @@ class ScrollReversalProofTests(unittest.TestCase):
         prepare = pacing.SCROLL_SCENES["notifications-list"][0]
         self.assertLess(prepare.index(("close-fixture-notices",)), prepare.index(("ui", "nacre", "controls", "notifications")))
         self.assertEqual(prepare[-1], ("ui", "nacre", "controls", "notifications"))
-        self.assertEqual(pacing.SCROLL_STORE_KEYS["notifications-list"], "notifications.scroll.y")
+        self.assertEqual(pacing.SCROLL_STORE_KEYS["notifications-list"], "dashboard.notifications.scroll")
+        self.assertEqual(pacing.SCROLL_SCENES["notifications-list"][1:3], (500, 300))
+        self.assertEqual(
+            pacing.SCROLL_SCENES["clipboard"][0],
+            [("only", "qml", ("ui", "drawers", "toggle", "dashboard")), ("ui", "nacre", "tab", "6")],
+        )
+        self.assertEqual(pacing.SCROLL_STORE_KEYS["clipboard"], "dashboard.clipboard.scroll")
+        self.assertEqual(pacing.SCROLL_SCENES["wallpaper-picker"][1:3], (960, 1000))
+        self.assertIn(("click", 1070, 900), pacing.SCROLL_SCENES["wallpaper-picker"][0])
+        self.assertEqual(pacing.SCROLL_SCENES["keybindings"][1:3], (960, 900))
+        self.assertEqual(pacing.SCROLL_SCENES["ai-chat"][1:3], (240, 650))
         calls = []
 
         def run(command, check=False):
@@ -248,6 +290,28 @@ class ScrollReversalProofTests(unittest.TestCase):
         self.assertEqual(arm.fixture_active_ids, [])
         self.assertEqual(arm.fixture_closed_ids, [17, 18])
         self.assertEqual([command[-1] for command in calls], ["17", "18"])
+
+    def test_clipboard_fixture_has_same_private_text_rows_for_both_shells(self):
+        fixture_dir = pacing.seed_clipboard_fixture(SimpleNamespace(root=self.root))
+        path = fixture_dir.with_name("dashboard-extras") / "clipboard.json"
+        fixture = __import__("json").loads(path.read_text())
+        order = fixture["entries"]["order"]
+        items = fixture["entries"]["items"]
+        self.assertEqual(len(order), 120)
+        self.assertEqual(order[0], "c120")
+        self.assertEqual(order[-1], "c001")
+        self.assertEqual(items[order[0]]["preview"], "Synthetic clipboard row 120")
+        self.assertEqual(items[order[-1]]["preview"], "Synthetic clipboard row 001")
+        self.assertTrue(all(item["kind"] == "text" for item in items.values()))
+
+    def test_scroll_shortcuts_stay_inside_private_niri_binds_block(self):
+        path = self.root / "fixture-bindings.kdl"
+        path.write_text('binds {\n    Super+K { spawn-sh "true"; }\n}\n')
+        pacing.append_scroll_shortcut_fixture(path)
+        contents = path.read_text()
+        self.assertEqual(contents.count("hotkey-overlay-title=\"Nacre:scroll fixture"), 120)
+        self.assertLess(contents.index("Nacre:scroll fixture 120"), contents.rindex("\n}"))
+        self.assertEqual(contents.count("\n}"), 1)
 
     def test_scroll_notification_fixture_uses_long_ttl_and_closes_exact_ids(self):
         calls = []
