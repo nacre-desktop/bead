@@ -1,0 +1,26 @@
+{
+  "bead": {
+    "source": "3e018ef799b1845cb0b5dcc1c0f419f51e0ce7f5",
+    "container": "ghcr.io/archlinux/archlinux:latest",
+    "toolchain": "rustc/cargo 1.99.1 (Arch Linux)",
+    "exit": 0,
+    "complete_marker": "FULL_CI_OK",
+    "command_file": "bead-ci.sh",
+    "goldens": "four Spotlight static/dynamic at scale 1 and 1.5 regenerated; all four visually inspected",
+    "candidate_shell_sha256": "ff7893d898c203b630169cf05236b00fe3568a60f663ca81a80575eef7ced854",
+    "control_source": "02614ed913b790012f314f64edd561d8d1a2ff76",
+    "control_shell_sha256": "cef0c2be76a2e5478f7ecef448f138ad7211d572b08dfc704a4bb665080b4c89",
+    "release_flags": "cargo build --release --locked -j2 -p nacre-shell (fat LTO, codegen-units=1); sequential fresh candidate rebuild after control",
+    "additional_system_build_dependency": "swaybg for existing smoke test; container sway file capability removed because Docker bounding set excludes CAP_SYS_NICE",
+    "scope": "remote container only; no installation or desktop configuration changes",
+    "command": "RUST_TEST_THREADS=1 nice -n 10 bash /w/ci-check-final.sh",
+    "test_concurrency": "one test thread; cargo -j2; 50 ms markup/script guards unchanged",
+    "candidate_binary_source": "160f80951577532d552f64ec94a6b296d2172d2e",
+    "final_source_note": "Integration rebases onto B0125 and adds the Spotlight palette harness selector; fallback binary corrects GPU-unavailable animation ownership. Normal GL measurements retain their immutable source pin. Final full CI also passes after integration with B0133 welcome fixes; generated goldens remain clean.",
+    "environment_attempts": "Earlier runs hit 50 ms wall limits in unchanged recovery/source fixtures, including serial execution; fresh alternate-host full Arch runs passed without changing either guard. Cause not attributed from load snapshots.",
+    "orchestration_dependency": "tmux inside the ephemeral final CI container",
+    "fallback_source": "cbe60901f1257a90fb39aaa8e5677bc0c3a48a66",
+    "fallback_shell_sha256": "bc56ee80bb6eee5d34f115949ca3dde41bdfb1ad3f78dbc727f14e4f210540cf",
+    "earlier_integration_source": "263c408fb65de4da69207924e38fdfcfbf49acfc"
+  }
+}

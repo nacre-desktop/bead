@@ -1,0 +1,1120 @@
+{
+  "fallback": {
+    "baseline_scope_peak_bytes": null,
+    "capture_returncode": 0,
+    "cgroup_final_or_last_available": {
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+      "memory.max": "12884901888",
+      "memory.peak": "595910656",
+      "memory.swap.max": "0"
+    },
+    "cgroup_initial": {
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+      "memory.max": "12884901888",
+      "memory.peak": "11481088",
+      "memory.swap.max": "0"
+    },
+    "cgroup_pre_release": {
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+      "memory.max": "12884901888",
+      "memory.peak": "11743232",
+      "memory.swap.max": "0"
+    },
+    "child_cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-11a941ae80ad.scope",
+    "child_membership_verified": true,
+    "child_pid": 656812,
+    "child_start_ticks": 82806983,
+    "control_group": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-11a941ae80ad.scope",
+    "effective_memory_max": "12884901888",
+    "effective_memory_swap_max": "0",
+    "final_cgroup_read_while_scope_held": true,
+    "final_scope_verification": {
+      "child_cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-11a941ae80ad.scope",
+      "child_membership_verified": true,
+      "child_pid": 656812,
+      "child_start_ticks": 82806983,
+      "control_group": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-11a941ae80ad.scope",
+      "effective_memory_max": "12884901888",
+      "effective_memory_swap_max": "0"
+    },
+    "memory_max_bytes": 12884901888,
+    "memory_swap_max_bytes": 0,
+    "minimum_memavailable_kib": 11510720,
+    "oom_delta": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "oom_final_or_last_available": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "oom_initial": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "pre_release_verification": {
+      "child_cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-11a941ae80ad.scope",
+      "child_membership_verified": true,
+      "child_pid": 656812,
+      "child_start_ticks": 82806983,
+      "control_group": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-11a941ae80ad.scope",
+      "effective_memory_max": "12884901888",
+      "effective_memory_swap_max": "0"
+    },
+    "release_memavailable_kib": 11959380,
+    "scope": "bead-capture-11a941ae80ad.scope",
+    "scope_runner_returncode": 0,
+    "start_memavailable_kib": 11979432,
+    "status": "complete",
+    "watchdog_events": [
+      {
+        "available_kib": 11959568,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "11743232",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11877664,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "114257920",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11868048,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "125890560",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11870632,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "125890560",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11816956,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "219648000",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11831932,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "219648000",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11783080,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "263274496",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11549752,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "494682112",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11557548,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "494682112",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11565608,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "494682112",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11595436,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "494682112",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11598416,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "494682112",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11510720,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "577376256",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11585884,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "577376256",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11560492,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "577376256",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11511144,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "577376256",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11523600,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "577376256",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11533556,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "577376256",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11541196,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "577376256",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11550796,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "577376256",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11626108,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "577376256",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11628920,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "577376256",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11612028,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "577376256",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11625756,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "577376256",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11608484,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "577376256",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11563080,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "580075520",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11567744,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "593006592",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11567124,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "593006592",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11582416,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "593006592",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11577076,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "593006592",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11563524,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "593006592",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11561624,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "593006592",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11563068,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "593006592",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11566988,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "593006592",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11573116,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "593006592",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11518432,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "595124224",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11656588,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "595910656",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11654568,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "595910656",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 12072908,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "595910656",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      }
+    ],
+    "watchdog_first_sample_kib": 11959568,
+    "watchdog_samples": 39
+  },
+  "motion": {
+    "baseline_scope_peak_bytes": null,
+    "capture_returncode": 0,
+    "cgroup_final_or_last_available": {
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+      "memory.max": "12884901888",
+      "memory.peak": "1013915648",
+      "memory.swap.max": "0"
+    },
+    "cgroup_initial": {
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+      "memory.max": "12884901888",
+      "memory.peak": "11476992",
+      "memory.swap.max": "0"
+    },
+    "cgroup_pre_release": {
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+      "memory.max": "12884901888",
+      "memory.peak": "11476992",
+      "memory.swap.max": "0"
+    },
+    "child_cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-35eb783b3f25.scope",
+    "child_membership_verified": true,
+    "child_pid": 615879,
+    "child_start_ticks": 82604731,
+    "control_group": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-35eb783b3f25.scope",
+    "effective_memory_max": "12884901888",
+    "effective_memory_swap_max": "0",
+    "final_cgroup_read_while_scope_held": true,
+    "final_scope_verification": {
+      "child_cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-35eb783b3f25.scope",
+      "child_membership_verified": true,
+      "child_pid": 615879,
+      "child_start_ticks": 82604731,
+      "control_group": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-35eb783b3f25.scope",
+      "effective_memory_max": "12884901888",
+      "effective_memory_swap_max": "0"
+    },
+    "memory_max_bytes": 12884901888,
+    "memory_swap_max_bytes": 0,
+    "minimum_memavailable_kib": 10859736,
+    "oom_delta": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "oom_final_or_last_available": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "oom_initial": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "pre_release_verification": {
+      "child_cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-35eb783b3f25.scope",
+      "child_membership_verified": true,
+      "child_pid": 615879,
+      "child_start_ticks": 82604731,
+      "control_group": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-35eb783b3f25.scope",
+      "effective_memory_max": "12884901888",
+      "effective_memory_swap_max": "0"
+    },
+    "release_memavailable_kib": 12077452,
+    "scope": "bead-capture-35eb783b3f25.scope",
+    "scope_runner_returncode": 0,
+    "start_memavailable_kib": 12094232,
+    "status": "complete",
+    "watchdog_events": [
+      {
+        "available_kib": 12077632,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "11476992",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11973832,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "113504256",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11967256,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "125026304",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11966340,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "125100032",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11795872,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "219516928",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11852836,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "219516928",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11856084,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "219516928",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11541036,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "472432640",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11542740,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "472432640",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11466840,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "472432640",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11466840,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "472432640",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11470252,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "472432640",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11484284,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "472432640",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11514504,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "472432640",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11526348,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "472432640",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11529196,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "472432640",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11539272,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "472432640",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11577444,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "472432640",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11596552,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "472432640",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11634128,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "472432640",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11619324,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "500867072",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11579016,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "500867072",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11580384,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "500867072",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11594928,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "500867072",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11441452,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "589631488",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11007172,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "975540224",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11023452,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1002278912",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11309328,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11341880,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11370744,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11389272,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11280820,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11062848,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11060120,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11301456,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11299588,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11311772,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11327100,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11340088,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11355848,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11371260,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11392492,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11416796,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11430440,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11443476,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11458752,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11309992,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 10996672,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11310440,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11349712,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11355388,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11341800,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11345724,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11348232,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11014432,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 10859736,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11110540,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      },
+      {
+        "available_kib": 11781156,
+        "cgroup": {
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+          "memory.max": "12884901888",
+          "memory.peak": "1013915648",
+          "memory.swap.max": "0"
+        },
+        "kind": "memory"
+      }
+    ],
+    "watchdog_first_sample_kib": 12077632,
+    "watchdog_samples": 58
+  },
+  "notes": {
+    "fallback": "Corrected cbe60901 release: exactly one GPU unavailable event and one GPU-to-CPU fallback; no retry. First content commit/frame/present 127.029/129.199/130.923 ms; warm cached frame 11.652 ms.",
+    "motion": "Private burst/WebM capture exit0, with isolated runtime library path corrected after initial missing-libmpv failure."
+  }
+}

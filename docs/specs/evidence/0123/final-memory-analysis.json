@@ -1,0 +1,1307 @@
+{
+  "schema": 1,
+  "backend": "cpu-bar-gl-panel",
+  "memory_method": "Pss_Anon + Pss_Shmem + SwapPss + DRM from parity driver RSS sidecars; MiB; paired candidate-minus-control median",
+  "memory": {
+    "minimum_pairs": 5,
+    "phases": {
+      "idle": {
+        "n": 5,
+        "control_median_mib": 37.60546875,
+        "candidate_median_mib": 37.81640625,
+        "paired_delta_median_mib": 0.265625,
+        "paired_deltas_mib": [
+          0.359375,
+          0.1484375,
+          0.28515625,
+          0.265625,
+          -3.99609375
+        ],
+        "control_pss_median_mib": 57.072265625,
+        "candidate_pss_median_mib": 56.8173828125,
+        "control_clean_file_pss_median_mib": 19.466796875,
+        "candidate_clean_file_pss_median_mib": 19.0869140625,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": 27.0234375,
+            "candidate_median_mib": 27.234375,
+            "paired_delta_median_mib": 0.265625
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": 10.58203125,
+            "candidate_median_mib": 10.58203125,
+            "paired_delta_median_mib": 0.0
+          },
+          "swap_pss_mib": {
+            "control_median_mib": 0.0,
+            "candidate_median_mib": 0.0,
+            "paired_delta_median_mib": 0.0
+          },
+          "drm_mib": {
+            "control_median_mib": 0.0,
+            "candidate_median_mib": 0.0,
+            "paired_delta_median_mib": 0.0
+          }
+        },
+        "status": "WITHIN 1 MiB never-opened budget"
+      },
+      "expired": {
+        "n": 5,
+        "control_median_mib": 53.140625,
+        "candidate_median_mib": 356.6796875,
+        "paired_delta_median_mib": 303.5390625,
+        "paired_deltas_mib": [
+          303.74609375,
+          303.265625,
+          303.71484375,
+          303.5390625,
+          302.89453125
+        ],
+        "control_pss_median_mib": 92.2587890625,
+        "candidate_pss_median_mib": 131.646484375,
+        "control_clean_file_pss_median_mib": 39.1181640625,
+        "candidate_clean_file_pss_median_mib": 38.2041015625,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": 42.5546875,
+            "candidate_median_mib": 82.84765625,
+            "paired_delta_median_mib": 40.29296875
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": 10.5859375,
+            "candidate_median_mib": 10.6796875,
+            "paired_delta_median_mib": 0.09375
+          },
+          "swap_pss_mib": {
+            "control_median_mib": 0.0,
+            "candidate_median_mib": 0.0,
+            "paired_delta_median_mib": 0.0
+          },
+          "drm_mib": {
+            "control_median_mib": 0.0,
+            "candidate_median_mib": 263.15234375,
+            "paired_delta_median_mib": 263.15234375
+          }
+        },
+        "status": "reported smoothness trade; no standalone pass threshold"
+      },
+      "open": {
+        "n": 5,
+        "control_median_mib": 127.716796875,
+        "candidate_median_mib": 328.9296875,
+        "paired_delta_median_mib": 201.271484375,
+        "paired_deltas_mib": [
+          201.271484375,
+          201.353515625,
+          201.376953125,
+          200.216796875,
+          198.923828125
+        ],
+        "control_pss_median_mib": 167.6357421875,
+        "candidate_pss_median_mib": 148.791015625,
+        "control_clean_file_pss_median_mib": 39.9111328125,
+        "candidate_clean_file_pss_median_mib": 38.2041015625,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": 107.27734375,
+            "candidate_median_mib": 99.99609375,
+            "paired_delta_median_mib": -7.22265625
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": 20.439453125,
+            "candidate_median_mib": 10.6796875,
+            "paired_delta_median_mib": -9.759765625
+          },
+          "swap_pss_mib": {
+            "control_median_mib": 0.0,
+            "candidate_median_mib": 0.0,
+            "paired_delta_median_mib": 0.0
+          },
+          "drm_mib": {
+            "control_median_mib": 0.0,
+            "candidate_median_mib": 218.25390625,
+            "paired_delta_median_mib": 218.25390625
+          }
+        },
+        "status": "reported smoothness trade; no standalone pass threshold"
+      },
+      "closed": {
+        "n": 5,
+        "control_median_mib": 127.9609375,
+        "candidate_median_mib": 296.8173828125,
+        "paired_delta_median_mib": 169.1220703125,
+        "paired_deltas_mib": [
+          167.8759765625,
+          172.6025390625,
+          171.7587890625,
+          169.1220703125,
+          160.2978515625
+        ],
+        "control_pss_median_mib": 173.6279296875,
+        "candidate_pss_median_mib": 146.939453125,
+        "control_clean_file_pss_median_mib": 45.5537109375,
+        "candidate_clean_file_pss_median_mib": 44.2763671875,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": 107.51953125,
+            "candidate_median_mib": 91.91796875,
+            "paired_delta_median_mib": -15.3359375
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": 20.44140625,
+            "candidate_median_mib": 10.6845703125,
+            "paired_delta_median_mib": -9.7568359375
+          },
+          "swap_pss_mib": {
+            "control_median_mib": 0.0,
+            "candidate_median_mib": 0.0,
+            "paired_delta_median_mib": 0.0
+          },
+          "drm_mib": {
+            "control_median_mib": 0.0,
+            "candidate_median_mib": 194.21484375,
+            "paired_delta_median_mib": 194.21484375
+          }
+        },
+        "status": "reported smoothness trade; no standalone pass threshold"
+      }
+    },
+    "pairs": [
+      {
+        "label": "1",
+        "control_mib": {
+          "idle": 37.37109375,
+          "expired": 52.953125,
+          "open": 127.712890625,
+          "closed": 128.90234375
+        },
+        "candidate_mib": {
+          "idle": 37.73046875,
+          "expired": 356.69921875,
+          "open": 328.984375,
+          "closed": 296.7783203125
+        },
+        "control_info_mib": {
+          "idle": {
+            "pss_mib": 56.92578125,
+            "clean_file_pss_mib": 19.5546875,
+            "pss_anon_mib": 26.7890625,
+            "pss_shmem_mib": 10.58203125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "expired": {
+            "pss_mib": 92.0810546875,
+            "clean_file_pss_mib": 39.1279296875,
+            "pss_anon_mib": 42.3671875,
+            "pss_shmem_mib": 10.5859375,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "open": {
+            "pss_mib": 167.6455078125,
+            "clean_file_pss_mib": 39.9326171875,
+            "pss_anon_mib": 107.2734375,
+            "pss_shmem_mib": 20.439453125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "closed": {
+            "pss_mib": 174.4560546875,
+            "clean_file_pss_mib": 45.5537109375,
+            "pss_anon_mib": 108.4609375,
+            "pss_shmem_mib": 20.44140625,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          }
+        },
+        "candidate_info_mib": {
+          "idle": {
+            "pss_mib": 56.8173828125,
+            "clean_file_pss_mib": 19.0869140625,
+            "pss_anon_mib": 27.1484375,
+            "pss_shmem_mib": 10.58203125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "expired": {
+            "pss_mib": 131.751953125,
+            "clean_file_pss_mib": 38.2041015625,
+            "pss_anon_mib": 82.8671875,
+            "pss_shmem_mib": 10.6796875,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 263.15234375
+          },
+          "open": {
+            "pss_mib": 148.935546875,
+            "clean_file_pss_mib": 38.2041015625,
+            "pss_anon_mib": 100.05078125,
+            "pss_shmem_mib": 10.6796875,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 218.25390625
+          },
+          "closed": {
+            "pss_mib": 146.8408203125,
+            "clean_file_pss_mib": 44.2763671875,
+            "pss_anon_mib": 91.87890625,
+            "pss_shmem_mib": 10.6845703125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 194.21484375
+          }
+        },
+        "delta_mib": {
+          "idle": 0.359375,
+          "expired": 303.74609375,
+          "open": 201.271484375,
+          "closed": 167.8759765625
+        },
+        "notes": []
+      },
+      {
+        "label": "2",
+        "control_mib": {
+          "idle": 37.66796875,
+          "expired": 53.38671875,
+          "open": 127.716796875,
+          "closed": 124.25390625
+        },
+        "candidate_mib": {
+          "idle": 37.81640625,
+          "expired": 356.65234375,
+          "open": 329.0703125,
+          "closed": 296.8564453125
+        },
+        "control_info_mib": {
+          "idle": {
+            "pss_mib": 57.2587890625,
+            "clean_file_pss_mib": 19.5908203125,
+            "pss_anon_mib": 27.0859375,
+            "pss_shmem_mib": 10.58203125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "expired": {
+            "pss_mib": 92.5458984375,
+            "clean_file_pss_mib": 39.1591796875,
+            "pss_anon_mib": 42.80078125,
+            "pss_shmem_mib": 10.5859375,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "open": {
+            "pss_mib": 167.689453125,
+            "clean_file_pss_mib": 39.9716796875,
+            "pss_anon_mib": 107.27734375,
+            "pss_shmem_mib": 20.439453125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "closed": {
+            "pss_mib": 169.81640625,
+            "clean_file_pss_mib": 45.5625,
+            "pss_anon_mib": 103.8125,
+            "pss_shmem_mib": 20.44140625,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          }
+        },
+        "candidate_info_mib": {
+          "idle": {
+            "pss_mib": 57.0390625,
+            "clean_file_pss_mib": 19.22265625,
+            "pss_anon_mib": 27.234375,
+            "pss_shmem_mib": 10.58203125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "expired": {
+            "pss_mib": 131.908203125,
+            "clean_file_pss_mib": 38.4072265625,
+            "pss_anon_mib": 82.8203125,
+            "pss_shmem_mib": 10.6796875,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 263.15234375
+          },
+          "open": {
+            "pss_mib": 149.224609375,
+            "clean_file_pss_mib": 38.4072265625,
+            "pss_anon_mib": 100.13671875,
+            "pss_shmem_mib": 10.6796875,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 218.25390625
+          },
+          "closed": {
+            "pss_mib": 147.1201171875,
+            "clean_file_pss_mib": 44.478515625,
+            "pss_anon_mib": 91.95703125,
+            "pss_shmem_mib": 10.6845703125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 194.21484375
+          }
+        },
+        "delta_mib": {
+          "idle": 0.1484375,
+          "expired": 303.265625,
+          "open": 201.353515625,
+          "closed": 172.6025390625
+        },
+        "notes": []
+      },
+      {
+        "label": "3",
+        "control_mib": {
+          "idle": 37.51953125,
+          "expired": 53.03125,
+          "open": 127.552734375,
+          "closed": 125.05859375
+        },
+        "candidate_mib": {
+          "idle": 37.8046875,
+          "expired": 356.74609375,
+          "open": 328.9296875,
+          "closed": 296.8173828125
+        },
+        "control_info_mib": {
+          "idle": {
+            "pss_mib": 56.9521484375,
+            "clean_file_pss_mib": 19.4326171875,
+            "pss_anon_mib": 26.9375,
+            "pss_shmem_mib": 10.58203125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "expired": {
+            "pss_mib": 91.85546875,
+            "clean_file_pss_mib": 38.82421875,
+            "pss_anon_mib": 42.4453125,
+            "pss_shmem_mib": 10.5859375,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "open": {
+            "pss_mib": 167.1865234375,
+            "clean_file_pss_mib": 39.6328125,
+            "pss_anon_mib": 107.11328125,
+            "pss_shmem_mib": 20.439453125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "closed": {
+            "pss_mib": 170.2783203125,
+            "clean_file_pss_mib": 45.2197265625,
+            "pss_anon_mib": 104.6171875,
+            "pss_shmem_mib": 20.44140625,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          }
+        },
+        "candidate_info_mib": {
+          "idle": {
+            "pss_mib": 56.6328125,
+            "clean_file_pss_mib": 18.828125,
+            "pss_anon_mib": 27.22265625,
+            "pss_shmem_mib": 10.58203125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "expired": {
+            "pss_mib": 131.640625,
+            "clean_file_pss_mib": 38.0458984375,
+            "pss_anon_mib": 82.9140625,
+            "pss_shmem_mib": 10.6796875,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 263.15234375
+          },
+          "open": {
+            "pss_mib": 148.72265625,
+            "clean_file_pss_mib": 38.0458984375,
+            "pss_anon_mib": 99.99609375,
+            "pss_shmem_mib": 10.6796875,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 218.25390625
+          },
+          "closed": {
+            "pss_mib": 146.69921875,
+            "clean_file_pss_mib": 44.0966796875,
+            "pss_anon_mib": 91.91796875,
+            "pss_shmem_mib": 10.6845703125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 194.21484375
+          }
+        },
+        "delta_mib": {
+          "idle": 0.28515625,
+          "expired": 303.71484375,
+          "open": 201.376953125,
+          "closed": 171.7587890625
+        },
+        "notes": []
+      },
+      {
+        "label": "4",
+        "control_mib": {
+          "idle": 37.60546875,
+          "expired": 53.140625,
+          "open": 127.724609375,
+          "closed": 127.9609375
+        },
+        "candidate_mib": {
+          "idle": 37.87109375,
+          "expired": 356.6796875,
+          "open": 327.94140625,
+          "closed": 297.0830078125
+        },
+        "control_info_mib": {
+          "idle": {
+            "pss_mib": 57.072265625,
+            "clean_file_pss_mib": 19.466796875,
+            "pss_anon_mib": 27.0234375,
+            "pss_shmem_mib": 10.58203125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "expired": {
+            "pss_mib": 92.2587890625,
+            "clean_file_pss_mib": 39.1181640625,
+            "pss_anon_mib": 42.5546875,
+            "pss_shmem_mib": 10.5859375,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "open": {
+            "pss_mib": 167.6357421875,
+            "clean_file_pss_mib": 39.9111328125,
+            "pss_anon_mib": 107.28515625,
+            "pss_shmem_mib": 20.439453125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "closed": {
+            "pss_mib": 173.9228515625,
+            "clean_file_pss_mib": 45.9619140625,
+            "pss_anon_mib": 107.51953125,
+            "pss_shmem_mib": 20.44140625,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          }
+        },
+        "candidate_info_mib": {
+          "idle": {
+            "pss_mib": 56.734375,
+            "clean_file_pss_mib": 18.86328125,
+            "pss_anon_mib": 27.2890625,
+            "pss_shmem_mib": 10.58203125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "expired": {
+            "pss_mib": 131.6103515625,
+            "clean_file_pss_mib": 38.0830078125,
+            "pss_anon_mib": 82.84765625,
+            "pss_shmem_mib": 10.6796875,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 263.15234375
+          },
+          "open": {
+            "pss_mib": 147.7705078125,
+            "clean_file_pss_mib": 38.0830078125,
+            "pss_anon_mib": 99.0078125,
+            "pss_shmem_mib": 10.6796875,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 218.25390625
+          },
+          "closed": {
+            "pss_mib": 147.0517578125,
+            "clean_file_pss_mib": 44.18359375,
+            "pss_anon_mib": 92.18359375,
+            "pss_shmem_mib": 10.6845703125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 194.21484375
+          }
+        },
+        "delta_mib": {
+          "idle": 0.265625,
+          "expired": 303.5390625,
+          "open": 200.216796875,
+          "closed": 169.1220703125
+        },
+        "notes": []
+      },
+      {
+        "label": "5",
+        "control_mib": {
+          "idle": 42.1796875,
+          "expired": 53.4140625,
+          "open": 127.908203125,
+          "closed": 128.31640625
+        },
+        "candidate_mib": {
+          "idle": 38.18359375,
+          "expired": 356.30859375,
+          "open": 326.83203125,
+          "closed": 288.6142578125
+        },
+        "control_info_mib": {
+          "idle": {
+            "pss_mib": 61.4501953125,
+            "clean_file_pss_mib": 19.2705078125,
+            "pss_anon_mib": 31.59765625,
+            "pss_shmem_mib": 10.58203125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "expired": {
+            "pss_mib": 92.2890625,
+            "clean_file_pss_mib": 38.875,
+            "pss_anon_mib": 42.828125,
+            "pss_shmem_mib": 10.5859375,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "open": {
+            "pss_mib": 167.5966796875,
+            "clean_file_pss_mib": 39.6875,
+            "pss_anon_mib": 107.46875,
+            "pss_shmem_mib": 20.439453125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "closed": {
+            "pss_mib": 173.6279296875,
+            "clean_file_pss_mib": 45.3115234375,
+            "pss_anon_mib": 107.875,
+            "pss_shmem_mib": 20.44140625,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          }
+        },
+        "candidate_info_mib": {
+          "idle": {
+            "pss_mib": 57.505859375,
+            "clean_file_pss_mib": 19.322265625,
+            "pss_anon_mib": 27.6015625,
+            "pss_shmem_mib": 10.58203125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 0.0
+          },
+          "expired": {
+            "pss_mib": 131.646484375,
+            "clean_file_pss_mib": 38.490234375,
+            "pss_anon_mib": 82.4765625,
+            "pss_shmem_mib": 10.6796875,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 263.15234375
+          },
+          "open": {
+            "pss_mib": 148.791015625,
+            "clean_file_pss_mib": 38.212890625,
+            "pss_anon_mib": 99.8984375,
+            "pss_shmem_mib": 10.6796875,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 216.25390625
+          },
+          "closed": {
+            "pss_mib": 146.939453125,
+            "clean_file_pss_mib": 44.5400390625,
+            "pss_anon_mib": 91.71484375,
+            "pss_shmem_mib": 10.6845703125,
+            "swap_pss_mib": 0.0,
+            "drm_mib": 186.21484375
+          }
+        },
+        "delta_mib": {
+          "idle": -3.99609375,
+          "expired": 302.89453125,
+          "open": 198.923828125,
+          "closed": 160.2978515625
+        },
+        "notes": []
+      }
+    ]
+  },
+  "content_timing": [
+    {
+      "capture": "1/control",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "panel_prepared_before_open": false,
+          "first_scene_commit_ms": 35.641,
+          "first_scene_update": "9",
+          "first_scene_image_bytes": 0,
+          "first_scene_frame_ms": 37.445,
+          "first_scene_presented_ms": 38.852,
+          "content_method": "first companion UI_COMMIT with extras_images_bytes>0 (content proxy)",
+          "content_scene_commit_ms": 264.062,
+          "content_scene_update": "13",
+          "content_scene_image_bytes": 171439,
+          "content_scene_frame_ms": 277.793,
+          "content_presented_ms": 293.366,
+          "content_presented_update": "14",
+          "status": "first positive extras_images_bytes scene commit; UI_FRAME marks surface submission and UI_PRESENTED its nested presentation feedback"
+        }
+      }
+    },
+    {
+      "capture": "1/candidate",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "content_method": "retained prepared scene; first companion UI_FRAME",
+          "panel_prepared_before_open": true,
+          "content_frame_ms": 9.642,
+          "refresh_commit_ms": 13.561,
+          "commit_update": "7",
+          "refresh_presented_ms": 42.912,
+          "status": "warm retained frame; refresh commit reported separately"
+        }
+      }
+    },
+    {
+      "capture": "2/control",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "panel_prepared_before_open": false,
+          "first_scene_commit_ms": 35.772,
+          "first_scene_update": "9",
+          "first_scene_image_bytes": 0,
+          "first_scene_frame_ms": 37.202,
+          "first_scene_presented_ms": 38.66,
+          "content_method": "first companion UI_COMMIT with extras_images_bytes>0 (content proxy)",
+          "content_scene_commit_ms": 259.467,
+          "content_scene_update": "13",
+          "content_scene_image_bytes": 171439,
+          "content_scene_frame_ms": 260.246,
+          "content_scene_presented_ms": 291.943,
+          "content_presented_ms": 291.943,
+          "content_presented_update": "13",
+          "status": "first positive extras_images_bytes scene commit; UI_FRAME marks surface submission and UI_PRESENTED its nested presentation feedback"
+        }
+      }
+    },
+    {
+      "capture": "2/candidate",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "content_method": "retained prepared scene; first companion UI_FRAME",
+          "panel_prepared_before_open": true,
+          "content_frame_ms": 9.747,
+          "refresh_commit_ms": 13.262,
+          "commit_update": "7",
+          "refresh_presented_ms": 42.961,
+          "status": "warm retained frame; refresh commit reported separately"
+        }
+      }
+    },
+    {
+      "capture": "3/control",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "panel_prepared_before_open": false,
+          "first_scene_commit_ms": 36.403,
+          "first_scene_update": "9",
+          "first_scene_image_bytes": 0,
+          "first_scene_frame_ms": 38.293,
+          "first_scene_presented_ms": 39.809,
+          "content_method": "first companion UI_COMMIT with extras_images_bytes>0 (content proxy)",
+          "content_scene_commit_ms": 267.235,
+          "content_scene_update": "13",
+          "content_scene_image_bytes": 171439,
+          "content_scene_frame_ms": 267.858,
+          "content_scene_presented_ms": 299.714,
+          "content_presented_ms": 299.714,
+          "content_presented_update": "13",
+          "status": "first positive extras_images_bytes scene commit; UI_FRAME marks surface submission and UI_PRESENTED its nested presentation feedback"
+        }
+      }
+    },
+    {
+      "capture": "3/candidate",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "content_method": "retained prepared scene; first companion UI_FRAME",
+          "panel_prepared_before_open": true,
+          "content_frame_ms": 9.569,
+          "refresh_commit_ms": 13.697,
+          "commit_update": "7",
+          "refresh_presented_ms": 42.771,
+          "status": "warm retained frame; refresh commit reported separately"
+        }
+      }
+    },
+    {
+      "capture": "4/control",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "panel_prepared_before_open": false,
+          "first_scene_commit_ms": 35.475,
+          "first_scene_update": "9",
+          "first_scene_image_bytes": 0,
+          "first_scene_frame_ms": 37.403,
+          "first_scene_presented_ms": 38.887,
+          "content_method": "first companion UI_COMMIT with extras_images_bytes>0 (content proxy)",
+          "content_scene_commit_ms": 264.22,
+          "content_scene_update": "13",
+          "content_scene_image_bytes": 171439,
+          "content_scene_frame_ms": 276.43,
+          "content_presented_ms": 292.028,
+          "content_presented_update": "14",
+          "status": "first positive extras_images_bytes scene commit; UI_FRAME marks surface submission and UI_PRESENTED its nested presentation feedback"
+        }
+      }
+    },
+    {
+      "capture": "4/candidate",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "content_method": "retained prepared scene; first companion UI_FRAME",
+          "panel_prepared_before_open": true,
+          "content_frame_ms": 9.951,
+          "refresh_commit_ms": 14.094,
+          "commit_update": "7",
+          "refresh_presented_ms": 43.224,
+          "status": "warm retained frame; refresh commit reported separately"
+        }
+      }
+    },
+    {
+      "capture": "5/control",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "panel_prepared_before_open": false,
+          "first_scene_commit_ms": 36.265,
+          "first_scene_update": "9",
+          "first_scene_image_bytes": 0,
+          "first_scene_frame_ms": 37.679,
+          "first_scene_presented_ms": 39.046,
+          "content_method": "first companion UI_COMMIT with extras_images_bytes>0 (content proxy)",
+          "content_scene_commit_ms": 264.733,
+          "content_scene_update": "13",
+          "content_scene_image_bytes": 171439,
+          "content_scene_frame_ms": 277.252,
+          "content_presented_ms": 292.967,
+          "content_presented_update": "14",
+          "status": "first positive extras_images_bytes scene commit; UI_FRAME marks surface submission and UI_PRESENTED its nested presentation feedback"
+        }
+      }
+    },
+    {
+      "capture": "5/candidate",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "content_method": "retained prepared scene; first companion UI_FRAME",
+          "panel_prepared_before_open": true,
+          "content_frame_ms": 9.546,
+          "refresh_commit_ms": 13.507,
+          "commit_update": "7",
+          "refresh_presented_ms": 42.769,
+          "status": "warm retained frame; refresh commit reported separately"
+        }
+      }
+    }
+  ],
+  "palette_timing": [
+    {
+      "capture": "1/control",
+      "status": "palette selection clock unavailable"
+    },
+    {
+      "capture": "1/candidate",
+      "status": "palette selection clock unavailable"
+    },
+    {
+      "capture": "2/control",
+      "status": "palette selection clock unavailable"
+    },
+    {
+      "capture": "2/candidate",
+      "status": "palette selection clock unavailable"
+    },
+    {
+      "capture": "3/control",
+      "status": "palette selection clock unavailable"
+    },
+    {
+      "capture": "3/candidate",
+      "status": "palette selection clock unavailable"
+    },
+    {
+      "capture": "4/control",
+      "status": "palette selection clock unavailable"
+    },
+    {
+      "capture": "4/candidate",
+      "status": "palette selection clock unavailable"
+    },
+    {
+      "capture": "5/control",
+      "status": "palette selection clock unavailable"
+    },
+    {
+      "capture": "5/candidate",
+      "status": "palette selection clock unavailable"
+    }
+  ],
+  "palette_image_proxy": [
+    {
+      "status": "palette endpoint screenshots or image sequence unavailable",
+      "capture": "1/control"
+    },
+    {
+      "status": "palette endpoint screenshots or image sequence unavailable",
+      "capture": "1/candidate"
+    },
+    {
+      "status": "palette endpoint screenshots or image sequence unavailable",
+      "capture": "2/control"
+    },
+    {
+      "status": "palette endpoint screenshots or image sequence unavailable",
+      "capture": "2/candidate"
+    },
+    {
+      "status": "palette endpoint screenshots or image sequence unavailable",
+      "capture": "3/control"
+    },
+    {
+      "status": "palette endpoint screenshots or image sequence unavailable",
+      "capture": "3/candidate"
+    },
+    {
+      "status": "palette endpoint screenshots or image sequence unavailable",
+      "capture": "4/control"
+    },
+    {
+      "status": "palette endpoint screenshots or image sequence unavailable",
+      "capture": "4/candidate"
+    },
+    {
+      "status": "palette endpoint screenshots or image sequence unavailable",
+      "capture": "5/control"
+    },
+    {
+      "status": "palette endpoint screenshots or image sequence unavailable",
+      "capture": "5/candidate"
+    }
+  ],
+  "pacing": [],
+  "frame_pacing": [
+    {
+      "capture": "bead",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 18,
+            "p50": 0.308,
+            "p99": 28.866
+          },
+          "ui_frame_intervals": {
+            "sample_count": 18,
+            "interval_count": 17,
+            "interval_ms_p50": 16.001,
+            "interval_ms_p99": 32.391,
+            "interval_ms_max": 32.391
+          },
+          "ui_callback_intervals": {
+            "sample_count": 16,
+            "interval_count": 15,
+            "interval_ms_p50": 16.024,
+            "interval_ms_p99": 31.971,
+            "interval_ms_max": 31.971
+          },
+          "panel_gpu_prepared": [],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        }
+      }
+    },
+    {
+      "capture": "bead",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 19,
+            "p50": 0.163,
+            "p99": 2.046
+          },
+          "ui_frame_intervals": {
+            "sample_count": 19,
+            "interval_count": 18,
+            "interval_ms_p50": 16.0,
+            "interval_ms_p99": 32.266,
+            "interval_ms_max": 32.266
+          },
+          "ui_callback_intervals": {
+            "sample_count": 18,
+            "interval_count": 17,
+            "interval_ms_p50": 16.007,
+            "interval_ms_p99": 32.104,
+            "interval_ms_max": 32.104
+          },
+          "panel_gpu_prepared": [],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        }
+      }
+    },
+    {
+      "capture": "bead",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 17,
+            "p50": 0.304,
+            "p99": 28.087
+          },
+          "ui_frame_intervals": {
+            "sample_count": 17,
+            "interval_count": 16,
+            "interval_ms_p50": 16.017,
+            "interval_ms_p99": 32.296,
+            "interval_ms_max": 32.296
+          },
+          "ui_callback_intervals": {
+            "sample_count": 15,
+            "interval_count": 14,
+            "interval_ms_p50": 16.008,
+            "interval_ms_p99": 32.12,
+            "interval_ms_max": 32.12
+          },
+          "panel_gpu_prepared": [],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        }
+      }
+    },
+    {
+      "capture": "bead",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 19,
+            "p50": 0.149,
+            "p99": 2.794
+          },
+          "ui_frame_intervals": {
+            "sample_count": 19,
+            "interval_count": 18,
+            "interval_ms_p50": 16.018,
+            "interval_ms_p99": 32.458,
+            "interval_ms_max": 32.458
+          },
+          "ui_callback_intervals": {
+            "sample_count": 18,
+            "interval_count": 17,
+            "interval_ms_p50": 16.028,
+            "interval_ms_p99": 32.241,
+            "interval_ms_max": 32.241
+          },
+          "panel_gpu_prepared": [],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        }
+      }
+    },
+    {
+      "capture": "bead",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 18,
+            "p50": 0.317,
+            "p99": 31.108
+          },
+          "ui_frame_intervals": {
+            "sample_count": 18,
+            "interval_count": 17,
+            "interval_ms_p50": 15.996,
+            "interval_ms_p99": 33.006,
+            "interval_ms_max": 33.006
+          },
+          "ui_callback_intervals": {
+            "sample_count": 16,
+            "interval_count": 15,
+            "interval_ms_p50": 16.01,
+            "interval_ms_p99": 32.455,
+            "interval_ms_max": 32.455
+          },
+          "panel_gpu_prepared": [],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        }
+      }
+    },
+    {
+      "capture": "bead",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 19,
+            "p50": 0.169,
+            "p99": 1.856
+          },
+          "ui_frame_intervals": {
+            "sample_count": 19,
+            "interval_count": 18,
+            "interval_ms_p50": 16.056,
+            "interval_ms_p99": 32.224,
+            "interval_ms_max": 32.224
+          },
+          "ui_callback_intervals": {
+            "sample_count": 18,
+            "interval_count": 17,
+            "interval_ms_p50": 16.065,
+            "interval_ms_p99": 32.089,
+            "interval_ms_max": 32.089
+          },
+          "panel_gpu_prepared": [],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        }
+      }
+    },
+    {
+      "capture": "bead",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 18,
+            "p50": 0.316,
+            "p99": 27.824
+          },
+          "ui_frame_intervals": {
+            "sample_count": 18,
+            "interval_count": 17,
+            "interval_ms_p50": 16.044,
+            "interval_ms_p99": 32.457,
+            "interval_ms_max": 32.457
+          },
+          "ui_callback_intervals": {
+            "sample_count": 16,
+            "interval_count": 15,
+            "interval_ms_p50": 16.02,
+            "interval_ms_p99": 32.204,
+            "interval_ms_max": 32.204
+          },
+          "panel_gpu_prepared": [],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        }
+      }
+    },
+    {
+      "capture": "bead",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 19,
+            "p50": 0.153,
+            "p99": 2.009
+          },
+          "ui_frame_intervals": {
+            "sample_count": 19,
+            "interval_count": 18,
+            "interval_ms_p50": 16.004,
+            "interval_ms_p99": 32.279,
+            "interval_ms_max": 32.279
+          },
+          "ui_callback_intervals": {
+            "sample_count": 18,
+            "interval_count": 17,
+            "interval_ms_p50": 16.036,
+            "interval_ms_p99": 32.04,
+            "interval_ms_max": 32.04
+          },
+          "panel_gpu_prepared": [],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        }
+      }
+    },
+    {
+      "capture": "bead",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 18,
+            "p50": 0.283,
+            "p99": 28.64
+          },
+          "ui_frame_intervals": {
+            "sample_count": 18,
+            "interval_count": 17,
+            "interval_ms_p50": 16.06,
+            "interval_ms_p99": 32.209,
+            "interval_ms_max": 32.209
+          },
+          "ui_callback_intervals": {
+            "sample_count": 16,
+            "interval_count": 15,
+            "interval_ms_p50": 16.02,
+            "interval_ms_p99": 32.176,
+            "interval_ms_max": 32.176
+          },
+          "panel_gpu_prepared": [],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        }
+      }
+    },
+    {
+      "capture": "bead",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 19,
+            "p50": 0.164,
+            "p99": 1.842
+          },
+          "ui_frame_intervals": {
+            "sample_count": 19,
+            "interval_count": 18,
+            "interval_ms_p50": 16.026,
+            "interval_ms_p99": 38.567,
+            "interval_ms_max": 38.567
+          },
+          "ui_callback_intervals": {
+            "sample_count": 18,
+            "interval_count": 17,
+            "interval_ms_p50": 16.024,
+            "interval_ms_p99": 38.629,
+            "interval_ms_max": 38.629
+          },
+          "panel_gpu_prepared": [],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "Pair order is supplied by the caller; the artifacts do not prove that capture arms alternated.",
+    "A missing/unknown DRM value is not treated as zero; it leaves that memory sample unavailable.",
+    "Cold content uses the first companion UI_COMMIT with positive extras_images_bytes; that cache-byte proxy may precede all visible thumbnails settling. Prepared warm panels use the first companion UI_FRAME. Warm UI_PRESENTED callbacks are not paired with that frame because callback logging deduplicates by UI update id.",
+    "UI_FRAME render_ms and UI_CALLBACK intervals are bounded to each sequence clock's open window. They describe client draw/callback clocks, not physical refresh. PANEL_GPU_PREPARED reports hidden first-context upload time separately when frame tracing is enabled.",
+    "Direct palette presentation links require a wallpaper_palette=true UI_COMMIT matched by companion/update to same-update UI_PRESENTED, plus WALLPAPER_PRESENTED matched to the attached output/revision. Missing tags remain unavailable; refresh_ns=0 and zero sequence fields do not prove a physical frame interval.",
+    "Palette image-progress t10/t50/t90 uses normalized L1 crops between before/settled screenshots and sampled JPEGs; capture stamps are scheduling proxies, not scanout clocks.",
+    "Exact palette and wallpaper presentation clocks require BEAD_PROFILE_INPUT=clocks and the opt-in presentation feedback capture."
+  ]
+}

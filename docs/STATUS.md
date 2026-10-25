@@ -20,6 +20,23 @@ mouse and keyboard delivery at all three edges, restoration and overlay policy.
 Full remote Arch CI passes, including all renderer, lifecycle and license graphs.
 [Evidence and limits](specs/0125-lips-fullscreen.md). No live deployment.
 
+## 2026-10-25 — B0123 Spotlight and wallpaper palette
+
+Spotlight is a centered overlay over the dimmed live desktop. First publication
+waits for visible thumbnails; its single prepared layer/worker survives the old
+120-second expiry. The existing GL panel renderer stays prepared, with CPU
+fallback when runtime GL is unavailable. Nacre prewarms bounded existing palette
+markers and removes the native observer’s 500 ms publication delay.
+Wallpaper and bar present together in the clean nested run; the picker palette
+follows 3.302 ms later with Spotlight open (3.008 ms in Carousel). Prepared
+warm/125-second reopens draw in about 10 ms.
+First-ever GPU preparation takes 95.7 ms before the fade begins. Full remote CI,
+four regenerated goldens and private QML
+pairs validate the implementation. Five-pair never-opened cost is +0.266 MiB;
+125-second retention costs +303.539 MiB, mostly DRM, under SMOOTHNESS FIRST. CPU
+painting still has long frames. [Measurements, sources and limits](specs/0123-picker-spotlight-palette.md).
+No live deployment or laptop-cap acceptance.
+
 ## 2026-10-25 — B0124 pill clicks and compact updates
 
 The status pill background and gaps are inert; widget-owned targets retain the

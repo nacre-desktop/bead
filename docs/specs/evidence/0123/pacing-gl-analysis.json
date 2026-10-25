@@ -1,0 +1,224 @@
+{
+  "schema": 1,
+  "backend": "femtovg-gl",
+  "memory_method": "Pss_Anon + Pss_Shmem + SwapPss + DRM from parity driver RSS sidecars; MiB; paired candidate-minus-control median",
+  "memory": {
+    "minimum_pairs": 5,
+    "phases": {
+      "idle": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "control_pss_median_mib": null,
+        "candidate_pss_median_mib": null,
+        "control_clean_file_pss_median_mib": null,
+        "candidate_clean_file_pss_median_mib": null,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "swap_pss_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "drm_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          }
+        },
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      },
+      "expired": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "control_pss_median_mib": null,
+        "candidate_pss_median_mib": null,
+        "control_clean_file_pss_median_mib": null,
+        "candidate_clean_file_pss_median_mib": null,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "swap_pss_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "drm_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          }
+        },
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      },
+      "open": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "control_pss_median_mib": null,
+        "candidate_pss_median_mib": null,
+        "control_clean_file_pss_median_mib": null,
+        "candidate_clean_file_pss_median_mib": null,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "swap_pss_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "drm_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          }
+        },
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      },
+      "closed": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "control_pss_median_mib": null,
+        "candidate_pss_median_mib": null,
+        "control_clean_file_pss_median_mib": null,
+        "candidate_clean_file_pss_median_mib": null,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "swap_pss_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "drm_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          }
+        },
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      }
+    },
+    "pairs": []
+  },
+  "content_timing": [
+    {
+      "capture": "gl",
+      "states": {
+        "spotlight-cold": {
+          "panel_prepared_before_open": false,
+          "first_buffer_commit_ms": 123.826,
+          "first_buffer_update": "1",
+          "first_buffer_image_bytes": 171439,
+          "first_buffer_frame_ms": 125.681,
+          "first_buffer_presented_ms": 127.307,
+          "content_method": "first companion UI_COMMIT with extras_images_bytes>0 (content proxy)",
+          "content_commit_ms": 123.826,
+          "content_update": "1",
+          "content_image_bytes": 171439,
+          "content_frame_ms": 125.681,
+          "content_presented_ms": 127.307,
+          "content_presented_update": "1",
+          "status": "extras_images_bytes is a content proxy and may precede all visible thumbnail hydration"
+        },
+        "spotlight-repeat": {
+          "content_method": "retained prepared scene; first companion UI_FRAME",
+          "panel_prepared_before_open": true,
+          "content_frame_ms": 9.75,
+          "refresh_commit_ms": 13.533,
+          "commit_update": "12",
+          "refresh_presented_ms": 26.955,
+          "status": "warm retained frame; refresh commit reported separately"
+        },
+        "spotlight-expired": {
+          "content_method": "retained prepared scene; first companion UI_FRAME",
+          "panel_prepared_before_open": true,
+          "content_frame_ms": 9.756,
+          "refresh_commit_ms": 13.501,
+          "commit_update": "22",
+          "refresh_presented_ms": 27.021,
+          "status": "warm retained frame; refresh commit reported separately"
+        }
+      }
+    }
+  ],
+  "palette_timing": [
+    {
+      "capture": "gl",
+      "palette_accepted_ns": 820841579433332,
+      "wallpaper_attached_ns": 820841593759653,
+      "palette_accept_to_wallpaper_attach_ms": 14.326,
+      "method": "UI_TIMELINE wallpaper_palette_accepted \u2192 wallpaper_surface_committed; commit mark follows successful buffer attach",
+      "selection_send_ns": 820841106772583,
+      "selection_to_palette_accept_ms": 472.661,
+      "selection_to_wallpaper_attach_ms": 486.987,
+      "nearest_main_frame_relative_to_palette_accept_ms": -0.527,
+      "palette_accept_to_panel_commit_ms": 22.844,
+      "panel_commit_update": "50",
+      "palette_accept_to_panel_frame_ms": 23.346,
+      "palette_accept_to_shell_present_ms": 0.924,
+      "shell_present_update": "23",
+      "palette_accept_to_presented_main_commit_ms": -0.825,
+      "selection_to_shell_present_ms": 473.585,
+      "palette_accept_to_panel_present_ms": 34.923,
+      "selection_to_panel_present_ms": 507.584
+    }
+  ],
+  "palette_image_proxy": [
+    {
+      "status": "palette endpoint screenshots or image sequence unavailable",
+      "capture": "gl"
+    }
+  ],
+  "pacing": [],
+  "limitations": [
+    "Pair order is supplied by the caller; the artifacts do not prove that capture arms alternated.",
+    "A missing/unknown DRM value is not treated as zero; it leaves that memory sample unavailable.",
+    "Cold content uses the first companion UI_COMMIT with positive extras_images_bytes; that cache-byte proxy may precede all visible thumbnails settling. Prepared warm panels use the first companion UI_FRAME. Warm UI_PRESENTED callbacks are not paired with that frame because callback logging deduplicates by UI update id.",
+    "Palette image-progress t10/t50/t90 uses normalized L1 crops between before/settled screenshots and sampled JPEGs; capture stamps are scheduling proxies, not scanout clocks.",
+    "Exact palette-to-buffer timing requires BEAD_PROFILE_INPUT=clocks; without both marks the analyzer reports unavailable rather than inferring from line order."
+  ]
+}

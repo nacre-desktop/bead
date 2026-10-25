@@ -1,0 +1,400 @@
+{
+  "schema": 1,
+  "backend": "cpu-bar-gl-panel",
+  "memory_method": "Pss_Anon + Pss_Shmem + SwapPss + DRM from parity driver RSS sidecars; MiB; paired candidate-minus-control median",
+  "memory": {
+    "minimum_pairs": 5,
+    "phases": {
+      "idle": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "control_pss_median_mib": null,
+        "candidate_pss_median_mib": null,
+        "control_clean_file_pss_median_mib": null,
+        "candidate_clean_file_pss_median_mib": null,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "swap_pss_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "drm_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          }
+        },
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      },
+      "expired": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "control_pss_median_mib": null,
+        "candidate_pss_median_mib": null,
+        "control_clean_file_pss_median_mib": null,
+        "candidate_clean_file_pss_median_mib": null,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "swap_pss_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "drm_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          }
+        },
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      },
+      "open": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "control_pss_median_mib": null,
+        "candidate_pss_median_mib": null,
+        "control_clean_file_pss_median_mib": null,
+        "candidate_clean_file_pss_median_mib": null,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "swap_pss_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "drm_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          }
+        },
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      },
+      "closed": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "control_pss_median_mib": null,
+        "candidate_pss_median_mib": null,
+        "control_clean_file_pss_median_mib": null,
+        "candidate_clean_file_pss_median_mib": null,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "swap_pss_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "drm_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          }
+        },
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      }
+    },
+    "pairs": []
+  },
+  "content_timing": [
+    {
+      "capture": "qml",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "status": "sequence clock unavailable"
+        }
+      }
+    },
+    {
+      "capture": "bead",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "status": "sequence clock unavailable"
+        }
+      }
+    },
+    {
+      "capture": "fallback",
+      "states": {
+        "spotlight-cold": {
+          "panel_prepared_before_open": false,
+          "first_scene_commit_ms": 127.029,
+          "first_scene_update": "1",
+          "first_scene_image_bytes": 171439,
+          "first_scene_frame_ms": 129.199,
+          "first_scene_presented_ms": 130.923,
+          "content_method": "first companion UI_COMMIT with extras_images_bytes>0 (content proxy)",
+          "content_scene_commit_ms": 127.029,
+          "content_scene_update": "1",
+          "content_scene_image_bytes": 171439,
+          "content_scene_frame_ms": 129.199,
+          "content_scene_presented_ms": 130.923,
+          "content_presented_ms": 130.923,
+          "content_presented_update": "1",
+          "status": "first positive extras_images_bytes scene commit; UI_FRAME marks surface submission and UI_PRESENTED its nested presentation feedback"
+        },
+        "spotlight-repeat": {
+          "content_method": "retained prepared scene; first companion UI_FRAME",
+          "panel_prepared_before_open": true,
+          "content_frame_ms": 11.652,
+          "refresh_commit_ms": 14.935,
+          "commit_update": "12",
+          "refresh_presented_ms": 59.047,
+          "status": "warm retained frame; refresh commit reported separately"
+        },
+        "spotlight-expired": {
+          "status": "sequence clock unavailable"
+        }
+      }
+    }
+  ],
+  "palette_timing": [
+    {
+      "capture": "qml",
+      "selection_send_ns": 828305884557561,
+      "active_topic_patch_ns": 828306200859760,
+      "wallpaper_palette_accepted_ns": null,
+      "wallpaper_attached_ns": null,
+      "wallpaper_presented_ns": null,
+      "wallpaper_presented_refresh_ns": null,
+      "main_palette_commit_update": null,
+      "main_palette_commit_ns": null,
+      "main_palette_presented_ns": null,
+      "main_palette_presented_refresh_ns": null,
+      "panel_palette_commit_update": null,
+      "panel_palette_commit_ns": null,
+      "panel_palette_presented_ns": null,
+      "panel_palette_presented_refresh_ns": null,
+      "selection_to_active_topic_ms": 316.302,
+      "presentation_method": "UI_COMMIT wallpaper_palette=true update matched to same-update UI_PRESENTED; wallpaper WALLPAPER_PRESENTED matched by output/revision after successful attach",
+      "presentation_limit": "refresh_ns=0 or absent supplies no refresh interval; protocol timestamps are nested presentation feedback, not physical scanout",
+      "status": "palette acceptance mark unavailable; exact palette-commit/presentation link unavailable"
+    },
+    {
+      "capture": "bead",
+      "selection_send_ns": 828337043194628,
+      "active_topic_patch_ns": 828337288223090,
+      "wallpaper_palette_accepted_ns": 828337521125750,
+      "wallpaper_attached_ns": 828337534276371,
+      "wallpaper_presented_ns": 828337541876227,
+      "wallpaper_presented_refresh_ns": 0.0,
+      "main_palette_commit_update": "13",
+      "main_palette_commit_ns": 828337520672330,
+      "main_palette_presented_ns": 828337541876227,
+      "main_palette_presented_refresh_ns": 0.0,
+      "panel_palette_commit_update": "7",
+      "panel_palette_commit_ns": 828337520614770,
+      "panel_palette_presented_ns": 828337545178004,
+      "panel_palette_presented_refresh_ns": 0.0,
+      "selection_to_active_topic_ms": 245.028,
+      "selection_to_palette_accept_ms": 477.931,
+      "selection_to_wallpaper_attach_ms": 491.082,
+      "selection_to_wallpaper_present_ms": 498.682,
+      "palette_accept_to_main_palette_present_ms": 20.75,
+      "palette_accept_to_panel_palette_present_ms": 24.052,
+      "palette_accept_to_wallpaper_present_ms": 20.75,
+      "palette_accept_to_wallpaper_attach_ms": 13.151,
+      "main_palette_minus_wallpaper_present_ms": 0.0,
+      "panel_palette_minus_wallpaper_present_ms": 3.302,
+      "presentation_method": "UI_COMMIT wallpaper_palette=true update matched to same-update UI_PRESENTED; wallpaper WALLPAPER_PRESENTED matched by output/revision after successful attach",
+      "presentation_limit": "refresh_ns=0 or absent supplies no refresh interval; protocol timestamps are nested presentation feedback, not physical scanout"
+    },
+    {
+      "capture": "fallback",
+      "status": "palette selection clock unavailable"
+    }
+  ],
+  "palette_image_proxy": [
+    {
+      "status": "image processing skipped",
+      "capture": "qml"
+    },
+    {
+      "status": "image processing skipped",
+      "capture": "bead"
+    },
+    {
+      "status": "image processing skipped",
+      "capture": "fallback"
+    }
+  ],
+  "pacing": [],
+  "frame_pacing": [
+    {
+      "capture": "qml",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "status": "sequence clock unavailable"
+        }
+      }
+    },
+    {
+      "capture": "bead",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "status": "sequence clock unavailable"
+        }
+      }
+    },
+    {
+      "capture": "fallback",
+      "states": {
+        "spotlight-cold": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 19,
+            "p50": 3.864,
+            "p99": 38.71
+          },
+          "ui_frame_intervals": {
+            "sample_count": 19,
+            "interval_count": 18,
+            "interval_ms_p50": 16.029,
+            "interval_ms_p99": 49.477,
+            "interval_ms_max": 49.477
+          },
+          "ui_callback_intervals": {
+            "sample_count": 17,
+            "interval_count": 16,
+            "interval_ms_p50": 16.063,
+            "interval_ms_p99": 39.099,
+            "interval_ms_max": 39.099
+          },
+          "panel_gpu_prepared": [],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        },
+        "spotlight-repeat": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 17,
+            "p50": 3.929,
+            "p99": 42.963
+          },
+          "ui_frame_intervals": {
+            "sample_count": 17,
+            "interval_count": 16,
+            "interval_ms_p50": 16.161,
+            "interval_ms_p99": 70.729,
+            "interval_ms_max": 70.729
+          },
+          "ui_callback_intervals": {
+            "sample_count": 16,
+            "interval_count": 15,
+            "interval_ms_p50": 16.284,
+            "interval_ms_p99": 45.102,
+            "interval_ms_max": 45.102
+          },
+          "panel_gpu_prepared": [],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        },
+        "spotlight-expired": {
+          "status": "sequence clock unavailable"
+        }
+      }
+    }
+  ],
+  "renderer_fallbacks": [
+    {
+      "capture": "qml",
+      "companion_gpu_unavailable": 0,
+      "companion_gpu_to_cpu": 0,
+      "companion_cpu_to_gl": 0,
+      "panel_gpu_prepared": 0
+    },
+    {
+      "capture": "bead",
+      "companion_gpu_unavailable": 0,
+      "companion_gpu_to_cpu": 0,
+      "companion_cpu_to_gl": 0,
+      "panel_gpu_prepared": 1
+    },
+    {
+      "capture": "fallback",
+      "companion_gpu_unavailable": 1,
+      "companion_gpu_to_cpu": 1,
+      "companion_cpu_to_gl": 0,
+      "panel_gpu_prepared": 0
+    }
+  ],
+  "limitations": [
+    "Pair order is supplied by the caller; the artifacts do not prove that capture arms alternated.",
+    "A missing/unknown DRM value is not treated as zero; it leaves that memory sample unavailable.",
+    "Cold content uses the first companion UI_COMMIT with positive extras_images_bytes; that cache-byte proxy may precede all visible thumbnails settling. Prepared warm panels use the first companion UI_FRAME. Warm UI_PRESENTED callbacks are not paired with that frame because callback logging deduplicates by UI update id.",
+    "UI_FRAME render_ms and UI_CALLBACK intervals are bounded to each sequence clock's open window. They describe client draw/callback clocks, not physical refresh. PANEL_GPU_PREPARED reports hidden first-context upload time separately when frame tracing is enabled.",
+    "Direct palette presentation links require a wallpaper_palette=true UI_COMMIT matched by companion/update to same-update UI_PRESENTED, plus WALLPAPER_PRESENTED matched to the attached output/revision. Missing tags remain unavailable; refresh_ns=0 and zero sequence fields do not prove a physical frame interval.",
+    "Palette image-progress t10/t50/t90 uses normalized L1 crops between before/settled screenshots and sampled JPEGs; capture stamps are scheduling proxies, not scanout clocks.",
+    "Exact palette and wallpaper presentation clocks require BEAD_PROFILE_INPUT=clocks and the opt-in presentation feedback capture."
+  ]
+}

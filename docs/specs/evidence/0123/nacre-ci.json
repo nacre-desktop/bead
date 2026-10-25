@@ -1,0 +1,125 @@
+{
+  "source": {
+    "repository": "https://github.com/nacre-desktop/nacre",
+    "commit": "a1e3f865d177f7d543a0c3edd68cad98fd2040e7",
+    "orient_commit": "3efe8d1e7fb50200d74a3e0193ad63699cb8ebe8",
+    "change": "feat: prewarm visible wallpaper palettes [no-publish]",
+    "diff_lines": {
+      "insertions": 337,
+      "deletions": 25,
+      "files": 4
+    }
+  },
+  "github_ci": {
+    "run": "https://github.com/nacre-desktop/nacre/actions/runs/40215849784",
+    "event": "push",
+    "head_sha": "a1e3f865d177f7d543a0c3edd68cad98fd2040e7",
+    "conclusion": "success",
+    "desktop_job": {
+      "url": "https://github.com/nacre-desktop/nacre/actions/runs/40215849784/job/121236687557",
+      "conclusion": "success",
+      "container": "ghcr.io/archlinux/archlinux:latest",
+      "script": ".github/workflows/check.yml: jobs.desktop",
+      "all_workflow_steps_succeeded": [
+        "Set up job",
+        "Initialize containers",
+        "Rolling package cache key",
+        "Restore Arch packages",
+        "Install target-platform checks",
+        "actions/checkout",
+        "Restore public checkout modes",
+        "Tool cache identity",
+        "Restore check environment",
+        "Restore Cargo downloads and builds",
+        "Restore npm downloads",
+        "Install the pinned palette engine in an isolated environment",
+        "Candidate engine for fresh-install tests",
+        "Native helper library checks",
+        "Candidate helper for fresh-install tests",
+        "Install developer-only helper parity tooling",
+        "Helper sandbox integrity",
+        "Install development-only JavaScript formatter",
+        "Translation coverage",
+        "Source and native UI regression checks",
+        "Native English and pseudo gallery",
+        "Daemon raster memory regression",
+        "Native gallery evidence",
+        "Save Arch packages",
+        "Save check environment",
+        "Save Cargo downloads and builds",
+        "Save npm downloads",
+        "Post checkout cleanup",
+        "Stop containers",
+        "Complete job"
+      ],
+      "executed_commands": [
+        "cargo build -j2 --release --locked --manifest-path deps/orient/Cargo.toml -p orient-cli",
+        "cargo fmt --check",
+        "cargo clippy -j2 --all-targets -- -D warnings",
+        "cargo build -j2 --locked --examples",
+        "cargo test -j2 --quiet",
+        "cargo run -j2 --locked --manifest-path crates/nacre-protocol/tests/minimal-consumer/Cargo.toml --target-dir target",
+        "cargo build -j2 --locked --release -p nacre-helper --bin nacre-helper",
+        "/tmp/check-env/bin/python -m unittest discover -s tests/parity/helpers -p test_runner.py",
+        "/tmp/check-env/bin/python tools/i18n/check.py",
+        "/tmp/check-env/bin/python tools/i18n/generate.py",
+        "dbus-run-session -- xvfb-run -a /tmp/check-env/bin/python tools/check.py",
+        "dbus-run-session -- xvfb-run -a /tmp/check-env/bin/python tools/i18n/audit.py --download-fonts --output /tmp/nacre-pseudo-audit",
+        "NACRE_HELPER_BINARY=\"$PWD/target/release/nacre-helper\" /tmp/check-env/bin/python tools/capture-aur-review.py --output /tmp/nacre-pseudo-audit/aur-review",
+        "NACRE_MEMORY_BINARY=\"$PWD/target/release/nacre-helper\" cargo test -j2 --locked -p nacre-helper --test daemon memory:: -- --ignored --nocapture"
+      ],
+      "successful_output_markers": [
+        "tools/tests: Ran 500 tests; OK (skipped=1)",
+        "ai/tests: Ran 120 tests; OK",
+        "brain/tests: Ran 52 tests; OK",
+        "nacre/shell-tools/tests: Ran 490 tests; OK",
+        "Helper parity: 534 cases, 0 failures",
+        "Native translation audit passed: 244 states per language",
+        "Native translation audit passed: 185 states per language",
+        "test memory::catalogue_and_lock_raster_bursts_settle_below_sixty_mib ... ok"
+      ]
+    },
+    "fresh_install_job": {
+      "url": "https://github.com/nacre-desktop/nacre/actions/runs/40215849784/job/121245898573",
+      "conclusion": "success",
+      "command": "PATH=/tmp/smoke-env/bin:$PATH python tools/tests/smoke_install.py --output /tmp/nacre-install-smoke",
+      "result": "Fresh default install in nested niri passed"
+    }
+  },
+  "remote_task_ci": {
+    "container": "b0123-palette-ci",
+    "image": "ghcr.io/archlinux/archlinux:latest (task base image)",
+    "revision": "a1e3f865d177f7d543a0c3edd68cad98fd2040e7",
+    "exit_marker": "CI_EXIT=0",
+    "reported_stages": [
+      "tools/tests: 500 passed, 1 skipped",
+      "ai/tests: 120 passed",
+      "brain/tests: 52 passed",
+      "nacre/shell-tools/tests: 490 passed",
+      "Helper parity: 534 cases, 0 failures",
+      "Native translation audit passed for 244 and 185 states per language"
+    ],
+    "script_note": "The task wrapper ci.sh and ci.log were removed during required host cleanup. The GitHub desktop workflow command and step outputs above are retained verifiable CI receipts."
+  },
+  "focused_remote_checks": [
+    {
+      "command": "cargo test -j2 --locked -p nacre-helper --test daemon wallpaper_active_publishes_atomic_pair_and_retains_stale_revision -- --exact --nocapture",
+      "result": "passed"
+    },
+    {
+      "command": "cargo test -j2 --locked -p nacre-helper --test daemon wallpaper_watch_shares_inotify_preserves_frozen_lines_and_never_replays_after_disconnect -- --exact --nocapture",
+      "result": "passed"
+    },
+    {
+      "command": "cargo test -j2 --locked -p nacre-helper --lib wallpaper_watch::tests::presentation_updates_have_a_daemon_only_bit_without_legacy_generations -- --exact --nocapture",
+      "result": "passed"
+    }
+  ],
+  "release_stage": {
+    "command": "cargo build --release --locked -j2 -p nacre-helper",
+    "source_revision": "a1e3f865d177f7d543a0c3edd68cad98fd2040e7",
+    "sha256": "c6c9c062ce9a9c8c3b2de3baa4eccff72a03329b2c3099da5fa9f7261eab9dd5",
+    "destination": "desktop task staging: bin-integrated/nacre-helper",
+    "transfer": "hash verified; staged by atomic rename"
+  }
+}

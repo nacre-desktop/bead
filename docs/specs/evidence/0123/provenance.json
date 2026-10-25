@@ -1,0 +1,50 @@
+{
+  "control": {
+    "bead": "02614ed913b790012f314f64edd561d8d1a2ff76",
+    "bead_shell_sha256": "cef0c2be76a2e5478f7ecef448f138ad7211d572b08dfc704a4bb665080b4c89",
+    "nacre": "a6da4350 (public baseline)",
+    "nacre_helper_sha256": "f64e7e544a8b556df6b3731d9037cd267250903b1ef1df652a8325eda67ae035"
+  },
+  "cpu_memory_and_visual_candidate": {
+    "bead": "e77372bea52b9146cb389081aeb295b71f5c0b4a",
+    "bead_shell_sha256": "72d31b87dc498f34c4781875fae7b929d7590e51111e88082f1d8641af28f1bd",
+    "nacre": "abb115daedf2d78cd261e1116d609a6d0dfbd616",
+    "nacre_helper_sha256": "d280a936188dca3795c85e0ba7ae3e5ec63b36073c473770ac9f230de7d52af3",
+    "reproduction": "bead-cpu-cohort.patch applies to Bead control; nacre-cohort.patch applies to Nacre a6da4350; original unpublished commits were later rebased/amended"
+  },
+  "integrated_cpu_timing_candidate": {
+    "bead": "1fb383adbb430167ec94e0cde00cbaca05174a57",
+    "bead_shell_sha256": "4f3af50ab7d6502275f2d61006fabd3a5c6d4ae2e19c3244a846f4f8e8a2e683",
+    "change_from_cpu_candidate": "opt-in presentation instrumentation only",
+    "nacre": "a1e3f865d177f7d543a0c3edd68cad98fd2040e7"
+  },
+  "gl_candidate": {
+    "bead": "7ff295369e8e55c2dc88a520c9359acaadf7727b",
+    "bead_shell_sha256": "bbcf7bd7fa97d858eeb493d2a75f3d1576e21c9659198df239c1ce0cb0d953d4",
+    "nacre_both_arms": "a1e3f865d177f7d543a0c3edd68cad98fd2040e7",
+    "base_note": "Candidate rebased onto 9d378a3e (includes independent inert status pill/updates and widget-editor-removal changes). Control is the task-start baseline; measurements therefore compare complete trees, not a synthetic revert."
+  },
+  "integrated_helper_sha256": "c6c9c062ce9a9c8c3b2de3baa4eccff72a03329b2c3099da5fa9f7261eab9dd5",
+  "method": {
+    "release": "cargo build --release --locked -j2 -p nacre-shell; sequential control/candidate builds in remote Arch container",
+    "outputs": "private nested niri, 2880x1800, scale 1.5",
+    "cpu_cohort_flags": "--cpu (CPU bar and panel)",
+    "default_renderer_cohort_flags": "--renderer auto --panel-renderer femtovg-gl, identical both arms. CPU primary; control uses CPU-first/lazy-GL/idle-retirement, candidate GPU-first/retained GL.",
+    "daemon_memory": "separate from UI samples; no daemon memory acceptance claimed",
+    "limits": "No physical scanout or absolute laptop-cap acceptance; clean file-backed PSS informational."
+  },
+  "final_normal_gl_candidate": {
+    "bead": "160f80951577532d552f64ec94a6b296d2172d2e",
+    "bead_shell_sha256": "ff7893d898c203b630169cf05236b00fe3568a60f663ca81a80575eef7ced854",
+    "nacre_both_arms": "a1e3f865d177f7d543a0c3edd68cad98fd2040e7",
+    "base": "99640153089ca080a3ae806a8d4f96f6e9caca6e",
+    "base_note": "Includes independent widget form/clock work; control remains the task-start baseline. These are complete-tree comparisons."
+  },
+  "final_code": {
+    "bead": "cbe60901f1257a90fb39aaa8e5677bc0c3a48a66",
+    "change_from_measured_binary": "GPU-unavailable fallback uses the already-selected panel animation map; normal GL branches unchanged.",
+    "fallback_shell_sha256": "bc56ee80bb6eee5d34f115949ca3dde41bdfb1ad3f78dbc727f14e4f210540cf"
+  },
+  "integration_ci_source": "3e018ef799b1845cb0b5dcc1c0f419f51e0ce7f5",
+  "integration_base": "29b4be971d5ea5c6bfb631ad185b6579516d5cb6"
+}

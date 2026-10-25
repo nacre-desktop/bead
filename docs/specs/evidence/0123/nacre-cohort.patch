@@ -1,0 +1,405 @@
+diff --git a/crates/nacre-helper/src/daemon/active_wallpaper.rs b/crates/nacre-helper/src/daemon/active_wallpaper.rs
+index 9380cebc..5ce2bf14 100644
+--- a/crates/nacre-helper/src/daemon/active_wallpaper.rs
++++ b/crates/nacre-helper/src/daemon/active_wallpaper.rs
+@@ -11,14 +11,106 @@ use nacre_protocol::{
+ use serde_json::Value;
+ use sha2::{Digest, Sha256};
+ use std::os::unix::fs::MetadataExt;
++use std::sync::{Mutex, OnceLock};
+ use std::{
+-    collections::BTreeMap,
++    collections::{BTreeMap, HashSet, VecDeque},
+     fs::File,
+     io::Read,
+     path::{Component, Path},
+ };
+ 
+ pub const TOPIC: &str = "wallpaper.active";
++const PALETTE_PREWARM_BATCH: usize = 32;
++const PALETTE_PREWARM_QUEUE: usize = 128;
++
++#[derive(Default)]
++struct PalettePrewarmQueue {
++    ids: VecDeque<String>,
++    active: HashSet<String>,
++    running: bool,
++}
++static PALETTE_PREWARM: OnceLock<Mutex<PalettePrewarmQueue>> = OnceLock::new();
++
++fn enqueue_palette_prewarm(ids: &[String]) {
++    let queue = PALETTE_PREWARM.get_or_init(|| Mutex::new(PalettePrewarmQueue::default()));
++    let start = {
++        let Ok(mut state) = queue.lock() else {
++            return;
++        };
++        for id in ids.iter().take(PALETTE_PREWARM_QUEUE) {
++            if state.ids.len() >= PALETTE_PREWARM_QUEUE {
++                break;
++            }
++            if !state.active.contains(id) && !state.ids.contains(id) {
++                state.ids.push_back(id.clone());
++            }
++        }
++        if state.running || state.ids.is_empty() {
++            false
++        } else {
++            state.running = true;
++            true
++        }
++    };
++    if start {
++        tokio::spawn(async move { run_palette_prewarm().await });
++    }
++}
++
++async fn run_palette_prewarm() {
++    loop {
++        let batch = {
++            let queue = PALETTE_PREWARM.get_or_init(|| Mutex::new(PalettePrewarmQueue::default()));
++            let Ok(mut state) = queue.lock() else {
++                return;
++            };
++            let count = state.ids.len().min(PALETTE_PREWARM_BATCH);
++            let batch = state.ids.drain(..count).collect::<Vec<_>>();
++            if batch.is_empty() {
++                state.running = false;
++                return;
++            }
++            state.active.extend(batch.iter().cloned());
++            batch
++        };
++        if let Ok(engine) = std::env::current_exe() {
++            let engine = engine.to_string_lossy().into_owned();
++            let mut owned = vec![
++                "-n".to_owned(),
++                "10".to_owned(),
++                "--".to_owned(),
++                engine,
++                "wallpaper-media".to_owned(),
++                "prewarm".to_owned(),
++                "--catalogue-ids".to_owned(),
++            ];
++            owned.extend(batch.iter().cloned());
++            let args = owned.iter().map(String::as_str).collect::<Vec<_>>();
++            if super::behaviours::helper(
++                Path::new("nice"),
++                &args,
++                64 * 1024,
++                std::time::Duration::from_secs(120),
++            )
++            .await
++            .is_none_or(|(success, _)| !success)
++            {
++                eprintln!("Wallpaper palette prewarm failed");
++            }
++        } else {
++            eprintln!("Wallpaper palette prewarm could not resolve the helper executable");
++        }
++        if let Ok(mut state) = PALETTE_PREWARM
++            .get_or_init(|| Mutex::new(PalettePrewarmQueue::default()))
++            .lock()
++        {
++            for id in batch {
++                state.active.remove(&id);
++            }
++        }
++    }
++}
++
+ thread_local! {
+     static SELECTION_BUSY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+ }
+@@ -687,6 +779,9 @@ pub async fn catalogue(
+             true,
+         )
+     })?;
++    if let Some(ids) = request.ids.as_deref() {
++        enqueue_palette_prewarm(ids);
++    }
+     Ok(catalogue)
+ }
+ 
+diff --git a/crates/nacre-helper/src/wallpaper_media.rs b/crates/nacre-helper/src/wallpaper_media.rs
+index 01fb1f60..b4cfa9ad 100644
+--- a/crates/nacre-helper/src/wallpaper_media.rs
++++ b/crates/nacre-helper/src/wallpaper_media.rs
+@@ -191,6 +191,34 @@ pub struct Media {
+     pub hour: Option<u32>,
+     pub palette_command: Option<PaletteCommand>,
+ }
++const PALETTE_CACHE_COUNT: usize = 64;
++const PALETTE_PREWARM_COUNT: usize = 32;
++
++fn trim_palette_cache(cache: &Path, keep: usize) -> Result<()> {
++    let mut entries = fs::read_dir(cache)?
++        .filter_map(std::result::Result::ok)
++        .filter_map(|entry| {
++            let name = entry.file_name().to_string_lossy().into_owned();
++            let key = name.strip_suffix(".palette.json")?;
++            if key.len() != 64 || !key.bytes().all(|byte| byte.is_ascii_hexdigit()) {
++                return None;
++            }
++            let metadata = entry.metadata().ok()?;
++            if !metadata.is_file() {
++                return None;
++            }
++            Some((
++                metadata.modified().unwrap_or(std::time::UNIX_EPOCH),
++                entry.path(),
++            ))
++        })
++        .collect::<Vec<_>>();
++    entries.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
++    for (_, path) in entries.into_iter().skip(keep) {
++        fs::remove_file(path)?;
++    }
++    Ok(())
++}
+ impl Media {
+     pub fn new(paths: Paths, assets: PathBuf) -> Result<Self> {
+         let fallback = paths.home.join("Pictures/Wallpapers");
+@@ -1148,7 +1176,7 @@ impl Media {
+                     fs::write(&thumbnail, crate::image_paint::encode_jpeg(&image, 85)?)?;
+                 }
+                 cli.publisher
+-                    .commit_prepared(&poster, &data, &thumbnail, true, automatic)
++                    .commit_prepared(&poster, &data, &thumbnail, cli.publish, automatic)
+             })();
+             match result {
+                 Ok(value) => prepared = value,
+@@ -1251,10 +1279,79 @@ impl Media {
+             );
+             let image =
+                 image::DynamicImage::ImageRgba8(orient_decoder::load_rgba(image)?).to_rgb8();
+-            fs::write(path, crate::image_paint::encode_jpeg(&image, 85)?)?;
++            crate::files::atomic(&path, &crate::image_paint::encode_jpeg(&image, 85)?)?;
+         }
+         Ok(())
+     }
++
++    /// Prepare current-setting palette markers for one bounded catalogue page.
++    pub fn prewarm_catalogue(
++        &self,
++        cli: &mut crate::palette_cli::Cli,
++        ids: &[String],
++    ) -> Result<Value> {
++        if ids.len() > PALETTE_PREWARM_COUNT {
++            return Err("Too many wallpapers requested for palette prewarming".into());
++        }
++        if ids.is_empty() {
++            return Ok(json!({"prepared":0,"computed":0}));
++        }
++        let catalogue = self.catalog_with_ids(Some(ids))?;
++        let scheme = state::read(&self.paths.state.join("scheme.json"), json!({}))?;
++        let settings = self.settings()?;
++        let automatic = json::truthy(&settings["paletteAutoMode"]);
++        let mut prepared = 0;
++        let mut computed = 0;
++        for item in catalogue["entries"]
++            .as_array()
++            .ok_or("Invalid wallpaper catalog")?
++        {
++            let (Some(source), Some(poster)) = (item["path"].as_str(), item["poster"].as_str())
++            else {
++                continue;
++            };
++            let poster_path = Path::new(poster);
++            if !poster_path.is_file() {
++                continue;
++            }
++            let mode = automatic
++                .then(|| Self::wallpaper_mode(poster_path))
++                .transpose()?;
++            let marker = self.palette_marker(
++                poster_path,
++                scheme["flavour"].as_str().unwrap_or("default"),
++                None,
++                Some(Path::new(source)),
++                mode,
++                None,
++            )?;
++            let data = if marker.is_file() {
++                state::read(&marker, json!({}))?
++            } else {
++                let mut words = vec![
++                    "wallpaper".into(),
++                    "-p".into(),
++                    poster.into(),
++                    "--source".into(),
++                    source.into(),
++                ];
++                if let Some(mode) = mode {
++                    words.extend(["--mode".into(), mode.into()]);
++                }
++                let data = self.query_palette(cli, words)?;
++                atomic(&marker, &data)?;
++                computed += 1;
++                data
++            };
++            if let Err(error) = self.prepare_thumbnail(item, &data) {
++                eprintln!("Wallpaper palette prewarm thumbnail: {error}");
++            }
++            prepared += 1;
++        }
++        trim_palette_cache(&self.cache(), PALETTE_CACHE_COUNT)?;
++        Ok(json!({"prepared":prepared,"computed":computed}))
++    }
++
+     pub fn warm(&self, cli: &mut crate::palette_cli::Cli, include_demo: bool) -> Result<Value> {
+         use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+         let cache = self.cache();
+@@ -1403,6 +1500,7 @@ impl Media {
+                 eprintln!("Wallpaper catalog preparation: {error}");
+             }
+         }
++        trim_palette_cache(&self.cache(), PALETTE_CACHE_COUNT)?;
+         Ok(json!({"prepared":prepared,"computed":computed}))
+     }
+     pub fn demo_scenes(&self) -> Result<Value> {
+@@ -1771,6 +1869,7 @@ const ACTIONS: [&str; 11] = [
+     "warm",
+     "serve",
+ ];
++const INTERNAL_ACTIONS: [&str; 1] = ["prewarm"];
+ const USAGE: &str = "usage: wallpaper-media.py [-h] [--stream-presentation]\n                          {catalog,demo-start,demo-restore,select,preferences,theme,import,pick,session,warm,serve}\n                          [path]\n";
+ fn argument_error(message: &str) -> i32 {
+     eprintln!("{USAGE}wallpaper-media.py: error: {message}");
+@@ -1889,7 +1988,7 @@ pub fn run(args: &[String]) -> Result<i32> {
+             "the following arguments are required: action",
+         ));
+     };
+-    if !ACTIONS.contains(&action.as_str()) {
++    if !ACTIONS.contains(&action.as_str()) && !INTERNAL_ACTIONS.contains(&action.as_str()) {
+         return Ok(argument_error(&format!(
+             "argument action: invalid choice: {} (choose from {})",
+             json::python_repr(&json!(action)),
+@@ -1906,8 +2005,15 @@ pub fn run(args: &[String]) -> Result<i32> {
+             values[2..].join(" ")
+         )));
+     }
+-    if catalogue_ids.as_ref().is_some_and(|ids| ids.len() > 128)
+-        || (catalogue_ids.is_some() && (action != "catalog" || values.len() != 1))
++    if catalogue_ids.as_ref().is_some_and(|ids| {
++        ids.len()
++            > if action == "prewarm" {
++                PALETTE_PREWARM_COUNT
++            } else {
++                128
++            }
++    }) || (catalogue_ids.is_some()
++        && (!matches!(action.as_str(), "catalog" | "prewarm") || values.len() != 1))
+     {
+         return Ok(argument_error("invalid --catalogue-ids arguments"));
+     }
+@@ -1932,6 +2038,10 @@ pub fn run(args: &[String]) -> Result<i32> {
+         let mut cli = crate::palette_cli::Cli::environment(true)?;
+         match action.as_str() {
+             "catalog" => media.catalog_with_ids(catalogue_ids.as_deref()),
++            "prewarm" => media.prewarm_catalogue(
++                &mut cli,
++                catalogue_ids.as_deref().ok_or("Missing catalogue ids")?,
++            ),
+             "pick" => media.pick(),
+             "warm" => media.warm(&mut cli, true),
+             "preferences" | "theme" | "import" => {
+@@ -2023,6 +2133,26 @@ mod thumbnail_cache_tests {
+         Ok((home, Media::new(paths, assets)?))
+     }
+ 
++    fn test_palette_cli(media: &Media) -> Result<crate::palette_cli::Cli> {
++        let paths = media.paths.clone();
++        let publisher = crate::classic_state::Publisher {
++            paths: paths.clone(),
++            assets: media.assets.clone(),
++            backend: crate::compositor::backend::Backend::new(
++                paths.clone(),
++                std::collections::BTreeMap::new(),
++            )?,
++            system_icons: paths.home.join("icons"),
++            monitors: None,
++            now_ms: None,
++        };
++        Ok(crate::palette_cli::Cli {
++            paths,
++            publisher,
++            publish: false,
++        })
++    }
++
+     #[test]
+     fn catalogue_metadata_is_cheap_and_batch_hydration_preserves_only_requested_previews(
+     ) -> Result<()> {
+@@ -2114,4 +2244,72 @@ mod thumbnail_cache_tests {
+             .is_some_and(|path| !path.is_empty()));
+         Ok(())
+     }
++
++    #[test]
++    fn palette_cache_trim_keeps_only_the_newest_bounded_markers() -> Result<()> {
++        let folder = tempfile::tempdir()?;
++        for index in 0..70 {
++            let key = format!("{index:064x}");
++            fs::write(folder.path().join(format!("{key}.palette.json")), b"{}")?;
++        }
++        let unrelated = folder.path().join("unrelated.json");
++        fs::write(&unrelated, b"keep")?;
++
++        trim_palette_cache(folder.path(), 64)?;
++
++        let markers = fs::read_dir(folder.path())?
++            .filter_map(std::result::Result::ok)
++            .filter(|entry| {
++                entry
++                    .file_name()
++                    .to_string_lossy()
++                    .ends_with(".palette.json")
++            })
++            .count();
++        assert_eq!(markers, 64);
++        assert_eq!(fs::read(unrelated)?, b"keep");
++        Ok(())
++    }
++
++    #[test]
++    fn catalogue_prewarm_extracts_once_then_reuses_the_keyed_marker() -> Result<()> {
++        let (_home, mut media) = media_fixture()?;
++        let image = media.library.join("prewarm.png");
++        image::DynamicImage::new_rgb8(16, 16).save(&image)?;
++        let id = image.canonicalize()?.to_string_lossy().into_owned();
++        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
++        let calls_for_query = calls.clone();
++        let mut palette: Value =
++            serde_json::from_slice(&fs::read(media.assets.join("reference-style.json"))?)?;
++        palette["name"] = json!("dynamic");
++        palette["source"] = json!({"digest":format!("{:x}",Sha256::digest(fs::read(&image)?))});
++        palette["input"] = json!({});
++        let palette_text = serde_json::to_string(&palette)?;
++        fs::create_dir_all(&media.paths.state)?;
++        fs::write(
++            media.paths.state.join("scheme.json"),
++            serde_json::to_vec(&palette)?,
++        )?;
++        media.palette_command = Some(Box::new(move |_| {
++            calls_for_query.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
++            Ok(Some(palette_text.clone()))
++        }));
++
++        let mut cli = test_palette_cli(&media)?;
++        let first = media.prewarm_catalogue(&mut cli, std::slice::from_ref(&id))?;
++        let second = media.prewarm_catalogue(&mut cli, std::slice::from_ref(&id))?;
++        media.select(&mut cli, &image)?;
++        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
++        image::DynamicImage::new_rgb8(32, 24).save(&image)?;
++        let changed_file = media.prewarm_catalogue(&mut cli, std::slice::from_ref(&id))?;
++        media.preference(&json!({"palettePersonality":"vivid"}))?;
++        let changed_settings = media.prewarm_catalogue(&mut cli, std::slice::from_ref(&id))?;
++
++        assert_eq!(first["computed"], 1);
++        assert_eq!(second["computed"], 0);
++        assert_eq!(changed_file["computed"], 1);
++        assert_eq!(changed_settings["computed"], 1);
++        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 3);
++        Ok(())
++    }
+ }

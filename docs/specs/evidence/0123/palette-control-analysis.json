@@ -1,0 +1,136 @@
+{
+  "schema": 1,
+  "backend": "cpu",
+  "memory_method": "Pss_Anon + Pss_Shmem + SwapPss + DRM from parity driver RSS sidecars; MiB; paired candidate-minus-control median",
+  "memory": {
+    "minimum_pairs": 5,
+    "phases": {
+      "idle": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      },
+      "expired": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      },
+      "open": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      },
+      "closed": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      }
+    },
+    "pairs": []
+  },
+  "content_timing": [
+    {
+      "capture": "palette-control",
+      "states": {
+        "spotlight-cold": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "status": "sequence clock unavailable"
+        }
+      }
+    }
+  ],
+  "palette_timing": [
+    {
+      "capture": "palette-control",
+      "status": "palette acceptance mark unavailable; surface timing is relative to selection only",
+      "selection_send_ns": 815130703084584,
+      "wallpaper_attached_ns": 815130816545044,
+      "selection_to_wallpaper_attach_ms": 113.46,
+      "selection_to_first_main_present_ms": 1404.949,
+      "main_present_update": "13",
+      "first_main_commit_ns": 815131907654996,
+      "selection_to_first_main_commit_ms": 1204.57,
+      "selection_to_first_panel_present_ms": 17.858,
+      "panel_present_update": "6"
+    }
+  ],
+  "palette_image_proxy": [
+    {
+      "status": "image-sequence L1 proxy; not scanout timing",
+      "sample_count": 118,
+      "trigger_offset_ms": 0.25,
+      "wallpaper_roi_fraction": [
+        0.6,
+        0.15,
+        0.85,
+        0.5
+      ],
+      "palette_roi_fraction": [
+        0.3,
+        0.005,
+        0.4,
+        0.01
+      ],
+      "panel_palette_roi_fraction": [
+        0.2,
+        0.75,
+        0.28,
+        0.79
+      ],
+      "regions": {
+        "wallpaper": {
+          "endpoint_mean_l1": 78.7962,
+          "t10_ms": 125.8,
+          "t50_ms": 125.8,
+          "t90_ms": 125.8
+        },
+        "palette": {
+          "endpoint_mean_l1": 11.0,
+          "t10_ms": 1122.8,
+          "t50_ms": 1122.8,
+          "t90_ms": 1122.8
+        },
+        "panel_palette": {
+          "endpoint_mean_l1": 11.0,
+          "t10_ms": 1122.8,
+          "t50_ms": 1122.8,
+          "t90_ms": 1122.8
+        }
+      },
+      "palette_minus_wallpaper_ms": {
+        "bar_minus_wallpaper_t10_ms": 997.0,
+        "panel_palette_minus_wallpaper_t10_ms": 997.0,
+        "bar_minus_wallpaper_t50_ms": 997.0,
+        "panel_palette_minus_wallpaper_t50_ms": 997.0,
+        "bar_minus_wallpaper_t90_ms": 997.0,
+        "panel_palette_minus_wallpaper_t90_ms": 997.0
+      },
+      "capture": "palette-control"
+    }
+  ],
+  "pacing": [],
+  "limitations": [
+    "Pair order is supplied by the caller; the artifacts do not prove that capture arms alternated.",
+    "A missing/unknown DRM value is not treated as zero; it leaves that memory sample unavailable.",
+    "Cold content uses the first accepted companion UI_COMMIT; a prepared warm panel uses its first companion UI_FRAME. UI_PRESENTED is the available presentation callback proxy.",
+    "Palette image-progress t10/t50/t90 uses normalized L1 crops between before/settled screenshots and sampled JPEGs; capture stamps are scheduling proxies, not scanout clocks.",
+    "Exact palette-to-buffer timing requires BEAD_PROFILE_INPUT=clocks; without both marks the analyzer reports unavailable rather than inferring from line order."
+  ]
+}

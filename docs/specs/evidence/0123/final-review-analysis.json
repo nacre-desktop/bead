@@ -1,0 +1,591 @@
+{
+  "schema": 1,
+  "backend": "cpu-bar-gl-panel",
+  "memory_method": "Pss_Anon + Pss_Shmem + SwapPss + DRM from parity driver RSS sidecars; MiB; paired candidate-minus-control median",
+  "memory": {
+    "minimum_pairs": 5,
+    "phases": {
+      "idle": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "control_pss_median_mib": null,
+        "candidate_pss_median_mib": null,
+        "control_clean_file_pss_median_mib": null,
+        "candidate_clean_file_pss_median_mib": null,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "swap_pss_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "drm_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          }
+        },
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      },
+      "expired": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "control_pss_median_mib": null,
+        "candidate_pss_median_mib": null,
+        "control_clean_file_pss_median_mib": null,
+        "candidate_clean_file_pss_median_mib": null,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "swap_pss_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "drm_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          }
+        },
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      },
+      "open": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "control_pss_median_mib": null,
+        "candidate_pss_median_mib": null,
+        "control_clean_file_pss_median_mib": null,
+        "candidate_clean_file_pss_median_mib": null,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "swap_pss_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "drm_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          }
+        },
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      },
+      "closed": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "control_pss_median_mib": null,
+        "candidate_pss_median_mib": null,
+        "control_clean_file_pss_median_mib": null,
+        "candidate_clean_file_pss_median_mib": null,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "swap_pss_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "drm_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          }
+        },
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      }
+    },
+    "pairs": []
+  },
+  "content_timing": [
+    {
+      "capture": "qml",
+      "states": {
+        "spotlight-cold": {
+          "status": "no companion UI_COMMIT after open trigger"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "status": "sequence clock unavailable"
+        }
+      }
+    },
+    {
+      "capture": "bead",
+      "states": {
+        "spotlight-cold": {
+          "panel_prepared_before_open": false,
+          "first_scene_commit_ms": 127.205,
+          "first_scene_update": "1",
+          "first_scene_image_bytes": 171439,
+          "first_scene_frame_ms": 243.796,
+          "first_scene_presented_ms": 247.714,
+          "content_method": "first companion UI_COMMIT with extras_images_bytes>0 (content proxy)",
+          "content_scene_commit_ms": 127.205,
+          "content_scene_update": "1",
+          "content_scene_image_bytes": 171439,
+          "content_scene_frame_ms": 243.796,
+          "content_scene_presented_ms": 247.714,
+          "content_presented_ms": 247.714,
+          "content_presented_update": "1",
+          "status": "first positive extras_images_bytes scene commit; UI_FRAME marks surface submission and UI_PRESENTED its nested presentation feedback"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "status": "sequence clock unavailable"
+        }
+      }
+    },
+    {
+      "capture": "final-pacing",
+      "states": {
+        "spotlight-cold": {
+          "panel_prepared_before_open": false,
+          "first_scene_commit_ms": 126.305,
+          "first_scene_update": "1",
+          "first_scene_image_bytes": 171439,
+          "first_scene_frame_ms": 224.466,
+          "first_scene_presented_ms": 228.279,
+          "content_method": "first companion UI_COMMIT with extras_images_bytes>0 (content proxy)",
+          "content_scene_commit_ms": 126.305,
+          "content_scene_update": "1",
+          "content_scene_image_bytes": 171439,
+          "content_scene_frame_ms": 224.466,
+          "content_scene_presented_ms": 228.279,
+          "content_presented_ms": 228.279,
+          "content_presented_update": "1",
+          "status": "first positive extras_images_bytes scene commit; UI_FRAME marks surface submission and UI_PRESENTED its nested presentation feedback"
+        },
+        "spotlight-repeat": {
+          "content_method": "retained prepared scene; first companion UI_FRAME",
+          "panel_prepared_before_open": true,
+          "content_frame_ms": 10.022,
+          "refresh_commit_ms": 13.821,
+          "commit_update": "12",
+          "refresh_presented_ms": 27.252,
+          "status": "warm retained frame; refresh commit reported separately"
+        },
+        "spotlight-expired": {
+          "content_method": "retained prepared scene; first companion UI_FRAME",
+          "panel_prepared_before_open": true,
+          "content_frame_ms": 9.632,
+          "refresh_commit_ms": 13.654,
+          "commit_update": "22",
+          "refresh_presented_ms": 26.914,
+          "status": "warm retained frame; refresh commit reported separately"
+        }
+      }
+    }
+  ],
+  "palette_timing": [
+    {
+      "capture": "qml",
+      "selection_send_ns": 823799199714074,
+      "active_topic_patch_ns": 823799437127462,
+      "wallpaper_palette_accepted_ns": null,
+      "wallpaper_attached_ns": null,
+      "wallpaper_presented_ns": null,
+      "wallpaper_presented_refresh_ns": null,
+      "main_palette_commit_update": null,
+      "main_palette_commit_ns": null,
+      "main_palette_presented_ns": null,
+      "main_palette_presented_refresh_ns": null,
+      "panel_palette_commit_update": null,
+      "panel_palette_commit_ns": null,
+      "panel_palette_presented_ns": null,
+      "panel_palette_presented_refresh_ns": null,
+      "selection_to_active_topic_ms": 237.413,
+      "presentation_method": "UI_COMMIT wallpaper_palette=true update matched to same-update UI_PRESENTED; wallpaper WALLPAPER_PRESENTED matched by output/revision after successful attach",
+      "presentation_limit": "refresh_ns=0 or absent supplies no refresh interval; protocol timestamps are nested presentation feedback, not physical scanout",
+      "status": "palette acceptance mark unavailable; exact palette-commit/presentation link unavailable"
+    },
+    {
+      "capture": "bead",
+      "selection_send_ns": 823865136823973,
+      "active_topic_patch_ns": 823865433140110,
+      "wallpaper_palette_accepted_ns": 823865916449262,
+      "wallpaper_attached_ns": 823865939011046,
+      "wallpaper_presented_ns": 823865991535158,
+      "wallpaper_presented_refresh_ns": 0.0,
+      "main_palette_commit_update": "23",
+      "main_palette_commit_ns": 823865915277393,
+      "main_palette_presented_ns": 823865991535158,
+      "main_palette_presented_refresh_ns": 0.0,
+      "panel_palette_commit_update": "41",
+      "panel_palette_commit_ns": 823865911855826,
+      "panel_palette_presented_ns": 823865991535158,
+      "panel_palette_presented_refresh_ns": 0.0,
+      "selection_to_active_topic_ms": 296.316,
+      "selection_to_palette_accept_ms": 779.625,
+      "selection_to_wallpaper_attach_ms": 802.187,
+      "selection_to_wallpaper_present_ms": 854.711,
+      "palette_accept_to_main_palette_present_ms": 75.086,
+      "palette_accept_to_panel_palette_present_ms": 75.086,
+      "palette_accept_to_wallpaper_present_ms": 75.086,
+      "palette_accept_to_wallpaper_attach_ms": 22.562,
+      "main_palette_minus_wallpaper_present_ms": 0.0,
+      "panel_palette_minus_wallpaper_present_ms": 0.0,
+      "presentation_method": "UI_COMMIT wallpaper_palette=true update matched to same-update UI_PRESENTED; wallpaper WALLPAPER_PRESENTED matched by output/revision after successful attach",
+      "presentation_limit": "refresh_ns=0 or absent supplies no refresh interval; protocol timestamps are nested presentation feedback, not physical scanout"
+    },
+    {
+      "capture": "final-pacing",
+      "selection_send_ns": 824463063818830,
+      "active_topic_patch_ns": 824463306754570,
+      "wallpaper_palette_accepted_ns": 824463536132549,
+      "wallpaper_attached_ns": 824463551145189,
+      "wallpaper_presented_ns": 824463557541205,
+      "wallpaper_presented_refresh_ns": 0.0,
+      "main_palette_commit_update": "22",
+      "main_palette_commit_ns": 824463535489550,
+      "main_palette_presented_ns": 824463557541205,
+      "main_palette_presented_refresh_ns": 0.0,
+      "panel_palette_commit_update": "50",
+      "panel_palette_commit_ns": 824463535226920,
+      "panel_palette_presented_ns": 824463560548863,
+      "panel_palette_presented_refresh_ns": 0.0,
+      "selection_to_active_topic_ms": 242.936,
+      "selection_to_palette_accept_ms": 472.314,
+      "selection_to_wallpaper_attach_ms": 487.326,
+      "selection_to_wallpaper_present_ms": 493.722,
+      "palette_accept_to_main_palette_present_ms": 21.409,
+      "palette_accept_to_panel_palette_present_ms": 24.416,
+      "palette_accept_to_wallpaper_present_ms": 21.409,
+      "palette_accept_to_wallpaper_attach_ms": 15.013,
+      "main_palette_minus_wallpaper_present_ms": 0.0,
+      "panel_palette_minus_wallpaper_present_ms": 3.008,
+      "presentation_method": "UI_COMMIT wallpaper_palette=true update matched to same-update UI_PRESENTED; wallpaper WALLPAPER_PRESENTED matched by output/revision after successful attach",
+      "presentation_limit": "refresh_ns=0 or absent supplies no refresh interval; protocol timestamps are nested presentation feedback, not physical scanout"
+    }
+  ],
+  "palette_image_proxy": [
+    {
+      "status": "image-sequence L1 proxy; not scanout timing",
+      "sample_count": 118,
+      "trigger_offset_ms": 1.08,
+      "wallpaper_roi_fraction": [
+        0.6,
+        0.15,
+        0.85,
+        0.5
+      ],
+      "palette_roi_fraction": [
+        0.3,
+        0.005,
+        0.4,
+        0.01
+      ],
+      "panel_palette_roi_fraction": [
+        0.2,
+        0.75,
+        0.28,
+        0.79
+      ],
+      "regions": {
+        "wallpaper": {
+          "endpoint_mean_l1": 78.5816,
+          "t10_ms": 376.9,
+          "t50_ms": 426.9,
+          "t90_ms": 426.9
+        },
+        "palette": {
+          "endpoint_mean_l1": 11.0,
+          "t10_ms": 324.9,
+          "t50_ms": 324.9,
+          "t90_ms": 324.9
+        },
+        "panel_palette": {
+          "endpoint_mean_l1": 11.0,
+          "t10_ms": 324.9,
+          "t50_ms": 324.9,
+          "t90_ms": 324.9
+        }
+      },
+      "palette_minus_wallpaper_ms": {
+        "bar_minus_wallpaper_t10_ms": -52.0,
+        "panel_palette_minus_wallpaper_t10_ms": -52.0,
+        "bar_minus_wallpaper_t50_ms": -102.0,
+        "panel_palette_minus_wallpaper_t50_ms": -102.0,
+        "bar_minus_wallpaper_t90_ms": -102.0,
+        "panel_palette_minus_wallpaper_t90_ms": -102.0
+      },
+      "capture": "qml"
+    },
+    {
+      "status": "image-sequence L1 proxy; not scanout timing",
+      "sample_count": 118,
+      "trigger_offset_ms": 0.97,
+      "wallpaper_roi_fraction": [
+        0.6,
+        0.15,
+        0.85,
+        0.5
+      ],
+      "palette_roi_fraction": [
+        0.3,
+        0.005,
+        0.4,
+        0.01
+      ],
+      "panel_palette_roi_fraction": [
+        0.2,
+        0.75,
+        0.28,
+        0.79
+      ],
+      "regions": {
+        "wallpaper": {
+          "endpoint_mean_l1": 78.7962,
+          "t10_ms": 737.0,
+          "t50_ms": 737.0,
+          "t90_ms": 737.0
+        },
+        "palette": {
+          "endpoint_mean_l1": 11.0,
+          "t10_ms": 737.0,
+          "t50_ms": 737.0,
+          "t90_ms": 737.0
+        },
+        "panel_palette": {
+          "endpoint_mean_l1": 11.0,
+          "t10_ms": 763.0,
+          "t50_ms": 763.0,
+          "t90_ms": 763.0
+        }
+      },
+      "palette_minus_wallpaper_ms": {
+        "bar_minus_wallpaper_t10_ms": 0.0,
+        "panel_palette_minus_wallpaper_t10_ms": 26.0,
+        "bar_minus_wallpaper_t50_ms": 0.0,
+        "panel_palette_minus_wallpaper_t50_ms": 26.0,
+        "bar_minus_wallpaper_t90_ms": 0.0,
+        "panel_palette_minus_wallpaper_t90_ms": 26.0
+      },
+      "capture": "bead"
+    },
+    {
+      "status": "palette endpoint screenshots or image sequence unavailable",
+      "capture": "final-pacing"
+    }
+  ],
+  "pacing": [],
+  "frame_pacing": [
+    {
+      "capture": "qml",
+      "states": {
+        "spotlight-cold": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 0,
+            "p50": null,
+            "p99": null
+          },
+          "ui_frame_intervals": {
+            "sample_count": 0,
+            "interval_count": 0,
+            "interval_ms_p50": null,
+            "interval_ms_p99": null,
+            "interval_ms_max": null
+          },
+          "ui_callback_intervals": {
+            "sample_count": 0,
+            "interval_count": 0,
+            "interval_ms_p50": null,
+            "interval_ms_p99": null,
+            "interval_ms_max": null
+          },
+          "panel_gpu_prepared": [],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "status": "sequence clock unavailable"
+        }
+      }
+    },
+    {
+      "capture": "bead",
+      "states": {
+        "spotlight-cold": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 16,
+            "p50": 0.352,
+            "p99": 3.204
+          },
+          "ui_frame_intervals": {
+            "sample_count": 16,
+            "interval_count": 15,
+            "interval_ms_p50": 22.927,
+            "interval_ms_p99": 38.926,
+            "interval_ms_max": 38.926
+          },
+          "ui_callback_intervals": {
+            "sample_count": 14,
+            "interval_count": 13,
+            "interval_ms_p50": 25.429,
+            "interval_ms_p99": 52.888,
+            "interval_ms_max": 52.888
+          },
+          "panel_gpu_prepared": [
+            {
+              "after_open_ms": 240.931,
+              "prepare_ms": 112.558
+            }
+          ],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        },
+        "spotlight-repeat": {
+          "status": "sequence clock unavailable"
+        },
+        "spotlight-expired": {
+          "status": "sequence clock unavailable"
+        }
+      }
+    },
+    {
+      "capture": "bead",
+      "states": {
+        "spotlight-cold": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 38,
+            "p50": 0.131,
+            "p99": 3.338
+          },
+          "ui_frame_intervals": {
+            "sample_count": 38,
+            "interval_count": 37,
+            "interval_ms_p50": 8.015,
+            "interval_ms_p99": 16.064,
+            "interval_ms_max": 16.064
+          },
+          "ui_callback_intervals": {
+            "sample_count": 36,
+            "interval_count": 35,
+            "interval_ms_p50": 8.01,
+            "interval_ms_p99": 16.064,
+            "interval_ms_max": 16.064
+          },
+          "panel_gpu_prepared": [
+            {
+              "after_open_ms": 223.327,
+              "prepare_ms": 95.719
+            }
+          ],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        },
+        "spotlight-repeat": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 37,
+            "p50": 0.12,
+            "p99": 2.621
+          },
+          "ui_frame_intervals": {
+            "sample_count": 37,
+            "interval_count": 36,
+            "interval_ms_p50": 8.015,
+            "interval_ms_p99": 16.669,
+            "interval_ms_max": 16.669
+          },
+          "ui_callback_intervals": {
+            "sample_count": 36,
+            "interval_count": 35,
+            "interval_ms_p50": 8.017,
+            "interval_ms_p99": 16.66,
+            "interval_ms_max": 16.66
+          },
+          "panel_gpu_prepared": [],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        },
+        "spotlight-expired": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 36,
+            "p50": 0.099,
+            "p99": 1.933
+          },
+          "ui_frame_intervals": {
+            "sample_count": 36,
+            "interval_count": 35,
+            "interval_ms_p50": 8.018,
+            "interval_ms_p99": 16.12,
+            "interval_ms_max": 16.12
+          },
+          "ui_callback_intervals": {
+            "sample_count": 35,
+            "interval_count": 34,
+            "interval_ms_p50": 8.019,
+            "interval_ms_p99": 16.039,
+            "interval_ms_max": 16.039
+          },
+          "panel_gpu_prepared": [],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "Pair order is supplied by the caller; the artifacts do not prove that capture arms alternated.",
+    "A missing/unknown DRM value is not treated as zero; it leaves that memory sample unavailable.",
+    "Cold content uses the first companion UI_COMMIT with positive extras_images_bytes; that cache-byte proxy may precede all visible thumbnails settling. Prepared warm panels use the first companion UI_FRAME. Warm UI_PRESENTED callbacks are not paired with that frame because callback logging deduplicates by UI update id.",
+    "UI_FRAME render_ms and UI_CALLBACK intervals are bounded to each sequence clock's open window. They describe client draw/callback clocks, not physical refresh. PANEL_GPU_PREPARED reports hidden first-context upload time separately when frame tracing is enabled.",
+    "Direct palette presentation links require a wallpaper_palette=true UI_COMMIT matched by companion/update to same-update UI_PRESENTED, plus WALLPAPER_PRESENTED matched to the attached output/revision. Missing tags remain unavailable; refresh_ns=0 and zero sequence fields do not prove a physical frame interval.",
+    "Palette image-progress t10/t50/t90 uses normalized L1 crops between before/settled screenshots and sampled JPEGs; capture stamps are scheduling proxies, not scanout clocks.",
+    "Exact palette and wallpaper presentation clocks require BEAD_PROFILE_INPUT=clocks and the opt-in presentation feedback capture."
+  ]
+}

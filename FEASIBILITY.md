@@ -1,5 +1,23 @@
 # Feasibility
 
+## 2026-10-25 — B0123 Spotlight retention and palette
+
+Spotlight now floats over the desktop and waits for real thumbnails before publishing.
+Prepared GL retention removes the expired blank open and visible promotion hitch.
+The never-opened budget passes; warm GPU residency is a large explicit smoothness spend.
+Nested clocks are not physical scanout; CPU fallback and laptop-cap limits remain.
+
+| CPU bar / GL picker | Result |
+| --- | ---: |
+| First-ever / warm / 125 s first draw | 224.466 / 10.022 / 9.632 ms |
+| Warm / expired render p99 | 2.621 / 1.933 ms |
+| Five-pair idle unreclaimable delta | +0.266 MiB |
+| Five-pair expired unreclaimable delta | +303.539 MiB |
+| Expired DRM component delta | +263.152 MiB |
+
+CPU rounded-paint p99 remains 38–44 ms. First-ever hidden GPU preparation is 95.719 ms.
+[Paired evidence, synchronized palette clocks and limitations](docs/specs/0123-picker-spotlight-palette.md).
+
 ## 2026-10-25 — B0114 widget editor feature-budget decision
 
 The lead accepted the editor’s measured cost under a 2 MiB always-on feature budget.

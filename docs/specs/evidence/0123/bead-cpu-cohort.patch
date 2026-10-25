@@ -1,0 +1,1573 @@
+diff --git a/crates/bead-ui/src/markup_tests.rs b/crates/bead-ui/src/markup_tests.rs
+index 8facb36f..e57ec7ed 100644
+--- a/crates/bead-ui/src/markup_tests.rs
++++ b/crates/bead-ui/src/markup_tests.rs
+@@ -123,6 +123,40 @@ fn session(f: &Fixture) -> Session {
+     session
+ }
+ 
++#[test]
++fn host_policy_resolves_staged_computed_values_and_reject_keeps_previous_state() {
++    let f = fixture();
++    let path = f.0.join("ui/behavior.luau");
++    fs::write(
++        &path,
++        fs::read_to_string(&path).unwrap().replace(
++            "computed={}",
++            "computed={host_policy=function(s) return s.query end}",
++        ),
++    )
++    .unwrap();
++    let mut s = session(&f);
++    assert_eq!(
++        s.resolve("host_policy").unwrap(),
++        Value::Text(String::new())
++    );
++    s.update(BTreeMap::from([(
++        "query".into(),
++        Value::Text("next".into()),
++    )]))
++    .unwrap();
++    assert_eq!(s.stores.get("query"), Some(&Value::Text(String::new())));
++    assert_eq!(
++        s.resolve("host_policy").unwrap(),
++        Value::Text("next".into())
++    );
++    s.reject("test rejection".into());
++    assert_eq!(
++        s.resolve("host_policy").unwrap(),
++        Value::Text(String::new())
++    );
++}
++
+ #[test]
+ fn normalized_clip_polygon_masks_image_and_button_hit_region() {
+     let f = fixture();
+diff --git a/crates/bead-ui/src/session.rs b/crates/bead-ui/src/session.rs
+index 4024512f..114632bf 100644
+--- a/crates/bead-ui/src/session.rs
++++ b/crates/bead-ui/src/session.rs
+@@ -95,6 +95,22 @@ impl Session {
+             self.font_picker = Some(picker);
+         }
+     }
++    /// Resolve host policy from the staged transaction, including computed values.
++    pub fn resolve(&self, name: &str) -> Result<Value, Diagnostic> {
++        let (generation, stores) = if let Some(pending) = &self.pending {
++            (
++                pending.generation.as_ref().or(self.generation.as_ref()),
++                &pending.stores,
++            )
++        } else {
++            (self.generation.as_ref(), &self.stores)
++        };
++        generation
++            .ok_or_else(|| Diagnostic::new(&self.entry, 1, 1, "view is not loaded"))?
++            .script
++            .resolve(name, stores)
++    }
++
+     /// Run host-selected presentation feedback without consulting the external projector.
+     ///
+     /// The closure should change only pure local presentation input state, such as hover or
+diff --git a/crates/bead-wayland/src/lib.rs b/crates/bead-wayland/src/lib.rs
+index 8ae2d53a..fff6f0fc 100644
+--- a/crates/bead-wayland/src/lib.rs
++++ b/crates/bead-wayland/src/lib.rs
+@@ -557,6 +557,10 @@ pub struct PanelAnchor {
+ pub struct PanelSpec {
+     /// Application-selected active decoration state; no view names in the framework.
+     pub engages_decorations: bool,
++    /// Place above application fullscreen surfaces (layer-shell overlay).
++    pub overlay: bool,
++    /// Keep this single resident view prepared until another view replaces it.
++    pub retain_when_closed: bool,
+     /// Passive notices never create a dismissal layer or request keyboard focus.
+     pub passive: bool,
+     /// Request keyboard focus and an outside-dismiss layer while the panel is open.
+@@ -776,6 +780,7 @@ impl Surface {
+     }
+ }
+ struct WallpaperSurface {
++    palette: Option<bead_render::Palette>,
+     output: wl_output::WlOutput,
+     name: String,
+     width: u32,
+@@ -793,8 +798,11 @@ struct WallpaperSurface {
+     transition: Option<WallpaperTransition>,
+ }
+ struct WallpaperTransition {
++    commit: Option<(u64, std::sync::Arc<dyn std::any::Any + Send + Sync>)>,
++    palette: bead_render::Palette,
+     pixels: Vec<u8>,
+-    target: Vec<u8>,
++    // None retains an already-final snap while both SHM buffers are busy.
++    target: Option<Vec<u8>>,
+     remaining: u8,
+ }
+ impl Drop for Surface {
+diff --git a/crates/bead-wayland/src/panel.rs b/crates/bead-wayland/src/panel.rs
+index 84e20dcd..4d7b3a1b 100644
+--- a/crates/bead-wayland/src/panel.rs
++++ b/crates/bead-wayland/src/panel.rs
+@@ -591,6 +591,18 @@ impl App {
+                 }
+             }
+             self.sync_all_decorations()?;
++            if spec.retain_when_closed && open && self.panel_ready {
++                self.set_dismiss_enabled(
++                    self.panel_runtime
++                        .as_ref()
++                        .is_some_and(|source| source.outside_dismiss()),
++                )?;
++                for surface in self.surfaces.iter_mut().filter(|surface| surface.companion) {
++                    surface.callbacks.invalidate();
++                }
++            }
++            // PanelVisibility forces a draw of the last prepared scene even if
++            // its worker is still refreshing service data in the background.
+             self.panel_ui(UiEvent::PanelVisibility(true));
+             return Ok(());
+         }
+@@ -609,7 +621,6 @@ impl App {
+         let epoch = self.panel_epoch;
+         self.panel_reload_pending = false;
+         self.panel_ready = false;
+-        self.panel_started = Instant::now();
+         self.panel_output = Some(output.clone());
+         if open && spec.keyboard_focus && self.pearl.is_none() {
+             self.create_dismiss(&output)?;
+@@ -814,7 +825,20 @@ impl App {
+         self.notify_panel_owner(UiEvent::PanelDismissed);
+         self.panel_target = false;
+         self.edges_panel_changed(true);
+-        drop(self.dismiss.take());
++        if self
++            .options
++            .panel_spec
++            .as_ref()
++            .is_some_and(|spec| spec.retain_when_closed)
++        {
++            // Keep its stacking order below the prepared panel. Recreating the
++            // catcher on reopen would also recreate the panel surface/buffers.
++            if let Err(error) = self.set_dismiss_enabled(false) {
++                self.fail(error);
++            }
++        } else {
++            drop(self.dismiss.take());
++        }
+         // Release the seat before waiting for a worker/animation frame. Closed
+         // workers remain alive and may publish new models during keep-alive.
+         for surface in self.surfaces.iter_mut().filter(|s| s.companion) {
+@@ -848,6 +872,14 @@ impl App {
+             motion.open = false;
+         }
+         self.panel_ui(UiEvent::PanelVisibility(false));
++        if self
++            .options
++            .panel_spec
++            .as_ref()
++            .is_some_and(|spec| spec.retain_when_closed)
++        {
++            return;
++        }
+         let qh = self.qh.clone();
+         let epoch = self.panel_epoch;
+         if let Err(e) = self.loop_handle.insert_source(
+@@ -1035,7 +1067,16 @@ impl App {
+         let layer = self.layers.create_layer_surface(
+             &self.qh,
+             surface,
+-            Layer::Top,
++            if self
++                .options
++                .panel_spec
++                .as_ref()
++                .is_some_and(|spec| spec.overlay)
++            {
++                Layer::Overlay
++            } else {
++                Layer::Top
++            },
+             Some("bead-panel-dismiss"),
+             Some(output),
+         );
+diff --git a/crates/bead-wayland/src/panels.rs b/crates/bead-wayland/src/panels.rs
+index 568abc07..b9db5129 100644
+--- a/crates/bead-wayland/src/panels.rs
++++ b/crates/bead-wayland/src/panels.rs
+@@ -164,6 +164,8 @@ mod tests {
+         PanelSpec {
+             position: None,
+             engages_decorations: false,
++            overlay: false,
++            retain_when_closed: false,
+             passive: false,
+             keyboard_focus: true,
+             initial_open: false,
+diff --git a/crates/bead-wayland/src/rendering.rs b/crates/bead-wayland/src/rendering.rs
+index a732f1de..3a8ce2ff 100644
+--- a/crates/bead-wayland/src/rendering.rs
++++ b/crates/bead-wayland/src/rendering.rs
+@@ -433,9 +433,9 @@ impl App {
+             return;
+         }
+         if self.surfaces[index].companion {
+-            // No dark or empty first frame: wait for the panel's own scene (bounded, so a failing
+-            // worker still shows its error scene).
+-            if !self.panel_ready && self.panel_started.elapsed() < Duration::from_millis(750) {
++            // A worker failure publishes an error scene. A loading worker must never
++            // expose the fallback buffer, even when hydration takes longer than a frame.
++            if !self.panel_ready {
+                 self.surfaces[index].redraw = true;
+                 return;
+             }
+diff --git a/crates/bead-wayland/src/runtime.rs b/crates/bead-wayland/src/runtime.rs
+index 2ce1a94e..a8e95c6f 100644
+--- a/crates/bead-wayland/src/runtime.rs
++++ b/crates/bead-wayland/src/runtime.rs
+@@ -27,7 +27,6 @@ pub(super) struct App {
+     pub(super) panel_close_epoch: u64,
+     /// The panel's own scene has been committed at least once (no dark/empty first frame before).
+     pub(super) panel_ready: bool,
+-    pub(super) panel_started: Instant,
+     pub(super) panel_reload_pending: bool,
+     pub(super) panel_target: bool,
+     /// The shown view was offered by a service (see `UiEvent::CompanionOffer`).
+@@ -224,7 +223,6 @@ pub fn run_runtime(
+         panel_canvas_owner: None,
+         panel_close_epoch: 0,
+         panel_ready: true,
+-        panel_started: Instant::now(),
+         panel_reload_pending: false,
+         panel_target: false,
+         panel_ambient: false,
+@@ -665,6 +663,7 @@ impl App {
+             layer.set_keyboard_interactivity(KeyboardInteractivity::None);
+             layer.commit();
+             Ok(WallpaperSurface {
++                palette: None,
+                 output: output.clone(),
+                 name: name.clone(),
+                 width: width as u32,
+@@ -1019,6 +1018,7 @@ impl App {
+                 .is_none_or(|provider| provider.is_current(frame))
+         });
+         if accepted && has_current {
++            bead_core::profile::mark("wallpaper_palette_accepted");
+             self.set_wallpaper_palette(palette.clone());
+             self.commit_pending_wallpapers(palette);
+         } else {
+@@ -1112,14 +1112,23 @@ impl App {
+         let old_pixels = surface
+             .transition
+             .take()
+-            .map(|transition| transition.pixels)
++            .and_then(|transition| transition.target.is_some().then_some(transition.pixels))
+             .or_else(|| surface.pixels.take())
+             .or(frame.previous_rgba);
+-        let transitioning = self.options.animate && old_pixels.is_some();
++        // A colour-scheme change is one coordinated swap. Fading only the
++        // wallpaper would leave the new chrome over the old image for 14 frames.
++        let transitioning = self.options.animate
++            && old_pixels.is_some()
++            && surface
++                .palette
++                .as_ref()
++                .is_some_and(|palette| palette.0 == frame.palette.0);
+         if transitioning {
+             surface.transition = Some(WallpaperTransition {
++                commit: Some((frame.revision, frame.commit_token.clone())),
++                palette: frame.palette.clone(),
+                 pixels: old_pixels.unwrap(),
+-                target: frame.rgba,
++                target: Some(frame.rgba),
+                 remaining: 14,
+             });
+             surface.pixels = None;
+@@ -1139,26 +1148,57 @@ impl App {
+             )
+             .is_err()
+             {
++                // The accepted pair must survive buffer backpressure. Reuse the
++                // transition retry slot without a second raster or a fade.
++                surface.transition = Some(WallpaperTransition {
++                    commit: Some((frame.revision, frame.commit_token)),
++                    palette: frame.palette,
++                    pixels: frame.rgba,
++                    target: None,
++                    remaining: 0,
++                });
++                surface.pixels = old_pixels;
++                surface.release_wait_ms = 0;
++                self.schedule_wallpaper_tick(frame.output);
+                 return;
+             }
+             surface.pixels = self.options.animate.then_some(frame.rgba);
+         }
++        surface.palette = Some(frame.palette.clone());
+         surface.release_wait_ms = 0;
+         surface.revision = frame.revision;
+         let output = frame.output.clone();
+         let revision = frame.revision;
++        if transitioning {
++            // A retry retains the notification until a target buffer really attaches.
++            self.wallpaper_tick(&output);
++        } else {
++            self.wallpaper_committed(&output, revision, &frame.commit_token, false);
++            self.schedule_wallpaper_release_poll(output);
++        }
++    }
++
++    fn wallpaper_committed(
++        &self,
++        output: &str,
++        revision: u64,
++        token: &std::sync::Arc<dyn std::any::Any + Send + Sync>,
++        transitioning: bool,
++    ) {
+         if let Some(provider) = &self.options.wallpaper {
+-            provider.committed(&output, revision, &frame.commit_token);
++            provider.committed(output, revision, token);
+         }
+         bead_core::profile::mark("wallpaper_surface_committed");
+-        println!(
+-            "WALLPAPER_SURFACE_COMMITTED output={} revision={} width={} height={} transition={}",
+-            frame.output, revision, frame.width, frame.height, transitioning
+-        );
+-        if transitioning {
+-            self.schedule_wallpaper_tick(output);
++        if let Some(surface) = self
++            .wallpaper_surfaces
++            .iter()
++            .find(|surface| surface.name == output)
++        {
++            println!(
++                "WALLPAPER_SURFACE_COMMITTED output={} revision={} width={} height={} transition={}",
++                output, revision, surface.width, surface.height, transitioning
++            );
+         }
+-        self.schedule_wallpaper_release_poll(frame.output.clone());
+     }
+ 
+     pub(super) fn wallpaper_tick(&mut self, output: &str) {
+@@ -1174,18 +1214,21 @@ impl App {
+             .output
+             .info(&output_handle)
+             .and_then(|info| info.logical_size);
+-        let finished = {
++        let (finished, commit) = {
+             let surface = &mut self.wallpaper_surfaces[index];
+             let Some(transition) = surface.transition.as_mut() else {
+                 return;
+             };
+-            let remaining = transition.remaining.max(1) as u16;
+-            for (current, target) in transition.pixels.iter_mut().zip(transition.target.iter()) {
+-                *current = ((*current as u16 * (remaining - 1) + *target as u16) / remaining) as u8;
+-            }
+-            transition.remaining = transition.remaining.saturating_sub(1);
+-            if transition.remaining == 0 {
+-                transition.pixels.copy_from_slice(&transition.target);
++            if let Some(target) = &transition.target {
++                let remaining = transition.remaining.max(1) as u16;
++                for (current, target) in transition.pixels.iter_mut().zip(target.iter()) {
++                    *current =
++                        ((*current as u16 * (remaining - 1) + *target as u16) / remaining) as u8;
++                }
++                transition.remaining = transition.remaining.saturating_sub(1);
++                if transition.remaining == 0 {
++                    transition.pixels.copy_from_slice(target);
++                }
+             }
+             if attach_wallpaper_buffer(
+                 WallpaperBufferTarget {
+@@ -1202,16 +1245,28 @@ impl App {
+             )
+             .is_err()
+             {
+-                false
+-            } else if transition.remaining == 0 {
+-                let transition = surface.transition.take().unwrap();
+-                surface.pixels = Some(transition.pixels);
+-                drop(transition.target);
+-                true
++                (false, None)
+             } else {
+-                false
++                surface.palette = Some(transition.palette.clone());
++                if let Some((revision, _)) = &transition.commit {
++                    surface.revision = *revision;
++                }
++                let commit = transition
++                    .commit
++                    .take()
++                    .map(|(revision, token)| (revision, token, transition.target.is_some()));
++                if transition.remaining == 0 {
++                    let transition = surface.transition.take().unwrap();
++                    surface.pixels = Some(transition.pixels);
++                    (true, commit)
++                } else {
++                    (false, commit)
++                }
+             }
+         };
++        if let Some((revision, token, fading)) = commit {
++            self.wallpaper_committed(output, revision, &token, fading);
++        }
+         if !finished {
+             self.schedule_wallpaper_tick(output.to_owned());
+         }
+@@ -1502,7 +1557,17 @@ impl App {
+             let layer = self.layers.create_layer_surface(
+                 qh,
+                 surface,
+-                Layer::Top,
++                if companion
++                    && self
++                        .options
++                        .panel_spec
++                        .as_ref()
++                        .is_some_and(|spec| spec.overlay)
++                {
++                    Layer::Overlay
++                } else {
++                    Layer::Top
++                },
+                 Some(&self.options.namespace),
+                 Some(&output),
+             );
+diff --git a/crates/nacre-shell/src/dashboard.rs b/crates/nacre-shell/src/dashboard.rs
+index 3e083107..01ed2841 100644
+--- a/crates/nacre-shell/src/dashboard.rs
++++ b/crates/nacre-shell/src/dashboard.rs
+@@ -303,6 +303,8 @@ pub fn spec(
+     Ok(bead::wayland::PanelSpec {
+         position: Some(crate::placement::Frame::default().positioner(attachment)),
+         engages_decorations: true,
++        overlay: false,
++        retain_when_closed: false,
+         passive: false,
+         keyboard_focus: true,
+         initial_open: false,
+diff --git a/crates/nacre-shell/src/extras.rs b/crates/nacre-shell/src/extras.rs
+index 0104836e..6501d211 100644
+--- a/crates/nacre-shell/src/extras.rs
++++ b/crates/nacre-shell/src/extras.rs
+@@ -1151,6 +1151,16 @@ impl Extras {
+             }
+         }
+     }
++    pub fn content_ready(&self) -> bool {
++        let state = self.state.borrow();
++        self.kind != Kind::Wallpaper
++            || !state.wallpaper_open
++            || !state.message.is_empty()
++            || (state.catalogue_boot == state.wallpaper_boot
++                && state.catalogue_boot.is_some()
++                && state.catalogue_pending_handles.is_empty())
++    }
++
+     pub fn image_bytes(&self) -> usize {
+         self.state.borrow().image_bytes
+     }
+@@ -1257,6 +1267,8 @@ pub fn panel(
+             crate::placement::Attachment::SceneEdge(bead::core::Edge::Bottom),
+         )),
+         engages_decorations: true,
++        overlay: kind == Kind::Wallpaper,
++        retain_when_closed: kind == Kind::Wallpaper,
+         passive: false,
+         keyboard_focus: true,
+         initial_open: false,
+diff --git a/crates/nacre-shell/src/extras/tests.rs b/crates/nacre-shell/src/extras/tests.rs
+index 67e2e76b..d42bf944 100644
+--- a/crates/nacre-shell/src/extras/tests.rs
++++ b/crates/nacre-shell/src/extras/tests.rs
+@@ -433,6 +433,10 @@ async fn wallpaper_catalogue_projects_and_selection_calls_revision_fenced_activa
+     let wake: CallWake = Arc::new(|| {});
+     let first = wallpaper.project(&stores, Some(wake.clone()));
+     assert_eq!(first["extras.wallpaper.loading"], Value::Bool(true));
++    assert!(
++        !wallpaper.content_ready(),
++        "metadata loading is not first content"
++    );
+     assert_eq!(
+         tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
+             .await
+@@ -521,6 +525,10 @@ async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_previe
+         bounds: Rect::new(0., 0., 8., 6.),
+     };
+     wallpaper.attach_images(&mut scene, Some(wake.clone()));
++    assert!(
++        !wallpaper.content_ready(),
++        "unhydrated thumbnails cannot be presented"
++    );
+     assert_eq!(
+         lab.calls.recv().await.unwrap(),
+         (
+@@ -587,6 +595,10 @@ async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_previe
+         bounds: Rect::new(0., 0., 8., 6.),
+     };
+     wallpaper.attach_images(&mut repeated, Some(wake.clone()));
++    assert!(
++        wallpaper.content_ready(),
++        "settled missing previews use their hydrated thumbnail on the first frame"
++    );
+     assert!(
+         lab.calls.try_recv().is_err(),
+         "a missing preview must not cause an automatic retry loop"
+@@ -595,6 +607,14 @@ async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_previe
+         repeated.asset_data.values().any(|bytes| !bytes.is_empty()),
+         "the advertised thumbnail remains a fallback"
+     );
++    // A real refresh ticket may be pending while displayed paths remain hydrated.
++    wallpaper.state.borrow_mut().catalogue =
++        wallpaper.begin("wallpaper.catalogue", json!({"ids":[]}), Some(wake));
++    assert!(wallpaper.state.borrow().catalogue.is_some());
++    assert!(
++        wallpaper.content_ready(),
++        "same-boot hydrated content remains ready during refresh"
++    );
+ }
+ 
+ #[tokio::test(flavor = "current_thread")]
+@@ -1000,11 +1020,25 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
+     );
+     runtime.services(Box::new(|_| {}));
+     assert!(runtime.viewport(1920, 1200));
+-    let initial_scene = runtime
+-        .stage(UiEvent::Reload)
+-        .unwrap()
+-        .expect("wallpaper picker loads");
+-    runtime.commit();
++    assert!(
++        runtime.stage(UiEvent::Reload).unwrap().is_none(),
++        "cold catalogue loading must not publish a blank first scene"
++    );
++    let mut first_content = None;
++    for _ in 0..200 {
++        if let Some(scene) = runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap() {
++            assert!(
++                scene.asset_data.values().any(|bytes| !bytes.is_empty()),
++                "first published content includes hydrated wallpaper bytes"
++            );
++            first_content = Some(scene);
++            assert!(runtime.commit());
++            break;
++        }
++        tokio::time::sleep(Duration::from_millis(5)).await;
++    }
++    let initial_scene =
++        first_content.expect("hydration eventually publishes the first content frame");
+     let frame = crate::placement::Frame::current();
+     let usable_width = (1920. - frame.left - frame.right).max(1.);
+     let usable_height = (1200. - frame.top - frame.bottom).max(1.);
+@@ -1055,6 +1089,11 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
+         .unwrap()
+         .expect("fullscreen layout relayouts");
+     runtime.session.commit(full_scene);
++    assert_eq!(
++        runtime.session.resolve("view.frame").unwrap(),
++        Value::Bool(false),
++        "Luau owns whether the spotlight joins the shell frame"
++    );
+     let fullscreen_root = runtime
+         .session
+         .view_nodes()
+@@ -1102,6 +1141,10 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
+         .unwrap()
+         .expect("carousel relayouts");
+     runtime.session.commit(carousel_scene);
++    assert_eq!(
++        runtime.session.resolve("view.frame").unwrap(),
++        Value::Bool(true)
++    );
+     assert_eq!(
+         tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
+             .await
+@@ -1151,8 +1194,12 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
+         .join("../../shell/sample.png")
+         .canonicalize()
+         .unwrap();
+-    let mut hydrated_scene = None;
++    let mut hydrated_scene =
++        Some(initial_scene).filter(|scene| scene.asset_data.contains_key(&fixture_image));
+     for _ in 0..200 {
++        if hydrated_scene.is_some() {
++            break;
++        }
+         let scene = runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
+         runtime.commit();
+         if scene
+@@ -1671,6 +1718,11 @@ fn wallpaper_picker_goldens() -> bead_test::Result<()> {
+             assert!(harness.scene().primitives.iter().any(|primitive|
+                 matches!(primitive, bead::render::Primitive::Image { path, .. } if path.file_name().is_some_and(|name| name == "sample.png"))),
+                 "populated picker must render wallpaper thumbnails");
++            if layout == "spotlight" {
++                assert!(!harness.scene().primitives.iter().any(|primitive| matches!(primitive,
++                    bead::render::Primitive::Image { rect, .. } if rect.w >= 1216. && rect.h >= 936.)),
++                    "spotlight must leave the live desktop behind its translucent scrim");
++            }
+             let frame = harness.render()?;
+             for primitive in &harness.scene().primitives {
+                 if let bead::render::Primitive::Text {
+diff --git a/crates/nacre-shell/src/launcher_panel.rs b/crates/nacre-shell/src/launcher_panel.rs
+index 5d404e72..9a3d12d4 100644
+--- a/crates/nacre-shell/src/launcher_panel.rs
++++ b/crates/nacre-shell/src/launcher_panel.rs
+@@ -40,6 +40,8 @@ pub fn spec(
+                 .positioner(crate::placement::Attachment::Attached(Edge::Bottom)),
+         ),
+         engages_decorations: false,
++        overlay: false,
++        retain_when_closed: false,
+         passive: false,
+         keyboard_focus: true,
+         initial_open: false,
+diff --git a/crates/nacre-shell/src/main.rs b/crates/nacre-shell/src/main.rs
+index 33741517..822933d1 100644
+--- a/crates/nacre-shell/src/main.rs
++++ b/crates/nacre-shell/src/main.rs
+@@ -564,6 +564,8 @@ fn start(
+                     .positioner(placement::Attachment::Attached(bead::core::Edge::Right)),
+             ),
+             engages_decorations: true,
++            overlay: false,
++            retain_when_closed: false,
+             passive: false,
+             keyboard_focus: true,
+             initial_open: state::File::path()
+diff --git a/crates/nacre-shell/src/notice_views.rs b/crates/nacre-shell/src/notice_views.rs
+index 2d884c4e..ed0e6749 100644
+--- a/crates/nacre-shell/src/notice_views.rs
++++ b/crates/nacre-shell/src/notice_views.rs
+@@ -53,6 +53,8 @@ fn spec(owner: Owner, style: Style, geometry: Geometry, interactive: bool) -> Pa
+     PanelSpec {
+         position: geometry.position,
+         engages_decorations: false,
++        overlay: false,
++        retain_when_closed: false,
+         // Notices take pointer input (hover pauses the producer, cards click) but
+         // never keyboard focus or an outside-dismiss layer. The private compatibility
+         // owner's OSD stays click-through.
+diff --git a/crates/nacre-shell/src/pearls.rs b/crates/nacre-shell/src/pearls.rs
+index 4a9d5ac9..878ca124 100644
+--- a/crates/nacre-shell/src/pearls.rs
++++ b/crates/nacre-shell/src/pearls.rs
+@@ -625,6 +625,8 @@ pub fn guide_spec(colors: &Palette) -> Result<PanelSpec, Box<dyn Error>> {
+     Ok(PanelSpec {
+         position: Some(Arc::new(|scene, _, output| guide_origin(scene, output))),
+         engages_decorations: false,
++        overlay: false,
++        retain_when_closed: false,
+         passive: true,
+         keyboard_focus: false,
+         initial_open: false,
+diff --git a/crates/nacre-shell/src/popouts.rs b/crates/nacre-shell/src/popouts.rs
+index c2703e6b..47dd9080 100644
+--- a/crates/nacre-shell/src/popouts.rs
++++ b/crates/nacre-shell/src/popouts.rs
+@@ -38,6 +38,8 @@ pub fn calendar(
+             crate::placement::Frame::default().positioner(crate::placement::Attachment::Popout),
+         ),
+         engages_decorations: true,
++        overlay: false,
++        retain_when_closed: false,
+         passive: false,
+         keyboard_focus: true,
+         initial_open: false,
+@@ -127,6 +129,8 @@ pub(crate) fn core_sound_with_root(
+             crate::placement::Frame::default().positioner(crate::placement::Attachment::Popout),
+         ),
+         engages_decorations: true,
++        overlay: false,
++        retain_when_closed: false,
+         passive: false,
+         keyboard_focus: true,
+         initial_open: false,
+@@ -192,6 +196,8 @@ pub fn session(
+                 .positioner(crate::placement::Attachment::ControlCenter),
+         ),
+         engages_decorations: true,
++        overlay: false,
++        retain_when_closed: false,
+         passive: false,
+         keyboard_focus: true,
+         initial_open: false,
+@@ -323,6 +329,8 @@ fn status_at_root_mode(
+             crate::placement::Frame::default().positioner(crate::placement::Attachment::Popout),
+         ),
+         engages_decorations: !peek,
++        overlay: false,
++        retain_when_closed: false,
+         passive: false,
+         keyboard_focus: !peek,
+         initial_open: false,
+@@ -465,6 +473,8 @@ pub fn chat(
+             crate::placement::Attachment::Attached(bead::core::Edge::Left),
+         )),
+         engages_decorations: true,
++        overlay: false,
++        retain_when_closed: false,
+         passive: false,
+         keyboard_focus: true,
+         initial_open: false,
+@@ -534,6 +544,8 @@ pub fn control_center(
+                 .positioner(crate::placement::Attachment::ControlCenter),
+         ),
+         engages_decorations: true,
++        overlay: false,
++        retain_when_closed: false,
+         passive: false,
+         keyboard_focus: true,
+         initial_open: false,
+@@ -625,6 +637,8 @@ fn notification_panel(
+             crate::placement::Frame::default().positioner(crate::placement::Attachment::Popout),
+         ),
+         engages_decorations: !peek,
++        overlay: false,
++        retain_when_closed: false,
+         passive: false,
+         keyboard_focus: !peek,
+         initial_open: false,
+diff --git a/crates/nacre-shell/src/prompt.rs b/crates/nacre-shell/src/prompt.rs
+index d90f0931..3ca01350 100644
+--- a/crates/nacre-shell/src/prompt.rs
++++ b/crates/nacre-shell/src/prompt.rs
+@@ -283,6 +283,8 @@ pub fn panel(
+             crate::placement::Attachment::Attached(bead::core::Edge::Bottom),
+         )),
+         engages_decorations: false,
++        overlay: false,
++        retain_when_closed: false,
+         passive: false,
+         keyboard_focus: true,
+         initial_open: false,
+diff --git a/crates/nacre-shell/src/reload.rs b/crates/nacre-shell/src/reload.rs
+index 860e9885..750f549c 100644
+--- a/crates/nacre-shell/src/reload.rs
++++ b/crates/nacre-shell/src/reload.rs
+@@ -2294,10 +2294,23 @@ impl Runtime {
+             } else {
+                 self.chrome.as_ref()
+             };
+-            if let Some(chrome) = chrome {
++            if let Some(chrome) = chrome
++                && self.session.resolve("view.frame").ok() != Some(bead::core::Value::Bool(false))
++            {
+                 chrome.decorate(scene)?;
+             }
+         }
++        self.session.check_sources()?;
++        if self
++            .extras
++            .as_ref()
++            .is_some_and(|extras| !extras.content_ready())
++        {
++            if let Some(scene) = scene {
++                self.session.commit(scene);
++            }
++            return Ok(None);
++        }
+         if scene
+             .as_ref()
+             .and_then(|scene| scene.motion.as_ref())
+@@ -2307,7 +2320,6 @@ impl Runtime {
+         {
+             wakeup(UiEvent::CompanionVisibility(false));
+         }
+-        self.session.check_sources()?;
+         self.pending = scene.clone();
+         Ok(scene)
+     }
+diff --git a/crates/nacre-shell/src/tray.rs b/crates/nacre-shell/src/tray.rs
+index b4327c3d..81dd5ac7 100644
+--- a/crates/nacre-shell/src/tray.rs
++++ b/crates/nacre-shell/src/tray.rs
+@@ -148,6 +148,8 @@ pub fn spec(
+             crate::placement::Frame::default().positioner(crate::placement::Attachment::Popout),
+         ),
+         engages_decorations: true,
++        overlay: false,
++        retain_when_closed: false,
+         passive: false,
+         keyboard_focus: true,
+         initial_open: false,
+diff --git a/crates/nacre-shell/src/wallpaper.rs b/crates/nacre-shell/src/wallpaper.rs
+index 7d09a007..44a8b783 100644
+--- a/crates/nacre-shell/src/wallpaper.rs
++++ b/crates/nacre-shell/src/wallpaper.rs
+@@ -1,7 +1,7 @@
+ // SPDX-License-Identifier: GPL-3.0-only
+ //! Secure, descriptor-pinned decoding for the published wallpaper contract.
+ use bead::core::source::{Publisher, Source, Subscription};
+-use nacre_protocol::wallpaper::{ActiveWallpaper, WallpaperActive, WallpaperFileIdentity};
++use nacre_protocol::wallpaper::{ActiveWallpaper, WallpaperActive};
+ use std::{
+     collections::BTreeMap,
+     sync::{Arc, Mutex},
+@@ -20,11 +20,7 @@ fn supports_wallpaper_v1(status: &crate::nacre_source::Status) -> bool {
+ struct PreviewSelection {
+     boot: String,
+     id: String,
+-    preview: String,
+-    kind: String,
+-    animated: bool,
+     generation: u64,
+-    video_identity: Option<WallpaperFileIdentity>,
+ }
+ #[derive(Default)]
+ struct PreviewState {
+@@ -32,8 +28,7 @@ struct PreviewState {
+     selected: Option<PreviewSelection>,
+ }
+ 
+-/// One shared, short-lived selection preview. It carries only bounded path and identity metadata;
+-/// raster bytes are decoded for a single output frame and then released.
++/// One shared pending selection fence. Never display its image with the previous palette.
+ pub(crate) struct Preview {
+     publisher: Publisher,
+     state: Mutex<PreviewState>,
+@@ -59,15 +54,12 @@ impl Preview {
+         id: String,
+         preview: String,
+         kind: String,
+-        animated: bool,
++        _animated: bool,
+     ) -> u64 {
+         let _publish_order = self.publish_order.lock().unwrap_or_else(|p| p.into_inner());
+         let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
+         state.generation = state.generation.saturating_add(1).max(1);
+         let generation = state.generation;
+-        let video_identity = (kind == "video" || animated)
+-            .then(|| local_file_identity(&id, 64 * 1024 * 1024 * 1024))
+-            .flatten();
+         let selected = (boot.len() <= 128
+             && !boot.is_empty()
+             && valid_local_path(&id)
+@@ -76,16 +68,11 @@ impl Preview {
+         .then(|| PreviewSelection {
+             boot: boot.clone(),
+             id: id.clone(),
+-            preview: preview.clone(),
+-            kind: kind.clone(),
+-            animated,
+             generation,
+-            video_identity,
+         });
+         let published = selected.as_ref().map(|selection| {
+             serde_json::json!({
+-                "boot":selection.boot,"id":selection.id,"preview":selection.preview,
+-                "kind":selection.kind,"animated":selection.animated
++                "boot":selection.boot,"id":selection.id
+             })
+         });
+         state.selected = selected;
+@@ -139,33 +126,18 @@ fn valid_local_path(path: &str) -> bool {
+             .components()
+             .any(|component| matches!(component, std::path::Component::ParentDir))
+ }
+-fn local_file_identity(path: &str, limit: u64) -> Option<WallpaperFileIdentity> {
+-    if !valid_local_path(path) {
+-        return None;
+-    }
+-    let metadata = std::fs::symlink_metadata(path).ok()?;
+-    (metadata.is_file() && !metadata.file_type().is_symlink() && metadata.len() <= limit)
+-        .then(|| WallpaperFileIdentity::from_metadata(&metadata))
+-}
+-
+ pub(crate) struct Consumer {
+     client: crate::nacre_source::Client,
+     topic: crate::nacre_source::Topic,
+     preview: Arc<Preview>,
+     subscriptions: Mutex<Vec<Subscription>>,
+     displayed: Mutex<BTreeMap<String, ActiveWallpaper>>,
+-    preview_visual: Mutex<BTreeMap<String, ActiveWallpaper>>,
++    motion_commits: Publisher,
+ }
+ struct PairToken {
+     boot: String,
+     pair: ActiveWallpaper,
+ }
+-struct PreviewToken {
+-    boot: String,
+-    id: String,
+-    generation: u64,
+-    pair: ActiveWallpaper,
+-}
+ impl Consumer {
+     #[cfg(test)]
+     pub(crate) fn start(socket: std::path::PathBuf) -> Result<Arc<Self>, String> {
+@@ -195,7 +167,11 @@ impl Consumer {
+             preview,
+             subscriptions: Mutex::new(Vec::new()),
+             displayed: Mutex::new(BTreeMap::new()),
+-            preview_visual: Mutex::new(BTreeMap::new()),
++            motion_commits: Publisher::new(
++                "wallpaper-motion-commits".into(),
++                serde_json::json!({}),
++            )
++            .map_err(|error| error.to_string())?,
+         });
+         // Retain the reconnecting client even when the daemon starts later.
+         // Contract checks belong to state/activation, never startup admission.
+@@ -228,12 +204,23 @@ impl Consumer {
+         {
+             return None;
+         }
+-        let selected = self.preview.selected();
+-        if let Some(selected) = selected.filter(|selected| {
+-            status.boot.as_deref() == Some(&selected.boot)
+-                && !active_matches_id(&snapshot.data, &selected.id)
+-        }) {
+-            return pending_motion_source(&selected);
++        let state: WallpaperActive = serde_json::from_value((*snapshot.data).clone()).ok()?;
++        state.validate().ok()?;
++        let current = state.current.as_ref()?;
++        let displayed = self.displayed.lock().ok()?;
++        // One shared motion source: every output using it must first commit its
++        // corresponding poster/palette pair. Other outputs do not hold it back.
++        let mut matching = state
++            .outputs
++            .iter()
++            .filter(|(_, pair)| pair.motion == current.motion)
++            .peekable();
++        if matching.peek().is_none()
++            || !matching.all(|(output, pair)| displayed.get(output) == Some(pair))
++            || status.boot.is_none()
++            || self.client.status().boot != status.boot
++        {
++            return None;
+         }
+         parse_motion(&snapshot.data)
+     }
+@@ -246,14 +233,25 @@ impl Consumer {
+         &self,
+         changed: Arc<dyn Fn() + Send + Sync>,
+     ) -> Option<Vec<Subscription>> {
+-        let preview_changed = changed.clone();
+-        let preview = self
+-            .preview
+-            .publisher
+-            .subscribe(Arc::new(move |_| preview_changed()))
++        let committed_changed = changed.clone();
++        let committed = self
++            .motion_commits
++            .subscribe(Arc::new(move |_| committed_changed()))
+             .ok()?;
+         let active = Source::subscribe(&self.topic, Arc::new(move |_| changed())).ok()?;
+-        Some(vec![preview, active])
++        Some(vec![committed, active])
++    }
++
++    #[cfg(test)]
++    pub(crate) fn commit_token_for_test(
++        &self,
++        output: &str,
++    ) -> Option<Arc<dyn std::any::Any + Send + Sync>> {
++        let state = self.state().ok()?;
++        Some(Arc::new(PairToken {
++            boot: self.client.status().boot?,
++            pair: state.outputs.get(output)?.clone(),
++        }))
+     }
+ 
+     /// Palette is deliberately committed from the matching activation pair only
+@@ -299,50 +297,6 @@ impl bead::wayland::WallpaperProvider for Consumer {
+             return Err("wallpaper is stale".into());
+         }
+         let boot = status.boot.ok_or("wallpaper daemon boot unavailable")?;
+-        if let Some(selection) = self.preview.selected()
+-            && selection.boot == boot
+-        {
+-            if state
+-                .current
+-                .as_ref()
+-                .is_some_and(|pair| pair_matches_id(pair, &selection.id))
+-                || state
+-                    .outputs
+-                    .values()
+-                    .any(|pair| pair_matches_id(pair, &selection.id))
+-            {
+-                self.preview.cancel(selection.generation);
+-            } else if let Some(previous) = self
+-                .displayed
+-                .lock()
+-                .ok()
+-                .and_then(|displayed| displayed.get(&output).cloned())
+-                .or_else(|| state.outputs.get(&output).cloned())
+-                && let Some(pair) = preview_pair(&selection, &previous)
+-            {
+-                bead::core::profile::mark("wallpaper_decode_started");
+-                let decoded = decode_pair(pair, width, height)?;
+-                bead::core::profile::mark("wallpaper_decode_finished");
+-                let preview_pair = decoded.pair;
+-                return Ok(bead::wayland::WallpaperFrame {
+-                    output,
+-                    revision: preview_pair.revision.max(1),
+-                    width: decoded.width,
+-                    height: decoded.height,
+-                    rgba: decoded.rgba,
+-                    previous_rgba: None,
+-                    // A pending selection never advances the palette. This stays on the last
+-                    // frame the compositor actually confirmed, even during queued activations.
+-                    palette: palette(&previous),
+-                    commit_token: Arc::new(PreviewToken {
+-                        boot,
+-                        id: selection.id,
+-                        generation: selection.generation,
+-                        pair: preview_pair,
+-                    }),
+-                });
+-            }
+-        }
+         bead::core::profile::mark("wallpaper_decode_started");
+         let decoded = decode(&state, &output, width, height)?;
+         bead::core::profile::mark("wallpaper_decode_finished");
+@@ -390,63 +344,18 @@ impl bead::wayland::WallpaperProvider for Consumer {
+         })
+     }
+     fn prepare_transition(&self, output: &str, width: u32, height: u32) -> Option<Vec<u8>> {
+-        let previous = self
+-            .preview_visual
+-            .lock()
+-            .ok()?
+-            .get(output)
+-            .cloned()
+-            .or_else(|| self.displayed.lock().ok()?.get(output).cloned())?;
++        let previous = self.displayed.lock().ok()?.get(output).cloned()?;
+         let state = self.state().ok()?;
+         let current = state.outputs.get(output)?.clone();
+-        let status = self.client.status();
+-        let preview_pending = self.preview.selected().is_some_and(|selection| {
+-            status.boot.as_deref() == Some(&selection.boot)
+-                && !pair_matches_id(&current, &selection.id)
+-        });
+-        if previous == current && !preview_pending {
++        if previous == current {
+             return None;
+         }
+-        let fallback = self
+-            .displayed
+-            .lock()
+-            .ok()?
+-            .get(output)
+-            .filter(|confirmed| **confirmed != previous)
+-            .cloned();
+         decode_pair(previous, width, height)
+-            .or_else(|_| {
+-                fallback.map_or_else(
+-                    || Err("wallpaper unavailable".into()),
+-                    |p| decode_pair(p, width, height),
+-                )
+-            })
+             .ok()
+             .map(|decoded| decoded.rgba)
+     }
+     fn is_current(&self, frame: &bead::wayland::WallpaperFrame) -> bool {
+         let status = self.client.status();
+-        if let Some(token) = frame.commit_token.downcast_ref::<PreviewToken>() {
+-            if status.boot.as_deref() != Some(&token.boot)
+-                || !supports_wallpaper_v1(&status)
+-                || self.preview.generation_for(&token.boot, &token.id) != Some(token.generation)
+-            {
+-                return false;
+-            }
+-            return self.state().is_ok_and(|state| {
+-                if !state.available || state.stale {
+-                    return false;
+-                }
+-                let matches = state
+-                    .outputs
+-                    .get(&frame.output)
+-                    .is_some_and(|pair| pair_matches_id(pair, &token.id));
+-                if matches {
+-                    self.preview.cancel(token.generation);
+-                }
+-                !matches
+-            });
+-        }
+         let Some(token) = frame.commit_token.downcast_ref::<PairToken>() else {
+             return false;
+         };
+@@ -462,30 +371,6 @@ impl bead::wayland::WallpaperProvider for Consumer {
+             })
+     }
+     fn committed(&self, output: &str, revision: u64, token: &Arc<dyn std::any::Any + Send + Sync>) {
+-        if let Some(preview) = token.downcast_ref::<PreviewToken>() {
+-            let status = self.client.status();
+-            let active_pending = self.state().ok().is_some_and(|state| {
+-                state.available
+-                    && !state.stale
+-                    && state
+-                        .outputs
+-                        .get(output)
+-                        .is_some_and(|pair| !pair_matches_id(pair, &preview.id))
+-            });
+-            if preview.pair.revision.max(1) != revision
+-                || status.boot.as_deref() != Some(&preview.boot)
+-                || !supports_wallpaper_v1(&status)
+-                || self.preview.generation_for(&preview.boot, &preview.id)
+-                    != Some(preview.generation)
+-                || !active_pending
+-            {
+-                return;
+-            }
+-            if let Ok(mut visual) = self.preview_visual.lock() {
+-                visual.insert(output.into(), preview.pair.clone());
+-            }
+-            return;
+-        }
+         let Some(pair) = token.downcast_ref::<PairToken>() else {
+             return;
+         };
+@@ -507,18 +392,20 @@ impl bead::wayland::WallpaperProvider for Consumer {
+         if let Ok(mut displayed) = self.displayed.lock() {
+             displayed.insert(output.into(), pair.pair.clone());
+         }
+-        if let Ok(mut visual) = self.preview_visual.lock() {
+-            visual.remove(output);
++        if let Some(selection) = self.preview.selected().filter(|selection| {
++            selection.boot == pair.boot && pair_matches_id(&pair.pair, &selection.id)
++        }) {
++            self.preview.cancel(selection.generation);
+         }
++        let _ = self
++            .motion_commits
++            .publish(serde_json::json!({"output":output,"revision":revision}));
+     }
+     fn discarded(&self, _output: &str, _revision: u64) {}
+     fn output_removed(&self, output: &str) {
+         if let Ok(mut displayed) = self.displayed.lock() {
+             displayed.remove(output);
+         }
+-        if let Ok(mut visual) = self.preview_visual.lock() {
+-            visual.remove(output);
+-        }
+     }
+ }
+ 
+@@ -559,65 +446,6 @@ pub(crate) fn parse_motion(state: &serde_json::Value) -> Option<bead_wallpaper::
+ fn pair_matches_id(pair: &ActiveWallpaper, id: &str) -> bool {
+     pair.path == id || pair.motion.as_ref().is_some_and(|motion| motion.path == id)
+ }
+-fn active_matches_id(state: &serde_json::Value, id: &str) -> bool {
+-    state.get("available") == Some(&serde_json::Value::Bool(true))
+-        && state.get("stale") == Some(&serde_json::Value::Bool(false))
+-        && (state
+-            .get("current")
+-            .and_then(|pair| serde_json::from_value::<ActiveWallpaper>(pair.clone()).ok())
+-            .is_some_and(|pair| pair_matches_id(&pair, id))
+-            || state["outputs"].as_object().is_some_and(|outputs| {
+-                outputs.values().any(|value| {
+-                    serde_json::from_value::<ActiveWallpaper>(value.clone())
+-                        .is_ok_and(|pair| pair_matches_id(&pair, id))
+-                })
+-            }))
+-}
+-fn pending_motion_source(selected: &PreviewSelection) -> Option<bead_wallpaper::protocol::Source> {
+-    if selected.kind != "video" && !selected.animated {
+-        return None;
+-    }
+-    let identity = selected.video_identity.as_ref()?;
+-    let metadata = std::fs::symlink_metadata(&selected.id).ok()?;
+-    if !metadata.is_file() || metadata.file_type().is_symlink() || !identity.matches(&metadata) {
+-        return None;
+-    }
+-    Some(bead_wallpaper::protocol::Source::Video {
+-        path: selected.id.clone(),
+-        fit: bead_wallpaper::protocol::Fit::Crop,
+-        looped: true,
+-    })
+-}
+-
+-/// Replace only the image source on a confirmed pair, retaining its published palette and
+-/// presentation. The normal descriptor-pinned decoder then scales the bounded preview.
+-fn preview_pair(
+-    selection: &PreviewSelection,
+-    confirmed: &ActiveWallpaper,
+-) -> Option<ActiveWallpaper> {
+-    const PREVIEW_LIMIT: u64 = 2 * 1024 * 1024;
+-    let identity = local_file_identity(&selection.preview, PREVIEW_LIMIT)?;
+-    let reader = image::ImageReader::open(&selection.preview)
+-        .ok()?
+-        .with_guessed_format()
+-        .ok()?;
+-    if reader.format() != Some(image::ImageFormat::Jpeg) {
+-        return None;
+-    }
+-    let (width, height) = reader.into_dimensions().ok()?;
+-    if width == 0 || height == 0 || width > 1600 || height > 1000 {
+-        return None;
+-    }
+-    if local_file_identity(&selection.preview, PREVIEW_LIMIT).as_ref() != Some(&identity) {
+-        return None;
+-    }
+-    let mut pair = confirmed.clone();
+-    pair.path = selection.preview.clone();
+-    pair.file_identity = identity;
+-    pair.motion = None;
+-    Some(pair)
+-}
+-
+ pub(crate) struct Decoded {
+     pub width: u32,
+     pub height: u32,
+@@ -920,43 +748,6 @@ mod tests {
+         assert!(!supports_wallpaper_v1(&status));
+     }
+ 
+-    #[test]
+-    fn pending_motion_is_video_only_and_source_identity_fenced() {
+-        let root =
+-            std::env::temp_dir().join(format!("bead-wallpaper-preview-{}", std::process::id()));
+-        let _ = std::fs::remove_dir_all(&root);
+-        std::fs::create_dir(&root).unwrap();
+-        let video = root.join("selected.mp4");
+-        std::fs::write(&video, b"video source").unwrap();
+-        let preview = Preview::default();
+-        let generation = preview.select(
+-            "boot-preview".into(),
+-            video.to_string_lossy().into_owned(),
+-            root.join("preview.jpg").to_string_lossy().into_owned(),
+-            "video".into(),
+-            false,
+-        );
+-        let selected = preview.selected().unwrap();
+-        assert!(matches!(
+-            pending_motion_source(&selected),
+-            Some(bead_wallpaper::protocol::Source::Video { ref path, .. }) if path == video.to_str().unwrap()
+-        ));
+-        let mut animated_still = selected.clone();
+-        animated_still.kind = "image".into();
+-        animated_still.animated = true;
+-        assert!(matches!(
+-            pending_motion_source(&animated_still),
+-            Some(bead_wallpaper::protocol::Source::Video { .. })
+-        ));
+-        let mut still = animated_still.clone();
+-        still.animated = false;
+-        assert!(pending_motion_source(&still).is_none());
+-        std::fs::write(&video, b"replacement source").unwrap();
+-        assert!(pending_motion_source(&selected).is_none());
+-        assert!(preview.cancel(generation));
+-        let _ = std::fs::remove_dir_all(root);
+-    }
+-
+     #[test]
+     fn decoder_rejects_malformed_bytes_identity_mismatch_and_symlink_paths() {
+         use std::os::unix::fs::symlink;
+@@ -1105,22 +896,24 @@ mod tests {
+             )
+             .await
+             .unwrap();
+-            let Message::Call { id, m, p, .. } = reader.next().await.unwrap().unwrap() else {
+-                panic!("wallpaper.activate call expected");
+-            };
+-            assert_eq!(m, "wallpaper.activate");
+-            assert_eq!(p, serde_json::json!({"revision":1}));
+-            framing::write(
+-                &mut write,
+-                &Message::Ret {
+-                    id,
+-                    reply: Reply::Ok {
+-                        ok: serde_json::to_value(&pair).unwrap(),
++            for _ in 0..2 {
++                let Message::Call { id, m, p, .. } = reader.next().await.unwrap().unwrap() else {
++                    panic!("wallpaper.activate call expected");
++                };
++                assert_eq!(m, "wallpaper.activate");
++                assert_eq!(p, serde_json::json!({"revision":1}));
++                framing::write(
++                    &mut write,
++                    &Message::Ret {
++                        id,
++                        reply: Reply::Ok {
++                            ok: serde_json::to_value(&pair).unwrap(),
++                        },
+                     },
+-                },
+-            )
+-            .await
+-            .unwrap();
++                )
++                .await
++                .unwrap();
++            }
+             let _ = release_rx.await;
+         });
+         tokio::time::timeout(Duration::from_secs(2), async {
+@@ -1147,10 +940,11 @@ mod tests {
+         let token = Arc::downgrade(&frame.commit_token);
+         assert_eq!(frame.revision, 1);
+         assert_eq!(frame.rgba.len(), 8);
+-        assert!(frame.commit_token.is::<PreviewToken>());
+-        assert!(bead::wayland::WallpaperProvider::is_current(
+-            &*consumer, &frame
+-        ));
++        assert!(frame.commit_token.is::<PairToken>());
++        assert!(
++            !bead::wayland::WallpaperProvider::is_current(&*consumer, &frame),
++            "a pending selection must not expose a different image with the old palette"
++        );
+         bead::wayland::WallpaperProvider::committed(
+             &*consumer,
+             "DP-1",
+@@ -1186,12 +980,23 @@ mod tests {
+         assert!(bead::wayland::WallpaperProvider::is_current(
+             &*consumer, &confirmed
+         ));
++        preview.select(
++            "00000000-0000-4000-8000-000000000021".into(),
++            expected_pair.path.clone(),
++            preview_path.to_string_lossy().into_owned(),
++            "image".into(),
++            false,
++        );
+         bead::wayland::WallpaperProvider::committed(
+             &*consumer,
+             "DP-1",
+             confirmed.revision,
+             &confirmed.commit_token,
+         );
++        assert!(
++            preview.selected().is_none(),
++            "a successful commit releases the selection fence for future external updates"
++        );
+         assert_eq!(consumer.displayed("DP-1"), Some(expected_pair));
+         drop(confirmed);
+         drop(frame);
+diff --git a/crates/nacre-shell/src/wallpaper_motion.rs b/crates/nacre-shell/src/wallpaper_motion.rs
+index 6fae70e8..a7dc8e66 100644
+--- a/crates/nacre-shell/src/wallpaper_motion.rs
++++ b/crates/nacre-shell/src/wallpaper_motion.rs
+@@ -412,14 +412,19 @@ mod tests {
+         let identity = nacre_protocol::wallpaper::WallpaperFileIdentity::from_metadata(
+             &std::fs::metadata(&clip).unwrap(),
+         );
+-        let with_motion = json!({"available": true, "stale": false, "revision": 1, "outputs": {},
+-            "current": {"revision": 1, "motion": {"kind": "video", "path": clip, "file_identity": identity}}});
++        let pair = json!({"revision":1,"palette_revision":1,"path":clip,"file_identity":identity,
++            "presentation":"crop","motion":{"kind":"video","path":clip,"file_identity":identity},
++            "palette":{"mode":"dark","colours":{"background":"#101820","onSurface":"#f0f4f8","primary":"#22aa88"}}});
++        let with_motion = json!({"available":true,"stale":false,"revision":1,
++            "outputs":{"DP-1":pair.clone(),"DP-2":pair.clone()},"current":pair});
+         // Patches are merge patches: null removes the member.
+         let without = json!({"current": {"motion": null}});
+         let socket = dir.join("daemon.sock");
+         let listener = UnixListener::bind(&socket).unwrap();
+         std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600)).unwrap();
+         let (clear_tx, clear_rx) = tokio::sync::oneshot::channel::<()>();
++        let (snapshot_tx, snapshot_rx) = tokio::sync::oneshot::channel::<()>();
++        let (outputs_tx, outputs_rx) = tokio::sync::oneshot::channel::<()>();
+         let server = tokio::spawn(async move {
+             let (stream, _) = listener.accept().await.unwrap();
+             let (read, mut write) = stream.into_split();
+@@ -461,18 +466,35 @@ mod tests {
+                 &Message::Snap {
+                     topic: "wallpaper.active".into(),
+                     seq: 0,
+-                    data: with_motion,
++                    data: {
++                        let mut initial = with_motion.clone();
++                        initial["outputs"] = json!({});
++                        initial
++                    },
+                 },
+             )
+             .await
+             .unwrap();
+-            let _ = clear_rx.await;
++            snapshot_tx.send(()).unwrap();
++            let _ = outputs_rx.await;
+             framing::write(
+                 &mut write,
+                 &Message::Patch {
+                     topic: "wallpaper.active".into(),
+                     base: 0,
+                     seq: 1,
++                    data: json!({"outputs":with_motion["outputs"]}),
++                },
++            )
++            .await
++            .unwrap();
++            let _ = clear_rx.await;
++            framing::write(
++                &mut write,
++                &Message::Patch {
++                    topic: "wallpaper.active".into(),
++                    base: 1,
++                    seq: 2,
+                     data: without,
+                 },
+             )
+@@ -490,7 +512,7 @@ mod tests {
+         let log_for_command = log.clone();
+         let controller = Controller::start_with(
+             Deps {
+-                wallpaper,
++                wallpaper: wallpaper.clone(),
+                 picker: None,
+                 backend: None,
+                 desktop: None,
+@@ -517,6 +539,43 @@ mod tests {
+                 false
+             }
+         };
++        snapshot_rx.await.unwrap();
++        tokio::time::sleep(Duration::from_millis(150)).await;
++        assert!(
++            wallpaper.motion().is_none(),
++            "a published source without known outputs is not ready"
++        );
++        assert!(
++            !std::fs::read_to_string(&log)
++                .unwrap_or_default()
++                .contains("\"kind\":\"video\""),
++            "startup cannot play before any poster/palette commit"
++        );
++        outputs_tx.send(()).unwrap();
++        let mut token = None;
++        for _ in 0..200 {
++            token = wallpaper.commit_token_for_test("DP-1");
++            if token.is_some() {
++                break;
++            }
++            tokio::time::sleep(Duration::from_millis(5)).await;
++        }
++        let token = token.expect("published pair reached the consumer");
++        tokio::time::sleep(Duration::from_millis(100)).await;
++        assert!(
++            !std::fs::read_to_string(&log)
++                .unwrap_or_default()
++                .contains("\"kind\":\"video\""),
++            "publishing a motion topic must not bypass the poster/palette commit"
++        );
++        bead::wayland::WallpaperProvider::committed(&*wallpaper, "DP-1", 1, &token);
++        tokio::time::sleep(Duration::from_millis(100)).await;
++        assert!(
++            wallpaper.motion().is_none(),
++            "the shared source waits for every output using it"
++        );
++        let second = wallpaper.commit_token_for_test("DP-2").unwrap();
++        bead::wayland::WallpaperProvider::committed(&*wallpaper, "DP-2", 1, &second);
+         assert!(
+             seen("\"kind\":\"video\"").await,
+             "source reached the renderer"
+diff --git a/crates/nacre-shell/src/widgets.rs b/crates/nacre-shell/src/widgets.rs
+index 107d548f..4d7715f9 100644
+--- a/crates/nacre-shell/src/widgets.rs
++++ b/crates/nacre-shell/src/widgets.rs
+@@ -188,6 +188,8 @@ pub fn editor(
+             crate::placement::Frame::default().positioner(crate::placement::Attachment::Popout),
+         ),
+         engages_decorations: false,
++        overlay: false,
++        retain_when_closed: false,
+         passive: false,
+         keyboard_focus: false,
+         initial_open: false,
+diff --git a/shell/README.md b/shell/README.md
+index 7b653e84..7c4da676 100644
+--- a/shell/README.md
++++ b/shell/README.md
+@@ -3,3 +3,6 @@
+ Future Nacre-derived UI files, scripts and assets live here under GPL-3.0,
+ retaining the upstream terms and any asset-specific notices. No production UI
+ is implemented during Phase 0.
++
++A hosted view can set or compute `view.frame = false` to draw its own floating
++composition without the shell's joined frame artwork. The default keeps the frame.
+diff --git a/shell/extras/behavior.luau b/shell/extras/behavior.luau
+index 813467a3..bff549dd 100644
+--- a/shell/extras/behavior.luau
++++ b/shell/extras/behavior.luau
+@@ -184,6 +184,9 @@ local exports = {
+     ["extras.do"] = "",
+   },
+   computed = {
++    ["view.frame"] = function(s)
++      return s["extras.kind"]~="wallpaper" or s["extras.wallpaper.layout"]~="spotlight"
++    end,
+     ["extras.filtered"] = filtered,
+     ["extras.wallpaper.backdrop"] = function(s)
+       for _, item in ipairs(filtered(s)) do
+diff --git a/shell/extras/tokens.luau b/shell/extras/tokens.luau
+index 47f13d99..191af14d 100644
+--- a/shell/extras/tokens.luau
++++ b/shell/extras/tokens.luau
+@@ -45,6 +45,7 @@ return {
+     search_height=40, search_min_width=160, search_max_width=640,
+     search_left_padding=16, search_right_padding=12, search_vertical=8, search_radius=16, search_focus_border=1,
+     carousel_body_clearance=52, carousel_content_gap=10, fullscreen_nav_clearance=56,
++    spotlight_width=1360, spotlight_height=560, spotlight_inset=48,
+     spotlight_body_clearance=74, spotlight_top_gap=24, hex_top_gap=22,
+     carousel_slot_estimate=266, carousel_card_max_width=280,
+     carousel_card_height_ratio=.66, card_gap=16, card_radius=15, image_radius=12, image_inset=3,
+diff --git a/shell/extras/wallpaper/main.luau b/shell/extras/wallpaper/main.luau
+index 9b3902ca..a725361d 100644
+--- a/shell/extras/wallpaper/main.luau
++++ b/shell/extras/wallpaper/main.luau
+@@ -9,9 +9,10 @@ local layout=ui.resolve_for_check(ui.bind("extras.wallpaper.layout")) or "carous
+ local kind=ui.resolve_for_check(ui.bind("extras.wallpaper.kind")) or "static"
+ local resource_revision=ui.resolve_for_check(ui.bind("extras.wallpaper.resource_revision")) or 0
+ local carousel=layout=="carousel"
++local spotlight=layout=="spotlight"
+ local search_focused=ui.resolve_for_check(ui.bind("bead.focused"))=="extras.search"
+-local width=carousel and math.max(T.wallpaper.carousel_min_width,math.min(T.wallpaper.carousel_width,viewport_w-T.wallpaper.carousel_viewport_inset*2)) or viewport_w
+-local height=carousel and T.wallpaper.carousel_height or viewport_h
++local width=carousel and math.max(T.wallpaper.carousel_min_width,math.min(T.wallpaper.carousel_width,viewport_w-T.wallpaper.carousel_viewport_inset*2)) or spotlight and math.min(T.wallpaper.spotlight_width,viewport_w-T.wallpaper.spotlight_inset*2) or viewport_w
++local height=carousel and T.wallpaper.carousel_height or spotlight and math.min(T.wallpaper.spotlight_height,viewport_h-T.wallpaper.spotlight_inset*2) or viewport_h
+ local rows=ui.resolve_for_check(ui.bind("extras.filtered")) or {}
+ local count=#rows
+ local selected
+@@ -193,12 +194,12 @@ local nav=ui.Row{id="wallpaper-navigation",position="absolute",left=0,
+   width=width,height=T.wallpaper.nav_height,gap=T.wallpaper.nav_gap,align="center",justify="center",
+   nav_button("previous","Previous wallpaper","chevron_left","extras.prev"),
+   ui.Text{id="selected-title",width=math.min(T.wallpaper.nav_title_max_width,width-T.wallpaper.nav_title_reserved_width),height=T.wallpaper.nav_title_height,text=nav_title,
+-    font_size=T.wallpaper.nav_font,text_align="center",color=carousel and "onSurface" or T.wallpaper.photo_ink},
++    font_size=T.wallpaper.nav_font,text_align="center",color=(carousel or spotlight) and "onSurface" or T.wallpaper.photo_ink},
+   nav_button("next","Next wallpaper","chevron_right","extras.next")}
+ 
+-local backdrop=not carousel and ui.Image{id="gallery-backdrop-"..tostring(resource_revision),position="absolute",left=0,top=0,width=width,height=height,
++local backdrop=layout=="hexagons" and ui.Image{id="gallery-backdrop-"..tostring(resource_revision),position="absolute",left=0,top=0,width=width,height=height,
+   visible=ui.bind("extras.wallpaper.backdrop_visible"),icon=ui.bind("extras.wallpaper.backdrop"),image_fit="cover",aria_label="Selected wallpaper preview"} or nil
+-local scrim=not carousel and ui.Box{id="gallery-scrim",position="absolute",left=0,top=0,width=width,height=height,
++local scrim=layout=="hexagons" and ui.Box{id="gallery-scrim",position="absolute",left=0,top=0,width=width,height=height,
+   fill=ui.alpha("shadow",T.wallpaper.scrim_alpha)} or nil
+ local search_w=math.max(T.wallpaper.search_min_width,math.min(T.wallpaper.search_max_width,width-T.wallpaper.content_inset*2))
+ 
+@@ -210,11 +211,20 @@ local children={
+   controls,body,nav,
+   ui.Text{id="empty",position="absolute",left=T.wallpaper.content_inset,top=height/2-T.wallpaper.empty_center_offset,width=width-T.wallpaper.content_inset*2,height=T.wallpaper.empty_height,
+     text=ui.bind("extras.empty_message"),visible=#rows==0 and not ui.resolve_for_check(ui.bind("extras.status_visible")),font_size=T.panel.empty_font,
+-    text_align="center",color=carousel and "onSurface" or T.wallpaper.photo_ink},
++    text_align="center",color=(carousel or spotlight) and "onSurface" or T.wallpaper.photo_ink},
+   ui.Text{id="status",position="absolute",left=T.wallpaper.content_inset,top=body_y+body_h/2+T.wallpaper.status_center_offset,width=width-T.wallpaper.content_inset*2,height=T.wallpaper.status_height,
+     text=ui.bind("extras.status_message"),visible=ui.bind("extras.status_visible"),font_size=T.panel.empty_font,
+     text_align="center",color="onSurfaceVariant"}}
+ if backdrop then table.insert(children,1,scrim);table.insert(children,1,backdrop) end
++if spotlight then
++  return kit.Panel{id="extras",edge="bottom",open=ui.bind("panel.open"),width=viewport_w,height=viewport_h,
++    duration=T.panel.duration,transition=T.panel.transition,reveal=false,slide_distance=0,fade=true,radius=0,
++    fill=ui.alpha("shadow",T.wallpaper.scrim_alpha),padding=0,gap=0,
++    on_activate=ui.action("close"),aria_label="Close wallpaper picker",
++    ui.Box{id="spotlight-card",position="absolute",left=(viewport_w-width)/2,top=(viewport_h-height)/2,
++      width=width,height=height,radius=T.panel.radius,fill="surface",border_width=T.panel.border,
++      border_color="outlineVariant",table.unpack(children)}}
++end
+ return kit.Panel{id="extras",edge="bottom",open=ui.bind("panel.open"),width=width,height=height,
+   duration=T.panel.duration,transition=T.panel.transition,reveal=false,slide_distance=height,fade=false,radius=T.panel.radius,
+   fill="surface",border_width=carousel and T.panel.border or 0,
+diff --git a/shell/tests/goldens/wallpaper-picker-spotlight-dynamic-1.5.png b/shell/tests/goldens/wallpaper-picker-spotlight-dynamic-1.5.png
+index 3a86afbe..937cf266 100644
+Binary files a/shell/tests/goldens/wallpaper-picker-spotlight-dynamic-1.5.png and b/shell/tests/goldens/wallpaper-picker-spotlight-dynamic-1.5.png differ
+diff --git a/shell/tests/goldens/wallpaper-picker-spotlight-dynamic-1.png b/shell/tests/goldens/wallpaper-picker-spotlight-dynamic-1.png
+index 47461063..c79c427a 100644
+Binary files a/shell/tests/goldens/wallpaper-picker-spotlight-dynamic-1.png and b/shell/tests/goldens/wallpaper-picker-spotlight-dynamic-1.png differ
+diff --git a/shell/tests/goldens/wallpaper-picker-spotlight-static-1.5.png b/shell/tests/goldens/wallpaper-picker-spotlight-static-1.5.png
+index 61e184b1..82ccd4fe 100644
+Binary files a/shell/tests/goldens/wallpaper-picker-spotlight-static-1.5.png and b/shell/tests/goldens/wallpaper-picker-spotlight-static-1.5.png differ
+diff --git a/shell/tests/goldens/wallpaper-picker-spotlight-static-1.png b/shell/tests/goldens/wallpaper-picker-spotlight-static-1.png
+index 8dacc125..d49e6101 100644
+Binary files a/shell/tests/goldens/wallpaper-picker-spotlight-static-1.png and b/shell/tests/goldens/wallpaper-picker-spotlight-static-1.png differ
