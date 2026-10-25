@@ -314,6 +314,9 @@ impl TreeCache {
     pub fn drop_unused_since(&mut self, serial: u64) {
         self.entries.retain(|_, entry| entry.touched > serial);
         self.nodes.retain(|_, (_, touched)| *touched > serial);
+        // Finished rasters own their pixels. The baker's fonts, decoded textures
+        // and glyph scratch must not keep a replaced view resident.
+        self.raster = CpuRenderer::default();
     }
     /// Keep finished active rasters, release scratch and offscreen cache entries.
     pub fn trim_idle(&mut self) {
@@ -2617,6 +2620,28 @@ mod tests {
                 h: 1
             }
         );
+    }
+    #[test]
+    fn generation_retirement_keeps_current_rasters_at_every_scale() {
+        let scene = scene();
+        let mut cache = TreeCache::default();
+        let serial = cache.serial();
+        let mut frames = Vec::new();
+        for scale in [1., 1.5] {
+            cache.prepare(&scene, scale).unwrap();
+            frames.push(cache.frame.as_ref().unwrap().clone());
+        }
+        cache.drop_unused_since(serial);
+        let builds = cache.builds;
+        for (scale, before) in [1., 1.5].into_iter().zip(frames) {
+            cache.prepare(&scene, scale).unwrap();
+            let after = cache.frame.as_ref().unwrap();
+            assert!(Arc::ptr_eq(
+                before.items[0].raster.as_ref().unwrap(),
+                after.items[0].raster.as_ref().unwrap()
+            ));
+            assert_eq!(cache.builds, builds);
+        }
     }
     #[test]
     fn idle_trim_keeps_visible_pixels_and_rebuilds_changed_assets() {
