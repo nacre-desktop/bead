@@ -236,15 +236,10 @@ pub fn spec(
         motion.reveal = true;
     }
     let cold = fallback.clone();
-    Ok(bead::wayland::PanelSpec {
-        position: Some(crate::placement::Frame::default().positioner(attachment)),
-        engages_decorations: true,
-        passive: false,
-        keyboard_focus: true,
-        initial_open: false,
-        fallback,
-        renderer: bead::render::RendererKind::Cpu,
-        factory: Arc::new(move |open| {
+    let factory: Factory = {
+        let choice = choice.clone();
+        let owner = owner.clone();
+        Arc::new(move |page| {
             let source = choice.open(page).map_err(|e| e.to_string())?;
             let secondary = match page {
                 Page::Today => Some(choice.open_named("dashboard.weather", "weather")),
@@ -284,7 +279,10 @@ pub fn spec(
             let settings = choice.open_named(SETTINGS, "settings").ok();
             let controls = choice.client.clone().map(controls::Controls::new);
             let clock = if page == Page::Today {
-                let desktop = owner.get().cloned().ok_or("bar services not ready")?;
+                let desktop = owner
+                    .get()
+                    .cloned()
+                    .ok_or_else(|| "bar services not ready".to_owned())?;
                 Some(
                     Arc::new(bead::source::Clock::attach(desktop).map_err(|e| e.to_string())?)
                         as Arc<dyn Source>,
@@ -292,9 +290,27 @@ pub fn spec(
             } else {
                 None
             };
+            Ok(Dashboard::new(page, source, secondary, choice.fixtures.is_some())
+                .with_clock(clock)
+                .with_player(player)
+                .with_overview(system, wallpaper, summary_updates)
+                .with_controls(settings, controls, choice.client.clone())
+                .with_prefs(choice.prefs.clone()))
+        })
+    };
+    Ok(bead::wayland::PanelSpec {
+        position: Some(crate::placement::Frame::default().positioner(attachment)),
+        engages_decorations: true,
+        passive: false,
+        keyboard_focus: true,
+        initial_open: false,
+        fallback,
+        renderer: bead::render::RendererKind::Cpu,
+        factory: Arc::new(move |open| {
+            let initial = factory(page)?;
             let session = bead::ui::Session::new(
                 "shell".into(),
-                format!("dashboard/{}/main.luau", page.name()).into(),
+                "dashboard/main.luau".into(),
                 (*palette).clone(),
                 (*colors).clone(),
                 cold.clone(),
@@ -302,16 +318,7 @@ pub fn spec(
             crate::reload::Runtime::panel_session(session, open)
                 .with_trace(trace)
                 .with_frame(attachment, &colors)
-                .and_then(|runtime| {
-                    runtime.with_dashboard_view(
-                        Dashboard::new(page, source, secondary, choice.fixtures.is_some())
-                            .with_clock(clock)
-                            .with_player(player)
-                            .with_overview(system, wallpaper, summary_updates)
-                            .with_controls(settings, controls, choice.client.clone())
-                            .with_prefs(choice.prefs.clone()),
-                    )
-                })
+                .and_then(|runtime| runtime.with_dashboard_factory(initial, factory.clone()))
                 .map(|runtime| Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
                 .map_err(|e| e.to_string())
         }),
@@ -517,7 +524,11 @@ pub struct Dashboard {
     now: fn() -> u64,
     preview: bool,
 }
+pub type Factory = Arc<dyn Fn(Page) -> Result<Dashboard, String> + Send + Sync>;
 impl Dashboard {
+    pub fn page(&self) -> Page {
+        self.page
+    }
     pub fn new(
         page: Page,
         source: Arc<dyn Source>,
@@ -701,6 +712,10 @@ impl Dashboard {
             (
                 "dashboard.page".into(),
                 Value::Text(self.page.name().into()),
+            ),
+            (
+                "dashboard.reduce_motion".into(),
+                Value::Bool(self.prefs().is_some_and(|prefs| prefs.reduce_motion)),
             ),
             ("dashboard.title".into(), Value::Text(self.page.title())),
             ("dashboard.preview".into(), Value::Bool(self.preview)),

@@ -61,7 +61,11 @@ pub struct Runtime {
     welcome: Option<std::rc::Rc<crate::welcome::Welcome>>,
     control: Option<std::rc::Rc<crate::control_center::ControlCenter>>,
     control_subscription: Vec<bead::core::source::Subscription>,
-    dashboard: Option<std::rc::Rc<crate::dashboard::Dashboard>>,
+    dashboard: Option<std::rc::Rc<std::cell::RefCell<crate::dashboard::Dashboard>>>,
+    dashboard_factory: Option<crate::dashboard::Factory>,
+    dashboard_pearl_animation: Option<DashboardPearlAnimation>,
+    dashboard_pearl_timer: Option<u64>,
+    dashboard_pearl_epoch: u64,
     dashboard_subscription: Vec<bead::core::source::Subscription>,
     slider_sent: Option<std::time::Instant>,
     slider_pending: Option<UiEvent>,
@@ -116,6 +120,13 @@ pub struct Runtime {
     state_file: Option<crate::state::File>,
     actions: bead::core::capabilities::Registry,
     wakeup: Option<std::sync::Arc<dyn Fn(UiEvent) + Send + Sync>>,
+}
+struct DashboardPearlAnimation {
+    from: f64,
+    to: f64,
+    started: std::time::Instant,
+    duration: std::time::Duration,
+    easing: String,
 }
 impl Drop for Runtime {
     fn drop(&mut self) {
@@ -342,6 +353,10 @@ impl Runtime {
             control: None,
             control_subscription: Vec::new(),
             dashboard: None,
+            dashboard_factory: None,
+            dashboard_pearl_animation: None,
+            dashboard_pearl_timer: None,
+            dashboard_pearl_epoch: 0,
             dashboard_subscription: Vec::new(),
             slider_sent: None,
             slider_pending: None,
@@ -1185,12 +1200,14 @@ impl Runtime {
         {
             return Err("one data projector per panel".into());
         }
-        let dashboard = std::rc::Rc::new(dashboard);
+        let dashboard = std::rc::Rc::new(std::cell::RefCell::new(dashboard));
         let projector = dashboard.clone();
         self.session.set_projector(Box::new(move |stores| {
-            Ok(projector.project_with_stores(stores))
+            Ok(projector.borrow().project_with_stores(stores))
         }));
         self.actions.register("view.open", "ui.popouts")?;
+        self.actions.grant("ui.popouts");
+        self.actions.register("dashboard.select", "ui.popouts")?;
         self.actions.grant("ui.popouts");
         self.actions.register("dashboard.do", "dashboard.control")?;
         self.actions.grant("dashboard.control");
@@ -1198,6 +1215,26 @@ impl Runtime {
             chrome.set_engaged(true);
         }
         self.dashboard = Some(dashboard);
+        Ok(self)
+    }
+    pub fn with_dashboard_factory(
+        mut self,
+        dashboard: crate::dashboard::Dashboard,
+        factory: crate::dashboard::Factory,
+    ) -> Result<Self, Box<dyn Error>> {
+        self = self.with_dashboard_view(dashboard)?;
+        let page = self.dashboard.as_ref().map(|d| d.borrow().page());
+        if let Some(page) = page {
+            let mut changes = self.session.action_values(
+                "dashboard.select",
+                bead::core::Value::Text(page.name().into()),
+            )?;
+            if let Some(target) = changes.get("dashboard.pearl.target").cloned() {
+                changes.insert("dashboard.pearl.x".into(), target);
+            }
+            self.session.stores = self.session.stores.reconcile(&changes)?;
+        }
+        self.dashboard_factory = Some(factory);
         Ok(self)
     }
     pub fn with_launcher_memory(
@@ -1828,7 +1865,7 @@ impl Runtime {
                 crate::desktop::icons(scene, &self.with_daemon_tray(base))?;
             }
             if let Some(dashboard) = &self.dashboard {
-                dashboard.attach_art(scene);
+                dashboard.borrow().attach_art(scene);
             }
             if let Some(colors) = &self.colors {
                 colors.attach_images(scene);
@@ -2123,7 +2160,7 @@ impl SceneSource for Runtime {
             }));
         }
         if let Some(dashboard) = &self.dashboard {
-            match dashboard.subscribe(wakeup.clone()) {
+            match dashboard.borrow().subscribe(wakeup.clone()) {
                 Ok(subscription) => self.dashboard_subscription = subscription,
                 Err(_) => eprintln!("SOURCE_ERROR code=dashboard_subscription"),
             }
@@ -2296,6 +2333,114 @@ impl SceneSource for Runtime {
     ) -> Result<(), Box<dyn Error>> {
         self.session.watch(wakeup)
     }
+    fn select_dashboard_page(
+        &mut self,
+        page: crate::dashboard::Page,
+    ) -> Result<Option<Scene>, Box<dyn Error>> {
+        let Some(current) = &self.dashboard else {
+            return Ok(None);
+        };
+        if current.borrow().page() == page {
+            return Ok(None);
+        }
+        let Some(factory) = &self.dashboard_factory else {
+            return Ok(None);
+        };
+        let mut changes = self.session.action_values(
+            "dashboard.select",
+            bead::core::Value::Text(page.name().into()),
+        )?;
+        let target = match changes.get("dashboard.pearl.target") {
+            Some(bead::core::Value::Number(target)) => *target,
+            _ => return Err("dashboard pearl target is unavailable".into()),
+        };
+        let from = match self.session.stores.get("dashboard.pearl.x") {
+            Some(bead::core::Value::Number(value)) => *value,
+            _ => target,
+        };
+        let duration = match changes.get("dashboard.pearl.duration") {
+            Some(bead::core::Value::Number(value)) => *value,
+            _ => 0.,
+        };
+        let easing = match changes.get("dashboard.pearl.easing") {
+            Some(bead::core::Value::Text(value)) => value.clone(),
+            _ => String::new(),
+        };
+        let reduced_motion = self.session.stores.get("dashboard.reduce_motion")
+            == Some(&bead::core::Value::Bool(true));
+        let next = factory(page).map_err(std::io::Error::other)?;
+        let wakeup = self
+            .wakeup
+            .clone()
+            .ok_or("dashboard event channel unavailable")?;
+        let subscriptions = next.subscribe(wakeup)?;
+        *current.borrow_mut() = next;
+        self.dashboard_subscription = subscriptions;
+        let animate = !reduced_motion && duration > 0. && from != target;
+        if !animate {
+            changes.insert("dashboard.pearl.x".into(), bead::core::Value::Number(target));
+            self.dashboard_pearl_animation = None;
+            self.dashboard_pearl_timer = None;
+        } else {
+            self.dashboard_pearl_animation = Some(DashboardPearlAnimation {
+                from,
+                to: target,
+                started: std::time::Instant::now(),
+                duration: std::time::Duration::from_secs_f64(duration),
+                easing,
+            });
+        }
+        let scene = self.session.update(changes)?;
+        if animate {
+            self.schedule_dashboard_pearl_frame();
+        }
+        Ok(scene)
+    }
+
+    fn schedule_dashboard_pearl_frame(&mut self) {
+        let Some(wakeup) = self.wakeup.clone() else {
+            return;
+        };
+        self.dashboard_pearl_epoch = self.dashboard_pearl_epoch.wrapping_add(1);
+        let token = u64::MAX - self.dashboard_pearl_epoch;
+        self.dashboard_pearl_timer = Some(token);
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(16));
+            wakeup(UiEvent::Timer { token });
+        });
+    }
+
+    fn advance_dashboard_pearl(&mut self, token: u64) -> Result<Option<Scene>, Box<dyn Error>> {
+        if self.dashboard_pearl_timer != Some(token) {
+            return Ok(None);
+        }
+        let Some(animation) = &self.dashboard_pearl_animation else {
+            return Ok(None);
+        };
+        let progress = (animation.started.elapsed().as_secs_f64() / animation.duration.as_secs_f64())
+            .clamp(0., 1.);
+        let eased = if animation.easing == "out-cubic" {
+            1. - (1. - progress).powi(3)
+        } else {
+            progress
+        };
+        let x = animation.from + (animation.to - animation.from) * eased;
+        let done = progress >= 1.;
+        let value = if done { animation.to } else { x };
+        if done {
+            self.dashboard_pearl_animation = None;
+            self.dashboard_pearl_timer = None;
+        }
+        let scene = self.session.update(BTreeMap::from([(
+            "dashboard.pearl.x".into(),
+            bead::core::Value::Number(value),
+        )]))?;
+        if !done {
+            self.schedule_dashboard_pearl_frame();
+        }
+        Ok(scene)
+    }
+
     fn stage(&mut self, mut event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
         if let UiEvent::Click { x, y } = &event {
             self.session.capture_pointer(*x, *y);
@@ -2575,6 +2720,21 @@ impl SceneSource for Runtime {
             *name = "services.audio".into();
         }
         if let Some((_, name, bead::core::Value::Text(view))) = &host_action
+            && name == "dashboard.select"
+            && let Some(page) = crate::dashboard::Page::from_view(&format!("dashboard-{view}"))
+            && self.dashboard.is_some()
+            && (matches!(&event, UiEvent::Click { .. })
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            self.status_pill.escape();
+            self.status_pill_route = None;
+            self.schedule_status_pill();
+            let status_scene = self.publish_status_pill()?;
+            let scene = self.select_dashboard_page(page)?.or(status_scene);
+            return self.finish_scene(scene, false);
+        }
+        if let Some((_, name, bead::core::Value::Text(view))) = &host_action
             && name == "status.pill.open"
             && (matches!(&event, UiEvent::Click { .. })
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
@@ -2713,7 +2873,7 @@ impl SceneSource for Runtime {
             let wake: crate::nacre_source::CallWake = std::sync::Arc::new(move || {
                 wakeup(UiEvent::Model(BTreeMap::new()));
             });
-            dashboard.act(arg, wake);
+            dashboard.borrow().act(arg, wake);
             let scene = self.session.update(BTreeMap::new())?;
             return self.finish_scene(scene, false);
         }
@@ -3734,7 +3894,9 @@ impl SceneSource for Runtime {
                 None
             }
             UiEvent::Timer { token } => {
-                if token == self.status_pill_epoch {
+                if self.dashboard_pearl_timer == Some(token) {
+                    self.advance_dashboard_pearl(token)?
+                } else if token == self.status_pill_epoch {
                     let before = self.status_pill.clone();
                     self.status_pill.advance(std::time::Instant::now());
                     self.schedule_status_pill();
