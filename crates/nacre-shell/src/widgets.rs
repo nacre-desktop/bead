@@ -178,6 +178,8 @@ pub fn canvas(
             crate::placement::Frame::default().positioner(crate::placement::Attachment::Popout),
         ),
         engages_decorations: false,
+        overlay: false,
+        retain_when_closed: false,
         passive: false,
         keyboard_focus: false,
         initial_open: false,

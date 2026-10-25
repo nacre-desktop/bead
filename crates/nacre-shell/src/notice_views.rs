@@ -53,6 +53,8 @@ fn spec(owner: Owner, style: Style, geometry: Geometry, interactive: bool) -> Pa
     PanelSpec {
         position: geometry.position,
         engages_decorations: false,
+        overlay: false,
+        retain_when_closed: false,
         // Notices take pointer input (hover pauses the producer, cards click) but
         // never keyboard focus or an outside-dismiss layer. The private compatibility
         // owner's OSD stays click-through.

@@ -433,6 +433,10 @@ async fn wallpaper_catalogue_projects_and_selection_calls_revision_fenced_activa
     let wake: CallWake = Arc::new(|| {});
     let first = wallpaper.project(&stores, Some(wake.clone()));
     assert_eq!(first["extras.wallpaper.loading"], Value::Bool(true));
+    assert!(
+        !wallpaper.content_ready(),
+        "metadata loading is not first content"
+    );
     assert_eq!(
         tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
             .await
@@ -521,6 +525,10 @@ async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_previe
         bounds: Rect::new(0., 0., 8., 6.),
     };
     wallpaper.attach_images(&mut scene, Some(wake.clone()));
+    assert!(
+        !wallpaper.content_ready(),
+        "unhydrated thumbnails cannot be presented"
+    );
     assert_eq!(
         lab.calls.recv().await.unwrap(),
         (
@@ -587,6 +595,10 @@ async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_previe
         bounds: Rect::new(0., 0., 8., 6.),
     };
     wallpaper.attach_images(&mut repeated, Some(wake.clone()));
+    assert!(
+        wallpaper.content_ready(),
+        "settled missing previews use their hydrated thumbnail on the first frame"
+    );
     assert!(
         lab.calls.try_recv().is_err(),
         "a missing preview must not cause an automatic retry loop"
@@ -1000,11 +1012,25 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
     );
     runtime.services(Box::new(|_| {}));
     assert!(runtime.viewport(1920, 1200));
-    let initial_scene = runtime
-        .stage(UiEvent::Reload)
-        .unwrap()
-        .expect("wallpaper picker loads");
-    runtime.commit();
+    assert!(
+        runtime.stage(UiEvent::Reload).unwrap().is_none(),
+        "cold catalogue loading must not publish a blank first scene"
+    );
+    let mut first_content = None;
+    for _ in 0..200 {
+        if let Some(scene) = runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap() {
+            assert!(
+                scene.asset_data.values().any(|bytes| !bytes.is_empty()),
+                "first published content includes hydrated wallpaper bytes"
+            );
+            first_content = Some(scene);
+            assert!(runtime.commit());
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    let initial_scene =
+        first_content.expect("hydration eventually publishes the first content frame");
     let frame = crate::placement::Frame::current();
     let usable_width = (1920. - frame.left - frame.right).max(1.);
     let usable_height = (1200. - frame.top - frame.bottom).max(1.);
@@ -1671,6 +1697,11 @@ fn wallpaper_picker_goldens() -> bead_test::Result<()> {
             assert!(harness.scene().primitives.iter().any(|primitive|
                 matches!(primitive, bead::render::Primitive::Image { path, .. } if path.file_name().is_some_and(|name| name == "sample.png"))),
                 "populated picker must render wallpaper thumbnails");
+            if layout == "spotlight" {
+                assert!(!harness.scene().primitives.iter().any(|primitive| matches!(primitive,
+                    bead::render::Primitive::Image { rect, .. } if rect.w >= 1216. && rect.h >= 936.)),
+                    "spotlight must leave the live desktop behind its translucent scrim");
+            }
             let frame = harness.render()?;
             for primitive in &harness.scene().primitives {
                 if let bead::render::Primitive::Text {

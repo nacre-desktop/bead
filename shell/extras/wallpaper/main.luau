@@ -9,9 +9,10 @@ local layout=ui.resolve_for_check(ui.bind("extras.wallpaper.layout")) or "carous
 local kind=ui.resolve_for_check(ui.bind("extras.wallpaper.kind")) or "static"
 local resource_revision=ui.resolve_for_check(ui.bind("extras.wallpaper.resource_revision")) or 0
 local carousel=layout=="carousel"
+local spotlight=layout=="spotlight"
 local search_focused=ui.resolve_for_check(ui.bind("bead.focused"))=="extras.search"
-local width=carousel and math.max(T.wallpaper.carousel_min_width,math.min(T.wallpaper.carousel_width,viewport_w-T.wallpaper.carousel_viewport_inset*2)) or viewport_w
-local height=carousel and T.wallpaper.carousel_height or viewport_h
+local width=carousel and math.max(T.wallpaper.carousel_min_width,math.min(T.wallpaper.carousel_width,viewport_w-T.wallpaper.carousel_viewport_inset*2)) or spotlight and math.min(T.wallpaper.spotlight_width,viewport_w-T.wallpaper.spotlight_inset*2) or viewport_w
+local height=carousel and T.wallpaper.carousel_height or spotlight and math.min(T.wallpaper.spotlight_height,viewport_h-T.wallpaper.spotlight_inset*2) or viewport_h
 local rows=ui.resolve_for_check(ui.bind("extras.filtered")) or {}
 local count=#rows
 local selected
@@ -193,12 +194,12 @@ local nav=ui.Row{id="wallpaper-navigation",position="absolute",left=0,
   width=width,height=T.wallpaper.nav_height,gap=T.wallpaper.nav_gap,align="center",justify="center",
   nav_button("previous","Previous wallpaper","chevron_left","extras.prev"),
   ui.Text{id="selected-title",width=math.min(T.wallpaper.nav_title_max_width,width-T.wallpaper.nav_title_reserved_width),height=T.wallpaper.nav_title_height,text=nav_title,
-    font_size=T.wallpaper.nav_font,text_align="center",color=carousel and "onSurface" or T.wallpaper.photo_ink},
+    font_size=T.wallpaper.nav_font,text_align="center",color=(carousel or spotlight) and "onSurface" or T.wallpaper.photo_ink},
   nav_button("next","Next wallpaper","chevron_right","extras.next")}
 
-local backdrop=not carousel and ui.Image{id="gallery-backdrop-"..tostring(resource_revision),position="absolute",left=0,top=0,width=width,height=height,
+local backdrop=layout=="hexagons" and ui.Image{id="gallery-backdrop-"..tostring(resource_revision),position="absolute",left=0,top=0,width=width,height=height,
   visible=ui.bind("extras.wallpaper.backdrop_visible"),icon=ui.bind("extras.wallpaper.backdrop"),image_fit="cover",aria_label="Selected wallpaper preview"} or nil
-local scrim=not carousel and ui.Box{id="gallery-scrim",position="absolute",left=0,top=0,width=width,height=height,
+local scrim=layout=="hexagons" and ui.Box{id="gallery-scrim",position="absolute",left=0,top=0,width=width,height=height,
   fill=ui.alpha("shadow",T.wallpaper.scrim_alpha)} or nil
 local search_w=math.max(T.wallpaper.search_min_width,math.min(T.wallpaper.search_max_width,width-T.wallpaper.content_inset*2))
 
@@ -210,11 +211,20 @@ local children={
   controls,body,nav,
   ui.Text{id="empty",position="absolute",left=T.wallpaper.content_inset,top=height/2-T.wallpaper.empty_center_offset,width=width-T.wallpaper.content_inset*2,height=T.wallpaper.empty_height,
     text=ui.bind("extras.empty_message"),visible=#rows==0 and not ui.resolve_for_check(ui.bind("extras.status_visible")),font_size=T.panel.empty_font,
-    text_align="center",color=carousel and "onSurface" or T.wallpaper.photo_ink},
+    text_align="center",color=(carousel or spotlight) and "onSurface" or T.wallpaper.photo_ink},
   ui.Text{id="status",position="absolute",left=T.wallpaper.content_inset,top=body_y+body_h/2+T.wallpaper.status_center_offset,width=width-T.wallpaper.content_inset*2,height=T.wallpaper.status_height,
     text=ui.bind("extras.status_message"),visible=ui.bind("extras.status_visible"),font_size=T.panel.empty_font,
     text_align="center",color="onSurfaceVariant"}}
 if backdrop then table.insert(children,1,scrim);table.insert(children,1,backdrop) end
+if spotlight then
+  return kit.Panel{id="extras",edge="bottom",open=ui.bind("panel.open"),width=viewport_w,height=viewport_h,
+    duration=T.panel.duration,transition=T.panel.transition,reveal=false,slide_distance=0,fade=true,radius=0,
+    fill=ui.alpha("shadow",T.wallpaper.scrim_alpha),padding=0,gap=0,
+    on_activate=ui.action("close"),aria_label="Close wallpaper picker",
+    ui.Box{id="spotlight-card",position="absolute",left=(viewport_w-width)/2,top=(viewport_h-height)/2,
+      width=width,height=height,radius=T.panel.radius,fill="surface",border_width=T.panel.border,
+      border_color="outlineVariant",table.unpack(children)}}
+end
 return kit.Panel{id="extras",edge="bottom",open=ui.bind("panel.open"),width=width,height=height,
   duration=T.panel.duration,transition=T.panel.transition,reveal=false,slide_distance=height,fade=false,radius=T.panel.radius,
   fill="surface",border_width=carousel and T.panel.border or 0,

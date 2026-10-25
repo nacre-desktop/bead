@@ -564,6 +564,8 @@ fn start(
                     .positioner(placement::Attachment::Attached(bead::core::Edge::Right)),
             ),
             engages_decorations: true,
+            overlay: false,
+            retain_when_closed: false,
             passive: false,
             keyboard_focus: true,
             initial_open: state::File::path()

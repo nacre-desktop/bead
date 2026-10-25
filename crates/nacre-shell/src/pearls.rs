@@ -625,6 +625,8 @@ pub fn guide_spec(colors: &Palette) -> Result<PanelSpec, Box<dyn Error>> {
     Ok(PanelSpec {
         position: Some(Arc::new(|scene, _, output| guide_origin(scene, output))),
         engages_decorations: false,
+        overlay: false,
+        retain_when_closed: false,
         passive: true,
         keyboard_focus: false,
         initial_open: false,

@@ -557,6 +557,10 @@ pub struct PanelAnchor {
 pub struct PanelSpec {
     /// Application-selected active decoration state; no view names in the framework.
     pub engages_decorations: bool,
+    /// Place above application fullscreen surfaces (layer-shell overlay).
+    pub overlay: bool,
+    /// Keep this single resident view prepared until another view replaces it.
+    pub retain_when_closed: bool,
     /// Passive notices never create a dismissal layer or request keyboard focus.
     pub passive: bool,
     /// Request keyboard focus and an outside-dismiss layer while the panel is open.
@@ -776,6 +780,7 @@ impl Surface {
     }
 }
 struct WallpaperSurface {
+    palette: Option<bead_render::Palette>,
     output: wl_output::WlOutput,
     name: String,
     width: u32,

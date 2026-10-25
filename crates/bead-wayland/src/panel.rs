@@ -609,7 +609,6 @@ impl App {
         let epoch = self.panel_epoch;
         self.panel_reload_pending = false;
         self.panel_ready = false;
-        self.panel_started = Instant::now();
         self.panel_output = Some(output.clone());
         if open && spec.keyboard_focus && self.pearl.is_none() {
             self.create_dismiss(&output)?;
@@ -848,6 +847,14 @@ impl App {
             motion.open = false;
         }
         self.panel_ui(UiEvent::PanelVisibility(false));
+        if self
+            .options
+            .panel_spec
+            .as_ref()
+            .is_some_and(|spec| spec.retain_when_closed)
+        {
+            return;
+        }
         let qh = self.qh.clone();
         let epoch = self.panel_epoch;
         if let Err(e) = self.loop_handle.insert_source(
@@ -1035,7 +1042,16 @@ impl App {
         let layer = self.layers.create_layer_surface(
             &self.qh,
             surface,
-            Layer::Top,
+            if self
+                .options
+                .panel_spec
+                .as_ref()
+                .is_some_and(|spec| spec.overlay)
+            {
+                Layer::Overlay
+            } else {
+                Layer::Top
+            },
             Some("bead-panel-dismiss"),
             Some(output),
         );

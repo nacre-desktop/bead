@@ -433,9 +433,9 @@ impl App {
             return;
         }
         if self.surfaces[index].companion {
-            // No dark or empty first frame: wait for the panel's own scene (bounded, so a failing
-            // worker still shows its error scene).
-            if !self.panel_ready && self.panel_started.elapsed() < Duration::from_millis(750) {
+            // A worker failure publishes an error scene. A loading worker must never
+            // expose the fallback buffer, even when hydration takes longer than a frame.
+            if !self.panel_ready {
                 self.surfaces[index].redraw = true;
                 return;
             }

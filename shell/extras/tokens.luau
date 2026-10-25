@@ -45,6 +45,7 @@ return {
     search_height=40, search_min_width=160, search_max_width=640,
     search_left_padding=16, search_right_padding=12, search_vertical=8, search_radius=16, search_focus_border=1,
     carousel_body_clearance=52, carousel_content_gap=10, fullscreen_nav_clearance=56,
+    spotlight_width=1360, spotlight_height=560, spotlight_inset=48,
     spotlight_body_clearance=74, spotlight_top_gap=24, hex_top_gap=22,
     carousel_slot_estimate=266, carousel_card_max_width=280,
     carousel_card_height_ratio=.66, card_gap=16, card_radius=15, image_radius=12, image_inset=3,

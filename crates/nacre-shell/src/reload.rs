@@ -2243,9 +2243,26 @@ impl Runtime {
             } else {
                 self.chrome.as_ref()
             };
-            if let Some(chrome) = chrome {
+            let spotlight = self
+                .extras
+                .as_ref()
+                .is_some_and(|extras| extras.kind == crate::extras::Kind::Wallpaper)
+                && self.session.stores.get("extras.wallpaper.layout")
+                    == Some(&bead::core::Value::Text("spotlight".into()));
+            if !spotlight && let Some(chrome) = chrome {
                 chrome.decorate(scene)?;
             }
+        }
+        self.session.check_sources()?;
+        if self
+            .extras
+            .as_ref()
+            .is_some_and(|extras| !extras.content_ready())
+        {
+            if let Some(scene) = scene {
+                self.session.commit(scene);
+            }
+            return Ok(None);
         }
         if scene
             .as_ref()
@@ -2256,7 +2273,6 @@ impl Runtime {
         {
             wakeup(UiEvent::CompanionVisibility(false));
         }
-        self.session.check_sources()?;
         self.pending = scene.clone();
         Ok(scene)
     }

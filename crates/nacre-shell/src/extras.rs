@@ -1151,6 +1151,17 @@ impl Extras {
             }
         }
     }
+    pub fn content_ready(&self) -> bool {
+        let state = self.state.borrow();
+        self.kind != Kind::Wallpaper
+            || !state.wallpaper_open
+            || !state.message.is_empty()
+            || (state.catalogue_boot == state.wallpaper_boot
+                && state.catalogue_boot.is_some()
+                && state.catalogue.is_none()
+                && state.catalogue_pending_handles.is_empty())
+    }
+
     pub fn image_bytes(&self) -> usize {
         self.state.borrow().image_bytes
     }
@@ -1257,6 +1268,8 @@ pub fn panel(
             crate::placement::Attachment::SceneEdge(bead::core::Edge::Bottom),
         )),
         engages_decorations: true,
+        overlay: kind == Kind::Wallpaper,
+        retain_when_closed: kind == Kind::Wallpaper,
         passive: false,
         keyboard_focus: true,
         initial_open: false,

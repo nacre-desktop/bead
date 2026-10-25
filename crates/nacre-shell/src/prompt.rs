@@ -283,6 +283,8 @@ pub fn panel(
             crate::placement::Attachment::Attached(bead::core::Edge::Bottom),
         )),
         engages_decorations: false,
+        overlay: false,
+        retain_when_closed: false,
         passive: false,
         keyboard_focus: true,
         initial_open: false,

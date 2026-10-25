@@ -84,6 +84,8 @@ After Bead's core switch on Nacre, plan support for:
   and JSON-preserving `copy_value` are general APIs;
   widget identities, edit history, settings pages and composition remain in Luau.
 
+- B0123: `PanelSpec.overlay` selects layer-shell overlay; `retain_when_closed` keeps the single resident prepared view until replacement. Product layout stays in Luau.
+
 - B0113: `ui.Host` expands a horizontal strip into region-local tile spans or content-packed rows,
   resolves bar/compact variants, and preserves unknown packages in the caller's document;
   `column_start`/`column_span` expose general grid placement. Packages, presets and persistence stay in the shell.

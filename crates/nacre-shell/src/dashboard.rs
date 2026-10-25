@@ -303,6 +303,8 @@ pub fn spec(
     Ok(bead::wayland::PanelSpec {
         position: Some(crate::placement::Frame::default().positioner(attachment)),
         engages_decorations: true,
+        overlay: false,
+        retain_when_closed: false,
         passive: false,
         keyboard_focus: true,
         initial_open: false,

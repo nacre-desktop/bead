@@ -27,7 +27,6 @@ pub(super) struct App {
     pub(super) panel_close_epoch: u64,
     /// The panel's own scene has been committed at least once (no dark/empty first frame before).
     pub(super) panel_ready: bool,
-    pub(super) panel_started: Instant,
     pub(super) panel_reload_pending: bool,
     pub(super) panel_target: bool,
     /// The shown view was offered by a service (see `UiEvent::CompanionOffer`).
@@ -224,7 +223,6 @@ pub fn run_runtime(
         panel_canvas_owner: None,
         panel_close_epoch: 0,
         panel_ready: true,
-        panel_started: Instant::now(),
         panel_reload_pending: false,
         panel_target: false,
         panel_ambient: false,
@@ -665,6 +663,7 @@ impl App {
             layer.set_keyboard_interactivity(KeyboardInteractivity::None);
             layer.commit();
             Ok(WallpaperSurface {
+                palette: None,
                 output: output.clone(),
                 name: name.clone(),
                 width: width as u32,
@@ -1019,6 +1018,7 @@ impl App {
                 .is_none_or(|provider| provider.is_current(frame))
         });
         if accepted && has_current {
+            bead_core::profile::mark("wallpaper_palette_accepted");
             self.set_wallpaper_palette(palette.clone());
             self.commit_pending_wallpapers(palette);
         } else {
@@ -1115,7 +1115,14 @@ impl App {
             .map(|transition| transition.pixels)
             .or_else(|| surface.pixels.take())
             .or(frame.previous_rgba);
-        let transitioning = self.options.animate && old_pixels.is_some();
+        // A colour-scheme change is one coordinated swap. Fading only the
+        // wallpaper would leave the new chrome over the old image for 14 frames.
+        let transitioning = self.options.animate
+            && old_pixels.is_some()
+            && surface
+                .palette
+                .as_ref()
+                .is_some_and(|palette| palette.0 == frame.palette.0);
         if transitioning {
             surface.transition = Some(WallpaperTransition {
                 pixels: old_pixels.unwrap(),
@@ -1143,10 +1150,16 @@ impl App {
             }
             surface.pixels = self.options.animate.then_some(frame.rgba);
         }
+        surface.palette = Some(frame.palette.clone());
         surface.release_wait_ms = 0;
         surface.revision = frame.revision;
         let output = frame.output.clone();
         let revision = frame.revision;
+        if transitioning {
+            // Attach the first target blend in this turn, before acknowledging
+            // the pair or allowing its motion source to start.
+            self.wallpaper_tick(&output);
+        }
         if let Some(provider) = &self.options.wallpaper {
             provider.committed(&output, revision, &frame.commit_token);
         }
@@ -1155,9 +1168,6 @@ impl App {
             "WALLPAPER_SURFACE_COMMITTED output={} revision={} width={} height={} transition={}",
             frame.output, revision, frame.width, frame.height, transitioning
         );
-        if transitioning {
-            self.schedule_wallpaper_tick(output);
-        }
         self.schedule_wallpaper_release_poll(frame.output.clone());
     }
 
@@ -1502,7 +1512,17 @@ impl App {
             let layer = self.layers.create_layer_surface(
                 qh,
                 surface,
-                Layer::Top,
+                if companion
+                    && self
+                        .options
+                        .panel_spec
+                        .as_ref()
+                        .is_some_and(|spec| spec.overlay)
+                {
+                    Layer::Overlay
+                } else {
+                    Layer::Top
+                },
                 Some(&self.options.namespace),
                 Some(&output),
             );

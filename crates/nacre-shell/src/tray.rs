@@ -148,6 +148,8 @@ pub fn spec(
             crate::placement::Frame::default().positioner(crate::placement::Attachment::Popout),
         ),
         engages_decorations: true,
+        overlay: false,
+        retain_when_closed: false,
         passive: false,
         keyboard_focus: true,
         initial_open: false,
