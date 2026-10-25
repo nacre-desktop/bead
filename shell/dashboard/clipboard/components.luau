@@ -1,1 +1,2 @@
-../components.luau
+-- SPDX-License-Identifier: GPL-3.0-only
+return require("../components")

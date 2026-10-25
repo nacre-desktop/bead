@@ -15,6 +15,6 @@ return function()
         ui.Row{id="header",width=896,height=40,gap=12,align="center",
             ui.Text{id="title",text=ui.bind("dashboard.heading"),width=896-150-12,height=28,font_size=20,color="onSurface"},
             table.unpack(buttons)},
-        C.lines("items","dashboard.rows",896,440,ui.resolve_for_check(ui.bind("dashboard.detail")),true,control),
+        C.lines("items","dashboard.rows",896,440,ui.resolve_for_check(ui.bind("dashboard.detail")),true,control,ui.bind("dashboard.clipboard.scroll")),
     }
 end
