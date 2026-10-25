@@ -627,11 +627,19 @@ impl App {
         }
         self.companion_policy = Default::default();
         self.options.companion = Some((spec.fallback.clone(), spec.renderer));
-        self.options.lazy_gl = true;
+        let gpu_first = cfg!(feature = "native-gl")
+            && spec.retain_when_closed
+            && spec.renderer == RendererKind::FemtovgGl;
+        self.options.lazy_gl = !gpu_first;
+        let renderer_kind = if gpu_first {
+            spec.renderer
+        } else {
+            RendererKind::Cpu
+        };
         self.companion = Some((
             spec.fallback.clone(),
-            bead_render::renderer(RendererKind::Cpu).map_err(|e| e.to_string())?,
-            RendererKind::Cpu,
+            bead_render::renderer(renderer_kind).map_err(|e| e.to_string())?,
+            renderer_kind,
         ));
         self.sync_all_decorations()?;
         let factory = spec.factory.clone();
@@ -916,6 +924,7 @@ impl App {
         {
             self.primary_idle(&output, true);
         }
+        let retired_panel_epoch = self.panel_epoch;
         self.panel_target = false;
         // An app process lives exactly as long as its panel.
         if self.options.app.is_some() && self.app_pending.is_none() {
@@ -964,6 +973,7 @@ impl App {
         self.panel_output = None;
         self.companion_policy = Default::default();
         self.release_timer = false;
+        self.wallpaper_panel_released(retired_panel_epoch);
         #[cfg(feature = "native-gl")]
         if self.surfaces.iter().all(|s| s.gl.is_none())
             && let Some(gl) = self.gl.take()

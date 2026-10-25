@@ -398,7 +398,22 @@ impl App {
                         }
                     }
                 } else {
+                    let palette_settled = if let UiEvent::Worker(packet) = &*event {
+                        packet
+                            .wallpaper_palette()
+                            .filter(|_| {
+                                packet.is_accepted() || packet.is_settled() || packet.is_failed()
+                            })
+                            .map(|palette| {
+                                (palette.clone(), !packet.is_failed() && !packet.has_error())
+                            })
+                    } else {
+                        None
+                    };
                     self.panel_ui(*event);
+                    if let Some((palette, accepted)) = palette_settled {
+                        self.wallpaper_panel_palette_settled(epoch, &palette, accepted);
+                    }
                     if self
                         .pearl
                         .is_some_and(|info| info.kind == pearls::Kind::Pearl)
@@ -668,7 +683,8 @@ impl App {
                     .collect();
                 for i in indices {
                     #[cfg(any(feature = "native-gl", feature = "wgpu"))]
-                    if self.renderer.wants_gpu()
+                    if !self.processing_panel
+                        && self.renderer.wants_gpu()
                         && let Err(error) = self.ensure_gpu(i)
                     {
                         if !self.options.auto_fallback {
@@ -678,7 +694,11 @@ impl App {
                         self.renderer = bead_render::renderer(RendererKind::Cpu)?;
                         for surface in &mut self.surfaces {
                             #[cfg(feature = "native-gl")]
-                            drop(surface.gl.take());
+                            {
+                                drop(surface.gl.take());
+                                surface.gl_prepared = false;
+                                surface.gl_prepare_pending = false;
+                            }
                             #[cfg(feature = "wgpu")]
                             drop(surface.gpu.take());
                         }

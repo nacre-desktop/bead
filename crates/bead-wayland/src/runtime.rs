@@ -138,6 +138,13 @@ pub(super) struct PendingPalette {
     pub(super) expected: std::collections::BTreeSet<String>,
     pub(super) settled: std::collections::BTreeSet<String>,
     pub(super) accepted: bool,
+    pub(super) panel_epoch: Option<u64>,
+    pub(super) panel_settled: bool,
+}
+impl PendingPalette {
+    pub(super) fn ready(&self) -> bool {
+        self.expected.is_subset(&self.settled) && (self.panel_epoch.is_none() || self.panel_settled)
+    }
 }
 
 pub(crate) fn output_event_is_current(current_epoch: Option<u64>, event_epoch: u64) -> bool {
@@ -812,26 +819,7 @@ impl App {
                 self.discard_pending_wallpapers();
             }
             self.wallpaper_pending_frames.push(frame);
-            let expected = self
-                .output_sessions
-                .keys()
-                .cloned()
-                .collect::<std::collections::BTreeSet<_>>();
-            self.wallpaper_palette_outputs = Some(PendingPalette {
-                palette: palette_key.clone(),
-                expected: expected.clone(),
-                settled: Default::default(),
-                accepted: true,
-            });
-            for id in expected {
-                if let Some(session) = self.output_sessions.get(&id) {
-                    self.ui(UiEvent::Output(
-                        session.epoch,
-                        id,
-                        Box::new(UiEvent::WallpaperPalette(palette_key.clone())),
-                    ));
-                }
-            }
+            self.prepare_wallpaper_palette_group(palette_key);
             self.request_dirty_wallpaper(&output_name);
             return;
         }
@@ -945,6 +933,7 @@ impl App {
     }
 
     pub(super) fn discard_pending_wallpapers(&mut self) {
+        self.wallpaper_palette_outputs = None;
         for frame in std::mem::take(&mut self.wallpaper_pending_frames) {
             if let Some(provider) = &self.options.wallpaper {
                 provider.discarded(&frame.output, frame.revision);
@@ -986,7 +975,7 @@ impl App {
             }
             waiting.settled.insert(output);
             waiting.accepted &= accepted;
-            if waiting.expected.is_subset(&waiting.settled) {
+            if waiting.ready() {
                 let waiting = self.wallpaper_palette_outputs.take().unwrap();
                 self.wallpaper_palette_settled(&waiting.palette, waiting.accepted);
             }
@@ -1008,6 +997,8 @@ impl App {
         if matching.is_empty() {
             if accepted && self.wallpaper_palette.as_ref() != Some(palette) {
                 self.restore_wallpaper_palette();
+            } else if accepted {
+                self.draw_palette_group();
             }
             return;
         }
@@ -1021,6 +1012,10 @@ impl App {
             bead_core::profile::mark("wallpaper_palette_accepted");
             self.set_wallpaper_palette(palette.clone());
             self.commit_pending_wallpapers(palette);
+            // The new scenes were prepared while their previous buffers stayed
+            // visible. Submit the ready group in this turn, ignoring callbacks
+            // belonging to those old buffers.
+            self.draw_palette_group();
         } else {
             let mut keep = Vec::new();
             for frame in std::mem::take(&mut self.wallpaper_pending_frames) {
@@ -1044,26 +1039,115 @@ impl App {
         }
     }
 
+    fn draw_palette_group(&mut self) {
+        let qh = self.qh.clone();
+        for surface in &mut self.surfaces {
+            surface.callbacks.invalidate();
+        }
+        for index in 0..self.surfaces.len() {
+            self.draw(index, &qh);
+        }
+    }
+
+    fn prepare_wallpaper_palette_group(
+        &mut self,
+        palette_key: std::collections::BTreeMap<String, [u8; 4]>,
+    ) {
+        let mut participants: Vec<_> = self
+            .output_sessions
+            .iter()
+            .map(|(id, session)| (id.clone(), session.epoch))
+            .collect();
+        let active = self
+            .active_output
+            .clone()
+            .filter(|_| self.runtime.is_some());
+        if let Some(id) = &active
+            && !participants.iter().any(|(output, _)| output == id)
+        {
+            participants.push((id.clone(), self.active_output_epoch.unwrap_or_default()));
+        }
+        if participants.is_empty() && self.panel_runtime.is_none() {
+            self.wallpaper_palette_outputs = None;
+            return;
+        }
+        self.wallpaper_palette_outputs = Some(PendingPalette {
+            palette: palette_key.clone(),
+            expected: participants.iter().map(|(id, _)| id.clone()).collect(),
+            settled: Default::default(),
+            accepted: true,
+            panel_epoch: self.panel_runtime.as_ref().map(|_| self.panel_epoch),
+            panel_settled: false,
+        });
+        // Keep the old buffers visible while bar and companion prepare together.
+        if self.panel_runtime.is_some() {
+            self.panel_ui(UiEvent::WallpaperPalette(palette_key.clone()));
+            if !self
+                .panel_runtime
+                .as_ref()
+                .is_some_and(|source| source.wallpaper_palette_pending())
+            {
+                self.wallpaper_panel_palette_settled(self.panel_epoch, &palette_key, true);
+            }
+        }
+        for (id, epoch) in participants {
+            if active.as_ref() == Some(&id) {
+                self.ui(UiEvent::WallpaperPalette(palette_key.clone()));
+                if !self
+                    .runtime
+                    .as_ref()
+                    .is_some_and(|source| source.wallpaper_palette_pending())
+                {
+                    self.wallpaper_palette_settled(&palette_key, true);
+                }
+            } else {
+                self.ui(UiEvent::Output(
+                    epoch,
+                    id,
+                    Box::new(UiEvent::WallpaperPalette(palette_key.clone())),
+                ));
+            }
+        }
+    }
+
+    pub(super) fn wallpaper_panel_palette_settled(
+        &mut self,
+        epoch: u64,
+        palette: &std::collections::BTreeMap<String, [u8; 4]>,
+        accepted: bool,
+    ) {
+        if let Some(waiting) = &mut self.wallpaper_palette_outputs
+            && waiting.panel_epoch == Some(epoch)
+            && waiting.palette == *palette
+        {
+            waiting.panel_settled = true;
+            waiting.accepted &= accepted;
+            if waiting.ready() {
+                let waiting = self.wallpaper_palette_outputs.take().unwrap();
+                self.wallpaper_palette_settled(&waiting.palette, waiting.accepted);
+            }
+        }
+    }
+
+    pub(super) fn wallpaper_panel_released(&mut self, epoch: u64) {
+        let palette = self
+            .wallpaper_palette_outputs
+            .as_ref()
+            .filter(|waiting| waiting.panel_epoch == Some(epoch))
+            .map(|waiting| waiting.palette.clone());
+        if let Some(palette) = palette {
+            self.wallpaper_panel_palette_settled(epoch, &palette, true);
+        }
+    }
+
     fn restore_wallpaper_palette(&mut self) {
         let Some(previous) = self.wallpaper_palette.clone() else {
             return;
         };
         if self.options.primary_factory.is_some() {
-            let sessions: Vec<_> = self
-                .output_sessions
-                .iter()
-                .map(|(id, session)| (id.clone(), session.epoch))
-                .collect();
-            for (id, epoch) in sessions {
-                self.ui(UiEvent::Output(
-                    epoch,
-                    id,
-                    Box::new(UiEvent::WallpaperPalette(previous.clone())),
-                ));
-            }
-            if self.active_output.is_some() && self.runtime.is_some() {
-                self.ui(UiEvent::WallpaperPalette(previous));
-            }
+            // Rollback is also a prepare fence: a failed participant must not
+            // expose another participant's staged colors while restoration runs.
+            self.prepare_wallpaper_palette_group(previous);
         } else if let Some(runtime) = &mut self.runtime {
             let _ = runtime.wallpaper_palette(bead_render::Palette(std::sync::Arc::new(
                 previous.into_iter().collect(),
@@ -1696,6 +1780,10 @@ impl App {
                 gpu: None,
                 #[cfg(feature = "native-gl")]
                 gl: None,
+                #[cfg(feature = "native-gl")]
+                gl_prepared: false,
+                #[cfg(feature = "native-gl")]
+                gl_prepare_pending: false,
                 buffers: Vec::new(),
                 width: 0,
                 height: 32,
@@ -1852,5 +1940,49 @@ fn write_bgra(bytes: &mut [u8], rgba: &[u8]) {
     debug_assert!(pixel_remainder.is_empty() && color_remainder.is_empty());
     for (pixel, color) in pixels.iter_mut().zip(colors) {
         *pixel = [color[2], color[1], color[0], color[3]];
+    }
+}
+
+#[cfg(test)]
+mod palette_barrier_tests {
+    use super::PendingPalette;
+
+    #[test]
+    fn palette_group_waits_for_both_output_and_companion_in_either_order() {
+        for panel_first in [false, true] {
+            let mut group = PendingPalette {
+                palette: Default::default(),
+                expected: ["output".to_owned()].into_iter().collect(),
+                settled: Default::default(),
+                accepted: true,
+                panel_epoch: Some(7),
+                panel_settled: false,
+            };
+            assert!(!group.ready());
+            if panel_first {
+                group.panel_settled = true;
+            } else {
+                group.settled.insert("output".to_owned());
+            }
+            assert!(!group.ready());
+            group.panel_settled = true;
+            group.settled.insert("output".to_owned());
+            assert!(group.ready());
+        }
+    }
+
+    #[test]
+    fn palette_group_without_companion_only_waits_for_its_outputs() {
+        let mut group = PendingPalette {
+            palette: Default::default(),
+            expected: ["output".to_owned()].into_iter().collect(),
+            settled: Default::default(),
+            accepted: true,
+            panel_epoch: None,
+            panel_settled: false,
+        };
+        assert!(!group.ready());
+        group.settled.insert("output".to_owned());
+        assert!(group.ready());
     }
 }

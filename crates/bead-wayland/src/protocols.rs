@@ -451,7 +451,7 @@ impl OutputHandler for App {
         }
         let finish_palette = if let Some(waiting) = &mut self.wallpaper_palette_outputs {
             waiting.expected.remove(&output_id);
-            waiting.expected.is_subset(&waiting.settled)
+            waiting.ready()
         } else {
             false
         };

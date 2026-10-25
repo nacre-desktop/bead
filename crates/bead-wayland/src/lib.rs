@@ -727,6 +727,10 @@ struct Surface {
     gpu: Option<bead_render::gpu::Surface>,
     #[cfg(feature = "native-gl")]
     gl: Option<bead_render::gl::Surface>,
+    #[cfg(feature = "native-gl")]
+    gl_prepared: bool,
+    #[cfg(feature = "native-gl")]
+    gl_prepare_pending: bool,
     buffers: Vec<Reusable>,
     width: u32,
     height: u32,

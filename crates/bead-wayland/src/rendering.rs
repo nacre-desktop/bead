@@ -338,7 +338,11 @@ impl App {
                         {
                             for surface in app.surfaces.iter_mut().filter(|s| s.companion) {
                                 #[cfg(feature="native-gl")]
-                            drop(surface.gl.take());
+                                {
+                                    drop(surface.gl.take());
+                                    surface.gl_prepared = false;
+                                    surface.gl_prepare_pending = false;
+                                }
                                 #[cfg(feature="wgpu")]
                             drop(surface.gpu.take());
                                 surface.visual_damage = Default::default();
@@ -440,6 +444,10 @@ impl App {
         if self.hidden {
             return;
         }
+        if self.wallpaper_palette_outputs.is_some() {
+            self.surfaces[index].redraw = true;
+            return;
+        }
         if self.surfaces[index].companion {
             // A worker failure publishes an error scene. A loading worker must never
             // expose the fallback buffer, even when hydration takes longer than a frame.
@@ -450,6 +458,43 @@ impl App {
             std::mem::swap(&mut self.animations, &mut self.panel_animations);
             self.draw_current(index, qh);
             std::mem::swap(&mut self.animations, &mut self.panel_animations);
+            #[cfg(feature = "native-gl")]
+            if self.surfaces[index].gl_prepare_pending {
+                self.surfaces[index].gl_prepare_pending = false;
+                let unprepared: Vec<_> = self
+                    .surfaces
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, surface)| {
+                        surface.companion && surface.configured && !surface.gl_prepared
+                    })
+                    .map(|(index, _)| index)
+                    .collect();
+                if let Some(index) = unprepared.first().copied() {
+                    self.draw(index, qh);
+                } else {
+                    if self
+                        .surfaces
+                        .iter()
+                        .filter(|surface| surface.companion)
+                        .all(|surface| surface.frames == 0)
+                    {
+                        // GL uploads happened without a present; begin reveal only
+                        // after the prepared frame can actually be shown.
+                        self.panel_content_ready();
+                    }
+                    let prepared: Vec<_> = self
+                        .surfaces
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, surface)| surface.companion && surface.configured)
+                        .map(|(index, _)| index)
+                        .collect();
+                    for index in prepared {
+                        self.draw(index, qh);
+                    }
+                }
+            }
             return;
         }
         if self.options.primary_factory.is_some() && !self.surfaces[index].companion {
@@ -818,13 +863,20 @@ impl App {
                     );
                 }
                 let surface = s.gl.as_ref().unwrap();
+                let retained_gl_prepare = s.companion
+                    && !s.gl_prepared
+                    && self
+                        .options
+                        .panel_spec
+                        .as_ref()
+                        .is_some_and(|spec| spec.retain_when_closed);
                 let activate_started = Instant::now();
                 transport.activate(surface, w as u32, h as u32)?;
                 if self.started.elapsed().as_secs_f64() > 2. {
                     s.activate_ms
                         .push(activate_started.elapsed().as_secs_f64() * 1000.);
                 }
-                if regions.is_empty() {
+                if regions.is_empty() && !retained_gl_prepare {
                     wl_surface.frame(
                         qh,
                         FrameData {
@@ -841,6 +893,35 @@ impl App {
                 }
                 let start = Instant::now();
                 let compose_profile = bead_core::profile::Span::new("compose");
+                if retained_gl_prepare {
+                    let opacity = scene.opacity;
+                    // This private backbuffer is never presented. A partial alpha
+                    // forces the retained opacity group to be built and uploaded.
+                    scene.opacity = 0.5;
+                    let prepared = renderer.draw(
+                        scene,
+                        RenderTarget::Gl(bead_render::gl::GlTarget {
+                            display: &transport.display,
+                            width: w as u32,
+                            height: h as u32,
+                        }),
+                        Damage::full(w as u32, h as u32),
+                    );
+                    scene.opacity = opacity;
+                    prepared?;
+                    drop(compose_profile);
+                    s.visual_damage = Default::default();
+                    s.gl_prepared = true;
+                    s.gl_prepare_pending = true;
+                    if bead_core::profile::frame_trace() {
+                        println!(
+                            "PANEL_GPU_PREPARED monotonic_ns={} prepare_ms={:.3}",
+                            monotonic_ns(),
+                            frame_started.elapsed().as_secs_f64() * 1000.
+                        );
+                    }
+                    return Ok(());
+                }
                 renderer.draw(
                     scene,
                     RenderTarget::Gl(bead_render::gl::GlTarget {
@@ -1372,7 +1453,11 @@ impl App {
                 }
                 for surface in self.surfaces.iter_mut().filter(|surface| surface.companion) {
                     #[cfg(feature = "native-gl")]
-                    drop(surface.gl.take());
+                    {
+                        drop(surface.gl.take());
+                        surface.gl_prepared = false;
+                        surface.gl_prepare_pending = false;
+                    }
                     #[cfg(feature = "wgpu")]
                     drop(surface.gpu.take());
                     surface.callbacks.invalidate();
@@ -1421,7 +1506,11 @@ impl App {
                 }
                 for surface in &mut self.surfaces {
                     #[cfg(feature = "native-gl")]
-                    drop(surface.gl.take());
+                    {
+                        drop(surface.gl.take());
+                        surface.gl_prepared = false;
+                        surface.gl_prepare_pending = false;
+                    }
                     #[cfg(feature = "wgpu")]
                     drop(surface.gpu.take());
                     surface.callbacks.pending = false;
