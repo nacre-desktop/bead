@@ -653,7 +653,7 @@ impl Default for Policy {
         Self {
             enabled: true,
             drag: true,
-            views: ["launcher", "chat", "dashboard-*"]
+            views: ["launcher", "chat", "control", "dashboard-*"]
                 .map(String::from)
                 .to_vec(),
         }
@@ -838,6 +838,7 @@ mod tests {
     fn policy_matches_names_and_prefixes() {
         let p = Policy::default();
         assert!(p.allows("launcher") && p.allows("chat") && p.allows("dashboard-media"));
+        assert!(p.allows("control"));
         assert!(!p.allows("sound") && !p.allows("peek-network") && !p.allows("calendar"));
         let none = Policy {
             views: vec![],

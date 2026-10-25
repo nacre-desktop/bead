@@ -149,6 +149,41 @@ atomic replacements are watched without polling. Launcher icon choices use the
 bundled Nacre mark, theme icons `distributor-logo-archlinux` / `cachyos`, or a
 custom icon path; actions select launcher, dashboard, or a custom view route.
 
+## Phase 2 candidate — B0114 (not accepted)
+
+The editor keeps a bounded, eight-step draft history; only Done writes the
+revisioned store or atomically replaces the standalone file. The first tile move
+reserves the measured content widths of the content preset before changing its
+mode. Reset restores the original preset. Unknown JSON values retain empty
+objects, arrays, nulls and integers beyond the double-precision range across edits.
+
+Canvas placement remains output-local. Canvas/card/bar variants share the same
+catalogue; empty canvases allocate no surface, and visible content uses a tight
+bottom-layer surface with two reusable buffers. Drag metadata is independent of
+keyboard focus. Settings, catalogue, handles and drop targets remain in Luau.
+No phase-2 parity, smoothness, first-key or memory gate is accepted yet.
+
+| Gate | Candidate status |
+| --- | --- |
+| Remote focused transactions / canvas fallback / JSON preservation | Passed on the integrated candidate |
+| Full CI after B0111/B0117/B0119/B0120 integration | Pending exact committed revision |
+| Desktop paired captures, drag, key and five-pair memory | Pending |
+| Idle canvas input | Decision needed: clickable controls versus entirely click-through |
+
+The idle-input wording conflicts with pointer-activated dropdowns on desktop
+widgets: a surface with an empty input region receives no widget clicks. The
+candidate currently bounds input to visible controls; the background is empty.
+The exact intended idle policy must be resolved before acceptance.
+
+General APIs added here: canvas hosts, opaque drag/drop metadata, anchored panels,
+lazy content-sized output canvases, child/host model and action projection,
+direct app-to-pearl startup, shared image snapshots and JSON-preserving copying.
+Editor drop zones opt into source-origin stores; metadata stays inert and does
+not request pointer or keyboard focus. Title schemas reserve maximum widths
+after the content preset becomes a grid. Custom width changes remain immediate;
+animated flexible width is still a gap. Daemon store integration waits for the
+published N0075 registration; standalone atomic-file persistence is available.
+
 ## Phase 1 evidence — 2026-10-25
 
 Candidate `a9c2f75`, control `2e523f2` (B0118 daemon/bar recovery retained),

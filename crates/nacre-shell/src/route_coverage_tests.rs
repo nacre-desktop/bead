@@ -90,6 +90,14 @@ fn every_nacre_route_has_a_bead_handler_or_a_stated_refusal() {
             let label = format!("{id} {args:?}");
             match expected {
                 Panel(t, m) => {
+                    if id == "pearls.open" && args.first() == Some(&"ai") {
+                        let reply = map_views(c).unwrap_err();
+                        assert_eq!(
+                            reply.error.unwrap().message,
+                            "apps are not configured in this shell"
+                        );
+                        continue;
+                    }
                     let mapped = map_views(c).unwrap_or_else(|e| panic!("{label}: {e:?}"));
                     assert_eq!(
                         (mapped.target.as_str(), mapped.method.as_str()),

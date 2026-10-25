@@ -204,6 +204,13 @@ impl Prefs {
             drag_panels: on("dragPanels"),
             pearl_views: Some(strings(desktop.get("pearlPanels"), false))
                 .filter(|v| !v.is_empty())
+                .map(|views| {
+                    if views == ["launcher", "chat", "dashboard-*"] {
+                        crate::pearls::Policy::default().views
+                    } else {
+                        views
+                    }
+                })
                 .unwrap_or_else(|| crate::pearls::Policy::default().views),
         }
     }

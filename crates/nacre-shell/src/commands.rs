@@ -205,6 +205,32 @@ pub fn map_views(mut call: Call) -> Result<Call, Reply> {
         }
         return Err(Reply::ok(call.id, Value::Null));
     }
+    if call.target == "pearls"
+        && call.method == "open"
+        && call.args.first().and_then(Value::as_str) == Some("ai")
+    {
+        validate(&call)?;
+        return Err(crate::app::route(
+            call.id,
+            "chat",
+            "pearl-open",
+            &[Value::String("chat".into())],
+        ));
+    }
+    if call.target == "widgets" && matches!(call.method.as_str(), "open" | "edit") {
+        validate(&call)?;
+        return Ok(call);
+    }
+    if call.target == "nacre"
+        && call.method == "menu"
+        && call.args.first().and_then(Value::as_str) == Some("widgets")
+    {
+        validate(&call)?;
+        call.target = "widgets".into();
+        call.method = "open".into();
+        call.args.clear();
+        return Ok(call);
+    }
     // Native extras have their own lazy surfaces; menu routes remain engine-owned.
     if call.target == "nacre"
         && call.method == "mode"
@@ -743,7 +769,7 @@ mod tests {
     #[test]
     fn every_audited_route_and_selector_is_typed_and_dispatchable() {
         let c = catalog().unwrap();
-        assert_eq!(c.routes.len(), 121);
+        assert_eq!(c.routes.len(), 123);
         for route in &c.routes {
             for p in &route.patterns {
                 let args = route

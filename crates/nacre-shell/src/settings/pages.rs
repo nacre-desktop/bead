@@ -69,6 +69,7 @@ type Launch = (&'static str, Json, Option<(&'static str, Json)>);
 fn launch(key: &str) -> Option<Launch> {
     let dispatch = |target: &str, method: &str, args: Json| json!({"target": target, "method": method, "args": args});
     Some(match key {
+        "widgets" => ("ui.dispatch", dispatch("widgets", "edit", json!([])), None),
         "sidebar" => ("ui.dispatch", dispatch("nacre", "left", json!([])), None),
         "welcome" => (
             "ui.dispatch",

@@ -42,6 +42,7 @@ fn initial_models()
     session = session.reconcile(&crate::desktop::values(&Default::default(), ""))?;
     session = session.reconcile(&std::collections::BTreeMap::from([
         ("bead.workspaces".into(), bead::core::Value::list(vec![])),
+        ("bead.windows".into(), bead::core::Value::list(vec![])),
         (
             "bead.focused_title".into(),
             bead::core::Value::Text(String::new()),

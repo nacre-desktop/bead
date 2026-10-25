@@ -95,6 +95,17 @@ pub struct Runtime {
     widgets_subscription: Option<bead::core::source::Subscription>,
     widgets_file: Option<std::path::PathBuf>,
     widgets_watch: Option<notify::RecommendedWatcher>,
+    widgets_canvas_layout: Option<bead::core::Value>,
+    widgets_canvas_editing: bool,
+    widgets_canvas_wanted: bool,
+    widgets_client: Option<crate::nacre_source::Client>,
+    widget_editor: bool,
+    widgets_close_on_commit: bool,
+    widget_canvas: bool,
+    widgets_projection: Option<BTreeMap<String, bead::core::Value>>,
+    widgets_write: Option<crate::nacre_source::CallTicket>,
+    widgets_write_document: Option<bead::core::Value>,
+    pointer_at: (f32, f32),
     origins_topic: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     origins_subscription: Option<bead::core::source::Subscription>,
     backend: Option<std::sync::Arc<crate::backends::Native>>,
@@ -123,6 +134,12 @@ pub struct Runtime {
     status_pill_epoch: u64,
     status_pill_scheduled: Option<std::time::Instant>,
     status_pill_route: Option<String>,
+    status_route_center: Option<f32>,
+    status_route_anchor: Option<bead::wayland::PanelAnchor>,
+    status_route_id: Option<String>,
+    viewport_size: (u32, u32),
+    popup_anchor: Option<bead::wayland::PanelAnchor>,
+    popup_anchor_changed: bool,
     tray_menu: Option<crate::tray::Menu>,
     pending_focus: Option<String>,
     bar: bool,
@@ -163,6 +180,130 @@ impl Drop for Runtime {
     }
 }
 impl Runtime {
+    fn widget_seed(&self) -> Option<serde_json::Value> {
+        self.session
+            .view_nodes()
+            .iter()
+            .find_map(|node| match &node.metadata {
+                Some(bead::core::Value::List(records)) => records
+                    .first()
+                    .filter(|record| record["widget_layout"] == true)
+                    .cloned(),
+                _ => None,
+            })
+    }
+    fn widget_argument(&self, name: &str, argument: bead::core::Value) -> bead::core::Value {
+        let bead::core::Value::List(records) = &argument else {
+            return argument;
+        };
+        let Some(seed) = self.widget_seed() else {
+            return argument;
+        };
+        let Some(seed) = seed.as_object() else {
+            return argument;
+        };
+        let mut records = (**records).clone();
+        let target = if name == "widgets.drag" {
+            if records
+                .first()
+                .is_none_or(|record| record["phase"] != "drop")
+            {
+                return argument;
+            }
+            records
+                .first_mut()
+                .and_then(|record| record["target"].as_array_mut())
+                .and_then(|targets| targets.first_mut())
+        } else {
+            records.first_mut()
+        };
+        if let Some(target) = target.and_then(serde_json::Value::as_object_mut) {
+            for (key, value) in seed {
+                target.entry(key.clone()).or_insert_with(|| value.clone());
+            }
+        }
+        bead::core::Value::list(records)
+    }
+    fn widget_host_values(&self) -> BTreeMap<String, bead::core::Value> {
+        self.session
+            .stores
+            .values()
+            .iter()
+            .filter(|(key, _)| {
+                key.starts_with("widgets.")
+                    || key.starts_with("bar.")
+                    || key.starts_with("bead.desktop.")
+                    || matches!(
+                        key.as_str(),
+                        "bead.workspaces" | "bead.windows" | "bead.focused_title"
+                    )
+            })
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect()
+    }
+    fn open_widgets(&self, context: bool, selected: Option<String>) -> Result<(), Box<dyn Error>> {
+        self.actions.authorize("view.open")?;
+        let wakeup = self
+            .wakeup
+            .as_ref()
+            .ok_or("Widget event channel unavailable")?;
+        if self.session.stores.get("widgets.editing") == Some(&bead::core::Value::Bool(true)) {
+            if let Some(iid) = selected {
+                wakeup(UiEvent::CompanionModel(BTreeMap::from([(
+                    "widgets.selected".into(),
+                    bead::core::Value::Text(iid),
+                )])));
+            }
+            wakeup(UiEvent::CompanionVisibility(true));
+            return Ok(());
+        }
+        wakeup(UiEvent::CompanionSelect {
+            view: if context { "widget-menu" } else { "widgets" }.into(),
+            output: self.output.clone(),
+            toggle: false,
+            center: None,
+        });
+        let mut values = self.widget_host_values();
+        values.insert("widgets.context".into(), bead::core::Value::Bool(context));
+        values.insert(
+            "widgets.page".into(),
+            bead::core::Value::Text("layout".into()),
+        );
+        values.insert("widgets.editing".into(), bead::core::Value::Bool(!context));
+        values.insert("widgets.draft".into(), bead::core::Value::list(Vec::new()));
+        values.insert("widgets.undo".into(), bead::core::Value::list(Vec::new()));
+        let geometry = self
+            .session
+            .view_nodes()
+            .iter()
+            .filter_map(|node| {
+                let bead::core::Value::Text(iid) = node.drag_payload.as_ref()? else {
+                    return None;
+                };
+                let rect = bead::ui::rect(&node.draw);
+                Some(serde_json::json!({"iid":iid,"x":rect.x,"y":rect.y,"w":rect.w,"h":rect.h}))
+            })
+            .collect();
+        values.insert("widgets.geometry".into(), bead::core::Value::list(geometry));
+        if let Some(seed) = self.widget_seed()
+            && let Some(document) = seed.get("document")
+        {
+            values.insert(
+                "widgets.layout".into(),
+                bead::core::Value::list(vec![document.clone()]),
+            );
+        }
+        values.remove("widgets.canvas.width");
+        values.remove("widgets.canvas.height");
+        if let Some(rev) = self.session.stores.get("widgets.rev") {
+            values.insert("widgets.rev".into(), rev.clone());
+        }
+        if let Some(iid) = selected {
+            values.insert("widgets.selected".into(), bead::core::Value::Text(iid));
+        }
+        wakeup(UiEvent::CompanionModel(values));
+        Ok(())
+    }
     /// A freshly opened prompt or form takes keyboard focus on its first field, so the
     /// user can type (and press Enter) at once.
     fn focus_network_form(
@@ -194,16 +335,28 @@ impl Runtime {
         changes.insert("bead.focused".into(), bead::core::Value::Text(field));
         Ok(self.session.update(changes)?.or(scene))
     }
+    fn dropdown_kind(&self, key: &str) -> String {
+        self.session
+            .view_nodes()
+            .iter()
+            .find(|node| node.id == key)
+            .and_then(|node| node.action_arg.as_ref())
+            .and_then(crate::widgets::dropdown_view)
+            .unwrap_or(key)
+            .to_owned()
+    }
     fn publish_status_pill(&mut self) -> Result<Option<Scene>, Box<dyn Error>> {
         // Pointer-region and timer events also reach companion surfaces. Only
         // the bar owns the pill state declared by bar/behavior.luau.
-        if !self.bar {
+        if !self.bar && !self.widget_canvas {
             return Ok(None);
         }
         let values = BTreeMap::from([
             (
                 "status.hovered".into(),
-                bead::core::Value::Text(self.status_pill.hovered().unwrap_or("").into()),
+                bead::core::Value::Text(
+                    self.dropdown_kind(self.status_pill.hovered().unwrap_or("")),
+                ),
             ),
             (
                 "status.peek.visible".into(),
@@ -211,11 +364,11 @@ impl Runtime {
             ),
             (
                 "status.peek.kind".into(),
-                bead::core::Value::Text(self.status_pill.peek().unwrap_or("").into()),
+                bead::core::Value::Text(self.dropdown_kind(self.status_pill.peek().unwrap_or(""))),
             ),
             (
                 "status.panel.kind".into(),
-                bead::core::Value::Text(self.status_pill.panel().unwrap_or("").into()),
+                bead::core::Value::Text(self.dropdown_kind(self.status_pill.panel().unwrap_or(""))),
             ),
         ]);
         self.session.update(values).map_err(Into::into)
@@ -244,7 +397,8 @@ impl Runtime {
         let desired = self
             .status_pill
             .panel()
-            .map(|kind| {
+            .map(|key| {
+                let kind = self.dropdown_kind(key);
                 if kind == "audio" {
                     "sound".to_owned()
                 } else {
@@ -252,28 +406,74 @@ impl Runtime {
                 }
             })
             .or_else(|| {
-                self.status_pill.peek().map(|kind| match kind {
-                    "sound" => "peek-audio".to_owned(),
-                    _ => format!("peek-{kind}"),
+                self.status_pill.peek().map(|key| {
+                    let kind = self.dropdown_kind(key);
+                    match kind.as_str() {
+                        "calendar" | "session" => kind,
+                        "sound" => "peek-audio".to_owned(),
+                        _ => format!("peek-{kind}"),
+                    }
                 })
             });
-        if desired == self.status_pill_route {
+        let center = desired.as_ref().and_then(|view| {
+            let item = view.strip_prefix("peek-").unwrap_or(view);
+            self.status_icon_center(if item == "sound" { "audio" } else { item })
+        });
+        let anchor = self
+            .widget_canvas
+            .then(|| {
+                let id = self.status_pill.panel().or(self.status_pill.peek())?;
+                let node = self
+                    .session
+                    .view_nodes()
+                    .iter()
+                    .find(|node| node.id == id)?;
+                let rect = bead::ui::rect(&node.draw);
+                Some(bead::wayland::PanelAnchor {
+                    rect,
+                    edge: if rect.y + rect.h / 2. > self.viewport_size.1 as f32 / 2. {
+                        bead::core::Edge::Bottom
+                    } else {
+                        bead::core::Edge::Top
+                    },
+                })
+            })
+            .flatten();
+        if desired == self.status_pill_route
+            && center == self.status_route_center
+            && anchor == self.status_route_anchor
+            && self.status_pill.panel().or(self.status_pill.peek())
+                == self.status_route_id.as_deref()
+        {
             return Ok(());
         }
         if let Some(view) = desired {
-            let item = view.strip_prefix("peek-").unwrap_or(&view);
-            let center = self.status_icon_center(if item == "sound" { "audio" } else { item });
             self.wakeup
                 .as_ref()
                 .ok_or("status panel event channel unavailable")?(
-                UiEvent::CompanionSelect {
-                    view: view.clone(),
-                    output: None,
-                    toggle: false,
-                    center,
+                if let Some(anchor) = anchor {
+                    UiEvent::CompanionSelectAt {
+                        view: view.clone(),
+                        output: self.output.clone(),
+                        anchor,
+                    }
+                } else {
+                    UiEvent::CompanionSelect {
+                        view: view.clone(),
+                        output: self.output.clone(),
+                        toggle: false,
+                        center,
+                    }
                 },
             );
             self.status_pill_route = Some(view);
+            self.status_route_center = center;
+            self.status_route_anchor = anchor;
+            self.status_route_id = self
+                .status_pill
+                .panel()
+                .or(self.status_pill.peek())
+                .map(String::from);
         } else if self.status_pill_route.take().is_some()
             && let Some(wakeup) = &self.wakeup
         {
@@ -283,13 +483,34 @@ impl Runtime {
     }
 
     fn status_icon_center(&self, item: &str) -> Option<f32> {
+        if let Some(anchor) = self
+            .status_pill
+            .panel()
+            .or(self.status_pill.peek())
+            .or(self.status_pill.hovered())
+            && let Some(node) = self.session.view_nodes().iter().find(|node| {
+                node.id == anchor
+                    && node
+                        .action_arg
+                        .as_ref()
+                        .and_then(crate::widgets::dropdown_view)
+                        == Some(item)
+            })
+        {
+            let rect = bead::ui::rect(&node.draw);
+            return Some(rect.x + rect.w / 2.);
+        }
         let arg = if item == "audio" { "audio" } else { item };
         self.session
             .view_nodes()
             .iter()
             .filter(|node| {
                 (node.action.as_deref() == Some("status.pill.open")
-                    && node.action_arg == Some(bead::core::Value::Text(arg.into())))
+                    && node
+                        .action_arg
+                        .as_ref()
+                        .and_then(crate::widgets::dropdown_view)
+                        == Some(arg))
                     || (item == "calendar"
                         && node.id.rsplit('.').next() == Some("clock")
                         && node.action.as_deref() == Some("view.open"))
@@ -393,6 +614,17 @@ impl Runtime {
             daemon_tray: Default::default(),
             widgets_file: None,
             widgets_watch: None,
+            widgets_canvas_layout: None,
+            widgets_canvas_editing: false,
+            widgets_canvas_wanted: false,
+            widgets_client: None,
+            widget_editor: false,
+            widgets_close_on_commit: false,
+            widget_canvas: false,
+            widgets_projection: None,
+            widgets_write: None,
+            widgets_write_document: None,
+            pointer_at: (0., 0.),
             widgets_topic: None,
             widgets_subscription: None,
             updates_topic: None,
@@ -431,6 +663,12 @@ impl Runtime {
             status_pill_epoch: 0,
             status_pill_scheduled: None,
             status_pill_route: None,
+            status_route_center: None,
+            status_route_anchor: None,
+            status_route_id: None,
+            viewport_size: (1200, 800),
+            popup_anchor: None,
+            popup_anchor_changed: false,
             tray_menu: None,
             pending_focus: None,
             bar: false,
@@ -489,11 +727,65 @@ impl Runtime {
         self.widgets_file = crate::widgets::file_path();
         self
     }
+    pub fn with_widget_editor(
+        mut self,
+        client: Option<&crate::nacre_source::Client>,
+        canvas: bool,
+    ) -> Result<Self, Box<dyn Error>> {
+        self.widget_editor = !canvas;
+        self.widget_canvas = canvas;
+        self.actions.register("widgets.edit", "ui.widgets")?;
+        self.actions.grant("ui.widgets");
+        if canvas {
+            self.actions.register("view.open", "ui.widgets")?;
+            self.actions.register("status.pill.open", "ui.widgets")?;
+            self.actions.register("launcher.open", "ui.widgets")?;
+            self.launcher_trigger = true;
+        }
+        let mut values = crate::desktop::values(&Default::default(), "");
+        values.insert("widgets.editing".into(), bead::core::Value::Bool(!canvas));
+        if canvas {
+            values.insert("bar.popouts".into(), bead::core::Value::Bool(true));
+            values.insert("bar.launcher".into(), bead::core::Value::Bool(true));
+        }
+        values.insert(
+            "bead.output.name".into(),
+            bead::core::Value::Text(String::new()),
+        );
+        values.extend(BTreeMap::from([
+            ("bead.windows".into(), bead::core::Value::list(Vec::new())),
+            (
+                "bead.workspaces".into(),
+                bead::core::Value::list(Vec::new()),
+            ),
+            (
+                "bead.focused_title".into(),
+                bead::core::Value::Text(String::new()),
+            ),
+        ]));
+        self.session.stores = self.session.stores.reconcile(&values)?;
+        if let Some(client) = client {
+            self.widgets_client = Some(client.clone());
+            self = self.with_bar_daemon(client)?;
+            let routes = crate::bar_routes::Routes::new(client.clone());
+            self.session.stores = self.session.stores.reconcile(&routes.stores())?;
+            self.actions.register("bar.title", "ui.widgets")?;
+            self.routes = Some(std::rc::Rc::new(routes));
+            self.with_widgets(client)
+        } else {
+            Ok(self.with_widget_file())
+        }
+    }
     /// The daemon stores an opaque JSON document; Luau validates it in a staged update.
     pub fn with_widgets(
         mut self,
         client: &crate::nacre_source::Client,
     ) -> Result<Self, Box<dyn Error>> {
+        // An explicit standalone layout override remains independent of service transport.
+        if std::env::var_os("BEAD_WIDGET_LAYOUT").is_some() {
+            self.widgets_client = None;
+            return Ok(self.with_widget_file());
+        }
         let topic = match client.lease_topic(crate::widgets::TOPIC) {
             Ok(topic) => std::sync::Arc::new(topic),
             Err(_) => {
@@ -1488,6 +1780,7 @@ impl Runtime {
     pub fn with_popout_trigger(mut self) -> Result<Self, Box<dyn Error>> {
         self.actions.register("view.open", "ui.popouts")?;
         self.actions.register("status.pill.open", "ui.popouts")?;
+        self.actions.register("widgets.edit", "ui.popouts")?;
         self.actions.grant("ui.popouts");
         self.session.stores = self
             .session
@@ -1630,6 +1923,7 @@ impl Runtime {
             for (key, value) in [
                 ("bead.focused_title", bead::core::Value::Text(String::new())),
                 ("bead.workspaces", bead::core::Value::list(vec![])),
+                ("bead.windows", bead::core::Value::list(vec![])),
             ] {
                 if self.session.stores.get(key).is_none() {
                     defaults.insert(key.into(), value);
@@ -1915,7 +2209,19 @@ impl Runtime {
         mut scene: Option<Scene>,
         reload: bool,
     ) -> Result<Option<Scene>, Box<dyn Error>> {
+        if self.popup_anchor_changed && scene.is_none() {
+            scene = self.session.relayout()?;
+        }
+        self.popup_anchor_changed = false;
         if let Some(scene) = &mut scene {
+            if let Some(anchor) = self.popup_anchor
+                && let Some(motion) = &mut scene.motion
+            {
+                motion.edge = anchor.edge;
+            }
+            if self.widget_canvas {
+                scene.offset = (0., 0.);
+            }
             if let Some(base) = self
                 .desktop
                 .as_ref()
@@ -1983,7 +2289,12 @@ impl Runtime {
             let editor_profile = bead::core::profile::Span::new("editor_shape");
             self.session.decorate_inputs(scene)?;
             drop(editor_profile);
-            if let Some(chrome) = &self.chrome {
+            let chrome = if self.popup_anchor.is_some() {
+                self.spare_chrome.as_ref().or(self.chrome.as_ref())
+            } else {
+                self.chrome.as_ref()
+            };
+            if let Some(chrome) = chrome {
                 chrome.decorate(scene)?;
             }
         }
@@ -2198,6 +2509,21 @@ impl SceneSource for Runtime {
         .min()
     }
 
+    fn initial_model(
+        &mut self,
+        values: BTreeMap<String, bead::core::Value>,
+    ) -> Result<(), Box<dyn Error>> {
+        let mut stores = self.session.stores.reconcile(&values)?;
+        stores.commit(values)?;
+        self.session.stores = stores;
+        Ok(())
+    }
+    fn panel_anchor(&mut self, anchor: Option<bead::wayland::PanelAnchor>) {
+        let before = self.popup_anchor.map(|anchor| anchor.edge);
+        let after = anchor.map(|anchor| anchor.edge);
+        self.popup_anchor = anchor;
+        self.popup_anchor_changed = before != after;
+    }
     fn panel_center(&mut self, center: Option<f32>) {
         if let Some(chrome) = &mut self.chrome {
             chrome.center = center;
@@ -2490,7 +2816,12 @@ impl SceneSource for Runtime {
         self.session
             .view_nodes()
             .iter()
-            .filter(|node| node.input.is_some() || node.action.is_some())
+            .filter(|node| {
+                node.input.is_some()
+                    || node.action.is_some()
+                    || node.drag_action.is_some()
+                    || node.drop_action.is_some()
+            })
             .map(|node| {
                 let rect = match &node.draw {
                     bead::render::Primitive::Rounded { rect, .. }
@@ -2501,6 +2832,9 @@ impl SceneSource for Runtime {
                     | bead::render::Primitive::Polyline { rect, .. } => *rect,
                 };
                 bead::wayland::InputRegion {
+                    include_in_bounds: node.action.is_some()
+                        || node.input.is_some()
+                        || node.drag_action.is_some(),
                     id: node.id.clone(),
                     prepare_panel: self.bar
                         && (node.action.as_deref() == Some("view.open")
@@ -2518,14 +2852,23 @@ impl SceneSource for Runtime {
                             None
                         }
                     } else if self.bar && node.action.as_deref() == Some("status.pill.open") {
-                        if let Some(bead::core::Value::Text(view)) = &node.action_arg {
-                            Some(format!(
-                                "peek-{}",
-                                if view == "sound" { "audio" } else { view }
-                            ))
-                        } else {
-                            None
-                        }
+                        node.action_arg
+                            .as_ref()
+                            .and_then(crate::widgets::dropdown_view)
+                            .map(|view| {
+                                if !crate::widgets::dropdown_hover(
+                                    node.action_arg.as_ref().unwrap(),
+                                ) || matches!(view, "calendar" | "session")
+                                {
+                                    if view == "audio" {
+                                        "sound".to_owned()
+                                    } else {
+                                        view.to_owned()
+                                    }
+                                } else {
+                                    format!("peek-{}", if view == "sound" { "audio" } else { view })
+                                }
+                            })
                     } else {
                         None
                     },
@@ -2533,13 +2876,14 @@ impl SceneSource for Runtime {
                         node.action.as_deref(),
                         Some("view.open" | "status.pill.open")
                     ) {
-                        if let Some(bead::core::Value::Text(view)) = &node.action_arg {
+                        if let Some(view) = node
+                            .action_arg
+                            .as_ref()
+                            .and_then(crate::widgets::dropdown_view)
+                        {
                             if node.action.as_deref() == Some("status.pill.open") {
-                                self.status_icon_center(if view == "sound" {
-                                    "audio"
-                                } else {
-                                    view
-                                })
+                                let rect = bead::ui::rect(&node.draw);
+                                Some(rect.x + rect.w / 2.)
                             } else {
                                 self.popout_center(&node.id, view)
                             }
@@ -2589,7 +2933,11 @@ impl SceneSource for Runtime {
             dashboard.borrow().set_raster_scale(scale);
         }
     }
+    fn tracks_origin(&self) -> bool {
+        self.widget_editor
+    }
     fn viewport(&mut self, width: u32, height: u32) -> bool {
+        self.viewport_size = (width, height);
         if let Some(chrome) = &mut self.chrome {
             chrome.output = (width, height);
         }
@@ -2611,6 +2959,22 @@ impl SceneSource for Runtime {
         if let Some(extras) = &self.extras {
             extras.set_viewport(width, height);
         }
+        if self.widget_editor {
+            let values = BTreeMap::from([
+                (
+                    "widgets.canvas.width".into(),
+                    bead::core::Value::Number(f64::from(width)),
+                ),
+                (
+                    "widgets.canvas.height".into(),
+                    bead::core::Value::Number(f64::from(height)),
+                ),
+            ]);
+            if let Ok(stores) = self.session.stores.reconcile(&values) {
+                self.session.stores = stores;
+            }
+            let _ = self.session.stores.commit(values);
+        }
         self.session.set_viewport(width, height)
     }
     fn watch(
@@ -2620,6 +2984,37 @@ impl SceneSource for Runtime {
         self.session.watch(wakeup)
     }
     fn stage(&mut self, mut event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+        if let UiEvent::Click { x, y } | UiEvent::Drag { x, y } | UiEvent::Hover { x, y } = &event {
+            self.pointer_at = (*x, *y);
+        }
+        if let Some(reply) = self
+            .widgets_write
+            .as_mut()
+            .and_then(|ticket| ticket.try_take())
+        {
+            self.widgets_write = None;
+            let document = self.widgets_write_document.take();
+            let success = reply.is_ok();
+            let (editing, error) = match reply {
+                Ok(_) => {
+                    self.widgets_close_on_commit = true;
+                    (false, String::new())
+                }
+                Err(error) => (
+                    self.session.stores.get("panel.open") == Some(&bead::core::Value::Bool(true)),
+                    error.message,
+                ),
+            };
+            let mut changes = BTreeMap::from([
+                ("widgets.editing".into(), bead::core::Value::Bool(editing)),
+                ("widgets.error".into(), bead::core::Value::Text(error)),
+            ]);
+            if success && let Some(document) = document {
+                changes.insert("widgets.layout".into(), document);
+            }
+            let scene = self.session.update(changes)?;
+            return self.finish_scene(scene, false);
+        }
         if let UiEvent::Click { x, y } = &event {
             self.session.capture_pointer(*x, *y);
         }
@@ -2804,8 +3199,18 @@ impl SceneSource for Runtime {
             )]))?;
         }
         let mut host_action = match &event {
+            UiEvent::Action { name, argument } => {
+                Some((String::new(), name.clone(), argument.clone()))
+            }
             UiEvent::Click { x, y } => self.session.press_action_at(*x, *y),
-            UiEvent::Release => self.session.release_action(),
+            UiEvent::Release => self
+                .session
+                .transfer_action(self.pointer_at.0, self.pointer_at.1, "drop")
+                .or_else(|| {
+                    self.session
+                        .transfer_action(self.pointer_at.0, self.pointer_at.1, "cancel")
+                })
+                .or_else(|| self.session.release_action()),
             UiEvent::ContextMenu { x, y }
             | UiEvent::SecondaryClick { x, y }
             | UiEvent::HorizontalScroll { x, y, .. }
@@ -2814,10 +3219,188 @@ impl SceneSource for Runtime {
             UiEvent::Command { command, .. } if command == "left" || command == "right" => {
                 self.session.range_action(command == "left")
             }
-            UiEvent::Drag { x, y } => self.session.drag_action(*x, *y),
+            UiEvent::Drag { x, y } => self
+                .session
+                .transfer_action(*x, *y, "move")
+                .or_else(|| self.session.drag_action(*x, *y)),
             _ => None,
         };
+        if (self.bar || self.widget_canvas)
+            && matches!(&event, UiEvent::ContextMenu { .. })
+            && !host_action
+                .as_ref()
+                .is_some_and(|(_, name, _)| name == "services.tray")
+        {
+            let selected = host_action.as_ref().and_then(|(id, _, argument)| {
+                if let bead::core::Value::List(records) = argument
+                    && let Some(iid) = records.first().and_then(|record| record["iid"].as_str())
+                {
+                    return Some(iid.to_owned());
+                }
+                self.session
+                    .view_nodes()
+                    .iter()
+                    .find(|node| &node.id == id)
+                    .and_then(|node| match &node.drag_payload {
+                        Some(bead::core::Value::Text(iid)) => Some(iid.clone()),
+                        _ => None,
+                    })
+            });
+            self.open_widgets(true, selected)?;
+            return Ok(None);
+        }
+
+        if let Some((_, name, argument)) = &mut host_action
+            && name == "status.pill.open"
+            && let Some(view) = crate::widgets::dropdown_view(argument)
+        {
+            *argument = bead::core::Value::Text(view.to_owned());
+        }
         let mut pointer_scene = None;
+        if let Some((_, name, argument)) = &host_action
+            && name == "widgets.drag"
+        {
+            self.actions.authorize("widgets.edit")?;
+            if !self.widget_editor {
+                if let Some(wakeup) = &self.wakeup {
+                    wakeup(UiEvent::CompanionAction {
+                        name: name.clone(),
+                        argument: argument.clone(),
+                    });
+                }
+                let released = if matches!(&event, UiEvent::Release) {
+                    self.session.release()?
+                } else {
+                    None
+                };
+                return self.finish_scene(released, false);
+            }
+            let changes = self
+                .session
+                .action_values(name, self.widget_argument(name, argument.clone()))?;
+            if matches!(&event, UiEvent::Release) {
+                self.session.release()?;
+            }
+            let scene = self.session.update(changes)?;
+            return self.finish_scene(scene, false);
+        }
+        if let Some((id, name, argument)) = &host_action
+            && name == "widgets.edit"
+            && (matches!(
+                &event,
+                UiEvent::Click { .. }
+                    | UiEvent::Drag { .. }
+                    | UiEvent::Release
+                    | UiEvent::Action { .. }
+            ) || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            if !self.widget_editor {
+                if let Some(wakeup) = &self.wakeup {
+                    wakeup(UiEvent::CompanionAction {
+                        name: name.clone(),
+                        argument: argument.clone(),
+                    });
+                }
+                let released = if matches!(&event, UiEvent::Release) {
+                    self.session.release()?
+                } else {
+                    None
+                };
+                return self.finish_scene(released, false);
+            }
+            if self.widgets_write.is_some() {
+                return Ok(None);
+            }
+            let mut argument = argument.clone();
+            if matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
+                && self.session.has_preview(id)
+            {
+                self.pointer_feedback(id, &event, true)?;
+                if let Some(pointer) = self.session.pointer_argument(id) {
+                    argument = pointer;
+                }
+            }
+            let mut changes = self
+                .session
+                .action_values(name, self.widget_argument(name, argument))?;
+            let write = changes.get("widgets.write").and_then(|value| match value {
+                bead::core::Value::List(items) => items.first().cloned(),
+                _ => None,
+            });
+            changes.insert("widgets.write".into(), bead::core::Value::list(Vec::new()));
+            if write.is_some() {
+                changes.insert("widgets.editing".into(), bead::core::Value::Bool(true));
+            }
+            // The markup registry validates the draft before any external write.
+            let scene = self.session.update(changes.clone())?;
+            if let Some(document) = write {
+                let result = if let Some(client) = &self.widgets_client {
+                    let status = client.status();
+                    let result = (|| -> Result<_, String> {
+                        let method = status
+                            .methods
+                            .get("settings.set")
+                            .filter(|method| method.v == 1)
+                            .ok_or("Widget settings are unavailable")?;
+                        let boot = status.boot.ok_or("Widget settings are disconnected")?;
+                        let rev = match changes.get("widgets.base_rev") {
+                            Some(bead::core::Value::Number(rev)) => *rev as u64,
+                            _ => 0,
+                        };
+                        let wakeup = self
+                            .wakeup
+                            .clone()
+                            .ok_or("Widget event channel unavailable")?;
+                        client.begin_call(
+                            "settings.set".into(),
+                            serde_json::json!({"store":"widgets","key":["layout"],"value":document,"rev":rev}),
+                            std::time::Duration::from_millis(u64::from(method.timeout).clamp(1, 30_000)),
+                            crate::nacre_source::CallGuard { boot, version: 1 },
+                            Some(std::sync::Arc::new(move || wakeup(UiEvent::Model(BTreeMap::new())))),
+                        ).map_err(|error| error.message)
+                    })();
+                    match result {
+                        Ok(ticket) => {
+                            self.widgets_write = Some(ticket);
+                            self.widgets_write_document =
+                                Some(bead::core::Value::list(vec![document.clone()]));
+                            Ok(())
+                        }
+                        Err(error) => Err(error),
+                    }
+                } else {
+                    self.widgets_file
+                        .as_deref()
+                        .ok_or("Widget layout path unavailable".to_owned())
+                        .and_then(|path| {
+                            crate::widgets::save_file(path, &document)
+                                .map_err(|error| error.to_string())
+                        })
+                };
+                if result.is_ok() && self.widgets_client.is_none() {
+                    changes.insert(
+                        "widgets.layout".into(),
+                        bead::core::Value::list(vec![document]),
+                    );
+                    changes.insert("widgets.editing".into(), bead::core::Value::Bool(false));
+                }
+                if let Err(error) = result {
+                    let failed = self.session.update(BTreeMap::from([
+                        ("widgets.editing".into(), bead::core::Value::Bool(true)),
+                        ("widgets.error".into(), bead::core::Value::Text(error)),
+                    ]))?;
+                    return self.finish_scene(failed.or(scene), false);
+                }
+            }
+            if self.widgets_write.is_none()
+                && changes.get("widgets.editing") == Some(&bead::core::Value::Bool(false))
+            {
+                self.widgets_close_on_commit = true;
+            }
+            let final_scene = self.session.update(changes)?.or(scene);
+            return self.finish_scene(final_scene, false);
+        }
         if matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
             && let Some((id, _, argument)) = &mut host_action
             && self.session.has_preview(id)
@@ -2912,12 +3495,16 @@ impl SceneSource for Runtime {
             let scene = self.select_dashboard_page(page)?.or(status_scene);
             return self.finish_scene(scene, false);
         }
-        if let Some((_, name, bead::core::Value::Text(view))) = &host_action
+        if let Some((id, name, bead::core::Value::Text(view))) = &host_action
             && name == "status.pill.open"
             && (matches!(&event, UiEvent::Click { .. })
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
-            self.status_pill.click_icon(view.clone());
+            self.status_pill.click_icon(if id.is_empty() {
+                view.clone()
+            } else {
+                id.clone()
+            });
             self.schedule_status_pill();
             let scene = self.publish_status_pill()?;
             self.actions.authorize(name)?;
@@ -3747,7 +4334,12 @@ impl SceneSource for Runtime {
             UiEvent::CompanionVisibility(_)
             | UiEvent::NativePearlMotion(_)
             | UiEvent::CompanionSelect { .. }
+            | UiEvent::CompanionSelectAt { .. }
             | UiEvent::CompanionOffer { .. }
+            | UiEvent::CanvasOffer { .. }
+            | UiEvent::CanvasModel { .. }
+            | UiEvent::CompanionAction { .. }
+            | UiEvent::HostModel(_)
             | UiEvent::ShellHidden(_)
             | UiEvent::LivePalette(_)
             | UiEvent::ControlChanged => {
@@ -3756,6 +4348,7 @@ impl SceneSource for Runtime {
             UiEvent::Panel(_, _)
             | UiEvent::Window(_, _)
             | UiEvent::Overlay(_, _)
+            | UiEvent::Canvas(_, _)
             | UiEvent::Output(_, _, _) => {
                 return Err("session envelope reached script".into());
             }
@@ -3772,6 +4365,14 @@ impl SceneSource for Runtime {
                         self.session
                             .action_values("close", bead::core::Value::Bool(true))?,
                     );
+                }
+                if self.widget_editor && !open {
+                    values.extend(BTreeMap::from([
+                        ("widgets.editing".into(), bead::core::Value::Bool(false)),
+                        ("widgets.draft".into(), bead::core::Value::list(Vec::new())),
+                        ("widgets.undo".into(), bead::core::Value::list(Vec::new())),
+                        ("widgets.drag.active".into(), bead::core::Value::Bool(false)),
+                    ]));
                 }
                 if !open && !self.dock_status.is_empty() {
                     self.leave_docked_flow();
@@ -3803,6 +4404,18 @@ impl SceneSource for Runtime {
                 let reply = match validation {
                     Err(reply) => reply,
                     Ok(()) => match (call.target.as_str(), call.method.as_str()) {
+                        ("widgets", "open" | "edit") if self.bar => {
+                            self.open_widgets(false, None)?;
+                            if call.method == "open"
+                                && let Some(wakeup) = &self.wakeup
+                            {
+                                wakeup(UiEvent::CompanionModel(BTreeMap::from([(
+                                    "widgets.page".into(),
+                                    bead::core::Value::Text("catalogue".into()),
+                                )])));
+                            }
+                            bead::services::ipc::Reply::ok(call.id, serde_json::Value::Null)
+                        }
                         ("bead.osd", "show" | "preview") => match self
                             .actions
                             .authorize("notifications.feedback")
@@ -4242,23 +4855,28 @@ impl SceneSource for Runtime {
             } => self.session.accessibility_action(target, &action, value)?,
             UiEvent::Hover { x, y } => {
                 let before = self.status_pill.clone();
-                let pill_item = self.session.action_at(x, y).and_then(|(id, name, arg)| {
-                    if name == "status.pill.open" {
-                        if let bead::core::Value::Text(view) = arg {
-                            Some(view)
+                let pill_item = self
+                    .session
+                    .action_at(x, y)
+                    .and_then(|(id, name, argument)| {
+                        if name == "status.pill.open" {
+                            let hover = crate::widgets::dropdown_hover(&argument);
+                            crate::widgets::dropdown_view(&argument)?;
+                            if hover || self.status_pill.panel().is_some() {
+                                Some(id)
+                            } else {
+                                None
+                            }
+                        } else if name == "view.open" {
+                            (id.rsplit('.').next() == Some("clock")).then_some(id)
                         } else {
                             None
                         }
-                    } else if name == "view.open" {
-                        (id.rsplit('.').next() == Some("clock")).then(|| "calendar".into())
-                    } else {
-                        None
-                    }
-                });
+                    });
                 let hovered = self
                     .session
                     .with_local_feedback(|session| session.hover(x, y))?;
-                let pill = if self.bar {
+                let pill = if self.bar || self.widget_canvas {
                     if let Some(item) = pill_item {
                         self.status_pill.enter_icon(item, std::time::Instant::now());
                     } else {
@@ -4525,6 +5143,10 @@ impl SceneSource for Runtime {
             | UiEvent::HorizontalScroll { .. } => None,
             UiEvent::Click { x, y } => self.session.click(x, y)?,
             UiEvent::Scroll { x, y, delta } => self.session.scroll(x, y, delta)?,
+            UiEvent::Action { name, argument } => {
+                let changes = self.session.action_values(&name, argument)?;
+                self.session.update(changes)?
+            }
             UiEvent::Key { text, backspace } => self.session.key(&text, backspace)?,
         };
         // Lua actions can request an edge call (including pointer navigation buttons).
@@ -4646,7 +5268,115 @@ impl SceneSource for Runtime {
     fn commit(&mut self) -> bool {
         if let Some(scene) = self.pending.take() {
             self.session.commit(scene);
+            if self.widget_canvas
+                && self.status_pill_route.is_some()
+                && let Err(error) = self.sync_status_peek_route()
+            {
+                eprintln!("WIDGET_ANCHOR_ERROR {error}");
+            }
+            if self.widget_editor {
+                let keys = [
+                    "widgets.layout",
+                    "widgets.draft",
+                    "widgets.editing",
+                    "widgets.selected",
+                    "widgets.geometry",
+                    "widgets.canvas.width",
+                    "widgets.canvas.height",
+                    "widgets.drag.active",
+                    "widgets.drag.source",
+                    "widgets.drag.x",
+                    "widgets.drag.y",
+                ];
+                let projection: BTreeMap<_, _> = keys
+                    .into_iter()
+                    .filter_map(|key| {
+                        self.session
+                            .stores
+                            .get(key)
+                            .map(|value| (key.into(), value.clone()))
+                    })
+                    .collect();
+                if self.widgets_projection.as_ref() != Some(&projection) {
+                    self.widgets_projection = Some(projection.clone());
+                    if let Some(wakeup) = &self.wakeup {
+                        wakeup(UiEvent::HostModel(projection));
+                    }
+                }
+            }
+
+            if self.bar {
+                let editing = self.session.stores.get("widgets.editing")
+                    == Some(&bead::core::Value::Bool(true));
+                let layout = self
+                    .session
+                    .stores
+                    .get(if editing {
+                        "widgets.draft"
+                    } else {
+                        "widgets.layout"
+                    })
+                    .cloned();
+                if layout != self.widgets_canvas_layout || editing != self.widgets_canvas_editing {
+                    self.widgets_canvas_editing = editing;
+                    self.widgets_canvas_layout = layout.clone();
+                    let open = match layout {
+                        Some(bead::core::Value::List(documents)) => documents
+                            .first()
+                            .and_then(|doc| doc["hosts"]["canvas"]["instances"].as_array())
+                            .is_some_and(|instances| !instances.is_empty()),
+                        _ => false,
+                    };
+                    let wanted = open || editing;
+                    if wanted != self.widgets_canvas_wanted {
+                        self.widgets_canvas_wanted = wanted;
+                        if let Some(wakeup) = &self.wakeup {
+                            wakeup(UiEvent::CanvasOffer {
+                                view: "widgets-canvas".into(),
+                                output: self.output.clone(),
+                                open: wanted,
+                                values: self.widget_host_values(),
+                            });
+                        }
+                    }
+                }
+            }
+
             self.pending_dashboard = None;
+            if self.bar && self.widgets_canvas_wanted {
+                let projection = self.widget_host_values();
+                if self.widgets_projection.as_ref() != Some(&projection) {
+                    self.widgets_projection = Some(projection.clone());
+                    if let Some(wakeup) = &self.wakeup {
+                        if self.session.stores.get("widgets.editing")
+                            == Some(&bead::core::Value::Bool(true))
+                        {
+                            let live = projection
+                                .iter()
+                                .filter(|(key, _)| !key.starts_with("widgets."))
+                                .map(|(key, value)| (key.clone(), value.clone()))
+                                .collect();
+                            wakeup(UiEvent::CompanionModel(live));
+                        }
+                        if self.widgets_canvas_wanted {
+                            wakeup(UiEvent::CanvasModel {
+                                view: "widgets-canvas".into(),
+                                output: self.output.clone(),
+                                values: projection,
+                            });
+                        }
+                    }
+                }
+            }
+            if self.bar && !self.widgets_canvas_wanted {
+                self.widgets_projection = None;
+            }
+            if self.widgets_close_on_commit {
+                self.widgets_close_on_commit = false;
+                if let Some(wakeup) = &self.wakeup {
+                    wakeup(UiEvent::CompanionVisibility(false));
+                }
+            }
             if self.launcher.is_some()
                 && let Some(memory) = &self.launcher_memory
                 && let Ok(mut saved) = memory.lock()

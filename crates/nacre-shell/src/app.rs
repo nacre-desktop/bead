@@ -288,6 +288,9 @@ impl Host {
         if method == "hover-open" {
             spawn_args.push(json!("--hover-open"));
         }
+        if name == "chat" && method == "pearl-open" {
+            spawn_args.push(json!("--pearl"));
+        }
         match self.spawn(name, &spawn_args) {
             Ok(()) => Reply::ok(id, Value::Null),
             Err(error) => Reply::error(id, "spawn", error),
@@ -473,6 +476,7 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
         return Err(format!("unknown app: {name}").into());
     }
     let mut args = Vec::new();
+    let mut pearl = false;
     let mut daemon = None;
     let mut command_socket = None;
     let mut parent_socket = None;
@@ -483,6 +487,7 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
     while let Some(arg) = rest.next() {
         let mut value = |what: &str| rest.next().cloned().ok_or(format!("{arg} needs {what}"));
         match arg.as_str() {
+            "--pearl" if name == "chat" => pearl = true,
             "--daemon-socket" => daemon = Some(PathBuf::from(value("a path")?)),
             "--command-socket" => command_socket = Some(PathBuf::from(value("a path")?)),
             "--host-socket" => parent_socket = Some(PathBuf::from(value("a path")?)),
@@ -538,6 +543,8 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
         crate::i18n_source::Service::start(topic(client, "i18n")?, sink).ok()
     });
     // The look follows the owner's settings like the shell's: motion, text style, frame size.
+    let panel_gate = crate::shell_control::Gate::new();
+    let prefs_gate = panel_gate.clone();
     let (first, first_seen) = std::sync::mpsc::sync_channel::<()>(1);
     let _prefs = client.as_ref().and_then(|client| {
         prefs::Service::start_with(
@@ -546,6 +553,7 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
             topic(client, prefs::PROFILE),
             topic(client, prefs::LAUNCHER_LAYOUT),
             Arc::new(move |p: &prefs::Prefs| {
+                prefs_gate.apply(p);
                 bead::core::animation::set_reduced_motion(p.reduce_motion);
                 bead::ui::text_style::set(p.text_style());
                 placement::set_sheen(p.frame_sheen);
@@ -562,6 +570,7 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
         interactive: true,
         keyboard_focus: true,
         app: Some(args.clone()),
+        app_as_pearl: pearl,
         ..Options::default()
     };
     let fill = colors.get("surface")?;
@@ -630,7 +639,7 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
             let spec = popouts::chat(
                 client.clone().ok_or("the sidebar needs the daemon")?,
                 palette,
-                colors,
+                colors.clone(),
                 Arc::new(std::sync::Mutex::new(BTreeMap::from([
                     (
                         "panel.hover_opened".into(),
@@ -643,9 +652,22 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
                 ]))),
                 false,
             )?;
+            options.pearls = Some(crate::pearls::options(
+                crate::state::File::path()
+                    .ok()
+                    .and_then(|path| path.parent().map(|parent| parent.join("chat-pearls.json"))),
+                client.clone(),
+            ));
+            options.control = Some(panel_gate);
             options.panels = Some(Panels::new(
                 "chat".into(),
-                BTreeMap::from([("chat".into(), spec)]),
+                BTreeMap::from([
+                    ("chat".into(), spec),
+                    (
+                        crate::pearls::GUIDE_VIEW.into(),
+                        crate::pearls::guide_spec(&colors)?,
+                    ),
+                ]),
             )?);
         }
     }

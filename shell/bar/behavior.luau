@@ -1,8 +1,8 @@
 -- SPDX-License-Identifier: GPL-3.0-only
-return {stores={["widgets.layout"]={},["widgets.rev"]=0,["bar.height"]=50,["bar.notifications.count"]=0,["bar.launcher"]=false,["bar.popouts"]=false,["bar.reconnecting"]=false,["bar.workspace.enabled"]=true,["bar.tray.enabled"]=true,["bar.window.focus.enabled"]=true,["bar.workspace.origins"]={},["bar.dashboard.enabled"]=true,
+return {stores={["widgets.draft"]={},["widgets.geometry"]={},["widgets.editing"]=false,["widgets.selected"]="",["widgets.canvas.width"]=0,["widgets.canvas.height"]=0,["widgets.drag.active"]=false,["widgets.drag.source"]="",["widgets.drag.x"]=0,["widgets.drag.y"]=0,["widgets.layout"]={},["widgets.rev"]=0,["bar.height"]=50,["bar.notifications.count"]=0,["bar.launcher"]=false,["bar.popouts"]=false,["bar.reconnecting"]=false,["bar.workspace.enabled"]=true,["bar.tray.enabled"]=true,["bar.window.focus.enabled"]=true,["bar.workspace.origins"]={},["bar.dashboard.enabled"]=true,
     ["bar.tray.visible"]=false,["bar.workspace.count"]=6,["bar.workspace.icons"]={},["bar.workspace.hints"]=true,["bar.clock.twelve"]=false,["bar.updates.count"]=0,["bar.updates.enabled"]=true,
     ["bead.edge.dwell"]=0,["bead.edge.fade"]=0,["status.hovered"]="",["status.peek.visible"]=false,["status.peek.kind"]="",
-    ["status.panel.kind"]=""},actions={["launcher.open"]=function(_) end},computed={
+    ["status.panel.kind"]=""},actions={["launcher.open"]=function(_) end,["widgets.snapshot"]=function(_) end,["widgets.edit"]=function(_) end,["widgets.drag"]=function(_) end},computed={
     -- desktop.clockFormat: the daemon clock is "HH:MM"; 12-hour shows "h:MM AM/PM".
     ["bar.clock.text"]=function(s)
         local c=s["bead.desktop.clock"]

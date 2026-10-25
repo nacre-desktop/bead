@@ -1876,6 +1876,32 @@
       ],
       "returns": "bool",
       "source": "nacre/shell/services/compositor/NiriBackend.qml:162"
+    },
+    {
+      "target_expression": "\"widgets\"",
+      "patterns": [
+        {
+          "prefix": "widgets",
+          "dynamic": false
+        }
+      ],
+      "method": "open",
+      "parameters": [],
+      "returns": "void",
+      "source": "Bead B0114"
+    },
+    {
+      "target_expression": "\"widgets\"",
+      "patterns": [
+        {
+          "prefix": "widgets",
+          "dynamic": false
+        }
+      ],
+      "method": "edit",
+      "parameters": [],
+      "returns": "void",
+      "source": "Bead B0114"
     }
   ]
 }

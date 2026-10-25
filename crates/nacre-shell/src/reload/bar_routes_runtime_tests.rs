@@ -230,7 +230,12 @@ fn node(runtime: &Runtime, action: &str, arg: Option<&str>) -> Option<(f32, f32)
         .iter()
         .find(|n| {
             n.action.as_deref() == Some(action)
-                && arg.is_none_or(|a| n.action_arg == Some(bead::core::Value::Text(a.into())))
+                && arg.is_none_or(|a| {
+                    n.action_arg
+                        .as_ref()
+                        .and_then(crate::widgets::dropdown_view)
+                        == Some(a)
+                })
         })
         .map(|n| {
             let rect = bead::ui::rect(&n.draw);

@@ -539,6 +539,7 @@ fn start(
         return run(options, scene);
     }
     let desktop_owner = std::sync::Arc::new(std::sync::OnceLock::new());
+    let widget_backend = std::sync::Arc::new(std::sync::OnceLock::new());
     let tray_selection = tray::Selection::default();
     let panel_trace = options.trace_state;
     if core_views && options.bar {
@@ -933,7 +934,46 @@ fn start(
                 )?,
             );
         }
+        let widget_inputs = widgets::Inputs {
+            client: _ui_provider.clone(),
+            desktop: desktop_owner.clone(),
+            backend: widget_backend.clone(),
+            prefs: _prefs.as_ref().map(|(_, source)| source.clone()),
+        };
+        options.canvases = Some(bead::wayland::Panels::new(
+            "widgets-canvas".into(),
+            std::collections::BTreeMap::from([(
+                "widgets-canvas".into(),
+                widgets::editor(
+                    palette.clone(),
+                    colors.clone(),
+                    widget_inputs.clone(),
+                    panel_trace,
+                    widgets::View::Canvas,
+                )?,
+            )]),
+        )?);
         // B0047: the lips come from shell/frame/behavior.luau; a lip needs its view.
+        views.insert(
+            "widgets".into(),
+            widgets::editor(
+                palette.clone(),
+                colors.clone(),
+                widget_inputs.clone(),
+                panel_trace,
+                widgets::View::Editor,
+            )?,
+        );
+        views.insert(
+            "widget-menu".into(),
+            widgets::editor(
+                palette.clone(),
+                colors.clone(),
+                widget_inputs.clone(),
+                panel_trace,
+                widgets::View::Menu,
+            )?,
+        );
         frame_gate.configure_frame(
             frame_config::load(Path::new("shell")),
             views.keys().cloned(),
@@ -997,6 +1037,9 @@ fn start(
     } else {
         None
     };
+    if let Some(backend) = &shared_backend {
+        let _ = widget_backend.set(backend.clone());
+    }
     let shared_desktop = options.bar.then(bead::services::Desktop::start);
     if let Some(desktop) = &shared_desktop {
         let _ = desktop_owner.set(desktop.clone());

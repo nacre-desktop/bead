@@ -354,13 +354,13 @@ fn real_bar_calendar_action_enqueues_a_view_and_audio_scroll_does_not_toggle_it(
     assert!(
         regions
             .iter()
-            .any(|r| r.prepare_view.as_deref() == Some("peek-audio")
+            .any(|r| r.prepare_view.as_deref() == Some("sound")
                 && r.prepare_panel
                 && r.prepare_center == Some(audio.0))
     );
     let notification_anchor = regions
         .iter()
-        .find(|r| r.prepare_view.as_deref() == Some("peek-notifications"))
+        .find(|r| r.prepare_view.as_deref() == Some("notifications"))
         .and_then(|r| r.prepare_center)
         .ok_or("notification hover anchor missing")?;
     assert_eq!(
@@ -373,7 +373,7 @@ fn real_bar_calendar_action_enqueues_a_view_and_audio_scroll_does_not_toggle_it(
         y: calendar.1,
     })?;
     assert!(
-        matches!(events.lock().unwrap().as_slice(),[UiEvent::CompanionSelect{view,toggle:true,center:Some(x),..}]if view=="calendar" && *x==calendar.0)
+        matches!(events.lock().unwrap().as_slice(),[UiEvent::CompanionSelect{view,toggle:false,center:Some(x),..}]if view=="calendar" && *x==calendar.0)
     );
     let error = runtime
         .stage(UiEvent::Scroll {
@@ -1334,5 +1334,230 @@ fn widget_launcher_settings_select_dashboard_and_custom_view_routes() -> Result<
         assert_eq!(node.action.as_deref(), Some("view.open"));
         assert_eq!(node.action_arg, Some(Value::Text(expected.into())));
     }
+    Ok(())
+}
+
+#[test]
+fn widget_editor_transactions_keep_pills_unknown_data_and_cancel_is_not_a_write() -> Result<()> {
+    use serde_json::{Value as Json, json};
+    let preset: Json = serde_json::from_str(include_str!("../tests/widgets-default.json"))?;
+    let mut h = Harness::load(
+        &root(),
+        Path::new("widgets/editor/main.luau"),
+        &root().join("palette.json"),
+        super::initial_models()?,
+        Config {
+            width: 1920,
+            height: 1080,
+            scale: 1.5,
+        },
+    )?;
+    let apply = |h: &mut Harness, mut request: Json| -> Result<()> {
+        request["document"] = preset.clone();
+        request["initial"] = preset.clone();
+        request["rev"] = json!(7);
+        let changes = h
+            .session
+            .action_values("widgets.edit", Value::list(vec![request]))?;
+        h.update(changes)
+    };
+    let doc = |h: &Harness| -> Json {
+        match h.session.stores.get("widgets.draft").unwrap() {
+            Value::List(items) => items[0].clone(),
+            _ => panic!("draft must be a document list"),
+        }
+    };
+    apply(
+        &mut h,
+        json!({"op":"move","iid":"clock","host":"top_bar","region":"left","start":2}),
+    )?;
+    assert!(
+        doc(&h)["hosts"]["top_bar"]["instances"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["iid"] == "clock" && item["host"] == "top_bar")
+    );
+    apply(
+        &mut h,
+        json!({"op":"setting","iid":"launcher","key":"future","value":{"opaque":[1,2],"empty_object":{},"empty_array":[],"nothing":null,"large":18446744073709551615_u64}}),
+    )?;
+    let accepted = doc(&h);
+    assert_eq!(
+        accepted["hosts"]["top_bar"]["instances"][0]["settings"]["future"],
+        json!({"opaque":[1,2],"empty_object":{},"empty_array":[],"nothing":null,"large":18446744073709551615_u64})
+    );
+    assert!(
+        apply(
+            &mut h,
+            json!({"op":"setting","iid":"launcher","key":"icon","value":"invalid"})
+        )
+        .is_err()
+    );
+    assert_eq!(
+        doc(&h),
+        accepted,
+        "invalid settings must preserve the accepted draft"
+    );
+    apply(
+        &mut h,
+        json!({"op":"move","iid":"clock","host":"status-pill","region":"right","start":0}),
+    )?;
+    let restored = doc(&h);
+    let pill = restored["hosts"]["top_bar"]["instances"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["iid"] == "status-pill")
+        .unwrap();
+    assert!(
+        pill["children"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["iid"] == "clock" && item["host"] == "status-pill")
+    );
+    apply(
+        &mut h,
+        json!({"op":"move","iid":"status-pill","host":"status-pill","region":"left","start":0}),
+    )?;
+    assert_eq!(doc(&h), restored, "cyclic moves must be refused");
+    apply(
+        &mut h,
+        json!({"op":"add","widget":"clock","host":"top_bar","region":"left","start":2,"span":1}),
+    )?;
+    let first = doc(&h);
+    apply(
+        &mut h,
+        json!({"op":"add","widget":"clock","host":"top_bar","region":"left","start":3,"span":1}),
+    )?;
+    assert_ne!(doc(&h), first, "copies need unique instance IDs");
+    apply(&mut h, json!({"op":"undo"}))?;
+    assert_eq!(doc(&h), first);
+    apply(&mut h, json!({"op":"done"}))?;
+    assert_eq!(
+        h.session.stores.get("widgets.write"),
+        Some(&Value::list(vec![first]))
+    );
+    // Cancel a fresh editing session: it never creates an external-write request.
+    h.update(BTreeMap::from([(
+        "widgets.write".into(),
+        Value::list(Vec::new()),
+    )]))?;
+    apply(&mut h, json!({"op":"cancel"}))?;
+    assert_eq!(
+        h.session.stores.get("widgets.write"),
+        Some(&Value::list(Vec::new()))
+    );
+    assert_eq!(
+        h.session.stores.get("widgets.draft"),
+        Some(&Value::list(Vec::new()))
+    );
+    Ok(())
+}
+
+#[test]
+fn widget_canvas_move_roundtrip_snaps_preserves_ids_and_rejects_duplicates() -> Result<()> {
+    use serde_json::{Value as Json, json};
+    let preset: Json = serde_json::from_str(include_str!("../tests/widgets-default.json"))?;
+    let mut h = Harness::load(
+        &root(),
+        Path::new("widgets/editor/main.luau"),
+        &root().join("palette.json"),
+        super::initial_models()?,
+        Config {
+            width: 1920,
+            height: 1080,
+            scale: 1.5,
+        },
+    )?;
+    let apply = |h: &mut Harness, mut request: Json| -> Result<()> {
+        request["document"] = preset.clone();
+        request["canvas_width"] = json!(1920);
+        request["canvas_height"] = json!(1080);
+        let values = h
+            .session
+            .action_values("widgets.edit", Value::list(vec![request]))?;
+        h.update(values)
+    };
+    apply(
+        &mut h,
+        json!({"op":"move","iid":"clock","host":"canvas","x":100,"y":100,"w":88,"h":34,"snap":32}),
+    )?;
+    let Value::List(draft) = h.session.stores.get("widgets.draft").unwrap() else {
+        panic!("missing draft")
+    };
+    let document = draft[0].clone();
+    assert_eq!(document["hosts"]["canvas"]["instances"][0]["iid"], "clock");
+    assert_eq!(
+        document["hosts"]["canvas"]["instances"][0]["slot"],
+        json!({"x":96,"y":96,"w":88,"h":34})
+    );
+    let mut idle = super::initial_models()?;
+    idle.insert("widgets.layout".into(), Value::list(vec![document.clone()]));
+    idle.insert("widgets.editing".into(), Value::Bool(false));
+    let mut canvas = Harness::load(
+        &root(),
+        Path::new("widgets/editor/canvas.luau"),
+        &root().join("palette.json"),
+        idle,
+        Config {
+            width: 1920,
+            height: 1080,
+            scale: 1.5,
+        },
+    )?;
+    assert!(
+        canvas
+            .scene()
+            .layers
+            .iter()
+            .any(|layer| layer.id.contains("clock.time")),
+        "bar fallback must render the moved clock"
+    );
+    assert!(
+        canvas
+            .session
+            .view_nodes()
+            .iter()
+            .all(|node| node.action.is_none() && node.input.is_none()),
+        "passive fixture canvas cannot capture keyboard input"
+    );
+    let mut invalid = document.clone();
+    invalid["hosts"]["canvas"]["instances"]
+        .as_array_mut()
+        .unwrap()[0]["iid"] = json!("launcher");
+    assert!(
+        canvas
+            .update(BTreeMap::from([(
+                "widgets.layout".into(),
+                Value::list(vec![invalid])
+            )]))
+            .is_err()
+    );
+    assert_eq!(
+        canvas.session.stores.get("widgets.layout"),
+        Some(&Value::list(vec![document]))
+    );
+    apply(
+        &mut h,
+        json!({"op":"move","iid":"clock","host":"top_bar","region":"left","start":2,"span":1}),
+    )?;
+    let Value::List(draft) = h.session.stores.get("widgets.draft").unwrap() else {
+        panic!("missing draft")
+    };
+    assert!(
+        draft[0]["hosts"]["canvas"]["instances"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        draft[0]["hosts"]["top_bar"]["instances"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["iid"] == "clock" && item["host"] == "top_bar")
+    );
     Ok(())
 }
