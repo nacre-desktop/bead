@@ -12,7 +12,6 @@ The engine experiment is retained as a rejected patch. Only the opt-in QML probe
 and [source-pinned measurements](specs/0105-present-latency.md) are integrated; full
 probe-only remote Arch CI passes. No live desktop or installed software changed.
 
-## 2026-10-25 — B0104 pearl drag/close (lead-accepted)
 ## 2026-10-25 — B0104 pearl drag/close (integrated, lead-accepted)
 
 Logical relative dragging, native close, bounded recovery and view-state persistence
@@ -24,8 +23,7 @@ requests pass; synthetic Super+Q and final move/dock/stale/GL refreshes remain g
 One current-base diagnostic pair records detached/closed +0.531/+0.320 MiB,
 with allocator in-use growth and anonymous-backing variance; no new gate pass or code optimization is claimed.
 [B0104](specs/0104-pearls-drag.md) preserves failed gates and proof limits.
-No live change or laptop-cap claim; raw images stay private because updates were unstubbed.
-
+No live change or laptop-cap claim. Original images stay private because updates were unstubbed.
 
 ## 2026-10-25 — B0097 panel anchors and motion (review candidate)
 
