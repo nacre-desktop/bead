@@ -291,6 +291,11 @@ impl Generation {
                         && (0. ..=64.).contains(stroke_width)
                         && *stroke_width > 0.
                 }
+                Primitive::Polyline { points, stroke_width, .. } => {
+                    points.len() <= 256 && stroke_width.is_finite()
+                        && (0. ..=64.).contains(stroke_width)
+                        && points.iter().flatten().all(|value| value.is_finite() && (0. ..=1.).contains(value))
+                }
                 Primitive::Rounded { radius, border, .. } => {
                     radius.is_finite()
                         && *radius >= 0.

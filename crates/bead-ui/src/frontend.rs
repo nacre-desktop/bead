@@ -64,6 +64,9 @@ return function(ui, constructors, allowed, arrayMarker)
                     error("node properties need names or ordered children", 2)
                 end
             end
+            if name == "Polyline" and type(named.points) == "table" and next(named.points) == nil then
+                named.points = setmetatable({}, arrayMarker)
+            end
             local children = setmetatable({}, arrayMarker)
             local index, child = 1, rawget(props, 1)
             while child ~= nil do

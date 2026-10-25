@@ -2169,7 +2169,8 @@ impl SceneSource for Runtime {
                     | bead::render::Primitive::Text { rect, .. }
                     | bead::render::Primitive::Image { rect, .. }
                     | bead::render::Primitive::Shadow { rect, .. }
-                    | bead::render::Primitive::Arc { rect, .. } => *rect,
+                    | bead::render::Primitive::Arc { rect, .. }
+                    | bead::render::Primitive::Polyline { rect, .. } => *rect,
                 };
                 bead::wayland::InputRegion {
                     id: node.id.clone(),
@@ -2249,6 +2250,14 @@ impl SceneSource for Runtime {
     }
     fn sensitive_input(&self) -> bool {
         self.session.focused_masked()
+    }
+    fn scales(&mut self, scales: Vec<f32>) {
+        if let Some(dashboard) = &self.dashboard
+            && let Some(scale) = scales.into_iter().filter(|scale| scale.is_finite() && *scale > 0.)
+                .max_by(f32::total_cmp)
+        {
+            dashboard.set_raster_scale(scale);
+        }
     }
     fn viewport(&mut self, width: u32, height: u32) -> bool {
         if let Some(chrome) = &mut self.chrome {

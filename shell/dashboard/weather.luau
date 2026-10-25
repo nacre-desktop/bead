@@ -1,6 +1,5 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 local ui=require("bead.ui")
-local C=require("./components")
 local style=require("./weather-style")
 local sky=require("./weather-sky")
 return function()
@@ -18,7 +17,7 @@ return function()
         if type(day.high)=="number" then maximum=math.max(maximum,day.high) end
     end
     local span=math.max(1,maximum-minimum)
-    local weekdays={"sun","mon","tue","wed","thu","fri","sat"}
+    local weekdays={"bead.common.weekday-short-sun","bead.common.weekday-short-mon","bead.common.weekday-short-tue","bead.common.weekday-short-wed","bead.common.weekday-short-thu","bead.common.weekday-short-fri","bead.common.weekday-short-sat"}
     local function weekday(date)
         local y,m,d=string.match(date,"^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
         if not y then return date end
@@ -27,13 +26,43 @@ return function()
         if m<1 or m>12 then return date end
         if m<3 then y-=1 end
         local day=(y+math.floor(y/4)-math.floor(y/100)+math.floor(y/400)+offsets[m]+d)%7
-        return ui.tr("bead.common.weekday-short-"..weekdays[day+1])
+        return ui.tr(weekdays[day+1])
     end
     local function condition(code)
         if type(code)~="number" or code<0 then return "cloud_off" end
         return code<=1 and "sunny" or code==2 and "partly_cloudy_day" or code==3 and "cloud"
             or (code==45 or code==48) and "foggy" or code>=95 and "thunderstorm"
             or (code>=71 and code<=77 or code==85 or code==86) and "weather_snowy" or "rainy"
+    end
+    local hours={}
+    local low,high=math.huge,-math.huge
+    for _,item in ipairs(ui.resolve_for_check(ui.bind("dashboard.rows"))) do
+        if type(item.temperature)=="number" then
+            table.insert(hours,item)
+            low,high=math.min(low,item.temperature),math.max(high,item.temperature)
+        end
+    end
+    local chartWidth,chartHeight=style.width-32,160
+    local points,area,labels={},{},{}
+    for i,item in ipairs(hours) do
+        local x=1/6+(i-1)/math.max(1,#hours-1)*2/3
+        local y=(16+(1-(item.temperature-low)/math.max(1,high-low))*(chartHeight-24))/chartHeight
+        table.insert(points,{x,y})
+        if (i-1)%4==0 or i==#hours then
+            table.insert(labels,ui.Text{id="temperature-"..item.id,position="absolute",left=16+x*chartWidth-34,
+                top=42+y*chartHeight-22,width=68,height=20,text=item.value,font_size=12,text_align="center",color="onSurface"})
+            table.insert(labels,ui.Column{id="time-"..item.id,position="absolute",left=16+x*chartWidth-50,
+                top=210,width=100,height=40,gap=4,align="center",
+                ui.Row{width=100,height=18,gap=4,justify="center",
+                    ui.Text{text=condition(item.code),width=20,height=18,font_size=16,family="Material Symbols Rounded",color="secondary"},
+                    ui.Text{text=item.rain_text or item.detail,width=40,height=18,font_size=10.667,color="onSurface"}},
+                ui.Text{text=item.label,width=100,height=16,font_size=10.667,text_align="center",color="onSurfaceVariant"}})
+        end
+    end
+    if #points>=2 then
+        table.insert(area,{points[1][1],1})
+        for _,point in ipairs(points) do table.insert(area,point) end
+        table.insert(area,{points[#points][1],1})
     end
     return ui.Box{id="weather",width=940,height=562,
         ui.Box{id="hero",position="absolute",left=0,top=0,width=style.width,height=style.height,radius=style.radius,fill="surfaceContainer",
@@ -52,33 +81,38 @@ return function()
                 text=ui.bind("dashboard.weather.sun_times"),font_size=10.667,text_align="center",color=style.muted},
             table.unpack(metrics),
         },
-        ui.Column{id="hourly",position="absolute",left=0,top=310,width=564,height=252,padding=16,gap=12,radius=16,fill="surfaceContainerLow",
-            C.title("title",ui.tr("bead.dashboard.weather-hours"),532),
-            ui.Row{id="hours",height=170,gap=8,
-                ui.Repeat{id="items",model=ui.bind("dashboard.rows"),key="id",render=function(item)
-                    return ui.Column{id="hour",width=59,height=160,gap=12,align="center",
-                        ui.Text{text=item.value,height=30,font_size=20,color="primary"},
-                        ui.Text{text=item.detail,width=59,height=48,font_size=12,text_align="center",color="onSurfaceVariant"},
-                        ui.Text{text=item.label,height=24,font_size=14,color="onSurface"},
-                    }
-                end},
-            },
+        ui.Box{id="hourly",position="absolute",left=0,top=310,width=style.width,height=252,radius=16,fill="surfaceContainer",
+            ui.Text{id="title",position="absolute",left=16,top=12,width=220,height=24,
+                text=ui.tr("bead.dashboard.weather-hours"),font_size=16,font_weight=600,color="onSurface"},
+            ui.Text{id="legend",position="absolute",right=16,top=16,width=250,height=18,
+                text=ui.tr("bead.dashboard.weather-hour-legend"),font_size=10.667,text_align="right",color="onSurfaceVariant"},
+            ui.Polyline{id="area",position="absolute",left=16,top=42,width=chartWidth,height=chartHeight,
+                points=area,closed=true,stroke_width=2,color={0,0,0,0},fill=ui.alpha("primary",.08)},
+            ui.Polyline{id="temperature",position="absolute",left=16,top=42,width=chartWidth,height=chartHeight,
+                points=points,stroke_width=2,color="primary",round_caps=true},
+            #hours==0 and ui.Text{id="empty",position="absolute",left=16,top=100,width=chartWidth,height=24,
+                text=ui.tr("bead.dashboard.weather-none"),font_size=13.333,text_align="center",color="onSurfaceVariant"} or nil,
+            table.unpack(labels),
         },
-        ui.Column{id="outlook",position="absolute",left=580,top=0,width=360,height=562,padding=16,gap=16,radius=16,fill="surfaceContainerLow",
-            C.title("title",ui.tr("bead.dashboard.weather-days"),328),
-            ui.Column{id="days",width=328,height=470,gap=8,
+        ui.Box{id="outlook",position="absolute",left=580,top=0,width=360,height=562,radius=16,fill="surfaceContainer",
+            ui.Text{id="title",position="absolute",left=16,top=12,width=328,height=24,
+                text=ui.tr("bead.dashboard.weather-days"),font_size=16,font_weight=600,color="onSurface"},
+            ui.Column{id="days",position="absolute",left=16,top=54,width=328,height=496,gap=0,
                 ui.Repeat{id="items",model=ui.bind("dashboard.secondary"),key="id",render=function(item)
                     local valid=type(item.low)=="number" and type(item.high)=="number"
-                    return ui.Box{id="day",width=328,height=60,
-                        ui.Text{position="absolute",left=0,top=18,text=weekday(item.label),width=40,height=20,font_size=12,color="onSurface"},
-                        ui.Text{position="absolute",left=48,top=18,text=condition(item.code),width=24,height=20,font_size=16,
-                            family="Material Symbols Rounded",color="primary"},
-                        ui.Text{position="absolute",left=80,top=18,text=item.low_text or item.value,width=44,height=20,font_size=12,color="onSurfaceVariant"},
-                        ui.Box{position="absolute",left=128,top=25,width=78,height=5,radius=3,fill=ui.alpha("primary",.12)},
-                        valid and ui.Box{position="absolute",left=128+78*(item.low-minimum)/span,top=25,
-                            width=math.max(3,78*(item.high-item.low)/span),height=5,radius=3,fill="primary"} or nil,
-                        ui.Text{position="absolute",left=216,top=18,text=item.high_text or "",width=46,height=20,font_size=12,color="onSurface"},
-                        ui.Text{position="absolute",left=274,top=18,text=item.rain_text or item.detail,width=54,height=20,font_size=12,color="onSurfaceVariant"}}
+                    local rowHeight=496/math.max(1,#days)
+                    local textY=(rowHeight-20)/2
+                    local barY=(rowHeight-5)/2
+                    return ui.Box{id="day",width=328,height=rowHeight,
+                        ui.Text{position="absolute",left=0,top=textY,text=weekday(item.label),width=40,height=20,font_size=12,color="onSurface"},
+                        ui.Text{position="absolute",left=328*.21,top=textY,text=condition(item.code),width=24,height=20,font_size=14.667,
+                            family="Material Symbols Rounded",color="secondary"},
+                        ui.Text{position="absolute",left=328*.32,top=textY,text=item.low_text or item.value,width=44,height=20,font_size=12,color="onSurfaceVariant"},
+                        ui.Box{position="absolute",left=328*.47,top=barY,width=328*.24,height=5,radius=3,fill=ui.alpha("primary",.12)},
+                        valid and ui.Box{position="absolute",left=328*.47+328*.24*(item.low-minimum)/span,top=barY,
+                            width=math.max(3,328*.24*(item.high-item.low)/span),height=5,radius=3,fill="primary"} or nil,
+                        ui.Text{position="absolute",left=328*.75,top=textY,text=item.high_text or "",width=46,height=20,font_size=12,color="onSurface"},
+                        ui.Text{position="absolute",right=0,top=textY,text=item.rain_text or item.detail,width=54,height=20,font_size=12,text_align="right",color="onSurfaceVariant"}}
                 end},
             },
         },

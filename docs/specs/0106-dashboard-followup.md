@@ -8,14 +8,14 @@ Today's wallpaper decode and PNG encoding previously blocked the panel worker's
 model projection. A single background job now prepares the bounded poster;
 the first projection returns the layout immediately. The existing descriptor
 identity checks remain in the decoder. Results for superseded wallpaper/size
-pairs are rejected. Closing hides the poster; retirement joins the job and
+pairs are rejected. The closing reveal keeps its poster; retirement joins the job and
 releases its result. QML's Today image also uses asynchronous loading.
 
 Shell Luau owns the visual changes: Media separates player/artist/album,
 Weather restores units, metrics and compact weekday/range rows, and System
 uses a shared four-gauge band above network/process cards. Storage reads the
 published filesystem data. No frame pacing, launcher, daemon or backend change.
-No new framework primitive or temporary duplicate is introduced.
+General primitive: `ui.Polyline`, a bounded normalized CPU/GL path; the shell owns series, labels and normalization. Existing raster-scale hints reach projection before image sizing. No temporary product duplicate is introduced.
 
 ## Validation pending
 

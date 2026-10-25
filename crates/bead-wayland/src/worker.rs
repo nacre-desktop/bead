@@ -290,6 +290,7 @@ impl SceneSource for Source {
                         }
                         Job::Ack(_, _) => {}
                         Job::Stage(event, scales) => {
+                            source.scales(scales.clone());
                             active_scales.clone_from(&scales);
                             match &event {
                                 UiEvent::Hover { x, y } => {
@@ -640,8 +641,12 @@ mod tests {
     struct Mock {
         commits: Arc<AtomicUsize>,
         panic: bool,
+        scales: Vec<f32>,
     }
     impl SceneSource for Mock {
+        fn scales(&mut self, scales: Vec<f32>) {
+            self.scales = scales;
+        }
         fn input_regions(&self) -> Vec<InputRegion> {
             vec![InputRegion {
                 hit_polygon: None,
@@ -666,6 +671,7 @@ mod tests {
             if self.panic {
                 panic!("worker proof panic");
             }
+            assert_eq!(self.scales, vec![1.5], "scale hint must precede projection");
             Ok(Some(scene()))
         }
         fn validate(&self) -> Result<(), Box<dyn Error>> {
@@ -736,6 +742,7 @@ mod tests {
                 Ok(Box::new(Mock {
                     commits: count,
                     panic: false,
+                    scales: Vec::new(),
                 }))
             }),
             scene(),
@@ -813,6 +820,7 @@ mod tests {
                 Ok(Box::new(Mock {
                     commits: Arc::new(AtomicUsize::new(0)),
                     panic: true,
+                    scales: Vec::new(),
                 }))
             }),
             scene(),

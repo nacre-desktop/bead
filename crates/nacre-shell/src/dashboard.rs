@@ -488,6 +488,7 @@ pub struct Dashboard {
     system: Option<Arc<dyn Source>>,
     wallpaper: Option<Arc<dyn Source>>,
     summary_updates: Option<Arc<dyn Source>>,
+    raster_scale: std::cell::Cell<f64>,
     poster: std::cell::RefCell<Option<Poster>>,
     poster_job: std::cell::RefCell<Option<PosterJob>>,
     /// Thumbnail of the active player's art, decoded once per path while visible.
@@ -522,6 +523,7 @@ impl Dashboard {
             system: None,
             wallpaper: None,
             summary_updates: None,
+            raster_scale: std::cell::Cell::new(2.),
             poster: Default::default(),
             poster_job: Default::default(),
             art: Default::default(),
@@ -590,13 +592,22 @@ impl Dashboard {
         self.clock = clock;
         self
     }
+    pub fn set_raster_scale(&self, scale: f32) {
+        if scale.is_finite() && scale > 0. {
+            self.raster_scale.set(f64::from(scale));
+        }
+    }
     pub fn project_with_stores(&self, stores: &bead::core::Stores) -> BTreeMap<String, Value> {
         let mut values = self.project();
         let open = stores.get("panel.open") != Some(&Value::Bool(false));
         if self.page == Page::Today && open {
             self.project_wallpaper(stores, &mut values);
-        } else if !open {
-            self.poster.borrow_mut().take();
+        } else if self.page == Page::Today {
+            // Preserve the visible poster through the closing reveal. The existing
+            // panel retirement drops it and joins any pending job after the grace.
+            values.insert("dashboard.wallpaper".into(), Value::Bool(
+                self.poster.borrow().as_ref().is_some_and(|(_, _, _, bytes)| bytes.is_some()),
+            ));
         }
         // The countdown redraws once a second only while a session runs in an open panel;
         // the mini player on Today shows no position and needs no wake.
@@ -751,7 +762,8 @@ impl Dashboard {
                 let mut gauges = controls::gauges(&s);
                 let disk = s.disks.order.iter().find_map(|id| s.disks.items.get(id));
                 gauges[2] = json!({"id":"storage","label":tr("bead.dashboard.gauge-storage", &[]),"icon":"storage",
-                    "value":disk.map_or("—".into(), |d| format!("{:.0}%", d.used as f64 * 100. / d.total as f64)),
+                    "used":disk.map(|d| d.used),"total":disk.map(|d| d.total),
+                        "value":disk.map_or("—".into(), |d| format!("{:.0}%", d.used as f64 * 100. / d.total as f64)),
                     "fraction":disk.map(|d| (d.used as f64 / d.total as f64).clamp(0.,1.)),
                     "detail":disk.map_or(String::new(), |d| format!("{} / {}", bytes(d.used), bytes(d.total)))});
                 out.insert("dashboard.gauges".into(), Value::list(gauges));
@@ -911,17 +923,17 @@ impl Dashboard {
                     .first()
                     .and_then(|id| current.hours.items.get(id));
                 let metrics = [
-                    ("wind", current.wind, " km/h"),
-                    ("humidity", current.humidity, "%"),
-                    ("uv", day.and_then(|d| d.uv), ""),
-                    ("rain", hour.and_then(|h| h.rain), "%"),
-                    ("air-quality", current.aqi, " AQI"),
-                    ("pressure", current.pressure, " hPa"),
+                    ("wind", "bead.dashboard.weather-wind", current.wind, " km/h"),
+                    ("humidity", "bead.dashboard.weather-humidity", current.humidity, "%"),
+                    ("uv", "bead.dashboard.weather-uv", day.and_then(|d| d.uv), ""),
+                    ("rain", "bead.dashboard.weather-rain", hour.and_then(|h| h.rain), "%"),
+                    ("air-quality", "bead.dashboard.weather-air-quality", current.aqi, " AQI"),
+                    ("pressure", "bead.dashboard.weather-pressure", current.pressure, " hPa"),
                 ]
                 .into_iter()
-                .map(|(id, value, suffix)| {
+                .map(|(id, label, value, suffix)| {
                     json!({"id":id,
-                    "label":tr(&format!("bead.dashboard.weather-{id}"), &[]),
+                    "label":tr(label, &[]),
                     "value":number(value, suffix)})
                 })
                 .collect();
@@ -946,7 +958,8 @@ impl Dashboard {
                 );
                 let rain = tr("bead.dashboard.weather-rain-unit", &[]);
                 let hours = current.hours.order.iter().take(8).filter_map(|id| current.hours.items.get(id).map(|h| json!({
-                    "id":id,"label":line(h.time.get(11..16).unwrap_or(&h.time),20),"value":self.degrees(h.temperature),"detail":number(h.rain,&rain)
+                    "id":id,"label":line(h.time.get(11..16).unwrap_or(&h.time),20),"temperature":h.temperature,"code":h.wmo,
+                    "rain_text":number(h.rain,"%"),"value":self.degrees(h.temperature),"detail":number(h.rain,&rain)
                 }))).collect();
                 let days = current.days.order.iter().take(7).filter_map(|id| current.days.items.get(id).map(|d| json!({
                     "id":id,"label":line(&d.date,20),"low":d.low,"high":d.high,"code":d.wmo,
@@ -1021,6 +1034,7 @@ impl Dashboard {
                     let mut gauges = controls::gauges(&s);
                     let disk = s.disks.order.iter().find_map(|id| s.disks.items.get(id));
                     gauges.push(json!({"id":"storage","label":tr("bead.dashboard.gauge-storage", &[]),"icon":"hard_drive",
+                        "used":disk.map(|d| d.used),"total":disk.map(|d| d.total),
                         "value":disk.map_or("—".into(), |d| format!("{:.0}%", d.used as f64 * 100. / d.total as f64)),
                         "fraction":disk.map(|d| (d.used as f64 / d.total as f64).clamp(0.,1.)),
                         "detail":disk.map_or(String::new(), |d| format!("{} / {}", bytes(d.used), bytes(d.total)))}));
@@ -1252,7 +1266,7 @@ impl Dashboard {
         // Geometry belongs to the shell's theme. Decode with the existing short-lived,
         // descriptor-pinned worker; never retain a source-sized bitmap in the UI.
         let dimension = |key| match stores.get(key) {
-            Some(Value::Number(n)) if n.is_finite() && *n > 0. => (*n * 2.).min(4096.) as u32,
+            Some(Value::Number(n)) if n.is_finite() && *n > 0. => (*n * self.raster_scale.get()).ceil().min(4096.) as u32,
             _ => 0,
         };
         let (w, h) = (
@@ -1290,9 +1304,9 @@ impl Dashboard {
                             bead::core::profile::mark("dashboard_poster_start");
                             let mut request = pair.clone();
                             request.presentation = nacre_protocol::wallpaper::Presentation::Crop;
-                            let bytes = crate::wallpaper::decode_pair(request, w, h)
-                                .ok()
-                                .and_then(|decoded| image::RgbaImage::from_raw(w, h, decoded.rgba))
+                            let decoded = crate::wallpaper::decode_pair(request, w, h).ok();
+                            bead::core::profile::mark("dashboard_poster_decoded");
+                            let bytes = decoded.and_then(|decoded| image::RgbaImage::from_raw(w, h, decoded.rgba))
                                 .and_then(|image| crate::player_art::encode(&image));
                             bead::core::profile::mark("dashboard_poster_ready");
                             if send.send((pair, w, h, bytes)).is_ok()

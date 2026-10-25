@@ -23,11 +23,12 @@ pub enum Widget {
     TextInput,
     Image,
     Arc,
+    Polyline,
     Group,
     Box,
 }
 impl Widget {
-    pub fn constructors() -> [(&'static str, Self); 12] {
+    pub fn constructors() -> [(&'static str, Self); 13] {
         [
             ("Panel", Self::Panel),
             ("Row", Self::Row),
@@ -39,6 +40,7 @@ impl Widget {
             ("TextInput", Self::TextInput),
             ("Image", Self::Image),
             ("Arc", Self::Arc),
+            ("Polyline", Self::Polyline),
             ("Group", Self::Group),
             ("Box", Self::Box),
         ]
@@ -142,6 +144,8 @@ pub const PROPERTIES: &[&str] = &[
     "round_caps",
     "image_fit",
     "clip_polygon",
+    "points",
+    "closed",
     "text_align",
     "position",
     "left",
@@ -206,6 +210,8 @@ pub struct ViewSpec {
     pub round_caps: bool,
     pub image_fit: bead_render::ImageFit,
     pub clip_polygon: Option<Vec<[f32; 2]>>,
+    pub points: Vec<[f32; 2]>,
+    pub closed: bool,
     pub drag: bool,
     pub font_size: f32,
     pub font_weight: u16,
@@ -416,6 +422,21 @@ impl ViewSpec {
             let start_angle = number(p, "start_angle", -90., source)?;
             let sweep_angle = number(p, "sweep_angle", 360., source)?;
             let stroke_width = number(p, "stroke_width", 4., source)?;
+            let points: Vec<[f32; 2]> = if raw.kind == Widget::Polyline {
+                let value = p.get("points").cloned().unwrap_or(Json::Array(Vec::new()));
+                if !value.as_array().is_some_and(|items| items.len() <= 256) {
+                    return Err(source.error("Polyline points must be an array of at most 256 pairs"));
+                }
+                let parsed: Vec<[f32; 2]> = serde_json::from_value(value).map_err(|_| source.error("Polyline points must be [x,y] pairs"))?;
+                if parsed.iter().flatten().any(|v| !v.is_finite() || !(0. ..=1.).contains(v)) {
+                    return Err(source.error("Polyline points must contain at most 256 finite normalized pairs"));
+                }
+                parsed
+            } else { Vec::new() };
+            let closed = boolean(p, "closed", false, source)?;
+            if raw.kind == Widget::Polyline && !(0. ..=64.).contains(&stroke_width) {
+                return Err(source.error("Polyline stroke_width must be within 0..64"));
+            }
             if raw.kind == Widget::Arc
                 && (!(-360. ..=360.).contains(&start_angle)
                     || !(-360. ..=360.).contains(&sweep_angle)
@@ -700,6 +721,8 @@ impl ViewSpec {
                     _ => return Err(source.error("image_fit must be fill or cover")),
                 },
                 clip_polygon: polygon(p.get("clip_polygon"), source)?,
+                points,
+                closed,
                 radius: number(
                     p,
                     "radius",
@@ -1026,7 +1049,7 @@ pub fn layout(
             })
             .map(|(c, w)| c.map(|c| (c, w)))
             .transpose()?;
-        if fill[3] > 0 || border.is_some() {
+        if view.kind != Widget::Polyline && (fill[3] > 0 || border.is_some()) {
             emit(Primitive::Rounded {
                 rect: r,
                 radius: view.radius,
@@ -1087,6 +1110,11 @@ pub fn layout(
                 color: arc_color,
                 round_caps: view.round_caps,
             });
+        }
+        if view.kind == Widget::Polyline {
+            let line_color = color(view.color.as_ref(), accent, palette, source)?;
+            let fill = view.fill.as_ref().map(|v| color(Some(v), accent, palette, source)).transpose()?;
+            emit(Primitive::Polyline { rect: r, points: view.points.clone(), closed: view.closed, stroke_width: view.stroke_width, color: line_color, round_caps: view.round_caps, fill });
         }
         out.scene.layers[layer_index].own.end = out.scene.primitives.len();
         let inherited_scroll = view.scroll.as_deref().or(scroll_store);

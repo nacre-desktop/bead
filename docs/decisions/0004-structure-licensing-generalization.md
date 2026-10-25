@@ -80,6 +80,7 @@ After Bead's core switch on Nacre, plan support for:
 
 - B0107: `pointer_arg` lets a range view format continuous pointer actions while keyboard actions keep their steps;
   `preview_source`/`preview_expected`/`preview_tolerance` acknowledge local feedback without a timeout restoring stale values.
+- B0106: `ui.Polyline` paints at most 256 normalized points with optional closed fill on CPU/GL; shell markup owns series, normalization and labels.
 
 - B0103: `preview_key`/`preview_value` and `ui.preview_value` supply transient numeric control feedback;
   `SceneSource::wakeup_at` expires it without idle polling; Session scopes pointer focus, range capture and keyboard steps.

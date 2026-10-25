@@ -141,6 +141,7 @@ pub fn rect(draw: &Primitive) -> Rect {
     match draw {
         Primitive::Rounded { rect, .. }
         | Primitive::Arc { rect, .. }
+        | Primitive::Polyline { rect, .. }
         | Primitive::Text { rect, .. }
         | Primitive::Image { rect, .. }
         | Primitive::Shadow { rect, .. } => *rect,
@@ -150,6 +151,7 @@ fn rect_mut(draw: &mut Primitive) -> &mut Rect {
     match draw {
         Primitive::Rounded { rect, .. }
         | Primitive::Arc { rect, .. }
+        | Primitive::Polyline { rect, .. }
         | Primitive::Text { rect, .. }
         | Primitive::Image { rect, .. }
         | Primitive::Shadow { rect, .. } => rect,

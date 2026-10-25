@@ -831,5 +831,9 @@
   "bead.dashboard.weather-pressure": "Dashboard weather pressure label, using published weather readings.",
   "bead.dashboard.weather-sun-times": "Dashboard weather sun-times label, using published weather readings.",
   "bead.dashboard.media-track-details": "Dashboard Media card heading when no lyrics are available.",
-  "bead.dashboard.media-duration": "Dashboard Media track details: duration, formatted as minutes:seconds."
+  "bead.dashboard.media-duration": "Dashboard Media track details: duration, formatted as minutes:seconds.",
+  "bead.dashboard.weather-hour-legend": "Dashboard Weather hourly chart legend for temperature and precipitation chance.",
+  "bead.dashboard.system-temperature": "Dashboard System resource gauge system-temperature caption.",
+  "bead.dashboard.system-total": "Dashboard System resource gauge system-total caption.",
+  "bead.dashboard.system-unavailable": "Dashboard System resource gauge system-unavailable caption."
 }

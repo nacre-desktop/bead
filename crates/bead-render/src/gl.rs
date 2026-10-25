@@ -494,6 +494,14 @@ impl GlRenderer {
                     }
                     canvas.stroke_path(&path, &paint);
                 }
+            } else if let crate::Primitive::Polyline { points, closed, stroke_width, color, round_caps, fill, .. } = &item.primitive {
+                if let Some(points)=crate::polyline_points(r.translated(offset.0,offset.1),*stroke_width,points) {
+                    let mut path=femtovg::Path::new(); path.move_to(points[0].0*frame.scale,points[0].1*frame.scale);
+                    for &(px,py) in &points[1..] { path.line_to(px*frame.scale,py*frame.scale); }
+                    if *closed { path.close(); }
+                    if let Some(fill)=fill.filter(|c| *closed && c[3]!=0) { canvas.fill_path(&path,&femtovg::Paint::color(femtovg::Color::rgba(fill[0],fill[1],fill[2],fill[3]))); }
+                    if *stroke_width>0. && color[3]!=0 { let mut paint=femtovg::Paint::color(femtovg::Color::rgba(color[0],color[1],color[2],color[3])); paint.set_line_width(*stroke_width*frame.scale); paint.set_line_join(femtovg::LineJoin::Round); if *round_caps { paint.set_line_cap(femtovg::LineCap::Round); } canvas.stroke_path(&path,&paint); }
+                }
             } else if let crate::Primitive::Rounded {
                 radius,
                 fill,

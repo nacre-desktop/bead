@@ -230,7 +230,7 @@
   "bead.dashboard.page-notifications": "Notifications",
   "bead.dashboard.page-screenshots": "Screenshots",
   "bead.dashboard.page-system": "System",
-  "bead.dashboard.page-today": "Today",
+  "bead.dashboard.page-today": "Dashboard",
   "bead.dashboard.page-toggle": "Show or hide page",
   "bead.dashboard.page-unavailable": "{page} unavailable",
   "bead.dashboard.page-up": "Move up",
@@ -262,7 +262,7 @@
   "bead.dashboard.updates-unavailable": "Updates unavailable",
   "bead.dashboard.weather-days": "Daily outlook",
   "bead.dashboard.weather-details": "Feels like {feels}    Wind {wind}",
-  "bead.dashboard.weather-hours": "Next hours",
+  "bead.dashboard.weather-hours": "Next 24 hours",
   "bead.dashboard.weather-none": "Forecast unavailable",
   "bead.dashboard.weather-photo-credit": "Photo: {author} · {license} · cropped/softened",
   "bead.dashboard.weather-rain-unit": "% rain",
@@ -843,5 +843,9 @@
   "bead.dashboard.weather-pressure": "Pressure",
   "bead.dashboard.weather-sun-times": "Sunrise {rise} · Sunset {set}",
   "bead.dashboard.media-track-details": "Track details",
-  "bead.dashboard.media-duration": "Duration  {value}"
+  "bead.dashboard.media-duration": "Duration  {value}",
+  "bead.dashboard.weather-hour-legend": "Temperature · Precipitation chance",
+  "bead.dashboard.system-temperature": "Temperature",
+  "bead.dashboard.system-total": "{value} total",
+  "bead.dashboard.system-unavailable": "Unavailable"
 }
