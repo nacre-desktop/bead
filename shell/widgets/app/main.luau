@@ -394,7 +394,4 @@ local app_content=ui.Column{id="widgets-app",width="100%",height="100%",fill="su
         ui.Box{id="header-rule",width="fill",height=1,fill="outlineVariant"}},
     selected=="" and gallery() or detail(),
 }
-local pass_through={left={inline=true},centre={inline=true,props={width="100%",height="100%",align="stretch"},after={app_content}},right={inline=true}}
-return ui.Host{id="widgets-app-host",shape="strip-h",width="100%",height="100%",flatten=true,
-    layout={},grid={tiles=1,mode="content",regions=pass_through},catalogue=registry.catalogue,
-    render=function() return nil end,metadata=metadata()}
+return ui.Box{id="widgets-app-root",width="100%",height="100%",metadata=metadata(),app_content}
