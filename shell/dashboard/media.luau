@@ -39,7 +39,7 @@ return function()
         ui.Text{text=player,width=identityWidth-24,height=22,font_size=16,font_weight=600,text_align="center",color="onSurface"}}
 
     local coverSize=280.176
-    local metadata=ui.Column{id="metadata",position="absolute",left=302.176,top=22,width=236.624,height=280.176,
+    local metadata=ui.Column{id="metadata",position="absolute",left=302.176,top=24,width=236.624,height=310,
         gap=12,justify="center",
         ui.Text{id="title",text=ui.bind("dashboard.track"),width=236.624,font_size=23*4/3,
             font_weight=600,color="onSurface"},
@@ -48,17 +48,17 @@ return function()
         ui.Text{id="album",text=ui.bind("dashboard.album"),width=236.624,height=20,
             font_size=10*4/3,color="onSurfaceVariant"},
     }
-    local artwork=ui.Box{id="artwork",position="absolute",left=0,top=36.912,width=coverSize,height=coverSize,
+    local artwork=ui.Box{id="artwork",position="absolute",left=0,top=38.912,width=coverSize,height=coverSize,
         radius=14,fill="surfaceContainerHigh",
         art and ui.Image{position="absolute",left=0,top=0,icon="player-art",width=coverSize,height=coverSize,
             aria_label=ui.tr("bead.dashboard.media-art")}
             or ui.Text{position="absolute",left=98.088,top=98.088,width=84,height=84,text="music_note",
                 family="Material Symbols Rounded",font_size=82,color="primary"}}
     local seekWidth=538.8
-    local seeking=ui.Box{id="seek",position="absolute",left=0,top=348,width=seekWidth,height=26,
+    local seeking=ui.Box{id="seek",position="absolute",left=0,top=350,width=seekWidth,height=26,
         ui.Box{id="track",position="absolute",left=0,top=10,width=seekWidth,height=6,radius=3,fill=ui.alpha("primary",.16),
             progress>0 and ui.Box{id="elapsed",width=math.floor(seekWidth*progress),height=6,radius=3,fill="primary"} or nil}}
-    local seekDuration=ui.Box{id="seek-duration",position="absolute",left=0,top=378,width=seekWidth,height=16,
+    local seekDuration=ui.Box{id="seek-duration",position="absolute",left=0,top=380,width=seekWidth,height=16,
         kit.Button{id="seek-back",position="absolute",left=0,top=0,width=32,height=16,padding=0,radius=4,
             fill="transparent",hover_fill=ui.alpha("onSurface",.08),aria_label=ui.tr("bead.dashboard.media-seek-back"),
             on_activate=op("player.seek:-10","dashboard.can_seek"),
@@ -71,7 +71,7 @@ return function()
             on_activate=op("player.seek:10","dashboard.can_seek"),
             ui.Text{text="forward_10",family="Material Symbols Rounded",font_size=12,width=28,height=16,
                 text_align="center",color="onSurfaceVariant"}}}
-    local transport=ui.Row{id="transport",position="absolute",left=0,top=398,width=538.8,height=56,
+    local transport=ui.Row{id="transport",position="absolute",left=0,top=400,width=538.8,height=56,
         gap=12,justify="center",align="center",
         iconButton("previous","skip_previous",ui.tr("bead.dashboard.media-previous"),op("player.previous","dashboard.can_previous"),42),
         iconButton("toggle",state=="playing" and "pause" or "play_arrow",
