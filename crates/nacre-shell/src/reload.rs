@@ -5568,7 +5568,7 @@ impl SceneSource for Runtime {
             {
                 eprintln!("WIDGET_ANCHOR_ERROR {error}");
             }
-            if self.widget_editor {
+            if self.widget_editor && !self.widget_app {
                 let keys = [
                     "widgets.layout",
                     "widgets.draft",

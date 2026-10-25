@@ -101,6 +101,12 @@ fn form_toggle_shared_settings_undo_and_unknown_json_round_trip() {
     let Value::List(draft) = harness.session.stores.get("widgets.draft").unwrap() else { panic!("draft is a document list") };
     assert_eq!(draft[0]["hosts"]["top_bar"]["instances"][0]["settings"]["format"], "24");
     assert_eq!(draft[0]["hosts"]["canvas"]["instances"][0]["settings"]["format"], "24");
+    act(&mut harness, json!({"op":"default-trigger","value":"hover"}), &doc);
+    let Value::List(draft) = harness.session.stores.get("widgets.draft").unwrap() else {panic!("draft missing")};
+    assert_eq!(draft[0]["dropdown_trigger"], "hover");
+    act(&mut harness, json!({"op":"undo"}), &doc);
+    let Value::List(draft) = harness.session.stores.get("widgets.draft").unwrap() else {panic!("draft missing")};
+    assert!(draft[0]["dropdown_trigger"].is_null());
     drop(harness);
     let _ = std::fs::remove_dir_all(root);
 }
