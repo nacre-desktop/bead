@@ -2,6 +2,7 @@
   "modules": [
     "widgets/app/main.luau",
     "widgets/app/preview.luau",
+    "widgets/measure.luau",
     "widgets/battery/widget.luau",
     "widgets/bluetooth/widget.luau",
     "widgets/clock/widget.luau",

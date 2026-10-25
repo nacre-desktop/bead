@@ -276,3 +276,72 @@ fn real_widgets_gallery_starts_with_content_and_a_style_click_updates_the_previe
         "seconds"
     );
 }
+
+#[test]
+fn clock_detail_stage_and_style_previews_keep_all_content_inside_their_clips() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+    let mut stores = crate::desktop::values(&Default::default(), "");
+    stores.insert("widgets.selected".into(), Value::Text("clock".into()));
+    stores.insert("bar.clock.text".into(), Value::Text("09:08".into()));
+    stores.insert("bead.desktop.clock".into(), Value::Text("09:08".into()));
+    stores.insert(
+        "bead.desktop.clock.seconds".into(),
+        Value::Text("09:08:07".into()),
+    );
+    stores.insert(
+        "bead.desktop.clock.date".into(),
+        Value::Text("2026-10-25".into()),
+    );
+    let harness = Harness::load(
+        &root,
+        Path::new("widgets/app/main.luau"),
+        &root.join("palette.json"),
+        stores,
+        Config {
+            width: 1200,
+            height: 800,
+            scale: 1.5,
+        },
+    )
+    .unwrap();
+    let scene = harness.scene();
+    let text = |expected: &str| {
+        scene.primitives.iter().any(
+            |primitive| matches!(primitive,bead::render::Primitive::Text{text,..} if text==expected),
+        )
+    };
+    assert!(text("Your screen"), "clock detail stage caption was omitted");
+    assert!(
+        text("calendar_month"),
+        "the mini bar did not render its clock/calendar glyph"
+    );
+
+    for expected in ["09:08:07", "2026-10-25"] {
+        let matches: Vec<_> = scene
+            .primitives
+            .iter()
+            .enumerate()
+            .filter_map(|(index, primitive)| match primitive {
+                bead::render::Primitive::Text {
+                    rect,
+                    text,
+                    ..
+                } if text == expected => Some((index, *rect)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(matches.len(), 1, "style preview omitted {expected}");
+        let (index, rect) = matches[0];
+        let clip = scene
+            .clips
+            .get(&index)
+            .unwrap_or_else(|| panic!("{expected} preview is missing its clipping frame"));
+        assert!(
+            rect.x >= clip.x - 0.01
+                && rect.y >= clip.y - 0.01
+                && rect.x + rect.w <= clip.x + clip.w + 0.01
+                && rect.y + rect.h <= clip.y + clip.h + 0.01,
+            "{expected} preview content {rect:?} exceeds its clip {clip:?}"
+        );
+    }
+}

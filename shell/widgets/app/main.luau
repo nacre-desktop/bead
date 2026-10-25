@@ -300,7 +300,8 @@ local function style_tile(widget,placement,package,style_id,style,settings,is_se
         hover_fill="surfaceContainerHigh",selected=is_selected,focus_on_pointer=false,
         aria_label=style.title,on_activate=edit({op="style",widget=widget,form=placement,style=style_id}),
         ui.Column{id="style-card",width="fill",height="fill",gap=spacing.xs,align="center",
-            ui.Box{id="style-preview",width="fill",height=54,radius=kit.tokens.radii.small,fill="surfaceContainerHighest",clip_children=true,tile_preview},
+            ui.Box{id="style-preview",width="fill",height=54,align="center",justify="center",
+                radius=kit.tokens.radii.small,fill="surfaceContainerHighest",clip_children=true,tile_preview},
             label("style-title",style.title,text.caption*4/3,"onSurface",{width="fill",height=18,text_align="center"})}}
 end
 local function style_tiles(widget,placement,package,style_id,settings)
@@ -345,6 +346,45 @@ local function detail()
     end
     local item={iid=group,widget=selected,settings=settings}
     local fields=settings_form.rows(item,settings_package,form_action(selected,placement))
+    local stage_children={ui.Box{id="stage-background",position="absolute",left=mini_left,top=mini_top,
+        width=mini_w,height=mini_h,fill="surfaceContainerHighest"}}
+    if wallpaper_image then table.insert(stage_children,wallpaper_image) end
+    table.insert(stage_children,ui.Box{id="stage-tint",position="absolute",left=mini_left,top=mini_top,
+        width=mini_w,height=mini_h,fill=ui.alpha("surface",.08)})
+    table.insert(stage_children,ui.Box{id="stage-bar",position="absolute",left=mini_left,top=mini_top,
+        width=mini_w,height=stage_bar_height,clip_children=true,fill="surface",bar_node})
+    if desktop_preview then
+        table.insert(stage_children,ui.Box{id="desktop-widget-preview",position="absolute",left=widget_left,top=widget_top,
+            width=widget_w,height=widget_h,clip_children=true,visible=true,align="center",justify="center",desktop_preview})
+    end
+    table.insert(stage_children,ui.Column{id="stage-caption",position="absolute",left=spacing.md,bottom=spacing.md,gap=spacing.xs,
+        label("stage-title","Your screen",text.caption*4/3,"onSurface",{height=18}),
+        label("stage-size",tostring(screen_w).." × "..tostring(screen_h),text.caption*4/3,"onSurfaceVariant",{height=16})})
+    local stage_props={id="preview-stage",width="fill",height=stage_h,shrink=0,clip_children=true,
+        radius=kit.tokens.radii.medium,fill="surfaceContainerHigh"}
+    for _,child in stage_children do table.insert(stage_props,child) end
+    local tabs_props={id="form-tabs",width="fill",height=46,shrink=0,gap=spacing.xs,
+        button("bar-tab","In the bar",navigate("form","bar"),{selected=placement=="bar",fill=placement=="bar" and ui.alpha("primary",.15) or "surfaceContainer"})}
+    if desktop_available then
+        table.insert(tabs_props,button("desktop-tab","On the desktop",navigate("form","desktop"),
+            {selected=placement=="desktop",fill=placement=="desktop" and ui.alpha("primary",.15) or "surfaceContainer"}))
+    end
+    local content_props={id="detail-content",width="fill",gap=spacing.md,
+        ui.Box(stage_props),
+        ui.Row(tabs_props),
+        kit.ToggleRow{id="form-enabled",label=placement=="bar" and "Show in the bar" or "Show on the desktop",
+            checked=enabled,enabled=not busy,on_activate=edit({op="toggle-form",widget=selected,form=placement,enabled=not enabled})},
+        label("style-heading","Style",text.body*4/3,"onSurface",{height=22}),
+        style_tiles(selected,placement,package,style_id,settings)}
+    if next(settings_package.settings)~=nil then
+        table.insert(content_props,ui.Column{id="settings-section",width="fill",gap=spacing.md,padding=spacing.md,
+            radius=kit.tokens.radii.medium,fill="surfaceContainer",
+            label("settings-title","Settings",text.title*4/3,"onSurface",{height=24}),fields})
+    end
+    if error_message~="" or message~="" then
+        table.insert(content_props,label("save-status",error_message~="" and error_message or message,
+            text.caption*4/3,error_message~="" and "error" or "onSurfaceVariant",{width="fill",height=20}))
+    end
     return ui.Column{id="widget-detail",width="fill",height="fill",gap=spacing.md,padding=spacing.lg,
         ui.Row{id="detail-heading",width="fill",height=54,shrink=0,gap=spacing.md,align="center",
             button("back","arrow_back",navigate("back",selected),{width=spacing.huge+spacing.md,fill="transparent",font_size=kit.tokens.icons.medium,family="Material Symbols Rounded"}),
@@ -352,32 +392,7 @@ local function detail()
             ui.Column{id="detail-title-copy",width=0,grow=1,gap=spacing.xs,
                 label("detail-title",package.title,text.headline*4/3,"onSurface",{width="fill",height=28}),
                 label("detail-description","Choose a style for each place this widget can appear.",text.caption*4/3,"onSurfaceVariant",{height=18})}},
-        ui.Scroll{id="detail-scroll",width="fill",grow=1,scroll=ui.bind("widgets.scroll"),
-            ui.Column{id="detail-content",width="fill",gap=spacing.md,
-                ui.Box{id="preview-stage",width="fill",height=stage_h,shrink=0,clip_children=true,radius=kit.tokens.radii.medium,fill="surfaceContainerHigh",
-                    wallpaper_image,
-                    ui.Box{id="stage-tint",position="absolute",left=mini_left,top=mini_top,width=mini_w,height=mini_h,fill=ui.alpha("surface",.08)},
-                    ui.Box{id="stage-bar",position="absolute",left=mini_left,top=mini_top,width=mini_w,height=stage_bar_height,clip_children=true,
-                        fill="surface",bar_node},
-                    ui.Box{id="desktop-widget-preview",position="absolute",left=widget_left,top=widget_top,
-                        width=widget_w,height=widget_h,clip_children=true,
-                        visible=desktop_preview~=nil,align="center",justify="center",desktop_preview},
-                    ui.Column{id="stage-caption",position="absolute",left=spacing.md,bottom=spacing.md,gap=spacing.xs,
-                        label("stage-title","Your screen",text.caption*4/3,"onSurface",{height=18}),
-                        label("stage-size",tostring(screen_w).." × "..tostring(screen_h),text.caption*4/3,"onSurfaceVariant",{height=16})}},
-                ui.Row{id="form-tabs",width="fill",height=46,shrink=0,gap=spacing.xs,
-                    button("bar-tab","In the bar",navigate("form","bar"),{selected=placement=="bar",fill=placement=="bar" and ui.alpha("primary",.15) or "surfaceContainer"}),
-                    desktop_available and button("desktop-tab","On the desktop",navigate("form","desktop"),{selected=placement=="desktop",fill=placement=="desktop" and ui.alpha("primary",.15) or "surfaceContainer"}) or nil},
-                kit.ToggleRow{id="form-enabled",label=placement=="bar" and "Show in the bar" or "Show on the desktop",
-                    checked=enabled,enabled=not busy,on_activate=edit({op="toggle-form",widget=selected,form=placement,enabled=not enabled})},
-                label("style-heading","Style",text.body*4/3,"onSurface",{height=22}),
-                style_tiles(selected,placement,package,style_id,settings),
-                next(settings_package.settings)~=nil and ui.Column{id="settings-section",width="fill",gap=spacing.md,padding=spacing.md,
-                    radius=kit.tokens.radii.medium,fill="surfaceContainer",
-                    label("settings-title","Settings",text.title*4/3,"onSurface",{height=24}),fields} or nil,
-                (error_message~="" or message~="") and label("save-status",error_message~="" and error_message or message,
-                    text.caption*4/3,error_message~="" and "error" or "onSurfaceVariant",{width="fill",height=20}) or nil,
-            }}
+        ui.Scroll{id="detail-scroll",width="fill",grow=1,scroll=ui.bind("widgets.scroll"),ui.Column(content_props)}
     }
 end
 

@@ -3,6 +3,7 @@
 local context=require("../context")
 local ui,kit=context.ui,context.kit
 local registry=require("../registry")
+local measure=require("../measure")
 local M={}
 
 local scaled={width=true,height=true,min_width=true,max_width=true,left=true,right=true,top=true,bottom=true,
@@ -39,6 +40,17 @@ local function prepare(node,factor)
     return node
 end
 
+local function copy_node(node)
+    if type(node)~="table" then return node end
+    local copy=table.clone(node)
+    if node.props then copy.props=table.clone(node.props) end
+    if node.children then
+        copy.children={}
+        for _,child in node.children do table.insert(copy.children,copy_node(child)) end
+    end
+    return copy
+end
+
 local function render_item(package,instance,placement,settings,factor)
     local variant=package and package.variants[placement=="desktop" and "canvas" or "bar"]
     if not variant then return nil end
@@ -66,6 +78,16 @@ end
 function M.render_bar(document,width,height,factor,selected,style,settings)
     local layout=document.hosts.top_bar
     if not layout then return nil end
+    local scale=factor or 1
+    local regions={}
+    for name,region in layout.regions do regions[name]=table.clone(region) end
+    regions.left.props={id="left",height=34*scale,gap=12*scale,shrink=1,align="center"}
+    regions.centre.inline=true
+    regions.right.props={id="right",height=34*scale,gap=12*scale,shrink=0,align="center"}
+    regions.right.before={}
+    for _,node in require("../tray") do
+        table.insert(regions.right.before,prepare(copy_node(node),scale))
+    end
     local function copy_item(item)
         local copy=table.clone(item)
         if item.widget==selected then
@@ -91,10 +113,11 @@ function M.render_bar(document,width,height,factor,selected,style,settings)
         return variant.render({instance=item,catalogue=registry.catalogue,render=render,editing=false,
             local_layout=layout.mode=="tiles"},values,{})
     end
-    local node=ui.Host{id="stage-top-bar",shape="strip-h",width=width,height=height,
+    local node=ui.Host{edge="top",id="stage-top-bar",shape="strip-h",width=width,height=height,
+        radius=0,fill="surface",padding_left=15,padding_right=15,align="center",justify="space-between",direction="row",
         layout=instances,catalogue=registry.catalogue,render=render,
-        grid={tiles=layout.tiles,mode=layout.mode,regions=layout.regions}}
-    return prepare(node,factor or 1)
+        grid={tiles=layout.tiles,mode=layout.mode,regions=regions}}
+    return prepare(node,scale)
 end
 
 function M.render(id,placement,style,settings,width,height,actual_size)
@@ -105,6 +128,7 @@ function M.render(id,placement,style,settings,width,height,actual_size)
     local variant=package.variants[placement=="desktop" and "canvas" or "bar"]
     if not variant then return nil end
     local host=placement=="desktop" and "canvas" or "top_bar"
+    style=style or package.forms[placement].default_style
     local logical_w,logical_h=width,height
     local scale
     if placement=="desktop" and not actual_size then
@@ -116,8 +140,19 @@ function M.render(id,placement,style,settings,width,height,actual_size)
     elseif placement=="desktop" then
         scale=1
     else
-        local natural=variant.reserve_width and variant.reserve_width(values) or variant.preferred_span*32
-        scale=math.min(1,height/28,width/math.max(1,natural))
+        local instance={iid="preview-"..id,widget=id,host="top_bar",style=style,settings=values,
+            slot={region="left",start=0,span=package.forms.bar.styles[style].preferred_span},children={}}
+        local node=render_item(package,instance,placement,values,1)
+        local natural=measure.width(node)
+        if natural<=0 then
+            local definition=package.forms.bar.styles[style]
+            natural=definition.reserve_width and definition.reserve_width(values)
+                or definition.preferred_span*32
+        end
+        local base_height=ui.resolve_for_check((node.props or {}).height) or context.t.status_height
+        scale=math.min(1,height/math.max(1,base_height),width/math.max(1,natural))
+        prepare(node,scale)
+        return ui.Box{id="preview-"..id,width=width,height=height,align="center",justify="center",clip_children=true,node}
     end
     local instance={iid="preview-"..id,widget=id,host=host,style=style,settings=values,
         slot=placement=="desktop" and {x=0,y=0,w=logical_w,h=logical_h} or {region="left",start=0,span=variant.preferred_span},children={}}
