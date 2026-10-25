@@ -4,6 +4,8 @@ use bead::render::Scene;
 use bead::wayland::{SceneSource, UiEvent};
 use std::collections::BTreeMap;
 use std::error::Error;
+#[path = "reload/bar_daemon.rs"]
+mod bar_daemon;
 fn scope_recovery(session: &mut bead::ui::Session, output: Option<&str>) {
     if let Ok(path) = crate::state::File::path()
         && let Some(parent) = path.parent()
@@ -87,6 +89,8 @@ pub struct Runtime {
     /// N0040: the niri `compositor` topic, read only for workspace origins (visitor groups).
     updates_topic: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     updates_subscription: Option<bead::core::source::Subscription>,
+    bar_daemon: Option<std::sync::Arc<bar_daemon::BarDaemon>>,
+    bar_daemon_subscriptions: Vec<bead::core::source::Subscription>,
     origins_topic: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     origins_subscription: Option<bead::core::source::Subscription>,
     backend: Option<std::sync::Arc<crate::backends::Native>>,
@@ -385,6 +389,8 @@ impl Runtime {
             daemon_tray: Default::default(),
             updates_topic: None,
             updates_subscription: None,
+            bar_daemon: None,
+            bar_daemon_subscriptions: Vec::new(),
             origins_topic: None,
             origins_subscription: None,
             backend: None,
@@ -491,7 +497,8 @@ impl Runtime {
         Ok(self)
     }
     /// N0040 visitor groups: on niri the daemon `compositor` topic carries each workspace's home
-    /// output and number. Leased only for the bar's lifetime; other backends need nothing.
+    /// output and number. Share notifications' subscription when present, otherwise lease
+    /// for the bar's lifetime; other backends need nothing.
     pub fn with_workspace_origins(
         self,
         client: &crate::nacre_source::Client,
@@ -503,13 +510,23 @@ impl Runtime {
         {
             return Ok(self);
         }
-        match client.lease_topic("compositor") {
-            Ok(topic) => self.with_origins_topic(std::sync::Arc::new(topic)),
+        match client.view_topic("compositor") {
+            Ok(topic) => self.with_origins_topic(topic),
             Err(_) => {
                 eprintln!("SOURCE_ERROR code=compositor_topic_lease");
                 Ok(self)
             }
         }
+    }
+    /// Bar status icons use the same reconnecting daemon topics as the popouts.
+    pub fn with_bar_daemon(
+        mut self,
+        client: &crate::nacre_source::Client,
+    ) -> Result<Self, Box<dyn Error>> {
+        let source = std::sync::Arc::new(bar_daemon::BarDaemon::new(client)?);
+        self.session.stores = self.session.stores.reconcile(&source.values())?;
+        self.bar_daemon = Some(source);
+        Ok(self)
     }
     fn with_origins_topic(
         mut self,
@@ -1288,6 +1305,7 @@ impl Runtime {
         client: crate::nacre_source::Client,
         tray: std::sync::Arc<dyn bead::core::source::Source>,
     ) -> Result<Self, Box<dyn Error>> {
+        self = self.with_bar_daemon(&client)?;
         let routes = crate::bar_routes::Routes::new(client);
         let mut defaults = routes.stores();
         defaults.insert(
@@ -2224,6 +2242,15 @@ impl SceneSource for Runtime {
             })) {
                 Ok(subscription) => self.origins_subscription = Some(subscription),
                 Err(_) => eprintln!("SOURCE_ERROR code=origins_subscription"),
+            }
+        }
+        if let Some(source) = &self.bar_daemon {
+            let wakeup = wakeup.clone();
+            match source.subscribe(std::sync::Arc::new(move |values| {
+                wakeup(UiEvent::Model(values));
+            })) {
+                Ok(subscriptions) => self.bar_daemon_subscriptions = subscriptions,
+                Err(_) => eprintln!("SOURCE_ERROR code=bar_daemon_subscription"),
             }
         }
         // A language switch rebuilds the views from the new catalog, then lets the
@@ -3556,6 +3583,9 @@ impl SceneSource for Runtime {
                 }
                 if self.bar && self.menu_item.is_empty() {
                     values.extend(crate::desktop::tooltip_values(&snapshot, &self.tray_hover));
+                }
+                if let Some(source) = &self.bar_daemon {
+                    values.extend(source.values());
                 }
                 if let Some(id) = self.pending_focus.take() {
                     values.insert("bead.focused".into(), bead::core::Value::Text(id));

@@ -20,6 +20,13 @@ pub(super) struct Wanted {
     pub resync: bool,
 }
 impl Registry {
+    pub(super) fn missing(&self, advertised: &BTreeMap<String, u16>) -> bool {
+        self.records
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .keys()
+            .any(|name| !advertised.contains_key(name))
+    }
     #[cfg(test)]
     pub(super) fn has_topic(&self, name: &str) -> bool {
         self.records

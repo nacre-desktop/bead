@@ -222,6 +222,7 @@ pub fn start(
         ));
     }
     let topics = [
+        "daemon",
         "menu",
         "tray",
         "i18n",

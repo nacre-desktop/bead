@@ -29,7 +29,8 @@ use std::{
 pub const APPS: [&str; 5] = ["settings", "chat", "colors", "welcome", "prompt"];
 
 /// Topics every app follows: Nacre's text catalog and the settings that shape the look.
-const TOPICS: [&str; 5] = [
+const TOPICS: [&str; 6] = [
+    "daemon",
     "i18n",
     prefs::DESKTOP,
     prefs::DASHBOARD,

@@ -1034,6 +1034,12 @@ async fn wifi_popout_factory_is_lazy_and_routes_only_network_control()
         if let Message::Welcome { topics, .. } = &mut greeting {
             topics.insert("bluetooth".into(), 1);
         }
+        let (registry_topics, registry_methods) = match &greeting {
+            Message::Welcome {
+                topics, methods, ..
+            } => (topics.keys().cloned().collect::<Vec<_>>(), methods.clone()),
+            _ => unreachable!(),
+        };
         framing::write(&mut writer, &greeting).await.unwrap();
         probe_rx.await.unwrap();
         framing::write(
@@ -1072,12 +1078,36 @@ async fn wifi_popout_factory_is_lazy_and_routes_only_network_control()
                 topics: vec!["bluetooth".into()]
             }
         );
-        assert_eq!(
-            next(&mut reader).await,
-            Message::Sub {
-                topics: vec!["network".into()]
+        loop {
+            match next(&mut reader).await {
+                Message::Call { id, m, .. } if m == "daemon.status" => {
+                    framing::write(
+                        &mut writer,
+                        &Message::Ret {
+                            id,
+                            reply: Reply::Ok {
+                                ok: serde_json::json!({
+                                    "boot":"wifi-boot-a",
+                                    "topics":registry_topics,
+                                    "methods":registry_methods
+                                }),
+                            },
+                        },
+                    )
+                    .await
+                    .unwrap();
+                }
+                message => {
+                    assert_eq!(
+                        message,
+                        Message::Sub {
+                            topics: vec!["network".into()]
+                        }
+                    );
+                    break;
+                }
             }
-        );
+        }
         framing::write(
             &mut writer,
             &Message::Snap {

@@ -136,6 +136,8 @@ async fn lab(topics: Vec<(&str, Json)>, methods: &[&str]) -> Lab {
                 },
             );
         }
+        let registry_methods = methods.clone();
+        let registry_topics = published.keys().cloned().collect::<Vec<_>>();
         framing::write(
             &mut writer,
             &Message::Welcome {
@@ -167,7 +169,9 @@ async fn lab(topics: Vec<(&str, Json)>, methods: &[&str]) -> Lab {
                     }
                 }
                 Message::Call { id, m, p, .. } => {
-                    let _ = calls_tx.send((m.clone(), p));
+                    if m != "daemon.status" {
+                        let _ = calls_tx.send((m.clone(), p));
+                    }
                     let code = failing.lock().unwrap().get(&m).cloned();
                     let reply = match code {
                         Some(code) => Reply::Err {
@@ -184,6 +188,9 @@ async fn lab(topics: Vec<(&str, Json)>, methods: &[&str]) -> Lab {
                                 {"id": "qt", "label": "Qt", "status": "paused"}]}),
                         },
                         None if m == "system.status" => Reply::Ok { ok: status() },
+                        None if m == "daemon.status" => Reply::Ok {
+                            ok: json!({"boot":"pages-boot","topics":registry_topics,"methods":registry_methods}),
+                        },
                         None => Reply::Ok {
                             ok: json!({"changed": true}),
                         },

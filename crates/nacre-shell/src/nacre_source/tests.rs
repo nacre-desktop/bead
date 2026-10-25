@@ -59,6 +59,187 @@ fn fixture(name: &str) -> Vec<Message> {
         .map(|s| framing::decode(s.as_bytes()).unwrap())
         .collect()
 }
+
+/// Exercise the shared link used by every daemon-backed surface, including leases
+/// acquired before the socket exists and while it is down between daemon boots.
+#[tokio::test(flavor = "current_thread")]
+async fn all_active_topics_recover_after_late_start_restart_and_socket_reconnect() {
+    let lab = Lab::new();
+    let permanent = [
+        "daemon",
+        "menu",
+        "tray",
+        "i18n",
+        "notifications",
+        "osd",
+        "compositor",
+        crate::prefs::DESKTOP,
+        crate::prefs::DASHBOARD,
+        crate::prefs::PROFILE,
+        crate::prefs::LAUNCHER_LAYOUT,
+    ];
+    let mut names = permanent.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    names.extend(crate::control_center::TOPICS.map(String::from));
+    names.extend(
+        crate::dashboard::Page::ALL
+            .into_iter()
+            .chain(crate::dashboard::Page::EXTRAS)
+            .chain(crate::dashboard::Page::MORE)
+            .map(|p| p.topic()),
+    );
+    names.extend(
+        [
+            "settings.store.control-center",
+            "settings.store.wallpaper-picker",
+            "settings.store.apps",
+            "settings.store.colors",
+            "settings.store.dashboard",
+            "dashboard.updates",
+            "shortcuts",
+            "wallpaper.active",
+            "ai.chat",
+            "audio.peak",
+            "vpn.state",
+        ]
+        .map(String::from),
+    );
+    names.sort();
+    names.dedup();
+    let client = Client::start(Config::new(
+        lab.socket(),
+        permanent.map(String::from).to_vec(),
+    ))
+    .unwrap();
+    let sources = names
+        .iter()
+        .map(|n| client.view_topic(n).unwrap())
+        .collect::<Vec<_>>();
+    // Deliberately let the absent socket fail several connection attempts.
+    tokio::time::sleep(Duration::from_millis(250)).await;
+    assert!(sources.iter().all(|s| !s.snapshot().connected));
+    for (round, boot) in ["first-boot", "second-boot", "second-boot"]
+        .into_iter()
+        .enumerate()
+    {
+        let listener = lab.bind();
+        let advertised = names.clone();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let (read, mut writer) = stream.into_split();
+            let mut reader = framing::Reader::new(BufReader::new(read));
+            assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
+            framing::write(
+                &mut writer,
+                &Message::Welcome {
+                    proto: 1,
+                    min: 1,
+                    boot: boot.into(),
+                    methods: nacre_protocol::core_methods(),
+                    topics: BTreeMap::from([("menu".into(), 1)]),
+                    frame_ms: None,
+                },
+            )
+            .await
+            .unwrap();
+            let mut subscribed = std::collections::BTreeSet::new();
+            let mut registry_reads = 0;
+            loop {
+                match reader.next().await.unwrap() {
+                    Some(Message::Sub { topics }) => {
+                        for topic in topics {
+                            assert!(advertised.contains(&topic));
+                            assert!(
+                                subscribed.insert(topic.clone()),
+                                "duplicate subscription: {topic}"
+                            );
+                            framing::write(
+                                &mut writer,
+                                &Message::Snap {
+                                    topic,
+                                    seq: 0,
+                                    data: serde_json::json!({"round":round}),
+                                },
+                            )
+                            .await
+                            .unwrap();
+                        }
+                    }
+                    Some(Message::Call { id, m, .. }) => {
+                        assert_eq!(m, "daemon.status");
+                        // Producers become ready after Welcome, without dropping the socket.
+                        // A method becomes ready after the topics, on the second read.
+                        registry_reads += 1;
+                        if registry_reads == 1 {
+                            framing::write(
+                                &mut writer,
+                                &Message::Ret {
+                                    id,
+                                    reply: Reply::Err {
+                                        err: nacre_protocol::Failure::new(
+                                            nacre_protocol::ErrorCode::Unavailable,
+                                            "registry starting",
+                                            true,
+                                        ),
+                                    },
+                                },
+                            )
+                            .await
+                            .unwrap();
+                            continue;
+                        }
+                        let mut methods = nacre_protocol::core_methods();
+                        if registry_reads > 2 {
+                            methods.insert("late.method".into(), methods["daemon.status"].clone());
+                        }
+                        framing::write(
+                            &mut writer,
+                            &Message::Ret {
+                                id,
+                                reply: Reply::Ok {
+                                    ok: serde_json::json!({"boot":boot,"topics":advertised,"methods":methods}),
+                                },
+                            },
+                        )
+                        .await
+                        .unwrap();
+                    }
+                    None => break,
+                    message => panic!("unexpected request: {message:?}"),
+                }
+            }
+        });
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while !sources.iter().all(|s| {
+                let snap = s.snapshot();
+                snap.connected && snap.data["round"] == round && snap.epoch == boot
+            }) {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("every active topic must recover within two seconds");
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while !client.status().methods.contains_key("late.method") {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("late control methods must recover without reconnecting healthy topics");
+        // Aborting the fake daemon closes its listener and all connected streams.
+        server.abort();
+        assert!(server.await.unwrap_err().is_cancelled());
+        std::fs::remove_file(lab.socket()).unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while sources.iter().any(|s| s.snapshot().connected) {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+    client.stop().await.unwrap();
+}
 #[test]
 fn committed_transcripts_match_the_pinned_rust_exports() {
     let mut count = 0;
@@ -110,6 +291,64 @@ fn wallpaper_transcripts_match_the_pinned_export_and_replay() {
 
 fn welcome() -> Message {
     fixture("handshake")[1].clone()
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn registry_timeout_closes_the_remote_call_before_retrying() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let server = tokio::spawn(async move {
+        let (mut reader, writer) = accepted(&listener).await;
+        assert!(matches!(next(&mut reader).await, Message::Call { m, .. } if m == "daemon.status"));
+        // A stalled registry must not accumulate forgotten remote calls.
+        assert!(
+            tokio::time::timeout(Duration::from_secs(2), reader.next())
+                .await
+                .unwrap()
+                .unwrap()
+                .is_none()
+        );
+        drop(reader);
+        drop(writer);
+        let (stream, _) = listener.accept().await.unwrap();
+        let (read, mut writer) = stream.into_split();
+        let mut reader = framing::Reader::new(BufReader::new(read));
+        assert!(matches!(next(&mut reader).await, Message::Hello { .. }));
+        let mut greeting = welcome();
+        if let Message::Welcome { topics, .. } = &mut greeting {
+            topics.insert("late".into(), 1);
+        }
+        framing::write(&mut writer, &greeting).await.unwrap();
+        assert_eq!(
+            next(&mut reader).await,
+            Message::Sub {
+                topics: vec!["late".into()]
+            }
+        );
+        framing::write(
+            &mut writer,
+            &Message::Snap {
+                topic: "late".into(),
+                seq: 0,
+                data: serde_json::json!({"ready":true}),
+            },
+        )
+        .await
+        .unwrap();
+        assert!(reader.next().await.unwrap().is_none());
+    });
+    let client = Client::start(Config::new(lab.socket(), vec!["late".into()])).unwrap();
+    let topic = client.topic("late").unwrap();
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while !topic.snapshot().connected {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(topic.snapshot().data["ready"], true);
+    client.stop().await.unwrap();
+    server.await.unwrap();
 }
 
 #[test]

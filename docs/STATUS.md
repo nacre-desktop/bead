@@ -1,5 +1,11 @@
 # Status
 
+## 2026-10-25 — B0118 daemon recovery
+
+Bar status now follows reconnecting daemon sources; workspace origins reuse the
+notifications compositor subscription. Wallpaper consumers survive a late daemon.
+Full remote Arch CI passes. [Scope and recovery proof](specs/0118-daemon-reconnect.md).
+
 ## 2026-10-25 — B0108 title/tabs, lead-accepted
 
 The local candidate centers measured title/tab groups, retains a real window title

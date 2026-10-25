@@ -96,6 +96,10 @@ async fn daemon(
                 topics: std::collections::BTreeMap::from([
                     ("tray".into(), 1),
                     ("compositor".into(), 1),
+                    ("network".into(), 1),
+                    ("bluetooth".into(), 1),
+                    ("battery".into(), 1),
+                    ("audio".into(), 1),
                 ]),
                 methods: all,
                 frame_ms: None,

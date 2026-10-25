@@ -198,7 +198,7 @@ impl Choice {
             return Ok(Arc::new(ReadOnly::fixture(&path, topic)?));
         }
         if let Some(client) = &self.client {
-            return Ok(Arc::new(client.lease_topic(topic)?));
+            return client.view_topic(topic);
         }
         Ok(Arc::new(ReadOnly::unavailable()?))
     }

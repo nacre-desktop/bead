@@ -719,6 +719,18 @@ async fn sync_leases(
     }
     let mut added = Vec::new();
     let mut resync = Vec::new();
+    // A producer may publish its first snapshot after Welcome. Permanent topics
+    // discovered by the registry refresh need the same admission as new leases.
+    for (name, publisher) in &shared.topics {
+        if session.advertised.get(name) == Some(&1) && !session.available.contains(name) {
+            publisher.restart(session.boot.clone())?;
+            let mut mirror = Mirror::new(Instant::now());
+            mirror.reconnected(&session.boot, Instant::now())?;
+            mirrors.insert(name.clone(), mirror);
+            session.available.push(name.clone());
+            added.push(name.clone());
+        }
+    }
     for (name, wanted) in wanted {
         if session.advertised.get(&name) != Some(&1) {
             continue;
@@ -1002,6 +1014,10 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                 let mut pending = BTreeMap::<Id, Pending>::new();
                 let mut handlers: JoinSet<source::Result<Value>> = JoinSet::new();
                 let mut handler_requests = HashMap::<tokio::task::Id, Id>::new();
+                let mut registry_backoff = source::Reconnect::default();
+                let mut registry_due = Instant::now() + registry_backoff.delay();
+                let mut registry_pending: Option<(Id, Instant)> = None;
+                let mut registry_dirty = false;
                 loop {
                     if shared.stop.load(Ordering::Acquire) {
                         break;
@@ -1014,10 +1030,55 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                         }
                     };
                     tokio::pin!(alarm);
+                    // Welcome is a point-in-time registry, not a readiness barrier.
+                    // Missing topics retry with backoff. Hosts following `daemon`
+                    // also refresh after state changes to learn readiness-dependent
+                    // methods; idle healthy links have no registry timer.
+                    let missing = shared
+                        .topics
+                        .keys()
+                        .any(|name| !session.advertised.contains_key(name))
+                        || shared.leases.missing(&session.advertised);
+                    let registry_deadline =
+                        registry_pending.as_ref().map(|(_, d)| *d).or_else(|| {
+                            ((missing || registry_dirty)
+                                && session
+                                    .methods
+                                    .get("daemon.status")
+                                    .is_some_and(|m| m.v == 1)
+                                && pending.len() < nacre_protocol::MAX_CALLS)
+                                .then_some(registry_due)
+                        });
+                    let registry_alarm = async move {
+                        match registry_deadline {
+                            Some(d) => tokio::time::sleep_until(d.into()).await,
+                            None => std::future::pending::<()>().await,
+                        }
+                    };
+                    tokio::pin!(registry_alarm);
                     tokio::select! {
                         _=shared.notify.notified()=>break,
                         _=shared.leases.changed.notified()=>{if sync_leases(&shared,session,&mut mirrors).await.is_err(){break;}},
                         _=&mut alarm=>expire(&mut pending),
+                        _=&mut registry_alarm=>{
+                            if registry_pending.is_some() {
+                                // Close the socket to retire the timed-out remote
+                                // request before retrying; never lose its call slot.
+                                break;
+                            } else {
+                                next += 1;
+                                if next as u64 > nacre_protocol::MAX_SAFE_INTEGER { break; }
+                                let id = Id::Integer(next);
+                                if pending.contains_key(&id) {
+                                    registry_due = Instant::now() + registry_backoff.delay();
+                                    continue;
+                                }
+                                registry_dirty = false;
+                                let message = Message::Call { id: id.clone(), m: "daemon.status".into(), p: serde_json::json!({}), timeout: Some(1000) };
+                                if send(&shared, &mut session.writer, &message).await.is_err() { break; }
+                                registry_pending = Some((id, Instant::now() + Duration::from_secs(1)));
+                            }
+                        },
                         command=commands.recv()=>match command {
                             Some(Command::Stop(reply))=>{shared.stop.store(true,Ordering::Release);disconnect(&shared);let _=reply.send(Ok(Value::Null));break;},
                             Some(Command::Reconnect(reply))=>{disconnect(&shared);let _=reply.send(Ok(Value::Null));break;},
@@ -1028,10 +1089,10 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                                     if ticket.state.load(Ordering::Acquire) == TICKET_CANCELLED { drop(reply); continue; }
                                 }
                                 if deadline<=Instant::now(){reply.finish(Err(timeout()));continue;}
-                                if pending.len()>=nacre_protocol::MAX_CALLS{reply.finish(Err(Error::new("busy","daemon outstanding-call limit",true)));continue;}
+                                if pending.len() + usize::from(registry_pending.is_some()) >= nacre_protocol::MAX_CALLS{reply.finish(Err(Error::new("busy","daemon outstanding-call limit",true)));continue;}
                                 next+=1;if next as u64>nacre_protocol::MAX_SAFE_INTEGER{reply.finish(Err(Error::new("internal","call id exhausted",false)));break;}
                                 let id=id.unwrap_or(Id::Integer(next));
-                                if pending.contains_key(&id){reply.finish(Err(Error::new("validation","duplicate call id",false)));continue;}
+                                if pending.contains_key(&id) || registry_pending.as_ref().is_some_and(|(request, _)| request == &id) {reply.finish(Err(Error::new("validation","duplicate call id",false)));continue;}
                                 let remaining=deadline.saturating_duration_since(Instant::now());
                                 let trace_menu=bead::core::profile::enabled() && method=="menu.query";
                                 let message=Message::Call{id:id.clone(),m:method,p:params,timeout:Some(remaining.as_millis().clamp(1,120000) as u32)};
@@ -1081,10 +1142,12 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                             match message {
                                 Message::Snap{topic,seq,data}=>{
                                     if !session.available.contains(&topic){continue;}
+                                    registry_dirty |= config.topics.iter().any(|name| name == "daemon");
                                     if apply_snapshot(&shared,&mut mirrors,&session.boot,&topic,seq,data).is_err(){break;}
                                 },
                                 Message::Patch{topic,base,seq,data}=>{
                                     if !session.available.contains(&topic){continue;}
+                                    registry_dirty |= config.topics.iter().any(|name| name == "daemon");
                                     match apply_patch(&shared,&mut mirrors,&session.boot,&topic,base,seq,&data) {
                                         Ok(Applied::Resync)=>{
                                             if send(&shared,&mut session.writer,&Message::Resync{topics:vec![topic]}).await.is_err(){break;}
@@ -1093,7 +1156,37 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                                         _=>{},
                                     }
                                 },
-                                Message::Ret{id,reply}=>resolve(&mut pending,&id,reply),
+                                Message::Ret{id,reply}=>{
+                                    if registry_pending.as_ref().is_some_and(|(request, _)| request == &id) {
+                                        registry_pending = None;
+                                        registry_due = Instant::now() + registry_backoff.delay();
+                                        let mut registry_ok = false;
+                                        if let Reply::Ok { ok } = reply {
+                                            if let Some(methods) = ok.get("methods")
+                                                && let Ok(methods) = serde_json::from_value::<BTreeMap<String, nacre_protocol::Method>>(methods.clone())
+                                                && framing::encode(&Message::Welcome {
+                                                    proto: 1, min: 1, boot: session.boot.clone(),
+                                                    methods: methods.clone(), topics: session.advertised.clone(), frame_ms: None,
+                                                }).is_ok() {
+                                                session.methods = methods.clone();
+                                                shared.status.lock().unwrap_or_else(|p| p.into_inner()).methods = methods;
+                                                let _ = shared.link.publish(serde_json::json!({"boot":session.boot,"methods":session.methods}));
+                                            }
+                                            if let Some(topics) = ok.get("topics").and_then(Value::as_array)
+                                            && topics.len() <= nacre_protocol::MAX_SUBSCRIPTIONS {
+                                            for name in topics.iter().filter_map(Value::as_str) {
+                                                // Status lists v1 topic names; never override an
+                                                // explicitly unsupported version in Welcome.
+                                                session.advertised.entry(name.into()).or_insert(1);
+                                            }
+                                            shared.status.lock().unwrap_or_else(|p| p.into_inner()).topics = session.advertised.clone();
+                                            if sync_leases(&shared, session, &mut mirrors).await.is_err() { break; }
+                                            registry_ok = true;
+                                            }
+                                        }
+                                        registry_dirty |= !registry_ok;
+                                    } else { resolve(&mut pending,&id,reply); }
+                                },
                                 Message::Ping{id}=>{if send(&shared,&mut session.writer,&Message::Pong{id}).await.is_err(){break;}},
                                 Message::Call{id,m,p,timeout:limit}=>{
                                     let Some((_,methods,handler))=&config.provider else {

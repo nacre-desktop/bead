@@ -110,6 +110,8 @@ async fn lab_with_activation_behavior(
                 },
             );
         }
+        let registry_methods = methods.clone();
+        let registry_topics = offered_topics.keys().cloned().collect::<Vec<_>>();
         framing::write(
             &mut writer,
             &Message::Welcome {
@@ -159,7 +161,9 @@ async fn lab_with_activation_behavior(
                     }
                 }
                 Message::Call { id, m, p, .. } => {
-                    let _ = tx.send((m.clone(), p.clone()));
+                    if m != "daemon.status" {
+                        let _ = tx.send((m.clone(), p.clone()));
+                    }
                     let ok = if m == "menu.query" {
                         // Order is deliberately not alphabetical: `order` alone is authoritative (N0058).
                         let q = p["query"].as_str().unwrap_or_default();
@@ -228,6 +232,8 @@ async fn lab_with_activation_behavior(
                         json!({"revision":revision,"palette_revision":revision,"path":p["id"],
                             "file_identity":{"device":"1","inode":"3","size":4,"mtime_sec":1,"mtime_nsec":0,"ctime_sec":1,"ctime_nsec":0},
                             "presentation":"crop","palette":{"mode":"dark","colours":{"background":"#102030","onSurface":"#f0f0f0","primary":"#22aa88"}}})
+                    } else if m == "daemon.status" {
+                        json!({"boot":"extras-boot","topics":registry_topics,"methods":registry_methods})
                     } else {
                         json!({"changed":true})
                     };

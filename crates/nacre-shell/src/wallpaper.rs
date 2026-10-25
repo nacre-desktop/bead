@@ -33,6 +33,7 @@ impl Consumer {
             // The picker settings drive motion pause rules; a daemon without the topic is
             // simply not subscribed to it.
             vec![
+                "daemon".into(),
                 "wallpaper.active".into(),
                 crate::prefs::WALLPAPER_PICKER.into(),
             ],
@@ -47,18 +48,8 @@ impl Consumer {
             subscriptions: Mutex::new(Vec::new()),
             displayed: Mutex::new(BTreeMap::new()),
         });
-        let start = std::time::Instant::now();
-        loop {
-            let status = consumer.client.status();
-            let snapshot = Source::snapshot(&consumer.topic);
-            if supports_wallpaper_v1(&status) && snapshot.connected {
-                break;
-            }
-            if start.elapsed() > Duration::from_secs(3) {
-                return Err("wallpaper v1 contract unavailable".into());
-            }
-            std::thread::sleep(Duration::from_millis(25));
-        }
+        // Retain the reconnecting client even when the daemon starts later.
+        // Contract checks belong to state/activation, never startup admission.
         Ok(consumer)
     }
 
@@ -637,6 +628,13 @@ mod tests {
         };
         let expected_pair = pair.clone();
         let socket = root.join("daemon.sock");
+        let socket_for_client = socket.clone();
+        let consumer =
+            tokio::task::spawn_blocking(move || Consumer::start(socket_for_client).unwrap())
+                .await
+                .unwrap();
+        assert!(!consumer.topic.snapshot().connected);
+        tokio::time::sleep(Duration::from_millis(250)).await;
         let listener = UnixListener::bind(&socket).unwrap();
         std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600)).unwrap();
         let (release_tx, release_rx) = tokio::sync::oneshot::channel::<()>();
@@ -706,11 +704,13 @@ mod tests {
             .unwrap();
             let _ = release_rx.await;
         });
-        let socket_for_client = socket.clone();
-        let consumer =
-            tokio::task::spawn_blocking(move || Consumer::start(socket_for_client).unwrap())
-                .await
-                .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while !consumer.topic.snapshot().connected {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
         let prepare_consumer = consumer.clone();
         let frame = tokio::task::spawn_blocking(move || {
             prepare_consumer.prepare("DP-1".into(), 2, 1).unwrap()
