@@ -3718,7 +3718,7 @@ impl SceneSource for Runtime {
                 let title_only =
                     backend_title_only(&values, |id| self.session.stores.get(id).cloned());
                 if !title_only {
-                    println!(
+                    bead::core::vprintln!(
                         "BACKEND_UPDATE backend={} connected={} workspaces={} windows={}",
                         snapshot.backend,
                         snapshot.connected,
