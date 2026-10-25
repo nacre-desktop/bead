@@ -10,6 +10,8 @@ return {stores={
     ["bluetooth.secret"]="",["bluetooth.reveal"]=false,
     ["status.secondary"]=tr("bead.panel.status-data-unavailable"),["status.detail"]="",
     ["status.updates_summary"]=tr("bead.dashboard.updates-unavailable"),["status.updates_detail"]="",
+    ["status.updates_checked"]=tr("bead.panel.updates-never-checked"),["status.updates_health"]="",
+    ["status.updates_packages"]={},["status.updates_scroll"]=0,["status.updates_can_refresh"]=false,["status.updates_can_open"]=false,
     ["status.peek.title"]="",["status.peek.summary"]="",["status.peek.detail"]="",["status.peek.devices"]={},
     ["battery.level"]=0,["cc.src"]={},["cc.audio_devices"]={},["cc.streams"]={},["network.scan_enabled"]=false,["network.scanning"]=false,["network.scan_label"]="",["audio.peak"]=0,["audio.peak_on"]=false,["cc.message"]="",
 },actions={

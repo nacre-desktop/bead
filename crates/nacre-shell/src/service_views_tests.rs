@@ -516,6 +516,43 @@ fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
                 scale,
             },
         )?;
+        // A pill is a visual container. Its children are the only hit targets,
+        // including each icon/count pair; clicks between them must hit nothing.
+        let mut targets: Vec<_> = h
+            .session
+            .view_nodes()
+            .iter()
+            .filter(|node| {
+                node.id.contains("system-pill")
+                    && node.action.as_deref() == Some("status.pill.open")
+            })
+            .filter_map(|node| {
+                let rect = bead::ui::rect(&node.draw);
+                h.session
+                    .action_at(rect.x + rect.w / 2., rect.y + rect.h / 2.)
+                    .filter(|(_, action, _)| action == "status.pill.open")
+                    .map(|(_, _, argument)| {
+                        assert!(
+                            !crate::widgets::dropdown_hover(&argument),
+                            "click is the default"
+                        );
+                        rect
+                    })
+            })
+            .collect();
+        targets.sort_by(|a, b| a.x.total_cmp(&b.x));
+        targets.dedup_by(|a, b| a.x == b.x);
+        assert_eq!(targets.len(), 8, "every status widget owns one hit target");
+        {
+            for pair in targets.windows(2) {
+                let x = (pair[0].x + pair[0].w + pair[1].x) / 2.;
+                assert!(h.session.action_at(x, 25.).is_none(), "pill gap is inert");
+            }
+            assert!(
+                h.session.action_at(targets[0].x - 2., 25.).is_none(),
+                "pill padding is inert"
+            );
+        }
         for (suffix, action) in [
             ("updates.count", "status.pill.open"),
             ("battery.battery-value", "status.pill.open"),

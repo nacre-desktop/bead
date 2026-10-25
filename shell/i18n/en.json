@@ -461,8 +461,11 @@
   "bead.panel.control-back": "Back",
   "bead.panel.control-sound": "Sound",
   "bead.panel.updates-title": "Updates",
-  "bead.panel.updates-check": "Check for updates",
-  "bead.panel.updates-open": "Open updater",
+  "bead.panel.updates-checked": "Last checked {time}",
+  "bead.panel.updates-never-checked": "Not checked yet",
+  "bead.panel.updates-refreshing": "Checking for updates…",
+  "bead.panel.updates-check": "Refresh",
+  "bead.panel.updates-open": "Update now",
   "bead.panel.updates-available": {
     "one": "{count} update available",
     "other": "{count} updates available"

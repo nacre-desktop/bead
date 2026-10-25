@@ -124,6 +124,148 @@ fn updates_popout_projects_the_existing_daemon_topic() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn updates_dropdown_handles_optional_packages_health_and_empty_state() -> Result<()> {
+    let data: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../shell/tests/fixtures/dashboard/updates-packages.json"
+    ))?;
+    let source = Arc::new(FakeSource::new(data.clone())?);
+    let status = Status::core_updates(source.clone(), None);
+    let values = status.project();
+    let Value::List(rows) = &values["status.updates_packages"] else {
+        panic!("package rows")
+    };
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[0]["name"], "linux");
+    assert_eq!(rows[0]["old"], "6.17.4-1");
+    assert_eq!(rows[0]["new"], "6.17.5-1");
+    assert_eq!(rows[2]["repo"], "AUR");
+    assert!(text_value(&values, "status.updates_checked").starts_with("Last checked "));
+    let mut empty = data.clone();
+    empty.as_object_mut().unwrap().remove("packages");
+    empty["count"] = serde_json::json!(0);
+    empty["checked"] = serde_json::Value::Null;
+    source.publish(empty.clone())?;
+    let values = status.project();
+    assert_eq!(values["status.updates_packages"], Value::list(vec![]));
+    assert_eq!(text_value(&values, "status.updates_summary"), "Up to date");
+    assert_eq!(
+        text_value(&values, "status.updates_checked"),
+        "Not checked yet"
+    );
+    assert_eq!(values["status.updates_can_open"], Value::Bool(false));
+    empty["refreshing"] = serde_json::json!(true);
+    source.publish(empty.clone())?;
+    let values = status.project();
+    assert_eq!(
+        text_value(&values, "status.updates_health"),
+        "Checking for updates…"
+    );
+    assert_eq!(values["status.updates_can_refresh"], Value::Bool(false));
+    empty["health"] = serde_json::json!({"available":false,"stale":true,"error":{"code":"unavailable","message":"Offline","retry":true}});
+    empty["refreshing"] = serde_json::json!(false);
+    source.publish(empty)?;
+    assert_eq!(
+        text_value(&status.project(), "status.updates_health"),
+        "Offline"
+    );
+    let mut invalid = data;
+    invalid["packages"][0]["name"] = serde_json::json!("bad\nname");
+    source.publish(invalid)?;
+    let Value::List(rows) = &status.project()["status.updates_packages"] else {
+        panic!("package rows")
+    };
+    assert_eq!(rows.len(), 2);
+    assert_eq!(source.calls(), 0, "projections never run package commands");
+    Ok(())
+}
+
+#[test]
+fn updates_dropdown_goldens_cover_count_packages_scroll_and_empty() -> Result<()> {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../shell/tests/fixtures/dashboard/updates-packages.json"
+    ))?;
+    for scale in [1., 1.5] {
+        for case in ["count", "packages", "scroll", "empty", "unavailable"] {
+            let mut data = fixture.clone();
+            match case {
+                "count" => {
+                    data.as_object_mut().unwrap().remove("packages");
+                }
+                "scroll" => {
+                    data["packages"] = serde_json::json!((0..40).map(|i| serde_json::json!({"name":format!("package-{i:02}"),"old":"1.0-1","new":"1.1-1","repo":"extra"})).collect::<Vec<_>>());
+                }
+                "empty" => {
+                    data["count"] = serde_json::json!(0);
+                    data["packages"] = serde_json::json!([]);
+                }
+                "unavailable" => {
+                    data["count"] = serde_json::Value::Null;
+                    data["packages"] = serde_json::json!([]);
+                    data["health"] = serde_json::json!({"available":false,"stale":true});
+                }
+                _ => {}
+            }
+            let status = Status::core_updates(Arc::new(FakeSource::new(data)?), None);
+            let mut values = status.project();
+            // Fix the wall-clock label across time zones for deterministic pixels.
+            values.insert(
+                "status.updates_checked".into(),
+                Value::Text("Last checked 2027-01-15 08:00".into()),
+            );
+            values.insert("view.width".into(), Value::Number(382.));
+            if case == "scroll" {
+                values.insert("status.updates_scroll".into(), Value::Number(1000.));
+            }
+            let mut h = Harness::load(
+                &root(),
+                Path::new("status/updates.luau"),
+                &root().join("palette.json"),
+                values,
+                Config {
+                    width: 446,
+                    height: 500,
+                    scale,
+                },
+            )?;
+            assert!(h.scene().bounds.h < 450., "dropdown height is capped");
+            if case == "count" || case == "empty" {
+                assert!(h.scene().bounds.h < 200., "no blank detail space");
+            }
+            if case == "scroll" {
+                assert_eq!(h.session.scroll_regions().len(), 1);
+            }
+            if case == "packages" {
+                for repo in ["core", "extra", "AUR"] {
+                    assert!(
+                        h.scene()
+                            .primitives
+                            .iter()
+                            .any(|primitive| matches!(primitive,
+                                bead::render::Primitive::Text { text, rect, .. }
+                                if text == repo && rect.w > 10. && rect.x + rect.w <= 382.
+                            )),
+                        "repository badge must fit inside the dropdown: {repo}"
+                    );
+                }
+            }
+            let frame = h.render()?;
+            let golden = root()
+                .join("tests/goldens")
+                .join(format!("updates-{case}-{scale}.png"));
+            if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+                frame.save(&golden)?;
+            }
+            frame.compare(
+                &golden,
+                Default::default(),
+                &std::env::temp_dir().join(format!("bead-updates-{case}-{scale}-diff")),
+            )?;
+        }
+    }
+    Ok(())
+}
 fn harness(scale: f32) -> Result<Harness> {
     Harness::load(
         &root(),
