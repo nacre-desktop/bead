@@ -58,7 +58,7 @@ local function make_variant(package,placement,form)
         end or nil,
         render=function(props,settings,data)
             local instance=props.instance or {}
-            local name=instance.style or form.default_style
+            local name=instance.style or (form.legacy_style_setting and settings[form.legacy_style_setting]) or form.default_style
             local selected=form.styles[name]
             assert(selected,"unknown "..placement.." style "..tostring(name).." for "..package.id)
             local styled=table.clone(props)
@@ -90,7 +90,7 @@ end
 local function validate_style(package,item,placement,span)
     local form=package.forms[placement]
     assert(form,"widget "..package.id.." has no "..placement.." form")
-    local name=item.style or form.default_style
+    local name=item.style or (form.legacy_style_setting and (item.settings or {})[form.legacy_style_setting]) or form.default_style
     local style=form.styles[name]
     assert(style,"unknown "..placement.." style "..tostring(name).." for "..package.id)
     if span then

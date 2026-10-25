@@ -236,6 +236,7 @@ local function op(s,args)
     local form_state=state.forms[form] or {enabled=false,style=descriptor.default_style,placement={}}
     state.forms[form]=form_state
     local style_name=req.style or form_state.style
+    if not style_name or style_name=="" then style_name=descriptor.legacy_style_setting and (state.settings or {})[descriptor.legacy_style_setting] end
     if not descriptor.styles or not descriptor.styles[style_name] then style_name=descriptor.default_style end
     local style=descriptor.styles and descriptor.styles[style_name]
     if not style then s["widgets.error"]="invalid style"; return end

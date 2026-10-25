@@ -105,7 +105,10 @@ pub fn window_spec(
         fallback,
         factory,
         model: Arc::new(|args| {
-            let query = args.first().and_then(serde_json::Value::as_str).unwrap_or_default();
+            let query = args
+                .first()
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
             BTreeMap::from([("widgets.search".into(), Value::Text(query.into()))])
         }),
     })

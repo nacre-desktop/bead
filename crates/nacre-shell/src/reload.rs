@@ -33,7 +33,11 @@ fn panel_visibility_changes(open: bool, launcher: bool) -> BTreeMap<String, bead
 fn widget_screen_values(
     snapshot: &bead::core::source::Snapshot,
 ) -> BTreeMap<String, bead::core::Value> {
-    if !snapshot.connected || !snapshot.data["health"]["available"].as_bool().unwrap_or(true) {
+    if !snapshot.connected
+        || !snapshot.data["health"]["available"]
+            .as_bool()
+            .unwrap_or(true)
+    {
         return BTreeMap::new();
     }
     let outputs = snapshot.data["outputs"].as_array();
@@ -59,8 +63,14 @@ fn widget_screen_values(
         return BTreeMap::new();
     };
     BTreeMap::from([
-        ("widgets.screen_width".into(), bead::core::Value::Number(width)),
-        ("widgets.screen_height".into(), bead::core::Value::Number(height)),
+        (
+            "widgets.screen_width".into(),
+            bead::core::Value::Number(width),
+        ),
+        (
+            "widgets.screen_height".into(),
+            bead::core::Value::Number(height),
+        ),
     ])
 }
 // Resolve a write against the latest canonical snapshot, so a delayed acknowledgement
@@ -81,12 +91,27 @@ fn widget_write_resolution(
     let mut changes = BTreeMap::from([
         ("widgets.busy".into(), Value::Bool(false)),
         ("widgets.draft".into(), Value::list(Vec::new())),
-        ("widgets.error".into(), Value::Text(error.clone().unwrap_or_default())),
-        ("widgets.message".into(), Value::Text(if error.is_none() { "Changes saved".into() } else { String::new() })),
+        (
+            "widgets.error".into(),
+            Value::Text(error.clone().unwrap_or_default()),
+        ),
+        (
+            "widgets.message".into(),
+            Value::Text(if error.is_none() {
+                "Changes saved".into()
+            } else {
+                String::new()
+            }),
+        ),
     ]);
     let revision = accepted_revision.unwrap_or(base_revision.saturating_add(1));
     let newer = canonical.contains_key("widgets.layout")
-        && canonical_revision > if error.is_some() { base_revision } else { revision };
+        && canonical_revision
+            > if error.is_some() {
+                base_revision
+            } else {
+                revision
+            };
     if newer {
         changes.extend(canonical);
         changes.insert("widgets.undo".into(), Value::list(Vec::new()));
@@ -841,8 +866,14 @@ impl Runtime {
         if let Some(client) = client {
             self = self.with_settings(Some(client.clone()), root)?;
             self.session.stores = self.session.stores.reconcile(&BTreeMap::from([
-                ("settings.page".into(), bead::core::Value::Text("wallpaper".into())),
-                ("settings.search".into(), bead::core::Value::Text(String::new())),
+                (
+                    "settings.page".into(),
+                    bead::core::Value::Text("wallpaper".into()),
+                ),
+                (
+                    "settings.search".into(),
+                    bead::core::Value::Text(String::new()),
+                ),
             ]))?;
             if let Ok(topic) = client.view_topic("displays") {
                 let topic: std::sync::Arc<dyn bead::core::source::Source> = topic;
@@ -3143,20 +3174,23 @@ impl SceneSource for Runtime {
         }
         if matches!(&event, UiEvent::Model(values) if values.is_empty())
             && let Some(reply) = self
-            .widgets_write
-            .as_mut()
-            .and_then(|ticket| ticket.try_take())
+                .widgets_write
+                .as_mut()
+                .and_then(|ticket| ticket.try_take())
         {
             self.widgets_write = None;
             let document = self.widgets_write_document.take();
             let previous = self.widgets_write_previous.take();
             let success = reply.is_ok();
             let changes = if self.widget_app {
-                let canonical = self.widgets_topic.as_ref().map(|topic| {
-                    crate::widgets::values(&bead::core::source::Source::snapshot(&**topic))
-                }).unwrap_or_default();
-                let accepted_revision = reply.as_ref().ok()
-                    .and_then(|reply| reply["rev"].as_u64());
+                let canonical = self
+                    .widgets_topic
+                    .as_ref()
+                    .map(|topic| {
+                        crate::widgets::values(&bead::core::source::Source::snapshot(&**topic))
+                    })
+                    .unwrap_or_default();
+                let accepted_revision = reply.as_ref().ok().and_then(|reply| reply["rev"].as_u64());
                 let error = reply.as_ref().err().map(|error| error.message.clone());
                 widget_write_resolution(document, previous, accepted_revision, error, canonical)
             } else {
@@ -3166,7 +3200,8 @@ impl SceneSource for Runtime {
                         (false, String::new())
                     }
                     Err(error) => (
-                        self.session.stores.get("panel.open") == Some(&bead::core::Value::Bool(true)),
+                        self.session.stores.get("panel.open")
+                            == Some(&bead::core::Value::Bool(true)),
                         error.message,
                     ),
                 };
@@ -3429,7 +3464,14 @@ impl SceneSource for Runtime {
         if let Some((_, name, argument)) = &host_action
             && name == "widgets.navigate"
             && self.widget_app
-            && matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. } | UiEvent::Release | UiEvent::Action { .. } | UiEvent::Command { .. })
+            && matches!(
+                &event,
+                UiEvent::Click { .. }
+                    | UiEvent::Drag { .. }
+                    | UiEvent::Release
+                    | UiEvent::Action { .. }
+                    | UiEvent::Command { .. }
+            )
         {
             self.actions.authorize(name)?;
             let changes = self
@@ -3483,7 +3525,10 @@ impl SceneSource for Runtime {
                         .unwrap_or_default(),
                     _ => "",
                 };
-                let persistent = matches!(operation, "toggle-form" | "style" | "setting" | "undo" | "reset" | "default-trigger");
+                let persistent = matches!(
+                    operation,
+                    "toggle-form" | "style" | "setting" | "undo" | "reset" | "default-trigger"
+                );
                 let old_layout = self
                     .session
                     .stores
@@ -3499,13 +3544,10 @@ impl SceneSource for Runtime {
                 let changes = self
                     .session
                     .action_values(name, self.widget_argument(name, argument))?;
-                let Some(document) = changes
-                    .get("widgets.draft")
-                    .and_then(|value| match value {
-                        bead::core::Value::List(records) => records.first().cloned(),
-                        _ => None,
-                    })
-                else {
+                let Some(document) = changes.get("widgets.draft").and_then(|value| match value {
+                    bead::core::Value::List(records) => records.first().cloned(),
+                    _ => None,
+                }) else {
                     let scene = self.session.update(changes)?;
                     return self.finish_scene(scene, false);
                 };
@@ -3521,41 +3563,56 @@ impl SceneSource for Runtime {
                     Some(bead::core::Value::Number(revision)) => *revision as u64,
                     _ => 0,
                 };
-                self.widgets_write_previous = Some((old_layout.clone(), old_undo.clone(), old_revision));
+                self.widgets_write_previous =
+                    Some((old_layout.clone(), old_undo.clone(), old_revision));
                 let mut changes = changes;
                 changes.insert("widgets.busy".into(), bead::core::Value::Bool(true));
-                changes.insert("widgets.error".into(), bead::core::Value::Text(String::new()));
+                changes.insert(
+                    "widgets.error".into(),
+                    bead::core::Value::Text(String::new()),
+                );
                 let scene = self.session.update(changes)?;
-                let result: Result<Option<crate::nacre_source::CallTicket>, String> =
-                    if let Some(client) = &self.widgets_client {
-                        let status = client.status();
-                        (|| -> Result<_, String> {
-                            let method = status.methods.get("settings.set")
-                                .filter(|method| method.v == 1)
-                                .ok_or("Widget settings are unavailable")?;
-                            let boot = status.boot.ok_or("Widget settings are disconnected")?;
-                            let rev = match self.session.stores.get("widgets.rev") {
-                                Some(bead::core::Value::Number(rev)) => *rev as u64,
-                                _ => 0,
-                            };
-                            let wakeup = self.wakeup.clone().ok_or("Widget event channel unavailable")?;
-                            client.begin_call(
+                let result: Result<Option<crate::nacre_source::CallTicket>, String> = if let Some(
+                    client,
+                ) =
+                    &self.widgets_client
+                {
+                    let status = client.status();
+                    (|| -> Result<_, String> {
+                        let method = status
+                            .methods
+                            .get("settings.set")
+                            .filter(|method| method.v == 1)
+                            .ok_or("Widget settings are unavailable")?;
+                        let boot = status.boot.ok_or("Widget settings are disconnected")?;
+                        let rev = match self.session.stores.get("widgets.rev") {
+                            Some(bead::core::Value::Number(rev)) => *rev as u64,
+                            _ => 0,
+                        };
+                        let wakeup = self
+                            .wakeup
+                            .clone()
+                            .ok_or("Widget event channel unavailable")?;
+                        client.begin_call(
                                 "settings.set".into(),
                                 serde_json::json!({"store":"widgets","key":["layout"],"value":document,"rev":rev}),
                                 std::time::Duration::from_millis(u64::from(method.timeout).clamp(1, 30_000)),
                                 crate::nacre_source::CallGuard { boot, version: 1 },
                                 Some(std::sync::Arc::new(move || wakeup(UiEvent::Model(BTreeMap::new())))),
                             ).map(Some).map_err(|error| error.message)
-                        })()
-                    } else {
-                        self.widgets_file.as_deref()
-                            .ok_or("Widget layout path unavailable".to_owned())
-                            .and_then(|path| {
-                                let json = serde_json::to_value(&document).map_err(|error| error.to_string())?;
-                                crate::widgets::save_file(path, &json).map_err(|error| error.to_string())
-                            })
-                            .map(|()| None)
-                    };
+                    })()
+                } else {
+                    self.widgets_file
+                        .as_deref()
+                        .ok_or("Widget layout path unavailable".to_owned())
+                        .and_then(|path| {
+                            let json = serde_json::to_value(&document)
+                                .map_err(|error| error.to_string())?;
+                            crate::widgets::save_file(path, &json)
+                                .map_err(|error| error.to_string())
+                        })
+                        .map(|()| None)
+                };
                 let final_scene = match result {
                     Ok(Some(ticket)) => {
                         self.widgets_write = Some(ticket);
@@ -3568,22 +3625,29 @@ impl SceneSource for Runtime {
                             _ => 1.,
                         };
                         self.widgets_write_previous = None;
-                        self.session.update(BTreeMap::from([
-                            ("widgets.layout".into(), bead::core::Value::list(vec![document])),
-                            ("widgets.draft".into(), bead::core::Value::list(Vec::new())),
-                            ("widgets.busy".into(), bead::core::Value::Bool(false)),
-                            ("widgets.rev".into(), bead::core::Value::Number(rev)),
-                        ]))?.or(scene)
+                        self.session
+                            .update(BTreeMap::from([
+                                (
+                                    "widgets.layout".into(),
+                                    bead::core::Value::list(vec![document]),
+                                ),
+                                ("widgets.draft".into(), bead::core::Value::list(Vec::new())),
+                                ("widgets.busy".into(), bead::core::Value::Bool(false)),
+                                ("widgets.rev".into(), bead::core::Value::Number(rev)),
+                            ]))?
+                            .or(scene)
                     }
                     Err(error) => {
                         self.widgets_write_previous = None;
-                        self.session.update(BTreeMap::from([
-                            ("widgets.layout".into(), old_layout),
-                            ("widgets.draft".into(), bead::core::Value::list(Vec::new())),
-                            ("widgets.undo".into(), old_undo),
-                            ("widgets.busy".into(), bead::core::Value::Bool(false)),
-                            ("widgets.error".into(), bead::core::Value::Text(error)),
-                        ]))?.or(scene)
+                        self.session
+                            .update(BTreeMap::from([
+                                ("widgets.layout".into(), old_layout),
+                                ("widgets.draft".into(), bead::core::Value::list(Vec::new())),
+                                ("widgets.undo".into(), old_undo),
+                                ("widgets.busy".into(), bead::core::Value::Bool(false)),
+                                ("widgets.error".into(), bead::core::Value::Text(error)),
+                            ]))?
+                            .or(scene)
                     }
                 };
                 return self.finish_scene(final_scene, false);
@@ -6082,8 +6146,8 @@ mod prompt_runtime_tests;
 #[cfg(test)]
 mod session_menu_runtime_tests;
 #[cfg(test)]
-mod wifi_runtime_tests;
-#[cfg(test)]
 mod widget_app_tests;
 #[cfg(test)]
 mod widget_startup_tests;
+#[cfg(test)]
+mod wifi_runtime_tests;

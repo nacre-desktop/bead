@@ -14,7 +14,7 @@ local function catalogue_descriptors()
             defaults=package.defaults,settings=package.settings,forms={}}
         for placement,form_def in package.forms do
             if placement~="panel" then
-                local form_copy={default_style=form_def.default_style,styles={}}
+                local form_copy={default_style=form_def.default_style,legacy_style_setting=form_def.legacy_style_setting,styles={}}
                 for name,style in form_def.styles do
                     form_copy.styles[name]={title=style.title,min_span=style.min_span,max_span=style.max_span,preferred_span=style.preferred_span,preferred_height=style.preferred_height or spacing.huge*3}
                 end
@@ -197,14 +197,17 @@ end
 
 local function gallery()
     local rows=visible_packages()
+    local category_nodes={id="category-list",width="fill",gap=spacing.xs}
+    for _,item in categories do table.insert(category_nodes,category_button(item)) end
+    local card_nodes={id="widget-grid",width="fill",columns=2,gap=spacing.md,row_height=220}
+    for _,item in rows do table.insert(card_nodes,gallery_card(item)) end
     return ui.Row{id="gallery-page",width="fill",height="fill",padding=spacing.lg,gap=spacing.xl,
         ui.Column{id="gallery-rail",width=RAIL,height="fill",shrink=0,padding=spacing.md,gap=spacing.sm,
             radius=kit.tokens.radii.medium,fill="surfaceContainer",
             kit.TextInput{id="gallery-search",width="fill",height=spacing.huge+spacing.md,text=ui.bind("widgets.search"),
                 placeholder="Find a widget",fill="surface",border_width=1,border_color="outlineVariant",aria_label="Find a widget"},
             ui.Scroll{id="category-scroll",width="fill",grow=1,scroll=ui.bind("widgets.nav.scroll"),
-                ui.Column{id="category-list",width="fill",gap=spacing.xs,
-                    ui.Repeat{id="categories",model=categories,key="id",render=category_button}}},
+                ui.Column(category_nodes)},
             ui.Column{id="dropdown-default",width="fill",shrink=0,gap=spacing.sm,
                 label("trigger-label","Default dropdown trigger",text.caption*4/3,"onSurfaceVariant",{height=20}),
                 ui.Row{id="trigger-choices",width="fill",height=spacing.huge+spacing.xs,gap=spacing.sm,
@@ -221,8 +224,7 @@ local function gallery()
             #rows==0 and ui.Box{id="gallery-empty",grow=1,width="fill",radius=kit.tokens.radii.medium,fill="surfaceContainer",
                 label("gallery-empty-text","No widgets match this search.",text.body*4/3,"onSurfaceVariant",{width="fill",height=24,text_align="center"})}
                 or ui.Scroll{id="gallery-scroll",width="fill",grow=1,scroll=ui.bind("widgets.scroll"),
-                    ui.Grid{id="widget-grid",width="fill",columns=2,gap=spacing.md,row_height=220,
-                        ui.Repeat{id="widget-cards",model=rows,key="id",render=gallery_card}}}}
+                    ui.Grid(card_nodes)}}
     }
 end
 
@@ -266,7 +268,7 @@ local function form_state(widget,placement,package)
         configured=nil
         local function matching(items)
             for _,item in items or {} do
-                if item.widget==widget then configured=item.style; return true end
+                if item.widget==widget then configured=item.style or (package.forms[placement].legacy_style_setting and (item.settings or {})[package.forms[placement].legacy_style_setting]); return true end
                 if matching(item.children) then return true end
             end
             return false
