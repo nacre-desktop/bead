@@ -1,0 +1,386 @@
+{
+  "revision": "4a4ed0c86c6680ca68d6b5c9ca93987c12691ef9",
+  "binary_sha256": "13c89a203f67ce241951153fc3113fa52b4ff9f963e130846f33eb10ecf9469f",
+  "geometry": [
+    2880,
+    1800
+  ],
+  "scale": 1.5,
+  "pair_order": [
+    "QML reference",
+    "final Bead"
+  ],
+  "sequence_interval_ms": 25,
+  "timing_note": "Screencopy proxy timestamps; not scanout.",
+  "sources": {
+    "parity/qml/shots/idle.png": {
+      "sha256": "12260f5387eb82bbbf0e65c83a255719ac62cedffd93aa8e7b72599c3058398d",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/shots/idle.png": {
+      "sha256": "ce25a41146e26b020849679982620129b945021a08e609bb54af42f919b0b3a0",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/shots/bar-title-open.png": {
+      "sha256": "96729f5ab9f100439df9c167202ecd181c86e4b7df611510e407d039f1117c2d",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/shots/bar-title-open.png": {
+      "sha256": "01b2dae61ebed8c5bfb5cf0749d7b6915c47d356025eaf1a537af25e5f317029",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/shots/tabs-1.png": {
+      "sha256": "eed7459fe2b1e8dac3c6f810a346a65bd7deeae77b9a3111e38137b2ca5b50a2",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/shots/tabs-1.png": {
+      "sha256": "e9a1bd81d6f7d328f35fa0c57ceab58692ea37afef96d4c8387e1fe3357cacf5",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/bar-title-open-open/000.jpg": {
+      "sha256": "4184f6fd4a576390c71fdf7056aeb01c63948d0ba7955cc45596d1007b187ca5",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/bar-title-open-open/000.jpg": {
+      "sha256": "6371e432a7f46f27d61c27744013017895cfc6a69d9bad0d84fad7f589325147",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/bar-title-open-open/004.jpg": {
+      "sha256": "9474a0872278035c9846e523032689cc1d96e2d8e3de9126fe8a43c968cae9d3",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/bar-title-open-open/004.jpg": {
+      "sha256": "1c38c4178ee37d879687300f04cff2f30927fd2a2983ee80e28eb2764059eb47",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/bar-title-open-open/008.jpg": {
+      "sha256": "95ba5865114a75a56b3ea027e60ba87d2a8de23bb097f8d6bf60f8f42a2368d3",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/bar-title-open-open/008.jpg": {
+      "sha256": "6a420ac52479fc72d66bc7b3cb81625ec49f544ea0f2ae12e8a4c3889926fc5d",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/bar-title-open-open/012.jpg": {
+      "sha256": "430d4deb87f950ac557b8a4948a73f5fd99ac5126ec00efe458d00dcd9365261",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/bar-title-open-open/012.jpg": {
+      "sha256": "12168a60ca82b0ade651bbb34c5800cc1de1749ccb7a46f9c4293e252be1e164",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/bar-title-open-open/016.jpg": {
+      "sha256": "8493ee127e9827e35336f9cf30a512428399e2dd59c3524dd4700a16bb2f365f",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/bar-title-open-open/016.jpg": {
+      "sha256": "7442187010e3b83ace03f4953203a690e3623c628e5f520a546ea086d45b0603",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/bar-title-open-open/020.jpg": {
+      "sha256": "5f8aba52ce8865f4df7562a669d96d53efd7498258d29f01b6ea4605318d071d",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/bar-title-open-open/020.jpg": {
+      "sha256": "12192da123367cf8fe02ab2fc3fa52abe4f316523fb7afec533eff2f86579a0e",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/bar-title-open-open/024.jpg": {
+      "sha256": "6844dd8953a95385bd7ec08fced9fc37294c2862fe5627e0fa060a89c6870efc",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/bar-title-open-open/024.jpg": {
+      "sha256": "f1e31ce1ca0ae00a1d06613915c350f88778c9f8b4c092b67f7dcb7cb0d0435c",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/bar-title-open-open/028.jpg": {
+      "sha256": "247c5e5dbb35ce3f0f436b83457f8d355a71c87c69ca7657b80d3f67b68f696a",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/bar-title-open-open/028.jpg": {
+      "sha256": "dcbe81b6f58178994ffec6f09672d0794520c0c6d68748e3fb7f2209821d09ab",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/bar-title-open-open/032.jpg": {
+      "sha256": "44c9252bf408b036200bf49e1153729383a72a8c86a73573f5ccd913f4a8b1de",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/bar-title-open-open/032.jpg": {
+      "sha256": "66cfe8accf4957c59de36a87eace5db98e6960d34404e7e041af981c77a3e71c",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/bar-title-open-open/036.jpg": {
+      "sha256": "44c9252bf408b036200bf49e1153729383a72a8c86a73573f5ccd913f4a8b1de",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/bar-title-open-open/036.jpg": {
+      "sha256": "4c1c45a24e60b9ea55ad8600097cb0946bdb107861c45c0a8a13c3380923dab1",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/bar-title-open-open/040.jpg": {
+      "sha256": "44c9252bf408b036200bf49e1153729383a72a8c86a73573f5ccd913f4a8b1de",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/bar-title-open-open/040.jpg": {
+      "sha256": "4c1c45a24e60b9ea55ad8600097cb0946bdb107861c45c0a8a13c3380923dab1",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/bar-title-open-open/044.jpg": {
+      "sha256": "44c9252bf408b036200bf49e1153729383a72a8c86a73573f5ccd913f4a8b1de",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/bar-title-open-open/044.jpg": {
+      "sha256": "4c1c45a24e60b9ea55ad8600097cb0946bdb107861c45c0a8a13c3380923dab1",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/tabs-1-open/000.jpg": {
+      "sha256": "33b090f795d0c3799da0ece51298a605cd7ac7ff8db6c912e7d07c6499668f9a",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/tabs-1-open/000.jpg": {
+      "sha256": "248588d85e670c442e822b7ce8fe3288486d9c8aa944021bce3f4a25f96f9f37",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/tabs-1-open/004.jpg": {
+      "sha256": "d3d250c81b5ab5dcd770a5626614ffe860085f631ae1f68acdf17a1178003550",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/tabs-1-open/004.jpg": {
+      "sha256": "cdeb8da43cc4019a3c2031367d23716c5106d784b5a1b1ba57a917e825c033f8",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/tabs-1-open/008.jpg": {
+      "sha256": "e95d806ad3a797432d200589b8e1797e85d8d08c70a9bb964590fd9b35f6fc55",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/tabs-1-open/008.jpg": {
+      "sha256": "eb1013efa3b1d34b67d5fae04c3432e2167bd3fcec20d0515bca710c1432e8bd",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/tabs-1-open/012.jpg": {
+      "sha256": "42579a6c41243aac7a5595d42aec34b85b01db80abd8cfb39925673356590fec",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/tabs-1-open/012.jpg": {
+      "sha256": "eb1013efa3b1d34b67d5fae04c3432e2167bd3fcec20d0515bca710c1432e8bd",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/tabs-1-open/016.jpg": {
+      "sha256": "42579a6c41243aac7a5595d42aec34b85b01db80abd8cfb39925673356590fec",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/tabs-1-open/016.jpg": {
+      "sha256": "eb1013efa3b1d34b67d5fae04c3432e2167bd3fcec20d0515bca710c1432e8bd",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/tabs-1-open/020.jpg": {
+      "sha256": "42579a6c41243aac7a5595d42aec34b85b01db80abd8cfb39925673356590fec",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/tabs-1-open/020.jpg": {
+      "sha256": "eb1013efa3b1d34b67d5fae04c3432e2167bd3fcec20d0515bca710c1432e8bd",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/tabs-1-open/024.jpg": {
+      "sha256": "42579a6c41243aac7a5595d42aec34b85b01db80abd8cfb39925673356590fec",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/tabs-1-open/024.jpg": {
+      "sha256": "eb1013efa3b1d34b67d5fae04c3432e2167bd3fcec20d0515bca710c1432e8bd",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/tabs-1-open/028.jpg": {
+      "sha256": "42579a6c41243aac7a5595d42aec34b85b01db80abd8cfb39925673356590fec",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/tabs-1-open/028.jpg": {
+      "sha256": "eb1013efa3b1d34b67d5fae04c3432e2167bd3fcec20d0515bca710c1432e8bd",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/tabs-1-open/032.jpg": {
+      "sha256": "42579a6c41243aac7a5595d42aec34b85b01db80abd8cfb39925673356590fec",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/tabs-1-open/032.jpg": {
+      "sha256": "eb1013efa3b1d34b67d5fae04c3432e2167bd3fcec20d0515bca710c1432e8bd",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "parity/qml/seq/tabs-1-open/036.jpg": {
+      "sha256": "42579a6c41243aac7a5595d42aec34b85b01db80abd8cfb39925673356590fec",
+      "size": [
+        2880,
+        1800
+      ]
+    },
+    "accepted-refresh/bead/seq/tabs-1-open/036.jpg": {
+      "sha256": "eb1013efa3b1d34b67d5fae04c3432e2167bd3fcec20d0515bca710c1432e8bd",
+      "size": [
+        2880,
+        1800
+      ]
+    }
+  },
+  "title_retention": {
+    "primary_states_after_focus": 35,
+    "changed_title_states": 0
+  },
+  "state_errors": {
+    "idle": [],
+    "bar-title-open": [],
+    "tabs-1": []
+  },
+  "containment": {
+    "capture_returncode": 0,
+    "child_membership_verified": true,
+    "effective_memory_max": "12884901888",
+    "effective_memory_swap_max": "0",
+    "oom_delta": {
+      "oom": 0,
+      "oom_kill": 0
+    }
+  }
+}

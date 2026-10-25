@@ -31,8 +31,17 @@ or compositor sessions ran on the laptop. Pilot failures (missing private helper
 PATH entries, logical-resolution screencopy, wrong tab-index oracle and intercepted
 private-proof clicks) were corrected before the reported native captures.
 
-The visual revision is `da5473b`; final memory/CI revision `4a4ed0c` is blocked:
+The visual revision is `da5473b`; final memory/CI revision is `4a4ed0c`:
 Media +0.513672 MiB median exceeds +0.500 MiB by 14 KiB. Its visual rerun did
-not start after that failed gate. No main push or live change occurred.
+not start during the original gate stop. Lead-accepted 2026-10-25: the lead judged
+the 14 KiB excess within measurement noise and authorized integration. No live
+change is authorized or claimed.
 `capture-arm.sh` expects the existing owner-approved `swap-preflight.py` in the
 private lab root. Reported arms had zero swap used, so no swap reset was needed.
+
+After lead acceptance, `accepted-refresh/` records a successful quick final-code
+`4a4ed0c` capture: idle, title hover-open and Media selection, plus sampled series.
+Its native image hashes, binary hash, state errors and containment result are in
+`metadata.json`. The first refresh arm passed visual states but hit a disconnected
+private GVFS mount during cleanup; the retry disabled GVFS mounting in that arm's
+environment and exited 0. No host or live settings were changed.

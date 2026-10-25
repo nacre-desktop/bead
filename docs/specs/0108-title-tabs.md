@@ -1,4 +1,4 @@
-# B0108 — Bar title and dashboard tabs (blocked at memory gate)
+# B0108 — Bar title and dashboard tabs (lead-accepted 2026-10-25)
 
 The title group used a byte-count width estimate, leaving empty space after the
 actual caption. Tab labels similarly reserved 90 px regardless of shaped width.
@@ -38,8 +38,12 @@ screencopy launch/completion proxies, not physical presentation or scanout timin
 The visual candidate `da5473b` retained the real title in all 69 observed primary
 states. Its visible title-group center differs from QML by 0.5 physical px in each
 axis. All four tab series contain intermediate pearl positions without a strip
-reveal replay. These captures predate the two heap fixes; the final revision's
-visual rerun was correctly skipped when its memory gate failed.
+reveal replay. Those full series predate the two heap fixes. After lead acceptance,
+a quick title/tab refresh on final code `4a4ed0c` passed idle, hover-open title and
+Media selection at the same native geometry, with 35/35 title states retained and
+containment checks passing. [Refreshed pairs and series](evidence/0108/accepted-refresh/) preserve the
+final-binary proof. A private GVFS cleanup failure on the first attempt was corrected
+by disabling GVFS mounting only in the private arm; the rerun exited 0.
 
 Five alternating matched release pairs compare against B0106 `575afc7` using
 `--release --no-default-features --locked -j2`. The gated sum is anon + shmem +
@@ -47,9 +51,10 @@ DRM + SwapPss; file-backed PSS and total PSS remain informational in `memory.jso
 Final code `4a4ed0c` fails **Media +0.513672 MiB**, exceeding the +0.500 MiB limit
 by 14 KiB. Other median deltas (MiB): idle +0.089844, Today −0.177734,
 Weather −0.179688, System −0.814453, closed −0.199219. Media exceeds +0.5 in
-four of five pairs. This is a failed gate; no tolerance or acceptance is inferred.
-Work stops under the unit's standing memory rule. The candidate is committed
-locally for review and is **not integrated or pushed to main**.
+four of five pairs. **Lead-accepted 2026-10-25:** the lead judged the +0.5137 MiB
+Media median (14 KiB over the limit) within measurement noise and authorized
+integration. The measured failure remains recorded; this unit-specific acceptance
+does not change the standing memory limit.
 
 The first candidate failed the median gate on open pages (+2.203 to +6.104 MiB).
 Retiring unused rasters plus baker scratch reduced but did not eliminate the
@@ -60,6 +65,9 @@ first committed frame of each resource generation. The existing five-second
 focused SHM pool compaction delay is preserved; this trim never repaints the pool.
 Both failed five-pair results and allocator diagnostics are retained in the evidence.
 No host swap-in, process SwapPss, OOM or containment failure is accepted.
+
+Rebase onto current `origin/main` (`575afc7`) was a no-op; the product tree remains
+identical to the tested code, so no repeat container CI run was needed.
 
 Full remote Arch CI-equivalent `bash docs/specs/evidence/0108/check.sh` passes
 on `4a4ed0c` (`CI_ALL_OK`), including fmt, clippy −D warnings, workspace/trace

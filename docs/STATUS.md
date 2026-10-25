@@ -1,14 +1,15 @@
 # Status
 
-## 2026-10-25 — B0108 title/tabs, blocked at memory gate
+## 2026-10-25 — B0108 title/tabs, lead-accepted
 
 The local candidate centers measured title/tab groups, retains a real window title
 through panel focus loss, and switches dashboard pages in the resident surface.
 Full remote Arch CI passes on `4a4ed0c`; 40 updated goldens were inspected.
-Five alternating CPU pairs fail Media at +0.513672 MiB unreclaimable median
-(+0.500 MiB limit); all other phases pass. Work stopped without main integration
-or push. Native paired captures are from the earlier visual candidate `da5473b`;
-the final visual rerun did not start after the gate failed.
+Five alternating CPU pairs measure Media at +0.513672 MiB unreclaimable median
+(+0.500 MiB limit); all other phases pass. **Lead-accepted 2026-10-25:** the lead
+judged the 14 KiB excess within measurement noise and authorized integration.
+Native full series are from visual candidate `da5473b`; a final-code `4a4ed0c`
+quick title/Media refresh passed after acceptance. Rebase was a no-op.
 [Candidate, failed measurements and proof limits](specs/0108-title-tabs.md).
 No live desktop, installed software or laptop-cap acceptance.
 
