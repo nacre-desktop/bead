@@ -32,7 +32,8 @@ for state, kind in [("spotlight-hover", "pointer"), ("spotlight-pressed", "press
     m.STATE_PREPARE[state] = [pref, ("bar-window",), open_picker, ("sleep", 4)]
     m.STATES[state] = ([(kind, 960, 600)], [("release",), close_picker, ("bar-window-close",)], 0)
     m.STATE_SETTLE[state] = .1
-m.STATE_PREPARE["palette-sync"] = [("wallpaper-pref", "static", "carousel"), open_picker, ("sleep", 8)]
+palette_layout = "spotlight" if os.environ.get("PICKER_PALETTE_LAYOUT") == "spotlight" else "carousel"
+m.STATE_PREPARE["palette-sync"] = [("wallpaper-pref", "static", palette_layout), open_picker, ("sleep", 8)]
 m.STATES["palette-sync"] = ([("selection-key", "Right")], [close_picker], 3)
 m.STATE_SETTLE["palette-sync"] = 3
 m.STATE_CLEANUP["palette-sync"] = [("active-assert", "generated-2.jpg")]
