@@ -64,6 +64,34 @@ Builds on: ROADMAP "widget hosts and movable widgets" (2026-10-23), pearls (B004
   - Clock: format, date, seconds, font.
   - Pearls: count mode, labels, colours (the B0101 blend), with the thread on or off.
 
+## Widgets app and forms (owner design, 2026-10-25; replaces the right-click editor)
+
+Owner decisions:
+- The right-click "Edit widgets" list editor is REJECTED (debug-looking, confusing grid, too easy to lose widgets). Widget editing lives in a **Widgets app** window (like Settings: `nacre-shell --app widgets`, opened from Settings → Widgets, the launcher and a keybind/route).
+- Pixel parity with QML is no longer required for widget placement: widgets may SNAP to the grid.
+- Drag and drop must feel great: smooth, with a snap animation plus effect when a widget lands.
+
+**Forms.** Each widget declares up to three forms, each with named STYLES:
+- `bar` (strip host): e.g. music: line | circle; launcher: nacre | arch | cachyos | custom icon; status: icon | icon+value | icon+text; clock: time | time+date | seconds.
+- `desktop` (canvas host): e.g. music: bars | wave | mirror | ring | nation | particles (+ lyrics, wallpaper effects).
+- `panel` (the dropdown opened by clicking the bar or desktop form): e.g. the music media card with a "Music effects" page (the same settings as the app).
+A widget can be placed in the bar, on the desktop, or BOTH. The forms share data and shared settings (e.g. intensity, colours), and each form has its own style and placement settings.
+
+**Widgets app layout.**
+- Gallery: categories (All, Bar essentials, Status, Media, System, Containers, Your widgets), search, and cards with LIVE animated previews (the bar form above, the desktop form below as a mini scene).
+- Widget page:
+  - a large preview STAGE: a mini replica of the user's screen (their wallpaper, palette and bar) with a fake data source (e.g. a playing track);
+  - tabs "In the bar" / "On the desktop", each with an enable toggle and a row of STYLE tiles; selecting one updates the stage instantly;
+  - settings below, generated from the schema plus layout hints.
+- Placement:
+  - enabling a form flies it to a sensible slot with a snap animation;
+  - or drag the stage preview onto the real bar/desktop, with live reflow of neighbours (they slide aside), a magnetic snap, and a short settle/glow effect;
+  - desktop snap targets: centre, edges, corners; resize handles.
+- The bar while the app is open: widgets get a subtle hover outline and are draggable in place. Drop markers appear only near the pointer while dragging; NEVER a full checkerboard grid.
+- Removal: drag off, or the hover ×. Removed widgets always stay in the gallery. Undo, plus "Reset to Nacre default" in the app header. Nothing is lost silently.
+- Smoothness: every drag, reflow and drop is animated at the full frame rate (SMOOTHNESS FIRST); the app opens with content on the first frame.
+- Containers: drag status items into or out of a pill; the pill animates its width.
+
 ## Music widget (first rich widget)
 
 Inspired by the owner's reference (r/unixporn "desktop dances to the music"): a bar visualiser plus a media card dropdown plus a "Music effects" settings panel.
