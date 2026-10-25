@@ -293,18 +293,57 @@ impl Session {
         let Some(generation) = &self.generation else {
             return Ok(None);
         };
-        let Some(node) = self.hit(x, y, true) else {
+        let node = if generation.markup_entry.is_some() {
+            let mut layer_id = self.hit(x, y, true).map(|node| node.id.clone());
+            let mut target = None;
+            while let Some(id) = layer_id {
+                if let Some(node) = self
+                    .current_nodes
+                    .iter()
+                    .find(|node| node.id == id && node.contains(x, y))
+                {
+                    let can_consume = if let Some(store) = &node.scroll_store {
+                        match self.stores.get(store) {
+                            Some(Value::Number(value)) => {
+                                let limit = node.scroll_limit.unwrap_or(f64::MAX);
+                                let offset = value.clamp(0., limit);
+                                (offset + delta).clamp(0., limit) != offset
+                            }
+                            _ => true,
+                        }
+                    } else {
+                        node.scroll.is_some()
+                    };
+                    if can_consume {
+                        target = Some(node);
+                        break;
+                    }
+                }
+                layer_id = self
+                    .current
+                    .layers
+                    .iter()
+                    .find(|layer| layer.id == id)
+                    .and_then(|layer| layer.parent.clone());
+            }
+            target
+        } else {
+            self.hit(x, y, true)
+        };
+        let Some(node) = node else {
             return Ok(None);
         };
         let stores = if let Some(id) = &node.scroll_store {
             let Some(Value::Number(value)) = self.stores.get(id) else {
                 return Err(node.diagnostic("scroll store not a number"));
             };
+            let limit = node.scroll_limit.unwrap_or(f64::MAX);
+            let offset = value.clamp(0., limit);
             let mut stores = self.stores.clone();
             stores
                 .commit(BTreeMap::from([(
                     id.clone(),
-                    Value::Number((value + delta).clamp(0., node.scroll_limit.unwrap_or(f64::MAX))),
+                    Value::Number((offset + delta).clamp(0., limit)),
                 )]))
                 .map_err(|e| node.diagnostic(e))?;
             stores

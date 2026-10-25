@@ -123,6 +123,171 @@ fn session(f: &Fixture) -> Session {
     session
 }
 
+fn nested_scroll_session(inner_content: &str) -> (Fixture, Session) {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        r#"return {stores={query="",scroll=0,inner=0,inner_extent=180,selected=""},actions={select=function()end},computed={}}"#,
+    ).unwrap();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        format!(
+            r#"local ui=require("bead.ui")
+return ui.Panel{{id="panel",width=220,height=150,
+ ui.Scroll{{id="outer",width=200,height=90,scroll=ui.bind("scroll"),
+ ui.Column{{id="outer-content",width=200,gap=4,shrink=0,
+   ui.Scroll{{id="inner",width=180,height=40,scroll=ui.bind("inner"),{inner_content}}},
+   ui.Box{{id="tail",width=180,height=150,shrink=0}}
+  }}
+ }}
+}}"#
+        ),
+    )
+    .unwrap();
+    let s = session(&f);
+    (f, s)
+}
+
+fn scroll_center(s: &Session, suffix: &str) -> (f32, f32) {
+    let node = s
+        .current_nodes
+        .iter()
+        .find(|node| node.id.ends_with(suffix))
+        .unwrap();
+    let bounds = rect(&node.draw);
+    (bounds.x + bounds.w / 2., bounds.y + bounds.h / 2.)
+}
+
+#[test]
+fn empty_nested_scroll_falls_through_to_outer_scroll() {
+    let (_f, mut s) =
+        nested_scroll_session(r#"ui.Box{id="inner-content",width=180,height=24,shrink=0}"#);
+    assert_eq!(
+        s.current_nodes
+            .iter()
+            .find(|n| n.id.ends_with("inner"))
+            .unwrap()
+            .scroll_limit,
+        Some(0.)
+    );
+    assert!(
+        s.current_nodes
+            .iter()
+            .find(|n| n.id.ends_with("outer"))
+            .unwrap()
+            .scroll_limit
+            .unwrap()
+            > 0.
+    );
+    let (x, y) = scroll_center(&s, "inner");
+    let scene = s.scroll(x, y, 10.).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("inner"), Some(&Value::Number(0.)));
+    assert_eq!(s.stores.get("scroll"), Some(&Value::Number(10.)));
+}
+
+#[test]
+fn nested_scroll_at_edge_bubbles_and_reverse_input_returns_to_inner() {
+    let (_f, mut s) = nested_scroll_session(
+        r#"ui.Column{id="inner-content",width=180,height=180,shrink=0,
+      ui.Box{id="row-a",width=180,height=30,shrink=0},ui.Box{id="row-b",width=180,height=30,shrink=0},
+      ui.Box{id="row-c",width=180,height=30,shrink=0},ui.Box{id="row-d",width=180,height=30,shrink=0},
+      ui.Box{id="row-e",width=180,height=30,shrink=0},ui.Box{id="row-f",width=180,height=30,shrink=0}}"#,
+    );
+    let limit = s
+        .current_nodes
+        .iter()
+        .find(|n| n.id.ends_with("inner"))
+        .unwrap()
+        .scroll_limit
+        .unwrap();
+    assert!(limit > 0.);
+    let scene = s
+        .update(BTreeMap::from([("inner".into(), Value::Number(limit))]))
+        .unwrap()
+        .unwrap();
+    s.commit(scene);
+    let (x, y) = scroll_center(&s, "inner");
+    let scene = s.scroll(x, y, 10.).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("inner"), Some(&Value::Number(limit)));
+    assert_eq!(s.stores.get("scroll"), Some(&Value::Number(10.)));
+    let scene = s.scroll(x, y, -10.).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("inner"), Some(&Value::Number(limit - 10.)));
+    assert_eq!(s.stores.get("scroll"), Some(&Value::Number(10.)));
+}
+
+#[test]
+fn stale_inner_offset_uses_clamped_visible_pose_for_reversal() {
+    let (_f, mut s) = nested_scroll_session(
+        r#"ui.Box{id="inner-content",width=180,height=ui.bind("inner_extent"),shrink=0}"#,
+    );
+    let scene = s
+        .update(BTreeMap::from([
+            ("inner_extent".into(), Value::Number(60.)),
+            ("inner".into(), Value::Number(120.)),
+        ]))
+        .unwrap()
+        .unwrap();
+    s.commit(scene);
+    assert_eq!(
+        s.current_nodes
+            .iter()
+            .find(|n| n.id.ends_with("inner"))
+            .unwrap()
+            .scroll_limit,
+        Some(20.)
+    );
+    let (x, y) = scroll_center(&s, "inner");
+    let scene = s.scroll(x, y, -5.).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("inner"), Some(&Value::Number(15.)));
+    assert_eq!(s.stores.get("scroll"), Some(&Value::Number(0.)));
+}
+
+#[test]
+fn empty_front_scroll_does_not_bubble_through_overlapping_sibling() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        r#"return {stores={query="",back=0,front=0,selected=""},actions={},computed={}}"#,
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Panel{id="panel",width=220,height=150,
+ ui.Scroll{id="back",position="absolute",left=0,top=0,width=180,height=80,scroll=ui.bind("back"),
+  ui.Box{id="back-content",width=180,height=160,shrink=0}},
+ ui.Scroll{id="front",position="absolute",left=0,top=0,width=180,height=80,scroll=ui.bind("front"),
+  ui.Box{id="front-content",width=180,height=24,shrink=0}}}"#,
+    )
+    .unwrap();
+    let mut s = session(&f);
+    assert!(
+        s.current_nodes
+            .iter()
+            .find(|n| n.id.ends_with("back"))
+            .unwrap()
+            .scroll_limit
+            .unwrap()
+            > 0.
+    );
+    assert_eq!(
+        s.current_nodes
+            .iter()
+            .find(|n| n.id.ends_with("front"))
+            .unwrap()
+            .scroll_limit,
+        Some(0.)
+    );
+    let (x, y) = scroll_center(&s, "front");
+    assert!(s.scroll(x, y, 10.).unwrap().is_none());
+    assert_eq!(s.stores.get("front"), Some(&Value::Number(0.)));
+    assert_eq!(s.stores.get("back"), Some(&Value::Number(0.)));
+}
+
 #[test]
 fn nested_scroll_offset_cache_matches_full_layout_and_preserves_viewport_clips() {
     let f = fixture();
