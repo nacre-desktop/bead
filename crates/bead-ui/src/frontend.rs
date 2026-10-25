@@ -20,6 +20,7 @@ pub type Resolve<'a> = dyn Fn(&str) -> Result<Value, Diagnostic> + 'a;
 struct CompiledPrelude {
     kit: Vec<u8>,
     install: Vec<u8>,
+    host: Vec<u8>,
     _charge: bead_core::cache::Charge,
 }
 static COMPILED_PRELUDE: Mutex<Weak<CompiledPrelude>> = Mutex::new(Weak::new());
@@ -38,7 +39,10 @@ fn compiled_prelude(
     let install = compiler
         .compile(INSTALL)
         .map_err(|e| diagnostic(entry, e))?;
-    let bytes = kit.capacity() + install.capacity();
+    let host = compiler
+        .compile(include_str!("../assets/host.luau"))
+        .map_err(|e| diagnostic(entry, e))?;
+    let bytes = kit.capacity() + install.capacity() + host.capacity();
     let budget =
         bead_core::cache::Budget::new("compiled-markup-prelude", 8 * bead_core::cache::MIB);
     let charge = budget
@@ -47,6 +51,7 @@ fn compiled_prelude(
     let prelude = Arc::new(CompiledPrelude {
         kit,
         install,
+        host,
         _charge: charge,
     });
     *slot = Arc::downgrade(&prelude);
@@ -361,9 +366,7 @@ impl LuauFrontEnd {
             .iter()
             .map(|(p, b)| p.as_os_str().len() + b.capacity() + 96)
             .sum::<usize>();
-        if source_bytes.saturating_add(prelude.kit.capacity() + prelude.install.capacity())
-            > 8 * 1024 * 1024
-        {
+        if source_bytes.saturating_add(prelude._charge.bytes()) > 8 * 1024 * 1024 {
             return Err(Diagnostic::new(
                 entry,
                 1,
@@ -708,7 +711,7 @@ impl FrontEnd for LuauFrontEnd {
                     .eval()?;
                 install.call::<()>((sdk.clone(), constructors, allowed, lua.array_metatable()))?;
                 let host_factory: Function = lua
-                    .load(include_str!("../assets/host.luau"))
+                    .load(self.prelude.host.as_slice())
                     .set_name("@bead.host")
                     .eval()?;
                 sdk.set("Host", host_factory.call::<Function>(sdk.clone())?)?;
