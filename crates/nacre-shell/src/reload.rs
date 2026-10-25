@@ -3750,6 +3750,9 @@ impl SceneSource for Runtime {
                 return Err("session envelope reached script".into());
             }
             UiEvent::PanelVisibility(open) => {
+                if self.chat.is_some() {
+                    crate::app::notify_panel_visibility(open);
+                }
                 if open {
                     self.tray_requested_close = false;
                 }

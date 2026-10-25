@@ -40,8 +40,11 @@ const TOPICS: [&str; 6] = [
 
 pub struct Host {
     exe: PathBuf,
-    /// The shell's own command socket (`nacre clipboard` and the other routed commands).
+    /// Effective shell command socket (`nacre clipboard` and other routed commands).
     command: PathBuf,
+    /// Parent shell command socket for app-originated events, when this host is itself an app.
+    parent: Option<PathBuf>,
+    app_name: Option<String>,
     dir: PathBuf,
     daemon: Option<PathBuf>,
     palette: PathBuf,
@@ -79,16 +82,38 @@ fn live_palette_file(dir: &Path) -> Option<PathBuf> {
 
 /// Called once by the shell: app sockets live beside its command socket (owner-only directory).
 pub fn configure(command_socket: &Path, daemon: Option<PathBuf>, palette: PathBuf) {
+    configure_host(command_socket, None, None, daemon, palette);
+}
+
+/// Called by an app child with its own panel socket and the parent shell socket.
+fn configure_host(
+    command_socket: &Path,
+    parent: Option<PathBuf>,
+    app_name: Option<String>,
+    daemon: Option<PathBuf>,
+    palette: PathBuf,
+) {
     let (Some(dir), Ok(exe)) = (command_socket.parent(), std::env::current_exe()) else {
         return;
     };
     let _ = HOST.set(Host {
         exe,
-        command: command_socket.into(),
+        command: parent.clone().unwrap_or_else(|| command_socket.into()),
+        parent,
+        app_name,
         dir: dir.into(),
         daemon,
         palette,
     });
+}
+fn configure_child(
+    command_socket: &Path,
+    parent: Option<PathBuf>,
+    app_name: String,
+    daemon: Option<PathBuf>,
+    palette: PathBuf,
+) {
+    configure_host(command_socket, parent, Some(app_name), daemon, palette);
 }
 /// Runs a no-argument `nacre <method>` command through the shell's own socket (a tile that opens the launcher).
 pub fn command(method: &str) -> bool {
@@ -117,9 +142,37 @@ pub fn route(id: u64, name: &str, method: &str, args: &[Value]) -> Reply {
 /// Edge observations and opens share one ordered lane. In particular a leave
 /// cannot overtake startup or an earlier enter while the external app is cold.
 pub fn panel_request(name: &'static str, method: &'static str) {
+    enqueue_panel_request(PanelRequest::Panel(name, method));
+}
+enum PanelRequest {
+    Panel(&'static str, &'static str),
+    Visibility(&'static str, bool),
+    Describe(&'static str),
+}
+/// Queue a child panel visibility observation for its parent shell. The UI event path never waits
+/// for private IPC; visibility and geometry queries share the panel worker's ordered lane.
+pub fn notify_panel_visibility(open: bool) {
     let Some(host) = HOST.get() else { return };
-    type Request = (&'static str, &'static str);
-    static REQUESTS: OnceLock<std::sync::mpsc::Sender<Request>> = OnceLock::new();
+    if host.parent.is_none() {
+        return;
+    }
+    let Some(name) = host.app_name.as_deref() else {
+        return;
+    };
+    if name != "chat" {
+        return;
+    }
+    enqueue_panel_request(PanelRequest::Visibility(name, open));
+}
+/// Ask the shell worker to refresh geometry without delaying its private IPC reply.
+pub fn refresh_panel_description(name: &'static str) {
+    if name == "chat" {
+        enqueue_panel_request(PanelRequest::Describe(name));
+    }
+}
+fn enqueue_panel_request(request: PanelRequest) {
+    let Some(host) = HOST.get() else { return };
+    static REQUESTS: OnceLock<std::sync::mpsc::Sender<PanelRequest>> = OnceLock::new();
     let sender = REQUESTS.get_or_init(|| {
         let (sender, receiver) = std::sync::mpsc::channel();
         let _ = std::thread::Builder::new()
@@ -128,19 +181,41 @@ pub fn panel_request(name: &'static str, method: &'static str) {
             .spawn(move || panel_requests(host, receiver));
         sender
     });
-    if sender.send((name, method)).is_err() {
+    if sender.send(request).is_err() {
         eprintln!("EXTERNAL_PANEL_ERROR request lane unavailable");
     }
 }
-fn panel_requests(host: &Host, receiver: std::sync::mpsc::Receiver<(&str, &str)>) {
-    for (name, method) in receiver {
-        let reply = host.route(0, name, method, &[]);
-        if method == "hover-open" && reply.error.is_none() {
-            // The socket can precede the panel worker. Keep later observations
-            // queued until that worker can actually receive pointer events.
-            let _ = wait_panel_ready(&host.socket(name));
+fn panel_requests(host: &Host, receiver: std::sync::mpsc::Receiver<PanelRequest>) {
+    for request in receiver {
+        match request {
+            PanelRequest::Panel(name, method) => {
+                let reply = host.route(0, name, method, &[]);
+                if method == "hover-open" && reply.error.is_none() {
+                    // The socket can precede the panel worker. Keep later observations
+                    // queued until that worker can actually receive pointer events.
+                    let _ = wait_panel_ready(&host.socket(name));
+                }
+            }
+            PanelRequest::Visibility(name, open) => {
+                let Some(parent) = &host.parent else { continue };
+                if let Err(error) = send_panel_visibility(parent, name, open) {
+                    eprintln!("EXTERNAL_PANEL_ERROR visibility IPC failed: {error}");
+                }
+            }
+            PanelRequest::Describe(name) => describe_panel_state(name, &host.socket(name)),
         }
     }
+}
+fn send_panel_visibility(parent: &Path, name: &str, open: bool) -> Result<Reply, String> {
+    let call = Call {
+        version: 1,
+        id: 1,
+        target: "bead.apps".into(),
+        method: "panel-visibility".into(),
+        args: vec![json!(name), json!(open)],
+        output: None,
+    };
+    ipc::call(parent, &call, Duration::from_millis(800))
 }
 fn wait_panel_ready(socket: &Path) -> bool {
     let call = Call {
@@ -268,6 +343,8 @@ impl Host {
         command
             .arg("--command-socket")
             .arg(self.socket(name))
+            .arg("--host-socket")
+            .arg(&self.command)
             .arg("--palette")
             .arg(live_palette_file(&self.dir).unwrap_or_else(|| self.palette.clone()));
         if let Some(daemon) = &self.daemon {
@@ -325,22 +402,60 @@ fn describe_panel(app: &str, socket: &Path, child: &mut std::process::Child) {
             .and_then(|t| serde_json::from_str::<Value>(t).ok())
             .or(reply.result);
         let Some(state) = state else { continue };
-        let size = state["size"]
-            .as_array()
-            .and_then(|s| Some((s.first()?.as_f64()?, s.get(1)?.as_f64()?)));
-        if let (Some(true), Some((w, h))) = (state["target_open"].as_bool(), size)
-            && w > 64.
-            && h > 64.
-        {
-            placement::set_external(
-                app,
-                Some(placement::External {
-                    attachment: placement::Attachment::Attached(bead::core::Edge::Left),
-                    size: ((w - 64.).max(0.) as f32, (h - 64.).max(0.) as f32),
-                }),
-            );
+        if apply_panel_geometry(app, &state) {
             return;
         }
+    }
+}
+
+/// Bounded state refresh used after a warm panel reopens without new geometry.
+fn describe_panel_state(app: &str, socket: &Path) {
+    let call = Call {
+        version: 1,
+        id: 1,
+        target: "bead.panel".into(),
+        method: "state".into(),
+        args: vec![],
+        output: None,
+    };
+    for _ in 0..10 {
+        if let Ok(reply) = ipc::call(socket, &call, Duration::from_millis(300)) {
+            let state = reply
+                .result
+                .as_ref()
+                .and_then(Value::as_str)
+                .and_then(|t| serde_json::from_str::<Value>(t).ok())
+                .or(reply.result);
+            if let Some(state) = state.as_ref() {
+                if apply_panel_geometry(app, state) {
+                    return;
+                }
+            }
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+fn apply_panel_geometry(app: &str, state: &Value) -> bool {
+    let size = state["size"]
+        .as_array()
+        .and_then(|s| Some((s.first()?.as_f64()?, s.get(1)?.as_f64()?)));
+    if let (Some(true), Some((w, h))) = (state["target_open"].as_bool(), size)
+        && w > 64.
+        && h > 64.
+        && w <= f32::MAX as f64
+        && h <= f32::MAX as f64
+    {
+        placement::set_external(
+            app,
+            Some(placement::External {
+                attachment: placement::Attachment::Attached(bead::core::Edge::Left),
+                size: ((w - 64.).max(0.) as f32, (h - 64.).max(0.) as f32),
+            }),
+        );
+        true
+    } else {
+        false
     }
 }
 
@@ -353,6 +468,7 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
     let mut args = Vec::new();
     let mut daemon = None;
     let mut command_socket = None;
+    let mut parent_socket = None;
     let mut palette = PathBuf::from("shell/palette.json");
     let mut output = None;
     let mut hover_open = false;
@@ -362,6 +478,7 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
         match arg.as_str() {
             "--daemon-socket" => daemon = Some(PathBuf::from(value("a path")?)),
             "--command-socket" => command_socket = Some(PathBuf::from(value("a path")?)),
+            "--host-socket" => parent_socket = Some(PathBuf::from(value("a path")?)),
             "--palette" => palette = value("a path")?.into(),
             "--output" => output = Some(value("a name")?),
             "--hover-open" => hover_open = true,
@@ -376,7 +493,13 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
     crate::i18n::init();
     // An app that opens another (Welcome's tiles) calls it the way the shell does.
     if let Some(socket) = &command_socket {
-        configure(socket, daemon.clone(), palette.clone());
+        configure_child(
+            socket,
+            parent_socket.clone(),
+            name.to_owned(),
+            daemon.clone(),
+            palette.clone(),
+        );
     }
     // A plain client of the daemon: it follows topics and calls methods, registers nothing.
     let client = daemon
@@ -531,6 +654,8 @@ mod tests {
         Host {
             exe: exe.into(),
             command: dir.join("command.sock"),
+            parent: None,
+            app_name: None,
             dir: dir.into(),
             daemon: Some("/run/fake/daemon.sock".into()),
             palette: "shell/palette.json".into(),
@@ -574,6 +699,7 @@ mod tests {
         let argv = std::fs::read_to_string(&out).unwrap();
         let lines: Vec<_> = argv.lines().collect();
         let socket = dir.join("app-settings.sock");
+        let host_socket = dir.join("command.sock");
         assert_eq!(
             lines,
             [
@@ -582,6 +708,8 @@ mod tests {
                 "appearance",
                 "--command-socket",
                 socket.to_str().unwrap(),
+                "--host-socket",
+                host_socket.to_str().unwrap(),
                 "--palette",
                 "shell/palette.json",
                 "--daemon-socket",
@@ -634,7 +762,7 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         let worker = std::thread::spawn(move || panel_requests(&host, rx));
         for method in ["hover-open", "hover-leave", "hover-enter"] {
-            tx.send(("chat", method)).unwrap();
+            tx.send(PanelRequest::Panel("chat", method)).unwrap();
         }
         polling.recv_timeout(Duration::from_secs(2)).unwrap();
         assert_eq!(*seen.lock().unwrap(), ["hover-open"]);
@@ -645,6 +773,51 @@ mod tests {
             *seen.lock().unwrap(),
             ["hover-open", "hover-leave", "hover-enter"]
         );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    #[test]
+    fn private_parent_visibility_ipc_preserves_open_close_reopen_order() {
+        let dir = private_dir("visibility-order");
+        let socket = dir.join("parent.sock");
+        let received = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = received.clone();
+        let _server = ipc::Server::bind(socket.clone(), move |call| {
+            log.lock()
+                .unwrap()
+                .push((call.target.clone(), call.method.clone(), call.args.clone()));
+            Reply::ok(call.id, Value::Null)
+        })
+        .unwrap();
+        let mut host = host(&dir, Path::new("/nonexistent/app"));
+        host.parent = Some(socket);
+        let (tx, rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || panel_requests(&host, rx));
+        for open in [true, false, true] {
+            tx.send(PanelRequest::Visibility("chat", open)).unwrap();
+        }
+        drop(tx);
+        worker.join().unwrap();
+        assert_eq!(
+            *received.lock().unwrap(),
+            [
+                (
+                    "bead.apps".into(),
+                    "panel-visibility".into(),
+                    vec![json!("chat"), json!(true)]
+                ),
+                (
+                    "bead.apps".into(),
+                    "panel-visibility".into(),
+                    vec![json!("chat"), json!(false)]
+                ),
+                (
+                    "bead.apps".into(),
+                    "panel-visibility".into(),
+                    vec![json!("chat"), json!(true)]
+                ),
+            ]
+        );
+        drop(_server);
         let _ = std::fs::remove_dir_all(dir);
     }
     #[test]

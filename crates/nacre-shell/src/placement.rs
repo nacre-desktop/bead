@@ -83,24 +83,102 @@ pub struct External {
     pub attachment: Attachment,
     pub size: (f32, f32),
 }
-static EXTERNAL: std::sync::Mutex<Vec<(String, External)>> = std::sync::Mutex::new(Vec::new());
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct ExternalState {
+    geometry: Option<External>,
+    visible: bool,
+}
+#[derive(Default)]
+struct ExternalPanels(Vec<(String, ExternalState)>);
+impl ExternalPanels {
+    fn set_geometry(&mut self, name: &str, geometry: Option<External>) -> bool {
+        let before = self.0.iter().position(|(n, _)| n == name);
+        match (before, geometry) {
+            (Some(i), Some(p)) if self.0[i].1.geometry == Some(p) => false,
+            (Some(i), Some(p)) => {
+                self.0[i].1.geometry = Some(p);
+                true
+            }
+            (Some(i), None) => {
+                self.0.remove(i);
+                true
+            }
+            (None, Some(p)) => {
+                self.0.push((
+                    name.to_owned(),
+                    ExternalState {
+                        geometry: Some(p),
+                        visible: true,
+                    },
+                ));
+                true
+            }
+            (None, None) => false,
+        }
+    }
+
+    fn set_visible(&mut self, name: &str, visible: bool) -> bool {
+        if let Some((_, state)) = self.0.iter_mut().find(|(n, _)| n == name) {
+            if state.visible == visible {
+                return false;
+            }
+            state.visible = visible;
+        } else {
+            self.0.push((
+                name.to_owned(),
+                ExternalState {
+                    geometry: None,
+                    visible,
+                },
+            ));
+        }
+        true
+    }
+
+    fn is_open(&self, name: &str) -> bool {
+        self.0.iter().any(|(n, state)| n == name && state.visible)
+    }
+
+    fn has_geometry(&self, name: &str) -> bool {
+        self.0
+            .iter()
+            .any(|(n, state)| n == name && state.geometry.is_some())
+    }
+
+    fn visible_geometry(&self) -> Vec<External> {
+        self.0
+            .iter()
+            .filter_map(|(_, state)| if state.visible { state.geometry } else { None })
+            .collect()
+    }
+}
+static EXTERNAL: std::sync::Mutex<ExternalPanels> =
+    std::sync::Mutex::new(ExternalPanels(Vec::new()));
 static EXTERNAL_REV: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 type Notify = Box<dyn Fn() + Send + Sync>;
 static EXTERNAL_NOTIFY: std::sync::Mutex<Option<Notify>> = std::sync::Mutex::new(None);
 /// Describe (Some) or drop (None) an external panel; the frame tiles rebuild.
 pub fn set_external(name: &str, panel: Option<External>) {
-    {
+    let changed = {
         let mut all = EXTERNAL.lock().unwrap_or_else(|p| p.into_inner());
-        let before = all.iter().position(|(n, _)| n == name);
-        match (before, panel) {
-            (Some(i), Some(p)) if all[i].1 == p => return,
-            (Some(i), Some(p)) => all[i].1 = p,
-            (Some(i), None) => {
-                all.remove(i);
-            }
-            (None, Some(p)) => all.push((name.to_owned(), p)),
-            (None, None) => return,
-        }
+        all.set_geometry(name, panel)
+    };
+    if !changed {
+        return;
+    }
+    EXTERNAL_REV.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    if let Some(notify) = &*EXTERNAL_NOTIFY.lock().unwrap_or_else(|p| p.into_inner()) {
+        notify();
+    }
+}
+/// Update an external panel's live visibility while retaining its last geometry for a warm reopen.
+pub fn set_external_visible(name: &str, visible: bool) {
+    let changed = {
+        let mut all = EXTERNAL.lock().unwrap_or_else(|p| p.into_inner());
+        all.set_visible(name, visible)
+    };
+    if !changed {
+        return;
     }
     EXTERNAL_REV.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     if let Some(notify) = &*EXTERNAL_NOTIFY.lock().unwrap_or_else(|p| p.into_inner()) {
@@ -111,8 +189,13 @@ pub fn external_open(name: &str) -> bool {
     EXTERNAL
         .lock()
         .unwrap_or_else(|p| p.into_inner())
-        .iter()
-        .any(|(n, _)| n == name)
+        .is_open(name)
+}
+pub fn has_external_geometry(name: &str) -> bool {
+    EXTERNAL
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .has_geometry(name)
 }
 pub fn external_rev() -> u64 {
     EXTERNAL_REV.load(std::sync::atomic::Ordering::SeqCst)
@@ -125,9 +208,7 @@ fn externals() -> Vec<External> {
     EXTERNAL
         .lock()
         .unwrap_or_else(|p| p.into_inner())
-        .iter()
-        .map(|(_, e)| *e)
-        .collect()
+        .visible_geometry()
 }
 static LIVE: std::sync::Mutex<Frame> = std::sync::Mutex::new(Frame::DEFAULT);
 /// The Nacre bar's own height inside the header (the rest is the top frame edge).
@@ -699,6 +780,30 @@ mod pixels;
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn warm_external_visibility_retains_geometry_without_reopening_the_frame() {
+        let mut panels = ExternalPanels::default();
+        let geometry = External {
+            attachment: Attachment::Attached(Edge::Left),
+            size: (320., 640.),
+        };
+        panels.set_geometry("visibility-test", Some(geometry));
+        panels.set_visible("visibility-test", false);
+        assert!(!panels.is_open("visibility-test"));
+        assert!(panels.has_geometry("visibility-test"));
+        assert!(!panels.visible_geometry().contains(&geometry));
+
+        // A close can arrive before the first geometry description; that later description
+        // must preserve the closed state.
+        panels.set_visible("visibility-before-geometry-test", false);
+        panels.set_geometry("visibility-before-geometry-test", Some(geometry));
+        assert!(!panels.is_open("visibility-before-geometry-test"));
+        assert!(panels.has_geometry("visibility-before-geometry-test"));
+
+        panels.set_visible("visibility-test", true);
+        assert!(panels.is_open("visibility-test"));
+        assert!(panels.visible_geometry().contains(&geometry));
+    }
     fn colors() -> bead::render::Palette {
         bead::render::Palette::read(
             &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json"),

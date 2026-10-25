@@ -185,6 +185,26 @@ pub fn helper_client(args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
 }
 
 pub fn map_views(mut call: Call) -> Result<Call, Reply> {
+    // App children report live panel visibility over their private parent socket. Keep this
+    // handler in the GPL shell and reply immediately; geometry refresh runs on the panel lane.
+    if call.target == "bead.apps" && call.method == "panel-visibility" {
+        if call.args.len() != 2
+            || call.args[0].as_str() != Some("chat")
+            || call.args[1].as_bool().is_none()
+        {
+            return Err(Reply::error(
+                call.id,
+                "invalid-route",
+                "expected chat and a visibility boolean",
+            ));
+        }
+        let visible = call.args[1].as_bool().expect("validated");
+        crate::placement::set_external_visible("chat", visible);
+        if visible && !crate::placement::has_external_geometry("chat") {
+            crate::app::refresh_panel_description("chat");
+        }
+        return Err(Reply::ok(call.id, Value::Null));
+    }
     // Native extras have their own lazy surfaces; menu routes remain engine-owned.
     if call.target == "nacre"
         && call.method == "mode"
@@ -524,6 +544,42 @@ fn fixture_catalog() -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
+    #[test]
+    fn private_app_visibility_call_replies_and_updates_visibility_without_geometry() {
+        let dir =
+            std::env::temp_dir().join(format!("bead-panel-visibility-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let socket = dir.join("parent.sock");
+        let _server =
+            bead::services::ipc::Server::bind(socket.clone(), |call| match map_views(call) {
+                Err(reply) => reply,
+                Ok(call) => Reply::error(call.id, "unmapped", "test call was not handled"),
+            })
+            .unwrap();
+        let call = Call {
+            version: 1,
+            id: 41,
+            target: "bead.apps".into(),
+            method: "panel-visibility".into(),
+            args: vec![Value::String("chat".into()), Value::Bool(false)],
+            output: None,
+        };
+        let reply =
+            bead::services::ipc::call(&socket, &call, std::time::Duration::from_secs(1)).unwrap();
+        assert!(reply.error.is_none());
+
+        let mut invalid = call;
+        invalid.args[0] = Value::String("unknown".into());
+        let reply = bead::services::ipc::call(&socket, &invalid, std::time::Duration::from_secs(1))
+            .unwrap();
+        assert_eq!(reply.error.unwrap().code, "invalid-route");
+        crate::placement::set_external("chat", None);
+        drop(_server);
+        let _ = std::fs::remove_dir_all(dir);
+    }
     #[test]
     fn pearls_close_all_resets_open_and_remembered_pearls() {
         let call = from_strings("pearls".into(), "close".into(), &["all".into()]).unwrap();
