@@ -153,7 +153,10 @@ int main(int argc, char **argv) {
                     zwlr_virtual_pointer_v1_motion_absolute(pointer, now_ms(), px, py, w, h);
                 }
                 zwlr_virtual_pointer_v1_frame(pointer);
-                wl_display_roundtrip(display);
+                // Relative input is scheduled by the monotonic deadlines above;
+                // a compositor roundtrip per step stretches it under capture load.
+                if (relative) wl_display_flush(display);
+                else wl_display_roundtrip(display);
             }
             if (relative) {
                 struct timespec released;
