@@ -1,10 +1,33 @@
 {
-  "candidate_code": "eb64fe62aa2144d490aff5fc96ca82379dc41684",
-  "candidate_goldens": "355342a",
-  "qml_source": "713d38b",
-  "candidate_binary_sha256": "39b993cd89df87c2d50ca6c96c615aaab0b42f7c84a91dc7f24c6f560bb6f24d",
-  "memory_control_code": "4f8db4cf6d25c246536dd2cd702d4d858db55ef0",
-  "build": "Rust 1.99.0, default debug features, GNU stripped; same build flags for controls and candidate",
+  "historical_pre_b0110": {
+    "candidate_code": "eb64fe62aa2144d490aff5fc96ca82379dc41684",
+    "candidate_goldens": "355342a",
+    "qml_source": "713d38b",
+    "candidate_binary_sha256": "39b993cd89df87c2d50ca6c96c615aaab0b42f7c84a91dc7f24c6f560bb6f24d",
+    "memory_control_code": "4f8db4cf6d25c246536dd2cd702d4d858db55ef0",
+    "build": "Rust 1.99.0, default debug features, GNU stripped; same build flags for controls and candidate",
+    "backend": "CPU tiny-skia",
+    "output": {
+      "width": 2880,
+      "height": 1800,
+      "scale": 1.5
+    },
+    "measurement_limit": "Private nested screencopy timing; no physical scanout or laptop-cap acceptance.",
+    "shell_file_sha256": {
+      "shell/chat/behavior.luau": "0f8a623a2888a053fb3434f872b24b8b2f0611a844530978c70eb056699a20ee",
+      "shell/dashboard/main.luau": "f5371992cfd1b2862f59176a3e16ca0dcba77ca14d6472d4c3266c5f30e9baab",
+      "shell/dashboard/behavior.luau": "6ac98774af381dae00ed934e009b2bff7a6181ec3e629d160e52de8b9f5618f8",
+      "shell/dashboard/today/behavior.luau": "f9f9f4b852d6774e8d903e46334f6cbeb134842f683f7b39711761c0e17f7dc9"
+    },
+    "memory_comparison_limit": "Whole-unit comparison against the reported control; includes intervening main changes disabling default per-frame diagnostics and adding the updates status popout.",
+    "memory_control_binary_sha256": "e27dd19f024e92c02f6067ebeaef3410e5d8d3eb63abca997fbfe40a737f9ca0",
+    "shared_helper_sha256": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+    "helper_source_limit": "Existing frozen helper artifact shared by both roles; its compiled source revision was not recorded in this unit.",
+    "capture_scope": "Pre-B0110 notification, tab and peek captures; historical five-pair memory series."
+  },
+  "final_source": "6e054307d5b0e664b04f0f67fb7247dc8738127e",
+  "final_control_source": "2e523f2deec3c5c0f4e9a0f106d6a7e684888803",
+  "integration": "Own patches rebased onto B0110 renderer and B0118 daemon reconnect; final warm-cache proofs recorded separately.",
   "backend": "CPU tiny-skia",
   "output": {
     "width": 2880,
@@ -12,14 +35,10 @@
     "scale": 1.5
   },
   "measurement_limit": "Private nested screencopy timing; no physical scanout or laptop-cap acceptance.",
-  "shell_file_sha256": {
-    "shell/chat/behavior.luau": "0f8a623a2888a053fb3434f872b24b8b2f0611a844530978c70eb056699a20ee",
-    "shell/dashboard/main.luau": "f5371992cfd1b2862f59176a3e16ca0dcba77ca14d6472d4c3266c5f30e9baab",
-    "shell/dashboard/behavior.luau": "6ac98774af381dae00ed934e009b2bff7a6181ec3e629d160e52de8b9f5618f8",
-    "shell/dashboard/today/behavior.luau": "f9f9f4b852d6774e8d903e46334f6cbeb134842f683f7b39711761c0e17f7dc9"
-  },
-  "memory_comparison_limit": "Whole-unit comparison against the reported control; includes intervening main changes disabling default per-frame diagnostics and adding the updates status popout.",
-  "memory_control_binary_sha256": "e27dd19f024e92c02f6067ebeaef3410e5d8d3eb63abca997fbfe40a737f9ca0",
+  "final_candidate_binary_sha256": "834f34a7773ce9815a81ed1aa238c051c1addc60a037722f0767e137ce7dace2",
+  "final_control_binary_sha256": "1c10f28ea21a5b05d60d30b85d121ddd267b6327b0978f737709f705d844255b",
   "shared_helper_sha256": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
-  "helper_source_limit": "Existing frozen helper artifact shared by both roles; its compiled source revision was not recorded in this unit."
+  "build": "Rust 1.99.0, default debug features, GNU stripped; same build flags for controls and candidate",
+  "final_ci_source": "4f9590bbb7820cf3dee795599cb1d56cbfebeeb4",
+  "final_binary_source_limit": "Built from 6e054307; 4f9590b changes only a test assertion to isolate settings rebuild counts from the shared external-panel revision."
 }

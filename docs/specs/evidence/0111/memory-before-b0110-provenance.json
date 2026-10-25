@@ -1,0 +1,29 @@
+{
+  "control": {
+    "source_revision": "4f8db4cf6d25c246536dd2cd702d4d858db55ef0",
+    "shell_sha256_before": "e27dd19f024e92c02f6067ebeaef3410e5d8d3eb63abca997fbfe40a737f9ca0",
+    "shell_sha256_after": "e27dd19f024e92c02f6067ebeaef3410e5d8d3eb63abca997fbfe40a737f9ca0"
+  },
+  "candidate": {
+    "source_revision": "eb64fe62aa2144d490aff5fc96ca82379dc41684",
+    "shell_sha256_before": "39b993cd89df87c2d50ca6c96c615aaab0b42f7c84a91dc7f24c6f560bb6f24d",
+    "shell_sha256_after": "39b993cd89df87c2d50ca6c96c615aaab0b42f7c84a91dc7f24c6f560bb6f24d"
+  },
+  "shared_helper": {
+    "sha256_before": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+    "sha256_after": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5"
+  },
+  "configuration": {
+    "backend": "cpu",
+    "output_px": [
+      2880,
+      1800
+    ],
+    "scale": 1.5,
+    "notifications": "daemon",
+    "behaviours": "daemon",
+    "fixture": "one synthetic saved row; mode 0600; initial bar count 1",
+    "pairs": 5,
+    "phases_per_role": 13
+  }
+}

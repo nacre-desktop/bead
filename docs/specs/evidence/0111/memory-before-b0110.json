@@ -1,0 +1,2361 @@
+{
+  "backend": "cpu",
+  "units": "MiB",
+  "gate_definition": "Pss_Anon + Pss_Shmem + DRM + SwapPss",
+  "gate_limit_mib": 0.5,
+  "phase_summary": {
+    "audio_peek": {
+      "control_medians_mib": [
+        {
+          "Pss_Anon": 23.308594,
+          "Pss_Shmem": 10.839844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.797852,
+          "Pss": 85.946289,
+          "unreclaimable": 34.148438
+        },
+        {
+          "Pss_Anon": 23.300781,
+          "Pss_Shmem": 10.839844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.737305,
+          "Pss": 85.87793,
+          "unreclaimable": 34.140625
+        },
+        {
+          "Pss_Anon": 23.320312,
+          "Pss_Shmem": 10.839844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.525391,
+          "Pss": 85.685547,
+          "unreclaimable": 34.160156
+        },
+        {
+          "Pss_Anon": 23.339844,
+          "Pss_Shmem": 10.839844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.959961,
+          "Pss": 86.139648,
+          "unreclaimable": 34.179688
+        },
+        {
+          "Pss_Anon": 23.390625,
+          "Pss_Shmem": 10.839844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.952148,
+          "Pss": 86.182617,
+          "unreclaimable": 34.230469
+        }
+      ],
+      "candidate_medians_mib": [
+        {
+          "Pss_Anon": 23.40625,
+          "Pss_Shmem": 10.839844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.408203,
+          "Pss": 85.654297,
+          "unreclaimable": 34.246094
+        },
+        {
+          "Pss_Anon": 23.359375,
+          "Pss_Shmem": 10.839844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.601562,
+          "Pss": 85.800781,
+          "unreclaimable": 34.199219
+        },
+        {
+          "Pss_Anon": 23.230469,
+          "Pss_Shmem": 10.839844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.460938,
+          "Pss": 85.53125,
+          "unreclaimable": 34.070312
+        },
+        {
+          "Pss_Anon": 23.160156,
+          "Pss_Shmem": 10.839844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.467773,
+          "Pss": 85.467773,
+          "unreclaimable": 34.0
+        },
+        {
+          "Pss_Anon": 23.34375,
+          "Pss_Shmem": 10.839844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.530273,
+          "Pss": 85.713867,
+          "unreclaimable": 34.183594
+        }
+      ],
+      "paired_unreclaimable_deltas_mib": [
+        0.097656,
+        0.058594,
+        -0.089844,
+        -0.179688,
+        -0.046875
+      ],
+      "median_unreclaimable_delta_mib": -0.046875,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.09765600000000063,
+          0.05859399999999937,
+          -0.0898430000000019,
+          -0.17968799999999874,
+          -0.046875
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.3896489999999986,
+          -0.13574299999999795,
+          -0.06445300000000032,
+          -0.49218799999999874,
+          -0.421875
+        ],
+        "Pss": [
+          -0.29199199999999337,
+          -0.07714900000000569,
+          -0.15429699999999968,
+          -0.671875,
+          -0.46875
+        ]
+      },
+      "pass": true
+    },
+    "audio_peek_closed": {
+      "control_medians_mib": [
+        {
+          "Pss_Anon": 22.050781,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.798828,
+          "Pss": 84.431641,
+          "unreclaimable": 32.632812
+        },
+        {
+          "Pss_Anon": 22.074219,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.738281,
+          "Pss": 84.394531,
+          "unreclaimable": 32.65625
+        },
+        {
+          "Pss_Anon": 22.070312,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.525391,
+          "Pss": 84.177734,
+          "unreclaimable": 32.652344
+        },
+        {
+          "Pss_Anon": 22.136719,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.959961,
+          "Pss": 84.678711,
+          "unreclaimable": 32.71875
+        },
+        {
+          "Pss_Anon": 22.140625,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.952148,
+          "Pss": 84.674805,
+          "unreclaimable": 32.722656
+        }
+      ],
+      "candidate_medians_mib": [
+        {
+          "Pss_Anon": 22.117188,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.40918,
+          "Pss": 84.108398,
+          "unreclaimable": 32.699219
+        },
+        {
+          "Pss_Anon": 22.089844,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.601562,
+          "Pss": 84.273438,
+          "unreclaimable": 32.671875
+        },
+        {
+          "Pss_Anon": 22.09375,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.461914,
+          "Pss": 84.137695,
+          "unreclaimable": 32.675781
+        },
+        {
+          "Pss_Anon": 21.96875,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.46875,
+          "Pss": 84.019531,
+          "unreclaimable": 32.550781
+        },
+        {
+          "Pss_Anon": 22.078125,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.530273,
+          "Pss": 84.19043,
+          "unreclaimable": 32.660156
+        }
+      ],
+      "paired_unreclaimable_deltas_mib": [
+        0.066407,
+        0.015625,
+        0.023437,
+        -0.167969,
+        -0.0625
+      ],
+      "median_unreclaimable_delta_mib": 0.015625,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.0664069999999981,
+          0.015625,
+          0.023437999999998738,
+          -0.16796899999999937,
+          -0.0625
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.3896480000000011,
+          -0.13671899999999937,
+          -0.0634769999999989,
+          -0.49121099999999984,
+          -0.421875
+        ],
+        "Pss": [
+          -0.32324300000000505,
+          -0.1210930000000019,
+          -0.04003900000000726,
+          -0.6591800000000063,
+          -0.484375
+        ]
+      },
+      "pass": true
+    },
+    "control_center_closed": {
+      "control_medians_mib": [
+        {
+          "Pss_Anon": 21.929688,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.488281,
+          "Pss": 84.0,
+          "unreclaimable": 32.511719
+        },
+        {
+          "Pss_Anon": 22.046875,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.476562,
+          "Pss": 84.105469,
+          "unreclaimable": 32.628906
+        },
+        {
+          "Pss_Anon": 21.921875,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.297852,
+          "Pss": 83.801758,
+          "unreclaimable": 32.503906
+        },
+        {
+          "Pss_Anon": 22.015625,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.558594,
+          "Pss": 84.15625,
+          "unreclaimable": 32.597656
+        },
+        {
+          "Pss_Anon": 22.058594,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.509766,
+          "Pss": 84.150391,
+          "unreclaimable": 32.640625
+        }
+      ],
+      "candidate_medians_mib": [
+        {
+          "Pss_Anon": 21.996094,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.095703,
+          "Pss": 83.673828,
+          "unreclaimable": 32.578125
+        },
+        {
+          "Pss_Anon": 22.148438,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.175781,
+          "Pss": 83.90625,
+          "unreclaimable": 32.730469
+        },
+        {
+          "Pss_Anon": 22.039062,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.071289,
+          "Pss": 83.692383,
+          "unreclaimable": 32.621094
+        },
+        {
+          "Pss_Anon": 22.03125,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.09082,
+          "Pss": 83.704102,
+          "unreclaimable": 32.613281
+        },
+        {
+          "Pss_Anon": 21.871094,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.152344,
+          "Pss": 83.605469,
+          "unreclaimable": 32.453125
+        }
+      ],
+      "paired_unreclaimable_deltas_mib": [
+        0.066406,
+        0.101563,
+        0.117188,
+        0.015625,
+        -0.1875
+      ],
+      "median_unreclaimable_delta_mib": 0.066406,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.06640600000000063,
+          0.10156299999999874,
+          0.11718700000000126,
+          0.015625,
+          -0.1875
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.3925780000000003,
+          -0.30078100000000063,
+          -0.22656299999999874,
+          -0.4677739999999986,
+          -0.3574219999999997
+        ],
+        "Pss": [
+          -0.3261719999999997,
+          -0.19921899999999937,
+          -0.109375,
+          -0.452147999999994,
+          -0.5449219999999997
+        ]
+      },
+      "pass": true
+    },
+    "control_center_open": {
+      "control_medians_mib": [
+        {
+          "Pss_Anon": 31.871094,
+          "Pss_Shmem": 15.640625,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.984375,
+          "Pss": 100.496094,
+          "unreclaimable": 47.511719
+        },
+        {
+          "Pss_Anon": 31.699219,
+          "Pss_Shmem": 15.640625,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.976562,
+          "Pss": 100.316406,
+          "unreclaimable": 47.339844
+        },
+        {
+          "Pss_Anon": 31.773438,
+          "Pss_Shmem": 15.640625,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.797852,
+          "Pss": 100.211914,
+          "unreclaimable": 47.414062
+        },
+        {
+          "Pss_Anon": 31.949219,
+          "Pss_Shmem": 16.339844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.015625,
+          "Pss": 101.367188,
+          "unreclaimable": 48.289062
+        },
+        {
+          "Pss_Anon": 31.820312,
+          "Pss_Shmem": 15.640625,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.009766,
+          "Pss": 100.470703,
+          "unreclaimable": 47.460938
+        }
+      ],
+      "candidate_medians_mib": [
+        {
+          "Pss_Anon": 32.042969,
+          "Pss_Shmem": 15.640625,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.548828,
+          "Pss": 100.232422,
+          "unreclaimable": 47.683594
+        },
+        {
+          "Pss_Anon": 32.125,
+          "Pss_Shmem": 15.640625,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.633789,
+          "Pss": 100.399414,
+          "unreclaimable": 47.765625
+        },
+        {
+          "Pss_Anon": 31.933594,
+          "Pss_Shmem": 15.640625,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.452148,
+          "Pss": 100.026367,
+          "unreclaimable": 47.574219
+        },
+        {
+          "Pss_Anon": 32.003906,
+          "Pss_Shmem": 15.640625,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.543945,
+          "Pss": 100.188477,
+          "unreclaimable": 47.644531
+        },
+        {
+          "Pss_Anon": 32.015625,
+          "Pss_Shmem": 15.640625,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.667969,
+          "Pss": 100.324219,
+          "unreclaimable": 47.65625
+        }
+      ],
+      "paired_unreclaimable_deltas_mib": [
+        0.171875,
+        0.425781,
+        0.160157,
+        -0.644531,
+        0.195312
+      ],
+      "median_unreclaimable_delta_mib": 0.171875,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.171875,
+          0.42578100000000063,
+          0.16015600000000063,
+          0.05468700000000126,
+          0.19531299999999874
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          -0.6992189999999994,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.4355469999999997,
+          -0.3427730000000011,
+          -0.3457039999999978,
+          -0.4716799999999992,
+          -0.3417969999999997
+        ],
+        "Pss": [
+          -0.2636719999999997,
+          0.08300799999999242,
+          -0.18554699999999968,
+          -1.1787109999999927,
+          -0.14648400000000095
+        ]
+      },
+      "pass": true
+    },
+    "dashboard_today_closed": {
+      "control_medians_mib": [
+        {
+          "Pss_Anon": 22.230469,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.678711,
+          "Pss": 84.491211,
+          "unreclaimable": 32.8125
+        },
+        {
+          "Pss_Anon": 22.191406,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.630859,
+          "Pss": 84.404297,
+          "unreclaimable": 32.773438
+        },
+        {
+          "Pss_Anon": 22.210938,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.422852,
+          "Pss": 84.21582,
+          "unreclaimable": 32.792969
+        },
+        {
+          "Pss_Anon": 22.25,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.924805,
+          "Pss": 84.756836,
+          "unreclaimable": 32.832031
+        },
+        {
+          "Pss_Anon": 22.277344,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.90332,
+          "Pss": 84.762695,
+          "unreclaimable": 32.859375
+        }
+      ],
+      "candidate_medians_mib": [
+        {
+          "Pss_Anon": 22.3125,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.358398,
+          "Pss": 84.25293,
+          "unreclaimable": 32.894531
+        },
+        {
+          "Pss_Anon": 22.324219,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.488281,
+          "Pss": 84.394531,
+          "unreclaimable": 32.90625
+        },
+        {
+          "Pss_Anon": 22.230469,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.416016,
+          "Pss": 84.228516,
+          "unreclaimable": 32.8125
+        },
+        {
+          "Pss_Anon": 22.265625,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.416992,
+          "Pss": 84.264648,
+          "unreclaimable": 32.847656
+        },
+        {
+          "Pss_Anon": 22.21875,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.415039,
+          "Pss": 84.21582,
+          "unreclaimable": 32.800781
+        }
+      ],
+      "paired_unreclaimable_deltas_mib": [
+        0.082031,
+        0.132812,
+        0.019531,
+        0.015625,
+        -0.058594
+      ],
+      "median_unreclaimable_delta_mib": 0.019531,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.08203100000000063,
+          0.13281299999999874,
+          0.01953100000000063,
+          0.015625,
+          -0.05859399999999937
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.32031299999999874,
+          -0.14257800000000032,
+          -0.006835999999999842,
+          -0.5078129999999987,
+          -0.48828100000000063
+        ],
+        "Pss": [
+          -0.23828100000000063,
+          -0.009765999999999053,
+          0.01269600000000537,
+          -0.49218800000001295,
+          -0.546875
+        ]
+      },
+      "pass": true
+    },
+    "dashboard_today_open": {
+      "control_medians_mib": [
+        {
+          "Pss_Anon": 40.214844,
+          "Pss_Shmem": 17.714844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.107422,
+          "Pss": 110.037109,
+          "unreclaimable": 57.929688
+        },
+        {
+          "Pss_Anon": 40.339844,
+          "Pss_Shmem": 17.714844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.994141,
+          "Pss": 110.048828,
+          "unreclaimable": 58.054688
+        },
+        {
+          "Pss_Anon": 40.214844,
+          "Pss_Shmem": 17.714844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.735352,
+          "Pss": 109.665039,
+          "unreclaimable": 57.929688
+        },
+        {
+          "Pss_Anon": 40.300781,
+          "Pss_Shmem": 17.714844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.295898,
+          "Pss": 110.311523,
+          "unreclaimable": 58.015625
+        },
+        {
+          "Pss_Anon": 40.253906,
+          "Pss_Shmem": 17.714844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.274414,
+          "Pss": 110.243164,
+          "unreclaimable": 57.96875
+        }
+      ],
+      "candidate_medians_mib": [
+        {
+          "Pss_Anon": 40.285156,
+          "Pss_Shmem": 17.714844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.707031,
+          "Pss": 109.707031,
+          "unreclaimable": 58.0
+        },
+        {
+          "Pss_Anon": 40.265625,
+          "Pss_Shmem": 17.714844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.863281,
+          "Pss": 109.84375,
+          "unreclaimable": 57.980469
+        },
+        {
+          "Pss_Anon": 44.390625,
+          "Pss_Shmem": 17.714844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.791016,
+          "Pss": 113.896484,
+          "unreclaimable": 62.105469
+        },
+        {
+          "Pss_Anon": 40.300781,
+          "Pss_Shmem": 17.714844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.729492,
+          "Pss": 109.745117,
+          "unreclaimable": 58.015625
+        },
+        {
+          "Pss_Anon": 39.894531,
+          "Pss_Shmem": 17.714844,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.790039,
+          "Pss": 109.399414,
+          "unreclaimable": 57.609375
+        }
+      ],
+      "paired_unreclaimable_deltas_mib": [
+        0.070312,
+        -0.074219,
+        4.175781,
+        0.0,
+        -0.359375
+      ],
+      "median_unreclaimable_delta_mib": 0.0,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.07031200000000126,
+          -0.07421899999999937,
+          4.175781000000001,
+          0.0,
+          -0.359375
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.40039099999999905,
+          -0.13085999999999842,
+          0.05566400000000016,
+          -0.5664060000000006,
+          -0.484375
+        ],
+        "Pss": [
+          -0.3300780000000003,
+          -0.20507800000000032,
+          4.231445000000008,
+          -0.5664060000000006,
+          -0.84375
+        ]
+      },
+      "pass": true
+    },
+    "idle": {
+      "control_medians_mib": [
+        {
+          "Pss_Anon": 20.730469,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.24707,
+          "Pss": 83.55957,
+          "unreclaimable": 31.3125
+        },
+        {
+          "Pss_Anon": 20.695312,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.016602,
+          "Pss": 83.293945,
+          "unreclaimable": 31.277344
+        },
+        {
+          "Pss_Anon": 20.71875,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.822266,
+          "Pss": 83.123047,
+          "unreclaimable": 31.300781
+        },
+        {
+          "Pss_Anon": 20.769531,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.922852,
+          "Pss": 83.274414,
+          "unreclaimable": 31.351562
+        },
+        {
+          "Pss_Anon": 20.808594,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.205078,
+          "Pss": 83.595703,
+          "unreclaimable": 31.390625
+        }
+      ],
+      "candidate_medians_mib": [
+        {
+          "Pss_Anon": 20.8125,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.638672,
+          "Pss": 83.033203,
+          "unreclaimable": 31.394531
+        },
+        {
+          "Pss_Anon": 20.804688,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.723633,
+          "Pss": 83.110352,
+          "unreclaimable": 31.386719
+        },
+        {
+          "Pss_Anon": 20.796875,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.65332,
+          "Pss": 83.032227,
+          "unreclaimable": 31.378906
+        },
+        {
+          "Pss_Anon": 20.75,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.535156,
+          "Pss": 82.867188,
+          "unreclaimable": 31.332031
+        },
+        {
+          "Pss_Anon": 20.757812,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.78125,
+          "Pss": 83.121094,
+          "unreclaimable": 31.339844
+        }
+      ],
+      "paired_unreclaimable_deltas_mib": [
+        0.082031,
+        0.109375,
+        0.078125,
+        -0.019531,
+        -0.050781
+      ],
+      "median_unreclaimable_delta_mib": 0.078125,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.08203100000000063,
+          0.10937599999999748,
+          0.078125,
+          -0.01953100000000063,
+          -0.050781999999998106
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.6083980000000011,
+          -0.29296899999999937,
+          -0.16894599999999826,
+          -0.38769599999999826,
+          -0.4238280000000003
+        ],
+        "Pss": [
+          -0.5263669999999934,
+          -0.18359299999998768,
+          -0.09081999999999368,
+          -0.4072259999999943,
+          -0.47460900000000095
+        ]
+      },
+      "pass": true
+    },
+    "launcher_closed": {
+      "control_medians_mib": [
+        {
+          "Pss_Anon": 22.195312,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.798828,
+          "Pss": 84.576172,
+          "unreclaimable": 32.777344
+        },
+        {
+          "Pss_Anon": 22.226562,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.738281,
+          "Pss": 84.546875,
+          "unreclaimable": 32.808594
+        },
+        {
+          "Pss_Anon": 22.234375,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.525391,
+          "Pss": 84.341797,
+          "unreclaimable": 32.816406
+        },
+        {
+          "Pss_Anon": 22.410156,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.959961,
+          "Pss": 84.952148,
+          "unreclaimable": 32.992188
+        },
+        {
+          "Pss_Anon": 22.378906,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.952148,
+          "Pss": 84.913086,
+          "unreclaimable": 32.960938
+        }
+      ],
+      "candidate_medians_mib": [
+        {
+          "Pss_Anon": 22.3125,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.40918,
+          "Pss": 84.303711,
+          "unreclaimable": 32.894531
+        },
+        {
+          "Pss_Anon": 22.375,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.601562,
+          "Pss": 84.558594,
+          "unreclaimable": 32.957031
+        },
+        {
+          "Pss_Anon": 22.105469,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.462891,
+          "Pss": 84.150391,
+          "unreclaimable": 32.6875
+        },
+        {
+          "Pss_Anon": 22.203125,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.46875,
+          "Pss": 84.253906,
+          "unreclaimable": 32.785156
+        },
+        {
+          "Pss_Anon": 22.21875,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.53125,
+          "Pss": 84.332031,
+          "unreclaimable": 32.800781
+        }
+      ],
+      "paired_unreclaimable_deltas_mib": [
+        0.117187,
+        0.148437,
+        -0.128906,
+        -0.207032,
+        -0.160157
+      ],
+      "median_unreclaimable_delta_mib": -0.128906,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.11718799999999874,
+          0.14843799999999874,
+          -0.12890600000000063,
+          -0.20703100000000063,
+          -0.16015600000000063
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.3896480000000011,
+          -0.13671899999999937,
+          -0.0625,
+          -0.49121099999999984,
+          -0.4208980000000011
+        ],
+        "Pss": [
+          -0.27246099999999274,
+          0.011718999999999369,
+          -0.19140600000000063,
+          -0.6982419999999934,
+          -0.5810550000000063
+        ]
+      },
+      "pass": true
+    },
+    "launcher_quick": {
+      "control_medians_mib": [
+        {
+          "Pss_Anon": 31.183594,
+          "Pss_Shmem": 17.583984,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.827148,
+          "Pss": 101.594727,
+          "unreclaimable": 48.767578
+        },
+        {
+          "Pss_Anon": 31.121094,
+          "Pss_Shmem": 17.583984,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.759766,
+          "Pss": 101.464844,
+          "unreclaimable": 48.705078
+        },
+        {
+          "Pss_Anon": 31.207031,
+          "Pss_Shmem": 17.583984,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.569336,
+          "Pss": 101.360352,
+          "unreclaimable": 48.791016
+        },
+        {
+          "Pss_Anon": 31.351562,
+          "Pss_Shmem": 17.583984,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 53.004883,
+          "Pss": 101.94043,
+          "unreclaimable": 48.935547
+        },
+        {
+          "Pss_Anon": 31.40625,
+          "Pss_Shmem": 17.583984,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.982422,
+          "Pss": 101.972656,
+          "unreclaimable": 48.990234
+        }
+      ],
+      "candidate_medians_mib": [
+        {
+          "Pss_Anon": 31.300781,
+          "Pss_Shmem": 17.583984,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.43457,
+          "Pss": 101.319336,
+          "unreclaimable": 48.884766
+        },
+        {
+          "Pss_Anon": 31.265625,
+          "Pss_Shmem": 17.583984,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.633789,
+          "Pss": 101.483398,
+          "unreclaimable": 48.849609
+        },
+        {
+          "Pss_Anon": 30.601562,
+          "Pss_Shmem": 17.583984,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.46875,
+          "Pss": 100.654297,
+          "unreclaimable": 48.185547
+        },
+        {
+          "Pss_Anon": 31.285156,
+          "Pss_Shmem": 17.583984,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.438477,
+          "Pss": 101.307617,
+          "unreclaimable": 48.869141
+        },
+        {
+          "Pss_Anon": 30.691406,
+          "Pss_Shmem": 17.583984,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.526367,
+          "Pss": 100.801758,
+          "unreclaimable": 48.275391
+        }
+      ],
+      "paired_unreclaimable_deltas_mib": [
+        0.117188,
+        0.144531,
+        -0.605469,
+        -0.066406,
+        -0.714843
+      ],
+      "median_unreclaimable_delta_mib": -0.066406,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.11718700000000126,
+          0.14453100000000063,
+          -0.6054689999999994,
+          -0.06640600000000063,
+          -0.7148439999999994
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.3925780000000003,
+          -0.1259769999999989,
+          -0.10058599999999984,
+          -0.5664060000000006,
+          -0.4560549999999992
+        ],
+        "Pss": [
+          -0.27539099999999905,
+          0.01855399999999463,
+          -0.7060550000000063,
+          -0.632813000000013,
+          -1.170897999999994
+        ]
+      },
+      "pass": true
+    },
+    "notifications_panel_closed": {
+      "control_medians_mib": [
+        {
+          "Pss_Anon": 22.378906,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.808594,
+          "Pss": 84.769531,
+          "unreclaimable": 32.960938
+        },
+        {
+          "Pss_Anon": 22.511719,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.749023,
+          "Pss": 84.842773,
+          "unreclaimable": 33.09375
+        },
+        {
+          "Pss_Anon": 22.402344,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.537109,
+          "Pss": 84.521484,
+          "unreclaimable": 32.984375
+        },
+        {
+          "Pss_Anon": 22.546875,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.970703,
+          "Pss": 85.099609,
+          "unreclaimable": 33.128906
+        },
+        {
+          "Pss_Anon": 22.46875,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.963867,
+          "Pss": 85.014648,
+          "unreclaimable": 33.050781
+        }
+      ],
+      "candidate_medians_mib": [
+        {
+          "Pss_Anon": 22.46875,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.491211,
+          "Pss": 84.541992,
+          "unreclaimable": 33.050781
+        },
+        {
+          "Pss_Anon": 22.480469,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.619141,
+          "Pss": 84.681641,
+          "unreclaimable": 33.0625
+        },
+        {
+          "Pss_Anon": 22.261719,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.470703,
+          "Pss": 84.314453,
+          "unreclaimable": 32.84375
+        },
+        {
+          "Pss_Anon": 22.390625,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.477539,
+          "Pss": 84.450195,
+          "unreclaimable": 32.972656
+        },
+        {
+          "Pss_Anon": 22.078125,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.541016,
+          "Pss": 84.201172,
+          "unreclaimable": 32.660156
+        }
+      ],
+      "paired_unreclaimable_deltas_mib": [
+        0.089843,
+        -0.03125,
+        -0.140625,
+        -0.15625,
+        -0.390625
+      ],
+      "median_unreclaimable_delta_mib": -0.140625,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.08984399999999937,
+          -0.03125,
+          -0.140625,
+          -0.15625,
+          -0.390625
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.3173829999999995,
+          -0.12988200000000205,
+          -0.06640600000000063,
+          -0.49316400000000016,
+          -0.4228510000000014
+        ],
+        "Pss": [
+          -0.22753900000000726,
+          -0.16113199999999495,
+          -0.20703100000000063,
+          -0.6494140000000073,
+          -0.8134759999999943
+        ]
+      },
+      "pass": true
+    },
+    "notifications_panel_open": {
+      "control_medians_mib": [
+        {
+          "Pss_Anon": 25.21875,
+          "Pss_Shmem": 11.164062,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.800781,
+          "Pss": 88.183594,
+          "unreclaimable": 36.382812
+        },
+        {
+          "Pss_Anon": 25.183594,
+          "Pss_Shmem": 11.164062,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.740234,
+          "Pss": 88.087891,
+          "unreclaimable": 36.347656
+        },
+        {
+          "Pss_Anon": 25.179688,
+          "Pss_Shmem": 11.164062,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.524414,
+          "Pss": 87.868164,
+          "unreclaimable": 36.34375
+        },
+        {
+          "Pss_Anon": 25.265625,
+          "Pss_Shmem": 11.164062,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.961914,
+          "Pss": 88.391602,
+          "unreclaimable": 36.429688
+        },
+        {
+          "Pss_Anon": 25.230469,
+          "Pss_Shmem": 11.164062,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.954102,
+          "Pss": 88.348633,
+          "unreclaimable": 36.394531
+        }
+      ],
+      "candidate_medians_mib": [
+        {
+          "Pss_Anon": 25.484375,
+          "Pss_Shmem": 11.351562,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.418945,
+          "Pss": 88.254883,
+          "unreclaimable": 36.835938
+        },
+        {
+          "Pss_Anon": 25.515625,
+          "Pss_Shmem": 11.351562,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.611328,
+          "Pss": 88.478516,
+          "unreclaimable": 36.867188
+        },
+        {
+          "Pss_Anon": 24.824219,
+          "Pss_Shmem": 11.351562,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.463867,
+          "Pss": 87.639648,
+          "unreclaimable": 36.175781
+        },
+        {
+          "Pss_Anon": 25.429688,
+          "Pss_Shmem": 11.351562,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.477539,
+          "Pss": 88.258789,
+          "unreclaimable": 36.78125
+        },
+        {
+          "Pss_Anon": 24.773438,
+          "Pss_Shmem": 11.351562,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.541016,
+          "Pss": 87.666016,
+          "unreclaimable": 36.125
+        }
+      ],
+      "paired_unreclaimable_deltas_mib": [
+        0.453126,
+        0.519532,
+        -0.167969,
+        0.351562,
+        -0.269531
+      ],
+      "median_unreclaimable_delta_mib": 0.351562,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.265625,
+          0.33203100000000063,
+          -0.35546899999999937,
+          0.16406299999999874,
+          -0.45703100000000063
+        ],
+        "Pss_Shmem": [
+          0.1875,
+          0.1875,
+          0.1875,
+          0.1875,
+          0.1875
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.38183599999999984,
+          -0.12890600000000063,
+          -0.060546999999999684,
+          -0.484375,
+          -0.41308599999999984
+        ],
+        "Pss": [
+          0.07128900000000726,
+          0.390625,
+          -0.22851599999999905,
+          -0.13281300000001295,
+          -0.6826170000000076
+        ]
+      },
+      "pass": true
+    },
+    "sidebar_closed": {
+      "control_medians_mib": [
+        {
+          "Pss_Anon": 21.253906,
+          "Pss_Shmem": 10.587891,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.238281,
+          "Pss": 84.080078,
+          "unreclaimable": 31.841797
+        },
+        {
+          "Pss_Anon": 20.675781,
+          "Pss_Shmem": 10.587891,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.132812,
+          "Pss": 83.396484,
+          "unreclaimable": 31.263672
+        },
+        {
+          "Pss_Anon": 21.183594,
+          "Pss_Shmem": 10.587891,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.938477,
+          "Pss": 83.709961,
+          "unreclaimable": 31.771484
+        },
+        {
+          "Pss_Anon": 21.238281,
+          "Pss_Shmem": 10.587891,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.039062,
+          "Pss": 83.865234,
+          "unreclaimable": 31.826172
+        },
+        {
+          "Pss_Anon": 21.273438,
+          "Pss_Shmem": 10.587891,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 52.259766,
+          "Pss": 84.121094,
+          "unreclaimable": 31.861328
+        }
+      ],
+      "candidate_medians_mib": [
+        {
+          "Pss_Anon": 21.316406,
+          "Pss_Shmem": 10.587891,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.755859,
+          "Pss": 83.660156,
+          "unreclaimable": 31.904297
+        },
+        {
+          "Pss_Anon": 21.28125,
+          "Pss_Shmem": 10.587891,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.84082,
+          "Pss": 83.709961,
+          "unreclaimable": 31.869141
+        },
+        {
+          "Pss_Anon": 21.367188,
+          "Pss_Shmem": 10.587891,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.708984,
+          "Pss": 83.664062,
+          "unreclaimable": 31.955078
+        },
+        {
+          "Pss_Anon": 21.277344,
+          "Pss_Shmem": 10.587891,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.65332,
+          "Pss": 83.518555,
+          "unreclaimable": 31.865234
+        },
+        {
+          "Pss_Anon": 21.226562,
+          "Pss_Shmem": 10.587891,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 51.836914,
+          "Pss": 83.651367,
+          "unreclaimable": 31.814453
+        }
+      ],
+      "paired_unreclaimable_deltas_mib": [
+        0.0625,
+        0.605469,
+        0.183594,
+        0.039062,
+        -0.046875
+      ],
+      "median_unreclaimable_delta_mib": 0.0625,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.0625,
+          0.6054689999999994,
+          0.18359399999999937,
+          0.03906299999999874,
+          -0.046875999999997475
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.4824219999999997,
+          -0.2919920000000005,
+          -0.22949299999999795,
+          -0.3857420000000005,
+          -0.4228519999999989
+        ],
+        "Pss": [
+          -0.4199219999999997,
+          0.313477000000006,
+          -0.045899000000005685,
+          -0.34667899999999463,
+          -0.469727000000006
+        ]
+      },
+      "pass": true
+    },
+    "sidebar_open": {
+      "control_medians_mib": [
+        {
+          "Pss_Anon": 21.234375,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 28.472656,
+          "Pss": 60.289062,
+          "unreclaimable": 31.816406
+        },
+        {
+          "Pss_Anon": 21.078125,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 28.466797,
+          "Pss": 60.126953,
+          "unreclaimable": 31.660156
+        },
+        {
+          "Pss_Anon": 21.089844,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 28.257812,
+          "Pss": 59.929688,
+          "unreclaimable": 31.671875
+        },
+        {
+          "Pss_Anon": 21.140625,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 28.363281,
+          "Pss": 60.085938,
+          "unreclaimable": 31.722656
+        },
+        {
+          "Pss_Anon": 21.175781,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 28.672852,
+          "Pss": 60.430664,
+          "unreclaimable": 31.757812
+        }
+      ],
+      "candidate_medians_mib": [
+        {
+          "Pss_Anon": 21.222656,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 28.271484,
+          "Pss": 60.076172,
+          "unreclaimable": 31.804688
+        },
+        {
+          "Pss_Anon": 21.175781,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 28.704102,
+          "Pss": 60.461914,
+          "unreclaimable": 31.757812
+        },
+        {
+          "Pss_Anon": 21.339844,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 28.118164,
+          "Pss": 60.040039,
+          "unreclaimable": 31.921875
+        },
+        {
+          "Pss_Anon": 21.253906,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 28.333008,
+          "Pss": 60.168945,
+          "unreclaimable": 31.835938
+        },
+        {
+          "Pss_Anon": 21.125,
+          "Pss_Shmem": 10.582031,
+          "DRM": 0.0,
+          "SwapPss": 0.0,
+          "Pss_File": 28.641602,
+          "Pss": 60.348633,
+          "unreclaimable": 31.707031
+        }
+      ],
+      "paired_unreclaimable_deltas_mib": [
+        -0.011718,
+        0.097656,
+        0.25,
+        0.113282,
+        -0.050781
+      ],
+      "median_unreclaimable_delta_mib": 0.097656,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          -0.011718999999999369,
+          0.09765600000000063,
+          0.25,
+          0.11328100000000063,
+          -0.05078100000000063
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.20117199999999968,
+          0.2373049999999992,
+          -0.1396480000000011,
+          -0.030273000000001105,
+          -0.03125
+        ],
+        "Pss": [
+          -0.21289000000000158,
+          0.33496099999999984,
+          0.11035100000000142,
+          0.08300700000000205,
+          -0.08203100000000063
+        ]
+      },
+      "pass": true
+    }
+  },
+  "pass": true,
+  "comparison": "Pre-B0110 renderer: reported 4f8db4cf control versus eb64fe6 B0111 candidate; five alternating pairs, same debug flags/CPU/output/shared helper.",
+  "app_phase_medians_mib": [
+    {
+      "control": {
+        "idle": {},
+        "sidebar_open": {
+          "chat": {
+            "DRM": 0.0,
+            "Pss": 50.824219,
+            "Pss_Anon": 17.445312,
+            "Pss_File": 25.443359,
+            "Pss_Shmem": 7.935547,
+            "RssAnon": 17.445312,
+            "SwapPss": 0.0,
+            "VmRSS": 83.183594
+          }
+        },
+        "sidebar_closed": {},
+        "control_center_open": {},
+        "control_center_closed": {},
+        "dashboard_today_open": {},
+        "dashboard_today_closed": {},
+        "launcher_quick": {},
+        "launcher_closed": {},
+        "audio_peek": {},
+        "audio_peek_closed": {},
+        "notifications_panel_open": {},
+        "notifications_panel_closed": {}
+      },
+      "candidate": {
+        "idle": {},
+        "sidebar_open": {
+          "chat": {
+            "DRM": 0.0,
+            "Pss": 50.345703,
+            "Pss_Anon": 17.585938,
+            "Pss_File": 24.824219,
+            "Pss_Shmem": 7.935547,
+            "RssAnon": 17.585938,
+            "SwapPss": 0.0,
+            "VmRSS": 82.492188
+          }
+        },
+        "sidebar_closed": {},
+        "control_center_open": {},
+        "control_center_closed": {},
+        "dashboard_today_open": {},
+        "dashboard_today_closed": {},
+        "launcher_quick": {},
+        "launcher_closed": {},
+        "audio_peek": {},
+        "audio_peek_closed": {},
+        "notifications_panel_open": {},
+        "notifications_panel_closed": {}
+      }
+    },
+    {
+      "control": {
+        "idle": {},
+        "sidebar_open": {
+          "chat": {
+            "DRM": 0.0,
+            "Pss": 50.882812,
+            "Pss_Anon": 17.488281,
+            "Pss_File": 25.458984,
+            "Pss_Shmem": 7.935547,
+            "RssAnon": 17.488281,
+            "SwapPss": 0.0,
+            "VmRSS": 83.183594
+          }
+        },
+        "sidebar_closed": {},
+        "control_center_open": {},
+        "control_center_closed": {},
+        "dashboard_today_open": {},
+        "dashboard_today_closed": {},
+        "launcher_quick": {},
+        "launcher_closed": {},
+        "audio_peek": {},
+        "audio_peek_closed": {},
+        "notifications_panel_open": {},
+        "notifications_panel_closed": {}
+      },
+      "candidate": {
+        "idle": {},
+        "sidebar_open": {
+          "chat": {
+            "DRM": 0.0,
+            "Pss": 50.439453,
+            "Pss_Anon": 17.519531,
+            "Pss_File": 24.984375,
+            "Pss_Shmem": 7.935547,
+            "RssAnon": 17.519531,
+            "SwapPss": 0.0,
+            "VmRSS": 82.140625
+          }
+        },
+        "sidebar_closed": {},
+        "control_center_open": {},
+        "control_center_closed": {},
+        "dashboard_today_open": {},
+        "dashboard_today_closed": {},
+        "launcher_quick": {},
+        "launcher_closed": {},
+        "audio_peek": {},
+        "audio_peek_closed": {},
+        "notifications_panel_open": {},
+        "notifications_panel_closed": {}
+      }
+    },
+    {
+      "control": {
+        "idle": {},
+        "sidebar_open": {
+          "chat": {
+            "DRM": 0.0,
+            "Pss": 51.166016,
+            "Pss_Anon": 17.5,
+            "Pss_File": 25.730469,
+            "Pss_Shmem": 7.935547,
+            "RssAnon": 17.5,
+            "SwapPss": 0.0,
+            "VmRSS": 83.449219
+          }
+        },
+        "sidebar_closed": {},
+        "control_center_open": {},
+        "control_center_closed": {},
+        "dashboard_today_open": {},
+        "dashboard_today_closed": {},
+        "launcher_quick": {},
+        "launcher_closed": {},
+        "audio_peek": {},
+        "audio_peek_closed": {},
+        "notifications_panel_open": {},
+        "notifications_panel_closed": {}
+      },
+      "candidate": {
+        "idle": {},
+        "sidebar_open": {
+          "chat": {
+            "DRM": 0.0,
+            "Pss": 50.052734,
+            "Pss_Anon": 17.554688,
+            "Pss_File": 24.5625,
+            "Pss_Shmem": 7.935547,
+            "RssAnon": 17.554688,
+            "SwapPss": 0.0,
+            "VmRSS": 82.261719
+          }
+        },
+        "sidebar_closed": {},
+        "control_center_open": {},
+        "control_center_closed": {},
+        "dashboard_today_open": {},
+        "dashboard_today_closed": {},
+        "launcher_quick": {},
+        "launcher_closed": {},
+        "audio_peek": {},
+        "audio_peek_closed": {},
+        "notifications_panel_open": {},
+        "notifications_panel_closed": {}
+      }
+    },
+    {
+      "control": {
+        "idle": {},
+        "sidebar_open": {
+          "chat": {
+            "DRM": 0.0,
+            "Pss": 50.732422,
+            "Pss_Anon": 17.492188,
+            "Pss_File": 25.304688,
+            "Pss_Shmem": 7.935547,
+            "RssAnon": 17.492188,
+            "SwapPss": 0.0,
+            "VmRSS": 82.980469
+          }
+        },
+        "sidebar_closed": {},
+        "control_center_open": {},
+        "control_center_closed": {},
+        "dashboard_today_open": {},
+        "dashboard_today_closed": {},
+        "launcher_quick": {},
+        "launcher_closed": {},
+        "audio_peek": {},
+        "audio_peek_closed": {},
+        "notifications_panel_open": {},
+        "notifications_panel_closed": {}
+      },
+      "candidate": {
+        "idle": {},
+        "sidebar_open": {
+          "chat": {
+            "DRM": 0.0,
+            "Pss": 50.539062,
+            "Pss_Anon": 17.535156,
+            "Pss_File": 25.068359,
+            "Pss_Shmem": 7.935547,
+            "RssAnon": 17.535156,
+            "SwapPss": 0.0,
+            "VmRSS": 82.433594
+          }
+        },
+        "sidebar_closed": {},
+        "control_center_open": {},
+        "control_center_closed": {},
+        "dashboard_today_open": {},
+        "dashboard_today_closed": {},
+        "launcher_quick": {},
+        "launcher_closed": {},
+        "audio_peek": {},
+        "audio_peek_closed": {},
+        "notifications_panel_open": {},
+        "notifications_panel_closed": {}
+      }
+    },
+    {
+      "control": {
+        "idle": {},
+        "sidebar_open": {
+          "chat": {
+            "DRM": 0.0,
+            "Pss": 50.327148,
+            "Pss_Anon": 17.496094,
+            "Pss_File": 24.895508,
+            "Pss_Shmem": 7.935547,
+            "RssAnon": 17.496094,
+            "SwapPss": 0.0,
+            "VmRSS": 82.460938
+          }
+        },
+        "sidebar_closed": {},
+        "control_center_open": {},
+        "control_center_closed": {},
+        "dashboard_today_open": {},
+        "dashboard_today_closed": {},
+        "launcher_quick": {},
+        "launcher_closed": {},
+        "audio_peek": {},
+        "audio_peek_closed": {},
+        "notifications_panel_open": {},
+        "notifications_panel_closed": {}
+      },
+      "candidate": {
+        "idle": {},
+        "sidebar_open": {
+          "chat": {
+            "DRM": 0.0,
+            "Pss": 50.621094,
+            "Pss_Anon": 17.496094,
+            "Pss_File": 25.189453,
+            "Pss_Shmem": 7.935547,
+            "RssAnon": 17.496094,
+            "SwapPss": 0.0,
+            "VmRSS": 82.390625
+          }
+        },
+        "sidebar_closed": {},
+        "control_center_open": {},
+        "control_center_closed": {},
+        "dashboard_today_open": {},
+        "dashboard_today_closed": {},
+        "launcher_quick": {},
+        "launcher_closed": {},
+        "audio_peek": {},
+        "audio_peek_closed": {},
+        "notifications_panel_open": {},
+        "notifications_panel_closed": {}
+      }
+    }
+  ],
+  "fixture_proofs": [
+    {
+      "pair": 1,
+      "role": "control",
+      "source_revision": "4f8db4cf6d25c246536dd2cd702d4d858db55ef0",
+      "fixture": {
+        "row_count": 1,
+        "mode": "0o600",
+        "sha256": "d3097b01eac9eeae3050a8c421afe30f157b28a6d89d4617c65159ef8a50d086",
+        "initial_bar_state": {
+          "bar_notifications_count": 1.0
+        }
+      },
+      "host_swap_in_pages": 0
+    },
+    {
+      "pair": 1,
+      "role": "candidate",
+      "source_revision": "eb64fe62aa2144d490aff5fc96ca82379dc41684",
+      "fixture": {
+        "row_count": 1,
+        "mode": "0o600",
+        "sha256": "d3097b01eac9eeae3050a8c421afe30f157b28a6d89d4617c65159ef8a50d086",
+        "initial_bar_state": {
+          "bar_notifications_count": 1.0
+        }
+      },
+      "host_swap_in_pages": 0
+    },
+    {
+      "pair": 2,
+      "role": "control",
+      "source_revision": "4f8db4cf6d25c246536dd2cd702d4d858db55ef0",
+      "fixture": {
+        "row_count": 1,
+        "mode": "0o600",
+        "sha256": "d3097b01eac9eeae3050a8c421afe30f157b28a6d89d4617c65159ef8a50d086",
+        "initial_bar_state": {
+          "bar_notifications_count": 1.0
+        }
+      },
+      "host_swap_in_pages": 0
+    },
+    {
+      "pair": 2,
+      "role": "candidate",
+      "source_revision": "eb64fe62aa2144d490aff5fc96ca82379dc41684",
+      "fixture": {
+        "row_count": 1,
+        "mode": "0o600",
+        "sha256": "d3097b01eac9eeae3050a8c421afe30f157b28a6d89d4617c65159ef8a50d086",
+        "initial_bar_state": {
+          "bar_notifications_count": 1.0
+        }
+      },
+      "host_swap_in_pages": 0
+    },
+    {
+      "pair": 3,
+      "role": "control",
+      "source_revision": "4f8db4cf6d25c246536dd2cd702d4d858db55ef0",
+      "fixture": {
+        "row_count": 1,
+        "mode": "0o600",
+        "sha256": "d3097b01eac9eeae3050a8c421afe30f157b28a6d89d4617c65159ef8a50d086",
+        "initial_bar_state": {
+          "bar_notifications_count": 1.0
+        }
+      },
+      "host_swap_in_pages": 0
+    },
+    {
+      "pair": 3,
+      "role": "candidate",
+      "source_revision": "eb64fe62aa2144d490aff5fc96ca82379dc41684",
+      "fixture": {
+        "row_count": 1,
+        "mode": "0o600",
+        "sha256": "d3097b01eac9eeae3050a8c421afe30f157b28a6d89d4617c65159ef8a50d086",
+        "initial_bar_state": {
+          "bar_notifications_count": 1.0
+        }
+      },
+      "host_swap_in_pages": 0
+    },
+    {
+      "pair": 4,
+      "role": "control",
+      "source_revision": "4f8db4cf6d25c246536dd2cd702d4d858db55ef0",
+      "fixture": {
+        "row_count": 1,
+        "mode": "0o600",
+        "sha256": "d3097b01eac9eeae3050a8c421afe30f157b28a6d89d4617c65159ef8a50d086",
+        "initial_bar_state": {
+          "bar_notifications_count": 1.0
+        }
+      },
+      "host_swap_in_pages": 0
+    },
+    {
+      "pair": 4,
+      "role": "candidate",
+      "source_revision": "eb64fe62aa2144d490aff5fc96ca82379dc41684",
+      "fixture": {
+        "row_count": 1,
+        "mode": "0o600",
+        "sha256": "d3097b01eac9eeae3050a8c421afe30f157b28a6d89d4617c65159ef8a50d086",
+        "initial_bar_state": {
+          "bar_notifications_count": 1.0
+        }
+      },
+      "host_swap_in_pages": 0
+    },
+    {
+      "pair": 5,
+      "role": "control",
+      "source_revision": "4f8db4cf6d25c246536dd2cd702d4d858db55ef0",
+      "fixture": {
+        "row_count": 1,
+        "mode": "0o600",
+        "sha256": "d3097b01eac9eeae3050a8c421afe30f157b28a6d89d4617c65159ef8a50d086",
+        "initial_bar_state": {
+          "bar_notifications_count": 1.0
+        }
+      },
+      "host_swap_in_pages": 0
+    },
+    {
+      "pair": 5,
+      "role": "candidate",
+      "source_revision": "eb64fe62aa2144d490aff5fc96ca82379dc41684",
+      "fixture": {
+        "row_count": 1,
+        "mode": "0o600",
+        "sha256": "d3097b01eac9eeae3050a8c421afe30f157b28a6d89d4617c65159ef8a50d086",
+        "initial_bar_state": {
+          "bar_notifications_count": 1.0
+        }
+      },
+      "host_swap_in_pages": 0
+    }
+  ]
+}

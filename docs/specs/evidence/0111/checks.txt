@@ -1,3 +1,22 @@
+B0111 final remote Arch CI-equivalent
+Source: 4f9590bbb7820cf3dee795599cb1d56cbfebeeb4
+Private exact-tree CI snapshot: 02dbe9ef0d1976aa3e41fa589117a87c5b3ea52f
+Production binary source: 6e054307d5b0e664b04f0f67fb7247dc8738127e
+The final commit changes only test-counter isolation; production files are identical.
+Command: nice -n 10 bash docs/specs/evidence/0108/check.sh
+Result: exit 0, CI_ALL_OK
+Workspace nacre-shell suite: 602 passed, 0 failed, 1 ignored.
+All stages completed: fmt; clippy -D warnings; headless services boundary;
+workspace/doc tests; renderer feature configurations; facade/headless UI;
+Luau schema analysis; capture-window regressions; packaging and launcher;
+wallpaper smoke; private service/SNI/DBusMenu lifecycles; cargo-deny for the
+workspace and independent bead graphs.
+The first final run failed a test assuming the global external-panel revision
+was zero. Its assertion now checks the gate's local settings-rebuild counter;
+the complete rerun above passed. The earlier collapsible-if lint was also fixed.
+
+Historical pre-renderer-rebase checks follow:
+
 B0111 remote Arch CI-equivalent
 Source: eb64fe6 code, 355342a dashboard goldens; private exact-tree snapshot f78dcde
 Command: nice -n 10 bash docs/specs/evidence/0108/check.sh

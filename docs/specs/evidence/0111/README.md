@@ -34,3 +34,14 @@ raw logs remain private. No physical scanout or laptop-cap result is claimed.
 Motion contacts show entry. Earlier exit sequences began before native panels
 were fully open and are excluded from duration claims. The final semantic bell
 entry/exit check waits for prepared content, then verifies open/closed state.
+
+`memory-before-b0110*.{json,md}` retain the completed five-pair whole-unit
+comparison before the B0110 renderer rebase. All 13 paired medians pass; the
+maximum is notifications-open +0.351562 MiB. Their provenance and separate app
+series are preserved. These are historical results, not warm-cache acceptance.
+
+`memory-warm-snapshot.json` and its table preserve the failed first comparison
+after the renderer/reconnect rebase: five pairs, 15 phases, shell-only and
+combined shell-plus-cached-chat sums. Today/Quick exceed the median limit.
+Changing Today samples prevent a settled-memory claim; a separate fixed-extra-3s
+series is predeclared in the spec and does not erase this failure.

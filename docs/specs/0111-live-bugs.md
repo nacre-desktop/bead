@@ -1,6 +1,6 @@
 # B0111 — Daily-use sidebar, tabs and notification bugs
 
-Work in progress. Private nested reproduction and full CI are being collected.
+Final renderer integration validation is in progress; earlier proofs are source-pinned below.
 No live shell, installed configuration or daemon contract changes are included.
 
 ## Notifications
@@ -58,10 +58,26 @@ startup or letting it overwrite a later body enter.
 Regression checks cover explicit opens, no-visit lip departure, reentry, pin and
 unpin, detached panels, close resetting pin, and both startup ordering races.
 Static layout is unchanged. No daemon schema changes or extra provider are added.
+
+Rebasing onto B0110 exposed another lifecycle issue: its 120-second app cache
+keeps the child alive after close, while the parent previously removed external
+panel geometry only when that process exited. The parent therefore kept treating
+the closed sidebar as open and blocked lip reopens. Cached geometry and current
+visibility are now separate. The child sends ordered visibility observations over
+the existing private app IPC lane; late geometry cannot resurrect a closed panel.
+This preserves warm workers rather than reverting the smoothness cache.
+Regressions exercise close/reopen ordering, hidden cached geometry, late geometry,
+and validation of the private visibility route.
 Capture cases close the external app directly between states: the existing
 `nacre close` route closes resident bar panels only, so it is not used as proof
 that the external sidebar closed. That existing global-close routing gap is
 outside this hover/click/key/pin change.
+
+The pinned reference and candidate have matching panel placement. Existing
+capability presentation differs: Brain and composer attachment/screenshot actions
+are enabled in QML but disabled in this Bead fixture. The warm pin test seeds
+the conversation twice, so its extra message pair is fixture content, not a
+layout parity claim. Paired pin crops therefore compare the common header.
 
 ## Dashboard caption alignment
 
@@ -103,7 +119,7 @@ has more intermediate poses. This is not a claim of smooth-motion parity.
 Earlier exit sequences started before the
 native pane was fully prepared and are excluded from duration claims.
 
-## Validation in progress
+## Validation
 
 Paired final QML/Bead captures, persisted-history daemon reproduction, refreshed
 goldens, full remote CI and five alternating memory pairs are being collected.
@@ -115,6 +131,37 @@ used empty history. Neither set counts toward N0068 acceptance. The primary
 series requires both daemon takeover flags, one mode-0600 saved fixture row,
 and a bar count of one before the initial sample, then all 13 prepared/settled
 phases in five alternating pairs.
+
+The complete pre-B0110 comparison uses the reported `4f8db4cf` control and
+`eb64fe62` candidate, with the same default-debug stripped CPU build and helper.
+All five alternating pairs pass all 13 phases: the largest paired median
+unreclaimable increase is notifications open, +0.351562 MiB (+0.164 anonymous,
++0.188 shmem). Closed-sidebar increase is +0.062500 MiB. DRM and SwapPss are
+zero; file-backed PSS is reported separately.
+[All phases and paired deltas](evidence/0111/memory-before-b0110-table.md) and
+[source/fixture proof](evidence/0111/memory-before-b0110-provenance.json) retain
+the exact comparison. These numbers predate the renderer rebase and do not
+claim to validate its 120-second warm cache.
+
+The first warm-cache comparison (`2e523f2` control / `6e05430` candidate)
+completed five pairs and 15 phases but **failed**: Today open is +0.539 MiB
+resident shell / +0.645 MiB shell plus cached chat; Quick is +0.746 / +0.813 MiB.
+The excess in these phases is anonymous memory; DRM/SwapPss deltas are zero.
+[All paired snapshot results](evidence/0111/memory-warm-snapshot-table.md) and
+[raw changing-sample examples](evidence/0111/memory-warm-snapshot.json) are retained.
+
+Those windows start only 0.4 seconds after preparation. Today anonymous memory
+changes by several MiB inside them, and closed Today changes shared-memory
+buffers inside its window after a 2.5-second wait. They do not establish settled
+memory. One follow-up is predeclared: five new pairs with an extra fixed three
+seconds before every phase's five samples, keeping both roles, sources, fixtures
+and the +0.5 MiB gate unchanged. No adaptive waits or threshold changes are used.
+The failed snapshot result will remain recorded regardless of that outcome.
+
+Product source changes total +481/−73 lines across the standalone notification
+fix and this unit's remaining patches, including comments and blank lines,
+excluding tests, docs and golden images. The engine addition is a reusable
+behavior-controlled pointer-leave deadline; Nacre app IPC remains at the GPL edge.
 
 Private capture harness/source copies are temporary: delete 7 days after the
 replacement is trusted. Remote copies are removed after evidence transfer.

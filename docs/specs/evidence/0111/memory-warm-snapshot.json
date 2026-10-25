@@ -1,0 +1,1134 @@
+{
+  "backend": "cpu",
+  "units": "MiB",
+  "gate_definition": "Pss_Anon + Pss_Shmem + DRM + SwapPss",
+  "combined_ui_gate_definition": "resident shell + cached chat app; sample-wise sum of each process Pss_Anon + Pss_Shmem + DRM + SwapPss",
+  "gate_limit_mib": 0.5,
+  "memory_prefix": "post-b0110-memory",
+  "warm_cache": true,
+  "pass": false,
+  "sources": {
+    "control": "2e523f2deec3c5c0f4e9a0f106d6a7e684888803",
+    "candidate": "6e054307d5b0e664b04f0f67fb7247dc8738127e"
+  },
+  "sampling": {
+    "pairs": 5,
+    "samples_per_phase": 5,
+    "sample_interval_seconds": 0.1,
+    "additional_sample_settle_seconds": 0,
+    "open_wait_after_prepared_seconds": 0.4,
+    "close_wait_seconds": 2.5
+  },
+  "qualification": "Failed snapshot gate. Today raw samples change substantially within the sample window, so these data do not establish settled memory. A separately predeclared fixed-extra-3s series tests that question; this failure is retained.",
+  "phase_summary": {
+    "audio_peek": {
+      "paired_unreclaimable_deltas_mib": [
+        -0.058594,
+        -1.271484,
+        0.46289,
+        0.136718,
+        -0.138672
+      ],
+      "median_unreclaimable_delta_mib": -0.058594,
+      "paired_combined_ui_unreclaimable_deltas_mib": [
+        0.113281,
+        -1.205078,
+        0.529297,
+        0.253906,
+        -0.033203
+      ],
+      "median_combined_ui_unreclaimable_delta_mib": 0.113281,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          -0.058593000000001894,
+          -1.0625,
+          0.671875,
+          0.13671899999999937,
+          0.07031200000000126
+        ],
+        "Pss_Shmem": [
+          0.0,
+          -0.20898400000000095,
+          -0.20898400000000095,
+          0.0,
+          -0.20898400000000095
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.4169920000000005,
+          -0.1679680000000019,
+          -0.20898499999999842,
+          0.078125,
+          0.22070300000000032
+        ],
+        "Pss": [
+          -0.47558599999999984,
+          -1.4394530000000003,
+          0.2539069999999981,
+          0.2158200000000008,
+          0.08203100000000063
+        ]
+      },
+      "shell_pass": true,
+      "combined_ui_pass": true,
+      "pass": true
+    },
+    "audio_peek_closed": {
+      "paired_unreclaimable_deltas_mib": [
+        -0.058594,
+        -0.761719,
+        0.578124,
+        0.136719,
+        0.0625
+      ],
+      "median_unreclaimable_delta_mib": 0.0625,
+      "paired_combined_ui_unreclaimable_deltas_mib": [
+        0.132813,
+        -0.679688,
+        0.664062,
+        0.261719,
+        0.171875
+      ],
+      "median_combined_ui_unreclaimable_delta_mib": 0.171875,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          -0.058593000000001894,
+          -0.7617189999999994,
+          0.578125,
+          0.1367180000000019,
+          0.0625
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.4111329999999995,
+          -0.16210900000000095,
+          -0.20898400000000095,
+          0.08007899999999779,
+          0.2197269999999989
+        ],
+        "Pss": [
+          -0.4697269999999989,
+          -0.9238280000000003,
+          0.36914099999999905,
+          0.21679699999999968,
+          0.2822269999999989
+        ]
+      },
+      "shell_pass": true,
+      "combined_ui_pass": true,
+      "pass": true
+    },
+    "control_center_closed": {
+      "paired_unreclaimable_deltas_mib": [
+        0.884766,
+        -0.101563,
+        0.210937,
+        -0.046875,
+        0.007812
+      ],
+      "median_unreclaimable_delta_mib": 0.007812,
+      "paired_combined_ui_unreclaimable_deltas_mib": [
+        1.05664,
+        -0.035156,
+        0.277343,
+        0.070312,
+        0.113281
+      ],
+      "median_combined_ui_unreclaimable_delta_mib": 0.113281,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.828125,
+          -0.10156299999999874,
+          0.21093799999999874,
+          -0.046875,
+          0.007812000000001262
+        ],
+        "Pss_Shmem": [
+          0.05664099999999905,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.4814450000000008,
+          0.09765600000000063,
+          -0.0019530000000003156,
+          0.033203000000000316,
+          0.36816400000000016
+        ],
+        "Pss": [
+          0.4033199999999937,
+          -0.003906000000000631,
+          0.20898500000001263,
+          -0.013671999999999684,
+          0.375977000000006
+        ]
+      },
+      "shell_pass": true,
+      "combined_ui_pass": true,
+      "pass": true
+    },
+    "control_center_open": {
+      "paired_unreclaimable_deltas_mib": [
+        -2.509766,
+        0.039063,
+        1.359375,
+        -0.019531,
+        0.089844
+      ],
+      "median_unreclaimable_delta_mib": 0.039063,
+      "paired_combined_ui_unreclaimable_deltas_mib": [
+        -2.341797,
+        0.101562,
+        1.421875,
+        1.007812,
+        0.195312
+      ],
+      "median_combined_ui_unreclaimable_delta_mib": 0.195312,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          -2.6210939999999994,
+          0.03906299999999874,
+          1.359375,
+          -0.01953100000000063,
+          0.08984399999999937
+        ],
+        "Pss_Shmem": [
+          0.11132800000000032,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.4814450000000008,
+          0.09375,
+          -0.0019530000000003156,
+          0.033203000000000316,
+          0.3730469999999997
+        ],
+        "Pss": [
+          -2.991211000000007,
+          0.13281299999999874,
+          1.357420999999988,
+          0.013671999999999684,
+          0.46289099999999905
+        ]
+      },
+      "shell_pass": true,
+      "combined_ui_pass": true,
+      "pass": true
+    },
+    "dashboard_today_closed": {
+      "paired_unreclaimable_deltas_mib": [
+        -3.923828,
+        -4.103516,
+        0.214844,
+        3.994141,
+        0.0
+      ],
+      "median_unreclaimable_delta_mib": 0.0,
+      "paired_combined_ui_unreclaimable_deltas_mib": [
+        -3.751953,
+        -4.037109,
+        0.28125,
+        4.111328,
+        0.105469
+      ],
+      "median_combined_ui_unreclaimable_delta_mib": 0.105469,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.003906999999998106,
+          -0.15625,
+          0.21484399999999937,
+          0.05859399999999937,
+          0.0
+        ],
+        "Pss_Shmem": [
+          -3.9199219999999997,
+          -3.9199219999999997,
+          0.0,
+          3.9199219999999997,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.4746099999999984,
+          -0.11328100000000063,
+          -0.17773499999999842,
+          0.504882000000002,
+          0.25781299999999874
+        ],
+        "Pss": [
+          -4.398438000000013,
+          -4.216797,
+          0.03710900000000095,
+          4.499022999999994,
+          0.25781300000001295
+        ]
+      },
+      "shell_pass": true,
+      "combined_ui_pass": true,
+      "pass": true
+    },
+    "dashboard_today_open": {
+      "paired_unreclaimable_deltas_mib": [
+        1.503907,
+        1.171875,
+        0.117188,
+        0.074219,
+        0.539062
+      ],
+      "median_unreclaimable_delta_mib": 0.539062,
+      "paired_combined_ui_unreclaimable_deltas_mib": [
+        1.675781,
+        1.238281,
+        0.183594,
+        0.191407,
+        0.644532
+      ],
+      "median_combined_ui_unreclaimable_delta_mib": 0.644532,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          1.5039060000000006,
+          1.171875,
+          0.11718700000000126,
+          0.07421899999999937,
+          0.5390629999999987
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.4580079999999995,
+          -0.11816400000000016,
+          -0.1679680000000019,
+          0.1376950000000008,
+          0.2695319999999981
+        ],
+        "Pss": [
+          1.288086000000007,
+          1.2617189999999994,
+          -0.05078200000001232,
+          0.20898499999999842,
+          0.8095699999999937
+        ]
+      },
+      "shell_pass": false,
+      "combined_ui_pass": false,
+      "pass": false
+    },
+    "idle": {
+      "paired_unreclaimable_deltas_mib": [
+        0.007813,
+        -0.082031,
+        0.363281,
+        -0.035157,
+        -0.035156
+      ],
+      "median_unreclaimable_delta_mib": -0.035156,
+      "paired_combined_ui_unreclaimable_deltas_mib": [
+        0.007813,
+        -0.082031,
+        0.363281,
+        -0.035157,
+        -0.035156
+      ],
+      "median_combined_ui_unreclaimable_delta_mib": -0.035156,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.007812000000001262,
+          -0.0820319999999981,
+          0.3632819999999981,
+          -0.035156999999998106,
+          -0.03515600000000063
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.0771480000000011,
+          -0.21386700000000047,
+          0.0927730000000011,
+          -0.06738299999999953,
+          -0.15429699999999968
+        ],
+        "Pss": [
+          -0.06933599999999274,
+          -0.295897999999994,
+          0.4560550000000063,
+          -0.10253899999999305,
+          -0.18945300000000032
+        ]
+      },
+      "shell_pass": true,
+      "combined_ui_pass": true,
+      "pass": true
+    },
+    "launcher_closed": {
+      "paired_unreclaimable_deltas_mib": [
+        -0.054687,
+        -0.332031,
+        0.71875,
+        0.132813,
+        -0.039062
+      ],
+      "median_unreclaimable_delta_mib": -0.039062,
+      "paired_combined_ui_unreclaimable_deltas_mib": [
+        0.117187,
+        -0.265626,
+        0.785156,
+        0.25,
+        0.066406
+      ],
+      "median_combined_ui_unreclaimable_delta_mib": 0.117187,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          -0.05468700000000126,
+          -0.33203100000000063,
+          0.71875,
+          0.13281200000000126,
+          -0.03906299999999874
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.06933500000000237,
+          -0.16796899999999937,
+          -0.20996099999999984,
+          0.0791019999999989,
+          -0.7792969999999997
+        ],
+        "Pss": [
+          -0.12402400000000569,
+          -0.5,
+          0.508788999999993,
+          0.21191400000000726,
+          -0.818359000000001
+        ]
+      },
+      "shell_pass": true,
+      "combined_ui_pass": true,
+      "pass": true
+    },
+    "launcher_quick": {
+      "paired_unreclaimable_deltas_mib": [
+        0.011718,
+        0.9375,
+        0.746093,
+        0.117187,
+        1.40625
+      ],
+      "median_unreclaimable_delta_mib": 0.746093,
+      "paired_combined_ui_unreclaimable_deltas_mib": [
+        0.183594,
+        1.003906,
+        0.8125,
+        0.234375,
+        1.511719
+      ],
+      "median_combined_ui_unreclaimable_delta_mib": 0.8125,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.011718999999999369,
+          0.9375,
+          0.7460939999999994,
+          0.11718799999999874,
+          1.40625
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.3886719999999997,
+          -0.16992199999999968,
+          -0.22460900000000095,
+          0.08398499999999842,
+          0.2675780000000003
+        ],
+        "Pss": [
+          -0.3769530000000003,
+          0.767579000000012,
+          0.521484000000001,
+          0.20117199999999968,
+          1.6738280000000003
+        ]
+      },
+      "shell_pass": false,
+      "combined_ui_pass": false,
+      "pass": false
+    },
+    "notifications_panel_closed": {
+      "paired_unreclaimable_deltas_mib": [
+        0.058594,
+        -0.734375,
+        0.265625,
+        -0.046875,
+        -0.554688
+      ],
+      "median_unreclaimable_delta_mib": -0.046875,
+      "paired_combined_ui_unreclaimable_deltas_mib": [
+        0.230468,
+        -0.667968,
+        0.332031,
+        0.078126,
+        -0.445313
+      ],
+      "median_combined_ui_unreclaimable_delta_mib": 0.078126,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.058593000000001894,
+          -0.734375,
+          0.265625,
+          -0.046875999999997475,
+          -0.5546870000000013
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.41308599999999984,
+          -0.5429680000000019,
+          -0.20800799999999953,
+          0.08007800000000032,
+          0.5322269999999989
+        ],
+        "Pss": [
+          -0.3544920000000076,
+          -1.2773439999999994,
+          0.05761699999999337,
+          0.033203000000000316,
+          -0.022461000000006948
+        ]
+      },
+      "shell_pass": true,
+      "combined_ui_pass": true,
+      "pass": true
+    },
+    "notifications_panel_open": {
+      "paired_unreclaimable_deltas_mib": [
+        0.078124,
+        -1.261719,
+        0.695312,
+        -0.027344,
+        -0.089844
+      ],
+      "median_unreclaimable_delta_mib": -0.027344,
+      "paired_combined_ui_unreclaimable_deltas_mib": [
+        0.25,
+        -1.195313,
+        0.761719,
+        0.097656,
+        0.019531
+      ],
+      "median_combined_ui_unreclaimable_delta_mib": 0.097656,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          0.08593799999999874,
+          -0.7578129999999987,
+          0.7031259999999975,
+          -0.01953100000000063,
+          -0.08203100000000063
+        ],
+        "Pss_Shmem": [
+          -0.007813000000000514,
+          -0.007813000000000514,
+          -0.007813000000000514,
+          -0.007813000000000514,
+          -0.007813000000000514
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.41015600000000063,
+          -0.1679680000000019,
+          -0.20800799999999953,
+          0.0791019999999989,
+          0.22460900000000095
+        ],
+        "Pss": [
+          -0.3320319999999981,
+          -1.4296879999999987,
+          0.48730399999999463,
+          0.051756999999994946,
+          0.13476499999998737
+        ]
+      },
+      "shell_pass": true,
+      "combined_ui_pass": true,
+      "pass": true
+    },
+    "sidebar_closed": {
+      "paired_unreclaimable_deltas_mib": [
+        -0.205079,
+        -0.05664,
+        0.224609,
+        0.845703,
+        -0.025391
+      ],
+      "median_unreclaimable_delta_mib": -0.025391,
+      "paired_combined_ui_unreclaimable_deltas_mib": [
+        -0.08789,
+        -0.009766,
+        0.302734,
+        0.966797,
+        0.013672
+      ],
+      "median_combined_ui_unreclaimable_delta_mib": 0.013672,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          -0.21093700000000126,
+          -0.0625,
+          0.21875,
+          0.8398430000000019,
+          -0.03125
+        ],
+        "Pss_Shmem": [
+          0.005860000000000198,
+          0.005860000000000198,
+          0.005860000000000198,
+          0.005860000000000198,
+          0.005860000000000198
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.5927739999999986,
+          -0.0625,
+          -0.15429699999999968,
+          -0.0009760000000014202,
+          0.24121099999999984
+        ],
+        "Pss": [
+          -0.7978510000000014,
+          -0.11914000000000158,
+          0.07031299999999874,
+          0.8447260000000014,
+          0.2158200000000008
+        ]
+      },
+      "shell_pass": true,
+      "combined_ui_pass": true,
+      "pass": true
+    },
+    "sidebar_open": {
+      "paired_unreclaimable_deltas_mib": [
+        -0.214844,
+        -0.066406,
+        0.15625,
+        0.007813,
+        -0.023438
+      ],
+      "median_unreclaimable_delta_mib": -0.023438,
+      "paired_combined_ui_unreclaimable_deltas_mib": [
+        -0.199218,
+        -0.046875,
+        0.191407,
+        0.046875,
+        0.0
+      ],
+      "median_combined_ui_unreclaimable_delta_mib": 0.0,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          -0.21484399999999937,
+          -0.06640600000000063,
+          0.15625,
+          0.007812000000001262,
+          -0.023437000000001262
+        ],
+        "Pss_Shmem": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.5898439999999994,
+          -0.0625,
+          -0.09179699999999968,
+          0.058593000000001894,
+          0.24023499999999842
+        ],
+        "Pss": [
+          -0.8046879999999987,
+          -0.12890600000000063,
+          0.06445399999999779,
+          0.0664069999999981,
+          0.21679699999999968
+        ]
+      },
+      "shell_pass": true,
+      "combined_ui_pass": true,
+      "pass": true
+    },
+    "sidebar_reopened": {
+      "paired_unreclaimable_deltas_mib": [
+        -0.201172,
+        -0.048828,
+        0.220704,
+        0.833984,
+        -0.025391
+      ],
+      "median_unreclaimable_delta_mib": -0.025391,
+      "paired_combined_ui_unreclaimable_deltas_mib": [
+        -0.970703,
+        -0.130859,
+        0.240234,
+        2.009765,
+        -0.802734
+      ],
+      "median_combined_ui_unreclaimable_delta_mib": -0.130859,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          -0.20703100000000063,
+          -0.05468700000000126,
+          0.21484399999999937,
+          0.8281259999999975,
+          -0.03125
+        ],
+        "Pss_Shmem": [
+          0.005860000000000198,
+          0.005860000000000198,
+          0.005860000000000198,
+          0.005860000000000198,
+          0.005860000000000198
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.5888670000000005,
+          -0.0625,
+          -0.15234399999999937,
+          -0.0009769999999988954,
+          0.24316400000000016
+        ],
+        "Pss": [
+          -0.7900399999999976,
+          -0.11132800000000032,
+          0.06835999999999842,
+          0.8330079999999995,
+          0.2177730000000011
+        ]
+      },
+      "shell_pass": true,
+      "combined_ui_pass": true,
+      "pass": true
+    },
+    "sidebar_reopened_closed": {
+      "paired_unreclaimable_deltas_mib": [
+        -0.201172,
+        -0.052735,
+        0.216797,
+        0.830078,
+        -0.025391
+      ],
+      "median_unreclaimable_delta_mib": -0.025391,
+      "paired_combined_ui_unreclaimable_deltas_mib": [
+        -0.033203,
+        0.009766,
+        0.279297,
+        1.857421,
+        0.080078
+      ],
+      "median_combined_ui_unreclaimable_delta_mib": 0.080078,
+      "component_deltas_mib": {
+        "Pss_Anon": [
+          -0.20703100000000063,
+          -0.05859399999999937,
+          0.21093700000000126,
+          0.8242189999999994,
+          -0.03125
+        ],
+        "Pss_Shmem": [
+          0.005860000000000198,
+          0.005860000000000198,
+          0.005860000000000198,
+          0.005860000000000198,
+          0.005860000000000198
+        ],
+        "DRM": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SwapPss": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Pss_File": [
+          -0.5908200000000008,
+          -0.07226599999999905,
+          -0.15429699999999968,
+          -0.004882000000002051,
+          0.24414099999999905
+        ],
+        "Pss": [
+          -0.791992999999998,
+          -0.125,
+          0.0625,
+          0.8251959999999983,
+          0.21875
+        ]
+      },
+      "shell_pass": true,
+      "combined_ui_pass": true,
+      "pass": true
+    }
+  },
+  "changing_sample_examples_kib": {
+    "control": {
+      "dashboard_today_open": [
+        {
+          "Pss_Anon": 56736,
+          "Pss_Shmem": 14682,
+          "DRM": 0,
+          "SwapPss": 0
+        },
+        {
+          "Pss_Anon": 50572,
+          "Pss_Shmem": 14682,
+          "DRM": 0,
+          "SwapPss": 0
+        },
+        {
+          "Pss_Anon": 50572,
+          "Pss_Shmem": 14682,
+          "DRM": 0,
+          "SwapPss": 0
+        },
+        {
+          "Pss_Anon": 50572,
+          "Pss_Shmem": 14682,
+          "DRM": 0,
+          "SwapPss": 0
+        },
+        {
+          "Pss_Anon": 41916,
+          "Pss_Shmem": 21058,
+          "DRM": 0,
+          "SwapPss": 0
+        }
+      ],
+      "dashboard_today_closed": [
+        {
+          "Pss_Anon": 39048,
+          "Pss_Shmem": 18140,
+          "DRM": 0,
+          "SwapPss": 0
+        },
+        {
+          "Pss_Anon": 39048,
+          "Pss_Shmem": 18140,
+          "DRM": 0,
+          "SwapPss": 0
+        },
+        {
+          "Pss_Anon": 39048,
+          "Pss_Shmem": 18140,
+          "DRM": 0,
+          "SwapPss": 0
+        },
+        {
+          "Pss_Anon": 39136,
+          "Pss_Shmem": 10836,
+          "DRM": 0,
+          "SwapPss": 0
+        },
+        {
+          "Pss_Anon": 39016,
+          "Pss_Shmem": 14126,
+          "DRM": 0,
+          "SwapPss": 0
+        }
+      ]
+    },
+    "candidate": {
+      "dashboard_today_open": [
+        {
+          "Pss_Anon": 58820,
+          "Pss_Shmem": 14682,
+          "DRM": 0,
+          "SwapPss": 0
+        },
+        {
+          "Pss_Anon": 59692,
+          "Pss_Shmem": 14682,
+          "DRM": 0,
+          "SwapPss": 0
+        },
+        {
+          "Pss_Anon": 52112,
+          "Pss_Shmem": 14682,
+          "DRM": 0,
+          "SwapPss": 0
+        },
+        {
+          "Pss_Anon": 52112,
+          "Pss_Shmem": 14682,
+          "DRM": 0,
+          "SwapPss": 0
+        },
+        {
+          "Pss_Anon": 52112,
+          "Pss_Shmem": 14682,
+          "DRM": 0,
+          "SwapPss": 0
+        }
+      ],
+      "dashboard_today_closed": [
+        {
+          "Pss_Anon": 39052,
+          "Pss_Shmem": 18140,
+          "DRM": 0,
+          "SwapPss": 0
+        },
+        {
+          "Pss_Anon": 39052,
+          "Pss_Shmem": 18140,
+          "DRM": 0,
+          "SwapPss": 0
+        },
+        {
+          "Pss_Anon": 41304,
+          "Pss_Shmem": 10836,
+          "DRM": 0,
+          "SwapPss": 0
+        },
+        {
+          "Pss_Anon": 39044,
+          "Pss_Shmem": 14126,
+          "DRM": 0,
+          "SwapPss": 0
+        },
+        {
+          "Pss_Anon": 39044,
+          "Pss_Shmem": 14126,
+          "DRM": 0,
+          "SwapPss": 0
+        }
+      ]
+    }
+  }
+}
