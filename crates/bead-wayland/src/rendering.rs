@@ -1518,7 +1518,7 @@ impl App {
                 self.companion_policy = Default::default();
                 #[cfg(feature = "native-gl")]
                 if self.options.renderer == RendererKind::Cpu
-                    && self.surfaces.iter().all(|surface| surface.gl.is_none())
+                    && !self.has_gl_surfaces()
                     && let Some(transport) = self.gl.take()
                     && let Err(error) = {
                         // SAFETY: all companion GL surfaces were just dropped, no primary
@@ -1530,7 +1530,7 @@ impl App {
                     return;
                 }
                 #[cfg(feature = "wgpu")]
-                if self.surfaces.iter().all(|surface| surface.gpu.is_none()) {
+                if !self.has_gpu_surfaces() {
                     self.gpu = None;
                 }
                 println!("RENDER_POLICY companion=true transition=gpu-to-cpu fallback=true");
