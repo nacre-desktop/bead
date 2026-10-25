@@ -732,7 +732,9 @@ impl App {
             w: 0,
             h: 0,
         };
-        win.last_draw = Some(Instant::now());
+        // Pace render starts: measuring from completion adds the render cost
+        // to every refresh interval and steadily undershoots the output rate.
+        win.last_draw = Some(frame_started);
         if win.drawn == 0 && std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some() {
             win.first_frame_texts = win
                 .scene

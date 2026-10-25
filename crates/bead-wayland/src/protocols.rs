@@ -414,7 +414,16 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
                     s.refresh_ns = refresh;
                     s.presentation_kind = flags.into();
                 }
-                wp_presentation_feedback::Event::Discarded => s.discarded += 1,
+                wp_presentation_feedback::Event::Discarded => {
+                    s.discarded += 1;
+                    bead_core::vprintln!(
+                        "UI_DISCARDED generation={} monotonic_ns={} companion={} update={}",
+                        data.generation,
+                        monotonic_ns(),
+                        s.companion,
+                        data.update
+                    );
+                }
                 _ => {}
             }
         }
