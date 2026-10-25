@@ -800,6 +800,8 @@ def pace_drive(self, names):
                     self.steps([('app_close', CLOSE_APPS[name])])
                 if name in SCROLL_CLEANUPS:
                     self.steps(SCROLL_CLEANUPS[name])
+                if name.startswith('scroll-notifications'):
+                    close_active_fixture_notifications(self)
                 time.sleep(self.args.closed_settle)
                 try:
                     memory[name] = self.rss()
