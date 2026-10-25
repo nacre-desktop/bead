@@ -1,0 +1,148 @@
+{
+  "before2": {
+    "status": "complete",
+    "capture_returncode": 0,
+    "scope_runner_returncode": 0,
+    "child_membership_verified": true,
+    "oom_delta": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "arms": {
+      "qml": {
+        "geometry": {
+          "name": "winit",
+          "mode": [
+            2880,
+            1800
+          ],
+          "scale": 1.5,
+          "logical": [
+            1920,
+            1200
+          ]
+        },
+        "swap": {
+          "swap_used_before_kib": 0,
+          "pswpin_delta": 0
+        }
+      },
+      "bead": {
+        "geometry": {
+          "name": "winit",
+          "mode": [
+            2880,
+            1800
+          ],
+          "scale": 1.5,
+          "logical": [
+            1920,
+            1200
+          ]
+        },
+        "swap": {
+          "swap_used_before_kib": 0,
+          "pswpin_delta": 0
+        }
+      }
+    }
+  },
+  "after": {
+    "status": "complete",
+    "capture_returncode": 0,
+    "scope_runner_returncode": 0,
+    "child_membership_verified": true,
+    "oom_delta": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "arms": {
+      "qml": {
+        "geometry": {
+          "name": "winit",
+          "mode": [
+            2880,
+            1800
+          ],
+          "scale": 1.5,
+          "logical": [
+            1920,
+            1200
+          ]
+        },
+        "swap": {
+          "swap_used_before_kib": 0,
+          "pswpin_delta": 0
+        }
+      },
+      "bead": {
+        "geometry": {
+          "name": "winit",
+          "mode": [
+            2880,
+            1800
+          ],
+          "scale": 1.5,
+          "logical": [
+            1920,
+            1200
+          ]
+        },
+        "swap": {
+          "swap_used_before_kib": 0,
+          "pswpin_delta": 0
+        }
+      }
+    }
+  },
+  "final": {
+    "status": "complete",
+    "capture_returncode": 0,
+    "scope_runner_returncode": 0,
+    "child_membership_verified": true,
+    "oom_delta": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "arms": {
+      "qml": {
+        "geometry": {
+          "name": "winit",
+          "mode": [
+            2880,
+            1800
+          ],
+          "scale": 1.5,
+          "logical": [
+            1920,
+            1200
+          ]
+        },
+        "swap": {
+          "swap_used_before_kib": 0,
+          "pswpin_delta": 0
+        }
+      },
+      "bead": {
+        "geometry": {
+          "name": "winit",
+          "mode": [
+            2880,
+            1800
+          ],
+          "scale": 1.5,
+          "logical": [
+            1920,
+            1200
+          ]
+        },
+        "swap": {
+          "swap_used_before_kib": 0,
+          "pswpin_delta": 0
+        }
+      }
+    }
+  },
+  "video_process_stable": true,
+  "static_surface_creations": 1
+}

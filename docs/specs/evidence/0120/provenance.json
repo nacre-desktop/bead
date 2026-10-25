@@ -1,0 +1,31 @@
+{
+  "native_release_and_ci_source": "5a31c4192aa21eeb34f0e527f0eb1aa28f04091a",
+  "integration_source": "50bb0059c63229c356b437cdcef9da8c6ed0ec95",
+  "qml_and_helper_source": "30892db70264d3a0000ea7f1cc828c4a2209c46e",
+  "widget_context_sha256": "23b6200557da6dcbdf51c16477a5847bc3c1f5d840c649d9f0346b601c1f7140",
+  "bar_tokens_sha256": "1ce3badf087dde5d64964df3f6a2b76f3921cf996148c4e1eb54517a54e2c67f",
+  "native_binary_sha256": {
+    "nacre-shell": "58256c9c938e874a430d2352d94098d790f2bbb347f7084a8c22cb238d41ad87",
+    "bead-wallpaper-video": "a6c2265fa7a703935028ed94242f750809d19a5692716d7139ba81c00e189caa",
+    "nacre-wallpaper-decode": "8bd9aa13cd474348e648dacfb1c94702bc5c9ff05dd64120d9c966cdcfbc0280",
+    "nacre-helper": "83017feb52a562a85e78d7b36292dd057c37b7a125da6bad093fc6790de21b22",
+    "orient": "71bbb0c0a9410049e84d790dd759ec875c8b226ab6e1b3e78a120cbf2e8f4a97"
+  },
+  "ui_backend": "CPU tiny-skia",
+  "video_backend": "EGL/OpenGL hardware presentation",
+  "frame_interval_ms": 25,
+  "transition_window_ms": 1500,
+  "old_rule": "^nacre-background$",
+  "new_rule": "^(nacre-background|bead-wallpaper|bead-wallpaper-video)$",
+  "native_visible_group_gaps_physical_px": [18, 17, 19, 18, 18, 18, 19],
+  "native_battery_and_notification_digit_ink_center_y": 37.5,
+  "native_clock_digit_ink_center_y": 37.0,
+  "native_fixture_counts": {"updates": 9, "battery": 56, "qml_notifications": 15, "bead_notifications": 0},
+  "golden_fixture": {"updates": 9, "battery": 56, "notifications": 15, "clock": "11:02"},
+  "limits": [
+    "The final rebase over 5a31 changes only upstream B0113 documentation; tested/captured product code is identical.",
+    "The native fixture delivers different notification counts; the owner-value golden checks the two-digit comparison.",
+    "No whole-screen one-second blackout reproduced; the old-rule inter-workspace dark band is reproduced.",
+    "Capture stamps are screencopy process-start proxies, not scanout timestamps."
+  ]
+}

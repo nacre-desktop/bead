@@ -1,5 +1,16 @@
 # Status
 
+## 2026-10-25 — B0120 pill spacing and wallpaper backdrop
+
+Status widgets now use optical-width tokens: native gaps are 17–19 physical px
+at scale 1.5; counts and clock align with their icons. The B0113 port matches
+all four accepted goldens byte-for-byte and has fresh 4× native comparisons.
+Matching Bead's wallpaper namespaces in both Nacre niri entry points removes the
+measured workspace dark band for static and supervised video (12% → 0% dark rows).
+Video uses its poster in the backdrop; other evidence limits are explicit in
+[B0120](specs/0120-pill-wallpaper-flash.md). Full remote Bead and Nacre CI pass.
+No live deployment.
+
 ## 2026-10-25 — B0113 phase 1 gates pass
 
 The bar now composes validated Luau widget packages through a general strip host.
