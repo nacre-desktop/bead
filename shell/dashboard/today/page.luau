@@ -10,14 +10,16 @@ local function media(layout)
     local art=ui.resolve_for_check(ui.bind("dashboard.art"))
     local live=state=="playing" or state=="paused" or state=="stopped"
     local artSize=layout.artSize
+    local buttonSize=layout.transportSize
+    local controlsWidth=3*buttonSize+2*layout.transportGap
     local function op(name,can)
         return control and ui.resolve_for_check(ui.bind(can)) and ui.action("dashboard.do",name) or nil
     end
     local function transport(id,glyph,label,action)
-        return kit.Button{id=id,width=34,height=34,padding=0,radius=17,justify="center",align="center",
-            fill="transparent",hover_fill=ui.alpha("onSurface",.08),aria_label=label,on_activate=action,
-            ui.Text{text=glyph,family="Material Symbols Rounded",font_size=17*4/3,width=24,height=24,
-                text_align="center",color=action and "onSurface" or "onSurfaceVariant"}}
+        return kit.Button{id=id,width=buttonSize,height=buttonSize,padding=0,radius=buttonSize/2,justify="center",align="center",
+            fill="transparent",hover_fill=action and ui.alpha("onSurface",.08) or "transparent",aria_label=label,on_activate=action,activate_on_release=true,
+            ui.Text{text=glyph,family="Material Symbols Rounded",font_size=layout.transportIconSize,width=24,height=24,
+                text_align="center",color=action and "onSurface" or ui.alpha("onSurface",.35)}}
     end
     local artwork=ui.Box{id="artwork",position="absolute",left=(layout.artContainer-artSize)/2,top=28,
         width=artSize,height=artSize,radius=artSize/2,fill="surfaceContainerHigh",
@@ -26,8 +28,8 @@ local function media(layout)
             or ui.Text{position="absolute",left=(artSize-40)/2,top=(artSize-40)/2,width=40,height=40,text="music_note",
                 family="Material Symbols Rounded",font_size=layout.mediaArtIconSize,color="onSurfaceVariant"},
         ui.Image{position="absolute",left=0,top=0,width=artSize,height=artSize,path="dashboard/today/album-mask.themed.svg"}}
-    local controls=ui.Row{id="buttons",position="absolute",left=(layout.media-114)/2,top=layout.mediaControlsY,
-        width=114,height=34,gap=6,justify="center",
+    local controls=ui.Row{id="buttons",position="absolute",left=(layout.media-controlsWidth)/2,top=layout.mediaControlsY,
+        width=controlsWidth,height=buttonSize,gap=layout.transportGap,justify="center",
         transport("previous","skip_previous",ui.tr("bead.dashboard.media-previous"),op("player.previous","dashboard.can_previous")),
         transport("toggle",state=="playing" and "pause" or "play_arrow",
             state=="playing" and ui.tr("bead.dashboard.pause") or ui.tr("bead.dashboard.media-play"),op("player.play_pause","dashboard.can_toggle")),
@@ -60,6 +62,15 @@ return function()
     local host=ui.resolve_for_check(ui.bind("dashboard.host"))
     local gauges=ui.resolve_for_check(ui.bind("dashboard.gauges"))
     local wallpaper=ui.resolve_for_check(ui.bind("dashboard.wallpaper"))
+    local colors=ui.resolve_for_check(ui.bind("dashboard.can_colors")) and ui.action("dashboard.do","colors.open") or nil
+    local colorsText=ui.tr("bead.dashboard.colors")
+    local colorsTextWidth=math.min(l.heroActionWidth-40,math.ceil(ui.text_width(colorsText,"IBM Plex Sans",kit.tokens.text.caption*4/3)))
+    local swatches={}
+    for i,role in ipairs({"primary","secondary","tertiary","surfaceContainerHigh","onSurface"}) do
+        swatches[i]=kit.Button{id="swatch-"..i,width=19,height=19,padding=0,radius=9.5,fill=role,hover_fill=role,
+            aria_label=ui.tr("bead.welcome.colors-open"),on_activate=colors,activate_on_release=true,
+            ui.Box{width=19,height=19,radius=9.5,fill=role}}
+    end
     local hero=ui.Box{id="hero",width=l.width,height=l.hero,radius=l.heroRadius,fill="surfaceContainer",
         wallpaper and ui.Scroll{id="wallpaper-crop",width=l.width,height=l.hero,scroll=ui.bind("dashboard.hero.scroll"),
             ui.Row{id="wallpaper-centred",width=l.width,height=l.hero,shrink=0,justify="center",align="center",
@@ -72,10 +83,15 @@ return function()
             ui.Text{id="date",text=ui.bind("dashboard.date"),font_size=l.heroDateSize,height=l.heroLineHeight,color=l.heroTextColor},
             ui.Text{id="weather",text=ui.bind("dashboard.summary"),font_size=l.heroWeatherSize,width=l.width-2*l.heroInset,height=l.heroLineHeight,color=l.heroTextColor},
         },
-        ui.Row{id="palette",position="absolute",left=l.heroInset,top=l.hero-37,width=180,height=19,gap=10,
-            ui.Box{width=19,height=19,radius=10,fill="primary"},ui.Box{width=19,height=19,radius=10,fill="secondary"},
-            ui.Box{width=19,height=19,radius=10,fill="tertiary"},ui.Box{width=19,height=19,radius=10,fill="surfaceContainerHigh"},
-            ui.Box{width=19,height=19,radius=10,fill="onSurface"}},
+        ui.Row{id="palette",position="absolute",left=l.heroInset,top=l.hero-37,width=180,height=19,gap=10,table.unpack(swatches)},
+        kit.Button{id="colors",position="absolute",right=kit.tokens.spacing.xl,bottom=l.heroActionBottom,
+            width=l.heroActionWidth,height=l.heroActionHeight,padding=0,radius=l.heroActionRadius,
+            fill=ui.tint("surface","primary",.12),hover_fill=ui.tint(ui.tint("surface","primary",.12),"onSurface",.08),align="center",justify="center",
+            aria_label=ui.tr("bead.welcome.colors-open"),on_activate=colors,activate_on_release=true,
+            ui.Row{width=18+kit.tokens.spacing.xs+colorsTextWidth,height=20,gap=kit.tokens.spacing.xs,align="center",justify="center",
+                ui.Text{text="palette",family="Material Symbols Rounded",font_size=kit.tokens.icons.small*4/3,width=18,height=20,
+                    text_align="center",color="onSurface"},
+                ui.Text{text=colorsText,width=colorsTextWidth,font_size=kit.tokens.text.caption*4/3,height=20,color="onSurface"}}},
     }
     local hostRows={}
     local hostRowHeight=#host+1>5 and l.hostRowHeight or l.hostSmallRowHeight

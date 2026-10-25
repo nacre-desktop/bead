@@ -1046,6 +1046,102 @@ async fn player_controls_resolve_the_active_player_and_obey_can_flags() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn today_buttons_follow_player_updates_and_call_published_routes() -> Result<()> {
+    let (dir, client, mut calls) = lab(
+        &[
+            "player.previous",
+            "player.play_pause",
+            "player.next",
+            "ui.dispatch",
+        ],
+        &[],
+        vec![ok(); 9],
+    )
+    .await;
+    let mut data = fixture("player");
+    data["players"]["items"]["player-1"]["can_previous"] = json!(true);
+    let player = Arc::new(FakeSource::new(data.clone())?);
+    let dashboard = wired(Page::Today, fixture("today"), &client)
+        .with_player(Some(player.clone() as Arc<dyn Source>));
+    let mut h = extra_harness(Page::Today, dashboard.project(), 1.)?;
+    h.render()?;
+    for (label, method, params) in [
+        ("Previous", "player.previous", json!({"player":"player-1"})),
+        ("Pause", "player.play_pause", json!({"player":"player-1"})),
+        ("Next", "player.next", json!({"player":"player-1"})),
+    ] {
+        let node = h
+            .session
+            .view_nodes()
+            .iter()
+            .find(|n| n.label == label)
+            .expect(label);
+        let r = bead::ui::rect(&node.draw);
+        assert_eq!((r.w, r.h), (34., 34.));
+        assert!(
+            r.y + r.h <= 662.,
+            "transport remains inside the summary card"
+        );
+        assert_eq!(node.action.as_deref(), Some("dashboard.do"));
+        assert_eq!(node.action_arg, Some(Value::Text(method.into())));
+        assert!(node.activate_on_release);
+        // Resolve exactly the action attached to the visible control, as the host does.
+        dashboard.act(method, wake());
+        assert_eq!(calls.recv().await.unwrap(), (method.into(), params));
+        settle(&dashboard).await;
+    }
+    let colors: Vec<_> = h
+        .session
+        .view_nodes()
+        .iter()
+        .filter(|n| n.action_arg == Some(Value::Text("colors.open".into())))
+        .collect();
+    assert_eq!(colors.len(), 6, "button and five palette dots open Colors");
+    for node in colors {
+        assert_eq!(node.action.as_deref(), Some("dashboard.do"));
+        assert!(!node.label.is_empty());
+        assert!(node.activate_on_release);
+        dashboard.act("colors.open", wake());
+        assert_eq!(
+            calls.recv().await.unwrap(),
+            (
+                "ui.dispatch".into(),
+                json!({"target":"colorsApp","method":"open","args":[]})
+            )
+        );
+        settle(&dashboard).await;
+    }
+    data["players"]["items"]["player-1"]["status"] = json!("paused");
+    player.publish(data)?;
+    h.update(dashboard.project())?;
+    assert!(
+        h.session
+            .view_nodes()
+            .iter()
+            .any(|n| n.label == "Play" && n.action.is_some())
+    );
+    assert!(
+        h.scene().primitives.iter().any(
+            |p| matches!(p, bead::render::Primitive::Text { text, .. } if text == "play_arrow")
+        )
+    );
+    player.disconnect()?;
+    h.update(dashboard.project())?;
+    for label in ["Previous", "Play", "Next"] {
+        assert!(
+            h.session
+                .view_nodes()
+                .iter()
+                .all(|n| n.label != label || n.action.is_none())
+        );
+    }
+    dashboard.act("player.next", wake());
+    assert!(calls.try_recv().is_err());
+    std::fs::remove_dir_all(dir).ok();
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn seek_jumps_from_the_extrapolated_position_clamps_and_needs_can_seek() {
     let (dir, client, mut calls) = lab(&["player.seek"], &[], vec![ok(), ok(), ok(), ok()]).await;
     let view = |edit: &dyn Fn(&mut Json), now: fn() -> u64| {

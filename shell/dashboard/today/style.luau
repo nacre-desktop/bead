@@ -15,6 +15,8 @@ function M.layout(width,height)
         heroInset=24,heroTimeSize=math.max(44,math.min(64,44*hero/254))*4/3,heroDateSize=13*4/3,heroWeatherSize=11*4/3,
         heroTimeHeight=72,heroLineHeight=20,heroTextGap=10,heroRadius=20,cardRadius=18,mediaPadding=12,
         heroTextColor={255,253,250,255},
+        transportSize=34,transportGap=6,transportIconSize=17*4/3,
+        heroActionWidth=111,heroActionHeight=36,heroActionRadius=10,heroActionBottom=56,
         artSize=art,
         artContainer=art+56,
         logoSize=math.min(156,math.max(124,host*.28)),logoContent=.74,hostRowHeight=24,hostRowGap=4,

@@ -103,6 +103,11 @@ impl Dashboard {
         }
         let Some(c) = &self.controls else { return };
         match (page, op) {
+            (Page::Today, "colors.open") => c.submit(
+                "ui.dispatch",
+                json!({"target": "colorsApp", "method": "open", "args": []}),
+                wake,
+            ),
             (Page::Focus, "focus.start") => {
                 if let Ok(minutes @ 1..=180) = id.parse::<u32>() {
                     c.submit(op, json!({"minutes": minutes}), wake);
@@ -348,6 +353,12 @@ impl Dashboard {
             Value::Bool(!busy && can(method)),
         );
         out.insert("dashboard.busy".into(), Value::Bool(busy));
+        if self.page == Page::Today {
+            out.insert(
+                "dashboard.can_colors".into(),
+                Value::Bool(!busy && can("ui.dispatch")),
+            );
+        }
         out.insert("dashboard.message".into(), Value::Text(line(&message, 64)));
         out.insert("dashboard.confirm".into(), Value::Bool(confirm));
         out.insert("dashboard.customize".into(), Value::Bool(customize));
