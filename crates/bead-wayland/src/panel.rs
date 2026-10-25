@@ -357,6 +357,9 @@ impl App {
         let resolved = resolved.to_owned();
         let mut spec = spec.clone();
         spec.initial_open = false;
+        self.cancel_prepared_native();
+        self.reserved_pearl_id = None;
+        self.prewarm_attempted = false;
         self.panel_name = Some(resolved.clone());
         self.options.panel_spec = Some(spec);
         self.notify_panel_owner(UiEvent::PanelNavigated(resolved));
@@ -963,6 +966,9 @@ impl App {
             .as_ref()
             .is_some_and(|spec| spec.retain_when_closed)
         {
+            self.cancel_prepared_native();
+            self.reserved_pearl_id = None;
+            self.prewarm_attempted = false;
             // Keep its stacking order below the prepared panel. Recreating the
             // catcher on reopen would also recreate the panel surface/buffers.
             if let Err(error) = self.set_dismiss_enabled(false) {
@@ -1033,6 +1039,8 @@ impl App {
         self.panel_cover = None;
         self.panel_dock_transition = None;
         self.cancel_prepared_native();
+        self.reserved_pearl_id = None;
+        self.prewarm_attempted = false;
         // Trace probes are weak: observing retirement must not extend raster lifetime.
         #[cfg(all(target_os = "linux", target_env = "gnu"))]
         let retired_images = self.options.trace_state.then(|| {
@@ -1186,7 +1194,7 @@ impl App {
             .as_ref()
             .and_then(|d| d.size)
             .or_else(|| self.output.info(&output).and_then(|info| info.logical_size));
-        let enabled = enabled && !self.options.test_passive;
+        let enabled = enabled && self.pearl.is_none() && !self.options.test_passive;
         let bounds = size.filter(|_| enabled).map(|(width, height)| {
             let extent = if self.options.bar {
                 self.surfaces

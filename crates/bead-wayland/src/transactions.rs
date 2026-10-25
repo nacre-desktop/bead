@@ -39,9 +39,13 @@ impl App {
             anchor,
         } = event
         {
-            self.in_slot(id, |app| {
-                app.native_pearl_prewarmed(epoch, generation, rect, anchor)
-            });
+            if self.reserved_pearl_id == Some(id) {
+                self.native_pearl_prewarmed(id, epoch, generation, rect, anchor);
+            } else {
+                self.in_slot(id, |app| {
+                    app.native_pearl_prewarmed(id, epoch, generation, rect, anchor)
+                });
+            }
             return;
         }
         if let UiEvent::NativePearlMotion(motion) = event {

@@ -112,6 +112,7 @@ pub(crate) struct PreparedNative {
     pub(super) gl_ready: bool,
     pub(super) anchor: pearl::Rect,
     pub(super) request: pearl::Rect,
+    pub(super) id: u32,
     pub(super) epoch: u64,
     pub(super) size_generation: u64,
     pub(super) source_size: (u32, u32),
@@ -240,6 +241,8 @@ pub(crate) struct Group {
     lazy_gl: bool,
     release_timer: bool,
     pub(crate) info: Option<Info>,
+    reserved_pearl_id: Option<u32>,
+    prewarm_attempted: bool,
     surfaces: Vec<Surface>,
 }
 impl Group {
@@ -267,6 +270,8 @@ impl Group {
             lazy_gl: false,
             release_timer: false,
             info: None,
+            reserved_pearl_id: None,
+            prewarm_attempted: false,
             surfaces: Vec::new(),
         }
     }
@@ -367,6 +372,8 @@ impl App {
         swap(&mut self.options.lazy_gl, &mut g.lazy_gl);
         swap(&mut self.release_timer, &mut g.release_timer);
         swap(&mut self.pearl, &mut g.info);
+        swap(&mut self.reserved_pearl_id, &mut g.reserved_pearl_id);
+        swap(&mut self.prewarm_attempted, &mut g.prewarm_attempted);
         let mine: Vec<Surface> = {
             let mut kept = Vec::new();
             let mut out = Vec::new();
@@ -653,17 +660,20 @@ impl App {
         if self.slots.iter().filter(|g| g.is_pearl()).count() >= max {
             return Err("too many pearls".into());
         }
+        let reserved_id = self.reserved_pearl_id.take();
+        let id = reserved_id.unwrap_or_else(|| {
+            self.pearl_seq += 1;
+            self.pearl_seq
+        });
         let mut g = self.blank_group();
         self.swap_group(&mut g);
-        // `g` now holds the panel; the resident group is blank and closed.
-        self.pearl_seq += 1;
-        let id = self.pearl_seq;
+        // `g` now holds the panel; keep the admission identity through the lift.
+        g.reserved_pearl_id = Some(id);
         g.info = Some(Info {
             id,
             kind: Kind::Pearl,
             rect,
         });
-        drop(g.dismiss.take());
         self.slots.push(g);
         self.in_slot(id, |app| app.become_pearl(native));
         if let Err(error) = self.sync_all_decorations() {
@@ -677,40 +687,91 @@ impl App {
     fn become_pearl(&mut self, native: bool) {
         self.panel_ui(UiEvent::PanelDetached(true));
         if self.native_pearls_enabled() {
-            let result = if native {
-                self.promote_native_pearl()
-            } else {
-                self.prepare_native_pearl()
-            };
-            if let Err(error) = result {
+            if native {
+                // Direct/API detaches do not share the gesture-lift timing window.
+                self.cancel_prepared_native();
+                if let Err(error) = self.promote_native_pearl() {
+                    eprintln!("PEARL_NATIVE_ERROR {error}");
+                }
+            } else if !self.surfaces.iter().any(|surface| surface.prepared_native.is_some())
+                && !self.prewarm_attempted
+                && let Err(error) = self.prepare_native_pearl()
+            {
                 eprintln!("PEARL_NATIVE_ERROR {error}");
             }
         }
         self.place_pearl_surfaces();
     }
     fn native_pearls_enabled(&self) -> bool {
-        self.pearl.is_some_and(|i| i.kind == Kind::Pearl)
+        self.pearl.is_some_and(|info| info.kind == Kind::Pearl)
             && self
                 .options
                 .pearls
                 .as_ref()
-                .is_some_and(|p| p.native.is_some())
+                .is_some_and(|options| options.native.is_some())
+    }
+
+    /// Admit a hidden native window after the open panel has produced a real
+    /// configured frame. This never changes the active layer renderer.
+    pub(super) fn prewarm_resident_panel(&mut self) {
+        if self.pearl.is_some()
+            || !self.pearls_on()
+            || !self.panel_target
+            || !self.panel_ready
+            || self.panel_runtime.is_none()
+            || self.prewarm_attempted
+            || !self
+                .surfaces
+                .iter()
+                .any(|surface| surface.companion && surface.configured && surface.frames > 0)
+        {
+            return;
+        }
+        let Some((name, native)) = self.panel_name.as_deref().zip(
+            self.options
+                .pearls
+                .as_ref()
+                .and_then(|options| options.native.as_ref()),
+        ) else {
+            return;
+        };
+        if native.prewarm.is_none()
+            || self.options.control.as_ref().is_some_and(|control| !control.pearl_allowed(name))
+            || self.slots.iter().filter(|group| group.is_pearl()).count()
+                >= self.options.pearls.as_ref().map_or(0, |options| options.max)
+        {
+            return;
+        }
+        self.prewarm_attempted = true;
+        if self.reserved_pearl_id.is_none() {
+            self.pearl_seq = self.pearl_seq.wrapping_add(1).max(1);
+            self.reserved_pearl_id = Some(self.pearl_seq);
+        }
+        if let Err(error) = self.prepare_native_pearl() {
+            eprintln!("PEARL_PREWARM_ERROR {error}");
+        }
     }
 
     /// Create the native target while the current layer remains the active
     /// renderer and input surface. The target stays transparent until release.
     fn prepare_native_pearl(&mut self) -> Result<(), String> {
-        let (Some(info), Some(name), Some(native)) = (
-            self.pearl,
+        let (Some(id), Some(name), Some(native)) = (
+            self.pearl.map(|info| info.id).or(self.reserved_pearl_id),
             self.panel_name.clone(),
-            self.options.pearls.as_ref().and_then(|p| p.native.clone()),
+            self.options.pearls.as_ref().and_then(|options| options.native.clone()),
         ) else {
             return Ok(());
         };
         if native.prewarm.is_none() {
             return Ok(());
         }
-        let id = info.id;
+        let Some(anchor) = self
+            .pearl
+            .map(|info| info.rect)
+            .or_else(|| self.resident_body().map(|(rect, _)| rect))
+        else {
+            return Ok(());
+        };
         let xdg = self.xdg.as_ref().ok_or("compositor has no xdg-shell")?;
         let qh = self.qh.clone();
         for i in 0..self.surfaces.len() {
@@ -778,8 +839,9 @@ impl App {
                 gl: None,
                 #[cfg(feature = "native-gl")]
                 gl_ready: false,
-                anchor: info.rect,
-                request: info.rect,
+                anchor,
+                request: anchor,
+                id,
                 epoch: self.panel_epoch,
                 size_generation: 1,
                 source_size: (self.surfaces[i].width, self.surfaces[i].height),
@@ -1346,19 +1408,19 @@ impl App {
     }
 
     fn place_prepared_native(&mut self, i: usize) {
-        let (Some(info), Some(name), Some(native), Some(prepared)) = (
-            self.pearl,
+        let (Some(name), Some(native), Some(prepared)) = (
             self.panel_name.clone(),
-            self.options.pearls.as_ref().and_then(|p| p.native.clone()),
+            self.options.pearls.as_ref().and_then(|options| options.native.clone()),
             self.surfaces
                 .get(i)
-                .and_then(|s| s.prepared_native.as_ref()),
+                .and_then(|surface| surface.prepared_native.as_ref()),
         ) else {
             return;
         };
         if !prepared.configured {
             return;
         }
+        let id = prepared.id;
         let rect = prepared.request;
         let epoch = prepared.epoch;
         let generation = prepared.size_generation;
@@ -1368,16 +1430,16 @@ impl App {
         };
         prewarm(
             NativePearlPlacement {
-                id: info.id,
+                id,
                 view: name.clone(),
-                title: (native.title)(info.id, &name),
+                title: (native.title)(id, &name),
                 rect,
                 first: true,
             },
             Box::new(move |anchor| {
                 if let Some(sender) = sender {
                     let _ = sender.send(UiEvent::NativePearlPrewarmed {
-                        id: info.id,
+                        id,
                         epoch,
                         generation,
                         rect,
@@ -1390,6 +1452,7 @@ impl App {
 
     pub(super) fn native_pearl_prewarmed(
         &mut self,
+        id: u32,
         epoch: u64,
         generation: u64,
         rect: pearl::Rect,
@@ -1402,7 +1465,8 @@ impl App {
             let Some(prepared) = surface.prepared_native.as_mut() else {
                 return false;
             };
-            if prepared.epoch != epoch
+            if prepared.id != id
+                || prepared.epoch != epoch
                 || prepared.size_generation != generation
                 || prepared.request != rect
                 || !prepared.configured
@@ -1469,6 +1533,36 @@ impl App {
         }
     }
 
+    pub(super) fn cancel_prepared_window(
+        &mut self,
+        window: &smithay_client_toolkit::shell::xdg::window::Window,
+    ) -> bool {
+        let id = self.surfaces.iter().find_map(|surface| {
+            surface
+                .prepared_native
+                .as_ref()
+                .filter(|prepared| prepared.window.as_ref() == Some(window))
+                .map(|prepared| prepared.id)
+        });
+        let Some(id) = id else {
+            return false;
+        };
+        for surface in &mut self.surfaces {
+            if surface
+                .prepared_native
+                .as_ref()
+                .is_some_and(|prepared| prepared.id == id)
+            {
+                surface.prepared_native = None;
+            }
+        }
+        if self.pearl.is_none() && self.reserved_pearl_id == Some(id) {
+            self.reserved_pearl_id = None;
+            self.prewarm_attempted = true;
+        }
+        true
+    }
+
     fn activate_prepared_native(&mut self, rect: pearl::Rect) -> bool {
         let Some(native) = self.options.pearls.as_ref().and_then(|p| p.native.as_ref()) else {
             return false;
@@ -1476,6 +1570,10 @@ impl App {
         if native.prewarm.is_none() {
             return false;
         }
+        let expected_id = self
+            .pearl
+            .map(|info| info.id)
+            .or(self.reserved_pearl_id);
         let indices: Vec<_> = self
             .surfaces
             .iter()
@@ -1483,12 +1581,16 @@ impl App {
             .filter(|(_, surface)| surface.companion)
             .map(|(index, _)| index)
             .collect();
-        if indices.is_empty()
+        if expected_id.is_none()
+            || indices.is_empty()
             || indices.iter().any(|&i| {
                 let surface = &self.surfaces[i];
                 let Some(prepared) = surface.prepared_native.as_ref() else {
                     return true;
                 };
+                if Some(prepared.id) != expected_id {
+                    return true;
+                }
                 prepared
                     .window
                     .as_ref()
@@ -1868,6 +1970,8 @@ impl App {
         }
         self.swap_group(&mut g);
         self.cancel_prepared_native();
+        self.reserved_pearl_id = None;
+        self.prewarm_attempted = false;
         drop(g);
         self.pearl = None;
         let spec = self
@@ -1882,7 +1986,6 @@ impl App {
             animation_id: format!("bead.pearl.dock.{id}"),
             started: false,
         });
-        drop(self.dismiss.take());
         let moved = self.panel_output.as_ref() != Some(&target);
         // Native EGL/wgpu resources must retire before their xdg role. A fresh
         // layer surface also receives fresh idle timers and fractional state.
@@ -1890,7 +1993,8 @@ impl App {
             .surfaces
             .iter()
             .any(|s| s.companion && s.native.is_some());
-        if moved || spec.keyboard_focus || native {
+        if moved || native || (spec.keyboard_focus && self.dismiss.is_none()) {
+            drop(self.dismiss.take());
             let (cover, primary) = self.surfaces.drain(..).partition(|s| s.companion);
             self.surfaces = primary;
             self.panel_cover = Some((self.panel_ui_serial.wrapping_add(1), cover));
@@ -2104,6 +2208,11 @@ impl App {
             let (name, spec) = panels.resolve(Some(view))?;
             (name.to_owned(), spec.clone())
         };
+        if self.panel_runtime.is_some() && self.pearl.is_none() {
+            self.cancel_prepared_native();
+            self.reserved_pearl_id = None;
+            self.prewarm_attempted = false;
+        }
         self.pearl_seq += 1;
         let id = self.pearl_seq;
         let fallback_size = rendering::content_window_rect(&spec.fallback)

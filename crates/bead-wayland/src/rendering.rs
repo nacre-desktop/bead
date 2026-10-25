@@ -537,6 +537,13 @@ impl App {
                 // its matching local value just as the pose-only path does.
                 self.pointer_visual_flush(index);
             }
+            if self.surfaces[index].companion
+                && self.surfaces[index].frames > previous_frames
+                && self.pearl.is_none()
+            {
+                // Admission prewarm follows the accepted source frame and restored pointer scene.
+                self.prewarm_resident_panel();
+            }
             for event in pending.into_iter().flatten() {
                 self.view_event(true, event);
             }

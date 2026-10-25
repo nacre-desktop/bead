@@ -113,6 +113,8 @@ pub(super) struct App {
     pub(super) panel_animations: bead_core::animation::Animations,
     /// Set while a pearl (or guide) is swapped in as the resident panel.
     pub(super) pearl: Option<pearls::Info>,
+    pub(super) reserved_pearl_id: Option<u32>,
+    pub(super) prewarm_attempted: bool,
     pub(super) slots: Vec<pearls::Group>,
     pub(super) pearl_seq: u32,
     pub(super) epoch_seq: u64,
@@ -326,6 +328,8 @@ pub fn run_runtime(
         animations: Default::default(),
         panel_animations: Default::default(),
         pearl: None,
+        reserved_pearl_id: None,
+        prewarm_attempted: false,
         slots: Vec::new(),
         pearl_seq: 0,
         epoch_seq: 0,
