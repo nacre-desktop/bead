@@ -592,7 +592,15 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
     if name == "widgets" && cli.len() == 1 {
         let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
         let daemon_env = std::env::var_os("NACRE_DAEMON_SOCKET").map(PathBuf::from);
-        apply_widget_runtime_defaults(name,&mut daemon,&mut command_socket,&mut parent_socket,&mut palette,palette_explicit,widget_runtime_paths(runtime_dir.as_deref(),daemon_env.as_deref()));
+        apply_widget_runtime_defaults(
+            name,
+            &mut daemon,
+            &mut command_socket,
+            &mut parent_socket,
+            &mut palette,
+            palette_explicit,
+            widget_runtime_paths(runtime_dir.as_deref(), daemon_env.as_deref()),
+        );
         if let Some(socket) = command_socket.as_deref() {
             match open_existing_widget(socket) {
                 Ok(true) => return Ok(()),
@@ -828,7 +836,15 @@ mod tests {
         let mut command_socket = None;
         let mut parent_socket = None;
         let mut selected_palette = PathBuf::from("shell/palette.json");
-        assert!(apply_widget_runtime_defaults("widgets",&mut daemon_socket,&mut command_socket,&mut parent_socket,&mut selected_palette,false,widget_runtime_paths(Some(&runtime),None)));
+        assert!(apply_widget_runtime_defaults(
+            "widgets",
+            &mut daemon_socket,
+            &mut command_socket,
+            &mut parent_socket,
+            &mut selected_palette,
+            false,
+            widget_runtime_paths(Some(&runtime), None)
+        ));
         assert_eq!(command_socket, Some(socket_dir.join("app-widgets.sock")));
         assert_eq!(parent_socket, Some(socket_dir.join("bead-command.sock")));
         assert_eq!(daemon_socket, Some(socket_dir.join("daemon.sock")));
@@ -850,7 +866,15 @@ mod tests {
         let mut command = Some(dir.join("explicit-app.sock"));
         let mut parent = Some(dir.join("explicit-parent.sock"));
         let mut palette = PathBuf::from("private-palette.json");
-        assert!(apply_widget_runtime_defaults("widgets",&mut daemon,&mut command,&mut parent,&mut palette,true,widget_runtime_paths(Some(&dir),None)));
+        assert!(apply_widget_runtime_defaults(
+            "widgets",
+            &mut daemon,
+            &mut command,
+            &mut parent,
+            &mut palette,
+            true,
+            widget_runtime_paths(Some(&dir), None)
+        ));
         assert_eq!(daemon, Some(dir.join("explicit-daemon.sock")));
         assert_eq!(command, Some(dir.join("explicit-app.sock")));
         assert_eq!(parent, Some(dir.join("explicit-parent.sock")));
@@ -861,7 +885,15 @@ mod tests {
             parent.clone(),
             palette.clone(),
         );
-        assert!(!apply_widget_runtime_defaults("settings",&mut daemon,&mut command,&mut parent,&mut palette,false,widget_runtime_paths(Some(&dir),None)));
+        assert!(!apply_widget_runtime_defaults(
+            "settings",
+            &mut daemon,
+            &mut command,
+            &mut parent,
+            &mut palette,
+            false,
+            widget_runtime_paths(Some(&dir), None)
+        ));
         assert_eq!((daemon, command, parent, palette), before);
         std::fs::remove_dir_all(dir).unwrap();
     }
