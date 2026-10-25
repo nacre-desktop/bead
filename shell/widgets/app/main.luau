@@ -87,6 +87,7 @@ local function button(id,value,action,props)
     props.radius=props.radius or kit.tokens.radii.small
     props.fill=props.fill or "surfaceContainerHigh"
     props.hover_fill=props.hover_fill or "surfaceContainerHighest"
+    props.selected_fill=props.selected_fill or ui.alpha("primary",.18)
     props.focus_on_pointer=false
     local enabled=props.enabled~=false
     props.enabled=nil
