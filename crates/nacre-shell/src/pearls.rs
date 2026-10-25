@@ -91,6 +91,11 @@ fn native_options(client: Option<crate::nacre_source::Client>) -> NativePearlOpt
     }
     let queue = Arc::new(std::sync::Mutex::new(Queue::default()));
     NativePearlOptions {
+        surface_offset_positioning: match std::env::var("NACRE_COMPOSITOR").as_deref() {
+            Ok("niri") => true,
+            Ok(_) => false,
+            Err(_) => std::env::var_os("NIRI_SOCKET").is_some(),
+        },
         watch: client.map(|client| {
             Arc::new(move |send: Box<dyn Fn(NativePearlMotion) + Send + Sync>| {
                 use bead::core::source::Source;

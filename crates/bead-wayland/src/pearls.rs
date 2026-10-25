@@ -58,6 +58,8 @@ pub(crate) struct Handoff {
     pool: SlotPool,
     buffers: Vec<Reusable>,
     pub(super) first_frame: Option<Buffer>,
+    #[cfg(feature = "native-gl")]
+    pub(super) first_gl_frame: bool,
     #[cfg(feature = "wgpu")]
     gpu: Option<bead_render::gpu::Surface>,
     #[cfg(feature = "native-gl")]
@@ -81,6 +83,14 @@ impl Drop for Handoff {
         }
     }
 }
+impl Handoff {
+    pub(super) fn has_prepared_frame(&self) -> bool {
+        let ready = self.first_frame.is_some();
+        #[cfg(feature = "native-gl")]
+        let ready = ready || self.first_gl_frame;
+        ready
+    }
+}
 
 /// A configured, transparent native target prepared while its source layer keeps
 /// rendering and following the drag. Its last SHM snapshot is never attached
@@ -93,6 +103,10 @@ pub(crate) struct PreparedNative {
     pub(super) pool: Option<SlotPool>,
     pub(super) buffers: Vec<Reusable>,
     pub(super) snapshot: Option<Buffer>,
+    #[cfg(feature = "native-gl")]
+    pub(super) gl: Option<bead_render::gl::Surface>,
+    #[cfg(feature = "native-gl")]
+    pub(super) gl_ready: bool,
     pub(super) anchor: pearl::Rect,
     pub(super) request: pearl::Rect,
     pub(super) epoch: u64,
@@ -109,12 +123,28 @@ pub(crate) struct PreparedNative {
 }
 impl Drop for PreparedNative {
     fn drop(&mut self) {
+        #[cfg(feature = "native-gl")]
+        drop(self.gl.take());
         if let Some(f) = self.fractional.take() {
             f.destroy();
         }
         if let Some(v) = self.viewport.take() {
             v.destroy();
         }
+    }
+}
+
+impl PreparedNative {
+    pub(super) fn snapshot_key(&self) -> Option<policy::PreparedFrameKey> {
+        let ready = self.snapshot.is_some();
+        #[cfg(feature = "native-gl")]
+        let ready = ready || self.gl_ready;
+        ready.then_some(policy::PreparedFrameKey {
+            generation: self.snapshot_size_generation,
+            ui_serial: self.snapshot_ui_serial,
+            size: self.snapshot_size,
+            scale120: self.snapshot_scale120,
+        })
     }
 }
 
@@ -295,8 +325,11 @@ impl App {
     }
     #[cfg(feature = "native-gl")]
     pub(super) fn has_gl_surfaces(&self) -> bool {
-        self.retained_surfaces()
-            .any(|s| s.gl.is_some() || s.handoff.as_ref().is_some_and(|h| h.gl.is_some()))
+        self.retained_surfaces().any(|s| {
+            s.gl.is_some()
+                || s.handoff.as_ref().is_some_and(|h| h.gl.is_some())
+                || s.prepared_native.as_ref().is_some_and(|p| p.gl.is_some())
+        })
     }
     #[cfg(feature = "wgpu")]
     pub(super) fn has_gpu_surfaces(&self) -> bool {
@@ -380,10 +413,11 @@ impl App {
             } else {
                 bead_core::animation::Curve::EaseOut
             });
+            let duration = motion.return_duration.unwrap_or(motion.duration);
             self.animations
-                .target(&transition.animation_id, 0., now, motion.duration, curve);
+                .target(&transition.animation_id, 0., now, duration, curve);
             self.animations
-                .target(&transition.animation_id, 1., now, motion.duration, curve);
+                .target(&transition.animation_id, 1., now, duration, curve);
         }
         transition.started = true;
     }
@@ -711,7 +745,10 @@ impl App {
                 .and_then(|(scene, _, _)| rendering::content_window_rect(scene));
             let (min_width, min_height) = body
                 .map(|[_, _, w, h]| (w.max(1) as u32, h.max(1) as u32))
-                .unwrap_or((self.surfaces[i].width.max(1), self.surfaces[i].height.max(1)));
+                .unwrap_or((
+                    self.surfaces[i].width.max(1),
+                    self.surfaces[i].height.max(1),
+                ));
             window.set_min_size(Some((min_width, min_height)));
             window.set_max_size(Some((min_width, min_height)));
             if let Some([x, y, w, h]) = body {
@@ -727,10 +764,14 @@ impl App {
             self.surfaces[i].prepared_native = Some(PreparedNative {
                 fractional,
                 viewport,
-                window,
+                window: Some(window),
                 pool: Some(SlotPool::new(4096, &self.shm).map_err(|e| e.to_string())?),
                 buffers: Vec::new(),
                 snapshot: None,
+                #[cfg(feature = "native-gl")]
+                gl: None,
+                #[cfg(feature = "native-gl")]
+                gl_ready: false,
                 anchor: info.rect,
                 request: info.rect,
                 epoch: self.panel_epoch,
@@ -835,6 +876,8 @@ impl App {
                 ),
                 buffers: std::mem::take(&mut s.buffers),
                 first_frame: None,
+                #[cfg(feature = "native-gl")]
+                first_gl_frame: false,
                 #[cfg(feature = "wgpu")]
                 gpu: s.gpu.take(),
                 #[cfg(feature = "native-gl")]
@@ -923,8 +966,7 @@ impl App {
     /// Keep native buffer size and window geometry in step with accepted content.
     pub(super) fn sync_native_pearl_scene(&mut self) -> bool {
         if !self.surfaces.iter().any(|surface| {
-            surface.companion
-                && (surface.native.is_some() || surface.prepared_native.is_some())
+            surface.companion && (surface.native.is_some() || surface.prepared_native.is_some())
         }) {
             return false;
         }
@@ -932,9 +974,10 @@ impl App {
             return false;
         };
         let width = scene.bounds.w.ceil().max(1.) as u32;
-        let height = (scene.bounds.y + scene.bounds.h + scene.slide.map_or(scene.offset.1, |s| s.open_y))
-            .ceil()
-            .max(1.) as u32;
+        let height =
+            (scene.bounds.y + scene.bounds.h + scene.slide.map_or(scene.offset.1, |s| s.open_y))
+                .ceil()
+                .max(1.) as u32;
         let body = rendering::content_window_rect(scene);
         let previous = self.pearl.map(|info| info.rect);
         if let Some([_, _, w, h]) = body {
@@ -942,8 +985,7 @@ impl App {
         }
         let mut changed = previous != self.pearl.map(|info| info.rect);
         for surface in self.surfaces.iter_mut().filter(|surface| {
-            surface.companion
-                && (surface.native.is_some() || surface.prepared_native.is_some())
+            surface.companion && (surface.native.is_some() || surface.prepared_native.is_some())
         }) {
             let size_changed = surface.width != width || surface.height != height;
             if size_changed {
@@ -995,6 +1037,10 @@ impl App {
                 prepared.configured = false;
                 prepared.placed = false;
                 prepared.snapshot = None;
+                #[cfg(feature = "native-gl")]
+                {
+                    prepared.gl_ready = false;
+                }
                 prepared.snapshot_size_generation = 0;
                 prepared.ready_logged_generation = None;
                 if let Some(info) = self.pearl {
@@ -1141,6 +1187,10 @@ impl App {
         prepared.configured = false;
         prepared.placed = false;
         prepared.snapshot = None;
+        #[cfg(feature = "native-gl")]
+        {
+            prepared.gl_ready = false;
+        }
         prepared.snapshot_size_generation = 0;
         prepared.ready_logged_generation = None;
         self.prepared_window_configure(i);
@@ -1203,7 +1253,7 @@ impl App {
         {
             return;
         }
-        let snapshot_current = prepared.snapshot.is_some()
+        let snapshot_current = prepared.snapshot_key().is_some()
             && prepared.snapshot_size_generation == prepared.size_generation
             && prepared.snapshot_size == (s.width, s.height)
             && prepared.snapshot_scale120 == s.scale120
@@ -1217,14 +1267,19 @@ impl App {
         } else {
             (s.width as i32, s.height as i32)
         };
-        let scale120 = if prepared.viewport.is_some() { 120 } else { prepared.scale120 };
-        let (w, h, stride, _) = match buffer_dimensions(buffer_width as u32, buffer_height as u32, scale120) {
-            Ok(dimensions) => dimensions,
-            Err(error) => {
-                eprintln!("PEARL_PREWARM_ERROR {error}");
-                return;
-            }
+        let scale120 = if prepared.viewport.is_some() {
+            120
+        } else {
+            prepared.scale120
         };
+        let (w, h, stride, _) =
+            match buffer_dimensions(buffer_width as u32, buffer_height as u32, scale120) {
+                Ok(dimensions) => dimensions,
+                Err(error) => {
+                    eprintln!("PEARL_PREWARM_ERROR {error}");
+                    return;
+                }
+            };
         let Some(pool) = prepared.pool.as_mut() else {
             eprintln!("PEARL_PREWARM_ERROR bootstrap pool is unavailable");
             return;
@@ -1262,6 +1317,10 @@ impl App {
         prepared.placed = false;
         if !snapshot_current {
             prepared.snapshot = None;
+            #[cfg(feature = "native-gl")]
+            {
+                prepared.gl_ready = false;
+            }
         }
         if let Some(info) = self.pearl {
             prepared.anchor = pearl::Rect::new(
@@ -1273,6 +1332,11 @@ impl App {
             prepared.request = prepared.anchor;
         }
         self.place_prepared_native(i);
+        #[cfg(feature = "native-gl")]
+        if self.surfaces[i].gl.is_some() {
+            self.surfaces[i].redraw = true;
+            self.draw(i, &self.qh.clone());
+        }
     }
 
     fn place_prepared_native(&mut self, i: usize) {
@@ -1280,7 +1344,9 @@ impl App {
             self.pearl,
             self.panel_name.clone(),
             self.options.pearls.as_ref().and_then(|p| p.native.clone()),
-            self.surfaces.get(i).and_then(|s| s.prepared_native.as_ref()),
+            self.surfaces
+                .get(i)
+                .and_then(|s| s.prepared_native.as_ref()),
         ) else {
             return;
         };
@@ -1344,13 +1410,9 @@ impl App {
         };
         if !success {
             for surface in &mut self.surfaces {
-                if surface
-                    .prepared_native
-                    .as_ref()
-                    .is_some_and(|prepared| {
-                        prepared.epoch == epoch && prepared.size_generation == generation
-                    })
-                {
+                if surface.prepared_native.as_ref().is_some_and(|prepared| {
+                    prepared.epoch == epoch && prepared.size_generation == generation
+                }) {
                     surface.prepared_native = None;
                 }
             }
@@ -1368,12 +1430,7 @@ impl App {
         let Some(prepared) = surface.prepared_native.as_mut() else {
             return;
         };
-        let snapshot = prepared.snapshot.as_ref().map(|_| policy::PreparedFrameKey {
-            generation: prepared.snapshot_size_generation,
-            ui_serial: prepared.snapshot_ui_serial,
-            size: prepared.snapshot_size,
-            scale120: prepared.snapshot_scale120,
-        });
+        let snapshot = prepared.snapshot_key();
         let current = policy::PreparedFrameKey {
             generation: prepared.size_generation,
             ui_serial: surface.ui_serial,
@@ -1396,7 +1453,7 @@ impl App {
         }
     }
 
-    fn cancel_prepared_native(&mut self) {
+    pub(super) fn cancel_prepared_native(&mut self) {
         for surface in &mut self.surfaces {
             surface.prepared_native = None;
         }
@@ -1429,12 +1486,7 @@ impl App {
                     || !policy::prepared_frame_ready(
                         prepared.configured,
                         prepared.placed,
-                        prepared.snapshot.as_ref().map(|_| policy::PreparedFrameKey {
-                            generation: prepared.snapshot_size_generation,
-                            ui_serial: prepared.snapshot_ui_serial,
-                            size: prepared.snapshot_size,
-                            scale120: prepared.snapshot_scale120,
-                        }),
+                        prepared.snapshot_key(),
                         policy::PreparedFrameKey {
                             generation: prepared.size_generation,
                             ui_serial: surface.ui_serial,
@@ -1475,6 +1527,8 @@ impl App {
                 pool: prepared.pool.take().unwrap(),
                 buffers: std::mem::take(&mut prepared.buffers),
                 first_frame: snapshot,
+                #[cfg(feature = "native-gl")]
+                first_gl_frame: prepared.gl_ready,
                 #[cfg(feature = "wgpu")]
                 gpu: s.gpu.take(),
                 #[cfg(feature = "native-gl")]
@@ -1490,6 +1544,10 @@ impl App {
             s.fractional = prepared.fractional.take();
             s.viewport = prepared.viewport.take();
             s.native = prepared.window.take();
+            #[cfg(feature = "native-gl")]
+            {
+                s.gl = prepared.gl.take();
+            }
             s.native_configure_size = Some((s.width, s.height));
             s.configured = true;
             s.callbacks.invalidate();

@@ -608,12 +608,17 @@ impl App {
             let wl_surface = s.wl_surface().clone();
             if s.configured
                 && !s.callbacks.pending
-                && let Some(first_frame) = s
+                && let Some(handoff) = s
                     .handoff
                     .as_ref()
-                    .and_then(|handoff| handoff.first_frame.as_ref())
+                    .filter(|handoff| handoff.has_prepared_frame())
             {
-                let generation = self.companion.as_ref().map_or(self.scene.resource_revision, |(scene, _, _)| scene.resource_revision);
+                let generation = self
+                    .companion
+                    .as_ref()
+                    .map_or(self.scene.resource_revision, |(scene, _, _)| {
+                        scene.resource_revision
+                    });
                 let source_epoch = if s.companion { self.panel_epoch } else { 0 };
                 let (w, h, _, _) = buffer_dimensions(s.width, s.height, s.scale120)?;
                 wl_surface.damage_buffer(0, 0, w, h);
@@ -641,9 +646,18 @@ impl App {
                         },
                     );
                 }
-                first_frame.attach_to(&wl_surface)?;
                 bead_core::profile::mark("panel_commit");
-                wl_surface.commit();
+                if let Some(first_frame) = handoff.first_frame.as_ref() {
+                    first_frame.attach_to(&wl_surface)?;
+                    wl_surface.commit();
+                }
+                #[cfg(feature = "native-gl")]
+                if handoff.first_gl_frame {
+                    let transport = self.gl.as_ref().ok_or("missing prepared GL transport")?;
+                    let target = s.gl.as_ref().ok_or("missing prepared GL surface")?;
+                    transport.activate(target, w as u32, h as u32)?;
+                    transport.present(target, &[Damage::full(w as u32, h as u32)])?;
+                }
                 s.frames += 1;
                 return Ok(());
             }
@@ -964,6 +978,56 @@ impl App {
                     );
                 }
                 let surface = s.gl.as_ref().unwrap();
+                // Paint the target backbuffer without swapping it. It shares
+                // the existing context, renderer and raster cache; only release
+                // presents this frame together with its final surface offset.
+                if s.native.is_none()
+                    && let Some(prepared) = s.prepared_native.as_mut()
+                    && prepared.configured
+                    && prepared.scale120 == s.scale120
+                {
+                    let key = policy::PreparedFrameKey {
+                        generation: prepared.size_generation,
+                        ui_serial: s.ui_serial,
+                        size: (s.width, s.height),
+                        scale120: s.scale120,
+                    };
+                    if !prepared.gl_ready
+                        || prepared.snapshot_key() != Some(key)
+                        || !regions.is_empty()
+                    {
+                        prepared.gl_ready = false;
+                        if prepared.gl.is_none() {
+                            use raw_window_handle::{RawWindowHandle, WaylandWindowHandle};
+                            let window =
+                                prepared.window.as_ref().ok_or("missing prewarm window")?;
+                            let handle = RawWindowHandle::Wayland(WaylandWindowHandle::new(
+                                std::ptr::NonNull::new(window.wl_surface().id().as_ptr().cast())
+                                    .ok_or("missing prewarm surface")?,
+                            ));
+                            // SAFETY: PreparedNative drops EGL before its window.
+                            prepared.gl = Some(unsafe {
+                                transport.create_surface(handle, w as u32, h as u32)
+                            }?);
+                        }
+                        transport.activate(prepared.gl.as_ref().unwrap(), w as u32, h as u32)?;
+                        renderer.draw(
+                            scene,
+                            RenderTarget::Gl(bead_render::gl::GlTarget {
+                                display: &transport.display,
+                                width: w as u32,
+                                height: h as u32,
+                            }),
+                            Damage::full(w as u32, h as u32),
+                        )?;
+                        prepared.snapshot = None;
+                        prepared.snapshot_size_generation = key.generation;
+                        prepared.snapshot_ui_serial = key.ui_serial;
+                        prepared.snapshot_size = key.size;
+                        prepared.snapshot_scale120 = key.scale120;
+                        prepared.gl_ready = true;
+                    }
+                }
                 let retained_gl_prepare = s.companion
                     && !s.gl_prepared
                     && self
@@ -1452,6 +1516,10 @@ impl App {
                     .ok();
                 if let Some(prepared) = s.prepared_native.as_mut() {
                     prepared.snapshot = snapshot;
+                    #[cfg(feature = "native-gl")]
+                    {
+                        prepared.gl_ready = false;
+                    }
                     prepared.snapshot_size_generation = prepared.size_generation;
                     prepared.snapshot_ui_serial = s.ui_serial;
                     prepared.snapshot_size = (s.width, s.height);
@@ -2072,6 +2140,7 @@ mod input_tests {
             id: "content".into(),
             open: true,
             duration: 0.5,
+            return_duration: None,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Top,

@@ -69,10 +69,22 @@ mod handoff_tests {
         assert!(!prepared_frame_ready(true, false, Some(current), current));
         assert!(!prepared_frame_ready(true, true, None, current));
         for stale in [
-            PreparedFrameKey { generation: 2, ..current },
-            PreparedFrameKey { ui_serial: 40, ..current },
-            PreparedFrameKey { size: (640, 360), ..current },
-            PreparedFrameKey { scale120: 120, ..current },
+            PreparedFrameKey {
+                generation: 2,
+                ..current
+            },
+            PreparedFrameKey {
+                ui_serial: 40,
+                ..current
+            },
+            PreparedFrameKey {
+                size: (640, 360),
+                ..current
+            },
+            PreparedFrameKey {
+                scale120: 120,
+                ..current
+            },
         ] {
             assert!(!prepared_frame_ready(true, true, Some(stale), current));
         }

@@ -210,7 +210,10 @@ impl Dispatch<WpFractionalScaleV1, wl_surface::WlSurface> for App {
                     .prepared_native
                     .as_ref()
                     .is_some_and(|prepared| {
-                        prepared.window.as_ref().is_some_and(|window| window.wl_surface() == surface)
+                        prepared
+                            .window
+                            .as_ref()
+                            .is_some_and(|window| window.wl_surface() == surface)
                     })
             })
         {

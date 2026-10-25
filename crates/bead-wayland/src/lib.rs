@@ -842,10 +842,12 @@ impl Surface {
     }
     fn owns_surface(&self, surface: &wl_surface::WlSurface) -> bool {
         self.wl_surface() == surface
-            || self
-                .prepared_native
-                .as_ref()
-                .is_some_and(|prepared| prepared.window.wl_surface() == surface)
+            || self.prepared_native.as_ref().is_some_and(|prepared| {
+                prepared
+                    .window
+                    .as_ref()
+                    .is_some_and(|window| window.wl_surface() == surface)
+            })
     }
 }
 struct WallpaperSurface {

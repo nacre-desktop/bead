@@ -4892,6 +4892,7 @@ impl SceneSource for Runtime {
             UiEvent::CompanionVisibility(_)
             | UiEvent::NativePearlMotion(_)
             | UiEvent::NativePearlPlaced { .. }
+            | UiEvent::NativePearlPrewarmed { .. }
             | UiEvent::CompanionSelect { .. }
             | UiEvent::CompanionSelectAt { .. }
             | UiEvent::CompanionOffer { .. }

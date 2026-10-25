@@ -694,9 +694,7 @@ fn panel_return_duration_is_optional_and_bounded() {
     )
     .unwrap();
     s.reload().unwrap();
-    assert!(
-        (s.current.motion.as_ref().unwrap().return_duration.unwrap() - 0.18).abs() < 1e-6
-    );
+    assert!((s.current.motion.as_ref().unwrap().return_duration.unwrap() - 0.18).abs() < 1e-6);
 
     for invalid in ["-0.01", "60.01"] {
         fs::write(
