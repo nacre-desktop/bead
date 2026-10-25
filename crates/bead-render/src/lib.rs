@@ -1758,8 +1758,17 @@ mod tests {
                 align: None,
                 color: [200, 0, 0, 255],
             },
+            Primitive::Arc {
+                rect: Rect::new(40., 80., 40., 40.),
+                start_angle: -90.,
+                sweep_angle: 210.,
+                stroke_width: 4.,
+                color: [0, 200, 0, 255],
+                round_caps: true,
+            },
         ];
         scene.clips.insert(1, Rect::new(40., 40., 40., 20.));
+        scene.clips.insert(2, Rect::new(40., 80., 40., 40.));
         scene.motion = Some(Motion {
             id: "slide-reveal".into(),
             open: true,
@@ -1794,6 +1803,16 @@ mod tests {
                 serde_json::to_vec(&direct.items[1].primitive)?
             );
             assert_eq!(from_worker.items[1].clip, direct.items[1].clip);
+            assert_eq!(
+                serde_json::to_vec(&from_worker.items[2].primitive)?,
+                serde_json::to_vec(&direct.items[2].primitive)?
+            );
+            assert_eq!(from_worker.items[2].clip, direct.items[2].clip);
+            assert_eq!(tree::rect(&from_worker.items[2].primitive).y, 80. + dy);
+            assert!(
+                from_worker.items[2].raster.is_none(),
+                "arc stays directly painted"
+            );
             assert!(
                 std::sync::Arc::ptr_eq(
                     from_worker.items[1].raster.as_ref().unwrap(),
@@ -1812,6 +1831,11 @@ mod tests {
                     tree::rect(&direct.items[1].primitive)
                 );
                 assert_eq!(rebaked.items[1].clip, direct.items[1].clip);
+                assert_eq!(
+                    tree::rect(&rebaked.items[2].primitive),
+                    tree::rect(&direct.items[2].primitive)
+                );
+                assert_eq!(rebaked.items[2].clip, direct.items[2].clip);
             }
             scene.prepared.clear();
         }
