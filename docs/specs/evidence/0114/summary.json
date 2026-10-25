@@ -1,0 +1,3178 @@
+{
+  "status": "STOP: relative unreclaimable memory median exceeds +0.5 MiB in every measured phase",
+  "control_revision": "4925b6e8",
+  "candidate_revision": "23d2ffbc",
+  "release_rust_candidate": "ed38161e (23d2ffbc changes only external Luau and test code)",
+  "compiler": "rustc 1.99.1; checked-in release profile; cargo -j2",
+  "backend": "CPU; private headless labwc -> niri; 2880x1800 at scale 1.5",
+  "binary_sha256": {
+    "control": "f8cd2473566a40151696eff493c90a492eb7d876328591128f6f9a7174e40fd0",
+    "candidate": "a481877c3c696af30829fabdd48225ca0d51c58a2d2d4704cf2de9b11a7e87c2"
+  },
+  "daemon_revision": "b9bdb3616eb692e0edf6756461b741ec624d0234",
+  "orient_revision": "3efe8d1e7fb50200d74a3e0193ad63699cb8ebe8",
+  "method": "five alternating pairs; five /proc samples per phase per arm; medians of paired candidate-control deltas; closed sampled after 12 seconds; UI process only, daemon/provider separate",
+  "unreclaimable": "Pss_Anon + Pss_Shmem + DRM + SwapPss; clean file-backed PSS informational only",
+  "median_deltas_mib": {
+    "idle": 0.5546875,
+    "launcher": 0.8203125,
+    "typed": 0.75390625,
+    "closed_idle": 0.72265625
+  },
+  "median_component_deltas_mib": {
+    "idle": {
+      "Pss_Anon": 0.5546875,
+      "Pss_Shmem": 0.0,
+      "DRM": 0.0,
+      "SwapPss": 0.0,
+      "Pss_File": 0.203125
+    },
+    "launcher": {
+      "Pss_Anon": 0.8203125,
+      "Pss_Shmem": 0.0,
+      "DRM": 0.0,
+      "SwapPss": 0.0,
+      "Pss_File": 0.236328125
+    },
+    "typed": {
+      "Pss_Anon": 0.75390625,
+      "Pss_Shmem": 0.0,
+      "DRM": 0.0,
+      "SwapPss": 0.0,
+      "Pss_File": 0.2373046875
+    },
+    "closed_idle": {
+      "Pss_Anon": 0.72265625,
+      "Pss_Shmem": 0.0,
+      "DRM": 0.0,
+      "SwapPss": 0.0,
+      "Pss_File": 0.2373046875
+    }
+  },
+  "first_key": {
+    "control": {
+      "ui_cpu_median_ms": 3.650697,
+      "ui_cpu_max_ms": 3.952999,
+      "nested_presented_median_ms": 5.488485,
+      "nested_presented_max_ms": 5.876815
+    },
+    "candidate": {
+      "ui_cpu_median_ms": 3.578018,
+      "ui_cpu_max_ms": 4.067091,
+      "nested_presented_median_ms": 5.460275,
+      "nested_presented_max_ms": 6.042155
+    }
+  },
+  "timing_limits": "first matching presented UI response to a real menu.query key; not daemon CPU, completed-query latency, physical scanout, or a refresh prediction (refresh_ns unavailable)",
+  "pairs": [
+    {
+      "pair": 1,
+      "data": {
+        "control": {
+          "backend": "CPU",
+          "geometry": {
+            "name": "winit",
+            "mode": [
+              2880,
+              1800
+            ],
+            "scale": 1.5,
+            "logical": [
+              1920,
+              1200
+            ]
+          },
+          "source": "published menu.query; same-host system application data",
+          "phases": {
+            "idle": {
+              "median_kib": {
+                "VmRSS": 80684,
+                "RssAnon": 31392,
+                "Pss": 61969,
+                "Pss_Anon": 31392,
+                "Pss_File": 19741,
+                "Pss_Shmem": 10836,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 42228
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 80684,
+                  "RssAnon": 31392,
+                  "Pss": 61969,
+                  "Pss_Anon": 31392,
+                  "Pss_File": 19741,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42228
+                },
+                {
+                  "VmRSS": 80684,
+                  "RssAnon": 31392,
+                  "Pss": 61969,
+                  "Pss_Anon": 31392,
+                  "Pss_File": 19741,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42228
+                },
+                {
+                  "VmRSS": 80684,
+                  "RssAnon": 31392,
+                  "Pss": 61969,
+                  "Pss_Anon": 31392,
+                  "Pss_File": 19741,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42228
+                },
+                {
+                  "VmRSS": 80684,
+                  "RssAnon": 31392,
+                  "Pss": 61969,
+                  "Pss_Anon": 31392,
+                  "Pss_File": 19741,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42228
+                },
+                {
+                  "VmRSS": 80684,
+                  "RssAnon": 31392,
+                  "Pss": 61969,
+                  "Pss_Anon": 31392,
+                  "Pss_File": 19741,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42228
+                }
+              ]
+            },
+            "launcher": {
+              "median_kib": {
+                "VmRSS": 105924,
+                "RssAnon": 41404,
+                "Pss": 79989,
+                "Pss_Anon": 41404,
+                "Pss_File": 20579,
+                "Pss_Shmem": 18006,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 59410
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 105924,
+                  "RssAnon": 41404,
+                  "Pss": 79989,
+                  "Pss_Anon": 41404,
+                  "Pss_File": 20579,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59410
+                },
+                {
+                  "VmRSS": 105924,
+                  "RssAnon": 41404,
+                  "Pss": 79989,
+                  "Pss_Anon": 41404,
+                  "Pss_File": 20579,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59410
+                },
+                {
+                  "VmRSS": 105924,
+                  "RssAnon": 41404,
+                  "Pss": 79989,
+                  "Pss_Anon": 41404,
+                  "Pss_File": 20579,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59410
+                },
+                {
+                  "VmRSS": 105924,
+                  "RssAnon": 41404,
+                  "Pss": 79989,
+                  "Pss_Anon": 41404,
+                  "Pss_File": 20579,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59410
+                },
+                {
+                  "VmRSS": 105924,
+                  "RssAnon": 41404,
+                  "Pss": 79989,
+                  "Pss_Anon": 41404,
+                  "Pss_File": 20579,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59410
+                }
+              ]
+            },
+            "typed": {
+              "median_kib": {
+                "VmRSS": 108456,
+                "RssAnon": 43936,
+                "Pss": 82521,
+                "Pss_Anon": 43936,
+                "Pss_File": 20579,
+                "Pss_Shmem": 18006,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 61942
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 108828,
+                  "RssAnon": 44308,
+                  "Pss": 82893,
+                  "Pss_Anon": 44308,
+                  "Pss_File": 20579,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62314
+                },
+                {
+                  "VmRSS": 108828,
+                  "RssAnon": 44308,
+                  "Pss": 82893,
+                  "Pss_Anon": 44308,
+                  "Pss_File": 20579,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62314
+                },
+                {
+                  "VmRSS": 108456,
+                  "RssAnon": 43936,
+                  "Pss": 82521,
+                  "Pss_Anon": 43936,
+                  "Pss_File": 20579,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61942
+                },
+                {
+                  "VmRSS": 108456,
+                  "RssAnon": 43936,
+                  "Pss": 82521,
+                  "Pss_Anon": 43936,
+                  "Pss_File": 20579,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61942
+                },
+                {
+                  "VmRSS": 108456,
+                  "RssAnon": 43936,
+                  "Pss": 82521,
+                  "Pss_Anon": 43936,
+                  "Pss_File": 20579,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61942
+                }
+              ]
+            },
+            "closed_idle": {
+              "median_kib": {
+                "VmRSS": 98932,
+                "RssAnon": 42284,
+                "Pss": 76932,
+                "Pss_Anon": 42284,
+                "Pss_File": 20578,
+                "Pss_Shmem": 14070,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 56354
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 98932,
+                  "RssAnon": 42284,
+                  "Pss": 76932,
+                  "Pss_Anon": 42284,
+                  "Pss_File": 20578,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56354
+                },
+                {
+                  "VmRSS": 98932,
+                  "RssAnon": 42284,
+                  "Pss": 76932,
+                  "Pss_Anon": 42284,
+                  "Pss_File": 20578,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56354
+                },
+                {
+                  "VmRSS": 98932,
+                  "RssAnon": 42284,
+                  "Pss": 76932,
+                  "Pss_Anon": 42284,
+                  "Pss_File": 20578,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56354
+                },
+                {
+                  "VmRSS": 98932,
+                  "RssAnon": 42284,
+                  "Pss": 76932,
+                  "Pss_Anon": 42284,
+                  "Pss_File": 20578,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56354
+                },
+                {
+                  "VmRSS": 98932,
+                  "RssAnon": 42284,
+                  "Pss": 76932,
+                  "Pss_Anon": 42284,
+                  "Pss_File": 20578,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56354
+                }
+              ]
+            }
+          },
+          "first_key": {
+            "ui_cpu_ms": 3.451717,
+            "nested_presented_ms": 5.318725,
+            "refresh_ns": null
+          },
+          "errors": []
+        },
+        "candidate": {
+          "backend": "CPU",
+          "geometry": {
+            "name": "winit",
+            "mode": [
+              2880,
+              1800
+            ],
+            "scale": 1.5,
+            "logical": [
+              1920,
+              1200
+            ]
+          },
+          "source": "published menu.query; same-host system application data",
+          "phases": {
+            "idle": {
+              "median_kib": {
+                "VmRSS": 81232,
+                "RssAnon": 31960,
+                "Pss": 62563,
+                "Pss_Anon": 31960,
+                "Pss_File": 19767,
+                "Pss_Shmem": 10836,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 42796
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 81232,
+                  "RssAnon": 31960,
+                  "Pss": 62563,
+                  "Pss_Anon": 31960,
+                  "Pss_File": 19767,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42796
+                },
+                {
+                  "VmRSS": 81232,
+                  "RssAnon": 31960,
+                  "Pss": 62563,
+                  "Pss_Anon": 31960,
+                  "Pss_File": 19767,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42796
+                },
+                {
+                  "VmRSS": 81232,
+                  "RssAnon": 31960,
+                  "Pss": 62563,
+                  "Pss_Anon": 31960,
+                  "Pss_File": 19767,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42796
+                },
+                {
+                  "VmRSS": 81232,
+                  "RssAnon": 31960,
+                  "Pss": 62563,
+                  "Pss_Anon": 31960,
+                  "Pss_File": 19767,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42796
+                },
+                {
+                  "VmRSS": 81232,
+                  "RssAnon": 31960,
+                  "Pss": 62563,
+                  "Pss_Anon": 31960,
+                  "Pss_File": 19767,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42796
+                }
+              ]
+            },
+            "launcher": {
+              "median_kib": {
+                "VmRSS": 106716,
+                "RssAnon": 42016,
+                "Pss": 80817,
+                "Pss_Anon": 42016,
+                "Pss_File": 20795,
+                "Pss_Shmem": 18006,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 60022
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 106716,
+                  "RssAnon": 42016,
+                  "Pss": 80817,
+                  "Pss_Anon": 42016,
+                  "Pss_File": 20795,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 60022
+                },
+                {
+                  "VmRSS": 106716,
+                  "RssAnon": 42016,
+                  "Pss": 80817,
+                  "Pss_Anon": 42016,
+                  "Pss_File": 20795,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 60022
+                },
+                {
+                  "VmRSS": 106716,
+                  "RssAnon": 42016,
+                  "Pss": 80817,
+                  "Pss_Anon": 42016,
+                  "Pss_File": 20795,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 60022
+                },
+                {
+                  "VmRSS": 106716,
+                  "RssAnon": 42016,
+                  "Pss": 80817,
+                  "Pss_Anon": 42016,
+                  "Pss_File": 20795,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 60022
+                },
+                {
+                  "VmRSS": 106716,
+                  "RssAnon": 42016,
+                  "Pss": 80817,
+                  "Pss_Anon": 42016,
+                  "Pss_File": 20795,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 60022
+                }
+              ]
+            },
+            "typed": {
+              "median_kib": {
+                "VmRSS": 109148,
+                "RssAnon": 44384,
+                "Pss": 83249,
+                "Pss_Anon": 44384,
+                "Pss_File": 20859,
+                "Pss_Shmem": 18006,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 62390
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 109728,
+                  "RssAnon": 44964,
+                  "Pss": 83829,
+                  "Pss_Anon": 44964,
+                  "Pss_File": 20859,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62970
+                },
+                {
+                  "VmRSS": 109728,
+                  "RssAnon": 44964,
+                  "Pss": 83829,
+                  "Pss_Anon": 44964,
+                  "Pss_File": 20859,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62970
+                },
+                {
+                  "VmRSS": 109148,
+                  "RssAnon": 44384,
+                  "Pss": 83249,
+                  "Pss_Anon": 44384,
+                  "Pss_File": 20859,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62390
+                },
+                {
+                  "VmRSS": 109148,
+                  "RssAnon": 44384,
+                  "Pss": 83249,
+                  "Pss_Anon": 44384,
+                  "Pss_File": 20859,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62390
+                },
+                {
+                  "VmRSS": 109148,
+                  "RssAnon": 44384,
+                  "Pss": 83249,
+                  "Pss_Anon": 44384,
+                  "Pss_File": 20859,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62390
+                }
+              ]
+            },
+            "closed_idle": {
+              "median_kib": {
+                "VmRSS": 99816,
+                "RssAnon": 42924,
+                "Pss": 77849,
+                "Pss_Anon": 42924,
+                "Pss_File": 20855,
+                "Pss_Shmem": 14070,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 56994
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 99816,
+                  "RssAnon": 42924,
+                  "Pss": 77849,
+                  "Pss_Anon": 42924,
+                  "Pss_File": 20855,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56994
+                },
+                {
+                  "VmRSS": 99816,
+                  "RssAnon": 42924,
+                  "Pss": 77849,
+                  "Pss_Anon": 42924,
+                  "Pss_File": 20855,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56994
+                },
+                {
+                  "VmRSS": 99816,
+                  "RssAnon": 42924,
+                  "Pss": 77849,
+                  "Pss_Anon": 42924,
+                  "Pss_File": 20855,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56994
+                },
+                {
+                  "VmRSS": 99816,
+                  "RssAnon": 42924,
+                  "Pss": 77849,
+                  "Pss_Anon": 42924,
+                  "Pss_File": 20855,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56994
+                },
+                {
+                  "VmRSS": 99816,
+                  "RssAnon": 42924,
+                  "Pss": 77845,
+                  "Pss_Anon": 42924,
+                  "Pss_File": 20851,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56994
+                }
+              ]
+            }
+          },
+          "first_key": {
+            "ui_cpu_ms": 3.565397,
+            "nested_presented_ms": 5.460275,
+            "refresh_ns": null
+          },
+          "errors": []
+        }
+      },
+      "deltas_mib": {
+        "idle": 0.5546875,
+        "launcher": 0.59765625,
+        "typed": 0.4375,
+        "closed_idle": 0.625
+      }
+    },
+    {
+      "pair": 2,
+      "data": {
+        "control": {
+          "backend": "CPU",
+          "geometry": {
+            "name": "winit",
+            "mode": [
+              2880,
+              1800
+            ],
+            "scale": 1.5,
+            "logical": [
+              1920,
+              1200
+            ]
+          },
+          "source": "published menu.query; same-host system application data",
+          "phases": {
+            "idle": {
+              "median_kib": {
+                "VmRSS": 80064,
+                "RssAnon": 31108,
+                "Pss": 61361,
+                "Pss_Anon": 31108,
+                "Pss_File": 19417,
+                "Pss_Shmem": 10836,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 41944
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 80064,
+                  "RssAnon": 31108,
+                  "Pss": 61361,
+                  "Pss_Anon": 31108,
+                  "Pss_File": 19417,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 41944
+                },
+                {
+                  "VmRSS": 80064,
+                  "RssAnon": 31108,
+                  "Pss": 61361,
+                  "Pss_Anon": 31108,
+                  "Pss_File": 19417,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 41944
+                },
+                {
+                  "VmRSS": 80064,
+                  "RssAnon": 31108,
+                  "Pss": 61361,
+                  "Pss_Anon": 31108,
+                  "Pss_File": 19417,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 41944
+                },
+                {
+                  "VmRSS": 80064,
+                  "RssAnon": 31108,
+                  "Pss": 61361,
+                  "Pss_Anon": 31108,
+                  "Pss_File": 19417,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 41944
+                },
+                {
+                  "VmRSS": 80064,
+                  "RssAnon": 31108,
+                  "Pss": 61361,
+                  "Pss_Anon": 31108,
+                  "Pss_File": 19417,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 41944
+                }
+              ]
+            },
+            "launcher": {
+              "median_kib": {
+                "VmRSS": 104660,
+                "RssAnon": 40836,
+                "Pss": 78860,
+                "Pss_Anon": 40836,
+                "Pss_File": 20138,
+                "Pss_Shmem": 17886,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 58722
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 104660,
+                  "RssAnon": 40836,
+                  "Pss": 78860,
+                  "Pss_Anon": 40836,
+                  "Pss_File": 20138,
+                  "Pss_Shmem": 17886,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 58722
+                },
+                {
+                  "VmRSS": 104660,
+                  "RssAnon": 40836,
+                  "Pss": 78860,
+                  "Pss_Anon": 40836,
+                  "Pss_File": 20138,
+                  "Pss_Shmem": 17886,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 58722
+                },
+                {
+                  "VmRSS": 104660,
+                  "RssAnon": 40836,
+                  "Pss": 78860,
+                  "Pss_Anon": 40836,
+                  "Pss_File": 20138,
+                  "Pss_Shmem": 17886,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 58722
+                },
+                {
+                  "VmRSS": 104660,
+                  "RssAnon": 40836,
+                  "Pss": 78860,
+                  "Pss_Anon": 40836,
+                  "Pss_File": 20138,
+                  "Pss_Shmem": 17886,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 58722
+                },
+                {
+                  "VmRSS": 104660,
+                  "RssAnon": 40836,
+                  "Pss": 78860,
+                  "Pss_Anon": 40836,
+                  "Pss_File": 20138,
+                  "Pss_Shmem": 17886,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 58722
+                }
+              ]
+            },
+            "typed": {
+              "median_kib": {
+                "VmRSS": 107160,
+                "RssAnon": 42968,
+                "Pss": 81360,
+                "Pss_Anon": 42968,
+                "Pss_File": 20266,
+                "Pss_Shmem": 18126,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 61094
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 107740,
+                  "RssAnon": 43548,
+                  "Pss": 81940,
+                  "Pss_Anon": 43548,
+                  "Pss_File": 20266,
+                  "Pss_Shmem": 18126,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61674
+                },
+                {
+                  "VmRSS": 107740,
+                  "RssAnon": 43548,
+                  "Pss": 81940,
+                  "Pss_Anon": 43548,
+                  "Pss_File": 20266,
+                  "Pss_Shmem": 18126,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61674
+                },
+                {
+                  "VmRSS": 107160,
+                  "RssAnon": 42968,
+                  "Pss": 81360,
+                  "Pss_Anon": 42968,
+                  "Pss_File": 20266,
+                  "Pss_Shmem": 18126,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61094
+                },
+                {
+                  "VmRSS": 107160,
+                  "RssAnon": 42968,
+                  "Pss": 81360,
+                  "Pss_Anon": 42968,
+                  "Pss_File": 20266,
+                  "Pss_Shmem": 18126,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61094
+                },
+                {
+                  "VmRSS": 107160,
+                  "RssAnon": 42968,
+                  "Pss": 81360,
+                  "Pss_Anon": 42968,
+                  "Pss_File": 20266,
+                  "Pss_Shmem": 18126,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61094
+                }
+              ]
+            },
+            "closed_idle": {
+              "median_kib": {
+                "VmRSS": 98056,
+                "RssAnon": 41736,
+                "Pss": 76069,
+                "Pss_Anon": 41736,
+                "Pss_File": 20263,
+                "Pss_Shmem": 14070,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 55806
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 98056,
+                  "RssAnon": 41736,
+                  "Pss": 76069,
+                  "Pss_Anon": 41736,
+                  "Pss_File": 20263,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 55806
+                },
+                {
+                  "VmRSS": 98056,
+                  "RssAnon": 41736,
+                  "Pss": 76069,
+                  "Pss_Anon": 41736,
+                  "Pss_File": 20263,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 55806
+                },
+                {
+                  "VmRSS": 98056,
+                  "RssAnon": 41736,
+                  "Pss": 76069,
+                  "Pss_Anon": 41736,
+                  "Pss_File": 20263,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 55806
+                },
+                {
+                  "VmRSS": 98056,
+                  "RssAnon": 41736,
+                  "Pss": 76069,
+                  "Pss_Anon": 41736,
+                  "Pss_File": 20263,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 55806
+                },
+                {
+                  "VmRSS": 98056,
+                  "RssAnon": 41736,
+                  "Pss": 76069,
+                  "Pss_Anon": 41736,
+                  "Pss_File": 20263,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 55806
+                }
+              ]
+            }
+          },
+          "first_key": {
+            "ui_cpu_ms": 3.952999,
+            "nested_presented_ms": 5.876815,
+            "refresh_ns": null
+          },
+          "errors": []
+        },
+        "candidate": {
+          "backend": "CPU",
+          "geometry": {
+            "name": "winit",
+            "mode": [
+              2880,
+              1800
+            ],
+            "scale": 1.5,
+            "logical": [
+              1920,
+              1200
+            ]
+          },
+          "source": "published menu.query; same-host system application data",
+          "phases": {
+            "idle": {
+              "median_kib": {
+                "VmRSS": 80896,
+                "RssAnon": 31516,
+                "Pss": 62180,
+                "Pss_Anon": 31516,
+                "Pss_File": 19828,
+                "Pss_Shmem": 10836,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 42352
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 80896,
+                  "RssAnon": 31516,
+                  "Pss": 62180,
+                  "Pss_Anon": 31516,
+                  "Pss_File": 19828,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42352
+                },
+                {
+                  "VmRSS": 80896,
+                  "RssAnon": 31516,
+                  "Pss": 62180,
+                  "Pss_Anon": 31516,
+                  "Pss_File": 19828,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42352
+                },
+                {
+                  "VmRSS": 80896,
+                  "RssAnon": 31516,
+                  "Pss": 62180,
+                  "Pss_Anon": 31516,
+                  "Pss_File": 19828,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42352
+                },
+                {
+                  "VmRSS": 80896,
+                  "RssAnon": 31516,
+                  "Pss": 62180,
+                  "Pss_Anon": 31516,
+                  "Pss_File": 19828,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42352
+                },
+                {
+                  "VmRSS": 80896,
+                  "RssAnon": 31516,
+                  "Pss": 62180,
+                  "Pss_Anon": 31516,
+                  "Pss_File": 19828,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42352
+                }
+              ]
+            },
+            "launcher": {
+              "median_kib": {
+                "VmRSS": 106104,
+                "RssAnon": 41676,
+                "Pss": 80265,
+                "Pss_Anon": 41676,
+                "Pss_File": 20703,
+                "Pss_Shmem": 17886,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 59562
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 106104,
+                  "RssAnon": 41676,
+                  "Pss": 80265,
+                  "Pss_Anon": 41676,
+                  "Pss_File": 20703,
+                  "Pss_Shmem": 17886,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59562
+                },
+                {
+                  "VmRSS": 106104,
+                  "RssAnon": 41676,
+                  "Pss": 80265,
+                  "Pss_Anon": 41676,
+                  "Pss_File": 20703,
+                  "Pss_Shmem": 17886,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59562
+                },
+                {
+                  "VmRSS": 106104,
+                  "RssAnon": 41676,
+                  "Pss": 80265,
+                  "Pss_Anon": 41676,
+                  "Pss_File": 20703,
+                  "Pss_Shmem": 17886,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59562
+                },
+                {
+                  "VmRSS": 106104,
+                  "RssAnon": 41676,
+                  "Pss": 80265,
+                  "Pss_Anon": 41676,
+                  "Pss_File": 20703,
+                  "Pss_Shmem": 17886,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59562
+                },
+                {
+                  "VmRSS": 106104,
+                  "RssAnon": 41676,
+                  "Pss": 80265,
+                  "Pss_Anon": 41676,
+                  "Pss_File": 20703,
+                  "Pss_Shmem": 17886,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59562
+                }
+              ]
+            },
+            "typed": {
+              "median_kib": {
+                "VmRSS": 108632,
+                "RssAnon": 43964,
+                "Pss": 82792,
+                "Pss_Anon": 43964,
+                "Pss_File": 20702,
+                "Pss_Shmem": 18126,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 62090
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 109212,
+                  "RssAnon": 44544,
+                  "Pss": 83372,
+                  "Pss_Anon": 44544,
+                  "Pss_File": 20702,
+                  "Pss_Shmem": 18126,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62670
+                },
+                {
+                  "VmRSS": 109212,
+                  "RssAnon": 44544,
+                  "Pss": 83372,
+                  "Pss_Anon": 44544,
+                  "Pss_File": 20702,
+                  "Pss_Shmem": 18126,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62670
+                },
+                {
+                  "VmRSS": 108632,
+                  "RssAnon": 43964,
+                  "Pss": 82792,
+                  "Pss_Anon": 43964,
+                  "Pss_File": 20702,
+                  "Pss_Shmem": 18126,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62090
+                },
+                {
+                  "VmRSS": 108632,
+                  "RssAnon": 43964,
+                  "Pss": 82792,
+                  "Pss_Anon": 43964,
+                  "Pss_File": 20702,
+                  "Pss_Shmem": 18126,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62090
+                },
+                {
+                  "VmRSS": 108632,
+                  "RssAnon": 43964,
+                  "Pss": 82792,
+                  "Pss_Anon": 43964,
+                  "Pss_File": 20702,
+                  "Pss_Shmem": 18126,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62090
+                }
+              ]
+            },
+            "closed_idle": {
+              "median_kib": {
+                "VmRSS": 99272,
+                "RssAnon": 42476,
+                "Pss": 77249,
+                "Pss_Anon": 42476,
+                "Pss_File": 20703,
+                "Pss_Shmem": 14070,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 56546
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 99272,
+                  "RssAnon": 42476,
+                  "Pss": 77249,
+                  "Pss_Anon": 42476,
+                  "Pss_File": 20703,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56546
+                },
+                {
+                  "VmRSS": 99272,
+                  "RssAnon": 42476,
+                  "Pss": 77249,
+                  "Pss_Anon": 42476,
+                  "Pss_File": 20703,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56546
+                },
+                {
+                  "VmRSS": 99272,
+                  "RssAnon": 42476,
+                  "Pss": 77249,
+                  "Pss_Anon": 42476,
+                  "Pss_File": 20703,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56546
+                },
+                {
+                  "VmRSS": 99272,
+                  "RssAnon": 42476,
+                  "Pss": 77249,
+                  "Pss_Anon": 42476,
+                  "Pss_File": 20703,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56546
+                },
+                {
+                  "VmRSS": 99272,
+                  "RssAnon": 42476,
+                  "Pss": 77249,
+                  "Pss_Anon": 42476,
+                  "Pss_File": 20703,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56546
+                }
+              ]
+            }
+          },
+          "first_key": {
+            "ui_cpu_ms": 3.961379,
+            "nested_presented_ms": 5.931876,
+            "refresh_ns": null
+          },
+          "errors": []
+        }
+      },
+      "deltas_mib": {
+        "idle": 0.3984375,
+        "launcher": 0.8203125,
+        "typed": 0.97265625,
+        "closed_idle": 0.72265625
+      }
+    },
+    {
+      "pair": 3,
+      "data": {
+        "control": {
+          "backend": "CPU",
+          "geometry": {
+            "name": "winit",
+            "mode": [
+              2880,
+              1800
+            ],
+            "scale": 1.5,
+            "logical": [
+              1920,
+              1200
+            ]
+          },
+          "source": "published menu.query; same-host system application data",
+          "phases": {
+            "idle": {
+              "median_kib": {
+                "VmRSS": 80448,
+                "RssAnon": 31376,
+                "Pss": 61731,
+                "Pss_Anon": 31376,
+                "Pss_File": 19519,
+                "Pss_Shmem": 10836,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 42212
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 80448,
+                  "RssAnon": 31376,
+                  "Pss": 61731,
+                  "Pss_Anon": 31376,
+                  "Pss_File": 19519,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42212
+                },
+                {
+                  "VmRSS": 80448,
+                  "RssAnon": 31376,
+                  "Pss": 61731,
+                  "Pss_Anon": 31376,
+                  "Pss_File": 19519,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42212
+                },
+                {
+                  "VmRSS": 80448,
+                  "RssAnon": 31376,
+                  "Pss": 61731,
+                  "Pss_Anon": 31376,
+                  "Pss_File": 19519,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42212
+                },
+                {
+                  "VmRSS": 80448,
+                  "RssAnon": 31376,
+                  "Pss": 61731,
+                  "Pss_Anon": 31376,
+                  "Pss_File": 19519,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42212
+                },
+                {
+                  "VmRSS": 80448,
+                  "RssAnon": 31376,
+                  "Pss": 61731,
+                  "Pss_Anon": 31376,
+                  "Pss_File": 19519,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42212
+                }
+              ]
+            },
+            "launcher": {
+              "median_kib": {
+                "VmRSS": 105624,
+                "RssAnon": 41380,
+                "Pss": 79679,
+                "Pss_Anon": 41380,
+                "Pss_File": 20293,
+                "Pss_Shmem": 18006,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 59386
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 105624,
+                  "RssAnon": 41380,
+                  "Pss": 79679,
+                  "Pss_Anon": 41380,
+                  "Pss_File": 20293,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59386
+                },
+                {
+                  "VmRSS": 105624,
+                  "RssAnon": 41380,
+                  "Pss": 79679,
+                  "Pss_Anon": 41380,
+                  "Pss_File": 20293,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59386
+                },
+                {
+                  "VmRSS": 105624,
+                  "RssAnon": 41380,
+                  "Pss": 79679,
+                  "Pss_Anon": 41380,
+                  "Pss_File": 20293,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59386
+                },
+                {
+                  "VmRSS": 105624,
+                  "RssAnon": 41380,
+                  "Pss": 79679,
+                  "Pss_Anon": 41380,
+                  "Pss_File": 20293,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59386
+                },
+                {
+                  "VmRSS": 105624,
+                  "RssAnon": 41380,
+                  "Pss": 79679,
+                  "Pss_Anon": 41380,
+                  "Pss_File": 20293,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59386
+                }
+              ]
+            },
+            "typed": {
+              "median_kib": {
+                "VmRSS": 108324,
+                "RssAnon": 43952,
+                "Pss": 82379,
+                "Pss_Anon": 43952,
+                "Pss_File": 20421,
+                "Pss_Shmem": 18006,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 61958
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 108696,
+                  "RssAnon": 44324,
+                  "Pss": 82751,
+                  "Pss_Anon": 44324,
+                  "Pss_File": 20421,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62330
+                },
+                {
+                  "VmRSS": 108696,
+                  "RssAnon": 44324,
+                  "Pss": 82751,
+                  "Pss_Anon": 44324,
+                  "Pss_File": 20421,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62330
+                },
+                {
+                  "VmRSS": 108324,
+                  "RssAnon": 43952,
+                  "Pss": 82379,
+                  "Pss_Anon": 43952,
+                  "Pss_File": 20421,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61958
+                },
+                {
+                  "VmRSS": 108324,
+                  "RssAnon": 43952,
+                  "Pss": 82379,
+                  "Pss_Anon": 43952,
+                  "Pss_File": 20421,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61958
+                },
+                {
+                  "VmRSS": 108324,
+                  "RssAnon": 43952,
+                  "Pss": 82378,
+                  "Pss_Anon": 43952,
+                  "Pss_File": 20420,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61958
+                }
+              ]
+            },
+            "closed_idle": {
+              "median_kib": {
+                "VmRSS": 98828,
+                "RssAnon": 42328,
+                "Pss": 76818,
+                "Pss_Anon": 42328,
+                "Pss_File": 20420,
+                "Pss_Shmem": 14070,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 56398
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 98828,
+                  "RssAnon": 42328,
+                  "Pss": 76818,
+                  "Pss_Anon": 42328,
+                  "Pss_File": 20420,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56398
+                },
+                {
+                  "VmRSS": 98828,
+                  "RssAnon": 42328,
+                  "Pss": 76818,
+                  "Pss_Anon": 42328,
+                  "Pss_File": 20420,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56398
+                },
+                {
+                  "VmRSS": 98828,
+                  "RssAnon": 42328,
+                  "Pss": 76818,
+                  "Pss_Anon": 42328,
+                  "Pss_File": 20420,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56398
+                },
+                {
+                  "VmRSS": 98828,
+                  "RssAnon": 42328,
+                  "Pss": 76818,
+                  "Pss_Anon": 42328,
+                  "Pss_File": 20420,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56398
+                },
+                {
+                  "VmRSS": 98828,
+                  "RssAnon": 42328,
+                  "Pss": 76818,
+                  "Pss_Anon": 42328,
+                  "Pss_File": 20420,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56398
+                }
+              ]
+            }
+          },
+          "first_key": {
+            "ui_cpu_ms": 3.584318,
+            "nested_presented_ms": 5.488046,
+            "refresh_ns": null
+          },
+          "errors": []
+        },
+        "candidate": {
+          "backend": "CPU",
+          "geometry": {
+            "name": "winit",
+            "mode": [
+              2880,
+              1800
+            ],
+            "scale": 1.5,
+            "logical": [
+              1920,
+              1200
+            ]
+          },
+          "source": "published menu.query; same-host system application data",
+          "phases": {
+            "idle": {
+              "median_kib": {
+                "VmRSS": 81456,
+                "RssAnon": 32144,
+                "Pss": 62707,
+                "Pss_Anon": 32144,
+                "Pss_File": 19727,
+                "Pss_Shmem": 10836,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 42980
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 81456,
+                  "RssAnon": 32144,
+                  "Pss": 62707,
+                  "Pss_Anon": 32144,
+                  "Pss_File": 19727,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42980
+                },
+                {
+                  "VmRSS": 81456,
+                  "RssAnon": 32144,
+                  "Pss": 62707,
+                  "Pss_Anon": 32144,
+                  "Pss_File": 19727,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42980
+                },
+                {
+                  "VmRSS": 81456,
+                  "RssAnon": 32144,
+                  "Pss": 62707,
+                  "Pss_Anon": 32144,
+                  "Pss_File": 19727,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42980
+                },
+                {
+                  "VmRSS": 81456,
+                  "RssAnon": 32144,
+                  "Pss": 62707,
+                  "Pss_Anon": 32144,
+                  "Pss_File": 19727,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42980
+                },
+                {
+                  "VmRSS": 81456,
+                  "RssAnon": 32144,
+                  "Pss": 62707,
+                  "Pss_Anon": 32144,
+                  "Pss_File": 19727,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42980
+                }
+              ]
+            },
+            "launcher": {
+              "median_kib": {
+                "VmRSS": 106748,
+                "RssAnon": 42248,
+                "Pss": 80806,
+                "Pss_Anon": 42248,
+                "Pss_File": 20552,
+                "Pss_Shmem": 18006,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 60254
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 106748,
+                  "RssAnon": 42248,
+                  "Pss": 80806,
+                  "Pss_Anon": 42248,
+                  "Pss_File": 20552,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 60254
+                },
+                {
+                  "VmRSS": 106748,
+                  "RssAnon": 42248,
+                  "Pss": 80806,
+                  "Pss_Anon": 42248,
+                  "Pss_File": 20552,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 60254
+                },
+                {
+                  "VmRSS": 106748,
+                  "RssAnon": 42248,
+                  "Pss": 80806,
+                  "Pss_Anon": 42248,
+                  "Pss_File": 20552,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 60254
+                },
+                {
+                  "VmRSS": 106748,
+                  "RssAnon": 42248,
+                  "Pss": 80806,
+                  "Pss_Anon": 42248,
+                  "Pss_File": 20552,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 60254
+                },
+                {
+                  "VmRSS": 106748,
+                  "RssAnon": 42248,
+                  "Pss": 80806,
+                  "Pss_Anon": 42248,
+                  "Pss_File": 20552,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 60254
+                }
+              ]
+            },
+            "typed": {
+              "median_kib": {
+                "VmRSS": 109284,
+                "RssAnon": 44724,
+                "Pss": 83342,
+                "Pss_Anon": 44724,
+                "Pss_File": 20612,
+                "Pss_Shmem": 18006,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 62730
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 109656,
+                  "RssAnon": 45096,
+                  "Pss": 83714,
+                  "Pss_Anon": 45096,
+                  "Pss_File": 20612,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 63102
+                },
+                {
+                  "VmRSS": 109656,
+                  "RssAnon": 45096,
+                  "Pss": 83714,
+                  "Pss_Anon": 45096,
+                  "Pss_File": 20612,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 63102
+                },
+                {
+                  "VmRSS": 109284,
+                  "RssAnon": 44724,
+                  "Pss": 83342,
+                  "Pss_Anon": 44724,
+                  "Pss_File": 20612,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62730
+                },
+                {
+                  "VmRSS": 109284,
+                  "RssAnon": 44724,
+                  "Pss": 83342,
+                  "Pss_Anon": 44724,
+                  "Pss_File": 20612,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62730
+                },
+                {
+                  "VmRSS": 109284,
+                  "RssAnon": 44724,
+                  "Pss": 83342,
+                  "Pss_Anon": 44724,
+                  "Pss_File": 20612,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62730
+                }
+              ]
+            },
+            "closed_idle": {
+              "median_kib": {
+                "VmRSS": 99840,
+                "RssAnon": 43152,
+                "Pss": 77833,
+                "Pss_Anon": 43152,
+                "Pss_File": 20611,
+                "Pss_Shmem": 14070,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 57222
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 99840,
+                  "RssAnon": 43152,
+                  "Pss": 77833,
+                  "Pss_Anon": 43152,
+                  "Pss_File": 20611,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 57222
+                },
+                {
+                  "VmRSS": 99840,
+                  "RssAnon": 43152,
+                  "Pss": 77833,
+                  "Pss_Anon": 43152,
+                  "Pss_File": 20611,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 57222
+                },
+                {
+                  "VmRSS": 99840,
+                  "RssAnon": 43152,
+                  "Pss": 77833,
+                  "Pss_Anon": 43152,
+                  "Pss_File": 20611,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 57222
+                },
+                {
+                  "VmRSS": 99840,
+                  "RssAnon": 43152,
+                  "Pss": 77833,
+                  "Pss_Anon": 43152,
+                  "Pss_File": 20611,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 57222
+                },
+                {
+                  "VmRSS": 99840,
+                  "RssAnon": 43152,
+                  "Pss": 77833,
+                  "Pss_Anon": 43152,
+                  "Pss_File": 20611,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 57222
+                }
+              ]
+            }
+          },
+          "first_key": {
+            "ui_cpu_ms": 4.067091,
+            "nested_presented_ms": 6.042155,
+            "refresh_ns": null
+          },
+          "errors": []
+        }
+      },
+      "deltas_mib": {
+        "idle": 0.75,
+        "launcher": 0.84765625,
+        "typed": 0.75390625,
+        "closed_idle": 0.8046875
+      }
+    },
+    {
+      "pair": 4,
+      "data": {
+        "control": {
+          "backend": "CPU",
+          "geometry": {
+            "name": "winit",
+            "mode": [
+              2880,
+              1800
+            ],
+            "scale": 1.5,
+            "logical": [
+              1920,
+              1200
+            ]
+          },
+          "source": "published menu.query; same-host system application data",
+          "phases": {
+            "idle": {
+              "median_kib": {
+                "VmRSS": 80660,
+                "RssAnon": 31432,
+                "Pss": 61966,
+                "Pss_Anon": 31432,
+                "Pss_File": 19698,
+                "Pss_Shmem": 10836,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 42268
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 80660,
+                  "RssAnon": 31432,
+                  "Pss": 61966,
+                  "Pss_Anon": 31432,
+                  "Pss_File": 19698,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42268
+                },
+                {
+                  "VmRSS": 80660,
+                  "RssAnon": 31432,
+                  "Pss": 61966,
+                  "Pss_Anon": 31432,
+                  "Pss_File": 19698,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42268
+                },
+                {
+                  "VmRSS": 80660,
+                  "RssAnon": 31432,
+                  "Pss": 61966,
+                  "Pss_Anon": 31432,
+                  "Pss_File": 19698,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42268
+                },
+                {
+                  "VmRSS": 80660,
+                  "RssAnon": 31432,
+                  "Pss": 61966,
+                  "Pss_Anon": 31432,
+                  "Pss_File": 19698,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42268
+                },
+                {
+                  "VmRSS": 80660,
+                  "RssAnon": 31432,
+                  "Pss": 61966,
+                  "Pss_Anon": 31432,
+                  "Pss_File": 19698,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42268
+                }
+              ]
+            },
+            "launcher": {
+              "median_kib": {
+                "VmRSS": 105560,
+                "RssAnon": 41136,
+                "Pss": 79630,
+                "Pss_Anon": 41136,
+                "Pss_File": 20488,
+                "Pss_Shmem": 18006,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 59142
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 105560,
+                  "RssAnon": 41136,
+                  "Pss": 79630,
+                  "Pss_Anon": 41136,
+                  "Pss_File": 20488,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59142
+                },
+                {
+                  "VmRSS": 105560,
+                  "RssAnon": 41136,
+                  "Pss": 79630,
+                  "Pss_Anon": 41136,
+                  "Pss_File": 20488,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59142
+                },
+                {
+                  "VmRSS": 105560,
+                  "RssAnon": 41136,
+                  "Pss": 79630,
+                  "Pss_Anon": 41136,
+                  "Pss_File": 20488,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59142
+                },
+                {
+                  "VmRSS": 105560,
+                  "RssAnon": 41136,
+                  "Pss": 79630,
+                  "Pss_Anon": 41136,
+                  "Pss_File": 20488,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59142
+                },
+                {
+                  "VmRSS": 105560,
+                  "RssAnon": 41136,
+                  "Pss": 79630,
+                  "Pss_Anon": 41136,
+                  "Pss_File": 20488,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59142
+                }
+              ]
+            },
+            "typed": {
+              "median_kib": {
+                "VmRSS": 108212,
+                "RssAnon": 43724,
+                "Pss": 82281,
+                "Pss_Anon": 43724,
+                "Pss_File": 20551,
+                "Pss_Shmem": 18006,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 61730
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 108792,
+                  "RssAnon": 44304,
+                  "Pss": 82861,
+                  "Pss_Anon": 44304,
+                  "Pss_File": 20551,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62310
+                },
+                {
+                  "VmRSS": 108792,
+                  "RssAnon": 44304,
+                  "Pss": 82861,
+                  "Pss_Anon": 44304,
+                  "Pss_File": 20551,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62310
+                },
+                {
+                  "VmRSS": 108212,
+                  "RssAnon": 43724,
+                  "Pss": 82281,
+                  "Pss_Anon": 43724,
+                  "Pss_File": 20551,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61730
+                },
+                {
+                  "VmRSS": 108212,
+                  "RssAnon": 43724,
+                  "Pss": 82281,
+                  "Pss_Anon": 43724,
+                  "Pss_File": 20551,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61730
+                },
+                {
+                  "VmRSS": 108212,
+                  "RssAnon": 43724,
+                  "Pss": 82281,
+                  "Pss_Anon": 43724,
+                  "Pss_File": 20551,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61730
+                }
+              ]
+            },
+            "closed_idle": {
+              "median_kib": {
+                "VmRSS": 98944,
+                "RssAnon": 42328,
+                "Pss": 76949,
+                "Pss_Anon": 42328,
+                "Pss_File": 20551,
+                "Pss_Shmem": 14070,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 56398
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 98944,
+                  "RssAnon": 42328,
+                  "Pss": 76949,
+                  "Pss_Anon": 42328,
+                  "Pss_File": 20551,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56398
+                },
+                {
+                  "VmRSS": 98944,
+                  "RssAnon": 42328,
+                  "Pss": 76949,
+                  "Pss_Anon": 42328,
+                  "Pss_File": 20551,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56398
+                },
+                {
+                  "VmRSS": 98944,
+                  "RssAnon": 42328,
+                  "Pss": 76949,
+                  "Pss_Anon": 42328,
+                  "Pss_File": 20551,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56398
+                },
+                {
+                  "VmRSS": 98944,
+                  "RssAnon": 42328,
+                  "Pss": 76949,
+                  "Pss_Anon": 42328,
+                  "Pss_File": 20551,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56398
+                },
+                {
+                  "VmRSS": 98944,
+                  "RssAnon": 42328,
+                  "Pss": 76949,
+                  "Pss_Anon": 42328,
+                  "Pss_File": 20551,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56398
+                }
+              ]
+            }
+          },
+          "first_key": {
+            "ui_cpu_ms": 3.650697,
+            "nested_presented_ms": 5.488485,
+            "refresh_ns": null
+          },
+          "errors": []
+        },
+        "candidate": {
+          "backend": "CPU",
+          "geometry": {
+            "name": "winit",
+            "mode": [
+              2880,
+              1800
+            ],
+            "scale": 1.5,
+            "logical": [
+              1920,
+              1200
+            ]
+          },
+          "source": "published menu.query; same-host system application data",
+          "phases": {
+            "idle": {
+              "median_kib": {
+                "VmRSS": 80604,
+                "RssAnon": 31396,
+                "Pss": 61906,
+                "Pss_Anon": 31396,
+                "Pss_File": 19674,
+                "Pss_Shmem": 10836,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 42232
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 80604,
+                  "RssAnon": 31396,
+                  "Pss": 61906,
+                  "Pss_Anon": 31396,
+                  "Pss_File": 19674,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42232
+                },
+                {
+                  "VmRSS": 80604,
+                  "RssAnon": 31396,
+                  "Pss": 61906,
+                  "Pss_Anon": 31396,
+                  "Pss_File": 19674,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42232
+                },
+                {
+                  "VmRSS": 80604,
+                  "RssAnon": 31396,
+                  "Pss": 61906,
+                  "Pss_Anon": 31396,
+                  "Pss_File": 19674,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42232
+                },
+                {
+                  "VmRSS": 80604,
+                  "RssAnon": 31396,
+                  "Pss": 61906,
+                  "Pss_Anon": 31396,
+                  "Pss_File": 19674,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42232
+                },
+                {
+                  "VmRSS": 80604,
+                  "RssAnon": 31396,
+                  "Pss": 61906,
+                  "Pss_Anon": 31396,
+                  "Pss_File": 19674,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42232
+                }
+              ]
+            },
+            "launcher": {
+              "median_kib": {
+                "VmRSS": 105788,
+                "RssAnon": 41384,
+                "Pss": 79856,
+                "Pss_Anon": 41384,
+                "Pss_File": 20466,
+                "Pss_Shmem": 18006,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 59390
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 105788,
+                  "RssAnon": 41384,
+                  "Pss": 79856,
+                  "Pss_Anon": 41384,
+                  "Pss_File": 20466,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59390
+                },
+                {
+                  "VmRSS": 105788,
+                  "RssAnon": 41384,
+                  "Pss": 79856,
+                  "Pss_Anon": 41384,
+                  "Pss_File": 20466,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59390
+                },
+                {
+                  "VmRSS": 105788,
+                  "RssAnon": 41384,
+                  "Pss": 79856,
+                  "Pss_Anon": 41384,
+                  "Pss_File": 20466,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59390
+                },
+                {
+                  "VmRSS": 105788,
+                  "RssAnon": 41384,
+                  "Pss": 79856,
+                  "Pss_Anon": 41384,
+                  "Pss_File": 20466,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59390
+                },
+                {
+                  "VmRSS": 105788,
+                  "RssAnon": 41384,
+                  "Pss": 79856,
+                  "Pss_Anon": 41384,
+                  "Pss_File": 20466,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59390
+                }
+              ]
+            },
+            "typed": {
+              "median_kib": {
+                "VmRSS": 108268,
+                "RssAnon": 43800,
+                "Pss": 82335,
+                "Pss_Anon": 43800,
+                "Pss_File": 20529,
+                "Pss_Shmem": 18006,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 61806
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 108848,
+                  "RssAnon": 44380,
+                  "Pss": 82915,
+                  "Pss_Anon": 44380,
+                  "Pss_File": 20529,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62386
+                },
+                {
+                  "VmRSS": 108848,
+                  "RssAnon": 44380,
+                  "Pss": 82915,
+                  "Pss_Anon": 44380,
+                  "Pss_File": 20529,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62386
+                },
+                {
+                  "VmRSS": 108268,
+                  "RssAnon": 43800,
+                  "Pss": 82335,
+                  "Pss_Anon": 43800,
+                  "Pss_File": 20529,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61806
+                },
+                {
+                  "VmRSS": 108268,
+                  "RssAnon": 43800,
+                  "Pss": 82335,
+                  "Pss_Anon": 43800,
+                  "Pss_File": 20529,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61806
+                },
+                {
+                  "VmRSS": 108268,
+                  "RssAnon": 43800,
+                  "Pss": 82335,
+                  "Pss_Anon": 43800,
+                  "Pss_File": 20529,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61806
+                }
+              ]
+            },
+            "closed_idle": {
+              "median_kib": {
+                "VmRSS": 98924,
+                "RssAnon": 42328,
+                "Pss": 76927,
+                "Pss_Anon": 42328,
+                "Pss_File": 20529,
+                "Pss_Shmem": 14070,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 56398
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 98924,
+                  "RssAnon": 42328,
+                  "Pss": 76927,
+                  "Pss_Anon": 42328,
+                  "Pss_File": 20529,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56398
+                },
+                {
+                  "VmRSS": 98924,
+                  "RssAnon": 42328,
+                  "Pss": 76927,
+                  "Pss_Anon": 42328,
+                  "Pss_File": 20529,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56398
+                },
+                {
+                  "VmRSS": 98924,
+                  "RssAnon": 42328,
+                  "Pss": 76927,
+                  "Pss_Anon": 42328,
+                  "Pss_File": 20529,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56398
+                },
+                {
+                  "VmRSS": 98924,
+                  "RssAnon": 42328,
+                  "Pss": 76927,
+                  "Pss_Anon": 42328,
+                  "Pss_File": 20529,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56398
+                },
+                {
+                  "VmRSS": 98924,
+                  "RssAnon": 42328,
+                  "Pss": 76927,
+                  "Pss_Anon": 42328,
+                  "Pss_File": 20529,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56398
+                }
+              ]
+            }
+          },
+          "first_key": {
+            "ui_cpu_ms": 3.578018,
+            "nested_presented_ms": 5.435925,
+            "refresh_ns": null
+          },
+          "errors": []
+        }
+      },
+      "deltas_mib": {
+        "idle": -0.03515625,
+        "launcher": 0.2421875,
+        "typed": 0.07421875,
+        "closed_idle": 0.0
+      }
+    },
+    {
+      "pair": 5,
+      "data": {
+        "control": {
+          "backend": "CPU",
+          "geometry": {
+            "name": "winit",
+            "mode": [
+              2880,
+              1800
+            ],
+            "scale": 1.5,
+            "logical": [
+              1920,
+              1200
+            ]
+          },
+          "source": "published menu.query; same-host system application data",
+          "phases": {
+            "idle": {
+              "median_kib": {
+                "VmRSS": 80432,
+                "RssAnon": 31364,
+                "Pss": 61704,
+                "Pss_Anon": 31364,
+                "Pss_File": 19504,
+                "Pss_Shmem": 10836,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 42200
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 80432,
+                  "RssAnon": 31364,
+                  "Pss": 61704,
+                  "Pss_Anon": 31364,
+                  "Pss_File": 19504,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42200
+                },
+                {
+                  "VmRSS": 80432,
+                  "RssAnon": 31364,
+                  "Pss": 61704,
+                  "Pss_Anon": 31364,
+                  "Pss_File": 19504,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42200
+                },
+                {
+                  "VmRSS": 80432,
+                  "RssAnon": 31364,
+                  "Pss": 61704,
+                  "Pss_Anon": 31364,
+                  "Pss_File": 19504,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42200
+                },
+                {
+                  "VmRSS": 80432,
+                  "RssAnon": 31364,
+                  "Pss": 61704,
+                  "Pss_Anon": 31364,
+                  "Pss_File": 19504,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42200
+                },
+                {
+                  "VmRSS": 80432,
+                  "RssAnon": 31364,
+                  "Pss": 61704,
+                  "Pss_Anon": 31364,
+                  "Pss_File": 19504,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 42200
+                }
+              ]
+            },
+            "launcher": {
+              "median_kib": {
+                "VmRSS": 105284,
+                "RssAnon": 41284,
+                "Pss": 79424,
+                "Pss_Anon": 41284,
+                "Pss_File": 20254,
+                "Pss_Shmem": 17886,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 59170
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 105284,
+                  "RssAnon": 41284,
+                  "Pss": 79424,
+                  "Pss_Anon": 41284,
+                  "Pss_File": 20254,
+                  "Pss_Shmem": 17886,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59170
+                },
+                {
+                  "VmRSS": 105284,
+                  "RssAnon": 41284,
+                  "Pss": 79424,
+                  "Pss_Anon": 41284,
+                  "Pss_File": 20254,
+                  "Pss_Shmem": 17886,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59170
+                },
+                {
+                  "VmRSS": 105284,
+                  "RssAnon": 41284,
+                  "Pss": 79424,
+                  "Pss_Anon": 41284,
+                  "Pss_File": 20254,
+                  "Pss_Shmem": 17886,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59170
+                },
+                {
+                  "VmRSS": 105284,
+                  "RssAnon": 41284,
+                  "Pss": 79424,
+                  "Pss_Anon": 41284,
+                  "Pss_File": 20254,
+                  "Pss_Shmem": 17886,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59170
+                },
+                {
+                  "VmRSS": 105284,
+                  "RssAnon": 41284,
+                  "Pss": 79424,
+                  "Pss_Anon": 41284,
+                  "Pss_File": 20254,
+                  "Pss_Shmem": 17886,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 59170
+                }
+              ]
+            },
+            "typed": {
+              "median_kib": {
+                "VmRSS": 107644,
+                "RssAnon": 43276,
+                "Pss": 81783,
+                "Pss_Anon": 43276,
+                "Pss_File": 20381,
+                "Pss_Shmem": 18126,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 61402
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 108220,
+                  "RssAnon": 43852,
+                  "Pss": 82359,
+                  "Pss_Anon": 43852,
+                  "Pss_File": 20381,
+                  "Pss_Shmem": 18126,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61978
+                },
+                {
+                  "VmRSS": 108220,
+                  "RssAnon": 43852,
+                  "Pss": 82359,
+                  "Pss_Anon": 43852,
+                  "Pss_File": 20381,
+                  "Pss_Shmem": 18126,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61978
+                },
+                {
+                  "VmRSS": 107644,
+                  "RssAnon": 43276,
+                  "Pss": 81783,
+                  "Pss_Anon": 43276,
+                  "Pss_File": 20381,
+                  "Pss_Shmem": 18126,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61402
+                },
+                {
+                  "VmRSS": 107644,
+                  "RssAnon": 43276,
+                  "Pss": 81783,
+                  "Pss_Anon": 43276,
+                  "Pss_File": 20381,
+                  "Pss_Shmem": 18126,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61402
+                },
+                {
+                  "VmRSS": 107644,
+                  "RssAnon": 43276,
+                  "Pss": 81783,
+                  "Pss_Anon": 43276,
+                  "Pss_File": 20381,
+                  "Pss_Shmem": 18126,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 61402
+                }
+              ]
+            },
+            "closed_idle": {
+              "median_kib": {
+                "VmRSS": 98532,
+                "RssAnon": 42036,
+                "Pss": 76486,
+                "Pss_Anon": 42036,
+                "Pss_File": 20380,
+                "Pss_Shmem": 14070,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 56106
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 98532,
+                  "RssAnon": 42036,
+                  "Pss": 76486,
+                  "Pss_Anon": 42036,
+                  "Pss_File": 20380,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56106
+                },
+                {
+                  "VmRSS": 98532,
+                  "RssAnon": 42036,
+                  "Pss": 76486,
+                  "Pss_Anon": 42036,
+                  "Pss_File": 20380,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56106
+                },
+                {
+                  "VmRSS": 98532,
+                  "RssAnon": 42036,
+                  "Pss": 76486,
+                  "Pss_Anon": 42036,
+                  "Pss_File": 20380,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56106
+                },
+                {
+                  "VmRSS": 98532,
+                  "RssAnon": 42036,
+                  "Pss": 76486,
+                  "Pss_Anon": 42036,
+                  "Pss_File": 20380,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56106
+                },
+                {
+                  "VmRSS": 98532,
+                  "RssAnon": 42036,
+                  "Pss": 76486,
+                  "Pss_Anon": 42036,
+                  "Pss_File": 20380,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 56106
+                }
+              ]
+            }
+          },
+          "first_key": {
+            "ui_cpu_ms": 3.838178,
+            "nested_presented_ms": 5.816845,
+            "refresh_ns": null
+          },
+          "errors": []
+        },
+        "candidate": {
+          "backend": "CPU",
+          "geometry": {
+            "name": "winit",
+            "mode": [
+              2880,
+              1800
+            ],
+            "scale": 1.5,
+            "logical": [
+              1920,
+              1200
+            ]
+          },
+          "source": "published menu.query; same-host system application data",
+          "phases": {
+            "idle": {
+              "median_kib": {
+                "VmRSS": 81420,
+                "RssAnon": 32180,
+                "Pss": 62746,
+                "Pss_Anon": 32180,
+                "Pss_File": 19730,
+                "Pss_Shmem": 10836,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 43016
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 81420,
+                  "RssAnon": 32180,
+                  "Pss": 62746,
+                  "Pss_Anon": 32180,
+                  "Pss_File": 19730,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 43016
+                },
+                {
+                  "VmRSS": 81420,
+                  "RssAnon": 32180,
+                  "Pss": 62746,
+                  "Pss_Anon": 32180,
+                  "Pss_File": 19730,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 43016
+                },
+                {
+                  "VmRSS": 81420,
+                  "RssAnon": 32180,
+                  "Pss": 62746,
+                  "Pss_Anon": 32180,
+                  "Pss_File": 19730,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 43016
+                },
+                {
+                  "VmRSS": 81420,
+                  "RssAnon": 32180,
+                  "Pss": 62746,
+                  "Pss_Anon": 32180,
+                  "Pss_File": 19730,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 43016
+                },
+                {
+                  "VmRSS": 81420,
+                  "RssAnon": 32180,
+                  "Pss": 62746,
+                  "Pss_Anon": 32180,
+                  "Pss_File": 19730,
+                  "Pss_Shmem": 10836,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 43016
+                }
+              ]
+            },
+            "launcher": {
+              "median_kib": {
+                "VmRSS": 106600,
+                "RssAnon": 42188,
+                "Pss": 80690,
+                "Pss_Anon": 42188,
+                "Pss_File": 20496,
+                "Pss_Shmem": 18006,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 60194
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 106600,
+                  "RssAnon": 42188,
+                  "Pss": 80690,
+                  "Pss_Anon": 42188,
+                  "Pss_File": 20496,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 60194
+                },
+                {
+                  "VmRSS": 106600,
+                  "RssAnon": 42188,
+                  "Pss": 80690,
+                  "Pss_Anon": 42188,
+                  "Pss_File": 20496,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 60194
+                },
+                {
+                  "VmRSS": 106600,
+                  "RssAnon": 42188,
+                  "Pss": 80690,
+                  "Pss_Anon": 42188,
+                  "Pss_File": 20496,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 60194
+                },
+                {
+                  "VmRSS": 106600,
+                  "RssAnon": 42188,
+                  "Pss": 80690,
+                  "Pss_Anon": 42188,
+                  "Pss_File": 20496,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 60194
+                },
+                {
+                  "VmRSS": 106600,
+                  "RssAnon": 42188,
+                  "Pss": 80690,
+                  "Pss_Anon": 42188,
+                  "Pss_File": 20496,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 60194
+                }
+              ]
+            },
+            "typed": {
+              "median_kib": {
+                "VmRSS": 109312,
+                "RssAnon": 44772,
+                "Pss": 83402,
+                "Pss_Anon": 44772,
+                "Pss_File": 20624,
+                "Pss_Shmem": 18006,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 62778
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 109688,
+                  "RssAnon": 45148,
+                  "Pss": 83778,
+                  "Pss_Anon": 45148,
+                  "Pss_File": 20624,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 63154
+                },
+                {
+                  "VmRSS": 109688,
+                  "RssAnon": 45148,
+                  "Pss": 83778,
+                  "Pss_Anon": 45148,
+                  "Pss_File": 20624,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 63154
+                },
+                {
+                  "VmRSS": 109312,
+                  "RssAnon": 44772,
+                  "Pss": 83402,
+                  "Pss_Anon": 44772,
+                  "Pss_File": 20624,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62778
+                },
+                {
+                  "VmRSS": 109312,
+                  "RssAnon": 44772,
+                  "Pss": 83402,
+                  "Pss_Anon": 44772,
+                  "Pss_File": 20624,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62778
+                },
+                {
+                  "VmRSS": 109312,
+                  "RssAnon": 44772,
+                  "Pss": 83402,
+                  "Pss_Anon": 44772,
+                  "Pss_File": 20624,
+                  "Pss_Shmem": 18006,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 62778
+                }
+              ]
+            },
+            "closed_idle": {
+              "median_kib": {
+                "VmRSS": 99820,
+                "RssAnon": 43152,
+                "Pss": 77845,
+                "Pss_Anon": 43152,
+                "Pss_File": 20623,
+                "Pss_Shmem": 14070,
+                "SwapPss": 0,
+                "DRM": 0,
+                "Unreclaimable": 57222
+              },
+              "samples_kib": [
+                {
+                  "VmRSS": 99820,
+                  "RssAnon": 43152,
+                  "Pss": 77845,
+                  "Pss_Anon": 43152,
+                  "Pss_File": 20623,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 57222
+                },
+                {
+                  "VmRSS": 99820,
+                  "RssAnon": 43152,
+                  "Pss": 77845,
+                  "Pss_Anon": 43152,
+                  "Pss_File": 20623,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 57222
+                },
+                {
+                  "VmRSS": 99820,
+                  "RssAnon": 43152,
+                  "Pss": 77845,
+                  "Pss_Anon": 43152,
+                  "Pss_File": 20623,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 57222
+                },
+                {
+                  "VmRSS": 99820,
+                  "RssAnon": 43152,
+                  "Pss": 77845,
+                  "Pss_Anon": 43152,
+                  "Pss_File": 20623,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 57222
+                },
+                {
+                  "VmRSS": 99820,
+                  "RssAnon": 43152,
+                  "Pss": 77845,
+                  "Pss_Anon": 43152,
+                  "Pss_File": 20623,
+                  "Pss_Shmem": 14070,
+                  "SwapPss": 0,
+                  "DRM": 0,
+                  "Unreclaimable": 57222
+                }
+              ]
+            }
+          },
+          "first_key": {
+            "ui_cpu_ms": 3.545077,
+            "nested_presented_ms": 5.290206,
+            "refresh_ns": null
+          },
+          "errors": []
+        }
+      },
+      "deltas_mib": {
+        "idle": 0.796875,
+        "launcher": 1.0,
+        "typed": 1.34375,
+        "closed_idle": 1.08984375
+      }
+    }
+  ],
+  "remaining_gates": {
+    "parity": "not accepted; control IPC status-open reports unknown state panel.anchor_hovered after upstream B0111 integration",
+    "drag_pacing": "not measured before mandatory memory STOP",
+    "laptop_absolute": "not run; belongs to lead",
+    "idle_canvas_input": "controls are clickable and background empty; literal entirely-empty idle input versus placed-widget dropdown requirement remains unresolved",
+    "ai_control_detach_redock": "implemented candidate routes; nested detach/re-dock validation not completed before memory STOP"
+  },
+  "excluded_attempts": [
+    "missing task-local swaybg",
+    "private driver namespace/trace corrections",
+    "old title preview raw-node error",
+    "shared-target release candidate had identical control hash; rejected, then separate-target workspace rebuild used for every accepted memory arm"
+  ],
+  "external_luau_git_blobs_verified": 216
+}

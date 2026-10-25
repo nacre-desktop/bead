@@ -1,0 +1,197 @@
+{
+  "focus": {
+    "before_id": 2,
+    "after_id": 2,
+    "keyboard_focus": false,
+    "dismiss_active": false
+  },
+  "saved_layout": {
+    "hosts": {
+      "canvas": {
+        "height": 1200,
+        "instances": [
+          {
+            "host": "canvas",
+            "iid": "clock",
+            "settings": {},
+            "slot": {
+              "h": 28,
+              "w": 69,
+              "x": 928,
+              "y": 608
+            },
+            "widget": "clock"
+          }
+        ],
+        "width": 1920
+      },
+      "top_bar": {
+        "instances": [
+          {
+            "host": "top_bar",
+            "iid": "launcher",
+            "settings": {
+              "action": "launcher",
+              "custom_path": "",
+              "icon": "nacre",
+              "route": ""
+            },
+            "slot": {
+              "region": "left",
+              "span": 1,
+              "start": 0
+            },
+            "widget": "launcher"
+          },
+          {
+            "host": "top_bar",
+            "iid": "workspaces",
+            "settings": {},
+            "slot": {
+              "region": "left",
+              "span": 2,
+              "start": 1
+            },
+            "widget": "workspaces"
+          },
+          {
+            "host": "top_bar",
+            "iid": "title",
+            "settings": {},
+            "slot": {
+              "region": "centre",
+              "span": 19,
+              "start": 20
+            },
+            "widget": "title"
+          },
+          {
+            "children": [
+              {
+                "host": "status-pill",
+                "iid": "updates",
+                "settings": {},
+                "slot": {
+                  "region": "left",
+                  "span": 1,
+                  "start": 0
+                },
+                "widget": "updates"
+              },
+              {
+                "host": "status-pill",
+                "iid": "sound",
+                "settings": {},
+                "slot": {
+                  "region": "centre",
+                  "span": 1,
+                  "start": 0
+                },
+                "widget": "sound"
+              },
+              {
+                "host": "status-pill",
+                "iid": "wifi",
+                "settings": {},
+                "slot": {
+                  "region": "centre",
+                  "span": 1,
+                  "start": 1
+                },
+                "widget": "wifi"
+              },
+              {
+                "host": "status-pill",
+                "iid": "bluetooth",
+                "settings": {},
+                "slot": {
+                  "region": "centre",
+                  "span": 1,
+                  "start": 2
+                },
+                "widget": "bluetooth"
+              },
+              {
+                "host": "status-pill",
+                "iid": "battery",
+                "settings": {},
+                "slot": {
+                  "region": "centre",
+                  "span": 1,
+                  "start": 3
+                },
+                "widget": "battery"
+              },
+              {
+                "host": "status-pill",
+                "iid": "notifications",
+                "settings": {},
+                "slot": {
+                  "region": "centre",
+                  "span": 1,
+                  "start": 4
+                },
+                "widget": "notifications"
+              },
+              {
+                "host": "status-pill",
+                "iid": "power",
+                "settings": {},
+                "slot": {
+                  "region": "right",
+                  "span": 1,
+                  "start": 0
+                },
+                "widget": "power"
+              }
+            ],
+            "host": "top_bar",
+            "iid": "status-pill",
+            "settings": {},
+            "slot": {
+              "region": "right",
+              "span": 11,
+              "start": 0
+            },
+            "widget": "pill"
+          }
+        ],
+        "mode": "tiles",
+        "regions": {
+          "centre": {
+            "span": 60,
+            "start": 0
+          },
+          "left": {
+            "span": 60,
+            "start": 0
+          },
+          "right": {
+            "span": 60,
+            "start": 0
+          }
+        },
+        "tiles": 60
+      }
+    },
+    "preset": "Custom",
+    "version": 1
+  },
+  "canvas_dropdown": {
+    "view": "calendar",
+    "target_open": true,
+    "edge": "bottom",
+    "output_size": [
+      1920,
+      1200
+    ],
+    "keyboard_focus": true,
+    "dismiss_active": true,
+    "scene_bounds": [
+      -32.0,
+      -32.0,
+      374.0,
+      376.0
+    ]
+  }
+}

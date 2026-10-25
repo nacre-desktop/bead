@@ -80,7 +80,8 @@ After Bead's core switch on Nacre, plan support for:
 
 - B0114: canvas hosts resolve canvas/card/bar variants; opaque pointer transfers carry source/drop metadata without keyboard focus.
   Lazy output canvases use content-sized bottom-layer surfaces and reusable buffers. Anchored panels, app-to-pearl startup,
-  child/host model and action delivery, explicit shared image snapshots and JSON-preserving `copy_value` are general APIs;
+  child/host model and action delivery, inert metadata, source-origin opt-in, explicit shared image snapshots
+  and JSON-preserving `copy_value` are general APIs;
   widget identities, edit history, settings pages and composition remain in Luau.
 
 - B0113: `ui.Host` expands a horizontal strip into region-local tile spans or content-packed rows,

@@ -149,40 +149,56 @@ atomic replacements are watched without polling. Launcher icon choices use the
 bundled Nacre mark, theme icons `distributor-logo-archlinux` / `cachyos`, or a
 custom icon path; actions select launcher, dashboard, or a custom view route.
 
-## Phase 2 candidate — B0114 (not accepted)
+## Phase 2 candidate — B0114: stopped at the memory gate
 
-The editor keeps a bounded, eight-step draft history; only Done writes the
-revisioned store or atomically replaces the standalone file. The first tile move
-reserves the measured content widths of the content preset before changing its
-mode. Reset restores the original preset. Unknown JSON values retain empty
-objects, arrays, nulls and integers beyond the double-precision range across edits.
+Candidate `23d2ffbc` is local only, on control `4925b6e8` including the B0111,
+B0117, B0119 and B0120 integrations. No feature slice was pushed. Full remote
+Arch CI passes, including the regenerated and visually reviewed Panels golden.
+The editor, catalogue and launcher settings were inspected in private nested
+CPU sessions at 2880×1800 / 1.5. Twelve accepted arms pass containment and swap
+checks. No live session or installed files were changed.
 
-Canvas placement remains output-local. Canvas/card/bar variants share the same
-catalogue; empty canvases allocate no surface, and visible content uses a tight
-bottom-layer surface with two reusable buffers. Drag metadata is independent of
-keyboard focus. Settings, catalogue, handles and drop targets remain in Luau.
-No phase-2 parity, smoothness, first-key or memory gate is accepted yet.
+The eight-step draft history writes only on Done: the standalone file is atomic,
+and the daemon path waits for revisioned acknowledgement. Unknown empty objects,
+arrays, nulls and 64-bit integers survive edits. Private pointer proofs move a
+clock from its pill to the canvas, save it, open its anchored calendar and retain
+the focused probe window while opening the editor. The shared layout stays outside
+views; empty canvases allocate no layer, and visible content uses tight bounds.
 
-| Gate | Candidate status |
-| --- | --- |
-| Remote focused transactions / canvas fallback / JSON preservation | Passed on the integrated candidate |
-| Full CI after B0111/B0117/B0119/B0120 integration | Pending exact committed revision |
-| Desktop paired captures, drag, key and five-pair memory | Pending |
-| Idle canvas input | Decision needed: clickable controls versus entirely click-through |
+| Five alternating CPU pairs; median candidate − control, MiB | Idle | Launcher | Typed | Closed + 12 s |
+| --- | ---: | ---: | ---: | ---: |
+| Unreclaimable | +0.554688 | +0.820312 | +0.753906 | +0.722656 |
+| Clean file-backed PSS (informational) | +0.203125 | +0.236328 | +0.237305 | +0.237305 |
 
-The idle-input wording conflicts with pointer-activated dropdowns on desktop
-widgets: a surface with an empty input region receives no widget clicks. The
-candidate currently bounds input to visible controls; the background is empty.
-The exact intended idle policy must be resolved before acceptance.
+Every unreclaimable median exceeds +0.5 MiB: the standing rule requires **STOP**.
+The increases are anonymous; SHM is identical and DRM/SwapPss are zero. All five
+pairs, including the near-zero fourth pair, remain in the medians. No allocation
+attribution or measured jank-removal trade has been established.
+First-key UI CPU is 3.578 ms median / 4.067 ms max; the first matching nested
+presentation is 5.460 / 6.042 ms. These are first-response measurements with the
+real menu service, not completed-query, daemon CPU or physical scanout timings.
 
-General APIs added here: canvas hosts, opaque drag/drop metadata, anchored panels,
-lazy content-sized output canvases, child/host model and action projection,
-direct app-to-pearl startup, shared image snapshots and JSON-preserving copying.
-Editor drop zones opt into source-origin stores; metadata stays inert and does
-not request pointer or keyboard focus. Title schemas reserve maximum widths
-after the content preset becomes a grid. Custom width changes remain immediate;
-animated flexible width is still a gap. Daemon store integration waits for the
-published N0075 registration; standalone atomic-file persistence is available.
+Default parity is not accepted: the matched control's IPC status-open path emits
+`unknown state panel.anchor_hovered` after the B0111 integration. Drag pacing was
+not measured before the memory stop. Further phase-2 gaps are animated flexible
+width, resize affordances, review of the new empty-value text controls, and
+nested AI/control detach/re-dock validation.
+The N0075 widget-store registration is still unpublished; standalone persistence
+is proven. Idle canvas controls are clickable over an input-empty background;
+the literal entirely-empty idle-region requirement conflicts with widget clicks
+and remains unresolved. Per-monitor overrides remain a proposal.
+
+General additions are canvas hosts, pointer transfers, inert metadata, anchored
+panels, lazy output canvases, source-origin opt-in, child/host model and action
+projection, direct app-to-pearl startup, shared asset snapshots and exact JSON
+copying. Existing flexible titles reserve maximum width after grid conversion;
+custom width changes currently happen immediately.
+
+[All five pairs, components, source hashes and timing limits](evidence/0114/summary.json),
+[containment](evidence/0114/containment.json), [CI](evidence/0114/checks.txt),
+[save/dropdown/focus proofs](evidence/0114/widget-contracts.json).
+Inspected editor crops: [layout](evidence/0114/editor-layout.png),
+[catalogue](evidence/0114/editor-catalogue.png), [settings](evidence/0114/launcher-settings.png).
 
 ## Phase 1 evidence — 2026-10-25
 

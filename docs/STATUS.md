@@ -13,6 +13,14 @@ cover six video formats. All five-pair CPU memory gates fail: closed deltas are
 with a spare wallpaper slot. This is an explicit SMOOTHNESS FIRST/SPEND trade,
 not memory acceptance. [Evidence and remaining visual limits](specs/0109-picker-fixes.md).
 No live desktop, installed software, physical scanout or laptop-cap acceptance.
+## 2026-10-25 — B0114 stopped; local candidate only
+
+Widget editor/canvas candidate `23d2ffbc` passes full remote Arch CI and nested
+save/dropdown/focus proofs. Five alternating CPU pairs fail the +0.5 MiB gate:
+idle +0.555, launcher +0.820, typed +0.754, closed +12 s +0.723 MiB, all anonymous.
+Feature work stopped; no feature push or live change. Parity/drag acceptance,
+flexible-width animation and the unpublished N0075 store remain unfinished.
+[Evidence and limits](specs/0113-widget-system.md#phase-2-candidate--b0114-stopped-at-the-memory-gate).
 
 ## 2026-10-25 — B0119 keyboard focus fixed
 

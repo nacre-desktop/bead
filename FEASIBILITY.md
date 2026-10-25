@@ -1,5 +1,21 @@
 # Feasibility
 
+## 2026-10-25 — B0114 widget editor stopped at memory gate
+
+The editor, catalogue, settings, canvas and detachable-panel candidate stays local.
+Full remote Arch CI and nested save/dropdown/focus proofs pass; parity and drag acceptance do not.
+Five alternating CPU pairs exceed the relative memory limit in every phase, so feature work stops.
+No jank-removal trade has been measured, and the laptop absolute gate was not run.
+
+| Median candidate − control, MiB | Idle | Launcher | Typed | Closed + 12 s |
+| --- | ---: | ---: | ---: | ---: |
+| Unreclaimable | +0.555 | +0.820 | +0.754 | +0.723 |
+| Clean file PSS, informational | +0.203 | +0.236 | +0.237 | +0.237 |
+
+Growth is anonymous; SHM is identical and DRM/SwapPss are zero. All five pairs remain.
+First-key UI CPU max is 4.067 ms; nested first response max is 6.042 ms, not scanout.
+[Candidate, full samples, failed parity control and unfinished gates](docs/specs/0113-widget-system.md#phase-2-candidate--b0114-stopped-at-the-memory-gate).
+
 ## 2026-10-25 — B0119 keyboard focus and title churn
 
 A closed warm panel could reclaim exclusive keyboard focus on its next update.
