@@ -9,7 +9,8 @@ The next measurement uses the 17-file private desktop set at 2880×1800 output r
 | --- | ---: | ---: |
 | Live static switch | p95 not yet established; observed range 412–1558 ms | selection to visible ≤150 ms |
 | Full-resolution presentation | not yet split by phase | ≤400 ms |
-| Static source set | 17 JPEGs, 72 MiB total | same files on nested desktop |
+| Owner-reported source set | 17 JPEGs, about 72 MB total | same files on nested desktop |
+| Measured desktop copy | 17 files: 9 PNG, 8 JPEG, 71.6 MiB | use all copied inputs |
 | Persistent decoded cache | not implemented | ≤384 MiB, identity/size/mtime invalidation |
 
 ## Instrumentation
@@ -24,4 +25,5 @@ Use phase data from the real files to choose the dominant cost. If decode/scale 
 
 - Initial live static-to-static samples: 412, 441, 527, 822, 905, 1034, 1074, 1209, 1266, 1316, 1558 ms; video-to-static: 509 ms.
 - Real wallpaper files were copied to the task-private desktop test directory. No live desktop shell, installed files or configuration were changed.
-- Full remote Bead CI passes with phase telemetry and the neutral upload callback. Real-file nested measurements and the latency gates remain pending.
+- Full remote Bead CI passes with phase telemetry and the neutral upload callback. A 34-run release decoder-only cohort on the copied files at 2880×1800 scale 1.5 measures wall p50/p95/p99 60.0/379.5/379.8 ms and CPU p95 224.7 ms; it excludes daemon, buffer upload, and compositor presentation.
+- The private B0114 daemon accepts wallpaper.activate but returns Unknown method for wallpaper.catalogue; QML ui.dispatch also times out. End-to-end selection/presentation and the p95/full-resolution gates remain unmeasured. No persistent cache was implemented.

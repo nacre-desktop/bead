@@ -12,8 +12,11 @@ so motion decoding was unavailable during this poster-focused check. [Evidence](
 The owner's live static switch samples span 412–1558 ms, while earlier nested
 tests used small fixtures. Bead now emits selection-relative switch phases with
 source byte count and dimensions, including the SHM upload boundary. The 17-file
-real wallpaper set is in a private desktop test directory; performance gates are
-not yet measured. Full remote Bead CI passes. No live deployment.
+real wallpaper set measured 71.6 MiB in the desktop copy (9 PNG, 8 JPEG). A
+34-run release decoder-only cohort at 2880×1800 scale 1.5 measured 60.0 ms p50,
+379.5 ms p95 and 379.8 ms p99; it excludes daemon, upload and presentation.
+The nested helper lacks the current catalogue route, so end-to-end latency and
+the cache gate remain unmeasured. Full remote Bead CI passes. No live deployment.
 [Scope and evidence](specs/0146-live-wallpaper-latency.md).
 
 ## 2026-10-26 — B0144 clock publication across busy boundaries
