@@ -1430,7 +1430,6 @@ fn bar_press_prepares_the_exact_drag_source_without_starting_the_gesture() {
         .expect("the real bar exposes a draggable clock inside its status pill");
     let bounds = bead::ui::rect(&source.draw);
     let (x, y) = (bounds.x + bounds.w / 2., bounds.y + bounds.h / 2.);
-    drop(nodes);
     let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let sent = events.clone();
     runtime.wakeup = Some(std::sync::Arc::new(move |event| {
@@ -1513,7 +1512,6 @@ fn canvas_press_prepares_the_configured_bar_destination_with_global_origin() {
         .expect("the desktop clock exposes a native drag source");
     let bounds = bead::ui::rect(&source.draw);
     let (x, y) = (bounds.x + bounds.w / 2., bounds.y + bounds.h / 2.);
-    drop(nodes);
     let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let sent = events.clone();
     runtime.wakeup = Some(std::sync::Arc::new(move |event| {
