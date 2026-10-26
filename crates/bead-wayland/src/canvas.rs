@@ -359,9 +359,18 @@ impl App {
             }
         };
         let scale120 = self
-            .output
-            .info(&output)
-            .map_or(120, |info| info.scale_factor.max(1) as u32 * 120);
+            .surfaces
+            .iter()
+            .find(|surface| {
+                surface.output == output && !surface.companion && surface.configured
+            })
+            .map(|surface| surface.scale120)
+            .or_else(|| {
+                self.output
+                    .info(&output)
+                    .map(|info| info.scale_factor.max(1) as u32 * 120)
+            })
+            .unwrap_or(120);
         self.canvases.insert(
             key.clone(),
             Canvas {
