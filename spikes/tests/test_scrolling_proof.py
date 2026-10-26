@@ -269,7 +269,8 @@ class ScrollReversalProofTests(unittest.TestCase):
         self.assertLess(prepare.index(("close-fixture-notices",)), prepare.index(("ui", "nacre", "controls", "notifications")))
         self.assertEqual(prepare[-1], ("ui", "nacre", "controls", "notifications"))
         self.assertEqual(pacing.SCROLL_STORE_KEYS["notifications-list"], "dashboard.notifications.scroll")
-        self.assertEqual(pacing.SCROLL_SCENES["notifications-list"][1:3], (500, 300))
+        self.assertEqual(pacing.SCROLL_SCENES["notifications-list"][1:3], (800, 300))
+        self.assertEqual(pacing.SCROLL_SCENES["clipboard"][1:3], (800, 600))
         self.assertEqual(
             pacing.SCROLL_SCENES["clipboard"][0],
             [("only", "qml", ("ui", "drawers", "toggle", "dashboard")), ("ui", "nacre", "tab", "6")],

@@ -109,12 +109,12 @@ SCROLL_SCENES = {
     'widgets-gallery': ([('shell', 'nacre', 'menu', 'widgets')], 960, 600, 80, 1.6),
     'updates-popout': ([('ui', 'nacre', 'controls', 'updates')], 1600, 600, 80, 1.6),
     'clipboard': ([('only', 'qml', ('ui', 'drawers', 'toggle', 'dashboard')),
-                   ('ui', 'nacre', 'tab', '6')], 500, 600, 80, 1.6),
+                   ('ui', 'nacre', 'tab', '6')], 800, 600, 80, 1.6),
     # Populate the private daemon's notification list before opening its panel.
     'notifications-list': ([('notify', f'Scroll fixture {i:02d}', f'Private synthetic notification row {i:02d}.')
                             for i in range(20)] + [('sleep', 2.0), ('close-fixture-notices',),
                                                    ('ui', 'nacre', 'controls', 'notifications')],
-                           500, 300, 80, 1.6),
+                           800, 300, 80, 1.6),
     'notifications-popup': ([('notify', f'Scroll fixture {i:02d}', f'Private synthetic notification row {i:02d}.')
                              for i in range(20)] + [('sleep', 2.0)], 1715, 650, 80, 1.6),
 }
