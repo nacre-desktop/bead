@@ -298,6 +298,7 @@ fn desktop_clock_dropped_on_occupied_pill_slot_writes_at_82_and_90_percent() {
             "slot":{"x":1700,"y":1080,"w":220,"h":120}
         }]});
         original["widgets"]["clock"]["forms"]["bar"]["enabled"] = json!(false);
+        original["widgets"]["clock"]["forms"]["bar"]["placement"]["slot"]["span"] = json!(3);
         original["widgets"]["clock"]["forms"]["desktop"]["enabled"] = json!(true);
 
         let mut controller = Controller::new().unwrap();
