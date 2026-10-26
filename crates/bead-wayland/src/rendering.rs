@@ -1474,7 +1474,7 @@ impl App {
                 )?;
             }
             let transparent = warm_target.and_then(|_| {
-                transparent_pixel(
+                transparent_corner(
                     canvas,
                     w as u32,
                     h as u32,
@@ -1958,7 +1958,7 @@ fn repair_plan<'a>(
     Some((slot, adopt))
 }
 
-fn transparent_pixel(
+fn transparent_corner(
     bytes: &[u8],
     width: u32,
     height: u32,
@@ -1975,8 +1975,11 @@ fn transparent_pixel(
     if let Some(pixel) = preferred.filter(|pixel| alpha_zero(*pixel)) {
         return Some(pixel);
     }
-    (0..height)
-        .flat_map(|y| (0..width).map(move |x| (x, y)))
+    // Warming is optional: checking corners keeps opaque-scene work bounded.
+    let right = width.checked_sub(1)?;
+    let bottom = height.checked_sub(1)?;
+    [(0, 0), (right, 0), (0, bottom), (right, bottom)]
+        .into_iter()
         .find(|pixel| alpha_zero(*pixel))
 }
 
@@ -1987,16 +1990,20 @@ mod repair_tests {
     use std::collections::BTreeMap;
 
     #[test]
-    fn transparent_pixel_requires_verified_zero_alpha_and_honors_row_stride() {
+    fn transparent_corner_requires_verified_zero_alpha_and_honors_row_stride() {
         let mut pixels = vec![0xff; 24];
         pixels[7] = 0;
         pixels[15] = 0;
-        assert_eq!(transparent_pixel(&pixels, 2, 2, 12, Some((1, 0))), Some((1, 0)));
-        assert_eq!(transparent_pixel(&pixels, 2, 2, 12, Some((0, 1))), Some((0, 1)));
+        assert_eq!(transparent_corner(&pixels, 2, 2, 12, Some((1, 0))), Some((1, 0)));
+        assert_eq!(transparent_corner(&pixels, 2, 2, 12, Some((0, 1))), Some((0, 1)));
         pixels[7] = 1;
         pixels[15] = 0xff;
-        assert_eq!(transparent_pixel(&pixels, 2, 2, 12, None), None);
-        assert_eq!(transparent_pixel(&pixels, 2, 2, 12, Some((9, 9))), None);
+        assert_eq!(transparent_corner(&pixels, 2, 2, 12, None), None);
+        assert_eq!(transparent_corner(&pixels, 2, 2, 12, Some((9, 9))), None);
+        let mut opaque_corners = vec![0xff; 36];
+        opaque_corners[19] = 0; // An interior hole does not trigger a full scan.
+        assert_eq!(transparent_corner(&opaque_corners, 3, 3, 12, None), None);
+        assert_eq!(transparent_corner(&[], 0, 0, 0, None), None);
     }
 
     #[test]
