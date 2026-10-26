@@ -8,6 +8,7 @@ import sys
 from subprocess import CompletedProcess
 import tempfile
 from types import SimpleNamespace
+from unittest.mock import patch
 import unittest
 
 
@@ -327,6 +328,26 @@ class ScrollReversalProofTests(unittest.TestCase):
                 os.environ.pop("PACING_WHEEL_INTERVAL_MS", None)
             else:
                 os.environ["PACING_WHEEL_INTERVAL_MS"] = old
+
+    def test_launcher_fixture_is_private_and_uses_the_existing_query(self):
+        arm = SimpleNamespace(root=self.root, env={})
+        fixture = pacing.seed_launcher_fixture(arm)
+        apps = self.root / "data" / "applications"
+        entries = sorted(apps.glob("*.desktop"))
+        self.assertEqual(len(entries), 80)
+        self.assertIn("Name=Scroll fixture app 001", entries[0].read_text())
+        self.assertIn("Name=Scroll fixture app 080", entries[-1].read_text())
+        self.assertIn("Exec=/usr/bin/true", entries[0].read_text())
+        self.assertEqual(arm.env["XDG_DATA_DIRS"], str(self.root / "data"))
+        self.assertEqual(fixture["query"], "Scroll fixture app")
+        self.assertEqual(len(fixture["manifest_sha256"]), 64)
+        with patch.dict(os.environ, {"PACING_LAUNCHER_FIXTURE": "1"}):
+            self.assertEqual(pacing.launcher_scroll_prepare(), [("ui", "nacre", "launcher", "Scroll fixture app")])
+        with patch.dict(os.environ, {"PACING_ANIMS": "scroll-launcher-touchpad"}, clear=False):
+            os.environ.pop("PACING_LAUNCHER_FIXTURE", None)
+            self.assertFalse(pacing.private_launcher_fixture_requested())
+        with patch.dict(os.environ, {"PACING_ANIMS": "scroll-launcher-touchpad", "PACING_LAUNCHER_FIXTURE": "1"}):
+            self.assertTrue(pacing.private_launcher_fixture_requested())
 
     def test_scroll_notification_fixture_uses_long_ttl_and_closes_exact_ids(self):
         calls = []

@@ -21,6 +21,7 @@ Bead render_ms p50/p99. Gaps longer than 250 ms are idle, not drops.
 (the flags are parity-compare.py's; --states is ignored). Never touches the live session.
 """
 import importlib.util
+import hashlib
 import json
 import math
 import os
@@ -87,10 +88,16 @@ ANIMS = {
 CLOSE_APPS = {'settings-wheel': 'settings', 'settings-touchpad': 'settings'}
 # B0135 scroll matrix: these scenes already have private QML/Bead fixtures in
 # parity-compare. Coordinates are logical pixels in its 1920x1200 scene.
+def launcher_scroll_prepare():
+    if os.environ.get('PACING_LAUNCHER_FIXTURE') == '1':
+        return [('ui', 'nacre', 'launcher', 'Scroll fixture app')]
+    return m.STATES['launcher'][0]
+
+
 SCROLL_SCENES = {
     'settings-content': (m.STATES['settings'][0], 500, 600, 80, 1.6),
     'settings-nav': (m.STATES['settings'][0], 150, 600, 80, 1.6),
-    'launcher': (m.STATES['launcher'][0], 960, 600, 80, 1.6),
+    'launcher': (launcher_scroll_prepare(), 960, 600, 80, 1.6),
     # The private popup begins around logical y=628; y=900 lands in its list.
     'keybindings': (m.STATES['keybindings'][0], 960, 900, 80, 1.6),
     'colors-app': (m.STATES['colors-app'][0], 500, 650, 80, 1.6),
@@ -138,11 +145,48 @@ SCROLL_CLEANUPS = {
 _orig_start_daemon = m.Arm.start_daemon
 
 
+def seed_launcher_fixture(arm, count=80):
+    """Publish harmless, deterministic launcher rows only in the private arm HOME."""
+    data_home = arm.root / 'data'
+    applications = data_home / 'applications'
+    applications.mkdir(parents=True, exist_ok=True)
+    icons = data_home / 'icons'
+    system_icons = Path('/usr/share/icons')
+    if system_icons.is_dir() and not icons.exists():
+        icons.symlink_to(system_icons, target_is_directory=True)
+    digest = hashlib.sha256()
+    for index in range(1, count + 1):
+        filename = f'scroll-fixture-{index:03d}.desktop'
+        content = (
+            '[Desktop Entry]\nType=Application\n'
+            f'Name=Scroll fixture app {index:03d}\n'
+            'Comment=Private synthetic launcher scroll row\n'
+            'Exec=/usr/bin/true\nIcon=utilities-terminal\n'
+            'Terminal=false\nNoDisplay=false\nCategories=Utility;\n'
+        )
+        (applications / filename).write_text(content)
+        digest.update(filename.encode())
+        digest.update(b'\0')
+        digest.update(content.encode())
+    arm.env['XDG_DATA_DIRS'] = str(data_home)
+    arm.launcher_fixture = {'count': count, 'query': 'Scroll fixture app',
+                            'manifest_sha256': digest.hexdigest(), 'xdg_data_dirs': 'private-only'}
+    return arm.launcher_fixture
+
+
+def private_launcher_fixture_requested(names=None):
+    selected = names if names is not None else os.environ.get('PACING_ANIMS', '').split(',')
+    return (os.environ.get('PACING_LAUNCHER_FIXTURE') == '1'
+            and any(name.startswith('scroll-launcher-') for name in selected))
+
+
 def start_daemon(self):
     selected = os.environ.get('PACING_ANIMS')
     names = selected.split(',') if selected else list(ANIMS)
     if any(name.startswith('scroll-ai-chat-') for name in names):
         self.install_chat_fixture()
+    if private_launcher_fixture_requested(names):
+        seed_launcher_fixture(self)
     if selected and any(name.startswith('scroll-clipboard-') for name in names):
         self.clipboard_fixture_dir = seed_clipboard_fixture(self)
         bin_dir = self.root / 'cliphist-bin'
@@ -998,6 +1042,7 @@ def pace_drive(self, names):
                                                                         else 'single-midpoint-reversal'),
                                                       'input_oscillation_period': int(os.environ.get('PACING_OSCILLATE_PERIOD', '3')) if os.environ.get('PACING_OSCILLATE') == '1' else None,
                                                       'wheel_input_interval_ms': wheel_interval_ms(),
+                                                      'private_launcher_fixture': getattr(self, 'launcher_fixture', None),
                                                       'trace_profile': trace_profile,
                                                       'presentation_discarded': presentation_discarded if discarded_trace_collected else None,
                                                       'presentation_discarded_trace_collected': discarded_trace_collected,
