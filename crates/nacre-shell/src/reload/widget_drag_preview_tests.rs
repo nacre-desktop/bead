@@ -1471,8 +1471,12 @@ fn bar_press_prepares_the_exact_drag_source_without_starting_the_gesture() {
     };
     assert!(
         items
-            .first()
-            .is_some_and(|item| { item["widget"] == "clock" && item["host"] == "status-pill" })
+        .first()
+        .is_some_and(|item| {
+            item["widget"] == "clock"
+                && item["host"] == "top_bar"
+                && item["form"] == "bar"
+        })
     );
     assert_ne!(
         runtime.session.stores.get("widgets.drag.active"),
@@ -1494,6 +1498,7 @@ fn canvas_press_prepares_the_configured_bar_destination_with_global_origin() {
         ("widgets.draft".into(), Value::list(Vec::new())),
         ("widgets.screen_origin_x".into(), Value::Number(1000.)),
         ("widgets.screen_origin_y".into(), Value::Number(40.)),
+        ("bead.output.name".into(), Value::Text("right".into())),
         ("bead.desktop.clock".into(), Value::Text("12:34".into())),
     ]);
     if runtime
