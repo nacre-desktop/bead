@@ -78,6 +78,8 @@ After Bead's core switch on Nacre, plan support for:
 
 ## Generalization list (framework pieces added by feature work)
 
+- B0146: `WallpaperProvider::uploaded` reports that a wallpaper buffer has been attached immediately before surface commit, giving host adapters a neutral upload phase hook.
+
 - B0131: optional native-target prewarming and generation-checked covered commits preserve authored content and geometry; `Motion.return_duration`/`return_curve` let hosts choose dock easing. Backend admission stays behind the neutral pearl interface.
 
 - B0126: `SceneSource::drag_visuals` carries authored pointer/travel bounds and stable visual identity; the toolkit slider supplies metadata, with no service IDs in the compositor primitive. Optional fill metadata uses one shared pose and bounded regional SHM paint. `kit.SliderValue` supplies an authored fixed label that `Session::local_range_feedback_with_label` patches into the existing Text primitive without Luau/layout work; service completion remains outside projection.

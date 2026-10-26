@@ -1070,6 +1070,10 @@ async fn wallpaper_activation_error_is_reported_without_retry_and_boot_change_dr
             id: "/fixture/next.jpg".into(),
             boot: "extras-boot".into(),
             revision: 17,
+            selected_at: std::time::Instant::now(),
+            file_bytes: 0,
+            source_width: 0,
+            source_height: 0,
         });
         state.invalidate_boot(Some("new-boot"));
         assert!(state.pending.is_none());
@@ -2470,6 +2474,10 @@ async fn failed_activation_retires_its_early_preview_outside_the_view() {
             id: "/fixture/next.jpg".into(),
             boot: "extras-boot".into(),
             revision: 17,
+            selected_at: std::time::Instant::now(),
+            file_bytes: 0,
+            source_width: 0,
+            source_height: 0,
         },
         &wake
     ));

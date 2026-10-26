@@ -1600,6 +1600,10 @@ impl App {
             surface.staged = None;
         }
         let staged_index = surface.staged.as_ref().map(|staged| staged.index);
+        let wallpaper_provider = self.options.wallpaper.clone();
+        let upload_token = frame.commit_token.clone();
+        let upload_output = frame.output.clone();
+        let upload_revision = frame.revision;
         let old_pixels = surface
             .transition
             .take()
@@ -1623,6 +1627,7 @@ impl App {
                 pixels: old_pixels.unwrap(),
                 target: Some(frame.rgba),
                 remaining: 14,
+                uploaded: false,
             });
             surface.pixels = None;
         } else {
@@ -1644,6 +1649,11 @@ impl App {
                         .map(|p| (p, &self.qh, frame.revision)),
                 },
                 &frame.rgba,
+                || {
+                    if let Some(provider) = &wallpaper_provider {
+                        provider.uploaded(&upload_output, upload_revision, &upload_token);
+                    }
+                },
             )
             .is_err()
             {
@@ -1655,6 +1665,7 @@ impl App {
                     pixels: frame.rgba,
                     target: None,
                     remaining: 0,
+                    uploaded: false,
                 });
                 surface.pixels = old_pixels;
                 surface.release_wait_ms = 0;
@@ -1716,6 +1727,7 @@ impl App {
             .output
             .info(&output_handle)
             .and_then(|info| info.logical_size);
+        let wallpaper_provider = self.options.wallpaper.clone();
         let (finished, commit) = {
             let surface = &mut self.wallpaper_surfaces[index];
             let Some(transition) = surface.transition.as_mut() else {
@@ -1732,6 +1744,11 @@ impl App {
                             .then_some(staged.index)
                     })
                 });
+            let upload_event = transition
+                .commit
+                .as_ref()
+                .map(|(revision, token)| (*revision, token.clone()));
+            let first_upload = !transition.uploaded;
             if let Some(target) = &transition.target {
                 let remaining = transition.remaining.max(1) as u16;
                 for (current, target) in transition.pixels.iter_mut().zip(target.iter()) {
@@ -1762,11 +1779,20 @@ impl App {
                         .map(|(p, (revision, _))| (p, &self.qh, *revision)),
                 },
                 &transition.pixels,
+                || {
+                    if first_upload
+                        && let (Some(provider), Some((revision, token))) =
+                            (&wallpaper_provider, &upload_event)
+                    {
+                        provider.uploaded(output, *revision, token);
+                    }
+                },
             )
             .is_err()
             {
                 (false, None)
             } else {
+                transition.uploaded = true;
                 if prepared_buffer.is_some() {
                     surface.staged = None;
                 }
@@ -2353,7 +2379,11 @@ fn prepare_wallpaper_buffer(
     Err("wallpaper buffers busy".into())
 }
 
-fn attach_wallpaper_buffer(target: WallpaperBufferTarget<'_>, rgba: &[u8]) -> Result<(), String> {
+fn attach_wallpaper_buffer(
+    target: WallpaperBufferTarget<'_>,
+    rgba: &[u8],
+    on_upload: impl FnOnce(),
+) -> Result<(), String> {
     let WallpaperBufferTarget {
         pool,
         layer,
@@ -2396,6 +2426,7 @@ fn attach_wallpaper_buffer(target: WallpaperBufferTarget<'_>, rgba: &[u8]) -> Re
     buffer
         .attach_to(layer.wl_surface())
         .map_err(|_| "wallpaper buffer still active")?;
+    on_upload();
     if let Some((presentation, qh, revision)) = feedback {
         presentation.feedback(
             layer.wl_surface(),

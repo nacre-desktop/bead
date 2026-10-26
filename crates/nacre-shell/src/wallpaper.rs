@@ -35,12 +35,16 @@ fn activation_reply_matches(
 #[derive(Clone)]
 struct PreviewSelection {
     requested_at: Instant,
+    file_bytes: u64,
+    source_width: u32,
+    source_height: u32,
     boot: String,
     id: String,
     kind: String,
     video_predecode: Option<nacre_protocol::wallpaper::WallpaperVideoPredecode>,
     generation: u64,
 }
+pub(crate) type SwitchMetadata = (u64, u32, u32);
 #[derive(Default)]
 struct PreviewState {
     generation: u64,
@@ -428,12 +432,25 @@ pub(crate) struct Preview {
     predecode: Predecoder,
 }
 impl Preview {
+    #[cfg(test)]
     pub(crate) fn select(
         &self,
         boot: String,
         id: String,
         kind: String,
         video_predecode: Option<nacre_protocol::wallpaper::WallpaperVideoPredecode>,
+    ) -> u64 {
+        self.select_at(boot, id, kind, video_predecode, Instant::now(), (0, 0, 0))
+    }
+
+    pub(crate) fn select_at(
+        &self,
+        boot: String,
+        id: String,
+        kind: String,
+        video_predecode: Option<nacre_protocol::wallpaper::WallpaperVideoPredecode>,
+        requested_at: Instant,
+        metadata: SwitchMetadata,
     ) -> u64 {
         let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
         // Repeated activation (for example Right followed by Enter) must not
@@ -453,7 +470,10 @@ impl Preview {
             && valid_local_path(&id)
             && matches!(kind.as_str(), "image" | "video"))
         .then(|| PreviewSelection {
-            requested_at: Instant::now(),
+            requested_at,
+            file_bytes: metadata.0,
+            source_width: metadata.1,
+            source_height: metadata.2,
             boot: boot.clone(),
             id: id.clone(),
             kind,
@@ -536,8 +556,9 @@ pub(crate) struct Consumer {
     subscriptions: Mutex<Vec<Subscription>>,
     displayed: Mutex<BTreeMap<String, ActiveWallpaper>>,
     motion_commits: Publisher,
-    visibility: Mutex<BTreeMap<String, (u64, Instant, &'static str)>>,
+    visibility: Mutex<BTreeMap<String, VisibilityRecord>>,
 }
+type VisibilityRecord = (u64, Instant, &'static str, Option<SwitchMetadata>);
 struct PairToken {
     requested_at: Option<Instant>,
     boot: String,
@@ -724,6 +745,15 @@ impl Consumer {
                 .clone(),
         );
         let selection = self.preview.selected();
+        if let Some(selection) = selection.as_ref().filter(|selection| {
+            selection.boot == boot
+                && state
+                    .outputs
+                    .get(&output)
+                    .is_some_and(|pair| pair_matches_id(pair, &selection.id))
+        }) {
+            wallpaper_switch_phase(selection, pair.revision, "decode_start");
+        }
         self.preview
             .register_target(selection.clone(), boot.clone(), pair.clone(), width, height);
         let predecoded = selection.as_ref().and_then(|selection| {
@@ -743,6 +773,12 @@ impl Consumer {
             decode(&state, &output, width, height)?
         };
         bead::core::profile::mark("wallpaper_decode_finished");
+        if let Some(selection) = selection.as_ref().filter(|selection| {
+            selection.boot == boot && pair_matches_id(&decoded.pair, &selection.id)
+        }) {
+            wallpaper_switch_phase(selection, decoded.pair.revision, "decode_end");
+            wallpaper_switch_phase(selection, decoded.pair.revision, "scale_end");
+        }
         let decoded_pair = decoded.pair.clone();
         let commit_token: Arc<dyn std::any::Any + Send + Sync> = Arc::new(PairToken {
             requested_at: selection
@@ -772,6 +808,11 @@ impl Consumer {
         };
         let request = serde_json::json!({"revision": decoded_pair.revision});
         bead::core::profile::mark("wallpaper_activation_requested");
+        if let Some(selection) = selection.as_ref().filter(|selection| {
+            selection.boot == boot && pair_matches_id(&decoded_pair, &selection.id)
+        }) {
+            wallpaper_switch_phase(selection, decoded_pair.revision, "request_sent");
+        }
         let reply = tokio::runtime::Builder::new_current_thread()
             .enable_time()
             .build()
@@ -784,6 +825,11 @@ impl Consumer {
             ))
             .map_err(|_| "wallpaper activation failed")?;
         bead::core::profile::mark("wallpaper_activation_confirmed");
+        if let Some(selection) = selection.as_ref().filter(|selection| {
+            selection.boot == boot && pair_matches_id(&decoded_pair, &selection.id)
+        }) {
+            wallpaper_switch_phase(selection, decoded_pair.revision, "daemon_ack");
+        }
         let activated: ActiveWallpaper =
             serde_json::from_value(reply).map_err(|_| "wallpaper activation response malformed")?;
         activated
@@ -873,6 +919,19 @@ impl bead::wayland::WallpaperProvider for Consumer {
                     && state.outputs.get(&frame.output) == Some(&token.pair)
             })
     }
+    fn uploaded(&self, _output: &str, revision: u64, token: &Arc<dyn std::any::Any + Send + Sync>) {
+        let Some(pair) = token.downcast_ref::<PairToken>() else {
+            return;
+        };
+        if pair.pair.revision != revision {
+            return;
+        }
+        if let Some(selection) = self.preview.selected().filter(|selection| {
+            selection.boot == pair.boot && pair_matches_id(&pair.pair, &selection.id)
+        }) {
+            wallpaper_switch_phase(&selection, revision, "upload_end");
+        }
+    }
     fn committed(&self, output: &str, revision: u64, token: &Arc<dyn std::any::Any + Send + Sync>) {
         let Some(pair) = token.downcast_ref::<PairToken>() else {
             return;
@@ -899,6 +958,14 @@ impl bead::wayland::WallpaperProvider for Consumer {
         } else {
             false
         };
+        if let Some(selection) = self.preview.selected().filter(|selection| {
+            selection.boot == pair.boot && pair_matches_id(&pair.pair, &selection.id)
+        }) {
+            wallpaper_switch_phase(&selection, revision, "commit");
+        }
+        let trace = self.preview.selected().filter(|selection| {
+            selection.boot == pair.boot && pair_matches_id(&pair.pair, &selection.id)
+        });
         if let Some(requested_at) = pair.requested_at
             && let Ok(mut visibility) = self.visibility.lock()
         {
@@ -913,6 +980,13 @@ impl bead::wayland::WallpaperProvider for Consumer {
                         (true, false) => "video-to-static",
                         (true, true) => "video-to-video-poster",
                     },
+                    trace.as_ref().map(|selection| {
+                        (
+                            selection.file_bytes,
+                            selection.source_width,
+                            selection.source_height,
+                        )
+                    }),
                 ),
             );
         }
@@ -929,16 +1003,26 @@ impl bead::wayland::WallpaperProvider for Consumer {
         let Ok(mut visibility) = self.visibility.lock() else {
             return;
         };
-        let Some(&(wanted, requested_at, path)) = visibility.get(output) else {
+        let Some(&(wanted, requested_at, path, metadata)) = visibility.get(output) else {
             return;
         };
         if revision != wanted {
             return;
         }
         visibility.remove(output);
+        if let Some((file_bytes, source_width, source_height)) = metadata {
+            println!(
+                "WALLPAPER_SWITCH_PHASE revision={} phase=presented ms_since_selection={:.3} file_bytes={} source_width={} source_height={}",
+                revision,
+                requested_at.elapsed().as_secs_f64() * 1000.0,
+                file_bytes,
+                source_width,
+                source_height,
+            );
+        }
         println!(
             "WALLPAPER_SWITCH_LATENCY output={output} revision={revision} path={path} request=selection endpoint=presentation-feedback ms={:.3}",
-            requested_at.elapsed().as_secs_f64() * 1000.,
+            requested_at.elapsed().as_secs_f64() * 1000.
         );
     }
     fn discarded(&self, _output: &str, _revision: u64) {}
@@ -950,6 +1034,18 @@ impl bead::wayland::WallpaperProvider for Consumer {
             displayed.remove(output);
         }
     }
+}
+
+fn wallpaper_switch_phase(selection: &PreviewSelection, revision: u64, phase: &str) {
+    println!(
+        "WALLPAPER_SWITCH_PHASE revision={} phase={} ms_since_selection={:.3} file_bytes={} source_width={} source_height={}",
+        revision,
+        phase,
+        selection.requested_at.elapsed().as_secs_f64() * 1000.0,
+        selection.file_bytes,
+        selection.source_width,
+        selection.source_height,
+    );
 }
 
 /// `current.motion` = `{kind: "video"|"animation", path, file_identity}`. Same path rules as

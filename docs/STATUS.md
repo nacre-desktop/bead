@@ -7,6 +7,14 @@ all outputs; video selection and an open picker hold it warm. The private nested
 desktop check found the renderer gone after the grace and captured the poster
 63.8 ms after video selection. Full remote CI passes. The desktop lacks libmpv,
 so motion decoding was unavailable during this poster-focused check. [Evidence](specs/0145-video-idle.md).
+## 2026-10-26 — B0146 live wallpaper switch latency (in progress)
+
+The owner's live static switch samples span 412–1558 ms, while earlier nested
+tests used small fixtures. Bead now emits selection-relative switch phases with
+source byte count and dimensions, including the SHM upload boundary. The 17-file
+real wallpaper set is in a private desktop test directory; performance gates are
+not yet measured. Full remote Bead CI passes. No live deployment.
+[Scope and evidence](specs/0146-live-wallpaper-latency.md).
 
 ## 2026-10-26 — B0144 clock publication across busy boundaries
 

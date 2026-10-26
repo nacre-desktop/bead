@@ -170,6 +170,14 @@ pub trait WallpaperProvider: Send + Sync {
         None
     }
     fn is_current(&self, frame: &WallpaperFrame) -> bool;
+    /// The output buffer has been attached and populated, immediately before surface commit.
+    fn uploaded(
+        &self,
+        _output: &str,
+        _revision: u64,
+        _token: &std::sync::Arc<dyn std::any::Any + Send + Sync>,
+    ) {
+    }
     fn committed(
         &self,
         output: &str,
@@ -961,6 +969,7 @@ struct WallpaperTransition {
     // None retains an already-final snap while both SHM buffers are busy.
     target: Option<Vec<u8>>,
     remaining: u8,
+    uploaded: bool,
 }
 impl Drop for Surface {
     fn drop(&mut self) {

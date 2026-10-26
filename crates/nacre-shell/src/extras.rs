@@ -80,11 +80,16 @@ struct WallpaperSelection {
     id: String,
     boot: String,
     revision: u64,
+    selected_at: std::time::Instant,
+    file_bytes: u64,
+    source_width: u32,
+    source_height: u32,
 }
 struct WallpaperActivationInFlight {
     ticket: CallTicket,
     boot: String,
     preview_generation: Option<u64>,
+    selection: WallpaperSelection,
 }
 /// Panel-factory-owned activation admission survives lazy view retirement without retaining its UI.
 struct WallpaperActivationQueue {
@@ -212,13 +217,15 @@ impl WallpaperActivationQueue {
             Some(wake),
         ) {
             Ok(ticket) => {
+                wallpaper_switch_phase(&selection, "request_sent");
                 state.inflight = Some(WallpaperActivationInFlight {
                     ticket,
                     preview_generation: state
                         .preview
                         .as_ref()
                         .and_then(|preview| preview.generation_for(&selection.boot, &selection.id)),
-                    boot: selection.boot,
+                    boot: selection.boot.clone(),
+                    selection,
                 });
                 true
             }
@@ -239,6 +246,7 @@ impl WallpaperActivationQueue {
             return;
         };
         let boot = inflight.boot.clone();
+        let selection = inflight.selection.clone();
         let preview_generation = inflight.preview_generation;
         let preview = state.preview.clone();
         let mut cancel_preview = Vec::new();
@@ -252,6 +260,7 @@ impl WallpaperActivationQueue {
                 {
                     Ok(active) if active.validate().is_ok() => {
                         bead::core::profile::mark("wallpaper_selection_confirmed");
+                        wallpaper_switch_phase(&selection, "daemon_ack");
                         let revision = state
                             .confirmed_revision(&boot)
                             .unwrap_or_default()
@@ -889,28 +898,34 @@ impl Extras {
             let Some(queue) = &self.wallpaper_actions else {
                 return;
             };
+            let selected_at = std::time::Instant::now();
+            let (file_bytes, source_width, source_height) = wallpaper_source_metadata(id);
+            let selection = WallpaperSelection {
+                id: id.into(),
+                boot: boot.clone(),
+                revision,
+                selected_at,
+                file_bytes,
+                source_width,
+                source_height,
+            };
+            wallpaper_switch_phase(&selection, "selection");
             let preview = queue
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
                 .preview
                 .clone();
             let generation = preview.as_ref().map(|preview| {
-                preview.select(
+                preview.select_at(
                     boot.clone(),
                     id.into(),
                     entry["kind"].as_str().unwrap_or("image").into(),
                     serde_json::from_value(entry["video_predecode"].clone()).ok(),
+                    selected_at,
+                    (file_bytes, source_width, source_height),
                 )
             });
-            let admitted = WallpaperActivationQueue::submit(
-                queue,
-                WallpaperSelection {
-                    id: id.into(),
-                    boot,
-                    revision,
-                },
-                &wake,
-            );
+            let admitted = WallpaperActivationQueue::submit(queue, selection, &wake);
             if !admitted && let (Some(preview), Some(generation)) = (preview, generation) {
                 preview.cancel(generation);
             }
@@ -1200,6 +1215,30 @@ impl Extras {
         document.insert(key.into(), json!(value));
         Some(json!({"store":"wallpaper-picker","value":data,"rev":rev}))
     }
+}
+
+fn wallpaper_source_metadata(path: &str) -> (u64, u32, u32) {
+    let bytes = std::fs::metadata(path)
+        .map(|metadata| metadata.len())
+        .unwrap_or(0);
+    let dimensions = image::ImageReader::open(path)
+        .and_then(image::ImageReader::with_guessed_format)
+        .ok()
+        .and_then(|reader| reader.into_dimensions().ok())
+        .unwrap_or_default();
+    (bytes, dimensions.0, dimensions.1)
+}
+
+fn wallpaper_switch_phase(selection: &WallpaperSelection, phase: &str) {
+    println!(
+        "WALLPAPER_SWITCH_PHASE revision={} phase={} ms_since_selection={:.3} file_bytes={} source_width={} source_height={}",
+        selection.revision,
+        phase,
+        selection.selected_at.elapsed().as_secs_f64() * 1000.0,
+        selection.file_bytes,
+        selection.source_width,
+        selection.source_height,
+    );
 }
 fn ordered<'a>(items: &'a Json, order: &'a Json) -> impl Iterator<Item = (&'a str, &'a Json)> {
     order
