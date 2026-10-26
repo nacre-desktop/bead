@@ -1469,15 +1469,9 @@ fn bar_press_prepares_the_exact_drag_source_without_starting_the_gesture() {
     let Some(Value::List(items)) = values.get("widgets.drag.source") else {
         panic!("prepared source preserves the captured widget payload");
     };
-    assert!(
-        items
-        .first()
-        .is_some_and(|item| {
-            item["widget"] == "clock"
-                && item["host"] == "top_bar"
-                && item["form"] == "bar"
-        })
-    );
+    assert!(items.first().is_some_and(|item| {
+        item["widget"] == "clock" && item["host"] == "top_bar" && item["form"] == "bar"
+    }));
     assert_ne!(
         runtime.session.stores.get("widgets.drag.active"),
         Some(&Value::Bool(true)),
