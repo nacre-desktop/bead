@@ -365,6 +365,17 @@ struct WidgetHoverPreview {
     key: WidgetHoverPreviewKey,
     prepared_at: std::time::Instant,
 }
+fn suppress_widget_drag_hover(suppressed: &mut bool, has_candidate: bool) -> bool {
+    if !*suppressed {
+        return false;
+    }
+    if has_candidate {
+        true
+    } else {
+        *suppressed = false;
+        false
+    }
+}
 const WIDGET_HOVER_PREVIEW_RENEW: std::time::Duration = std::time::Duration::from_millis(1500);
 const WIDGET_HOVER_PREVIEW_DEDUPE: std::time::Duration = std::time::Duration::from_millis(1400);
 fn widget_floating_action(
@@ -787,6 +798,7 @@ pub struct Runtime {
     widget_drag_output: Option<String>,
     widget_drag_projection: Option<BTreeMap<String, bead::core::Value>>,
     widget_hover_preview: Option<WidgetHoverPreview>,
+    widget_drag_suppress_hover_until_leave: bool,
     widget_drag_epoch: u64,
     widget_drag_retire_cleanup: bool,
     widget_drag_action_registered: bool,
@@ -2052,10 +2064,14 @@ impl Runtime {
         if self.widget_drag_is_active() {
             return;
         }
-        let preview = self
-            .session
-            .transfer_candidate_at(x, y)
-            .and_then(|candidate| self.widget_drag_preview(x, y, candidate));
+        let candidate = self.session.transfer_candidate_at(x, y);
+        if suppress_widget_drag_hover(
+            &mut self.widget_drag_suppress_hover_until_leave,
+            candidate.is_some(),
+        ) {
+            return;
+        }
+        let preview = candidate.and_then(|candidate| self.widget_drag_preview(x, y, candidate));
         let Some((key, values)) = preview else {
             self.retire_widget_hover_preview();
             return;
@@ -2538,6 +2554,9 @@ impl Runtime {
         self.publish_widget_drag_projection(drag_values);
     }
     fn retire_widget_drag_after_feedback(&mut self) {
+        // Keep the just-dropped ghost from being prewarmed again while the pointer
+        // remains over the target widget. A leave and re-entry can warm the next drag.
+        self.widget_drag_suppress_hover_until_leave = true;
         self.widget_drag_epoch = self.widget_drag_epoch.wrapping_add(1).max(1u64 << 63);
         let token = self.widget_drag_epoch;
         if let Some(wakeup) = self.wakeup.clone() {
@@ -2897,6 +2916,7 @@ impl Runtime {
             widget_drag_output: None,
             widget_drag_projection: None,
             widget_hover_preview: None,
+            widget_drag_suppress_hover_until_leave: false,
             widget_drag_epoch: 1u64 << 63,
             widget_drag_retire_cleanup: false,
             widget_drag_action_registered: false,

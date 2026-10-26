@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Cross-host drag preview is based on one normalized snapshot and commits only on drop.
-use super::{Runtime, SceneSource, UiEvent, widget_drag_source_bounds, widget_drag_targets_output};
+use super::{
+    Runtime, SceneSource, UiEvent, suppress_widget_drag_hover, widget_drag_source_bounds,
+    widget_drag_targets_output,
+};
 use crate::widgets::widget_drag::Controller;
 use bead::core::Value;
 use serde_json::{Value as Json, json};
@@ -39,6 +42,16 @@ fn prepared_source_bounds_clip_before_padding_at_output_edges() {
         bead::render::Rect::new(0., 0., 79., 30.)
     );
     assert!(widget_drag_source_bounds(1920., 20., 10., 10., 1920., 1080.).is_none());
+}
+
+#[test]
+fn dropped_ghost_stays_released_until_pointer_leaves_target() {
+    let mut suppressed = true;
+    assert!(suppress_widget_drag_hover(&mut suppressed, true));
+    assert!(suppressed, "hovering the drop target must not rebuild the ghost");
+    assert!(!suppress_widget_drag_hover(&mut suppressed, false));
+    assert!(!suppressed, "leaving the target permits a later hover prewarm");
+    assert!(!suppress_widget_drag_hover(&mut suppressed, true));
 }
 
 fn catalogue() -> Json {
