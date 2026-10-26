@@ -19,6 +19,16 @@ shell integration to assert while the wallpaper picker is open.
   selecting video afterwards shows its poster within 150 ms.
 - Full Bead desktop CI job on the first available remote CI host.
 
-## Implementation results
+## Results
 
-Pending validation.
+Supervisor unit tests cover idle release, quick-toggle cancellation and picker
+warm hold. Full `.github/workflows/ci.yml` passes in the isolated remote Ubuntu
+container, including workspace tests, renderer smoke and cargo-deny.
+
+Private nested desktop labwc check: after 60 seconds on a static wallpaper the
+renderer PID was gone and the `released reason=static_idle` marker was present.
+After switching to video, the poster capture completed in 63.8 ms; its center
+pixel matched the static poster before and after (`[32, 160, 220]`). A new renderer
+PID started lazily. The desktop does not have libmpv, so motion decoding and its
+first frame were unavailable; this check measures poster visibility and idle
+release only. No installed shell or desktop configuration was changed.

@@ -1,5 +1,13 @@
 # Status
 
+## 2026-10-26 — B0145 idle video renderer release
+
+The B0142 renderer now releases after 60 seconds with static wallpapers across
+all outputs; video selection and an open picker hold it warm. The private nested
+desktop check found the renderer gone after the grace and captured the poster
+63.8 ms after video selection. Full remote CI passes. The desktop lacks libmpv,
+so motion decoding was unavailable during this poster-focused check. [Evidence](specs/0145-video-idle.md).
+
 ## 2026-10-26 — B0144 clock publication across busy boundaries
 
 Fixed a service timer cancellation gap that could skip minute updates without
