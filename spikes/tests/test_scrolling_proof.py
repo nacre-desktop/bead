@@ -274,7 +274,7 @@ class ScrollReversalProofTests(unittest.TestCase):
         self.assertEqual(pacing.SCROLL_SCENES["clipboard"][1:3], (800, 600))
         self.assertEqual(
             pacing.SCROLL_SCENES["clipboard"][0],
-            [("only", "qml", ("ui", "drawers", "toggle", "dashboard")), ("ui", "nacre", "tab", "6")],
+            [("only", "qml", ("ui", "nacre", "clipboard")), ("only", "bead", ("ui", "nacre", "tab", "6"))],
         )
         self.assertEqual(pacing.SCROLL_STORE_KEYS["clipboard"], "dashboard.clipboard.scroll")
         self.assertEqual(pacing.SCROLL_SCENES["wallpaper-picker"][1:3], (960, 1000))

@@ -116,8 +116,8 @@ SCROLL_SCENES = {
     # Widgets has a Bead-only route; use the published on-demand widgets.open route.
     'widgets-gallery': ([('ui', 'widgets', 'open')], 800, 600, 80, 1.6),
     'updates-popout': ([('ui', 'nacre', 'controls', 'updates')], 1600, 600, 80, 1.6),
-    'clipboard': ([('only', 'qml', ('ui', 'drawers', 'toggle', 'dashboard')),
-                   ('ui', 'nacre', 'tab', '6')], 800, 600, 80, 1.6),
+    'clipboard': ([('only', 'qml', ('ui', 'nacre', 'clipboard')),
+                   ('only', 'bead', ('ui', 'nacre', 'tab', '6'))], 800, 600, 80, 1.6),
     # Populate the private daemon's notification list before opening its panel.
     'notifications-list': ([('notify', f'Scroll fixture {i:02d}', f'Private synthetic notification row {i:02d}.')
                             for i in range(20)] + [('sleep', 2.0), ('close-fixture-notices',),
