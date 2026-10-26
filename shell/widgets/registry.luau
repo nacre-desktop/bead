@@ -299,6 +299,7 @@ function M.renderer(document)
         local top_bar=document.hosts.top_bar
         local local_layout=item.host~="canvas" and top_bar and top_bar.mode=="tiles"
         local content_layout=item.host~="canvas" and top_bar and top_bar.mode=="content"
+        local default_content_layout=content_layout and document.preset=="Nacre default"
         local form=package.forms[item.host=="canvas" and "desktop" or "bar"]
         local selected=form and item.style
         if form and (type(selected)~="string" or selected=="") then
@@ -310,9 +311,11 @@ function M.renderer(document)
         if local_layout and item.slot and type(item.slot.span)=="number" then
             local viewport=ui.resolve_for_check(ui.bind("bead.viewport.width")) or 0
             if viewport>0 and top_bar.tiles>0 then available_width=viewport/top_bar.tiles*item.slot.span end
+        elseif content_layout and not default_content_layout and reserved and reserved>0 then
+            available_width=reserved
         end
-        -- Content rows size from their rendered children; maximum reservations
-        -- belong to tiled spans, where neighbours need a stable slot width.
+        -- The shipped default keeps its established natural-packing pixels.
+        -- Other content rows use maximum reservations so child growth won't move neighbours.
         local node=variant.render({instance=item,catalogue=registry,render=render,editing=editing,
             local_layout=local_layout==true,available_width=available_width},values,{})
         if not node then return nil end
@@ -326,7 +329,7 @@ function M.renderer(document)
         end
         local centered_title=content_layout and item.widget=="title" and item.host=="top_bar"
             and item.slot and item.slot.region=="centre"
-        if (local_layout or content_layout and not centered_title)
+        if (local_layout or content_layout and not centered_title and not default_content_layout)
             and available_width and available_width>0 then
             local natural: number
             if content_layout then
