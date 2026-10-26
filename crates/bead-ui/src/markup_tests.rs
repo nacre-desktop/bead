@@ -74,7 +74,7 @@ fn transfer_capture_is_focus_independent_thresholded_and_carries_drop_payload() 
     s.capture_pointer(x, y);
     assert_eq!(s.stores.get("bead.focused").cloned(), focused);
     let candidate = s.transfer_candidate().unwrap();
-    assert_eq!(candidate.payload, Value::Text("source".into()));
+    assert_eq!(candidate.payload, Value::Text("widget-7".into()));
     assert_eq!(candidate.origin, (x, y));
     assert!(candidate.source_rect.2 > 0. && candidate.source_rect.3 > 0.);
     assert!(s.transfer_action(x + 3.99, y, "move").is_none());
