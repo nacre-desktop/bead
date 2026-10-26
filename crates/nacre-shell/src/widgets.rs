@@ -500,6 +500,7 @@ pub(crate) fn canvas_spec_with_root(
         retain_when_closed: passive,
         passive,
         keyboard_focus: false,
+        text_focus_only: false,
         initial_open: false,
         fallback,
         fallback_factory: None,

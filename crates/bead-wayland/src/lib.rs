@@ -708,6 +708,8 @@ pub struct PanelSpec {
     pub passive: bool,
     /// Request keyboard focus and an outside-dismiss layer while the panel is open.
     pub keyboard_focus: bool,
+    /// Keep outside dismissal but request keyboard interactivity only for a text input.
+    pub text_focus_only: bool,
     pub initial_open: bool,
     pub factory: PanelFactory,
     pub fallback: Scene,

@@ -60,6 +60,7 @@ fn spec(owner: Owner, style: Style, geometry: Geometry, interactive: bool) -> Pa
         // owner's OSD stays click-through.
         passive: !interactive,
         keyboard_focus: false,
+        text_focus_only: false,
         initial_open: false,
         fallback,
         fallback_factory: None,

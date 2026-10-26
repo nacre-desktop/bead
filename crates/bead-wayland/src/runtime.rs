@@ -2326,7 +2326,7 @@ impl App {
                             .options
                             .panel_spec
                             .as_ref()
-                            .is_some_and(|s| s.keyboard_focus))
+                            .is_some_and(|s| s.keyboard_focus && !s.text_focus_only))
                         || (self.options.test_keyboard && !companion))
                 {
                     KeyboardInteractivity::Exclusive
@@ -2341,7 +2341,7 @@ impl App {
                             .options
                             .panel_spec
                             .as_ref()
-                            .is_some_and(|s| s.keyboard_focus))
+                            .is_some_and(|s| s.keyboard_focus && !s.text_focus_only))
                 {
                     KeyboardInteractivity::OnDemand
                 } else {

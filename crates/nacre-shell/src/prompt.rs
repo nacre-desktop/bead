@@ -287,6 +287,7 @@ pub fn panel(
         retain_when_closed: false,
         passive: false,
         keyboard_focus: true,
+        text_focus_only: false,
         initial_open: false,
         fallback,
         fallback_factory: None,

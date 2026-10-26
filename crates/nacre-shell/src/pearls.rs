@@ -712,6 +712,7 @@ pub fn guide_spec(colors: &Palette) -> Result<PanelSpec, Box<dyn Error>> {
         retain_when_closed: false,
         passive: true,
         keyboard_focus: false,
+        text_focus_only: false,
         initial_open: false,
         fallback: blank(1., 1.),
         fallback_factory: None,

@@ -1431,6 +1431,7 @@ pub fn panel(
         retain_when_closed: kind == Kind::Wallpaper,
         passive: false,
         keyboard_focus: true,
+        text_focus_only: false,
         initial_open: false,
         fallback: cold.clone(),
         fallback_factory: if kind == Kind::Wallpaper {

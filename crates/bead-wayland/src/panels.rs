@@ -233,6 +233,7 @@ mod tests {
             retain_when_closed: false,
             passive: false,
             keyboard_focus: true,
+            text_focus_only: false,
             initial_open: false,
             factory: std::sync::Arc::new(move |_| {
                 calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);

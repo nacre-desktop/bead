@@ -588,6 +588,7 @@ fn start(
             retain_when_closed: false,
             passive: false,
             keyboard_focus: true,
+            text_focus_only: false,
             initial_open: state::File::path()
                 .map_err(|e| -> Box<dyn std::error::Error> { e.into() })
                 .and_then(state::File::open)
