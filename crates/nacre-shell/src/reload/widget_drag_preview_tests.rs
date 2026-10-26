@@ -1454,18 +1454,26 @@ fn bar_press_prepares_the_exact_drag_source_without_starting_the_gesture() {
         panic!("pressing a real widget prepares its passive drag preview before threshold");
     };
     assert_eq!(output.as_deref(), Some("right"));
-    assert_eq!(values.get("widgets.drag.phase"), Some(&Value::Text("prepare".into())));
+    assert_eq!(
+        values.get("widgets.drag.phase"),
+        Some(&Value::Text("prepare".into()))
+    );
     assert_eq!(
         values.get("widgets.drag.destination"),
         Some(&Value::Text("desktop".into()))
     );
     assert_eq!(values.get("widgets.drag.active"), Some(&Value::Bool(true)));
-    assert_eq!(values.get("widgets.drag.source_origin_valid"), Some(&Value::Bool(true)));
+    assert_eq!(
+        values.get("widgets.drag.source_origin_valid"),
+        Some(&Value::Bool(true))
+    );
     assert!(matches!(
         values.get("widgets.drag.source"),
-        Some(Value::List(items) if items.first().is_some_and(|item| {
+        Some(
+            Value::List(items) if items.first().is_some_and(|item| {
             item["widget"] == "clock" && item["host"] == "status-pill"
-        }))
+        }),
+        )
     ));
     assert_ne!(
         runtime.session.stores.get("widgets.drag.active"),
@@ -1489,15 +1497,18 @@ fn canvas_press_prepares_the_configured_bar_destination_with_global_origin() {
         ("widgets.screen_origin_y".into(), Value::Number(40.)),
         ("bead.desktop.clock".into(), Value::Text("12:34".into())),
     ]);
-    if runtime.stage(UiEvent::Model(host_values)).unwrap().is_some() {
+    if runtime
+        .stage(UiEvent::Model(host_values))
+        .unwrap()
+        .is_some()
+    {
         runtime.commit();
     }
     let nodes = runtime.session.view_nodes();
     let source = nodes
         .iter()
         .find(|node| {
-            node.drag_action.as_deref() == Some("widgets.drag")
-                && node.id.contains("canvas-clock")
+            node.drag_action.as_deref() == Some("widgets.drag") && node.id.contains("canvas-clock")
         })
         .expect("the desktop clock exposes a native drag source");
     let bounds = bead::ui::rect(&source.draw);
@@ -2023,11 +2034,11 @@ fn passive_prepare_bakes_desktop_clock_without_input_and_seeds_bar_sized_morph()
     let mut prepare = BTreeMap::from([
         ("widgets.layout".into(), Value::list(vec![layout.clone()])),
         ("widgets.drag.active".into(), Value::Bool(true)),
-        ("widgets.drag.source".into(), Value::list(vec![source.clone()])),
         (
-            "widgets.drag.phase".into(),
-            Value::Text("prepare".into()),
+            "widgets.drag.source".into(),
+            Value::list(vec![source.clone()]),
         ),
+        ("widgets.drag.phase".into(), Value::Text("prepare".into())),
         (
             "widgets.drag.destination".into(),
             Value::Text("desktop".into()),
@@ -2038,18 +2049,9 @@ fn passive_prepare_bakes_desktop_clock_without_input_and_seeds_bar_sized_morph()
         ("widgets.drag.height".into(), Value::Number(40.)),
         ("widgets.drag.grab_x".into(), Value::Number(16.)),
         ("widgets.drag.grab_y".into(), Value::Number(8.)),
-        (
-            "widgets.drag.source_origin_valid".into(),
-            Value::Bool(true),
-        ),
-        (
-            "widgets.drag.source_origin_x".into(),
-            Value::Number(0.),
-        ),
-        (
-            "widgets.drag.source_origin_y".into(),
-            Value::Number(0.),
-        ),
+        ("widgets.drag.source_origin_valid".into(), Value::Bool(true)),
+        ("widgets.drag.source_origin_x".into(), Value::Number(0.)),
+        ("widgets.drag.source_origin_y".into(), Value::Number(0.)),
         (
             "widgets.drag.target_output_id".into(),
             Value::Text("right".into()),
@@ -2088,21 +2090,18 @@ fn passive_prepare_bakes_desktop_clock_without_input_and_seeds_bar_sized_morph()
     )));
     let prepared_size = largest_rounded_size(&prepared);
     assert!(prepared_size.0 > 64. && prepared_size.1 > 40.);
-    assert!(host_events.lock().unwrap().iter().all(|event| !widget_host_effect(event)));
+    assert!(
+        host_events
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|event| !widget_host_effect(event))
+    );
 
     let mut visible_model = prepare.clone();
-    visible_model.insert(
-        "widgets.drag.phase".into(),
-        Value::Text("dragging".into()),
-    );
-    visible_model.insert(
-        "widgets.drag.destination".into(),
-        Value::Text("bar".into()),
-    );
-    visible_model.insert(
-        "widgets.drag.layout".into(),
-        Value::list(vec![layout]),
-    );
+    visible_model.insert("widgets.drag.phase".into(), Value::Text("dragging".into()));
+    visible_model.insert("widgets.drag.destination".into(), Value::Text("bar".into()));
+    visible_model.insert("widgets.drag.layout".into(), Value::list(vec![layout]));
     visible_model.insert("widgets.drag.x".into(), Value::Number(124.));
     visible_model.insert("widgets.drag.y".into(), Value::Number(68.));
     let source_frame = ghost
@@ -2137,7 +2136,13 @@ fn passive_prepare_bakes_desktop_clock_without_input_and_seeds_bar_sized_morph()
         primitive,
         bead::render::Primitive::Text { text, .. } if text == "12:34:56"
     )));
-    assert!(host_events.lock().unwrap().iter().all(|event| !widget_host_effect(event)));
+    assert!(
+        host_events
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|event| !widget_host_effect(event))
+    );
 }
 
 fn initial_canvas_offer_values(events: &[UiEvent], view: &str) -> BTreeMap<String, Value> {

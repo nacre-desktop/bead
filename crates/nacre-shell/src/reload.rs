@@ -1125,13 +1125,13 @@ impl Runtime {
         let pointer_y = f64::from(origin.1) + surface_y;
         let source_left = f64::from(rect.0) + surface_x;
         let source_top = f64::from(rect.1) + surface_y;
-        let Some(output) = self
-            .output
-            .clone()
-            .or_else(|| match self.session.stores.get("bead.output.name") {
-                Some(bead::core::Value::Text(name)) if !name.is_empty() => Some(name.clone()),
-                _ => None,
-            })
+        let Some(output) =
+            self.output
+                .clone()
+                .or_else(|| match self.session.stores.get("bead.output.name") {
+                    Some(bead::core::Value::Text(name)) if !name.is_empty() => Some(name.clone()),
+                    _ => None,
+                })
         else {
             return;
         };
@@ -1140,7 +1140,10 @@ impl Runtime {
         set("bead.output.name", bead::core::Value::Text(output.clone()));
         set("widgets.drag.active", bead::core::Value::Bool(true));
         set("widgets.drag.source", source);
-        set("widgets.drag.phase", bead::core::Value::Text("prepare".into()));
+        set(
+            "widgets.drag.phase",
+            bead::core::Value::Text("prepare".into()),
+        );
         set(
             "widgets.drag.destination",
             bead::core::Value::Text(
@@ -1172,7 +1175,10 @@ impl Runtime {
             "widgets.drag.grab_y",
             bead::core::Value::Number(f64::from(y - rect.1)),
         );
-        set("widgets.drag.snap_x", bead::core::Value::Number(source_left));
+        set(
+            "widgets.drag.snap_x",
+            bead::core::Value::Number(source_left),
+        );
         set("widgets.drag.snap_y", bead::core::Value::Number(source_top));
         set(
             "widgets.drag.source_origin_x",
