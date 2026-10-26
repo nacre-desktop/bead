@@ -686,26 +686,40 @@ impl Session {
             .hit(x, y, false)
             .filter(|node| node.drag && !node.preview_key.is_empty())
             .map(|node| node.preview_key.clone());
-        self.transfer_capture = self
-            .current_nodes
-            .iter()
-            .rev()
-            .find(|node| {
-                node.contains(x, y) && node.drag_payload.is_some() && node.drag_action.is_some()
+        self.transfer_capture = self.transfer_node_at(x, y).and_then(|node| {
+            Some(super::session::TransferCapture {
+                source: node.id.clone(),
+                action: node.drag_action.clone()?,
+                payload: node.drag_payload.clone()?,
+                origin: (x, y),
+                source_rect: {
+                    let rect = rect(&node.draw);
+                    (rect.x, rect.y, rect.w, rect.h)
+                },
+                active: false,
             })
-            .and_then(|node| {
-                Some(super::session::TransferCapture {
-                    source: node.id.clone(),
-                    action: node.drag_action.clone()?,
-                    payload: node.drag_payload.clone()?,
-                    origin: (x, y),
-                    source_rect: {
-                        let rect = rect(&node.draw);
-                        (rect.x, rect.y, rect.w, rect.h)
-                    },
-                    active: false,
-                })
-            });
+        });
+    }
+    /// A passive transfer candidate under the pointer. This uses the same clipped hit test as
+    /// press capture without recording a gesture, focus change, or pressed state.
+    pub fn transfer_candidate_at(&self, x: f32, y: f32) -> Option<TransferCandidate> {
+        let node = self.transfer_node_at(x, y)?;
+        Some(TransferCandidate {
+            payload: node.drag_payload.clone()?,
+            origin: (x, y),
+            source_rect: {
+                let rect = rect(&node.draw);
+                (rect.x, rect.y, rect.w, rect.h)
+            },
+        })
+    }
+    fn transfer_node_at(&self, x: f32, y: f32) -> Option<&Node> {
+        if !x.is_finite() || !y.is_finite() {
+            return None;
+        }
+        self.current_nodes.iter().rev().find(|node| {
+            node.contains(x, y) && node.drag_payload.is_some() && node.drag_action.is_some()
+        })
     }
     /// The active transfer source and original pointer position, for cross-surface routing.
     pub fn transfer_source(&self) -> Option<(String, Value, (f32, f32))> {

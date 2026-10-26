@@ -38,6 +38,20 @@ return ui.Box{id="root",width=160,height=80,
     (f, s)
 }
 
+fn clipped_transfer_fixture() -> (Fixture, Session) {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Box{id="root",width=80,height=60,
+ ui.Box{id="clip",position="absolute",left=0,top=0,width=10,height=10,clip_children=true,
+  ui.Button{id="source",position="absolute",left=0,top=0,width=30,height=30,text="Move",drag_payload="widget-clip",on_drag=ui.action("select","move")}}}"#,
+    )
+    .unwrap();
+    let s = session(&f);
+    (f, s)
+}
+
 fn activation_transfer_fixture(kind: &str) -> (Fixture, Session) {
     let f = fixture();
     fs::write(
@@ -109,6 +123,54 @@ fn transfer_capture_is_focus_independent_thresholded_and_carries_drop_payload() 
     );
     s.finish_transfer();
     assert!(s.transfer_source().is_none());
+}
+
+#[test]
+fn hover_transfer_candidate_is_readonly_and_respects_clips() {
+    let (_f, s) = clipped_transfer_fixture();
+    let source = s
+        .current_nodes
+        .iter()
+        .find(|node| node.id.ends_with("source"))
+        .expect("clipped transfer source is materialized");
+    let source_rect = bead_render::tree::rect(&source.draw);
+    let clip = source.clip.expect("source inherits its parent's clip");
+    let before_focus = s.stores.get("bead.focused").cloned();
+    let before_pressed = s.stores.get("bead.pressed").cloned();
+
+    let inside = (clip.x + clip.w / 2., clip.y + clip.h / 2.);
+    let candidate = s
+        .transfer_candidate_at(inside.0, inside.1)
+        .expect("hover inside the clipped source finds the transfer payload");
+    assert_eq!(candidate.payload, Value::Text("widget-clip".into()));
+    assert_eq!(candidate.origin, inside);
+    assert_eq!(
+        candidate.source_rect,
+        (source_rect.x, source_rect.y, source_rect.w, source_rect.h)
+    );
+    assert!(
+        s.transfer_candidate().is_none(),
+        "hover does not capture a press"
+    );
+    assert!(s.transfer_source().is_none());
+
+    let outside_clip = (
+        source_rect.x + source_rect.w / 2.,
+        source_rect.y + source_rect.h / 2.,
+    );
+    assert!(
+        outside_clip.0 >= source_rect.x
+            && outside_clip.0 <= source_rect.x + source_rect.w
+            && outside_clip.1 >= source_rect.y
+            && outside_clip.1 <= source_rect.y + source_rect.h
+    );
+    assert!(
+        s.transfer_candidate_at(outside_clip.0, outside_clip.1)
+            .is_none(),
+        "a source's visible clip constrains passive transfer eligibility"
+    );
+    assert_eq!(s.stores.get("bead.focused").cloned(), before_focus);
+    assert_eq!(s.stores.get("bead.pressed").cloned(), before_pressed);
 }
 
 #[test]

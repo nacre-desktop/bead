@@ -165,6 +165,19 @@ struct WidgetFloatingRequest {
     enabled: bool,
     attempted: bool,
 }
+#[derive(Clone, PartialEq)]
+struct WidgetHoverPreviewKey {
+    payload: bead::core::Value,
+    source_rect: [u32; 4],
+    output: String,
+    revision: u64,
+}
+struct WidgetHoverPreview {
+    key: WidgetHoverPreviewKey,
+    prepared_at: std::time::Instant,
+}
+const WIDGET_HOVER_PREVIEW_RENEW: std::time::Duration = std::time::Duration::from_millis(1500);
+const WIDGET_HOVER_PREVIEW_DEDUPE: std::time::Duration = std::time::Duration::from_millis(1400);
 fn widget_floating_action(
     request: &mut Option<WidgetFloatingRequest>,
     active: Option<(u32, u64)>,
@@ -578,6 +591,7 @@ pub struct Runtime {
     widget_drag_wanted: bool,
     widget_drag_output: Option<String>,
     widget_drag_projection: Option<BTreeMap<String, bead::core::Value>>,
+    widget_hover_preview: Option<WidgetHoverPreview>,
     widget_drag_epoch: u64,
     widget_drag_retire_cleanup: bool,
     widget_drag_action_registered: bool,
@@ -1100,6 +1114,9 @@ impl Runtime {
     }
     fn publish_widget_drag_projection(&mut self, drag_values: BTreeMap<String, bead::core::Value>) {
         let active = drag_values.get("widgets.drag.active") == Some(&bead::core::Value::Bool(true));
+        if active {
+            self.widget_hover_preview = None;
+        }
         let output = drag_values
             .get("widgets.drag.target_output_id")
             .and_then(|value| {
@@ -1144,19 +1161,32 @@ impl Runtime {
             }
         }
     }
-    fn prepare_widget_drag_preview(&self, x: f32, y: f32) {
+    fn widget_drag_preview(
+        &self,
+        x: f32,
+        y: f32,
+        candidate: bead::ui::TransferCandidate,
+    ) -> Option<(WidgetHoverPreviewKey, BTreeMap<String, bead::core::Value>)> {
         if self.widget_app || !(self.bar || self.widget_canvas) {
-            return;
+            return None;
         }
-        let Some(candidate) = self.session.transfer_candidate() else {
-            return;
-        };
+        if ![
+            candidate.origin.0,
+            candidate.origin.1,
+            candidate.source_rect.0,
+            candidate.source_rect.1,
+            candidate.source_rect.2,
+            candidate.source_rect.3,
+        ]
+        .into_iter()
+        .all(f32::is_finite)
+        {
+            return None;
+        }
         let bead::core::Value::List(items) = &candidate.payload else {
-            return;
+            return None;
         };
-        let Some(item) = items.first() else {
-            return;
-        };
+        let item = items.first()?;
         let host = item["host"].as_str().unwrap_or_default().to_owned();
         let source_form = item["form"].as_str().unwrap_or_default().to_owned();
         let bar_source = self.bar && matches!(host.as_str(), "top_bar" | "status-pill");
@@ -1165,10 +1195,7 @@ impl Runtime {
             || (!bar_source && !canvas_source)
             || !matches!(source_form.as_str(), "bar" | "desktop")
         {
-            return;
-        }
-        let Some(wakeup) = &self.wakeup else {
-            return;
+            return None;
         };
         let number = |key: &str| match self.session.stores.get(key) {
             Some(bead::core::Value::Number(value)) if value.is_finite() => *value,
@@ -1186,15 +1213,30 @@ impl Runtime {
         let pointer_y = f64::from(candidate.origin.1) + surface_y;
         let source_left = f64::from(candidate.source_rect.0) + surface_x;
         let source_top = f64::from(candidate.source_rect.1) + surface_y;
-        let Some(output) =
+        let output =
             self.output
                 .clone()
                 .or_else(|| match self.session.stores.get("bead.output.name") {
                     Some(bead::core::Value::Text(name)) if !name.is_empty() => Some(name.clone()),
                     _ => None,
-                })
-        else {
-            return;
+                })?;
+        let key = WidgetHoverPreviewKey {
+            payload: candidate.payload.clone(),
+            source_rect: [
+                candidate.source_rect.0.to_bits(),
+                candidate.source_rect.1.to_bits(),
+                candidate.source_rect.2.to_bits(),
+                candidate.source_rect.3.to_bits(),
+            ],
+            output: output.clone(),
+            revision: match self.session.stores.get("widgets.rev") {
+                Some(bead::core::Value::Number(revision))
+                    if revision.is_finite() && *revision >= 0. =>
+                {
+                    *revision as u64
+                }
+                _ => 0,
+            },
         };
         let mut values = self.widget_drag_preview_values();
         let mut set = |key: &str, value| values.insert(key.into(), value);
@@ -1263,13 +1305,104 @@ impl Runtime {
         );
         set(
             "widgets.drag.target_output_id",
-            bead::core::Value::Text(output.clone()),
+            bead::core::Value::Text(output),
         );
+        Some((key, values))
+    }
+    fn send_widget_drag_prepare(
+        &self,
+        key: &WidgetHoverPreviewKey,
+        values: BTreeMap<String, bead::core::Value>,
+    ) -> bool {
+        let Some(wakeup) = &self.wakeup else {
+            return false;
+        };
         wakeup(UiEvent::CanvasPrepare {
             view: "widgets-drag".into(),
-            output: Some(output),
+            output: Some(key.output.clone()),
             values,
         });
+        true
+    }
+    fn widget_drag_is_active(&self) -> bool {
+        self.widget_drag_wanted
+            || self.widget_drag_model.as_ref().is_some_and(|model| {
+                model.get("widgets.drag.active") == Some(&bead::core::Value::Bool(true))
+            })
+            || self.session.stores.get("widgets.drag.active")
+                == Some(&bead::core::Value::Bool(true))
+            || self.session.transfer_candidate().is_some()
+            || self.session.transfer_source().is_some()
+    }
+    fn retire_widget_hover_preview(&mut self) {
+        if self.widget_drag_is_active() {
+            return;
+        }
+        let Some(previous) = self.widget_hover_preview.take() else {
+            return;
+        };
+        if let Some(wakeup) = &self.wakeup {
+            wakeup(UiEvent::CanvasOffer {
+                view: "widgets-drag".into(),
+                output: Some(previous.key.output),
+                open: false,
+                values: self.widget_drag_preview_values(),
+            });
+        }
+    }
+    fn prepare_widget_drag_preview(&mut self, x: f32, y: f32) {
+        let Some(candidate) = self.session.transfer_candidate() else {
+            return;
+        };
+        let Some((key, values)) = self.widget_drag_preview(x, y, candidate) else {
+            return;
+        };
+        if self
+            .widget_hover_preview
+            .as_ref()
+            .is_some_and(|previous| previous.key.output != key.output)
+        {
+            self.retire_widget_hover_preview();
+        }
+        if self.send_widget_drag_prepare(&key, values) {
+            self.widget_hover_preview = Some(WidgetHoverPreview {
+                key,
+                prepared_at: std::time::Instant::now(),
+            });
+        }
+    }
+    fn prewarm_widget_drag_hover(&mut self, x: f32, y: f32) {
+        if self.widget_drag_is_active() {
+            return;
+        }
+        let preview = self
+            .session
+            .transfer_candidate_at(x, y)
+            .and_then(|candidate| self.widget_drag_preview(x, y, candidate));
+        let Some((key, values)) = preview else {
+            self.retire_widget_hover_preview();
+            return;
+        };
+        let now = std::time::Instant::now();
+        if self.widget_hover_preview.as_ref().is_some_and(|previous| {
+            previous.key == key
+                && now.saturating_duration_since(previous.prepared_at) < WIDGET_HOVER_PREVIEW_DEDUPE
+        }) {
+            return;
+        }
+        if self
+            .widget_hover_preview
+            .as_ref()
+            .is_some_and(|previous| previous.key.output != key.output)
+        {
+            self.retire_widget_hover_preview();
+        }
+        if self.send_widget_drag_prepare(&key, values) {
+            self.widget_hover_preview = Some(WidgetHoverPreview {
+                key,
+                prepared_at: now,
+            });
+        }
     }
     fn stage_widget_drag_values(
         &self,
@@ -2060,6 +2193,7 @@ impl Runtime {
             widget_drag_wanted: false,
             widget_drag_output: None,
             widget_drag_projection: None,
+            widget_hover_preview: None,
             widget_drag_epoch: 1u64 << 63,
             widget_drag_retire_cleanup: false,
             widget_drag_action_registered: false,
@@ -4231,8 +4365,16 @@ impl SceneSource for Runtime {
         if self.slider_local_active {
             return send;
         }
+        let hover = (!self.widget_drag_is_active())
+            .then(|| {
+                self.widget_hover_preview
+                    .as_ref()
+                    .map(|preview| preview.prepared_at + WIDGET_HOVER_PREVIEW_RENEW)
+            })
+            .flatten();
         [
             send,
+            hover,
             self.session.preview_deadline(),
             self.session.hover_close_deadline(),
             self.dashboard_pearl_deadline,
@@ -4834,6 +4976,15 @@ impl SceneSource for Runtime {
         if let UiEvent::LocalDrag { x, y } = event {
             local = true;
             event = UiEvent::Drag { x, y };
+        }
+        if matches!(&event, UiEvent::Model(values) if values.is_empty())
+            && !self.widget_drag_is_active()
+            && self
+                .widget_hover_preview
+                .as_ref()
+                .is_some_and(|preview| preview.prepared_at.elapsed() >= WIDGET_HOVER_PREVIEW_RENEW)
+        {
+            self.prewarm_widget_drag_hover(self.pointer_at.0, self.pointer_at.1);
         }
         // Finish the old gesture before release can retire its final target. A final flush is exempt from the continuous-drag cap.
         if matches!(&event, UiEvent::Release)
@@ -7790,6 +7941,7 @@ impl SceneSource for Runtime {
                 value,
             } => self.session.accessibility_action(target, &action, value)?,
             UiEvent::Hover { x, y } => {
+                self.prewarm_widget_drag_hover(x, y);
                 let before = self.status_pill.clone();
                 let pill_item = self
                     .session

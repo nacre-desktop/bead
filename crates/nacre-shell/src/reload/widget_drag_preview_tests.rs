@@ -1481,6 +1481,288 @@ fn bar_press_prepares_the_exact_drag_source_without_starting_the_gesture() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+fn hover_prewarm_document() -> Json {
+    let mut document = document();
+    document["preset"] = json!("Hover prewarm");
+    document["widgets"] = json!({
+        "clock-main": {
+            "widget":"clock",
+            "settings":{"dropdown_trigger":"default"},
+            "forms":{
+                "bar":{"enabled":true,"style":"time","placement":{"host":"top_bar","slot":{"region":"left","start":0,"span":1}}},
+                "desktop":{"enabled":false,"style":"time","placement":{"host":"canvas","slot":{"x":40,"y":50,"w":360,"h":100}}}
+            }
+        }
+    });
+    document["hosts"]["canvas"] = json!({
+        "width":1920,"height":1080,"instances":[
+            {"iid":"clock-desktop","group":"clock-main","widget":"clock","host":"canvas","style":"time","slot":{"x":40,"y":50,"w":360,"h":100},"settings":{}}
+        ]
+    });
+    document
+}
+
+#[test]
+fn bar_hover_prewarms_once_retires_on_leave_and_reuses_the_warm_destination() {
+    let dir =
+        std::env::temp_dir().join(format!("widget-drag-hover-prepare-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("widgets.json");
+    let mut runtime = real_bar_runtime(file.clone());
+    runtime = runtime
+        .with_shared_desktop(
+            bead::services::Desktop::start_config(bead::services::Config {
+                audio: false,
+                bus: false,
+            }),
+            true,
+        )
+        .unwrap();
+    let initial_document = hover_prewarm_document();
+    if runtime
+        .stage(UiEvent::Model(BTreeMap::from([
+            (
+                "widgets.layout".into(),
+                Value::list(vec![initial_document.clone()]),
+            ),
+            ("widgets.rev".into(), Value::Number(1.)),
+        ])))
+        .unwrap()
+        .is_some()
+    {
+        runtime.commit();
+    }
+    let source = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| {
+            node.drag_action.as_deref() == Some("widgets.drag") && node.id.contains("clock")
+        })
+        .expect("the real bar exposes a draggable clock inside its status pill");
+    let bounds = bead::ui::rect(&source.draw);
+    let (x, y) = (bounds.x + bounds.w / 2., bounds.y + bounds.h / 2.);
+    let candidate = runtime
+        .session
+        .transfer_candidate_at(x, y)
+        .expect("the hovered real widget has a passive transfer candidate");
+    let Value::List(candidate_items) = &candidate.payload else {
+        panic!("widget drag payload is a list");
+    };
+    assert!(candidate_items.first().is_some_and(|item| {
+        item["widget"] == "clock"
+            && item["form"] == "bar"
+            && item["style"] == "time"
+            && item["host"] == "top_bar"
+            && item["settings"]["dropdown_trigger"] == "default"
+    }));
+    let layout_before = runtime.session.stores.get("widgets.layout").cloned();
+    let focused_before = runtime.session.stores.get("bead.focused").cloned();
+    let pressed_before = runtime.session.stores.get("bead.pressed").cloned();
+    let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sent = events.clone();
+    runtime.wakeup = Some(std::sync::Arc::new(move |event| {
+        sent.lock().unwrap().push(event);
+    }));
+    let hover = |runtime: &mut Runtime, x, y| {
+        if runtime.stage(UiEvent::Hover { x, y }).unwrap().is_some() {
+            runtime.commit();
+        }
+    };
+
+    hover(&mut runtime, x, y);
+    hover(&mut runtime, x + 1., y);
+    assert_eq!(
+        runtime.session.stores.get("widgets.layout").cloned(),
+        layout_before
+    );
+    assert_eq!(
+        runtime.session.stores.get("bead.focused").cloned(),
+        focused_before
+    );
+    assert_eq!(
+        runtime.session.stores.get("bead.pressed").cloned(),
+        pressed_before
+    );
+    assert!(runtime.session.transfer_candidate().is_none());
+    assert!(!file.exists(), "hover does not persist widget layout");
+
+    {
+        let events = events.lock().unwrap();
+        let prepares = events
+            .iter()
+            .filter_map(|event| match event {
+                UiEvent::CanvasPrepare {
+                    view,
+                    output,
+                    values,
+                } if view == "widgets-drag" => Some((output, values)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            prepares.len(),
+            1,
+            "pointer movement over a widget is deduplicated"
+        );
+        assert_eq!(prepares[0].0.as_deref(), Some("right"));
+        assert_eq!(
+            prepares[0].1.get("widgets.drag.source"),
+            Some(&candidate.payload)
+        );
+        assert_eq!(
+            prepares[0].1.get("widgets.drag.destination"),
+            Some(&Value::Text("desktop".into()))
+        );
+        assert_eq!(
+            prepares[0].1.get("widgets.drag.phase"),
+            Some(&Value::Text("prepare".into()))
+        );
+    }
+
+    runtime
+        .widget_hover_preview
+        .as_mut()
+        .expect("hover preview owns a bounded renewal deadline")
+        .prepared_at = std::time::Instant::now() - std::time::Duration::from_secs(2);
+    assert!(
+        runtime.wakeup_at().is_some(),
+        "stationary hover renews via the source deadline"
+    );
+    if runtime
+        .stage(UiEvent::Model(BTreeMap::new()))
+        .unwrap()
+        .is_some()
+    {
+        runtime.commit();
+    }
+    assert_eq!(
+        events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|event| matches!(event, UiEvent::CanvasPrepare { view, .. } if view == "widgets-drag"))
+            .count(),
+        2,
+        "a stationary pointer renews the same passive warm target before its two-second expiry"
+    );
+    assert!(
+        !events.lock().unwrap().iter().any(|event| matches!(event,
+        UiEvent::CanvasOffer { view, open: false, .. } if view == "widgets-drag")),
+        "renewal does not close or replace the retained worker"
+    );
+
+    let bar_payload = runtime
+        .session
+        .transfer_candidate_at(x, y)
+        .expect("the source still has its configured bar transfer payload")
+        .payload;
+    let mut target_config = initial_document.clone();
+    target_config["widgets"]["clock-main"]["forms"]["desktop"]["style"] = json!("time+date");
+    if runtime
+        .stage(UiEvent::Model(BTreeMap::from([
+            ("widgets.layout".into(), Value::list(vec![target_config])),
+            ("widgets.rev".into(), Value::Number(2.)),
+        ])))
+        .unwrap()
+        .is_some()
+    {
+        runtime.commit();
+    }
+    assert_eq!(
+        runtime
+            .session
+            .transfer_candidate_at(x, y)
+            .expect("source remains at the pointer")
+            .payload,
+        bar_payload,
+        "changing the configured desktop form leaves the bar payload unchanged"
+    );
+    hover(&mut runtime, x, y);
+    let target_preview = events
+        .lock()
+        .unwrap()
+        .iter()
+        .rev()
+        .find_map(|event| match event {
+            UiEvent::CanvasPrepare { view, values, .. } if view == "widgets-drag" => {
+                Some(values.clone())
+            }
+            _ => None,
+        });
+    assert!(
+        matches!(target_preview.as_ref().and_then(|values| values.get("widgets.layout")),
+        Some(Value::List(documents))
+            if documents[0]["widgets"]["clock-main"]["forms"]["desktop"]["style"] == "time+date")
+    );
+    assert_eq!(
+        target_preview
+            .as_ref()
+            .and_then(|values| values.get("widgets.drag.source")),
+        Some(&bar_payload)
+    );
+
+    hover(&mut runtime, -1., -1.);
+    assert!(events.lock().unwrap().iter().any(|event| matches!(event,
+        UiEvent::CanvasOffer { view, output: Some(output), open: false, .. }
+            if view == "widgets-drag" && output == "right")));
+    hover(&mut runtime, x, y);
+    hover(&mut runtime, x + 1., y);
+    let prepares = events
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(
+            |event| matches!(event, UiEvent::CanvasPrepare { view, .. } if view == "widgets-drag"),
+        )
+        .count();
+    assert_eq!(
+        prepares, 4,
+        "re-entry reuses the retained destination instead of restarting it"
+    );
+
+    runtime.output = Some("left".into());
+    hover(&mut runtime, x, y);
+    hover(&mut runtime, x + 1., y);
+    assert!(events.lock().unwrap().iter().any(|event| matches!(event,
+        UiEvent::CanvasOffer { view, output: Some(output), open: false, .. }
+            if view == "widgets-drag" && output == "right")));
+    let prepares = events
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|event| {
+            matches!(event, UiEvent::CanvasPrepare { view, output: Some(output), .. }
+            if view == "widgets-drag" && output == "left")
+        })
+        .count();
+    assert_eq!(
+        prepares, 1,
+        "a changed output gets one prepared destination"
+    );
+    hover(&mut runtime, -1., -1.);
+    assert!(events.lock().unwrap().iter().any(|event| matches!(event,
+        UiEvent::CanvasOffer { view, output: Some(output), open: false, .. }
+            if view == "widgets-drag" && output == "left")));
+    hover(&mut runtime, x, y);
+    assert_eq!(
+        events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(
+                |event| matches!(event, UiEvent::CanvasPrepare { view, output: Some(output), .. }
+                if view == "widgets-drag" && output == "left")
+            )
+            .count(),
+        2,
+        "re-enter within the host retention window prepares on the same output"
+    );
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[test]
 fn bar_drag_threshold_offers_ghost_before_root_reflow_commit() {
     let dir = std::env::temp_dir().join(format!(
