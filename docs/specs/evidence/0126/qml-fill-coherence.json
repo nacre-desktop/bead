@@ -1,0 +1,377 @@
+{
+  "method": "cursor-free PNGs: primary handle vertical run >=12px; center-row fill continuity and no trailing accent beyond handle; 3px AA allowance; shared-pose trace is separate exact-value proof",
+  "frames": 41,
+  "valid_frames": 41,
+  "coherent_frames": 41,
+  "rows": [
+    {
+      "frame": "000.png",
+      "handle_primary_bounds": [
+        155,
+        165
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "001.png",
+      "handle_primary_bounds": [
+        155,
+        165
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "002.png",
+      "handle_primary_bounds": [
+        155,
+        165
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "003.png",
+      "handle_primary_bounds": [
+        155,
+        165
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "004.png",
+      "handle_primary_bounds": [
+        155,
+        165
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "005.png",
+      "handle_primary_bounds": [
+        155,
+        165
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "006.png",
+      "handle_primary_bounds": [
+        155,
+        165
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "007.png",
+      "handle_primary_bounds": [
+        155,
+        165
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "008.png",
+      "handle_primary_bounds": [
+        155,
+        165
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "009.png",
+      "handle_primary_bounds": [
+        155,
+        165
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "010.png",
+      "handle_primary_bounds": [
+        155,
+        165
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "011.png",
+      "handle_primary_bounds": [
+        66,
+        76
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "012.png",
+      "handle_primary_bounds": [
+        66,
+        76
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "013.png",
+      "handle_primary_bounds": [
+        66,
+        76
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "014.png",
+      "handle_primary_bounds": [
+        66,
+        76
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "015.png",
+      "handle_primary_bounds": [
+        66,
+        76
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "016.png",
+      "handle_primary_bounds": [
+        66,
+        76
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "017.png",
+      "handle_primary_bounds": [
+        173,
+        184
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "018.png",
+      "handle_primary_bounds": [
+        66,
+        76
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "019.png",
+      "handle_primary_bounds": [
+        191,
+        201
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "020.png",
+      "handle_primary_bounds": [
+        230,
+        240
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "021.png",
+      "handle_primary_bounds": [
+        230,
+        240
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "022.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "023.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "024.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "025.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "026.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "027.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "028.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "029.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "030.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "031.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "032.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "033.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "034.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "035.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "036.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "037.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "038.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "039.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    },
+    {
+      "frame": "040.png",
+      "handle_primary_bounds": [
+        298,
+        308
+      ],
+      "gap_pixels": 0,
+      "excess_pixels": 0
+    }
+  ]
+}

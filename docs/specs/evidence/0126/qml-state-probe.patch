@@ -1,0 +1,73 @@
+--- a/spikes/qml-presentation.cpp
++++ b/spikes/qml-presentation.cpp
+@@ -3,6 +3,7 @@
+ #include <QGuiApplication>
+ #include <QQuickWindow>
+ #include <QQuickItem>
++#include <QPointer>
+ #include <QTimer>
+ #include <QQmlEngine>
+ #include <QJSEngine>
+@@ -85,6 +86,17 @@
+     for(auto &[surface,s]:samples) std::fprintf(stderr,"QML_PRESENTED surface=%p samples=%zu p50_ms=%.3f p99_ms=%.3f refresh_ns=%u kind=%u discarded=%u\n",static_cast<void*>(surface),s.intervals.size(),percentile(s.intervals,.5),percentile(s.intervals,.99),s.refresh,s.kind,s.discarded);
+ }
+ static std::vector<QQuickWindow*> tracked;
++// PointerHandler grabs may leave mouseGrabberItem() empty. Cache the real
++// unique control at the press, then read its state only while left is held.
++static std::map<QQuickWindow*,QPointer<QQuickItem>> pressed_sliders;
++static void slidersAt(QQuickItem *item,const QPointF &point,std::vector<QQuickItem*> &found) {
++    if(!item->isVisible()||!item->isEnabled()) return;
++    const bool inside=item->contains(item->mapFromScene(point));
++    if(item->clip()&&!inside) return;
++    if(inside&&item->property("visualPosition").isValid()) found.push_back(item);
++    for(auto *child:item->childItems()) slidersAt(child,point,found);
++}
++
+ // childAt can select an opacity-zero overlay above the pointer target. Search
+ // visible paint branches and require the interaction's actual feedback item.
+ static QQuickItem *hoveredFeedback(QQuickItem *item,const QPointF &point) {
+@@ -112,6 +124,7 @@
+     tracked.push_back(quick);
+     QObject::connect(quick,&QObject::destroyed,QCoreApplication::instance(),[quick] {
+         tracked.erase(std::remove(tracked.begin(),tracked.end(),quick),tracked.end());
++        pressed_sliders.erase(quick);
+     });
+     const auto hook=(std::getenv("BEAD_QML_TRACE_INPUT")||std::getenv("BEAD_QML_TRACE_POINTER"))?&QQuickWindow::afterSynchronizing:&QQuickWindow::beforeFrameBegin;
+     QObject::connect(quick,hook,quick,[native,quick] {
+@@ -126,11 +139,18 @@
+                 auto *feedback=hoveredFeedback(quick->contentItem(),QPointF(pointer_x.load(),pointer_y.load()));
+                 std::fprintf(stderr,"QML_POINTER_HOVER frame=%u generation=%u hovered=%d opacity=%.6f\n",frame,generation.load(),feedback?1:0,feedback?feedback->opacity():-1.);
+             }
++            QQuickItem *slider=nullptr;
+             for(auto *item=quick->mouseGrabberItem();item;item=item->parentItem()) {
+-                if(!item->property("visualPosition").isValid()) continue;
++                if(item->property("visualPosition").isValid()) {slider=item;break;}
++            }
++            if(!slider) {
++                const auto found=pressed_sliders.find(quick);
++                if(found!=pressed_sliders.end()&&found->second&&found->second->window()==quick
++                    &&found->second->isVisible()&&found->second->isEnabled()) slider=found->second;
++            }
++            if(auto *item=slider) {
+                 const auto origin=item->mapToScene(QPointF(0,0));
+                 std::fprintf(stderr,"QML_POINTER_VALUE frame=%u generation=%u value=%.6f position=%.6f x=%.3f y=%.3f width=%.3f padding=%.3f available=%.3f\n",frame,generation.load(),item->property("value").toDouble(),item->property("visualPosition").toDouble(),origin.x(),origin.y(),item->width(),item->property("leftPadding").toDouble(),item->property("availableWidth").toDouble());
+-                break;
+             }
+         }
+         auto *feedback=wp_presentation_feedback(presentation,surface);
+@@ -144,6 +164,15 @@
+         if(std::getenv("BEAD_QML_TRACE_POINTER")&&qobject_cast<QQuickWindow*>(object)
+             &&(event->type()==QEvent::MouseMove||event->type()==QEvent::MouseButtonPress||event->type()==QEvent::MouseButtonRelease)) {
+             auto *mouse=static_cast<QMouseEvent*>(event);
++            if(event->type()==QEvent::MouseButtonPress&&mouse->button()==Qt::LeftButton) {
++                auto *quick=qobject_cast<QQuickWindow*>(object);
++                std::vector<QQuickItem*> candidates;
++                slidersAt(quick->contentItem(),mouse->position(),candidates);
++                pressed_sliders[quick]=candidates.size()==1?candidates.front():nullptr;
++                std::fprintf(stderr,"QML_SLIDER_PRESS candidates=%zu\n",candidates.size());
++            }
++            if(event->type()==QEvent::MouseButtonRelease&&mouse->button()==Qt::LeftButton)
++                pressed_sliders.erase(qobject_cast<QQuickWindow*>(object));
+             pointer_x.store(mouse->position().x());pointer_y.store(mouse->position().y());
+             const auto value=input_generation.fetch_add(1)+1;
+             generation.store(value);

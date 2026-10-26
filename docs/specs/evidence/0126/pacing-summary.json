@@ -1,0 +1,221 @@
+{
+  "method": "first recorded presented motion per gesture versus remaining exact joins; parent frame and callback clocks in that dispatch/commit bracket",
+  "first_dispatch_to_commit_ms": {
+    "n": 12,
+    "p50": 11.667415,
+    "p95": 11.935225,
+    "p99": 11.935225
+  },
+  "remaining_dispatch_to_commit_ms": {
+    "n": 70,
+    "p50": 0.0515,
+    "p95": 0.0805,
+    "p99": 26.401527
+  },
+  "first_motion_records": [
+    {
+      "gesture": "pointer-01.log",
+      "x": 164.66406,
+      "injection_ns": 839254533870333,
+      "dispatch_ns": 839254543399838,
+      "received_ns": 839254543402328,
+      "commit_ns": 839254555335063,
+      "presented_ns": 839254594976694,
+      "dispatch_to_commit_ms": 11.935225,
+      "parent_frames": [
+        {
+          "end_ns": 839254555343483,
+          "render_ms": 11.868
+        }
+      ],
+      "callback_after_dispatch_ms": 0.01299
+    },
+    {
+      "gesture": "pointer-02.log",
+      "x": 247.33203,
+      "injection_ns": 839255230725348,
+      "dispatch_ns": 839255240247123,
+      "received_ns": 839255240252583,
+      "commit_ns": 839255251914538,
+      "presented_ns": 839255264193962,
+      "dispatch_to_commit_ms": 11.667415,
+      "parent_frames": [
+        {
+          "end_ns": 839255251921908,
+          "render_ms": 11.613
+        }
+      ],
+      "callback_after_dispatch_ms": 0.01535
+    },
+    {
+      "gesture": "pointer-03.log",
+      "x": 128.66406,
+      "injection_ns": 839255953297271,
+      "dispatch_ns": 839255962520387,
+      "received_ns": 839255962526017,
+      "commit_ns": 839255974124221,
+      "presented_ns": 839255986468596,
+      "dispatch_to_commit_ms": 11.603834,
+      "parent_frames": [
+        {
+          "end_ns": 839255974131871,
+          "render_ms": 11.553
+        }
+      ],
+      "callback_after_dispatch_ms": 0.015
+    },
+    {
+      "gesture": "pointer-04.log",
+      "x": 247.33203,
+      "injection_ns": 839256675290644,
+      "dispatch_ns": 839256684525360,
+      "received_ns": 839256684530560,
+      "commit_ns": 839256696250535,
+      "presented_ns": 839256708472049,
+      "dispatch_to_commit_ms": 11.725175,
+      "parent_frames": [
+        {
+          "end_ns": 839256696258395,
+          "render_ms": 11.668
+        }
+      ],
+      "callback_after_dispatch_ms": 0.01477
+    },
+    {
+      "gesture": "pointer-05.log",
+      "x": 128.66406,
+      "injection_ns": 839257397996167,
+      "dispatch_ns": 839257407186073,
+      "received_ns": 839257407190663,
+      "commit_ns": 839257418898787,
+      "presented_ns": 839257431137452,
+      "dispatch_to_commit_ms": 11.712714,
+      "parent_frames": [
+        {
+          "end_ns": 839257418906357,
+          "render_ms": 11.661
+        }
+      ],
+      "callback_after_dispatch_ms": 0.01387
+    },
+    {
+      "gesture": "pointer-06.log",
+      "x": 247.33203,
+      "injection_ns": 839258120592330,
+      "dispatch_ns": 839258129808456,
+      "received_ns": 839258129813816,
+      "commit_ns": 839258141664940,
+      "presented_ns": 839258153760104,
+      "dispatch_to_commit_ms": 11.856484,
+      "parent_frames": [
+        {
+          "end_ns": 839258141672650,
+          "render_ms": 11.807
+        }
+      ],
+      "callback_after_dispatch_ms": 0.01509
+    },
+    {
+      "gesture": "pointer-07.log",
+      "x": 123.33203,
+      "injection_ns": 839258839267895,
+      "dispatch_ns": 839258844178073,
+      "received_ns": 839258844182753,
+      "commit_ns": 839258855450907,
+      "presented_ns": 839258868163431,
+      "dispatch_to_commit_ms": 11.272834,
+      "parent_frames": [
+        {
+          "end_ns": 839258855459237,
+          "render_ms": 11.246
+        }
+      ],
+      "callback_after_dispatch_ms": 0.01357
+    },
+    {
+      "gesture": "pointer-08.log",
+      "x": 247.33203,
+      "injection_ns": 839259565488226,
+      "dispatch_ns": 839259574706752,
+      "received_ns": 839259574712582,
+      "commit_ns": 839259586230986,
+      "presented_ns": 839259598654781,
+      "dispatch_to_commit_ms": 11.524234,
+      "parent_frames": [
+        {
+          "end_ns": 839259586238546,
+          "render_ms": 11.47
+        }
+      ],
+      "callback_after_dispatch_ms": 0.01569
+    },
+    {
+      "gesture": "pointer-09.log",
+      "x": 128.66406,
+      "injection_ns": 839260287895489,
+      "dispatch_ns": 839260297107905,
+      "received_ns": 839260297114265,
+      "commit_ns": 839260308539009,
+      "presented_ns": 839260321061913,
+      "dispatch_to_commit_ms": 11.431104,
+      "parent_frames": [
+        {
+          "end_ns": 839260308547949,
+          "render_ms": 11.379
+        }
+      ],
+      "callback_after_dispatch_ms": 0.01653
+    },
+    {
+      "gesture": "pointer-10.log",
+      "x": 247.33203,
+      "injection_ns": 839261010339472,
+      "dispatch_ns": 839261019565758,
+      "received_ns": 839261019571168,
+      "commit_ns": 839261031059732,
+      "presented_ns": 839261043520756,
+      "dispatch_to_commit_ms": 11.493974,
+      "parent_frames": [
+        {
+          "end_ns": 839261031067352,
+          "render_ms": 11.442
+        }
+      ],
+      "callback_after_dispatch_ms": 0.01554
+    },
+    {
+      "gesture": "pointer-11.log",
+      "x": 128.66406,
+      "injection_ns": 839261733084305,
+      "dispatch_ns": 839261742318211,
+      "received_ns": 839261742323191,
+      "commit_ns": 839261754115365,
+      "presented_ns": 839261766260789,
+      "dispatch_to_commit_ms": 11.797154,
+      "parent_frames": [
+        {
+          "end_ns": 839261754122985,
+          "render_ms": 11.743
+        }
+      ],
+      "callback_after_dispatch_ms": 0.0154
+    },
+    {
+      "gesture": "pointer-12.log",
+      "x": 247.33203,
+      "injection_ns": 839262455344858,
+      "dispatch_ns": 839262464555584,
+      "received_ns": 839262464560864,
+      "commit_ns": 839262476302778,
+      "presented_ns": 839262488502732,
+      "dispatch_to_commit_ms": 11.747194,
+      "parent_frames": [
+        {
+          "end_ns": 839262476310688,
+          "render_ms": 11.682
+        }
+      ],
+      "callback_after_dispatch_ms": 0.01734
+    }
+  ]
+}

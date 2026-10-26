@@ -3,7 +3,8 @@
 Status: owner accepted the measured candidate on 2026-10-25; the measured thumb path is now enabled by default. The new continuation gate is 120 Hz total p95 ≤25 ms with fill and
 handle derived from the same value in every frame. Immediate fd dispatch, shared
 slider paint and slider-only value updates now pass full CI and are enabled in
-the product. Final capture gates remain open. The prior
+the product. The private 120 Hz proxy, CPU memory and fixture first-key gates pass;
+nested/physical niri acceptance remains open. The prior
 21/12 ms rejection below is historical, superseded by this explicit acceptance.
 
 The preserved
@@ -58,7 +59,128 @@ service targets drain independently of projection, including while held.
 Tests observe unchanged nodes/fill bounds and zero projector calls for local
 values, resumed projection on release, responsive close, and fake-daemon writes.
 The full Arch CI passes, including runtime projection and fake-daemon transport
-regressions. Final matched latency/memory/first-key captures are pending.
+regressions. The shipped product commits are `312c63e7`, `c7772734`, `e2d95769`
+and `3731c52e`; each passed the full remote Arch job before safe-push.
+Ancillary status/percentage text in sound cards remains at its accepted scene
+value while held and refreshes on release; only fill and handle receive local
+paint updates. This is a remaining QML interaction-parity gap.
+
+### Fresh continuation measurements
+
+Five alternating matched CPU pairs have 345 control and 395 final exact
+coordinate/clock joins at 2000 physical px/s. The parent is 120 Hz; nested niri
+advertises 60 Hz. These are presentation-feedback proxies, not physical scanout.
+The 25 ms total p95 gate **fails** on this nested path.
+
+| Stage, p50 / p95 ms | Control | Final |
+| --- | ---: | ---: |
+| Injection → dispatch | 10.026 / 11.891 | 9.994 / 11.635 |
+| Dispatch → commit | 11.431 / 12.155 | 0.052 / 11.888 |
+| Commit → feedback | 12.448 / 15.975 | 15.909 / 15.964 |
+| Total | 32.033 / 35.864 | 26.499 / 33.217 |
+
+The separate cursor-free coherence capture has 82 joins, total p50/p95
+26.500/33.469 ms. In that capture,
+The 70 remaining poses have dispatch→commit p50/p95 0.052/0.081 ms;
+the 12 first poses have 11.667/11.935 ms. The first recorded pose of each gesture still
+pays for mapping the child and masking the parent atomically. The corresponding
+parent render takes 11.25–11.87 ms after an immediately received callback.
+The nested compositor contributes about 16 ms after commit. Removing the callback
+guard would allow multiple frames in flight and is not an accepted optimization.
+
+Fill and handle agree in **41/41 sampled frames**, versus 30/41 before shared
+paint and 41/41 in QML. All **106 shared paints** use exactly the same fill edge
+and handle-center coordinate. This establishes committed-pose identity; the PNG
+samples do not enumerate every physical scanout frame. Runtime tests separately
+prove local value updates leave the accepted nodes/layout unchanged and do not
+invoke projection. The capture records 12 distinct post-store-commit local
+positions and shared paint positions; scene-only tracing sees just two endpoint
+updates because value changes no longer publish whole scenes.
+
+[Exact timing joins](evidence/0126/final-latency.json),
+[five-pair matched timing joins](evidence/0126/nested-cohort-latency.json),
+[first-pose pacing brackets](evidence/0126/pacing-summary.json),
+[exact shared-pose records](evidence/0126/final-shared-pose.json), and
+[sampled frame analysis](evidence/0126/final-fill-coherence.json) retain the data.
+[Source hashes, output geometry and safety results](evidence/0126/continuation-provenance.json)
+pin the nested final and matched direct control/candidate arms.
+Representative cursor-free drag crops: [Bead](evidence/0126/continuation-bead-drag.png)
+and [QML](evidence/0126/continuation-qml-drag.png). They show separate sampled
+poses, so they are a continuity check rather than a same-coordinate pixel golden.
+Strict moving pixel-error superiority over QML remains unproven.
+
+### Direct private 120 Hz proxy
+
+To separate the nested input/presentation hops, the existing private labwc
+headless parent also hosts the UI directly. Its queried mode is 2880×1800 at
+120 Hz, scale 1.5, logical 1920×1200. Bead uses `--backend none`; the existing
+private niri socket remains solely for the read-only helper adapter. QML uses
+the same direct output. All swap, source, containment, watchdog, geometry and
+full-window capture gates remain enabled. This reuses the private compositor;
+it is a synthetic presentation-feedback proxy, not a physical/niri-output result.
+
+The final CPU candidate **passes p95 ≤25 ms on this proxy**: total p50/p95 is
+10.548/17.291 ms (146 exact joins, 12 gestures). Input→dispatch p95 is 0.044 ms,
+dispatch→commit 12.163 ms, and commit→feedback 8.052 ms. Total p99 is 125.262 ms;
+outliers are retained, so complete smoothness is not claimed. Sampled coherence
+is 41/41, and all 181 shared paints have zero fill-edge/handle-center difference.
+The matched direct control has total p50/p95 16.447/18.779 ms (91 joins), with
+30/41 coherent samples. The candidate presents more distinct coalesced poses
+while reducing latency. QML has lower p95 on this direct path. All timing
+outliers are retained; a physical 120 Hz niri result is unmeasured.
+
+| Direct CPU proxy | Control | Final | QML |
+| --- | ---: | ---: | ---: |
+| Exact presented-pose joins | 91 | 146 | 180 |
+| Total p50 ms | 16.447 | 10.548 | 10.326 |
+| Total p95 ms | 18.779 | 17.291 | 11.979 |
+| Total p99 ms | 154.303 | 125.262 | 143.587 |
+| Coherent sampled frames | 30/41 | 41/41 | 41/41 |
+
+QML's first probe could not observe its slider state through the legacy mouse
+grabber API, so that arm supplies no latency number. A measurement-only
+[probe patch](evidence/0126/qml-state-probe.patch) caches the unique control under
+each press and reads its actual values at synchronization. It does not mutate
+the UI or relax the frame/generation/state/presentation join. The replacement
+has 180 accepted joins, zero generation-contract misses, zero rejected positions
+and zero unmatched coordinates. Its sampled pixel check is independently 41/41.
+[Exact proxy joins](evidence/0126/direct-candidate-latency.json),
+[matched control joins](evidence/0126/direct-control-latency.json),
+[state-verified QML joins](evidence/0126/direct-qml-state-latency.json),
+[sampled coherence](evidence/0126/direct-candidate-fill-coherence.json),
+[shared paint records](evidence/0126/direct-candidate-shared-pose.json).
+
+### Fresh memory and typing checks
+
+The same five alternating CPU pairs pass the +0.5 MiB median-per-phase regression
+guard against the default-thumb/readiness control. All capture inputs are stable
+within each phase; host swap-in and process SwapPss are zero in every arm.
+Only anonymous + SHM + DRM + SwapPss are gated. These are desktop-relative
+measurements, not an absolute laptop-cap reading.
+
+| Phase | Paired median Δ unreclaimable MiB | Δ file-backed PSS, info |
+| --- | ---: | ---: |
+| Idle | −0.055 | +0.108 |
+| Open | −0.301 | +0.104 |
+| Open after drags | −0.324 | +0.104 |
+| Closed, 20 s | −0.168 | +0.097 |
+
+The differences are anonymous residency; DRM/SwapPss stay zero and SHM has no
+median increase. File-backed PSS is informational. The original accepted thumb
+feature's peak median costs, +0.711 MiB CPU / +0.914 MiB pinned GL, remain within
+its declared 1 MiB feature budget; this continuation introduces no measured
+CPU relative regression. Fresh GL continuation memory is unmeasured; its feature
+configuration passes the full CI checks.
+
+Fresh fixture first-key process CPU is **7.102 ms control / 7.070 ms final**, both
+below 8 ms. Both use 320 fixture apps, 12 favorites, 8 recents and 64 result rows;
+one real key is matched to the exact typed state and generation/update marker.
+The initial combined drag/typing arm failed before measurement because the CLI
+rejects fixture mode with the production UI provider. The corrected run reuses
+the existing local-command-socket fixture benchmark, preserving all capture
+guards and source checks. It is UI CPU timing, not real-engine or physical
+presentation acceptance. [Five-pair components, source hashes and fresh typing
+results](evidence/0126/continuation-memory.json) retain the measurements.
 
 ## Experiment (historical thumb-only baseline)
 

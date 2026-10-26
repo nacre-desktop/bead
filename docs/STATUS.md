@@ -33,8 +33,17 @@ Shared fill and handle now use one value/buffer; pixel and full Arch CI checks
 pass. Presented shared paints agree exactly (94/94); cursor-free coherence is
 41/41 samples, versus the old thumb-only path's 30/41 and QML's 41/41.
 Local control/sound values now skip view projection and layout; service calls
-continue independently. Full Arch CI passes. Final matched latency, memory and
-first-key gates remain open.
+continue independently. Full Arch and exact-commit GitHub CI pass. Final CPU
+total p50/p95 improves to 26.499/33.217 ms across five matched pairs; the 25 ms nested gate still fails.
+Steady dispatch→commit p95 is 0.081 ms; first-pose atomic map/mask still costs
+11.935 ms p95, followed by about 16 ms nested compositor latency. Final fill
+and handle agree in all 106 paints and 41/41 cursor-free samples. Five-pair CPU
+unreclaimable deltas pass: idle/open/post-drag/closed −0.055/−0.301/−0.324/−0.168 MiB.
+Fresh fixture first-key CPU passes 8 ms: 7.102 ms control / 7.070 ms final.
+On the verified direct private headless 120 Hz output, total CPU p50/p95 improves
+from 16.447/18.779 to 10.548/17.291 ms, passing the revised 25 ms proxy gate.
+All 181 shared paints and 41/41 samples agree; physical niri acceptance remains open.
+State-verified QML is faster on this direct proxy, 10.326/11.979 ms p50/p95.
 Five-pair median costs peak at +0.711 MiB CPU / +0.914 MiB pinned GL,
 within the declared 1 MiB budget; absolute GL retention is substantial. Pixel
 error, general dragging and complete smoothness remain unproven.

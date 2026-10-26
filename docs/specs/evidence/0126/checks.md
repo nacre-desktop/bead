@@ -1,5 +1,79 @@
 # B0126 validation record
 
+## Shipped continuation
+
+The baseline and rejected-patch rows below are historical. The owner subsequently
+accepted the thumb candidate; default-on `312c63e7`, readiness `c7772734`, shared
+paint `e2d95769` and local values `3731c52e` are shipped. Each improvement passed
+the full Arch job before safe-push. The continuation invocation was
+`RUST_TEST_THREADS=2 nice -n 10 bash /task/ci-canonical.sh`, with Cargo `-j2`.
+It replicates the workflow coverage listed below, including private lifecycle
+probes and all independent cargo-deny graphs. All three canonical logs end with
+`CI_ALL_OK`; their exit markers are zero.
+
+| Snapshot | Full job | Log SHA-256 |
+| --- | --- | --- |
+| Readiness, clean canonical repeat | pass | `ef120251d746b8133f2b7fa61fa786ebccff0d995f022be691932d414654b0c2` |
+| Shared paint | pass | `2a31065392e739960935f497b47350d710e294859fbef4d22b74f933fdee9f8a` |
+| Local values | pass | `2df985b385eb844a0178c2639218c9c1f2512da266b5fc240e4368ab1384dde0` |
+
+Canonical script SHA-256:
+`24bcac9bf920d04d4aaa60bc74b1c566a26935138417e2addb0e35b97a1d7053`.
+All 818 tracked `crates/**` and `shell/**` blobs in the final validation snapshot
+`86190a12d03dfa11af666c07a0dd29c330c681b6` match shipped `3731c52e` exactly.
+The archive's `REVISION` text is stale; the blob comparison supplies provenance.
+Other differences are docs, metadata and the private-preview script's inclusion
+of pearl keybindings, outside these product changes. Published exact-commit
+GitHub CI also passes for [shared paint](https://github.com/nacre-desktop/bead/actions/runs/40240217079)
+and [local values](https://github.com/nacre-desktop/bead/actions/runs/40242542837).
+The readiness run was superseded by a later push; its full Arch validation passed.
+
+Shared raster tests cover all 101 poses at 1×/1.5×, transparent corners, BGRA/RGBA
+and the borrowed target tail. Descriptor origin tests cover 1×/1.5×/2×. Runtime
+tests assert zero projection for local values/empty source wakes, no accepted
+node or fill-bound changes, final release ordering and immediate explicit close.
+A fake-daemon regression proves completed calls and newest queued targets keep
+progressing while projection is suppressed. These checks do not claim the nested
+25 ms latency gate passed; see the spec's fresh measurements.
+
+The direct private 120 Hz capture reuses the existing headless labwc parent,
+verifies physical/logical dimensions and scale, and retains all source, swap,
+containment, watchdog and full-window gates. Five matched CPU pairs have stable
+per-phase source hashes, alternating order, zero host swap-in and zero process
+SwapPss. The paired median unreclaimable deltas pass in all four phases.
+
+The first direct QML arm had no observable slider state through the legacy
+mouse-grabber lookup; it is excluded from latency numbers. The measurement-only
+`qml-state-probe.patch` observes the unique control under a held press using a
+guarded `QPointer`, then reads its real state at `afterSynchronizing`. It changes
+neither event acceptance nor QML, and keeps the exact frame/generation/state/
+presentation join. The replacement yields 180 accepted joins, no unmatched
+coordinates, no rejected positions and 41/41 coherent sampled PNGs. It reports
+QML p95 11.979 ms versus Bead 17.291 ms on the direct synthetic proxy; the
+previous nested comparison cannot establish this direct-path ordering.
+The probe rebuilt successfully with Qt 6.12 base/declarative/Wayland private
+headers and wayland-protocols in the CI container; no runtime dependency was
+added to the product. Its binary SHA-256 is
+`fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046`.
+`git apply --check` passes for the retained measurement patch.
+
+Fresh fixture first-key process CPU is 7.101703 ms control / 7.069714 ms final,
+both below 8 ms. Each has exactly one key, the typed state, matching generation
+and update, 320 fixture apps, 12 favorites, 8 recents, 64 result rows and a
+2880×1800 typed screenshot. Source hashes remain stable; host swap-in and process
+SwapPss are zero. The first combined driver failed before measurement because
+`--ui-provider` rejects `--menu-fixture`; the successful run uses the existing
+local-command-socket fixture benchmark. The production guard was preserved.
+The component memory and typing data are in `continuation-memory.json`.
+
+The isolated owner preview was rebuilt from the landed product batch; it was
+not started. Raw evidence, exact binaries and reproduction tools are retained
+in the ignored task directory. Task-owned remote processes, container and work
+directories were removed after capture/analysis; no live desktop, installed
+Nacre, configuration, keybinding or unit was changed.
+
+## Historical experiment validation
+
 All builds and tests ran in a task-owned Arch Linux container, Rust 1.99.0,
 `nice -n 10`, Cargo `-j2`. No build/test/capture ran on the laptop. UI captures
 used the private desktop harness and one heavy capture lock per command.

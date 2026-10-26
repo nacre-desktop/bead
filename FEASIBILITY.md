@@ -1,12 +1,12 @@
 # Feasibility
 
-## 2026-10-25 — B0126 shared slider paint
+## 2026-10-26 — B0126 shared slider paint and local values
 
 Fill and handle now share one value and one small buffer, preventing independent lag.
 The paint borrows SHM directly and avoids constructing a font system or panel scene.
 Full Arch CI passes, including local values without projection and service call progress.
-Shared-paint captures pass; final latency and five-pair memory checks remain open.
-Dispatch-only timing is unchanged; the 25 ms gate has not passed.
+Shared paint stays coherent; local values avoid projection/layout while service calls progress.
+The CPU memory guard passes; 25 ms p95 passes on the direct private 120 Hz proxy and fails nested.
 
 | Check | Result |
 | --- | ---: |
@@ -16,6 +16,19 @@ Dispatch-only timing is unchanged; the 25 ms gate has not passed.
 | Coherent sampled frames, old / shared / QML | 30/41 / 41/41 / 41/41 |
 | Shared paint value differences | 0 px across 94 paints |
 | Dispatch-only CPU p95 before / after | 35.863 / 35.869 ms |
+| Five-pair nested CPU total p50 / p95 | 26.499 / 33.217 ms |
+| Steady dispatch→commit p95, 70 poses | 0.081 ms |
+| First-pose dispatch→commit p95, 12 poses | 11.935 ms |
+| Final coherent frames / shared poses | 41/41 / 106/106 |
+| Direct private 120 Hz CPU total p50 / p95 | 10.548 / 17.291 ms |
+| Direct QML CPU total p50 / p95 | 10.326 / 11.979 ms |
+| Five-pair CPU Δ idle/open/post-drag/closed MiB | −0.055/−0.301/−0.324/−0.168 |
+| Fresh fixture first-key CPU, control / final | 7.102 / 7.070 ms |
+
+Nested niri advertises 60 Hz under a synthetic 120 Hz parent; physical scanout is unmeasured.
+The same private headless parent hosting the UI directly passes 25 ms p95; this is not niri acceptance.
+QML has lower p95 on that direct proxy; first-key CPU passes 8 ms.
+[Timing joins, coherence and remaining handover cost](docs/specs/0126-instant-drag.md#fresh-continuation-measurements).
 
 ## 2026-10-25 — B0123 Spotlight retention and palette
 

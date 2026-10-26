@@ -1,0 +1,191 @@
+{
+  "source_note": "CPU final product is 3731c52e; matched continuation control contains default thumb plus ready-fd dispatch, before shared paint/local values; helper and QML are frozen across arms",
+  "captures": {
+    "nested-final": {
+      "phase": "candidate",
+      "backend": "cpu",
+      "arm": "bead",
+      "pointer_route": "parent",
+      "requested_hz": 120,
+      "geometry": {
+        "name": "winit",
+        "mode": [
+          2880,
+          1800
+        ],
+        "scale": 1.5,
+        "logical": [
+          1920,
+          1200
+        ]
+      },
+      "private_parent_mode": {
+        "width": 2880,
+        "height": 1800,
+        "refresh_hz": 120.0
+      },
+      "source_hashes": {
+        "nacre_shell": "bb17a655ee4f230e0aa25db8a8f067f958ead4ad0ede7a6effd64c4f91ba416c",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff",
+        "bead_shell_tree": "d63574ae624bdc4ccba3e041f2cc157695ff11a27eed0c878a40d0ea518e4341",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "36ac40452c12f83085ff0b1bb48a51234286affbf2acb4627e24b9ec61cfbf1e",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      },
+      "environment": {
+        "BEAD_EXPERIMENTAL_POINTER_MOTION": null
+      },
+      "nested_niri_refresh_hz": 60.0,
+      "refresh_limitation": "nested niri may advertise 60 Hz due B0105/winit even when labwc parent is set to 120 Hz",
+      "local_feedback_proof": {
+        "scene_preview_values": 2,
+        "committed_local_positions": 19,
+        "shared_paint_positions": 21,
+        "method": "three scene preview values, or three post-store-commit local feedback positions plus three shared paints; local range mapping is checked by runtime tests"
+      },
+      "painted_thumb_frames": {
+        "visible": 41,
+        "total": 41
+      },
+      "host_swapin_delta_pages": 0,
+      "safety": {
+        "status": "complete",
+        "capture_returncode": 0,
+        "child_membership_verified": true,
+        "final_cgroup_read_while_scope_held": true,
+        "memory_swap_max_bytes": 0,
+        "watchdog_samples": 23,
+        "oom_delta": {
+          "oom": 0,
+          "oom_kill": 0
+        }
+      }
+    },
+    "direct-control": {
+      "phase": "control",
+      "backend": "cpu",
+      "arm": "bead",
+      "pointer_route": "direct-labwc-parent",
+      "requested_hz": 120,
+      "geometry": {
+        "name": "HEADLESS-1",
+        "mode": [
+          2880,
+          1800
+        ],
+        "refresh_hz": 120.0,
+        "scale": 1.5,
+        "logical": [
+          1920,
+          1200
+        ],
+        "route": "direct-labwc-parent"
+      },
+      "private_parent_mode": {
+        "width": 2880,
+        "height": 1800,
+        "refresh_hz": 120.0
+      },
+      "source_hashes": {
+        "nacre_shell": "856152511fe3329a57122445ced74d8ff7b39bff4fe1148bf2f32056c38e4e20",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff",
+        "bead_shell_tree": "07e4cdf64ecb08c877a8ab6d6dbfe263ab6c0cd8cbb4862ac6d2e463bfd1eba6",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "af028ddb12e4fc89d05093dd7e0febdef78e615263615f4ff043153759d36223",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      },
+      "environment": {
+        "BEAD_EXPERIMENTAL_POINTER_MOTION": null
+      },
+      "presentation_proxy": "UI attaches directly to private headless labwc; a private nested niri socket is retained only for the read-only helper adapter",
+      "acceptance_scope": "synthetic private labwc presentation feedback; not physical scanout or a niri-output acceptance result",
+      "local_feedback_proof": {
+        "scene_preview_values": 7,
+        "committed_local_positions": 0,
+        "shared_paint_positions": 0,
+        "method": "three scene preview values, or three post-store-commit local feedback positions plus three shared paints; local range mapping is checked by runtime tests"
+      },
+      "host_swapin_delta_pages": 0,
+      "safety": {
+        "status": "complete",
+        "capture_returncode": 0,
+        "child_membership_verified": true,
+        "final_cgroup_read_while_scope_held": true,
+        "memory_swap_max_bytes": 0,
+        "watchdog_samples": 22,
+        "oom_delta": {
+          "oom": 0,
+          "oom_kill": 0
+        }
+      }
+    },
+    "direct-candidate": {
+      "phase": "candidate",
+      "backend": "cpu",
+      "arm": "bead",
+      "pointer_route": "direct-labwc-parent",
+      "requested_hz": 120,
+      "geometry": {
+        "name": "HEADLESS-1",
+        "mode": [
+          2880,
+          1800
+        ],
+        "refresh_hz": 120.0,
+        "scale": 1.5,
+        "logical": [
+          1920,
+          1200
+        ],
+        "route": "direct-labwc-parent"
+      },
+      "private_parent_mode": {
+        "width": 2880,
+        "height": 1800,
+        "refresh_hz": 120.0
+      },
+      "source_hashes": {
+        "nacre_shell": "bb17a655ee4f230e0aa25db8a8f067f958ead4ad0ede7a6effd64c4f91ba416c",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff",
+        "bead_shell_tree": "d63574ae624bdc4ccba3e041f2cc157695ff11a27eed0c878a40d0ea518e4341",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "af028ddb12e4fc89d05093dd7e0febdef78e615263615f4ff043153759d36223",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      },
+      "environment": {
+        "BEAD_EXPERIMENTAL_POINTER_MOTION": null
+      },
+      "presentation_proxy": "UI attaches directly to private headless labwc; a private nested niri socket is retained only for the read-only helper adapter",
+      "acceptance_scope": "synthetic private labwc presentation feedback; not physical scanout or a niri-output acceptance result",
+      "local_feedback_proof": {
+        "scene_preview_values": 2,
+        "committed_local_positions": 25,
+        "shared_paint_positions": 26,
+        "method": "three scene preview values, or three post-store-commit local feedback positions plus three shared paints; local range mapping is checked by runtime tests"
+      },
+      "painted_thumb_frames": {
+        "visible": 41,
+        "total": 41
+      },
+      "host_swapin_delta_pages": 0,
+      "safety": {
+        "status": "complete",
+        "capture_returncode": 0,
+        "child_membership_verified": true,
+        "final_cgroup_read_while_scope_held": true,
+        "memory_swap_max_bytes": 0,
+        "watchdog_samples": 22,
+        "oom_delta": {
+          "oom": 0,
+          "oom_kill": 0
+        }
+      }
+    }
+  }
+}
