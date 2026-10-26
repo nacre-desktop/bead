@@ -96,6 +96,8 @@ SCROLL_SCENES = {
     # The picker is bottom-docked; scroll the hexagon grid, not the carousel.
     'wallpaper-picker': (m.STATES['wallpaper-hexagons'][0] + [('sleep', 1.0), ('click', 1070, 900)],
                          960, 1000, 80, 1.6),
+    # Widgets has a Bead-only route in this harness; the natural registry drives the gallery.
+    'widgets-gallery': ([('shell', 'nacre', 'menu', 'widgets')], 960, 600, 80, 1.6),
     'updates-popout': ([('ui', 'nacre', 'controls', 'updates')], 1600, 600, 80, 1.6),
     'clipboard': ([('only', 'qml', ('ui', 'drawers', 'toggle', 'dashboard')),
                    ('ui', 'nacre', 'tab', '6')], 500, 600, 80, 1.6),
@@ -120,6 +122,8 @@ SCROLL_CLEANUPS = {
                     'welcome-ready', 'welcome-help')
        for device in ('touchpad', 'wheel')},
     **{f'scroll-ai-chat-{device}': [('ui', 'nacre', 'left')]
+       for device in ('touchpad', 'wheel')},
+    **{f'scroll-widgets-gallery-{device}': [('app_close', 'widgets')]
        for device in ('touchpad', 'wheel')},
 }
 _orig_start_daemon = m.Arm.start_daemon
@@ -371,6 +375,7 @@ SCROLL_STORE_KEYS = {
     'welcome-shortcuts': 'welcome.scroll', 'welcome-apps': 'welcome.scroll',
     'welcome-ready': 'welcome.scroll', 'welcome-help': 'welcome.scroll',
     'ai-chat': 'chat.scroll', 'wallpaper-picker': 'extras.scroll',
+    'widgets-gallery': 'widgets.scroll',
     'notifications-list': 'dashboard.notifications.scroll', 'notifications-popup': 'notifications.scroll.y',
     'updates-popout': 'status.updates_scroll',
 }
