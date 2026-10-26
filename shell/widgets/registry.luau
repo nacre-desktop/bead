@@ -310,9 +310,9 @@ function M.renderer(document)
         if local_layout and item.slot and type(item.slot.span)=="number" then
             local viewport=ui.resolve_for_check(ui.bind("bead.viewport.width")) or 0
             if viewport>0 and top_bar.tiles>0 then available_width=viewport/top_bar.tiles*item.slot.span end
-        elseif content_layout and reserved and reserved>0 then
-            available_width=reserved
         end
+        -- Content rows size from their rendered children; maximum reservations
+        -- belong to tiled spans, where neighbours need a stable slot width.
         local node=variant.render({instance=item,catalogue=registry,render=render,editing=editing,
             local_layout=local_layout==true,available_width=available_width},values,{})
         if not node then return nil end
