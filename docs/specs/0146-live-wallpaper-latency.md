@@ -17,6 +17,8 @@ The next measurement uses the 17-file private desktop set at 2880×1800 output r
 
 Unconditional `WALLPAPER_SWITCH_PHASE` journal entries include revision, phase, monotonic milliseconds since selection, encoded file bytes and source dimensions. Paths and filenames are omitted. The current phase set is `selection`, `request_sent`, `daemon_ack`, `decode_start`, `decode_end`, `scale_end`, `upload_end`, `commit` and `presented`. The daemon call around decode and the picker's activation call are both visible as request/ack pairs. Existing `WALLPAPER_SWITCH_LATENCY` remains the end-to-presentation summary.
 
+The JPEG decoder scales while decoding, so current parent-side `decode_end` and `scale_end` entries share the same timestamp; a distinct decode/scale split would require worker timing output and is not claimed here.
+
 ## Optimization plan
 
 Use phase data from the real files to choose the dominant cost. If decode/scale dominates, reuse a bounded per-source-identity and output-size decoded cache, build entries off the interaction path, prefetch the next visible picker item, and show the already-loaded thumbnail until full resolution is ready. Cache files are private, output-size-specific and invalidated by source identity, size and mtime; cap disk use at 384 MiB with least-recently-used eviction. Keep the first frame visible and blend to the full image. If daemon work or process startup dominates, fix that path instead.
