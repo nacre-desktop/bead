@@ -22,6 +22,7 @@ pub(super) struct Canvas {
     lifecycle: CanvasLifecycle,
     retain_when_closed: bool,
     initial_bounds: Option<Rect>,
+    reserved_size: Option<(f32, f32)>,
     buffer_attached: bool,
     pub(super) layer: Option<LayerSurface>,
     pub(super) output: wl_output::WlOutput,
@@ -64,7 +65,7 @@ impl Drop for Canvas {
     }
 }
 
-fn visible_bounds(scene: &Scene, output: (u32, u32)) -> Option<Rect> {
+fn visible_bounds(scene: &Scene, output: Option<(u32, u32)>) -> Option<Rect> {
     if scene.opacity <= 0.001 {
         return None;
     }
@@ -95,7 +96,9 @@ fn visible_bounds(scene: &Scene, output: (u32, u32)) -> Option<Rect> {
             continue;
         };
         let painted = rect.translated(scene.offset.0, scene.offset.1);
-        let clipped = painted.intersect(Rect::new(0., 0., output.0 as f32, output.1 as f32));
+        let clipped = output.map_or(painted, |(width, height)| {
+            painted.intersect(Rect::new(0., 0., width as f32, height as f32))
+        });
         if clipped.w <= 0. || clipped.h <= 0. {
             continue;
         }
@@ -106,9 +109,28 @@ fn visible_bounds(scene: &Scene, output: (u32, u32)) -> Option<Rect> {
     let top = bounds.y.floor();
     // A constant outward pixel keeps fractional translation from toggling the
     // layer size and forcing a configure round trip on each movement.
-    let right = (left + bounds.w.ceil() + 1.).min(output.0 as f32);
-    let bottom = (top + bounds.h.ceil() + 1.).min(output.1 as f32);
+    let right = left + bounds.w.ceil() + 1.;
+    let bottom = top + bounds.h.ceil() + 1.;
+    let right = output.map_or(right, |(width, _)| right.min(width as f32));
+    let bottom = output.map_or(bottom, |(_, height)| bottom.min(height as f32));
     Some(Rect::new(left, top, right - left, bottom - top))
+}
+
+fn reserve_canvas_size(source: Option<Rect>, prepared: Option<Rect>) -> Option<(f32, f32)> {
+    match (source, prepared) {
+        (Some(source), Some(prepared)) => {
+            Some((source.w.max(prepared.w), source.h.max(prepared.h)))
+        }
+        (Some(source), None) => Some((source.w, source.h)),
+        (None, Some(prepared)) => Some((prepared.w, prepared.h)),
+        (None, None) => None,
+    }
+}
+
+fn canvas_bounds_with_reserve(bounds: Rect, reserved_size: Option<(f32, f32)>) -> Rect {
+    reserved_size.map_or(bounds, |(width, height)| {
+        Rect::new(bounds.x, bounds.y, width, height)
+    })
 }
 
 fn crop_scene(mut scene: Scene, bounds: Rect) -> Scene {
@@ -124,11 +146,18 @@ fn crop_scene(mut scene: Scene, bounds: Rect) -> Scene {
     scene
 }
 
-fn canvas_surface_bounds(open: bool, scene_bounds: Rect, initial_bounds: Option<Rect>) -> Rect {
+fn canvas_surface_bounds(
+    open: bool,
+    scene_bounds: Rect,
+    initial_bounds: Option<Rect>,
+    reserved_size: Option<(f32, f32)>,
+) -> Rect {
     if open {
-        scene_bounds
+        canvas_bounds_with_reserve(scene_bounds, reserved_size)
     } else {
-        initial_bounds.unwrap_or(scene_bounds)
+        initial_bounds
+            .map(|bounds| canvas_bounds_with_reserve(bounds, reserved_size))
+            .unwrap_or(scene_bounds)
     }
 }
 
@@ -339,8 +368,9 @@ impl App {
                     .get(&key)
                     .is_some_and(|canvas| !canvas.lifecycle.open);
             if let Some(canvas) = self.canvases.get_mut(&key) {
-                if initial_bounds.is_some() {
+                if !open {
                     canvas.initial_bounds = initial_bounds;
+                    canvas.reserved_size = None;
                 }
                 if open {
                     canvas.lifecycle.offer_open();
@@ -436,6 +466,7 @@ impl App {
                 lifecycle: CanvasLifecycle::new(open, 0),
                 retain_when_closed: spec.retain_when_closed,
                 initial_bounds,
+                reserved_size: None,
                 buffer_attached: false,
                 layer: None,
                 output,
@@ -580,7 +611,11 @@ impl App {
                     return;
                 }
                 canvas.lifecycle.accept_scene(warmup_response);
-                let mut bounds = visible_bounds(&scene, canvas.viewport_size);
+                let hidden_prepare = !canvas.lifecycle.open && canvas.initial_bounds.is_some();
+                let mut bounds = visible_bounds(
+                    &scene,
+                    (!hidden_prepare).then_some(canvas.viewport_size),
+                );
                 if canvas.interactive {
                     for region in canvas
                         .source
@@ -613,7 +648,7 @@ impl App {
                         (rect.y + rect.h).ceil() - y,
                     )
                 });
-                let Some(bounds) = bounds else {
+                let Some(mut bounds) = bounds else {
                     if let Some(fractional) = canvas.fractional.take() {
                         fractional.destroy();
                     }
@@ -636,8 +671,16 @@ impl App {
                     canvas.pressed = false;
                     return;
                 };
-                let surface_bounds =
-                    canvas_surface_bounds(canvas.lifecycle.open, bounds, canvas.initial_bounds);
+                if hidden_prepare {
+                    canvas.reserved_size = reserve_canvas_size(canvas.initial_bounds, Some(bounds));
+                }
+                bounds = canvas_bounds_with_reserve(bounds, canvas.reserved_size);
+                let surface_bounds = canvas_surface_bounds(
+                    canvas.lifecycle.open,
+                    bounds,
+                    canvas.initial_bounds,
+                    canvas.reserved_size,
+                );
                 canvas.source_offset = scene.offset;
                 canvas.scene = crop_scene(scene, bounds);
                 canvas.bounds = Some(bounds);
@@ -1230,16 +1273,52 @@ mod tests {
     }
 
     #[test]
-    fn source_bounds_prepare_hidden_then_active_scene_takes_over() {
+    fn prepared_canvas_reserves_target_extent_at_source_origin_and_tracks_active_origin() {
         let source = Rect::new(12., 18., 69., 28.);
-        let desktop = Rect::new(300., 400., 220., 96.);
-        assert_eq!(canvas_surface_bounds(false, desktop, Some(source)), source);
-        assert_eq!(canvas_surface_bounds(true, source, Some(desktop)), source);
+        let active = Rect::new(300., 400., 71., 29.);
+        let reserved = Some((221., 97.));
+        assert_eq!(
+            canvas_surface_bounds(false, active, Some(source), reserved),
+            Rect::new(source.x, source.y, 221., 97.)
+        );
+        assert_eq!(
+            canvas_surface_bounds(true, active, Some(source), reserved),
+            Rect::new(active.x, active.y, 221., 97.)
+        );
         let mut lifecycle = CanvasLifecycle::new(false, 0);
         assert!(!lifecycle.unmap_if_buffered(false));
         assert!(!lifecycle.unmapped);
         assert!(lifecycle.unmap_if_buffered(true));
         assert!(lifecycle.unmapped);
+    }
+
+    #[test]
+    fn prepared_canvas_reserves_unclipped_target_size_until_a_new_prepare() {
+        let source = Rect::new(12., 18., 70., 29.);
+        let prepared = Rect::new(300., 400., 221., 97.);
+        let reserved = reserve_canvas_size(Some(source), Some(prepared));
+        assert_eq!(reserved, Some((221., 97.)));
+
+        for (x, y, natural_width) in [(20., 22., 71.), (40., 26., 111.), (80., 30., 221.)] {
+            assert_eq!(
+                canvas_bounds_with_reserve(
+                    Rect::new(x, y, natural_width, 29.),
+                    reserved,
+                ),
+                Rect::new(x, y, 221., 97.),
+                "active content moves naturally inside the fixed reservation"
+            );
+        }
+
+        let next_source = Rect::new(12., 18., 42., 24.);
+        let next_prepared = Rect::new(80., 90., 55., 33.);
+        let next_reserved = reserve_canvas_size(Some(next_source), Some(next_prepared));
+        assert_eq!(next_reserved, Some((55., 33.)));
+        assert_eq!(
+            canvas_bounds_with_reserve(next_prepared, next_reserved),
+            next_prepared,
+            "a fresh hidden prepare replaces the prior gesture's larger reserve"
+        );
     }
 
     #[test]
@@ -1318,7 +1397,7 @@ mod tests {
     fn cropped_canvas_keeps_pixels_and_anchor_without_an_output_sized_raster() {
         for offset in [(0., 0.), (32., 32.)] {
             let original = scene(offset);
-            let bounds = visible_bounds(&original, (1920, 1080)).unwrap();
+            let bounds = visible_bounds(&original, Some((1920, 1080))).unwrap();
             assert_eq!(bounds, Rect::new(96. + offset.0, 96. + offset.1, 89., 35.));
             let cropped = crop_scene(original, bounds);
             let mut bytes = vec![0; 89 * 35 * 4];
@@ -1347,7 +1426,7 @@ mod tests {
     fn fractional_canvas_translation_keeps_size_and_contains_painted_content() {
         for fraction in [0., 0.25, 0.5, 0.75] {
             let original = scene((fraction, fraction));
-            let bounds = visible_bounds(&original, (1920, 1080)).unwrap();
+            let bounds = visible_bounds(&original, Some((1920, 1080))).unwrap();
             assert_eq!((bounds.w, bounds.h), (89., 35.));
             let painted = Rect::new(96. + fraction, 96. + fraction, 88., 34.);
             assert!(bounds.x <= painted.x && bounds.y <= painted.y);
@@ -1359,9 +1438,25 @@ mod tests {
     fn empty_and_transparent_canvases_need_no_surface_bounds() {
         let mut empty = scene((0., 0.));
         empty.primitives.clear();
-        assert_eq!(visible_bounds(&empty, (1920, 1080)), None);
+        assert_eq!(visible_bounds(&empty, Some((1920, 1080))), None);
         let mut hidden = scene((0., 0.));
         hidden.opacity = 0.;
-        assert_eq!(visible_bounds(&hidden, (1920, 1080)), None);
+        assert_eq!(visible_bounds(&hidden, Some((1920, 1080))), None);
+    }
+
+    #[test]
+    fn prepared_extent_is_unclipped_but_open_bounds_are_output_clipped() {
+        let mut prepared = scene((0., 0.));
+        prepared.primitives = vec![bead_render::Primitive::Rounded {
+            rect: Rect::new(1800., 100., 220., 96.),
+            radius: 0.,
+            fill: [200, 0, 0, 255],
+            border: None,
+        }];
+        let unbounded = visible_bounds(&prepared, None).unwrap();
+        let open = visible_bounds(&prepared, Some((1920, 1080))).unwrap();
+        assert_eq!((unbounded.w, unbounded.h), (221., 97.));
+        assert_eq!(open.w, 120.);
+        assert!(unbounded.w > open.w);
     }
 }
