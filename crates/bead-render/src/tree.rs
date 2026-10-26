@@ -3673,7 +3673,7 @@ mod tests {
     fn clipped_wallpaper_rows_keep_descriptions_but_rasterize_only_visible_image_and_text() {
         for scale in [1., 1.5] {
             let mut scene = clipped_wallpaper_scene(80, 100.);
-            assert!(80 * 512 * 512 * 4 > STEADY_RASTER_LIMIT);
+            const { assert!(80 * 512 * 512 * 4 > STEADY_RASTER_LIMIT) };
             let mut cache = TreeCache::default();
             cache.prepare(&scene, scale).unwrap();
             let hidden = cache.frame.as_ref().unwrap().clone();
@@ -3771,7 +3771,9 @@ mod tests {
             let side = (160. * scale).ceil() as usize;
             assert!(
                 frame_pixels(cache.frame.as_ref().unwrap(), &scene, scale)
-                    .chunks_exact(4)
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
                     .any(|pixel| pixel[3] != 0)
             );
             let canonical_open = cache.frame.as_ref().unwrap().clone();
@@ -3793,7 +3795,9 @@ mod tests {
             assert_eq!(cache.builds, 1, "opening reused the retained image raster");
             assert!(
                 frame_pixels(&opened, &scene, scale)
-                    .chunks_exact(4)
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
                     .any(|pixel| pixel[3] != 0)
             );
         }
