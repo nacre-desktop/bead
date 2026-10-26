@@ -111,7 +111,7 @@ pub(super) fn content_input_rect(scene: &Scene) -> Option<[i32; 4]> {
 }
 
 /// Adopt only pixels the following complete repairs will leave untouched.
-fn copy_outside_repairs(
+pub(super) fn copy_outside_repairs(
     source: &[u8],
     target: &mut [u8],
     width: u32,

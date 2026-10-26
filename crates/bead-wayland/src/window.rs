@@ -663,9 +663,11 @@ impl App {
             }
             return Ok(());
         };
-        let damage = win.damage.pending[slot];
         let surface_damage = win.damage.surface;
         let pool = win.pool.as_mut().ok_or("window pool missing")?;
+        let damage = win
+            .damage
+            .repair(pool, &win.buffers, slot, w as u32, h as u32)?;
         let canvas = win.buffers[slot]
             .canvas(pool)
             .ok_or("compositor owns buffer")?;

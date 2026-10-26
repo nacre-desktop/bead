@@ -639,8 +639,10 @@ impl App {
             // Every buffer is still held by the compositor: try again shortly.
             return Ok(true);
         };
-        let damage = o.damage.pending[slot];
         let surface_damage = o.damage.surface;
+        let damage = o
+            .damage
+            .repair(pool, &o.buffers, slot, w as u32, h as u32)?;
         let canvas = o.buffers[slot]
             .canvas(pool)
             .ok_or("compositor owns buffer")?;
