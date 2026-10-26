@@ -1,0 +1,19 @@
+{
+ "bar-idle": {
+  "errors": {
+   "qml": [],
+   "bead": []
+  },
+  "metrics": {
+   "rmse": 1.6,
+   "changed_pct": 0.179,
+   "bar_rmse": 7.018,
+   "bbox": [
+    14,
+    16,
+    2866,
+    1008
+   ]
+  }
+ }
+}

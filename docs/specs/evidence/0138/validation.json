@@ -1,0 +1,46 @@
+{
+  "unit": "B0138 + N0083",
+  "source_revisions": {
+    "bead": "940eda615bf34321059e09eb6e0bba181968f5e0",
+    "nacre": "aa7067daa6c9c57ce7a9d5e26619f009c655ae66"
+  },
+  "visual_binaries": {
+    "bead_nacre_shell_sha256": "dab963ba2300c224d9b26427f6964326d87df33d9259106c4631487f5f6ea241",
+    "nacre_helper_sha256": "ad408a0da1f5afef5285cdca2e3e4db8d76e99c582e2d576b5e5372813856f8b",
+    "swaybg_sha256": "e36544a1faf6cb4f91493062684f0c4c5d95bce5454e1739a5ccde925ceffe27"
+  },
+  "zero_count_pair": {
+    "private_nested_sessions": true,
+    "physical_size": [2880, 1800],
+    "scale": 1.5,
+    "bead_renderer": "CPU",
+    "palette_source_sha256": "0d78f90d263bcc098f8f44b28b66bd6fc44bd655cadc10c5814b124d0d3b590a",
+    "wallpaper_source_sha256": "d12fb471f10f841d9bb909e63ab70490aea1dc3ccdf4f241314d994429e8c361",
+    "count": 0,
+    "qml_icon_visible": true,
+    "bead_icon_visible": true,
+    "qml_errors": [],
+    "bead_errors": [],
+    "pixel_metrics_percent": {
+      "rmse": 1.6,
+      "changed": 0.179,
+      "bar_rmse": 7.018
+    }
+  },
+  "package_fixture": {
+    "checkupdates": "exit 2, no output",
+    "paru": "exit 0, no output",
+    "pacman_yay_sudo": "refuse if called",
+    "update_or_refresh_actions_clicked": false
+  },
+  "capture_safety": {
+    "memory_max_bytes": 12884901888,
+    "memory_swap_max_bytes": 0,
+    "minimum_memavailable_kib": 10807664,
+    "scope_peak_bytes": 951963648,
+    "host_swap_used_kib_before_each_arm": 0,
+    "host_swap_in_delta_pages_each_arm": 0,
+    "oom_delta": {"oom": 0, "oom_kill": 0},
+    "capture_returncode": 0
+  }
+}
