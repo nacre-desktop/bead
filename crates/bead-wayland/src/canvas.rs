@@ -1145,13 +1145,15 @@ mod tests {
         assert!(!lifecycle.expires(opened));
 
         lifecycle.close();
-        let closed = lifecycle.retention_generation;
+        let first_close = lifecycle.retention_generation;
         assert!(lifecycle.unmap());
         lifecycle.close();
         assert!(
             !lifecycle.unmap(),
             "repeated close offers must not submit another null-buffer commit"
         );
+        let closed = lifecycle.retention_generation;
+        assert!(!lifecycle.expires(first_close));
         assert!(!lifecycle.expires(opened));
         assert!(lifecycle.expires(closed));
 
