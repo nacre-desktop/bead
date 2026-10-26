@@ -22,17 +22,22 @@ pub(super) fn tick() -> Duration {
         8_333_333
     })
 }
-/// Qt Flickable defaults, which the QML shell's FastScroll inherits after a touchpad release.
-const FLING_DECELERATION: f64 = 1500.;
-const FLING_MAX_VELOCITY: f64 = 2500.;
+/// Scalar constants from Chromium's default desktop FlingCurve
+/// (ui/events/gestures/fling_curve.cc, BSD-3-Clause), expressed independently.
+const FLING_ALPHA: f64 = -5707.62;
+const FLING_BETA: f64 = 172.;
+const FLING_GAMMA: f64 = 3.7;
+const FLING_MAX_VELOCITY: f64 = -FLING_ALPHA * FLING_GAMMA - FLING_BETA;
 const FLING_MIN_VELOCITY: f64 = 100.;
 const WHEEL_DURATION: f64 = 0.125;
+const WHEEL_STEP: f64 = 100.;
+const LEGACY_WHEEL_NOTCH: f64 = 15.;
 
 pub(super) fn distance(axis: AxisScroll) -> f64 {
     if axis.value120 != 0 {
-        f64::from(axis.value120) * 5.
+        f64::from(axis.value120) * WHEEL_STEP / 120.
     } else if axis.discrete != 0 {
-        f64::from(axis.discrete) * 600.
+        f64::from(axis.discrete) * WHEEL_STEP
     } else {
         axis.absolute
     }
@@ -47,7 +52,7 @@ fn movement(axis: AxisScroll, content: bool, source: Option<AxisSource>) -> (f64
             || axis.value120 != 0
             || axis.discrete != 0;
         let delta = if wheel && axis.value120 == 0 && axis.discrete == 0 {
-            axis.absolute * 40.
+            axis.absolute * WHEEL_STEP / LEGACY_WHEEL_NOTCH
         } else {
             distance(axis)
         };
@@ -77,7 +82,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(movement(axis, false, None), (15., false));
-        assert_eq!(movement(axis, true, None), (600., true));
+        assert_eq!(movement(axis, true, None), (100., true));
         assert_eq!(
             movement(
                 AxisScroll {
@@ -100,7 +105,18 @@ mod tests {
             movement(axis, true, Some(AxisSource::Finger)),
             (-15., false)
         );
-        assert_eq!(movement(axis, true, Some(AxisSource::Wheel)), (-600., true));
+        assert_eq!(movement(axis, true, Some(AxisSource::Wheel)), (-100., true));
+        assert_eq!(
+            movement(
+                AxisScroll {
+                    absolute: 15.,
+                    ..Default::default()
+                },
+                true,
+                Some(AxisSource::Wheel)
+            ),
+            (100., true)
+        );
         assert_eq!(
             movement(axis, true, Some(AxisSource::Continuous)),
             (-15., false)
@@ -127,7 +143,15 @@ mod tests {
         assert!(first < 0. && !done);
         let (end, done) = fling_position(-1500., 5.);
         assert!(done);
-        assert!((end + 1500. * 1500. / (2. * FLING_DECELERATION)).abs() < 1e-9);
+        assert!((first + 122.55464842549827).abs() < 1e-6);
+        assert!((end + 299.6820577040635).abs() < 1e-6);
+        assert!((fling_position(5000., 0.02).0 - 96.2654052575308).abs() < 1e-6);
+        assert!((fling_position(5000., 0.25).0 - 800.5512163632811).abs() < 1e-6);
+        assert!((fling_position(5000., 10.).0 - 1193.1336526352798).abs() < 1e-6);
+        assert_eq!(
+            fling_position(50_000., 0.1),
+            fling_position(FLING_MAX_VELOCITY, 0.1)
+        );
         assert!(fling_position(900., 0.2).0 > 0.);
     }
 
@@ -139,21 +163,35 @@ mod tests {
                 value120: 120,
                 ..Default::default()
             }),
-            600.
+            100.
+        );
+        assert_eq!(
+            distance(AxisScroll {
+                value120: 30,
+                ..Default::default()
+            }),
+            25.
         );
         assert_eq!(
             distance(AxisScroll {
                 value120: -30,
                 ..Default::default()
             }),
-            -150.
+            -25.
         );
         assert_eq!(
             distance(AxisScroll {
                 discrete: 1,
                 ..Default::default()
             }),
-            600.
+            100.
+        );
+        assert_eq!(
+            distance(AxisScroll {
+                discrete: -1,
+                ..Default::default()
+            }),
+            -100.
         );
         assert_eq!(
             distance(AxisScroll {
@@ -295,9 +333,9 @@ impl App {
         let step = settings
             .map(|(step, _)| step)
             .filter(|step| step.is_finite() && *step > 0.)
-            .unwrap_or(600.);
+            .unwrap_or(WHEEL_STEP);
         let (delta, wheel) = movement(axis, content, source);
-        let delta = delta * if wheel { step / 600. } else { 1. };
+        let delta = delta * if wheel { step / WHEEL_STEP } else { 1. };
         let key = (target.clone(), horizontal);
         if delta == 0. {
             if axis.stop {
@@ -452,10 +490,20 @@ impl App {
     }
 }
 
-/// Distance travelled `t` seconds after release at `velocity`, decelerating uniformly; `true` at rest.
+/// Chromium desktop fling position after `t` seconds; `true` once its curve rests.
 fn fling_position(velocity: f64, t: f64) -> (f64, bool) {
-    let stop = velocity.abs() / FLING_DECELERATION;
-    let t = t.min(stop);
-    let travelled = velocity.abs() * t - FLING_DECELERATION * t * t / 2.;
-    (travelled.copysign(velocity), t >= stop)
+    let curve_position =
+        |time: f64| FLING_ALPHA * (-FLING_GAMMA * time).exp() - FLING_BETA * time - FLING_ALPHA;
+    let curve_velocity =
+        |time: f64| -FLING_ALPHA * FLING_GAMMA * (-FLING_GAMMA * time).exp() - FLING_BETA;
+    let inverse_velocity =
+        |speed: f64| -((speed + FLING_BETA) / (-FLING_ALPHA * FLING_GAMMA)).ln() / FLING_GAMMA;
+    let initial_speed = velocity.abs().min(curve_velocity(0.));
+    let start = inverse_velocity(initial_speed);
+    let stop = inverse_velocity(0.);
+    let elapsed = t.max(0.);
+    let at_rest = elapsed + start >= stop;
+    let position_time = (elapsed + start).min(stop);
+    let travelled = curve_position(position_time) - curve_position(start);
+    (travelled.copysign(velocity), at_rest)
 }
