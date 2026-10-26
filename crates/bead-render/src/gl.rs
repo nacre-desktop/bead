@@ -410,7 +410,7 @@ impl GlRenderer {
                 .values()
                 .map(|t| t.pixels.data().len())
                 .sum::<usize>()
-                > 64 * 1024 * 1024
+                > crate::tree::STEADY_RASTER_LIMIT
         {
             let victim = self
                 .images
