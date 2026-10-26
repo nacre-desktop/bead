@@ -1898,8 +1898,8 @@ fn canvas_and_passive_ghost_use_distinct_declared_host_model_contracts() {
     assert!(bar_events.iter().any(|event| matches!(event,
         UiEvent::CanvasModel {view,..} if view=="widgets-drag")));
 
-    // A desktop canvas is also a publisher. Its editor stores include base_rev,
-    // which must stay out of both recipient payloads.
+    // A desktop canvas can publish its passive drag ghost, but the bar remains
+    // the owner that publishes the canvas document and live model.
     let mut canvas_publisher = real_widget_canvas_publisher();
     let mut canvas_source_values = source_values.clone();
     canvas_source_values.insert("widgets.base_rev".into(), Value::Number(19.));
@@ -1920,19 +1920,21 @@ fn canvas_and_passive_ghost_use_distinct_declared_host_model_contracts() {
     canvas_publisher.widget_drag_model = Some(later_drag);
     canvas_publisher.publish_widget_models();
     let canvas_events = canvas_events.lock().unwrap().clone();
-    assert!(canvas_events.iter().any(|event| matches!(event,
-        UiEvent::CanvasModel {view,..} if view=="widgets-canvas")));
+    assert!(!canvas_events.iter().any(|event| matches!(event,
+        UiEvent::CanvasOffer {view,..} | UiEvent::CanvasModel {view,..} if view=="widgets-canvas")),
+        "the canvas consumes its owner's live model instead of echoing it back to all canvases");
     assert!(canvas_events.iter().any(|event| matches!(event,
         UiEvent::CanvasOffer {view,open:true,..} if view=="widgets-drag")));
     assert!(canvas_events.iter().any(|event| matches!(event,
-        UiEvent::CanvasModel {view,..} if view=="widgets-drag")));
+        UiEvent::CanvasModel {view,values,..} if view=="widgets-drag"
+            && values.get("widgets.drag.x")==Some(&Value::Number(448.)))));
 
     let ghost_host_events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let canvas_host_events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let mut canvas = widget_surface_source(
         false,
         initial_canvas_offer_values(&bar_events, "widgets-canvas"),
-        canvas_host_events,
+        canvas_host_events.clone(),
     );
     let mut ghost = widget_surface_source(
         true,
@@ -1953,7 +1955,10 @@ fn canvas_and_passive_ghost_use_distinct_declared_host_model_contracts() {
         bar_delivered >= 4,
         "bar offers and updates reach both surfaces"
     );
-    assert!(canvas_delivered >= 3, "canvas models reach both surfaces");
+    assert!(canvas_delivered >= 2, "canvas drag ghost models reach the passive surface");
+    assert!(!canvas_host_events.lock().unwrap().iter().any(|event| matches!(event,
+        UiEvent::CanvasOffer {view,..} | UiEvent::CanvasModel {view,..} if view=="widgets-canvas")),
+        "the actual canvas Runtime accepts bar Models without echoing its own document back to the host");
     assert!(
         !ghost_host_events
             .lock()
