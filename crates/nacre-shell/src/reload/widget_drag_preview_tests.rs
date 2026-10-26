@@ -2946,3 +2946,18 @@ fn invalid_native_edit_never_reaches_file_persistence() {
     assert!(runtime.widgets_write.is_none());
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn native_widget_write_resolution_does_not_send_app_busy_to_bar() {
+    let changes = super::widget_write_resolution(None, None, None, None, BTreeMap::new(), false);
+    assert!(!changes.contains_key("widgets.busy"));
+
+    let dir = std::env::temp_dir().join(format!("widget-write-resolution-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut bar = real_bar_runtime(dir.join("widgets.json"));
+    bar.session
+        .update(changes)
+        .expect("native write completion values match the real bar schema");
+    let _ = std::fs::remove_dir_all(dir);
+}

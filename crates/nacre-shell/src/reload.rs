@@ -434,6 +434,7 @@ fn widget_write_resolution(
     accepted_revision: Option<u64>,
     error: Option<String>,
     canonical: BTreeMap<String, bead::core::Value>,
+    app_mode: bool,
 ) -> BTreeMap<String, bead::core::Value> {
     use bead::core::Value;
     let base_revision = previous.as_ref().map_or(0, |(_, _, revision)| *revision);
@@ -442,7 +443,6 @@ fn widget_write_resolution(
         _ => 0,
     };
     let mut changes = BTreeMap::from([
-        ("widgets.busy".into(), Value::Bool(false)),
         ("widgets.draft".into(), Value::list(Vec::new())),
         (
             "widgets.error".into(),
@@ -457,6 +457,9 @@ fn widget_write_resolution(
             }),
         ),
     ]);
+    if app_mode {
+        changes.insert("widgets.busy".into(), Value::Bool(false));
+    }
     let revision = accepted_revision.unwrap_or(base_revision.saturating_add(1));
     let newer = canonical.contains_key("widgets.layout")
         && canonical_revision
@@ -4899,7 +4902,14 @@ impl SceneSource for Runtime {
                         && widget_revision(&canonical) <= revision;
                 }
                 let error = reply.as_ref().err().map(|error| error.message.clone());
-                widget_write_resolution(document, previous, accepted_revision, error, canonical)
+                widget_write_resolution(
+                    document,
+                    previous,
+                    accepted_revision,
+                    error,
+                    canonical,
+                    self.widget_app,
+                )
             } else {
                 let (editing, error) = match reply {
                     Ok(_) => {

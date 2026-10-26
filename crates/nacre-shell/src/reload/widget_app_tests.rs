@@ -179,6 +179,7 @@ fn late_widget_write_ack_preserves_newer_canonical_edits_and_reports_errors() {
             Some(8),
             error.clone(),
             canonical.clone(),
+            true,
         );
         assert_eq!(changes["widgets.layout"], newer);
         assert_eq!(changes["widgets.rev"], Value::Number(9.));
@@ -194,6 +195,7 @@ fn late_widget_write_ack_preserves_newer_canonical_edits_and_reports_errors() {
         None,
         Some("store unavailable".into()),
         BTreeMap::new(),
+        true,
     );
     assert_eq!(changes["widgets.layout"], old);
     assert_eq!(changes["widgets.rev"], Value::Number(7.));
