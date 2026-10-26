@@ -1053,7 +1053,12 @@ async fn today_wallpaper_controls_follow_live_state_and_published_calls() -> Res
         "wallpaper.previous",
         "wallpaper.next",
     ];
-    let (dir, client, mut calls) = lab(&methods, &[], vec![ok(), ok(), ok(), ok(), ok()]).await;
+    let (dir, client, mut calls) = lab(
+        &methods,
+        &[],
+        vec![ok(), ok(), ok(), ok(), ok(), ok(), ok(), ok(), ok(), ok()],
+    )
+    .await;
     let pair = json!({
             "revision":4,"palette_revision":4,"path":"/fixture/current.png",
             "file_identity":{"device":"1","inode":"4","size":4096,"mtime_sec":1,"mtime_nsec":0,"ctime_sec":1,"ctime_nsec":0},
@@ -1071,20 +1076,18 @@ async fn today_wallpaper_controls_follow_live_state_and_published_calls() -> Res
         "store":"wallpaper-picker","rev":9,
         "data":{"version":1,"kind":"dynamic","layout":"carousel","paused":true,"future":"preserve"}
     }))?);
-    let dashboard = Dashboard::new(
-        Page::Today,
-        Arc::new(FakeSource::new(fixture("today")).unwrap()),
-        None,
-        false,
-    )
-    .with_overview(None, Some(wallpaper.clone()), None)
-    .with_wallpaper_settings(Some(wallpaper_settings.clone()))
-    .with_controls(
-        None,
-        Some(controls::Controls::new(client.clone())),
-        Some(client.clone()),
-    );
+    let today_source = Arc::new(FakeSource::new(fixture("today"))?);
+    let dashboard = Dashboard::new(Page::Today, today_source.clone(), None, false)
+        .with_overview(None, Some(wallpaper.clone()), None)
+        .with_wallpaper_settings(Some(wallpaper_settings.clone()))
+        .with_controls(
+            None,
+            Some(controls::Controls::new(client.clone())),
+            Some(client.clone()),
+        );
     let state = dashboard.project();
+    assert!(client.snapshot().connected);
+    assert!(client.status().methods.contains_key("ui.dispatch"));
     assert_eq!(state["dashboard.can_wallpaper_previous"], Value::Bool(true));
     assert_eq!(state["dashboard.can_wallpaper_next"], Value::Bool(true));
     assert_eq!(state["dashboard.wallpaper_dynamic"], Value::Bool(true));
@@ -1112,6 +1115,118 @@ async fn today_wallpaper_controls_follow_live_state_and_published_calls() -> Res
         let rect = bead::ui::rect(&node.draw);
         assert_eq!((rect.w, rect.h), size, "{operation}");
         assert!(node.activate_on_release, "{operation}");
+    }
+
+    // Exercise the actual host event boundary. Deferred controls must hit at their
+    // visible centers, remain pending after press, and dispatch exactly once on release.
+    use bead::wayland::{SceneSource, UiEvent};
+    let runtime_dashboard = Dashboard::new(Page::Today, today_source, None, false)
+        .with_overview(None, Some(wallpaper.clone()), None)
+        .with_wallpaper_settings(Some(wallpaper_settings.clone()))
+        .with_controls(
+            None,
+            Some(controls::Controls::new(client.clone())),
+            Some(client.clone()),
+        );
+    let mut runtime =
+        crate::reload::Runtime::new(harness.session).with_dashboard_view(runtime_dashboard)?;
+    runtime.isolate_state(&dir.join("runtime-state"));
+    runtime.services(Box::new(|_| {}));
+    for (operation, method, params) in [
+        (
+            "wallpapers.open",
+            "ui.dispatch",
+            json!({"target":"nacre","method":"mode","args":["wallpaper"]}),
+        ),
+        (
+            "colors.open",
+            "ui.dispatch",
+            json!({"target":"colorsApp","method":"open","args":[]}),
+        ),
+        ("wallpaper.previous", "wallpaper.previous", json!({})),
+        (
+            "wallpaper.pause",
+            "settings.provider",
+            json!({"store":"wallpaper-picker","rev":9,
+                "value":{"version":1,"kind":"dynamic","layout":"carousel","paused":false,"future":"preserve"}}),
+        ),
+        ("wallpaper.next", "wallpaper.next", json!({})),
+    ] {
+        let node = runtime
+            .session
+            .view_nodes()
+            .iter()
+            .find(|node| {
+                node.action_arg == Some(Value::Text(operation.into()))
+                    && (operation != "colors.open" || node.id.ends_with(".colors"))
+            })
+            .expect(operation);
+        let id = node.id.clone();
+        let rect = bead::ui::rect(&node.draw);
+        let (x, y) = (rect.x + rect.w / 2., rect.y + rect.h / 2.);
+        let hit = Some((
+            id,
+            "dashboard.do".to_owned(),
+            Value::Text(operation.to_owned()),
+        ));
+        assert_eq!(
+            runtime.session.action_at(x, y),
+            hit,
+            "{operation} center hit"
+        );
+
+        let _ = SceneSource::stage(&mut runtime, UiEvent::Click { x, y })
+            .unwrap_or_else(|error| panic!("{operation} press stage: {error:?}"));
+        assert!(SceneSource::commit(&mut runtime), "{operation} press frame");
+        assert!(calls.try_recv().is_err(), "{operation} dispatches on press");
+        assert_eq!(
+            runtime.session.release_action(),
+            hit,
+            "{operation} release remains valid after press commit"
+        );
+
+        let _ = SceneSource::stage(&mut runtime, UiEvent::Release)
+            .unwrap_or_else(|error| panic!("{operation} release stage: {error:?}"));
+        assert!(
+            SceneSource::commit(&mut runtime),
+            "{operation} release frame"
+        );
+        assert!(
+            runtime.session.release_action().is_none(),
+            "{operation} cleared release"
+        );
+        let call = tokio::time::timeout(Duration::from_secs(2), calls.recv())
+            .await
+            .unwrap_or_else(|_| {
+                panic!(
+                    "{operation} did not dispatch on release; busy={:?}, message={:?}, can_colors={:?}, can_previous={:?}, can_next={:?}",
+                    runtime.session.stores.get("dashboard.busy"),
+                    runtime.session.stores.get("dashboard.message"),
+                    runtime.session.stores.get("dashboard.can_colors"),
+                    runtime.session.stores.get("dashboard.can_wallpaper_previous"),
+                    runtime.session.stores.get("dashboard.can_wallpaper_next")
+                )
+            })
+            .unwrap();
+        assert_eq!(
+            call,
+            (method.to_owned(), params),
+            "{operation} release route"
+        );
+        for _ in 0..500 {
+            let _ = SceneSource::stage(&mut runtime, UiEvent::Model(BTreeMap::new()))
+                .unwrap_or_else(|error| panic!("{operation} model stage: {error:?}"));
+            SceneSource::commit(&mut runtime);
+            if runtime.session.stores.get("dashboard.busy") == Some(&Value::Bool(false)) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(
+            runtime.session.stores.get("dashboard.busy"),
+            Some(&Value::Bool(false)),
+            "{operation} daemon reply settled"
+        );
     }
 
     for (operation, expected) in [

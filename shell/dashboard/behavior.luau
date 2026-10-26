@@ -18,6 +18,7 @@ return {stores={
     ["dashboard.net_down"]={},["dashboard.net_up"]={},["dashboard.net_rate"]="—",["dashboard.net_up_rate"]="—",["dashboard.net_peak"]="",
     ["dashboard.customize"]=false,["dashboard.state"]="unavailable",["dashboard.progress"]=0,["dashboard.minutes"]=25,
 },actions={close=function(s) s["panel.open"]=false end,
+    ["dashboard.do"]=function(_) end,
     ["dashboard.select"]=function(s,id)
         local tabs=s["dashboard.tabs"]
         local count=math.max(1,#tabs)

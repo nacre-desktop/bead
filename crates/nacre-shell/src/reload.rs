@@ -4132,7 +4132,7 @@ impl SceneSource for Runtime {
         if let (Some(dashboard), Some((_, name, bead::core::Value::Text(arg)))) =
             (&self.dashboard, &host_action)
             && name == "dashboard.do"
-            && (matches!(&event, UiEvent::Click { .. })
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
             self.actions.authorize(name)?;
@@ -4144,7 +4144,12 @@ impl SceneSource for Runtime {
                 wakeup(UiEvent::Model(BTreeMap::new()));
             });
             dashboard.borrow().act(arg, wake);
-            let scene = self.session.update(BTreeMap::new())?;
+            let released = if matches!(&event, UiEvent::Release) {
+                self.session.release()?
+            } else {
+                None
+            };
+            let scene = self.session.update(BTreeMap::new())?.or(released);
             return self.finish_scene(scene, false);
         }
         if let (Some(control), Some((id, name, bead::core::Value::Text(arg)))) =

@@ -27,6 +27,7 @@ local base = {
     },
     actions={
         close=function(s) s["panel.open"]=false end,
+        ["dashboard.do"]=function(_) end,
         calendar_month=function(s,delta)
             if type(delta)~="number" or delta%1~=0 or math.abs(delta)>1200 then return end
             local y,m=displayed(s)
