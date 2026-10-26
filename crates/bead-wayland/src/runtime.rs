@@ -95,6 +95,8 @@ pub(super) struct App {
     pub(super) window_epoch: u64,
     /// App mode: the open request still waiting for the first usable output (panel apps).
     pub(super) app_pending: Option<Vec<serde_json::Value>>,
+    /// Slot swaps temporarily hide the resident panel while its lifetime is evaluated.
+    pub(super) app_lifetime_deferred: bool,
     pub(super) overlay: Option<overlay::Overlay>,
     pub(super) overlay_epoch: u64,
     pub(super) canvases: std::collections::BTreeMap<(String, String), canvas::Canvas>,
@@ -412,6 +414,7 @@ pub fn run_runtime(
         window: None,
         window_epoch: 0,
         app_pending: None,
+        app_lifetime_deferred: false,
         overlay: None,
         overlay_epoch: 0,
         canvases: Default::default(),

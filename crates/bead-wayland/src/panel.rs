@@ -9,6 +9,14 @@ fn update_panel_placement(
 ) -> bool {
     cached.replace(Some(placement)) != Some(placement)
 }
+fn should_stop_app_after_panel_release(
+    app_mode: bool,
+    pending: bool,
+    another_panel_open: bool,
+    lifetime_deferred: bool,
+) -> bool {
+    app_mode && !pending && !another_panel_open && !lifetime_deferred
+}
 
 impl App {
     pub(super) fn notify_panel_owner(&self, event: UiEvent) {
@@ -1122,6 +1130,14 @@ impl App {
         }
     }
     pub(super) fn release_panel(&mut self) {
+        self.release_panel_inner(true);
+    }
+    /// A dock is already carrying a live pearl out of `slots`; the caller checks
+    /// app lifetime again after the destination panel has been installed.
+    pub(super) fn release_panel_for_handoff(&mut self) {
+        self.release_panel_inner(false);
+    }
+    fn release_panel_inner(&mut self, check_app_lifetime: bool) {
         self.panel_cover = None;
         self.panel_dock_transition = None;
         self.cancel_prepared_native();
@@ -1154,10 +1170,6 @@ impl App {
         }
         let retired_panel_epoch = self.panel_epoch;
         self.panel_target = false;
-        // An app process lives exactly as long as its panel.
-        if self.options.app.is_some() && self.app_pending.is_none() {
-            self.signal.stop();
-        }
         self.panel_ambient = false;
         self.panel_center = None;
         self.panel_anchor = None;
@@ -1257,6 +1269,21 @@ impl App {
             }
         }
         println!("PANEL_IDLE_RELEASED workers=0 rasters=0 shm=0");
+        if check_app_lifetime {
+            self.stop_app_if_idle();
+        }
+    }
+    pub(super) fn stop_app_if_idle(&mut self) {
+        let another_panel_open = self.panel_runtime.is_some()
+            || self.slots.iter().any(|group| group.alive());
+        if should_stop_app_after_panel_release(
+            self.options.app.is_some(),
+            self.app_pending.is_some(),
+            another_panel_open,
+            self.app_lifetime_deferred,
+        ) {
+            self.signal.stop();
+        }
     }
 }
 
@@ -1416,6 +1443,25 @@ impl App {
 #[cfg(test)]
 mod placement_tests {
     use super::*;
+
+    #[test]
+    fn app_stops_only_after_the_last_panel_lifetime_ends() {
+        assert!(should_stop_app_after_panel_release(
+            true, false, false, false
+        ));
+        assert!(!should_stop_app_after_panel_release(
+            true, false, true, false
+        ));
+        assert!(!should_stop_app_after_panel_release(
+            true, false, false, true
+        ));
+        assert!(!should_stop_app_after_panel_release(
+            true, true, false, false
+        ));
+        assert!(!should_stop_app_after_panel_release(
+            false, false, false, false
+        ));
+    }
 
     #[test]
     fn only_actual_placement_changes_are_committed() {

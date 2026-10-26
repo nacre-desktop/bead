@@ -477,6 +477,8 @@ impl App {
         let at = self.slots.iter().position(|g| g.id() == Some(id))?;
         let mut g = self.slots.remove(at);
         let previous_output = g.output.clone();
+        let lifetime_was_deferred = self.app_lifetime_deferred;
+        self.app_lifetime_deferred = true;
         self.swap_group(&mut g);
         let result = f(self);
         self.swap_group(&mut g);
@@ -496,6 +498,10 @@ impl App {
                 self.save_pearls();
                 self.release_pearl_watch_if_idle();
             }
+        }
+        self.app_lifetime_deferred = lifetime_was_deferred;
+        if !lifetime_was_deferred {
+            self.stop_app_if_idle();
         }
         Some(result)
     }
@@ -2064,7 +2070,7 @@ impl App {
         let mut g = self.slots.remove(at);
         // One docked panel at a time: whatever is open yields at once.
         if self.panel_runtime.is_some() {
-            self.release_panel();
+            self.release_panel_for_handoff();
         }
         self.swap_group(&mut g);
         self.cancel_prepared_native();
@@ -2116,6 +2122,7 @@ impl App {
         self.sync_all_decorations()?;
         self.save_pearls();
         self.release_pearl_watch_if_idle();
+        self.stop_app_if_idle();
         println!("PEARL_DOCKED id={id}");
         Ok(())
     }
