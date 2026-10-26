@@ -38,6 +38,17 @@ mod keyboard_policy_tests {
     }
 }
 
+#[cfg(test)]
+mod native_gl_extent_tests {
+    use super::*;
+
+    #[test]
+    fn detached_gl_extent_keeps_natural_height_when_docked_layer_is_clipped() {
+        assert_eq!(native_gl_dimensions(1164., 0., 654., 0., 180).unwrap(), (1746, 981));
+        assert_eq!(native_gl_dimensions(1164., 0., 632., 0., 180).unwrap(), (1746, 948));
+    }
+}
+
 fn content_body(scene: &Scene) -> Option<bead_render::Rect> {
     scene
         .layers
@@ -55,6 +66,21 @@ fn content_body(scene: &Scene) -> Option<bead_render::Rect> {
                     _ => None,
                 })
         })
+}
+
+/// The docked layer may be clipped to the output while its detached window
+/// must retain the complete panel content extent.
+fn native_gl_dimensions(
+    bounds_width: f32,
+    bounds_y: f32,
+    bounds_height: f32,
+    offset_y: f32,
+    scale120: u32,
+) -> Result<(u32, u32), Box<dyn Error>> {
+    let width = bounds_width.ceil().max(1.) as u32;
+    let height = (bounds_y + bounds_height + offset_y).ceil().max(1.) as u32;
+    let (width, height, _, _) = buffer_dimensions(width, height, scale120)?;
+    Ok((width as u32, height as u32))
 }
 
 /// Native window geometry describes the complete body, even during its reveal.
@@ -1003,6 +1029,13 @@ impl App {
                     && prepared.configured
                     && prepared.scale120 == s.scale120
                 {
+                    let (native_w, native_h) = native_gl_dimensions(
+                        scene.bounds.w,
+                        scene.bounds.y,
+                        scene.bounds.h,
+                        scene.offset.1,
+                        s.scale120,
+                    )?;
                     let key = policy::PreparedFrameKey {
                         generation: prepared.size_generation,
                         ui_serial: s.ui_serial,
@@ -1011,9 +1044,17 @@ impl App {
                     };
                     if !prepared.gl_ready
                         || prepared.snapshot_key() != Some(key)
+                        || prepared.gl_size != Some((native_w, native_h))
                         || !regions.is_empty()
                     {
                         prepared.gl_ready = false;
+                        if prepared.gl_size != Some((native_w, native_h)) {
+                            // EGL retains its old backbuffer until a swap. Recreate
+                            // on a genuine natural-extent change instead of resizing
+                            // an unswapped surface and presenting stale dimensions.
+                            prepared.gl.take();
+                            prepared.gl_size = None;
+                        }
                         if prepared.gl.is_none() {
                             use raw_window_handle::{RawWindowHandle, WaylandWindowHandle};
                             let window =
@@ -1024,18 +1065,23 @@ impl App {
                             ));
                             // SAFETY: PreparedNative drops EGL before its window.
                             prepared.gl = Some(unsafe {
-                                transport.create_surface(handle, w as u32, h as u32)
+                                transport.create_surface(handle, native_w, native_h)
                             }?);
+                            prepared.gl_size = Some((native_w, native_h));
                         }
-                        transport.activate(prepared.gl.as_ref().unwrap(), w as u32, h as u32)?;
+                        transport.activate(
+                            prepared.gl.as_ref().unwrap(),
+                            native_w,
+                            native_h,
+                        )?;
                         renderer.draw(
                             scene,
                             RenderTarget::Gl(bead_render::gl::GlTarget {
                                 display: &transport.display,
-                                width: w as u32,
-                                height: h as u32,
+                                width: native_w,
+                                height: native_h,
                             }),
-                            Damage::full(w as u32, h as u32),
+                            Damage::full(native_w, native_h),
                         )?;
                         prepared.snapshot = None;
                         prepared.server_attached_key = None;

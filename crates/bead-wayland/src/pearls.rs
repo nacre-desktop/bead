@@ -112,6 +112,10 @@ pub(crate) struct PreparedNative {
     pub(super) gl: Option<bead_render::gl::Surface>,
     #[cfg(feature = "native-gl")]
     pub(super) gl_ready: bool,
+    /// Physical dimensions of the natural-content EGL backbuffer. This can be
+    /// taller than the clipped source layer while the panel is docked.
+    #[cfg(feature = "native-gl")]
+    pub(super) gl_size: Option<(u32, u32)>,
     pub(super) anchor: pearl::Rect,
     pub(super) request: pearl::Rect,
     pub(super) id: u32,
@@ -891,6 +895,8 @@ impl App {
                 gl: None,
                 #[cfg(feature = "native-gl")]
                 gl_ready: false,
+                #[cfg(feature = "native-gl")]
+                gl_size: None,
                 anchor,
                 request: anchor,
                 id,
@@ -1720,10 +1726,19 @@ impl App {
                 if Some(prepared.id) != expected_id {
                     return true;
                 }
+                #[cfg(feature = "native-gl")]
+                let gl_extent_matches = !prepared.gl_ready
+                    || buffer_dimensions(surface.width, surface.height, surface.scale120)
+                        .is_ok_and(|(width, height, _, _)| {
+                            prepared.gl_size == Some((width as u32, height as u32))
+                        });
+                #[cfg(not(feature = "native-gl"))]
+                let gl_extent_matches = true;
                 prepared
                     .window
                     .as_ref()
                     .is_none_or(|window| window.wl_surface().version() < 5)
+                    || !gl_extent_matches
                     || !policy::prepared_frame_ready(
                         prepared.configured,
                         prepared.placed,
