@@ -2,11 +2,13 @@
 //! Per-surface rendering, GPU staging and idle release.
 use super::*;
 
+#[cfg(feature = "native-gl")]
 fn is_cache_pressure(error: &str) -> bool {
     let error = error.to_ascii_lowercase();
     error.contains("budget") || error.contains("admission") || error.contains("cache pressure")
 }
 
+#[cfg(feature = "native-gl")]
 fn report_cache_pressure(owner: &str, error: &str) {
     static LAST_REPORT: std::sync::OnceLock<std::sync::Mutex<Option<Instant>>> =
         std::sync::OnceLock::new();
@@ -72,6 +74,7 @@ mod keyboard_policy_tests {
     }
 
     #[test]
+    #[cfg(feature = "native-gl")]
     fn cache_pressure_is_a_recoverable_render_condition() {
         assert!(is_cache_pressure("retained cache byte budget exceeded"));
         assert!(is_cache_pressure("CPU snapshot admission failed"));
@@ -503,7 +506,7 @@ impl App {
                                 if let Err(error) = app.suspend_panel_gpu(snapshot) {
                                     let detail = error.to_string();
                                     if is_cache_pressure(&detail) {
-                                        report_cache_pressure("wallpaper-picker", &detail);
+                                        report_cache_pressure("retained-panel", &detail);
                                         let qh = app.qh.clone();
                                         let indices = app
                                             .surfaces
@@ -522,7 +525,7 @@ impl App {
                             }
                             Err(error) => {
                                 if is_cache_pressure(&error) {
-                                    report_cache_pressure("wallpaper-picker", &error);
+                                    report_cache_pressure("retained-panel", &error);
                                     let qh = app.qh.clone();
                                     let indices = app
                                         .surfaces
@@ -772,16 +775,37 @@ impl App {
         index: usize,
         qh: &QueueHandle<Self>,
     ) -> Result<(), Box<dyn Error>> {
-        if !self.options.lazy_gl
-            || !self.surfaces[index].companion
-            || !self.surfaces[index].configured
-            || self.surfaces[index].callbacks.pending
-            || self.surfaces[index].scale_relayout_pending
-        {
+        if !self.surfaces[index].companion {
             return Ok(());
         }
         let desired = self.options.companion.as_ref().map(|(_, kind)| *kind);
         if desired != Some(RendererKind::FemtovgGl) {
+            return Ok(());
+        }
+        #[cfg(feature = "native-gl")]
+        if self.panel_target
+            && self
+                .companion
+                .as_ref()
+                .is_some_and(|(_, _, kind)| *kind != RendererKind::FemtovgGl)
+            && (!self.options.lazy_gl || self.gl.is_some())
+        {
+            // The warm CPU snapshot is the fallback while a lazy GL context is
+            // being prepared. Once GL is ready, promote before relayout/buffer
+            // callback gates can defer the first visible panel frame.
+            if let Some((_, renderer, kind)) = &mut self.companion {
+                *renderer = bead_render::renderer(RendererKind::FemtovgGl)?;
+                *kind = RendererKind::FemtovgGl;
+            }
+            self.surfaces[index].visual_damage = Default::default();
+            println!("RENDER_POLICY companion=true transition=cpu-to-gl");
+            return Ok(());
+        }
+        if !self.options.lazy_gl
+            || !self.surfaces[index].configured
+            || self.surfaces[index].callbacks.pending
+            || self.surfaces[index].scale_relayout_pending
+        {
             return Ok(());
         }
         #[cfg(feature = "native-gl")]
@@ -1006,12 +1030,13 @@ impl App {
             #[cfg(feature = "native-gl")]
             if self.gl_preparation.is_some()
                 && self.gl.is_none()
-                && (self
+                && self
                     .companion
                     .as_ref()
                     .is_some_and(|(_, _, kind)| *kind == RendererKind::FemtovgGl)
-                    || !self.panel_cpu_cached)
             {
+                // A cold open can draw its current CPU scene while the retained
+                // GL transport warms; only an already-GL renderer must wait for it.
                 self.surfaces[index].redraw = true;
                 return;
             }

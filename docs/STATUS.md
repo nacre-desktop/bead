@@ -1,5 +1,16 @@
 # Status
 
+## 2026-10-26 — B0148 cache admission (synthetic checks pass; real gate blocked)
+
+Cache-admission failures no longer log as UI errors; retained panels keep drawing
+through the current backend and GL promotion no longer waits behind relayout. The
+24-image 4K CPU snapshot regression stays within 40 MiB and renders at 4320×2700.
+Nested CPU/GL QML pairs pass with generated inputs, zero UI_ERROR and zero OOM.
+One cold GL open remained blank at 3 s settle and showed at 8 s; first-frame
+acceptance remains open. The owner's wallpaper directory is empty, and
+cross-owner eviction plus pointer hover/pressed parity remain unverified.
+[Scope and evidence](specs/0148-cache-admission.md).
+
 ## 2026-10-26 — B0145 idle video renderer release
 
 The B0142 renderer now releases after 60 seconds with static wallpapers across
