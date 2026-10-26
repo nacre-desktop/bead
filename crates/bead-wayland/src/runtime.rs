@@ -721,7 +721,10 @@ impl App {
             .filter(|surface| surface.output == *output && !surface.companion)
             .filter_map(|surface| (surface.refresh_ns > 0).then_some(surface.refresh_ns))
             .min()
-            .map_or_else(|| self.output_frame_interval(output), |ns| Duration::from_nanos(u64::from(ns)))
+            .map_or_else(
+                || self.output_frame_interval(output),
+                |ns| Duration::from_nanos(u64::from(ns)),
+            )
     }
     fn shared_primary_frame_interval(&self) -> Duration {
         self.output
@@ -731,10 +734,18 @@ impl App {
             .unwrap_or_else(|| Duration::from_millis(16))
     }
     pub(super) fn output_mode_changed(&mut self, output: &wl_output::WlOutput) {
-        for surface in self.surfaces.iter_mut().filter(|surface| surface.output == *output) {
+        for surface in self
+            .surfaces
+            .iter_mut()
+            .filter(|surface| surface.output == *output)
+        {
             surface.refresh_ns = 0;
         }
-        for canvas in self.canvases.values_mut().filter(|canvas| canvas.output == *output) {
+        for canvas in self
+            .canvases
+            .values_mut()
+            .filter(|canvas| canvas.output == *output)
+        {
             canvas.refresh_ns = 0;
         }
         let name = self.output_id(output);
@@ -761,7 +772,11 @@ impl App {
             source.frame_interval(interval);
         }
         self.pearl_output_mode_changed(output, interval);
-        for canvas in self.canvases.values_mut().filter(|canvas| canvas.output == *output) {
+        for canvas in self
+            .canvases
+            .values_mut()
+            .filter(|canvas| canvas.output == *output)
+        {
             canvas.source.frame_interval(interval);
         }
         self.window_output_mode_changed(&name, interval);
@@ -2571,9 +2586,8 @@ fn write_bgra(bytes: &mut [u8], rgba: &[u8]) {
 mod palette_barrier_tests {
     use super::{
         PendingPalette, StagedWallpaperBuffer, aborted_palette_retry_outputs,
-        accepted_palette_waits_for_confirmation, frame_is_unconfirmed,
-        frame_interval_from_refresh_millihz, has_unconfirmed_palette_frame,
-        wallpaper_palette_group_ready,
+        accepted_palette_waits_for_confirmation, frame_interval_from_refresh_millihz,
+        frame_is_unconfirmed, has_unconfirmed_palette_frame, wallpaper_palette_group_ready,
     };
     use std::sync::Arc;
 

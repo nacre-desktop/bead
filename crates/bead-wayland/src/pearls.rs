@@ -326,7 +326,11 @@ impl App {
         output: &wl_output::WlOutput,
         interval: std::time::Duration,
     ) {
-        for group in self.slots.iter_mut().filter(|group| group.output.as_ref() == Some(output)) {
+        for group in self
+            .slots
+            .iter_mut()
+            .filter(|group| group.output.as_ref() == Some(output))
+        {
             if let Some(source) = &mut group.runtime {
                 source.frame_interval(interval);
             }

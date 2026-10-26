@@ -208,7 +208,8 @@ impl App {
                 crate::scroll::note_refresh(*refresh);
                 if *refresh > 0 && win.refresh_ns != *refresh {
                     win.refresh_ns = *refresh;
-                    win.source.frame_interval(std::time::Duration::from_nanos(u64::from(*refresh)));
+                    win.source
+                        .frame_interval(std::time::Duration::from_nanos(u64::from(*refresh)));
                 }
                 let monotonic_ns = ((u64::from(*tv_sec_hi) << 32) | u64::from(*tv_sec_lo))
                     * 1_000_000_000
@@ -380,7 +381,9 @@ impl App {
                 self.output.info(output).and_then(|info| info.name).as_ref() == Some(name)
             })
         });
-        let output_name = selected_output.as_ref().map(|output| self.output_id(output));
+        let output_name = selected_output
+            .as_ref()
+            .map(|output| self.output_id(output));
         let frame_interval = selected_output.as_ref().map_or_else(
             || std::time::Duration::from_millis(16),
             |output| self.output_frame_interval(output),

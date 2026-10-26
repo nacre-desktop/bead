@@ -883,17 +883,29 @@ mod tests {
         let fast = Duration::from_nanos(1_000_000_000_000 / 120_000);
         source.frame_interval(slow);
         source.frame_interval(slow);
-        assert!(matches!(receiver.try_recv(), Ok(Job::FrameInterval(interval)) if interval == slow));
-        assert!(matches!(receiver.try_recv(), Err(mpsc::TryRecvError::Empty)));
+        assert!(
+            matches!(receiver.try_recv(), Ok(Job::FrameInterval(interval)) if interval == slow)
+        );
+        assert!(matches!(
+            receiver.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
 
         let mut queue = VecDeque::new();
         enqueue(&mut queue, Job::FrameInterval(slow));
         enqueue(&mut queue, Job::FrameInterval(fast));
         assert_eq!(queue.len(), 1);
-        assert!(matches!(queue.pop_front(), Some(Job::FrameInterval(interval)) if interval == fast));
+        assert!(
+            matches!(queue.pop_front(), Some(Job::FrameInterval(interval)) if interval == fast)
+        );
         source.frame_interval(fast);
-        assert!(matches!(receiver.try_recv(), Ok(Job::FrameInterval(interval)) if interval == fast));
-        assert!(matches!(receiver.try_recv(), Err(mpsc::TryRecvError::Empty)));
+        assert!(
+            matches!(receiver.try_recv(), Ok(Job::FrameInterval(interval)) if interval == fast)
+        );
+        assert!(matches!(
+            receiver.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
     }
     #[test]
     fn worker_dismissal_and_cursor_use_the_topmost_clipped_polygon_hit() {
