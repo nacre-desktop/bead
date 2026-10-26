@@ -1,7 +1,7 @@
 # B0135 — shared scrolling
 
-Status: implemented; 120 Hz smoothness acceptance fails. Final memory validation
-is in progress. No live installation.
+Status: implementation candidate; smoothness and open-memory acceptance fail.
+Five-pair validation is complete. No live installation.
 The updater bounds row construction to its viewport; notification cards and
 Settings previously laid out ordinary repeated trees. All surfaces already route
 through one Wayland handler, but it ignored axis source/stop, amplified finger
@@ -61,8 +61,8 @@ share semantic damage plus independent repaint history per SHM buffer. Inherited
 `clip_children` and nested scroll clips survive cached pose updates. The existing
 developer JSON fixture is still exercised by `spikes/measure.py`; it is not an
 unused replacement or a second shipping scroll policy.
-The framework/shell production delta is 1,198 added and 194 removed lines,
-against main `ef7d6aa3`, excluding test-only files/`cfg(test)` items, proof
+The framework/shell production delta is 1,205 added and 196 removed lines,
+against main `d58dfc67`, excluding test-only files/`cfg(test)` items, proof
 tooling, binary goldens and documentation; it includes eight deleted SVG lines.
 Old per-view full-row
 construction and the native full-surface repair path are replaced in this unit.
@@ -157,9 +157,9 @@ invalid timestamp. Measurements establish inner submission timing, not physical
 scanout. The shared timer uses known feedback periods, or an 8.333 ms opportunity
 when unknown; no benchmark-only rate override is shipped.
 
-Full remote Arch CI passes on integrated `30ba6683`, including final global
-admission and launcher input fixes. Five alternating CPU memory pairs remain
-in progress; the source-pinned per-surface timing evidence is linked below. Missing or
+Full remote Arch CI passes on integrated `b6c61725`, including final global
+admission and launcher input fixes. Five alternating CPU memory pairs are complete and fail the open-view gates;
+the source-pinned per-surface timing evidence is linked below. Missing or
 non-overflow measurements are not zeros. Whole-window gaps include time clamped
 at a boundary; do not silently drop long gaps or call them active-motion misses.
 
@@ -204,6 +204,14 @@ The default native-GL 80-image capture failed cache admission. Two later
 attempts exposed a stale 64 MiB eviction threshold, then old/new texture overlap,
 then process-global overlap. Rejected timings remain diagnostic in the
 [picker evidence](evidence/0135/wallpaper-picker/default-gl80.md).
+
+Clipboard also has an inherited structural gap: QML opens a bottom/right native
+overlay with search, pin and delete controls; Bead uses the compact dashboard
+history. The corrected QML y=900 visual probe shows movement, but its Qt path has
+no joined state/presentation timing. Launcher QML uses Home/search/filter/detail
+over a gradient; both measured Bead versions use Applications without that top
+filter/detail pane over black, with different icons and spacing. No QML Widgets
+counterpart was available. These are known parity gaps, not passing comparisons.
 
 An initial registration attempt using every optional dashboard page exceeded
 the existing 32-view catalog cap and was rejected before startup. That attempt
@@ -251,3 +259,72 @@ Results: [core Settings/notifications](evidence/0135/core-scroll/core-before-aft
 [other surfaces](evidence/0135/surfaces/wide-wheel.md),
 [Clipboard](evidence/0135/clipboard/clipboard.md), and
 [CI/source provenance](evidence/0135/validation.md).
+
+Final integration onto main `d58dfc67` preserves all 54 implementation/test patches
+exactly. Main's idle native-buffer preparation now also checks the shared wheel
+and fling animation state; it must not treat active scrolling as idle work. This
+six-line integration guard is outside the frozen matched capture snapshots.
+
+Attached AI transcript timing remains unavailable. The strict private pin probe
+queries existing state after pin plus an outside click: QML reports
+`leftPinned=true,left=true`, while both matched Bead control and candidate report
+`target_open=false,chat.pinned=false,dismiss_active=false`. Wire button presses
+arrive, but the pin interaction does not persist and the subsequent scroll
+window is invalid. This is a concrete pin/hit limitation in both arms, not a
+zero-cost or functional AI scrolling pass. No unrelated hover implementation is
+ported into this scrolling unit.
+
+Coverage is incomplete beyond the captured matrix. Nested selects, control
+history/network/tray, Overview workspaces, weather/artwork crops, prompt and kit
+demos have source inventory and automated coverage, but no native per-container
+reversal/cadence result in this unit. Hover/pressed states and every optional
+subpage were not exhaustively paired with QML. Missing evidence is not a pass;
+the unit does not meet its every-surface smoothness acceptance.
+
+## Five-pair CPU memory result
+
+The source audit passes with zero errors for all five alternating pairs (7–11),
+three fresh lifecycles per arm, scale 1.5 and close+12s. Both arms use CPU; the
+gated sum is Pss_Anon + Pss_Shmem + DRM + SwapPss. File PSS is informational.
+
+| Phase, candidate − control median | MiB | Verdict |
+| --- | ---: | --- |
+| Core idle | +0.2031 | passes 0.5 |
+| Notification history open | +1.4844 | fails 0.5 and 1 MiB feature budget |
+| Notification popup open | +1.2578 | fails 0.5 |
+| Clipboard open | +2.1758 | fails 0.5 and 1 MiB feature budget |
+| Eight-image picker open | −36.6055 | passes 0.5 |
+| Largest closed+12s median (Clipboard) | +0.4258 | passes 0.5 |
+
+The failed history/popup/Clipboard anonymous medians are +1.3516/+1.0820/
++2.1758 MiB; shmem adds +0.1328/+0.1758/+0.0000 MiB. Cache versus allocator
+attribution is incomplete. Other listed shell phases pass. The new-history/Clipboard budgets fail; no
+exception is assumed and no further performance optimization is accepted here.
+Settings application memory is separate from the always-on shell: content/nav
+open medians add 12.0312/7.3242 MiB. Their anonymous components add 6.8985/2.0781
+MiB and shmem adds 5.1524/5.2461 MiB; causal allocation attribution remains
+incomplete. These application costs are reported, not hidden by the shell gate.
+[All samples, components, exact pins and limits](evidence/0135/memory/memory.md).
+
+This cohort measures candidate203's non-AI pages. Later numeric AI-follow and
+main idle-preparation fixes are outside its immutable source pin; no AI memory
+result or full integrated-build memory acceptance is inferred.
+
+The final AI probe exposed a separate concrete scrolling bug: follow-latest
+snapped every offset within 48 pixels back to the bottom, preventing 7-pixel
+finger samples from accumulating. The adapter now leaves following on any
+reader offset change and resumes only at the actual bottom; thread changes
+still follow the new thread. A regression fails before the fix, then covers
+7-pixel and quarter-pixel movement, streaming while away, bottom resume and the
+Latest action. All 13 chat tests and full integrated CI pass. The change adds no
+state or cache; the immutable non-AI memory cohort remains tree203.
+
+A separate published `pearls.open ai` window probe validates the final AI fix
+on CPU: candidate315 moves 2249.27→1689→2249.27 while the matched control stays
+stuck at 2249.27. The source/configured viewport and input hit are verified.
+Render p95 is 2.093 ms; input-to-visible reversal is 49.22 ms (delivery 40.00 ms), so
+functional scrolling passes and timing fails. Canonical all-gap presentation
+p95 is 16.03 ms, with 89 missed-slot upper bound and unknown refresh prediction.
+Endpoint images return to the start; movement is proved by joined state/commit/
+presentation records. This is not attached-panel pin or QML parity acceptance.
+[AI proof and fixture provenance limits](evidence/0135/surfaces/ai-pearl-transcript-203.md).

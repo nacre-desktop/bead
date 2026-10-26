@@ -1,0 +1,258 @@
+{
+  "control": {
+    "first_axis_stop_ns": 859197137755487,
+    "first_opposite_axis_sent_ns": 859197548561838,
+    "stop_to_opposite_ms": 410.806,
+    "post_stop_presented_changes_before_opposite": [
+      {
+        "ms": 0.96,
+        "offset": 390.0
+      },
+      {
+        "ms": 8.98,
+        "offset": 420.0
+      },
+      {
+        "ms": 25.0,
+        "offset": 450.0
+      },
+      {
+        "ms": 33.01,
+        "offset": 480.0
+      },
+      {
+        "ms": 95.79,
+        "offset": 519.9
+      },
+      {
+        "ms": 111.95,
+        "offset": 559.4
+      },
+      {
+        "ms": 129.45,
+        "offset": 598.57
+      },
+      {
+        "ms": 143.41,
+        "offset": 637.31
+      },
+      {
+        "ms": 159.7,
+        "offset": 675.64
+      },
+      {
+        "ms": 176.53,
+        "offset": 713.65
+      },
+      {
+        "ms": 191.35,
+        "offset": 751.23
+      },
+      {
+        "ms": 207.31,
+        "offset": 788.4
+      },
+      {
+        "ms": 224.11,
+        "offset": 825.19
+      },
+      {
+        "ms": 240.51,
+        "offset": 861.58
+      },
+      {
+        "ms": 256.65,
+        "offset": 897.67
+      },
+      {
+        "ms": 272.98,
+        "offset": 933.39
+      },
+      {
+        "ms": 288.67,
+        "offset": 968.66
+      },
+      {
+        "ms": 304.54,
+        "offset": 1003.62
+      },
+      {
+        "ms": 330.58,
+        "offset": 1043.99
+      },
+      {
+        "ms": 346.95,
+        "offset": 1078.01
+      },
+      {
+        "ms": 364.16,
+        "offset": 1111.65
+      },
+      {
+        "ms": 378.48,
+        "offset": 1144.9
+      },
+      {
+        "ms": 395.51,
+        "offset": 1177.76
+      }
+    ],
+    "post_opposite_presented_changes": [
+      {
+        "ms": 0.7,
+        "offset": 1210.24
+      },
+      {
+        "ms": 16.78,
+        "offset": 1168.24
+      },
+      {
+        "ms": 32.79,
+        "offset": 1147.24
+      },
+      {
+        "ms": 48.8,
+        "offset": 1126.24
+      },
+      {
+        "ms": 56.81,
+        "offset": 1105.24
+      },
+      {
+        "ms": 72.96,
+        "offset": 1084.24
+      },
+      {
+        "ms": 136.24,
+        "offset": 1055.63
+      },
+      {
+        "ms": 151.48,
+        "offset": 1027.81
+      },
+      {
+        "ms": 167.48,
+        "offset": 1000.39
+      },
+      {
+        "ms": 184.84,
+        "offset": 972.86
+      },
+      {
+        "ms": 200.85,
+        "offset": 946.13
+      },
+      {
+        "ms": 216.82,
+        "offset": 919.79
+      }
+    ],
+    "positive_deliveries_after_opposite": 0,
+    "first_opposite_delivery_ns": 859197548859818,
+    "reversal": {
+      "status": "proven",
+      "store": "notifications.scroll.y",
+      "input_reversal_ns": 859197548561838,
+      "delivered_reversal_ns": 859197548859818,
+      "presented_direction_change_ns": 859197565342359,
+      "input_to_visible_ms": 16.78,
+      "delivery_to_visible_ms": 16.48,
+      "input_delta": -7.0,
+      "delivered_delta": -21.0,
+      "presented_samples": 93
+    },
+    "render_ms": {
+      "p50": 2.988,
+      "p95": 3.26,
+      "p99": 4.284,
+      "max": 4.284
+    },
+    "presentation_interval_all_gaps_ms": {
+      "p50": 16.03,
+      "p95": 17.49,
+      "p99": 97.95
+    },
+    "presented_max_gap_ms": 97.95,
+    "presented_dropped_upper_bound": 106,
+    "discarded_feedback": 0,
+    "input_p95_ms": 8.17
+  },
+  "candidate": {
+    "first_axis_stop_ns": 859222375597854,
+    "first_opposite_axis_sent_ns": 859222786750913,
+    "stop_to_opposite_ms": 411.153,
+    "post_stop_presented_changes_before_opposite": [
+      {
+        "ms": 1.13,
+        "offset": 130.0
+      },
+      {
+        "ms": 9.14,
+        "offset": 140.0
+      },
+      {
+        "ms": 17.16,
+        "offset": 150.0
+      },
+      {
+        "ms": 25.19,
+        "offset": 160.0
+      }
+    ],
+    "post_opposite_presented_changes": [
+      {
+        "ms": 7.52,
+        "offset": 153.0
+      },
+      {
+        "ms": 16.84,
+        "offset": 146.0
+      },
+      {
+        "ms": 32.88,
+        "offset": 139.0
+      },
+      {
+        "ms": 48.93,
+        "offset": 132.0
+      },
+      {
+        "ms": 56.95,
+        "offset": 125.0
+      },
+      {
+        "ms": 64.97,
+        "offset": 118.0
+      }
+    ],
+    "positive_deliveries_after_opposite": 0,
+    "first_opposite_delivery_ns": 859222786991853,
+    "reversal": {
+      "status": "proven",
+      "store": "notifications.scroll.y",
+      "input_reversal_ns": 859222786750913,
+      "delivered_reversal_ns": 859222786991853,
+      "presented_direction_change_ns": 859222794273569,
+      "input_to_visible_ms": 7.52,
+      "delivery_to_visible_ms": 7.28,
+      "input_delta": -7.0,
+      "delivered_delta": -7.0,
+      "presented_samples": 23
+    },
+    "render_ms": {
+      "p50": 2.97,
+      "p95": 4.151,
+      "p99": 4.302,
+      "max": 4.302
+    },
+    "presentation_interval_all_gaps_ms": {
+      "p50": 8.03,
+      "p95": 393.49,
+      "p99": 393.49
+    },
+    "presented_max_gap_ms": 393.49,
+    "presented_dropped_upper_bound": 51,
+    "discarded_feedback": 0,
+    "input_p95_ms": 8.05
+  }
+}

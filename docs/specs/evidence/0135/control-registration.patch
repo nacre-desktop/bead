@@ -1,0 +1,12 @@
+diff --git a/crates/nacre-shell/src/main.rs b/crates/nacre-shell/src/main.rs
+index 9ad2d798..66764d8c 100644
+--- a/crates/nacre-shell/src/main.rs
++++ b/crates/nacre-shell/src/main.rs
+@@ -867,6 +867,7 @@ fn start(
+         for page in dashboard::Page::ALL
+             .into_iter()
+             .chain(dashboard::Page::EXTRAS)
++            .chain([dashboard::Page::Clipboard])
+         {
+             views.insert(
+                 format!("dashboard-{}", page.name()),

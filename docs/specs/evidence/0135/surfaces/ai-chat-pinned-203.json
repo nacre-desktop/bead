@@ -1,0 +1,22 @@
+{
+  "run": "b0135-ai-chat-pinned-203f19d8-20261026-01",
+  "transport": "private nested Niri/Labwc",
+  "source": {
+    "nacre_reference": "37583d61928368bc22a46aa806fd0a2e06cfee55",
+    "sidebar_chat_rs_sha256": "874e3c32c4aaa287da6ade6b2dcbf37caf5aec31e946c68d17dc889195a32098",
+    "generated_codex_stub_sha256": "3742335fcea967956cd0dae8972b4369fa2d90313062e65540144309eaebc5ae",
+    "control_tree": "aac59abb1f2b9c2b65c6c0bb858ba51c63d98203",
+    "control_binary_sha256": "e3545eefe0bd939f72ad711ae07394b82d3a0797f6731de9478edf324a6a6a3e",
+    "candidate_tree": "203f19d8764b0a41577eea8bed42481d88f26835",
+    "candidate_binary_sha256": "952082d790fcf3b8951e5d97c0660c88f24c64e1fba3938a6f8bfffc2ca567de",
+    "shell_tree": "52a5777ab4f7a86a9ceaefb8d0024ad267170eca",
+    "harness_copy_sha256": "6b5c1b54afa0d146706de391bb40b1a0621df36b73eb6b4f18667ee510ac5369"
+  },
+  "private_output": {"physical": [2880, 1800], "scale": 1.5, "logical": [1920, 1200], "swap_used_kib": 0},
+  "scroll_input": {"events": 160, "interval_p95_ms": 8.01, "logical_global": [240, 650], "app_local": [230, 435]},
+  "chat_transcript_viewport": {"x": 0, "y": 181.6667, "width": 438, "height": 460.3333, "extent": 2936.3997, "max_scroll": 2476.0664},
+  "qml": {"pin_state_after_outside_click": {"left": true, "leftPinned": true}, "errors": []},
+  "bead_control": {"pin_pointer_press_release_seen": true, "outside_click_seen": true, "target_open_after_outside_click": false, "chat_pinned_after_outside_click": false, "dismiss_active": false, "child_axis_deliver_count": 0, "child_scroll_state_changes_during_input": 0, "harness_errors": ["Bead pinned sidebar did not survive outside click"]},
+  "bead_candidate": {"pin_pointer_press_release_seen": true, "outside_click_seen": true, "target_open_after_outside_click": false, "chat_pinned_after_outside_click": false, "dismiss_active": false, "child_axis_deliver_count": 0, "child_scroll_state_changes_during_input": 0, "harness_errors": ["Bead pinned sidebar did not survive outside click"]},
+  "result": "Bead chat input never reached the target because its panel pin did not persist; no scroll timing or reversal result is valid. The same control failure in both Bead builds is not evidence of a candidate regression."
+}

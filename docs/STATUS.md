@@ -50,12 +50,17 @@ inspected. Animation/content parity limits and unmeasured memory are explicit in
 Finger input follows pixels directly; real axis_stop starts kinetic motion,
 opposite input cancels old travel, and wheel steps retarget over 125 ms.
 Shared virtual lists and viewport/buffer repair reduce repeated frame work.
-Full remote Arch CI passes on `30ba6683`. Bounded Settings render p95 improves
-15.79→6.78 ms, but reversal remains 29.25 ms. Direct private finger-stop reversal
+Full remote Arch CI passes on integrated `b6c61725`. Settings side-tab wheel
+render p95 improves 15.59–16.15→1.29–1.51 ms. Bounded Settings content renders
+in 6.78 ms, but reversal remains 29.25 ms (older diagnostic cohort). Direct private finger-stop reversal
 is 11.35 ms; neither meets one 120 Hz frame. The GL80 picker now reopens without
 cache errors using demand-driven 256 MiB global admission; sampled active process
 unreclaimable memory reaches 528.64 MiB including DRM. This is a documented stress
-trade, separate from the final five-pair CPU memory validation in progress.
+trade. Five CPU pairs fail history/Clipboard open budgets at +1.484/+2.176 MiB;
+popup open is +1.258 MiB. Idle/closed gates pass, and picker8 open saves 36.606 MiB.
+The AI follow correction now permits small finger movement; native CPU reversal
+is 49.22 ms and render p95 2.093 ms. Required-priority full CI passes from a
+fresh target; an earlier allocator abort remains unexplained and documented.
 120 Hz/no-drop acceptance fails. No live deployment or laptop-cap claim.
 [Source pins, per-surface results and known parity gaps](specs/0135-scrolling.md).
 

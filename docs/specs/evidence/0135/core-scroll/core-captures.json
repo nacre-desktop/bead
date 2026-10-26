@@ -1,0 +1,5434 @@
+{
+  "method": {
+    "parent_output": "2880x1800 at 120Hz; nested output 1920x1200 logical at scale 1.5",
+    "requested_pacing_hz": 120,
+    "feedback_clock_id": "1 CLOCK_MONOTONIC",
+    "reported_refresh_ns": 0,
+    "refresh_interpretation": "presentation feedback timestamps are monotonic; period prediction unavailable, so this is not physical 120Hz scanout proof",
+    "frame_cost": "WINDOW_FRAME render_ms; includes every measured frame in the capture window",
+    "cadence": "WINDOW_PRESENTED timestamps; all gaps and >=250ms gaps retained in this evidence",
+    "reversal": "AXIS_SENT -> AXIS_DELIVER -> state offset -> matching presented frame; values are delivery-to-visible and input-to-visible",
+    "pointer_tool_sha256": "2cfa935d4a3b21bb047f1c99d823a7db4fb9f30770fee84073d6848d7cbf04a8",
+    "source_snapshots": {
+      "control": {
+        "source": "e2d9576917b06093dd8d6281ba0b74876ff88798",
+        "diagnostic_patch_sha256": "f529485abe77f37857520ac8610c32a48825e005fcbb318b1b5b06ad6e7ecf5b",
+        "binary_sha256": "9bf080972c16424e836bd9a8d2961b8147b48e71ff66e5aee68cabc93498f996"
+      },
+      "candidate_finger": {
+        "source_commit": "0e0647571170fd7d8338118659373f0b71e84e14",
+        "unit_patch_range": "3731c52e..0e064757",
+        "unit_patch_sha256": "511fbb198fdc43591f00a8818df23d1d5b5e5b4f9cd8e493c6a06db37d4549cb",
+        "binary_sha256": "473323f0ad4740a6651b7001743354b049b15d8f3b60dcd21ddf70e77bf4dbec",
+        "known_limit": "pre-final snapshot caps notification history at 12; history excluded from core reversal table"
+      },
+      "nacre_qml_ref": {
+        "revision": "37583d61928368bc22a46aa806fd0a2e06cfee55",
+        "content_manifest_sha256": "5de5d30e9d2431ba4b3b9ccd8a84ade30f5756a38cfaba18bb6fc064e5bc7e6e",
+        "mode_manifest_sha256": "7489bcf8c450b95bc77aa68a8203a7d46eed075336a0a50a8cd7fc974284f3cf",
+        "orient_revision": "3efe8d1e7fb50200d74a3e0193ad63699cb8ebe8",
+        "verified": "CI confirmed QML shell/shell-tools subtrees against reference tree after capture; historical per-arm manifest was not recorded.",
+        "reference_repository_tree": "fbea62d73374f4a71239bbfbda96ac975c917718",
+        "shell_subtree_prefix": "534835b",
+        "shell_tools_subtree_prefix": "2bbe29f",
+        "expected_manifest_sha256": "69ac2783d98bddf93cdf1cabf1ed7ce821c1f6f97148327698c289d93d126e8f",
+        "verified_manifest_entries": 754,
+        "validator_sha256": "c888d24e78a32fbb985a9f504b2f0dca371633ffae96e573afae6b81c0cb12e6"
+      },
+      "candidate_wheel_final": {
+        "source_commit": "0e56e503",
+        "unit_patch_range": "3731c52e..0e56",
+        "unit_patch_sha256": "9b7a65f965b72e498f2fd49cb256f7c5386c953be1bc81de8cafb6541e18fe39",
+        "binary_sha256": "7be62d242f5cb98d85650e1ed6912ddcfc7ce65c6ad71c841598d0e62806b608",
+        "shell_tree": "30e04072a0f9eaecdefbba716740583b851044fe",
+        "pointer_tool_sha256": "2cfa935d4a3b21bb047f1c99d823a7db4fb9f30770fee84073d6848d7cbf04a8",
+        "wheel_interval_ms": 120,
+        "ci": "full CI + long-list regression and viewport goldens passed (remote_ci receipt)"
+      },
+      "candidate_diagnostic_0981": {
+        "binary_sha256": "ff13be5aa948afb830941e4e9d704756394b9c42290e471bc1f8af96bf041466",
+        "source_endpoint": "0981a0a4e723d2bc32c3aaac432f156ead4158c0",
+        "unit_net_diff_sha256": "567579812388f84d2fcbda23053d2d7d89669b2618a3fef128928f5f7bcd3dde",
+        "incremental_diff_sha256": "33541a74f9c790b53afd4bd6a8fdf7d6edeb02549b921113507e828a9875115e",
+        "purpose": "diagnostic trace only; do not treat as accepted product binary",
+        "nacre_validator_sha256": "c888d24e78a32fbb985a9f504b2f0dca371633ffae96e573afae6b81c0cb12e6",
+        "nacre_manifest_sha256": "69ac2783d98bddf93cdf1cabf1ed7ce821c1f6f97148327698c289d93d126e8f"
+      },
+      "candidate_final_3b890_diagnostic": {
+        "source_tip": "3b890fc65a9f0e3a6980a083dc5033c1128e7e7b",
+        "unit_diff_sha256": "577d138855c305b57a54d0c11e48162f57d8825801a384f1cafe6796b499f28f",
+        "binary_sha256": "d68df5e47f14fba9d2236a7dfb032703f493bc506b13e3755e0256cf42ff95b5",
+        "support_swaybg_sha256": "e36544a1faf6cb4f91493062684f0c4c5d95bce5454e1739a5ccde925ceffe27",
+        "purpose": "diagnostic measurement; render gate currently fails"
+      }
+    },
+    "legacy_stream_helper": "2cfa935d4a3b21bb047f1c99d823a7db4fb9f30770fee84073d6848d7cbf04a8 uses a compositor roundtrip per event; observed finger AXIS_SENT p95 ranges 8\u201316.2ms and standard wheel p95 120.2ms."
+  },
+  "observations": [
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "settings-content",
+      "repeat": 0,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.29,
+        "max": 8.3
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 8.25,
+        "p99": 8.35
+      },
+      "commits": 46,
+      "commit_drop_count": 0,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "settings-content",
+      "repeat": 1,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.24,
+        "max": 8.24
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.0,
+        "p95": 8.24,
+        "p99": 8.37
+      },
+      "commits": 46,
+      "commit_drop_count": 0,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "settings-content",
+      "repeat": 2,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.23,
+        "max": 8.33
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 8.25,
+        "p99": 8.45
+      },
+      "commits": 46,
+      "commit_drop_count": 0,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "settings-nav",
+      "repeat": 0,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.11,
+        "max": 9.38
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 17.13,
+        "p99": 47.25
+      },
+      "commits": 67,
+      "commit_drop_count": 16,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "settings-nav",
+      "repeat": 1,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.17,
+        "max": 9.15
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 16.07,
+        "p99": 16.54
+      },
+      "commits": 58,
+      "commit_drop_count": 4,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "settings-nav",
+      "repeat": 2,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.24,
+        "max": 9.62
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 16.05,
+        "p99": 16.25
+      },
+      "commits": 58,
+      "commit_drop_count": 4,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "notifications-popup",
+      "repeat": 0,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.05,
+        "max": 8.33
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 9.14,
+        "p99": 9.71
+      },
+      "commits": 131,
+      "commit_drop_count": 14,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "notifications-popup",
+      "repeat": 1,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.02,
+        "max": 8.36
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 9.16,
+        "p99": 9.77
+      },
+      "commits": 132,
+      "commit_drop_count": 13,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "notifications-popup",
+      "repeat": 2,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.01,
+        "max": 8.18
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.0,
+        "p95": 9.05,
+        "p99": 11.97
+      },
+      "commits": 131,
+      "commit_drop_count": 14,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 0,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.19,
+        "max": 8.34
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.scroll",
+        "input_to_visible_ms": 20.17,
+        "delivery_to_visible_ms": 20.05,
+        "input_delta": -7.0,
+        "delivered_delta": -21.0
+      },
+      "render_ms": {
+        "p50": 15.778,
+        "p95": 16.174,
+        "p99": 16.174,
+        "max": 16.174
+      },
+      "commit_intervals_ms": {
+        "p50": 24.3,
+        "p95": 24.44,
+        "p99": 24.44
+      },
+      "commits": 6,
+      "commit_drop_count": 8,
+      "presented_frames": 4,
+      "presented_interval_ms_active_filtered": {
+        "p50": 24.2,
+        "p95": 24.41,
+        "p99": 24.41
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 24.2,
+        "p95": 614.62,
+        "p99": 614.62
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 614.62,
+      "presented_missed_vsync_slots_upper_bound": 77,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 1,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.17,
+        "max": 8.34
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.scroll",
+        "input_to_visible_ms": 21.2,
+        "delivery_to_visible_ms": 20.11,
+        "input_delta": -7.0,
+        "delivered_delta": -21.0
+      },
+      "render_ms": {
+        "p50": 15.719,
+        "p95": 16.19,
+        "p99": 16.19,
+        "max": 16.19
+      },
+      "commit_intervals_ms": {
+        "p50": 23.9,
+        "p95": 25.21,
+        "p99": 25.21
+      },
+      "commits": 6,
+      "commit_drop_count": 8,
+      "presented_frames": 4,
+      "presented_interval_ms_active_filtered": {
+        "p50": 25.08,
+        "p95": 25.12,
+        "p99": 25.12
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 25.08,
+        "p95": 614.69,
+        "p99": 614.69
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 614.69,
+      "presented_missed_vsync_slots_upper_bound": 77,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 2,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.17,
+        "max": 8.4
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.scroll",
+        "input_to_visible_ms": 19.9,
+        "delivery_to_visible_ms": 19.76,
+        "input_delta": -7.0,
+        "delivered_delta": -21.0
+      },
+      "render_ms": {
+        "p50": 15.59,
+        "p95": 15.805,
+        "p99": 15.805,
+        "max": 15.805
+      },
+      "commit_intervals_ms": {
+        "p50": 24.02,
+        "p95": 24.22,
+        "p99": 24.22
+      },
+      "commits": 6,
+      "commit_drop_count": 8,
+      "presented_frames": 4,
+      "presented_interval_ms_active_filtered": {
+        "p50": 24.21,
+        "p95": 24.81,
+        "p99": 24.81
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 24.21,
+        "p95": 614.92,
+        "p99": 614.92
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 614.92,
+      "presented_missed_vsync_slots_upper_bound": 77,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-nav",
+      "repeat": 0,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.0,
+        "max": 8.32
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": 20.3,
+        "delivery_to_visible_ms": 20.01,
+        "input_delta": -7.0,
+        "delivered_delta": -21.0
+      },
+      "render_ms": {
+        "p50": 15.833,
+        "p95": 15.955,
+        "p99": 15.955,
+        "max": 15.955
+      },
+      "commit_intervals_ms": {
+        "p50": 23.95,
+        "p95": 102.03,
+        "p99": 102.03
+      },
+      "commits": 7,
+      "commit_drop_count": 19,
+      "presented_frames": 7,
+      "presented_interval_ms_active_filtered": {
+        "p50": 23.89,
+        "p95": 101.36,
+        "p99": 101.36
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 25.08,
+        "p95": 591.27,
+        "p99": 591.27
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 591.27,
+      "presented_missed_vsync_slots_upper_bound": 89,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-nav",
+      "repeat": 1,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.01,
+        "max": 8.17
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": 19.97,
+        "delivery_to_visible_ms": 19.86,
+        "input_delta": -7.0,
+        "delivered_delta": -21.0
+      },
+      "render_ms": {
+        "p50": 15.526,
+        "p95": 15.981,
+        "p99": 15.981,
+        "max": 15.981
+      },
+      "commit_intervals_ms": {
+        "p50": 23.86,
+        "p95": 24.13,
+        "p99": 24.13
+      },
+      "commits": 6,
+      "commit_drop_count": 8,
+      "presented_frames": 6,
+      "presented_interval_ms_active_filtered": {
+        "p50": 24.15,
+        "p95": 24.46,
+        "p99": 24.46
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 24.15,
+        "p95": 591.74,
+        "p99": 591.74
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 591.74,
+      "presented_missed_vsync_slots_upper_bound": 78,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-nav",
+      "repeat": 2,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.01,
+        "max": 8.18
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": 20.0,
+        "delivery_to_visible_ms": 19.91,
+        "input_delta": -7.0,
+        "delivered_delta": -21.0
+      },
+      "render_ms": {
+        "p50": 15.896,
+        "p95": 16.288,
+        "p99": 16.288,
+        "max": 16.288
+      },
+      "commit_intervals_ms": {
+        "p50": 23.96,
+        "p95": 24.23,
+        "p99": 24.23
+      },
+      "commits": 6,
+      "commit_drop_count": 8,
+      "presented_frames": 6,
+      "presented_interval_ms_active_filtered": {
+        "p50": 24.27,
+        "p95": 24.89,
+        "p99": 24.89
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 24.27,
+        "p95": 591.05,
+        "p99": 591.05
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 591.05,
+      "presented_missed_vsync_slots_upper_bound": 78,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "notifications-popup",
+      "repeat": 0,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 16.01,
+        "p95": 16.06,
+        "max": 16.54
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": 48.28,
+        "delivery_to_visible_ms": 39.99,
+        "input_delta": -7.0,
+        "delivered_delta": -21.0
+      },
+      "render_ms": {
+        "p50": 2.909,
+        "p95": 3.18,
+        "p99": 3.438,
+        "max": 4.154
+      },
+      "commit_intervals_ms": {
+        "p50": 15.86,
+        "p95": 16.55,
+        "p99": 17.03
+      },
+      "commits": 143,
+      "commit_drop_count": 117,
+      "presented_frames": 138,
+      "presented_interval_ms_active_filtered": {
+        "p50": 16.02,
+        "p95": 16.22,
+        "p99": 16.38
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 16.03,
+        "p95": 16.38,
+        "p99": 24.06
+      },
+      "presented_long_gaps": 0,
+      "presented_max_gap_ms": 24.06,
+      "presented_missed_vsync_slots_upper_bound": 124,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "notifications-popup",
+      "repeat": 1,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.01,
+        "p95": 16.04,
+        "max": 16.43
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": 40.08,
+        "delivery_to_visible_ms": 24.01,
+        "input_delta": -7.0,
+        "delivered_delta": -21.0
+      },
+      "render_ms": {
+        "p50": 2.949,
+        "p95": 3.176,
+        "p99": 3.21,
+        "max": 4.081
+      },
+      "commit_intervals_ms": {
+        "p50": 12.76,
+        "p95": 16.14,
+        "p99": 16.38
+      },
+      "commits": 120,
+      "commit_drop_count": 67,
+      "presented_frames": 118,
+      "presented_interval_ms_active_filtered": {
+        "p50": 16.01,
+        "p95": 16.2,
+        "p99": 16.38
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 16.01,
+        "p95": 16.27,
+        "p99": 24.06
+      },
+      "presented_long_gaps": 0,
+      "presented_max_gap_ms": 24.11,
+      "presented_missed_vsync_slots_upper_bound": 74,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "control_finger",
+      "arm": "control",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "notifications-popup",
+      "repeat": 2,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 16.02,
+        "p95": 16.2,
+        "max": 16.39
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": 40.01,
+        "delivery_to_visible_ms": 23.82,
+        "input_delta": -7.0,
+        "delivered_delta": -21.0
+      },
+      "render_ms": {
+        "p50": 2.935,
+        "p95": 3.186,
+        "p99": 3.32,
+        "max": 3.429
+      },
+      "commit_intervals_ms": {
+        "p50": 15.93,
+        "p95": 16.47,
+        "p99": 17.06
+      },
+      "commits": 147,
+      "commit_drop_count": 128,
+      "presented_frames": 146,
+      "presented_interval_ms_active_filtered": {
+        "p50": 16.02,
+        "p95": 16.2,
+        "p99": 16.55
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 16.02,
+        "p95": 16.21,
+        "p99": 18.65
+      },
+      "presented_long_gaps": 0,
+      "presented_max_gap_ms": 24.07,
+      "presented_missed_vsync_slots_upper_bound": 131,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "settings-content",
+      "repeat": 0,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.01,
+        "p95": 120.24,
+        "max": 120.24
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 2.65,
+        "p95": 117.8,
+        "p99": 117.85
+      },
+      "commits": 24,
+      "commit_drop_count": 143,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "settings-content",
+      "repeat": 1,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.29,
+        "max": 120.29
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 3.16,
+        "p95": 117.84,
+        "p99": 118.02
+      },
+      "commits": 24,
+      "commit_drop_count": 143,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "settings-content",
+      "repeat": 2,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.01,
+        "p95": 120.36,
+        "max": 120.36
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 2.76,
+        "p95": 117.74,
+        "p99": 117.86
+      },
+      "commits": 24,
+      "commit_drop_count": 143,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "settings-nav",
+      "repeat": 0,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.01,
+        "p95": 120.29,
+        "max": 120.29
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 16.05,
+        "p99": 66.76
+      },
+      "commits": 97,
+      "commit_drop_count": 16,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "settings-nav",
+      "repeat": 1,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.01,
+        "p95": 120.24,
+        "max": 120.24
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 16.07,
+        "p99": 68.95
+      },
+      "commits": 84,
+      "commit_drop_count": 19,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "settings-nav",
+      "repeat": 2,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.37,
+        "max": 120.37
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 15.88,
+        "p99": 66.29
+      },
+      "commits": 84,
+      "commit_drop_count": 19,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "notifications-popup",
+      "repeat": 0,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.26,
+        "max": 120.26
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 118.51,
+        "p95": 121.52,
+        "p99": 121.52
+      },
+      "commits": 14,
+      "commit_drop_count": 146,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "notifications-popup",
+      "repeat": 1,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.44,
+        "max": 120.44
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 119.94,
+        "p95": 120.31,
+        "p99": 120.31
+      },
+      "commits": 15,
+      "commit_drop_count": 142,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "notifications-popup",
+      "repeat": 2,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.02,
+        "p95": 120.22,
+        "max": 120.22
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 119.98,
+        "p95": 120.43,
+        "p99": 120.43
+      },
+      "commits": 14,
+      "commit_drop_count": 143,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 0,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.01,
+        "p95": 120.28,
+        "max": 120.28
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": {
+        "p50": 15.589,
+        "p95": 15.589,
+        "p99": 15.589,
+        "max": 15.589
+      },
+      "commit_intervals_ms": null,
+      "commits": 2,
+      "commit_drop_count": 0,
+      "presented_frames": 2,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": {
+        "p50": 718.51,
+        "p95": 718.51,
+        "p99": 718.51
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 718.51,
+      "presented_missed_vsync_slots_upper_bound": 85,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 1,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.01,
+        "p95": 120.05,
+        "max": 120.05
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": {
+        "p50": 15.795,
+        "p95": 15.795,
+        "p99": 15.795,
+        "max": 15.795
+      },
+      "commit_intervals_ms": null,
+      "commits": 2,
+      "commit_drop_count": 0,
+      "presented_frames": 2,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": {
+        "p50": 718.93,
+        "p95": 718.93,
+        "p99": 718.93
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 718.93,
+      "presented_missed_vsync_slots_upper_bound": 85,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 2,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.23,
+        "max": 120.23
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": {
+        "p50": 15.573,
+        "p95": 15.573,
+        "p99": 15.573,
+        "max": 15.573
+      },
+      "commit_intervals_ms": null,
+      "commits": 2,
+      "commit_drop_count": 0,
+      "presented_frames": 2,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": {
+        "p50": 719.6,
+        "p95": 719.6,
+        "p99": 719.6
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 719.6,
+      "presented_missed_vsync_slots_upper_bound": 85,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "settings-nav",
+      "repeat": 0,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.01,
+        "p95": 120.25,
+        "max": 120.25
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": 37.11,
+        "delivery_to_visible_ms": 20.77,
+        "input_delta": -1.0,
+        "delivered_delta": -112.89936334663001
+      },
+      "render_ms": {
+        "p50": 15.836,
+        "p95": 16.215,
+        "p99": 16.215,
+        "max": 16.215
+      },
+      "commit_intervals_ms": {
+        "p50": 118.25,
+        "p95": 118.25,
+        "p99": 118.25
+      },
+      "commits": 4,
+      "commit_drop_count": 15,
+      "presented_frames": 4,
+      "presented_interval_ms_active_filtered": {
+        "p50": 117.71,
+        "p95": 117.71,
+        "p99": 117.71
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 117.71,
+        "p95": 719.08,
+        "p99": 719.08
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 719.08,
+      "presented_missed_vsync_slots_upper_bound": 100,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "settings-nav",
+      "repeat": 1,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.01,
+        "p95": 120.3,
+        "max": 120.3
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": {
+        "p50": 15.642,
+        "p95": 15.688,
+        "p99": 15.688,
+        "max": 15.688
+      },
+      "commit_intervals_ms": {
+        "p50": 26.5,
+        "p95": 26.5,
+        "p99": 26.5
+      },
+      "commits": 3,
+      "commit_drop_count": 2,
+      "presented_frames": 3,
+      "presented_interval_ms_active_filtered": {
+        "p50": 26.3,
+        "p95": 26.3,
+        "p99": 26.3
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 718.53,
+        "p95": 718.53,
+        "p99": 718.53
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 718.53,
+      "presented_missed_vsync_slots_upper_bound": 87,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "settings-nav",
+      "repeat": 2,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.01,
+        "p95": 120.24,
+        "max": 120.24
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": {
+        "p50": 15.818,
+        "p95": 15.91,
+        "p99": 15.91,
+        "max": 15.91
+      },
+      "commit_intervals_ms": {
+        "p50": 26.64,
+        "p95": 26.64,
+        "p99": 26.64
+      },
+      "commits": 3,
+      "commit_drop_count": 2,
+      "presented_frames": 3,
+      "presented_interval_ms_active_filtered": {
+        "p50": 26.47,
+        "p95": 26.47,
+        "p99": 26.47
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 718.49,
+        "p95": 718.49,
+        "p99": 718.49
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 718.49,
+      "presented_missed_vsync_slots_upper_bound": 87,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "notifications-popup",
+      "repeat": 0,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.06,
+        "max": 120.06
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": 21.68,
+        "delivery_to_visible_ms": 5.37,
+        "input_delta": -1.0,
+        "delivered_delta": -113.46658404382562
+      },
+      "render_ms": {
+        "p50": 2.984,
+        "p95": 3.29,
+        "p99": 3.365,
+        "max": 3.365
+      },
+      "commit_intervals_ms": {
+        "p50": 16.11,
+        "p95": 24.42,
+        "p99": 114.97
+      },
+      "commits": 45,
+      "commit_drop_count": 61,
+      "presented_frames": 45,
+      "presented_interval_ms_active_filtered": {
+        "p50": 16.09,
+        "p95": 24.37,
+        "p99": 115.2
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 16.15,
+        "p95": 25.06,
+        "p99": 360.37
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 360.37,
+      "presented_missed_vsync_slots_upper_bound": 103,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "notifications-popup",
+      "repeat": 1,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.01,
+        "p95": 120.24,
+        "max": 120.24
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": 22.12,
+        "delivery_to_visible_ms": 5.82,
+        "input_delta": -1.0,
+        "delivered_delta": -113.16077363859479
+      },
+      "render_ms": {
+        "p50": 2.997,
+        "p95": 3.187,
+        "p99": 3.412,
+        "max": 3.412
+      },
+      "commit_intervals_ms": {
+        "p50": 16.06,
+        "p95": 23.99,
+        "p99": 25.09
+      },
+      "commits": 44,
+      "commit_drop_count": 48,
+      "presented_frames": 44,
+      "presented_interval_ms_active_filtered": {
+        "p50": 16.05,
+        "p95": 23.91,
+        "p99": 25.05
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 16.05,
+        "p95": 25.02,
+        "p99": 361.22
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 361.22,
+      "presented_missed_vsync_slots_upper_bound": 90,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "control_wheel",
+      "arm": "control",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "notifications-popup",
+      "repeat": 2,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.21,
+        "max": 120.21
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": 21.95,
+        "delivery_to_visible_ms": 5.64,
+        "input_delta": -1.0,
+        "delivered_delta": -113.57211684705076
+      },
+      "render_ms": {
+        "p50": 2.97,
+        "p95": 3.334,
+        "p99": 3.407,
+        "max": 3.407
+      },
+      "commit_intervals_ms": {
+        "p50": 16.03,
+        "p95": 23.91,
+        "p99": 25.01
+      },
+      "commits": 44,
+      "commit_drop_count": 48,
+      "presented_frames": 44,
+      "presented_interval_ms_active_filtered": {
+        "p50": 16.01,
+        "p95": 23.9,
+        "p99": 24.99
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 16.01,
+        "p95": 24.77,
+        "p99": 361.12
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 361.12,
+      "presented_missed_vsync_slots_upper_bound": 90,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "settings-content",
+      "repeat": 0,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.31,
+        "max": 8.34
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 8.26,
+        "p99": 8.34
+      },
+      "commits": 46,
+      "commit_drop_count": 0,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "settings-content",
+      "repeat": 1,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.23,
+        "max": 8.37
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 8.31,
+        "p99": 8.41
+      },
+      "commits": 46,
+      "commit_drop_count": 0,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "settings-content",
+      "repeat": 2,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.3,
+        "max": 8.33
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 8.25,
+        "p99": 8.36
+      },
+      "commits": 46,
+      "commit_drop_count": 0,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "settings-nav",
+      "repeat": 0,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.24,
+        "max": 9.04
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 17.2,
+        "p99": 42.78
+      },
+      "commits": 67,
+      "commit_drop_count": 15,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "settings-nav",
+      "repeat": 1,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.24,
+        "max": 16.04
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 16.2,
+        "p99": 16.33
+      },
+      "commits": 57,
+      "commit_drop_count": 5,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "settings-nav",
+      "repeat": 2,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.27,
+        "max": 9.71
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 16.35,
+        "p99": 16.87
+      },
+      "commits": 58,
+      "commit_drop_count": 4,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "notifications-popup",
+      "repeat": 0,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.02,
+        "max": 8.23
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.0,
+        "p95": 9.18,
+        "p99": 9.7
+      },
+      "commits": 130,
+      "commit_drop_count": 15,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "notifications-popup",
+      "repeat": 1,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.01,
+        "max": 8.22
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.0,
+        "p95": 9.03,
+        "p99": 10.1
+      },
+      "commits": 131,
+      "commit_drop_count": 14,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "notifications-popup",
+      "repeat": 2,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.04,
+        "max": 8.27
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 9.2,
+        "p99": 11.68
+      },
+      "commits": 130,
+      "commit_drop_count": 15,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 0,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.02,
+        "p95": 16.12,
+        "max": 16.44
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.scroll",
+        "input_to_visible_ms": 24.06,
+        "delivery_to_visible_ms": 23.97,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 6.566,
+        "p95": 18.953,
+        "p99": 18.953,
+        "max": 18.953
+      },
+      "commit_intervals_ms": {
+        "p50": 15.96,
+        "p95": 21.4,
+        "p99": 21.4
+      },
+      "commits": 20,
+      "commit_drop_count": 11,
+      "presented_frames": 20,
+      "presented_interval_ms_active_filtered": {
+        "p50": 16.01,
+        "p95": 16.36,
+        "p99": 16.36
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 16.01,
+        "p95": 530.05,
+        "p99": 530.05
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 530.05,
+      "presented_missed_vsync_slots_upper_bound": 76,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 1,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.01,
+        "p95": 16.07,
+        "max": 16.3
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.scroll",
+        "input_to_visible_ms": 23.82,
+        "delivery_to_visible_ms": 15.83,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 6.793,
+        "p95": 19.098,
+        "p99": 19.098,
+        "max": 19.098
+      },
+      "commit_intervals_ms": {
+        "p50": 9.74,
+        "p95": 21.2,
+        "p99": 21.2
+      },
+      "commits": 15,
+      "commit_drop_count": 6,
+      "presented_frames": 15,
+      "presented_interval_ms_active_filtered": {
+        "p50": 16.01,
+        "p95": 16.41,
+        "p99": 16.41
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 16.01,
+        "p95": 568.47,
+        "p99": 568.47
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 568.47,
+      "presented_missed_vsync_slots_upper_bound": 76,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 2,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.17,
+        "max": 15.94
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.scroll",
+        "input_to_visible_ms": 31.94,
+        "delivery_to_visible_ms": 23.9,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 6.416,
+        "p95": 18.977,
+        "p99": 18.977,
+        "max": 18.977
+      },
+      "commit_intervals_ms": {
+        "p50": 8.83,
+        "p95": 21.32,
+        "p99": 21.32
+      },
+      "commits": 17,
+      "commit_drop_count": 6,
+      "presented_frames": 17,
+      "presented_interval_ms_active_filtered": {
+        "p50": 15.69,
+        "p95": 16.02,
+        "p99": 16.02
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 15.99,
+        "p95": 560.55,
+        "p99": 560.55
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 560.55,
+      "presented_missed_vsync_slots_upper_bound": 74,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-nav",
+      "repeat": 0,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.01,
+        "p95": 16.02,
+        "max": 16.26
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": 23.99,
+        "delivery_to_visible_ms": 15.97,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 0.552,
+        "p95": 0.881,
+        "p99": 19.074,
+        "max": 19.074
+      },
+      "commit_intervals_ms": {
+        "p50": 8.44,
+        "p95": 26.95,
+        "p99": 103.63
+      },
+      "commits": 35,
+      "commit_drop_count": 23,
+      "presented_frames": 35,
+      "presented_interval_ms_active_filtered": {
+        "p50": 8.16,
+        "p95": 16.91,
+        "p99": 99.65
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 8.16,
+        "p95": 99.65,
+        "p99": 512.68
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 512.68,
+      "presented_missed_vsync_slots_upper_bound": 85,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-nav",
+      "repeat": 1,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.03,
+        "p95": 16.11,
+        "max": 16.32
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": 16.02,
+        "delivery_to_visible_ms": 15.93,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 0.531,
+        "p95": 0.886,
+        "p99": 18.973,
+        "max": 18.973
+      },
+      "commit_intervals_ms": {
+        "p50": 8.36,
+        "p95": 15.87,
+        "p99": 26.8
+      },
+      "commits": 34,
+      "commit_drop_count": 11,
+      "presented_frames": 34,
+      "presented_interval_ms_active_filtered": {
+        "p50": 8.02,
+        "p95": 16.39,
+        "p99": 16.7
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 8.02,
+        "p95": 16.7,
+        "p99": 507.0
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 507.0,
+      "presented_missed_vsync_slots_upper_bound": 72,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-nav",
+      "repeat": 2,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.02,
+        "p95": 16.05,
+        "max": 16.57
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": 24.02,
+        "delivery_to_visible_ms": 16.0,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 0.514,
+        "p95": 0.858,
+        "p99": 19.315,
+        "max": 19.315
+      },
+      "commit_intervals_ms": {
+        "p50": 8.38,
+        "p95": 15.99,
+        "p99": 27.15
+      },
+      "commits": 34,
+      "commit_drop_count": 11,
+      "presented_frames": 34,
+      "presented_interval_ms_active_filtered": {
+        "p50": 8.03,
+        "p95": 16.2,
+        "p99": 17.15
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 8.03,
+        "p95": 17.15,
+        "p99": 514.77
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 514.77,
+      "presented_missed_vsync_slots_upper_bound": 73,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "notifications-popup",
+      "repeat": 0,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.01,
+        "p95": 16.13,
+        "max": 16.37
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": 24.01,
+        "delivery_to_visible_ms": 15.95,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 2.91,
+        "p95": 3.11,
+        "p99": 4.116,
+        "max": 4.285
+      },
+      "commit_intervals_ms": {
+        "p50": 8.34,
+        "p95": 16.29,
+        "p99": 17.19
+      },
+      "commits": 130,
+      "commit_drop_count": 31,
+      "presented_frames": 130,
+      "presented_interval_ms_active_filtered": {
+        "p50": 8.01,
+        "p95": 16.04,
+        "p99": 16.19
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 8.01,
+        "p95": 16.04,
+        "p99": 16.19
+      },
+      "presented_long_gaps": 0,
+      "presented_max_gap_ms": 16.24,
+      "presented_missed_vsync_slots_upper_bound": 34,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "notifications-popup",
+      "repeat": 1,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.02,
+        "p95": 16.2,
+        "max": 16.44
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": 32.03,
+        "delivery_to_visible_ms": 24.01,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 2.912,
+        "p95": 3.169,
+        "p99": 4.119,
+        "max": 4.307
+      },
+      "commit_intervals_ms": {
+        "p50": 8.4,
+        "p95": 15.87,
+        "p99": 16.25
+      },
+      "commits": 153,
+      "commit_drop_count": 42,
+      "presented_frames": 153,
+      "presented_interval_ms_active_filtered": {
+        "p50": 8.02,
+        "p95": 16.06,
+        "p99": 16.21
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 8.02,
+        "p95": 16.06,
+        "p99": 16.21
+      },
+      "presented_long_gaps": 0,
+      "presented_max_gap_ms": 16.52,
+      "presented_missed_vsync_slots_upper_bound": 44,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_finger_0e",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "notifications-popup",
+      "repeat": 2,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.01,
+        "p95": 16.04,
+        "max": 16.24
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": 32.01,
+        "delivery_to_visible_ms": 23.97,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 2.928,
+        "p95": 3.131,
+        "p99": 4.317,
+        "max": 4.344
+      },
+      "commit_intervals_ms": {
+        "p50": 8.37,
+        "p95": 16.08,
+        "p99": 16.94
+      },
+      "commits": 137,
+      "commit_drop_count": 28,
+      "presented_frames": 137,
+      "presented_interval_ms_active_filtered": {
+        "p50": 8.01,
+        "p95": 16.04,
+        "p99": 16.25
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 8.01,
+        "p95": 16.04,
+        "p99": 16.25
+      },
+      "presented_long_gaps": 0,
+      "presented_max_gap_ms": 24.04,
+      "presented_missed_vsync_slots_upper_bound": 33,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "settings-content",
+      "repeat": 0,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.22,
+        "max": 120.22
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 2.93,
+        "p95": 117.4,
+        "p99": 117.41
+      },
+      "commits": 24,
+      "commit_drop_count": 143,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "settings-content",
+      "repeat": 1,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.26,
+        "max": 120.26
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 3.21,
+        "p95": 117.27,
+        "p99": 117.99
+      },
+      "commits": 24,
+      "commit_drop_count": 143,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "settings-content",
+      "repeat": 2,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.37,
+        "max": 120.37
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 2.81,
+        "p95": 117.49,
+        "p99": 117.51
+      },
+      "commits": 24,
+      "commit_drop_count": 143,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "settings-nav",
+      "repeat": 0,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.33,
+        "max": 120.33
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.02,
+        "p95": 16.39,
+        "p99": 68.8
+      },
+      "commits": 96,
+      "commit_drop_count": 17,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "settings-nav",
+      "repeat": 1,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.01,
+        "p95": 120.27,
+        "max": 120.27
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 15.98,
+        "p99": 69.74
+      },
+      "commits": 84,
+      "commit_drop_count": 18,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "settings-nav",
+      "repeat": 2,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.01,
+        "p95": 120.25,
+        "max": 120.25
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 8.01,
+        "p95": 15.85,
+        "p99": 63.81
+      },
+      "commits": 84,
+      "commit_drop_count": 18,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "notifications-history",
+      "repeat": 0,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.22,
+        "max": 120.22
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": null,
+      "commits": null,
+      "commit_drop_count": null,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "notifications-history",
+      "repeat": 1,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.2,
+        "max": 120.2
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": null,
+      "commits": null,
+      "commit_drop_count": null,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "notifications-history",
+      "repeat": 2,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.37,
+        "max": 120.37
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": null,
+      "commits": null,
+      "commit_drop_count": null,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "notifications-popup",
+      "repeat": 0,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.01,
+        "p95": 120.23,
+        "max": 120.23
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 118.47,
+        "p95": 121.65,
+        "p99": 121.65
+      },
+      "commits": 14,
+      "commit_drop_count": 145,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "notifications-popup",
+      "repeat": 1,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.01,
+        "p95": 120.26,
+        "max": 120.26
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 118.9,
+        "p95": 121.34,
+        "p99": 121.34
+      },
+      "commits": 14,
+      "commit_drop_count": 144,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "notifications-popup",
+      "repeat": 2,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.29,
+        "max": 120.29
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": {
+        "p50": 119.66,
+        "p95": 121.05,
+        "p99": 121.05
+      },
+      "commits": 14,
+      "commit_drop_count": 145,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 0,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.26,
+        "max": 120.26
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.scroll",
+        "input_to_visible_ms": 18.07,
+        "delivery_to_visible_ms": 9.4,
+        "input_delta": -1.0,
+        "delivered_delta": -112.37422389291225
+      },
+      "render_ms": {
+        "p50": 10.239,
+        "p95": 10.239,
+        "p99": 10.239,
+        "max": 10.239
+      },
+      "commit_intervals_ms": null,
+      "commits": 2,
+      "commit_drop_count": 0,
+      "presented_frames": 2,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": {
+        "p50": 715.27,
+        "p95": 715.27,
+        "p99": 715.27
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 715.27,
+      "presented_missed_vsync_slots_upper_bound": 85,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 1,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.28,
+        "max": 120.28
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.scroll",
+        "input_to_visible_ms": 17.87,
+        "delivery_to_visible_ms": 9.26,
+        "input_delta": -1.0,
+        "delivered_delta": -112.39415068591899
+      },
+      "render_ms": {
+        "p50": 10.378,
+        "p95": 10.378,
+        "p99": 10.378,
+        "max": 10.378
+      },
+      "commit_intervals_ms": null,
+      "commits": 2,
+      "commit_drop_count": 0,
+      "presented_frames": 2,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": {
+        "p50": 714.41,
+        "p95": 714.41,
+        "p99": 714.41
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 714.41,
+      "presented_missed_vsync_slots_upper_bound": 85,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 2,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.36,
+        "max": 120.36
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.scroll",
+        "input_to_visible_ms": 18.05,
+        "delivery_to_visible_ms": 9.39,
+        "input_delta": -1.0,
+        "delivered_delta": -112.40957508056198
+      },
+      "render_ms": {
+        "p50": 10.225,
+        "p95": 10.225,
+        "p99": 10.225,
+        "max": 10.225
+      },
+      "commit_intervals_ms": null,
+      "commits": 2,
+      "commit_drop_count": 0,
+      "presented_frames": 2,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": {
+        "p50": 715.03,
+        "p95": 715.03,
+        "p99": 715.03
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 715.03,
+      "presented_missed_vsync_slots_upper_bound": 85,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "settings-nav",
+      "repeat": 0,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.23,
+        "max": 120.23
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": 15.49,
+        "delivery_to_visible_ms": 6.76,
+        "input_delta": -1.0,
+        "delivered_delta": -112.3671885644551
+      },
+      "render_ms": {
+        "p50": 0.714,
+        "p95": 0.853,
+        "p99": 0.853,
+        "max": 0.853
+      },
+      "commit_intervals_ms": {
+        "p50": 8.26,
+        "p95": 112.11,
+        "p99": 112.11
+      },
+      "commits": 5,
+      "commit_drop_count": 12,
+      "presented_frames": 5,
+      "presented_interval_ms_active_filtered": {
+        "p50": 8.07,
+        "p95": 107.98,
+        "p99": 107.98
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 107.98,
+        "p95": 711.95,
+        "p99": 711.95
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 711.95,
+      "presented_missed_vsync_slots_upper_bound": 96,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "settings-nav",
+      "repeat": 1,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.01,
+        "p95": 120.05,
+        "max": 120.05
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": 15.35,
+        "delivery_to_visible_ms": 6.73,
+        "input_delta": -1.0,
+        "delivered_delta": -112.37972920969716
+      },
+      "render_ms": {
+        "p50": 0.971,
+        "p95": 0.987,
+        "p99": 0.987,
+        "max": 0.987
+      },
+      "commit_intervals_ms": {
+        "p50": 8.47,
+        "p95": 8.47,
+        "p99": 8.47
+      },
+      "commits": 4,
+      "commit_drop_count": 0,
+      "presented_frames": 4,
+      "presented_interval_ms_active_filtered": {
+        "p50": 8.3,
+        "p95": 8.3,
+        "p99": 8.3
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 8.3,
+        "p95": 711.78,
+        "p99": 711.78
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 711.78,
+      "presented_missed_vsync_slots_upper_bound": 84,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "settings-nav",
+      "repeat": 2,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.25,
+        "max": 120.25
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.nav.scroll",
+        "input_to_visible_ms": 15.21,
+        "delivery_to_visible_ms": 6.59,
+        "input_delta": -1.0,
+        "delivered_delta": -112.37508919601716
+      },
+      "render_ms": {
+        "p50": 0.761,
+        "p95": 1.039,
+        "p99": 1.039,
+        "max": 1.039
+      },
+      "commit_intervals_ms": {
+        "p50": 8.63,
+        "p95": 8.63,
+        "p99": 8.63
+      },
+      "commits": 4,
+      "commit_drop_count": 0,
+      "presented_frames": 4,
+      "presented_interval_ms_active_filtered": {
+        "p50": 8.14,
+        "p95": 8.14,
+        "p99": 8.14
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 8.14,
+        "p95": 711.31,
+        "p99": 711.31
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 711.31,
+      "presented_missed_vsync_slots_upper_bound": 84,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "notifications-history",
+      "repeat": 0,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.03,
+        "p95": 120.23,
+        "max": 120.23
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": null,
+      "commits": null,
+      "commit_drop_count": null,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "notifications-history",
+      "repeat": 1,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.22,
+        "max": 120.22
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": null,
+      "commits": null,
+      "commit_drop_count": null,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "notifications-history",
+      "repeat": 2,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.31,
+        "max": 120.31
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commit_intervals_ms": null,
+      "commits": null,
+      "commit_drop_count": null,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "notifications-popup",
+      "repeat": 0,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.05,
+        "max": 120.05
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": 15.96,
+        "delivery_to_visible_ms": 7.27,
+        "input_delta": -1.0,
+        "delivered_delta": -112.37896423649505
+      },
+      "render_ms": {
+        "p50": 2.877,
+        "p95": 3.094,
+        "p99": 4.259,
+        "max": 4.259
+      },
+      "commit_intervals_ms": {
+        "p50": 8.33,
+        "p95": 9.01,
+        "p99": 11.57
+      },
+      "commits": 76,
+      "commit_drop_count": 0,
+      "presented_frames": 76,
+      "presented_interval_ms_active_filtered": {
+        "p50": 8.34,
+        "p95": 9.24,
+        "p99": 10.95
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 8.34,
+        "p95": 10.55,
+        "p99": 405.54
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 405.54,
+      "presented_missed_vsync_slots_upper_bound": 48,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "notifications-popup",
+      "repeat": 1,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.17,
+        "max": 120.17
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": 16.0,
+        "delivery_to_visible_ms": 7.27,
+        "input_delta": -1.0,
+        "delivered_delta": -112.50549998838866
+      },
+      "render_ms": {
+        "p50": 2.858,
+        "p95": 3.187,
+        "p99": 4.23,
+        "max": 4.23
+      },
+      "commit_intervals_ms": {
+        "p50": 8.33,
+        "p95": 9.23,
+        "p99": 11.71
+      },
+      "commits": 76,
+      "commit_drop_count": 0,
+      "presented_frames": 76,
+      "presented_interval_ms_active_filtered": {
+        "p50": 8.34,
+        "p95": 9.18,
+        "p99": 11.03
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 8.34,
+        "p95": 10.67,
+        "p99": 405.42
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 405.42,
+      "presented_missed_vsync_slots_upper_bound": 48,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_wheel_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "notifications-popup",
+      "repeat": 2,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.05,
+        "max": 120.05
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "notifications.scroll.y",
+        "input_to_visible_ms": 15.7,
+        "delivery_to_visible_ms": 7.05,
+        "input_delta": -1.0,
+        "delivered_delta": -112.37784812661774
+      },
+      "render_ms": {
+        "p50": 2.876,
+        "p95": 3.045,
+        "p99": 4.124,
+        "max": 4.124
+      },
+      "commit_intervals_ms": {
+        "p50": 8.31,
+        "p95": 9.33,
+        "p99": 11.71
+      },
+      "commits": 76,
+      "commit_drop_count": 0,
+      "presented_frames": 76,
+      "presented_interval_ms_active_filtered": {
+        "p50": 8.32,
+        "p95": 9.34,
+        "p99": 11.19
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 8.32,
+        "p95": 10.85,
+        "p99": 405.43
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 405.43,
+      "presented_missed_vsync_slots_upper_bound": 48,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_diagnostic_0981",
+      "arm": "candidate_diagnostic",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 0,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.17,
+        "max": 8.22
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.scroll",
+        "input_to_visible_ms": 24.8,
+        "delivery_to_visible_ms": 23.94,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 6.708,
+        "p95": 18.882,
+        "p99": 18.882,
+        "max": 18.882
+      },
+      "commits": 17,
+      "commit_intervals_ms": {
+        "p50": 10.16,
+        "p95": 20.41,
+        "p99": 20.41
+      },
+      "presented_frames": 17,
+      "presented_interval_ms_all_gaps": {
+        "p50": 16.01,
+        "p95": 545.5,
+        "p99": 545.5
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 545.5,
+      "presented_missed_vsync_slots_upper_bound": 73,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_diagnostic_0981",
+      "arm": "candidate_diagnostic",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 1,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.03,
+        "max": 8.17
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.scroll",
+        "input_to_visible_ms": 15.91,
+        "delivery_to_visible_ms": 15.73,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 6.591,
+        "p95": 18.693,
+        "p99": 18.693,
+        "max": 18.693
+      },
+      "commits": 18,
+      "commit_intervals_ms": {
+        "p50": 9.58,
+        "p95": 21.13,
+        "p99": 21.13
+      },
+      "presented_frames": 18,
+      "presented_interval_ms_all_gaps": {
+        "p50": 16.0,
+        "p95": 536.42,
+        "p99": 536.42
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 536.42,
+      "presented_missed_vsync_slots_upper_bound": 73,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_diagnostic_0981",
+      "arm": "candidate_diagnostic",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 2,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.01,
+        "max": 8.32
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.scroll",
+        "input_to_visible_ms": 16.27,
+        "delivery_to_visible_ms": 15.89,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 6.713,
+        "p95": 18.785,
+        "p99": 18.785,
+        "max": 18.785
+      },
+      "commits": 18,
+      "commit_intervals_ms": {
+        "p50": 9.27,
+        "p95": 21.26,
+        "p99": 21.26
+      },
+      "presented_frames": 18,
+      "presented_interval_ms_all_gaps": {
+        "p50": 16.02,
+        "p95": 536.59,
+        "p99": 536.59
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 536.59,
+      "presented_missed_vsync_slots_upper_bound": 73,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_history_pointcorrected_0e56",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "notifications-history",
+      "repeat": 0,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.24,
+        "max": 8.29
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commits": null,
+      "commit_intervals_ms": null,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_history_pointcorrected_0e56",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "notifications-history",
+      "repeat": 1,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.22,
+        "max": 8.24
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commits": null,
+      "commit_intervals_ms": null,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_history_pointcorrected_0e56",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "qml",
+      "surface": "notifications-history",
+      "repeat": 2,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.29,
+        "max": 8.32
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commits": null,
+      "commit_intervals_ms": null,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_history_pointcorrected_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "notifications-history",
+      "repeat": 0,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.37,
+        "max": 120.37
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commits": null,
+      "commit_intervals_ms": null,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_history_pointcorrected_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "notifications-history",
+      "repeat": 1,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.01,
+        "p95": 120.24,
+        "max": 120.24
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commits": null,
+      "commit_intervals_ms": null,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_history_pointcorrected_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "qml",
+      "surface": "notifications-history",
+      "repeat": 2,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.02,
+        "p95": 120.26,
+        "max": 120.26
+      },
+      "reversal": {
+        "status": "missing",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": null,
+        "delivery_to_visible_ms": null,
+        "input_delta": null,
+        "delivered_delta": null
+      },
+      "render_ms": null,
+      "commits": null,
+      "commit_intervals_ms": null,
+      "presented_frames": null,
+      "presented_interval_ms_active_filtered": null,
+      "presented_interval_ms_all_gaps": null,
+      "presented_long_gaps": null,
+      "presented_max_gap_ms": null,
+      "presented_missed_vsync_slots_upper_bound": null,
+      "presented_discarded": null,
+      "presented_refresh_ns": null
+    },
+    {
+      "cohort": "candidate_history_pointcorrected_0e56",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "notifications-history",
+      "repeat": 0,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 15.79,
+        "p95": 16.21,
+        "max": 16.37
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": 24.41,
+        "delivery_to_visible_ms": 16.22,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 0.261,
+        "p95": 0.494,
+        "p99": 1.175,
+        "max": 1.175
+      },
+      "commits": 94,
+      "commit_intervals_ms": {
+        "p50": 16.02,
+        "p95": 16.39,
+        "p99": 158.0
+      },
+      "presented_frames": 94,
+      "presented_interval_ms_active_filtered": {
+        "p50": 16.02,
+        "p95": 16.34,
+        "p99": 154.52
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 16.02,
+        "p95": 16.34,
+        "p99": 154.52
+      },
+      "presented_long_gaps": 0,
+      "presented_max_gap_ms": 154.52,
+      "presented_missed_vsync_slots_upper_bound": 115,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_history_pointcorrected_0e56",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "notifications-history",
+      "repeat": 1,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.01,
+        "p95": 16.12,
+        "max": 16.38
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": 40.06,
+        "delivery_to_visible_ms": 32.02,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 0.262,
+        "p95": 0.516,
+        "p99": 1.047,
+        "max": 1.047
+      },
+      "commits": 87,
+      "commit_intervals_ms": {
+        "p50": 16.02,
+        "p95": 16.18,
+        "p99": 16.29
+      },
+      "presented_frames": 87,
+      "presented_interval_ms_active_filtered": {
+        "p50": 16.02,
+        "p95": 16.19,
+        "p99": 16.23
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 16.02,
+        "p95": 16.19,
+        "p99": 16.23
+      },
+      "presented_long_gaps": 0,
+      "presented_max_gap_ms": 16.23,
+      "presented_missed_vsync_slots_upper_bound": 77,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_history_pointcorrected_0e56",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "notifications-history",
+      "repeat": 2,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 15.88,
+        "p95": 16.22,
+        "max": 16.55
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": 40.19,
+        "delivery_to_visible_ms": 24.15,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 0.242,
+        "p95": 0.522,
+        "p99": 0.677,
+        "max": 0.808
+      },
+      "commits": 125,
+      "commit_intervals_ms": {
+        "p50": 16.02,
+        "p95": 16.31,
+        "p99": 16.43
+      },
+      "presented_frames": 125,
+      "presented_interval_ms_active_filtered": {
+        "p50": 16.02,
+        "p95": 16.25,
+        "p99": 16.36
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 16.02,
+        "p95": 16.25,
+        "p99": 16.36
+      },
+      "presented_long_gaps": 0,
+      "presented_max_gap_ms": 16.47,
+      "presented_missed_vsync_slots_upper_bound": 117,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_history_pointcorrected_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "notifications-history",
+      "repeat": 0,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.31,
+        "max": 120.31
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": 14.65,
+        "delivery_to_visible_ms": 5.99,
+        "input_delta": -1.0,
+        "delivered_delta": -112.2952512695034
+      },
+      "render_ms": {
+        "p50": 0.238,
+        "p95": 0.39,
+        "p99": 0.682,
+        "max": 0.917
+      },
+      "commits": 104,
+      "commit_intervals_ms": {
+        "p50": 8.33,
+        "p95": 11.22,
+        "p99": 11.79
+      },
+      "presented_frames": 104,
+      "presented_interval_ms_active_filtered": {
+        "p50": 8.36,
+        "p95": 9.98,
+        "p99": 10.51
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 8.36,
+        "p95": 10.16,
+        "p99": 10.62
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 286.56,
+      "presented_missed_vsync_slots_upper_bound": 33,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_history_pointcorrected_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "notifications-history",
+      "repeat": 1,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.24,
+        "max": 120.24
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": 14.99,
+        "delivery_to_visible_ms": 6.36,
+        "input_delta": -1.0,
+        "delivered_delta": -112.38489589299616
+      },
+      "render_ms": {
+        "p50": 0.238,
+        "p95": 0.421,
+        "p99": 0.677,
+        "max": 0.922
+      },
+      "commits": 104,
+      "commit_intervals_ms": {
+        "p50": 8.33,
+        "p95": 10.96,
+        "p99": 11.84
+      },
+      "presented_frames": 104,
+      "presented_interval_ms_active_filtered": {
+        "p50": 8.36,
+        "p95": 10.2,
+        "p99": 10.56
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 8.36,
+        "p95": 10.27,
+        "p99": 10.69
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 287.25,
+      "presented_missed_vsync_slots_upper_bound": 33,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_history_pointcorrected_0e56",
+      "arm": "candidate",
+      "device": "wheel",
+      "shell": "bead",
+      "surface": "notifications-history",
+      "repeat": 2,
+      "input_events": 12,
+      "input_interval_ms": {
+        "p50": 120.0,
+        "p95": 120.25,
+        "max": 120.25
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "dashboard.notifications.scroll",
+        "input_to_visible_ms": 14.69,
+        "delivery_to_visible_ms": 6.03,
+        "input_delta": -1.0,
+        "delivered_delta": -112.48835982030747
+      },
+      "render_ms": {
+        "p50": 0.237,
+        "p95": 0.422,
+        "p99": 0.73,
+        "max": 0.944
+      },
+      "commits": 104,
+      "commit_intervals_ms": {
+        "p50": 8.33,
+        "p95": 11.63,
+        "p99": 11.83
+      },
+      "presented_frames": 104,
+      "presented_interval_ms_active_filtered": {
+        "p50": 8.36,
+        "p95": 10.08,
+        "p99": 10.59
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 8.36,
+        "p95": 10.18,
+        "p99": 10.69
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 286.72,
+      "presented_missed_vsync_slots_upper_bound": 33,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_final_3b890",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 0,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.0,
+        "max": 8.04
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.scroll",
+        "input_to_visible_ms": 38.85,
+        "delivery_to_visible_ms": 23.95,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 6.575,
+        "p95": 10.226,
+        "p99": 10.226,
+        "max": 10.226
+      },
+      "commits": 17,
+      "commit_intervals_ms": {
+        "p50": 9.45,
+        "p95": 15.63,
+        "p99": 15.63
+      },
+      "presented_frames": 17,
+      "presented_interval_ms_active_filtered": {
+        "p50": 15.28,
+        "p95": 16.02,
+        "p99": 16.02
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 16.01,
+        "p95": 561.12,
+        "p99": 561.12
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 561.12,
+      "presented_missed_vsync_slots_upper_bound": 74,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_final_3b890",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 1,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.05,
+        "max": 8.21
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.scroll",
+        "input_to_visible_ms": 16.28,
+        "delivery_to_visible_ms": 15.92,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 6.633,
+        "p95": 9.997,
+        "p99": 9.997,
+        "max": 9.997
+      },
+      "commits": 19,
+      "commit_intervals_ms": {
+        "p50": 9.31,
+        "p95": 16.84,
+        "p99": 16.84
+      },
+      "presented_frames": 19,
+      "presented_interval_ms_active_filtered": {
+        "p50": 16.0,
+        "p95": 16.05,
+        "p99": 16.05
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 16.01,
+        "p95": 529.47,
+        "p99": 529.47
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 529.47,
+      "presented_missed_vsync_slots_upper_bound": 73,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    },
+    {
+      "cohort": "candidate_final_3b890",
+      "arm": "candidate",
+      "device": "finger",
+      "shell": "bead",
+      "surface": "settings-content",
+      "repeat": 2,
+      "input_events": 160,
+      "input_interval_ms": {
+        "p50": 8.0,
+        "p95": 8.11,
+        "max": 8.18
+      },
+      "reversal": {
+        "status": "proven",
+        "store": "settings.scroll",
+        "input_to_visible_ms": 32.99,
+        "delivery_to_visible_ms": 23.87,
+        "input_delta": -7.0,
+        "delivered_delta": -7.0
+      },
+      "render_ms": {
+        "p50": 6.58,
+        "p95": 9.62,
+        "p99": 9.62,
+        "max": 9.62
+      },
+      "commits": 17,
+      "commit_intervals_ms": {
+        "p50": 8.98,
+        "p95": 15.6,
+        "p99": 15.6
+      },
+      "presented_frames": 17,
+      "presented_interval_ms_active_filtered": {
+        "p50": 16.0,
+        "p95": 16.21,
+        "p99": 16.21
+      },
+      "presented_interval_ms_all_gaps": {
+        "p50": 16.02,
+        "p95": 554.61,
+        "p99": 554.61
+      },
+      "presented_long_gaps": 1,
+      "presented_max_gap_ms": 554.61,
+      "presented_missed_vsync_slots_upper_bound": 74,
+      "presented_discarded": 0,
+      "presented_refresh_ns": 0
+    }
+  ],
+  "surface_availability": {
+    "settings-content": "paired control and pre-cap candidate finger; matched control wheel candidate wheel pending",
+    "settings-nav": "paired control and pre-cap candidate finger; matched control wheel candidate wheel pending",
+    "notifications-popup": "paired control and pre-cap candidate finger; matched control wheel candidate wheel pending",
+    "notifications-history": "final candidate0e56 Bead scroll proven at x800,y300 for finger and wheel; QML route emitted no frames and remains unmatched."
+  },
+  "validated_reparse": {
+    "cohort": "control_wheel",
+    "method": "Same-window, same-epoch WINDOW_STATE/COMMIT/PRESENTED pre-window baseline reparse; no UI-only baseline and no cross-epoch joins.",
+    "settings-content": {
+      "delivery_to_visible_ms": [
+        19.66,
+        19.78,
+        20.24
+      ]
+    },
+    "settings-nav": {
+      "delivery_to_visible_ms_range_ms": [
+        20.39,
+        20.77
+      ]
+    },
+    "notifications-popup": {
+      "delivery_to_visible_ms_range_ms": [
+        5.37,
+        5.82
+      ]
+    },
+    "note": "The stored capture pacing.json predates this parser fix; these reviewed joins supersede its missing control-wheel content result."
+  },
+  "limits": [
+    "Refresh prediction is unavailable (refresh_ns=0), so presented timestamps do not prove physical 120Hz scanout.",
+    "All-gap presented intervals and missed-slot upper bounds retain >=250ms intervals; long intervals include bounded edge/clamp idle, so they are not proof of active-motion drops.",
+    "The candidate finger run uses source 0e064757, which still caps notification history at 12; history data from this capture is excluded from before/after conclusions.",
+    "Candidate wheel and final uncapped notification-history captures are pending."
+  ],
+  "history_wheel_diagnostic": {
+    "cohort": "candidate_wheel_0e56",
+    "rows": 20,
+    "viewport_logical_px": [
+      520,
+      440
+    ],
+    "row_height_logical_px": 40,
+    "input_per_repeat": {
+      "delivered_wheel_events": 12,
+      "first_six_delta": 15,
+      "last_six_delta": -15,
+      "delivered_local_point": [
+        32,
+        250
+      ],
+      "global_point_logical": [
+        500,
+        300
+      ],
+      "point_validation": "hit panel-local left padding, not the VirtualList viewport; retry at global logical [800,300]"
+    },
+    "scroll_store": "dashboard.notifications.scroll",
+    "observed_value_each_repeat": 0.0,
+    "frames_or_presentations": "none during gesture in both QML and Bead",
+    "screen_check": "notification rows visible; target is near the inside padded edge of the list area",
+    "status": "superseded: x500 point hit padding; corrected final0e56 run at x800,y300 proves Bead history scrolling. QML still had no frames.",
+    "content_height_logical_px": 876,
+    "scroll_limit_logical_px": 436
+  },
+  "diagnostic_rendering_0981": {
+    "source": {
+      "binary_sha256": "ff13be5aa948afb830941e4e9d704756394b9c42290e471bc1f8af96bf041466",
+      "source_endpoint": "0981a0a4e723d2bc32c3aaac432f156ead4158c0",
+      "unit_tree": "26cdd0c05e71bd563ddcd570de2b99ff6ab611ab",
+      "purpose": "diagnostic only; not full-CI candidate"
+    },
+    "input_tool_sha256": "c8b201892a92bd2a116bd30e0fbde5e126be63a45b27486cfeb14411651147b7",
+    "input_cadence": "finger stream 160 events \u00d7 7 logical px @ requested 8ms; observed AXIS_SENT p95 about 8ms",
+    "summary": "frame7 is first use of slot2 in each repeat; its repair rectangle is full window and render_ms is ~18.7\u201318.9ms. Earlier slot0/1 scroll frames repair the viewport only. WORKER_PREPARE remains ~2ms near the slow frame.",
+    "frames_by_repeat": [
+      {
+        "repeat": 0,
+        "frames": [
+          {
+            "frame": 1,
+            "update": 1,
+            "render_ms": 14.746,
+            "slot": 0,
+            "damage": "0,0,1389,1662",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 2,
+            "update": 3,
+            "render_ms": 19.349,
+            "slot": 1,
+            "damage": "0,0,1389,1662",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 3,
+            "update": 5,
+            "render_ms": 15.661,
+            "slot": 0,
+            "damage": "57,1165,248,363",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 4,
+            "update": 7,
+            "render_ms": 10.293,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "57,262,1311,1379"
+          },
+          {
+            "frame": 5,
+            "update": 8,
+            "render_ms": 7.287,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 6,
+            "update": 9,
+            "render_ms": 6.812,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 7,
+            "update": 10,
+            "render_ms": 18.882,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 8,
+            "update": 11,
+            "render_ms": 7.54,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 9,
+            "update": 12,
+            "render_ms": 6.708,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 10,
+            "update": 13,
+            "render_ms": 6.433,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 11,
+            "update": 14,
+            "render_ms": 6.02,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 12,
+            "update": 16,
+            "render_ms": 6.567,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 13,
+            "update": 17,
+            "render_ms": 6.197,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 14,
+            "update": 18,
+            "render_ms": 6.87,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 15,
+            "update": 19,
+            "render_ms": 6.149,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 16,
+            "update": 21,
+            "render_ms": 6.89,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 17,
+            "update": 22,
+            "render_ms": 6.095,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 18,
+            "update": 24,
+            "render_ms": 6.709,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 19,
+            "update": 25,
+            "render_ms": 6.367,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 20,
+            "update": 27,
+            "render_ms": 6.68,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          }
+        ],
+        "first_fresh_slot": {
+          "frame": 7,
+          "update": 10,
+          "render_ms": 18.882,
+          "slot": 2,
+          "damage": "420,262,948,1379",
+          "repair": "0,0,1389,1662"
+        }
+      },
+      {
+        "repeat": 1,
+        "frames": [
+          {
+            "frame": 1,
+            "update": 1,
+            "render_ms": 14.597,
+            "slot": 0,
+            "damage": "0,0,1389,1662",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 2,
+            "update": 3,
+            "render_ms": 19.903,
+            "slot": 1,
+            "damage": "0,0,1389,1662",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 3,
+            "update": 5,
+            "render_ms": 15.484,
+            "slot": 0,
+            "damage": "57,1165,248,363",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 4,
+            "update": 7,
+            "render_ms": 10.471,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "57,262,1311,1379"
+          },
+          {
+            "frame": 5,
+            "update": 8,
+            "render_ms": 7.2,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 6,
+            "update": 9,
+            "render_ms": 6.534,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 7,
+            "update": 10,
+            "render_ms": 18.693,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 8,
+            "update": 11,
+            "render_ms": 7.379,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 9,
+            "update": 12,
+            "render_ms": 6.17,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 10,
+            "update": 13,
+            "render_ms": 6.226,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 11,
+            "update": 14,
+            "render_ms": 6.149,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 12,
+            "update": 16,
+            "render_ms": 6.643,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 13,
+            "update": 17,
+            "render_ms": 6.562,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 14,
+            "update": 18,
+            "render_ms": 6.777,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 15,
+            "update": 19,
+            "render_ms": 6.718,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 16,
+            "update": 20,
+            "render_ms": 6.171,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 17,
+            "update": 22,
+            "render_ms": 6.789,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 18,
+            "update": 23,
+            "render_ms": 6.591,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 19,
+            "update": 25,
+            "render_ms": 6.509,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 20,
+            "update": 26,
+            "render_ms": 6.035,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 21,
+            "update": 27,
+            "render_ms": 6.061,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          }
+        ],
+        "first_fresh_slot": {
+          "frame": 7,
+          "update": 10,
+          "render_ms": 18.693,
+          "slot": 2,
+          "damage": "420,262,948,1379",
+          "repair": "0,0,1389,1662"
+        }
+      },
+      {
+        "repeat": 2,
+        "frames": [
+          {
+            "frame": 1,
+            "update": 1,
+            "render_ms": 14.774,
+            "slot": 0,
+            "damage": "0,0,1389,1662",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 2,
+            "update": 3,
+            "render_ms": 19.756,
+            "slot": 1,
+            "damage": "0,0,1389,1662",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 3,
+            "update": 5,
+            "render_ms": 15.539,
+            "slot": 0,
+            "damage": "57,1165,248,363",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 4,
+            "update": 7,
+            "render_ms": 10.199,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "57,262,1311,1379"
+          },
+          {
+            "frame": 5,
+            "update": 8,
+            "render_ms": 7.053,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 6,
+            "update": 9,
+            "render_ms": 6.737,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 7,
+            "update": 10,
+            "render_ms": 18.785,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 8,
+            "update": 11,
+            "render_ms": 7.24,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 9,
+            "update": 12,
+            "render_ms": 6.521,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 10,
+            "update": 13,
+            "render_ms": 6.905,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 11,
+            "update": 14,
+            "render_ms": 6.116,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 12,
+            "update": 16,
+            "render_ms": 6.626,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 13,
+            "update": 17,
+            "render_ms": 6.672,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 14,
+            "update": 18,
+            "render_ms": 6.713,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 15,
+            "update": 19,
+            "render_ms": 6.933,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 16,
+            "update": 20,
+            "render_ms": 6.103,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 17,
+            "update": 22,
+            "render_ms": 6.707,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 18,
+            "update": 23,
+            "render_ms": 6.397,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 19,
+            "update": 25,
+            "render_ms": 6.748,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 20,
+            "update": 26,
+            "render_ms": 6.315,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 21,
+            "update": 27,
+            "render_ms": 6.69,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          }
+        ],
+        "first_fresh_slot": {
+          "frame": 7,
+          "update": 10,
+          "render_ms": 18.785,
+          "slot": 2,
+          "damage": "420,262,948,1379",
+          "repair": "0,0,1389,1662"
+        }
+      }
+    ],
+    "worker_prepare_profile": {
+      "worker_prepare_count": 100,
+      "worker_prepare_ms": {
+        "p50": 2.002,
+        "p95": 23.732,
+        "p99": 39.786,
+        "max": 39.786
+      },
+      "worker_builds_max": 196,
+      "input_patch_misses": {},
+      "input_profile_wall_ms_by_stage": {},
+      "input_profile_cpu_ms_by_stage": {},
+      "timeline_marks_by_stage": {},
+      "recovery_bundle_generations": [
+        1,
+        2,
+        3,
+        1,
+        2,
+        1,
+        2,
+        1,
+        2
+      ]
+    },
+    "repeat_metrics": [
+      {
+        "repeat": 0,
+        "render_p95_ms": 18.882,
+        "input_interval_p95_ms": 8.17,
+        "input_to_visible_ms": 24.8,
+        "delivery_to_visible_ms": 23.94,
+        "presented_frames": 17,
+        "all_gap_p95_ms": 545.5,
+        "long_gaps": 1,
+        "max_gap_ms": 545.5,
+        "missed_slots_upper_bound": 73,
+        "discarded": 0
+      },
+      {
+        "repeat": 1,
+        "render_p95_ms": 18.693,
+        "input_interval_p95_ms": 8.03,
+        "input_to_visible_ms": 15.91,
+        "delivery_to_visible_ms": 15.73,
+        "presented_frames": 18,
+        "all_gap_p95_ms": 536.42,
+        "long_gaps": 1,
+        "max_gap_ms": 536.42,
+        "missed_slots_upper_bound": 73,
+        "discarded": 0
+      },
+      {
+        "repeat": 2,
+        "render_p95_ms": 18.785,
+        "input_interval_p95_ms": 8.01,
+        "input_to_visible_ms": 16.27,
+        "delivery_to_visible_ms": 15.89,
+        "presented_frames": 18,
+        "all_gap_p95_ms": 536.59,
+        "long_gaps": 1,
+        "max_gap_ms": 536.59,
+        "missed_slots_upper_bound": 73,
+        "discarded": 0
+      }
+    ]
+  },
+  "history_pointcorrected_0e56": {
+    "run": "candidate-history-final-0e56-20261026-01",
+    "binary_sha256": "7be62d242f5cb98d85650e1ed6912ddcfc7ce65c6ad71c841598d0e62806b608",
+    "nacre_validator": "NACRE_SOURCE_PIN_OK under lock; validator sha c888d24e78a32fbb985a9f504b2f0dca371633ffae96e573afae6b81c0cb12e6",
+    "history_rows": 20,
+    "virtual_list_viewport_logical_px": [
+      520,
+      440
+    ],
+    "row_height_logical_px": 40,
+    "content_height_logical_px": 876,
+    "scroll_limit_logical_px": 436,
+    "point_global_logical": [
+      800,
+      300
+    ],
+    "bead_store": "dashboard.notifications.scroll",
+    "result": "Bead finger and wheel state changes presented and reversal proven; QML emitted no frames on this route during this capture; investigate QML panel/input parity separately."
+  },
+  "candidate_final_3b890_diagnostic": {
+    "run": "candidate-settings-content-final-3b890-bead-20261026-02",
+    "binary_sha256": "d68df5e47f14fba9d2236a7dfb032703f493bc506b13e3755e0256cf42ff95b5",
+    "source_tip": "3b890fc65a9f0e3a6980a083dc5033c1128e7e7b",
+    "unit_diff_sha256": "577d138855c305b57a54d0c11e48162f57d8825801a384f1cafe6796b499f28f",
+    "support_swaybg_sha256": "e36544a1faf6cb4f91493062684f0c4c5d95bce5454e1739a5ccde925ceffe27",
+    "pointer_tool_sha256": "c8b201892a92bd2a116bd30e0fbde5e126be63a45b27486cfeb14411651147b7",
+    "nacre_source_verified": "37583d61928368bc22a46aa806fd0a2e06cfee55; 754 files checked under lock",
+    "summary": "All measured scroll slots, including slot2/frame7, repair only viewport. Render p95 still 9.620\u201310.226ms; conditional <=8.33ms gate fails. Zero discard, refresh period unknown.",
+    "frames_by_repeat": [
+      {
+        "repeat": 0,
+        "frames": [
+          {
+            "frame": 1,
+            "update": 1,
+            "render_ms": 14.723,
+            "slot": 0,
+            "damage": "0,0,1389,1662",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 2,
+            "update": 3,
+            "render_ms": 19.535,
+            "slot": 1,
+            "damage": "0,0,1389,1662",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 3,
+            "update": 5,
+            "render_ms": 1.072,
+            "slot": 0,
+            "damage": "57,1165,248,363",
+            "repair": "57,1165,248,363"
+          },
+          {
+            "frame": 4,
+            "update": 7,
+            "render_ms": 8.399,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 5,
+            "update": 8,
+            "render_ms": 7.067,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 6,
+            "update": 9,
+            "render_ms": 6.436,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 7,
+            "update": 10,
+            "render_ms": 10.226,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 8,
+            "update": 11,
+            "render_ms": 6.334,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 9,
+            "update": 12,
+            "render_ms": 6.179,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 10,
+            "update": 14,
+            "render_ms": 6.694,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 11,
+            "update": 15,
+            "render_ms": 6.049,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 12,
+            "update": 17,
+            "render_ms": 6.575,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 13,
+            "update": 18,
+            "render_ms": 6.68,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 14,
+            "update": 19,
+            "render_ms": 6.444,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 15,
+            "update": 21,
+            "render_ms": 6.742,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 16,
+            "update": 22,
+            "render_ms": 6.421,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 17,
+            "update": 24,
+            "render_ms": 6.826,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 18,
+            "update": 25,
+            "render_ms": 6.326,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 19,
+            "update": 27,
+            "render_ms": 6.835,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 20,
+            "update": 28,
+            "render_ms": 6.338,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          }
+        ]
+      },
+      {
+        "repeat": 1,
+        "frames": [
+          {
+            "frame": 1,
+            "update": 1,
+            "render_ms": 14.988,
+            "slot": 0,
+            "damage": "0,0,1389,1662",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 2,
+            "update": 3,
+            "render_ms": 19.631,
+            "slot": 1,
+            "damage": "0,0,1389,1662",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 3,
+            "update": 5,
+            "render_ms": 0.822,
+            "slot": 0,
+            "damage": "57,1165,248,363",
+            "repair": "57,1165,248,363"
+          },
+          {
+            "frame": 4,
+            "update": 7,
+            "render_ms": 9.324,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 5,
+            "update": 8,
+            "render_ms": 6.808,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 6,
+            "update": 9,
+            "render_ms": 6.506,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 7,
+            "update": 10,
+            "render_ms": 6.51,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 8,
+            "update": 11,
+            "render_ms": 9.997,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 9,
+            "update": 12,
+            "render_ms": 6.64,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 10,
+            "update": 13,
+            "render_ms": 6.173,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 11,
+            "update": 15,
+            "render_ms": 6.882,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 12,
+            "update": 16,
+            "render_ms": 6.047,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 13,
+            "update": 17,
+            "render_ms": 6.408,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 14,
+            "update": 18,
+            "render_ms": 7.039,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 15,
+            "update": 19,
+            "render_ms": 6.556,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 16,
+            "update": 20,
+            "render_ms": 6.794,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 17,
+            "update": 21,
+            "render_ms": 6.487,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 18,
+            "update": 23,
+            "render_ms": 6.677,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 19,
+            "update": 24,
+            "render_ms": 6.824,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 20,
+            "update": 26,
+            "render_ms": 6.633,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 21,
+            "update": 27,
+            "render_ms": 6.487,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 22,
+            "update": 28,
+            "render_ms": 6.115,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          }
+        ]
+      },
+      {
+        "repeat": 2,
+        "frames": [
+          {
+            "frame": 1,
+            "update": 1,
+            "render_ms": 14.987,
+            "slot": 0,
+            "damage": "0,0,1389,1662",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 2,
+            "update": 3,
+            "render_ms": 20.16,
+            "slot": 1,
+            "damage": "0,0,1389,1662",
+            "repair": "0,0,1389,1662"
+          },
+          {
+            "frame": 3,
+            "update": 5,
+            "render_ms": 0.816,
+            "slot": 0,
+            "damage": "57,1165,248,363",
+            "repair": "57,1165,248,363"
+          },
+          {
+            "frame": 4,
+            "update": 7,
+            "render_ms": 9.053,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 5,
+            "update": 8,
+            "render_ms": 6.77,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 6,
+            "update": 9,
+            "render_ms": 6.524,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 7,
+            "update": 10,
+            "render_ms": 9.62,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 8,
+            "update": 11,
+            "render_ms": 6.426,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 9,
+            "update": 12,
+            "render_ms": 6.31,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 10,
+            "update": 14,
+            "render_ms": 6.716,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 11,
+            "update": 15,
+            "render_ms": 6.327,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 12,
+            "update": 17,
+            "render_ms": 6.609,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 13,
+            "update": 18,
+            "render_ms": 6.681,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 14,
+            "update": 19,
+            "render_ms": 6.258,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 15,
+            "update": 21,
+            "render_ms": 6.926,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 16,
+            "update": 22,
+            "render_ms": 6.186,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 17,
+            "update": 24,
+            "render_ms": 6.58,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 18,
+            "update": 25,
+            "render_ms": 6.096,
+            "slot": 1,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 19,
+            "update": 27,
+            "render_ms": 6.75,
+            "slot": 0,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          },
+          {
+            "frame": 20,
+            "update": 28,
+            "render_ms": 6.257,
+            "slot": 2,
+            "damage": "420,262,948,1379",
+            "repair": "420,262,948,1379"
+          }
+        ]
+      }
+    ]
+  }
+}

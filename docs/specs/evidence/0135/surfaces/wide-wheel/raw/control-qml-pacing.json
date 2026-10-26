@@ -1,0 +1,396 @@
+{
+ "arm": "qml",
+ "hz": 120,
+ "real_ref": 1792989215.6401508,
+ "vsync_ms": 8.333333333333334,
+ "backend": "cpu",
+ "presentation_clock_ids": [],
+ "presented_refresh_ns_median": null,
+ "presented_refresh_hz": null,
+ "presented_refresh_matches_requested_hz": false,
+ "input_pattern": "single-midpoint-reversal",
+ "input_oscillation_period": null,
+ "wheel_input_interval_ms": 120,
+ "private_launcher_fixture": {
+  "count": 80,
+  "query": "Scroll fixture app",
+  "manifest_sha256": "a27a48255aba52e5cc9cb7253248a6a49541a1e925daa669870b068513fd483f",
+  "xdg_data_dirs": "private-only"
+ },
+ "trace_profile": {
+  "worker_prepare_count": 0,
+  "worker_prepare_ms": null,
+  "worker_builds_max": null,
+  "input_patch_misses": {},
+  "input_profile_wall_ms_by_stage": {},
+  "input_profile_cpu_ms_by_stage": {},
+  "timeline_marks_by_stage": {},
+  "recovery_bundle_generations": []
+ },
+ "presentation_discarded": null,
+ "presentation_discarded_trace_collected": false,
+ "errors": [],
+ "memory_kib": {
+  "idle": {
+   "VmRSS": 573392,
+   "RssAnon": 423652,
+   "Pss": 502913,
+   "Pss_Anon": 423652,
+   "Pss_File": 79165,
+   "Pss_Shmem": 96,
+   "SwapPss": 0,
+   "DRM": 308612.0
+  },
+  "scroll-colors-app-wheel": {
+   "VmRSS": 611164,
+   "RssAnon": 458392,
+   "Pss": 538954,
+   "Pss_Anon": 458392,
+   "Pss_File": 80446,
+   "Pss_Shmem": 116,
+   "SwapPss": 0,
+   "DRM": 348352.0
+  },
+  "scroll-colors-rail-wheel": {
+   "VmRSS": 614904,
+   "RssAnon": 462488,
+   "Pss": 543086,
+   "Pss_Anon": 462488,
+   "Pss_File": 80481,
+   "Pss_Shmem": 116,
+   "SwapPss": 0,
+   "DRM": 348356.0
+  },
+  "scroll-launcher-wheel": {
+   "VmRSS": 620836,
+   "RssAnon": 466436,
+   "Pss": 547669,
+   "Pss_Anon": 466436,
+   "Pss_File": 81117,
+   "Pss_Shmem": 116,
+   "SwapPss": 0,
+   "DRM": 386088.0
+  },
+  "scroll-keybindings-wheel": {
+   "VmRSS": 617476,
+   "RssAnon": 462676,
+   "Pss": 543940,
+   "Pss_Anon": 462676,
+   "Pss_File": 81147,
+   "Pss_Shmem": 116,
+   "SwapPss": 0,
+   "DRM": 384004.0
+  },
+  "scroll-welcome-shortcuts-wheel": {
+   "VmRSS": 651276,
+   "RssAnon": 493236,
+   "Pss": 574750,
+   "Pss_Anon": 493236,
+   "Pss_File": 81398,
+   "Pss_Shmem": 116,
+   "SwapPss": 0,
+   "DRM": 408536.0
+  }
+ },
+ "memory_phase_kib": {
+  "scroll-colors-app-wheel": [
+   {
+    "repeat": 0,
+    "shell": {
+     "VmRSS": 612032,
+     "RssAnon": 459260,
+     "Pss": 539809,
+     "Pss_Anon": 459260,
+     "Pss_File": 80433,
+     "Pss_Shmem": 116,
+     "SwapPss": 0,
+     "DRM": 350400.0
+    },
+    "apps": {}
+   }
+  ],
+  "scroll-colors-rail-wheel": [
+   {
+    "repeat": 0,
+    "shell": {
+     "VmRSS": 614900,
+     "RssAnon": 462484,
+     "Pss": 543082,
+     "Pss_Anon": 462484,
+     "Pss_File": 80481,
+     "Pss_Shmem": 116,
+     "SwapPss": 0,
+     "DRM": 348356.0
+    },
+    "apps": {}
+   }
+  ],
+  "scroll-launcher-wheel": [
+   {
+    "repeat": 0,
+    "shell": {
+     "VmRSS": 621508,
+     "RssAnon": 467108,
+     "Pss": 548341,
+     "Pss_Anon": 467108,
+     "Pss_File": 81117,
+     "Pss_Shmem": 116,
+     "SwapPss": 0,
+     "DRM": 350404.0
+    },
+    "apps": {}
+   }
+  ],
+  "scroll-keybindings-wheel": [
+   {
+    "repeat": 0,
+    "shell": {
+     "VmRSS": 616612,
+     "RssAnon": 461812,
+     "Pss": 543076,
+     "Pss_Anon": 461812,
+     "Pss_File": 81147,
+     "Pss_Shmem": 116,
+     "SwapPss": 0,
+     "DRM": 372492.0
+    },
+    "apps": {}
+   }
+  ],
+  "scroll-welcome-shortcuts-wheel": [
+   {
+    "repeat": 0,
+    "shell": {
+     "VmRSS": 652468,
+     "RssAnon": 494428,
+     "Pss": 575942,
+     "Pss_Anon": 494428,
+     "Pss_File": 81398,
+     "Pss_Shmem": 116,
+     "SwapPss": 0,
+     "DRM": 493112.0
+    },
+    "apps": {}
+   }
+  ]
+ },
+ "windows": [
+  {
+   "animation": "scroll-colors-app-wheel",
+   "phase": "open",
+   "repeat": 0,
+   "start": 9.097174882888794,
+   "end": 10.819446563720703,
+   "mono_start": 9.097174134920351,
+   "mono_start_ns": 858856315983753,
+   "mono_end_ns": 858858038257079,
+   "screenshot_sampled": false,
+   "surface": "shell.log:83",
+   "commits": 12,
+   "active_ms": 1317.1,
+   "first_frame_ms": 105.7,
+   "interval_ms": {
+    "p50": 119.97,
+    "p95": 120.3,
+    "p99": 120.3
+   },
+   "longest_gap_ms": 120.3,
+   "housekeeping_commits": 0,
+   "dropped": 143,
+   "slow_intervals": 11,
+   "drop_rate": 0.929,
+   "presentation_source": null,
+   "presented_frames": null,
+   "presentation_interval_ms": null,
+   "presented_dropped": null,
+   "presented_drop_rate": null,
+   "presented_discarded": null,
+   "presented_refresh_ns": null,
+   "input_cadence": {
+    "events": 12,
+    "interval_ms": {
+     "p50": 120.05,
+     "p95": 120.25,
+     "max": 120.25
+    }
+   },
+   "reversal": {
+    "status": "missing",
+    "reason": "no presented scroll-store direction change joined to delivered opposite axis input",
+    "store": "colors.scroll",
+    "input_reversal_ns": 858857137341693
+   }
+  },
+  {
+   "animation": "scroll-colors-rail-wheel",
+   "phase": "open",
+   "repeat": 0,
+   "start": 21.14408779144287,
+   "end": 22.8662052154541,
+   "mono_start": 21.1440873069223,
+   "mono_start_ns": 858868362896925,
+   "mono_end_ns": 858870085015386,
+   "screenshot_sampled": false,
+   "surface": "shell.log:83",
+   "commits": 74,
+   "active_ms": 1467.6,
+   "first_frame_ms": 2.2,
+   "interval_ms": {
+    "p50": 15.78,
+    "p95": 77.15,
+    "p99": 106.98
+   },
+   "longest_gap_ms": 107.0,
+   "housekeeping_commits": 0,
+   "dropped": 110,
+   "slow_intervals": 59,
+   "drop_rate": 0.601,
+   "presentation_source": null,
+   "presented_frames": null,
+   "presentation_interval_ms": null,
+   "presented_dropped": null,
+   "presented_drop_rate": null,
+   "presented_discarded": null,
+   "presented_refresh_ns": null,
+   "input_cadence": {
+    "events": 12,
+    "interval_ms": {
+     "p50": 120.0,
+     "p95": 120.34,
+     "max": 120.34
+    }
+   },
+   "reversal": {
+    "status": "missing",
+    "reason": "no presented scroll-store direction change joined to delivered opposite axis input",
+    "store": "colors.rail.scroll",
+    "input_reversal_ns": 858869184193503
+   }
+  },
+  {
+   "animation": "scroll-launcher-wheel",
+   "phase": "open",
+   "repeat": 0,
+   "start": 27.205618143081665,
+   "end": 28.927729845046997,
+   "mono_start": 27.2056178629864,
+   "mono_start_ns": 858874424427481,
+   "mono_end_ns": 858876146539729,
+   "screenshot_sampled": false,
+   "surface": "shell.log:49",
+   "commits": 111,
+   "active_ms": 1565.9,
+   "first_frame_ms": 12.5,
+   "interval_ms": {
+    "p50": 15.3,
+    "p95": 17.19,
+    "p99": 80.47
+   },
+   "longest_gap_ms": 89.5,
+   "housekeeping_commits": 0,
+   "dropped": 92,
+   "slow_intervals": 72,
+   "drop_rate": 0.455,
+   "presentation_source": null,
+   "presented_frames": null,
+   "presentation_interval_ms": null,
+   "presented_dropped": null,
+   "presented_drop_rate": null,
+   "presented_discarded": null,
+   "presented_refresh_ns": null,
+   "input_cadence": {
+    "events": 12,
+    "interval_ms": {
+     "p50": 120.01,
+     "p95": 120.17,
+     "max": 120.17
+    }
+   },
+   "reversal": {
+    "status": "missing",
+    "reason": "no presented scroll-store direction change joined to delivered opposite axis input",
+    "store": "launcher.scroll.y",
+    "input_reversal_ns": 858875245764818
+   }
+  },
+  {
+   "animation": "scroll-keybindings-wheel",
+   "phase": "open",
+   "repeat": 0,
+   "start": 33.225170850753784,
+   "end": 34.9474458694458,
+   "mono_start": 33.225170488934964,
+   "mono_start_ns": 858880443980107,
+   "mono_end_ns": 858882166255323,
+   "screenshot_sampled": false,
+   "surface": "shell.log:49",
+   "commits": 18,
+   "active_ms": 1319.8,
+   "first_frame_ms": 104.3,
+   "interval_ms": {
+    "p50": 118.28,
+    "p95": 120.25,
+    "p99": 120.25
+   },
+   "longest_gap_ms": 120.2,
+   "housekeeping_commits": 0,
+   "dropped": 143,
+   "slow_intervals": 11,
+   "drop_rate": 0.894,
+   "presentation_source": null,
+   "presented_frames": null,
+   "presentation_interval_ms": null,
+   "presented_dropped": null,
+   "presented_drop_rate": null,
+   "presented_discarded": null,
+   "presented_refresh_ns": null,
+   "input_cadence": {
+    "events": 12,
+    "interval_ms": {
+     "p50": 120.0,
+     "p95": 120.24,
+     "max": 120.24
+    }
+   },
+   "reversal": {
+    "status": "missing",
+    "reason": "no presented scroll-store direction change joined to delivered opposite axis input",
+    "store": "extras.scroll",
+    "input_reversal_ns": 858881265256223
+   }
+  },
+  {
+   "animation": "scroll-welcome-shortcuts-wheel",
+   "phase": "open",
+   "repeat": 0,
+   "start": 39.26782441139221,
+   "end": 40.98999905586243,
+   "mono_start": 39.26782386598643,
+   "mono_start_ns": 858886486633484,
+   "mono_end_ns": 858888208809108,
+   "screenshot_sampled": false,
+   "frames": 0,
+   "presentation_source": null,
+   "presented_frames": null,
+   "presentation_interval_ms": null,
+   "presented_dropped": null,
+   "presented_drop_rate": null,
+   "presented_discarded": null,
+   "presented_refresh_ns": null,
+   "input_cadence": {
+    "events": 12,
+    "interval_ms": {
+     "p50": 120.01,
+     "p95": 120.29,
+     "max": 120.29
+    }
+   },
+   "reversal": {
+    "status": "missing",
+    "reason": "no presented scroll-store direction change joined to delivered opposite axis input",
+    "store": "welcome.scroll",
+    "input_reversal_ns": 858887308145028
+   }
+  }
+ ]
+}

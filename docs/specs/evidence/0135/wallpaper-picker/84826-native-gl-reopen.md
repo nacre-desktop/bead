@@ -1,0 +1,11 @@
+# Default GL picker, same-shell reopen
+
+This failed reopen run predates the 256 MiB bounded global overlap admission. It is retained to explain the cache change; the passing final-source rerun is [203 GL80 reopen](203-gl80-reopen.md).
+
+This one-repeat probe used the 80-wallpaper private fixture at 2880×1800 physical, scale 1.5 (1920×1200 logical), default renderer, candidate source `84826bb52bcf7462c3504f8ad45b86e924374ac9`, and Bead binary SHA-256 `3db7085c909b587c7dd9b59de3115aa84a1c9a7f5106f935f750c6e9861a5141`. The private Nacre export validator passed (754 entries, reference commit `37583d61928368bc22a46aa806fd0a2e06cfee55`); host swap used was 0 before and after.
+
+The picker opened with 80 items. A 160-event finger stream moved `extras.scroll` from 0 to 518 and back to 0; the presented-direction change after reversal was 289.89 ms from input (288.34 ms from delivered input). Render p95 was 0.813 ms over 25 commits. Whole-window presentation intervals included idle and clamped periods: p95 168.16 ms, maximum 600.79 ms, with 143 missed-slot upper-bound intervals; refresh prediction was 0/unknown, so this is not evidence of physical 120 Hz scanout.
+
+After closing the picker and settling for 12 seconds, the same shell reopened it for a 12-notch wheel stream. Reopen rendering failed before the first wheel axis event: the first `UI_ERROR retained cache byte budget exceeded` occurred while baking `extras.hexagon-scroll.hexagon-extent.wallpaper-19.thumbnail-7/image/0`. There were 180 such log lines; `pacing.json.errors` was empty, but capture-safety returned rc 1, which is authoritative. The wheel reversal therefore has no valid presentation result.
+
+The cache probe reported global retained-cache use of 149,161,103 B while open after finger input, 165,426,395 B after close+12 s, and 200,958,241 B after the failed wheel reopen. Native GL image use stayed 70,874,698 B; retained CPU rasters rose from 70,878,328 B to 106,401,382 B. This identifies retained-cache pressure during same-process reopen; it does not prove which individual admission limit rejected the bake. The run is a failed stress diagnostic, not an accepted before/after performance result. Capture: `b0135-picker80-native-reopen-cacheprobe-84826-20261026-01`.

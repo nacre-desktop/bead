@@ -1,0 +1,315 @@
+# Diagnostic-only control trace patch
+# Base: e2d9576917b06093dd8d6281ba0b74876ff88798 (origin/main)
+# Scope: AXIS_DELIVER, xdg window and overlay state/frame/commit/presentation,
+# plus existing surface UI_DISCARDED diagnostics. Full-buffer damage and all
+# input/layout/pacing behavior remain at the base revision; no source.presented
+# acknowledgement or scroll refresh update is added for window/overlay controls.
+
+diff --git a/crates/bead-wayland/src/overlay.rs b/crates/bead-wayland/src/overlay.rs
+index 74e53aedff25b0e0a114e54d1d0417db65ef1455..c832307be2952fdaa58100cfc4f839f3f6febe33 100644
+--- a/crates/bead-wayland/src/overlay.rs
++++ b/crates/bead-wayland/src/overlay.rs
+@@ -39,6 +39,8 @@ pub(super) struct Overlay {
+     cursor_serial: u32,
+     last_draw: Option<Instant>,
+     timer: bool,
++    ui_serial: u64,
++    presented_update: Option<u64>,
+ }
+ impl Overlay {
+     pub(super) fn scroll_regions(&self) -> Vec<Rect> {
+@@ -75,6 +77,48 @@ fn content_size(scene: &Scene) -> (u32, u32) {
+ }
+ 
+ impl App {
++    pub(super) fn overlay_presentation(
++        &mut self,
++        data: &PresentationData,
++        event: &wp_presentation_feedback::Event,
++    ) -> bool {
++        let Some(overlay) = self.overlay.as_mut().filter(|overlay| {
++            overlay.epoch == data.source_epoch && overlay.layer.wl_surface() == &data.surface
++        }) else {
++            return false;
++        };
++        match event {
++            wp_presentation_feedback::Event::Presented {
++                tv_sec_hi,
++                tv_sec_lo,
++                tv_nsec,
++                refresh,
++                ..
++            } => {
++                let monotonic_ns = ((u64::from(*tv_sec_hi) << 32) | u64::from(*tv_sec_lo))
++                    * 1_000_000_000
++                    + u64::from(*tv_nsec);
++                if overlay.presented_update != Some(data.update) {
++                    if bead_core::profile::frame_trace() {
++                        println!(
++                            "WINDOW_PRESENTED monotonic_ns={monotonic_ns} epoch={} update={} generation={} refresh_ns={} kind=overlay",
++                            overlay.epoch, data.update, data.generation, refresh
++                        );
++                    }
++                    overlay.presented_update = Some(data.update);
++                }
++            }
++            wp_presentation_feedback::Event::Discarded => {
++                bead_core::vprintln!(
++                    "WINDOW_DISCARDED monotonic_ns={} epoch={} update={} generation={} kind=overlay",
++                    super::monotonic_ns(), overlay.epoch, data.update, data.generation
++                );
++            }
++            _ => {}
++        }
++        true
++    }
++
+     pub(super) fn overlay_surface(&self) -> Option<&wl_surface::WlSurface> {
+         self.overlay.as_ref().map(|o| o.layer.wl_surface())
+     }
+@@ -247,6 +291,8 @@ impl App {
+             cursor_serial: 0,
+             last_draw: None,
+             timer: false,
++            ui_serial: 0,
++            presented_update: None,
+         });
+         if let Some(palette) = self.wallpaper_palette.clone() {
+             self.overlay_ui(UiEvent::WallpaperPalette(palette));
+@@ -396,6 +442,17 @@ impl App {
+             }
+         };
+         o.scene = scene;
++        o.ui_serial = o.ui_serial.wrapping_add(1);
++        let trace_window_state = self.options.trace_state
++            || (std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some()
++                && std::env::var("BEAD_TRACE_STATE").is_ok_and(|value| value == "1"));
++        if trace_window_state {
++            bead_core::vprintln!(
++                "WINDOW_STATE monotonic_ns={} epoch={} update={} generation={} kind=overlay state={}",
++                super::monotonic_ns(), o.epoch, o.ui_serial, o.scene.resource_revision,
++                o.source.state_summary()
++            );
++        }
+         // A content change resizes the surface; the draw waits for its configure.
+         let wanted = content_size(&o.scene);
+         if wanted != o.asked {
+@@ -453,6 +510,7 @@ impl App {
+     }
+     /// Draws one frame; true while a fade is still running.
+     fn overlay_render(&mut self) -> Result<bool, Box<dyn Error>> {
++        let frame_started = Instant::now();
+         let rgba = cfg!(target_endian = "little")
+             && !self.options.force_argb
+             && self.shm.formats().contains(&wl_shm::Format::Abgr8888);
+@@ -576,9 +634,32 @@ impl App {
+             surface.set_buffer_scale((o.scale120 / 120).max(1) as i32);
+         }
+         surface.damage_buffer(0, 0, w, h);
++        if let Some(presentation) = &self.presentation {
++            presentation.feedback(
++                surface,
++                &self.qh,
++                PresentationData {
++                    source_epoch: o.epoch,
++                    update: o.ui_serial,
++                    surface: surface.clone(),
++                    generation: scene.resource_revision,
++                },
++            );
++        }
+         o.buffers[slot].attach_to(surface)?;
+         o.layer.commit();
+         o.last_draw = Some(Instant::now());
++        if bead_core::profile::frame_trace() {
++            println!(
++                "WINDOW_FRAME monotonic_ns={} epoch={} update={} generation={} kind=overlay render_ms={:.3} damage=0,0,{},{}",
++                super::monotonic_ns(), o.epoch, o.ui_serial, o.scene.resource_revision,
++                frame_started.elapsed().as_secs_f64() * 1000., w, h
++            );
++            println!(
++                "WINDOW_COMMIT monotonic_ns={} epoch={} update={} generation={} kind=overlay",
++                super::monotonic_ns(), o.epoch, o.ui_serial, o.scene.resource_revision
++            );
++        }
+         Ok(animating)
+     }
+     /// `bead overlay`: residency and placement of the overlay slot (introspection).
+diff --git a/crates/bead-wayland/src/protocols.rs b/crates/bead-wayland/src/protocols.rs
+index c155aecb59d2ee4306abc2566ea3a4df6beb4099..14aba8ff05c87613d41b2a1b2c6d70841292ad5b 100644
+--- a/crates/bead-wayland/src/protocols.rs
++++ b/crates/bead-wayland/src/protocols.rs
+@@ -322,6 +322,9 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
+             }
+             return;
+         }
++        if state.window_presentation(data, &event) || state.overlay_presentation(data, &event) {
++            return;
++        }
+         if let Some(id) = state.slot_of_surface(&data.surface) {
+             state.in_slot(id, |app| Self::event(app, proxy, event, data, conn, qh));
+             return;
+@@ -378,7 +381,13 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
+                     s.refresh_ns = refresh;
+                     s.presentation_kind = flags.into();
+                 }
+-                wp_presentation_feedback::Event::Discarded => s.discarded += 1,
++                wp_presentation_feedback::Event::Discarded => {
++                    s.discarded += 1;
++                    bead_core::vprintln!(
++                        "UI_DISCARDED generation={} monotonic_ns={} companion={} update={}",
++                        data.generation, monotonic_ns(), s.companion, data.update
++                    );
++                }
+                 _ => {}
+             }
+         }
+diff --git a/crates/bead-wayland/src/scroll.rs b/crates/bead-wayland/src/scroll.rs
+index b4d00bf993a3ff1423c3ee2badf867af352e03a7..9655727718107303ca55df8c9c3406defc683b06 100644
+--- a/crates/bead-wayland/src/scroll.rs
++++ b/crates/bead-wayland/src/scroll.rs
+@@ -172,6 +172,10 @@ impl App {
+         }
+     }
+     fn deliver_scroll(&mut self, target: &Target, horizontal: bool, point: (f32, f32), delta: f64) {
++        bead_core::vprintln!(
++            "AXIS_DELIVER monotonic_ns={} horizontal={horizontal} x={} y={} delta={delta}",
++            bead_core::profile::monotonic_ns(), point.0, point.1
++        );
+         let event = if horizontal {
+             UiEvent::HorizontalScroll {
+                 x: point.0,
+diff --git a/crates/bead-wayland/src/window.rs b/crates/bead-wayland/src/window.rs
+index ef8825a795e5dd8c3f67b7068290f858026d5188..f84dbec768c5088b67ee6de1751fdac6a7660e79 100644
+--- a/crates/bead-wayland/src/window.rs
++++ b/crates/bead-wayland/src/window.rs
+@@ -58,6 +58,8 @@ pub(super) struct Win {
+     timer: bool,
+     drawn: u64,
+     first_frame_texts: Vec<String>,
++    ui_serial: u64,
++    presented_update: Option<u64>,
+ }
+ impl Win {
+     pub(super) fn scroll_regions(&self) -> Vec<Rect> {
+@@ -159,6 +161,48 @@ impl WindowHandler for App {
+ }
+ 
+ impl App {
++    pub(super) fn window_presentation(
++        &mut self,
++        data: &PresentationData,
++        event: &wp_presentation_feedback::Event,
++    ) -> bool {
++        let Some(win) = self.window.as_mut().filter(|win| {
++            win.epoch == data.source_epoch && win.window.wl_surface() == &data.surface
++        }) else {
++            return false;
++        };
++        match event {
++            wp_presentation_feedback::Event::Presented {
++                tv_sec_hi,
++                tv_sec_lo,
++                tv_nsec,
++                refresh,
++                ..
++            } => {
++                let monotonic_ns = ((u64::from(*tv_sec_hi) << 32) | u64::from(*tv_sec_lo))
++                    * 1_000_000_000
++                    + u64::from(*tv_nsec);
++                if win.presented_update != Some(data.update) {
++                    if bead_core::profile::frame_trace() {
++                        println!(
++                            "WINDOW_PRESENTED monotonic_ns={monotonic_ns} epoch={} update={} generation={} refresh_ns={}",
++                            win.epoch, data.update, data.generation, refresh
++                        );
++                    }
++                    win.presented_update = Some(data.update);
++                }
++            }
++            wp_presentation_feedback::Event::Discarded => {
++                bead_core::vprintln!(
++                    "WINDOW_DISCARDED monotonic_ns={} epoch={} update={} generation={}",
++                    super::monotonic_ns(), win.epoch, data.update, data.generation
++                );
++            }
++            _ => {}
++        }
++        true
++    }
++
+     pub(super) fn bind_xdg(
+         globals: &wayland_client::globals::GlobalList,
+         qh: &QueueHandle<Self>,
+@@ -301,6 +345,8 @@ impl App {
+             timer: false,
+             drawn: 0,
+             first_frame_texts: Vec::new(),
++            ui_serial: 0,
++            presented_update: None,
+         });
+         self.window_ui(UiEvent::Reload);
+         if let Some(palette) = self.wallpaper_palette.clone() {
+@@ -453,6 +499,17 @@ impl App {
+             }
+         };
+         win.scene = scene;
++        win.ui_serial = win.ui_serial.wrapping_add(1);
++        let trace_window_state = self.options.trace_state
++            || (std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some()
++                && std::env::var("BEAD_TRACE_STATE").is_ok_and(|value| value == "1"));
++        if trace_window_state {
++            bead_core::vprintln!(
++                "WINDOW_STATE monotonic_ns={} epoch={} update={} generation={} state={}",
++                super::monotonic_ns(), win.epoch, win.ui_serial, win.scene.resource_revision,
++                win.source.state_summary()
++            );
++        }
+         self.window_draw();
+     }
+     fn window_draw(&mut self) {
+@@ -486,6 +543,7 @@ impl App {
+         }
+     }
+     fn window_render(&mut self) -> Result<(), Box<dyn Error>> {
++        let frame_started = Instant::now();
+         let rgba = cfg!(target_endian = "little")
+             && !self.options.force_argb
+             && self.shm.formats().contains(&wl_shm::Format::Abgr8888);
+@@ -569,6 +627,18 @@ impl App {
+             surface.set_buffer_scale((win.scale120 / 120).max(1) as i32);
+         }
+         surface.damage_buffer(0, 0, w, h);
++        if let Some(presentation) = &self.presentation {
++            presentation.feedback(
++                surface,
++                &self.qh,
++                PresentationData {
++                    source_epoch: win.epoch,
++                    update: win.ui_serial,
++                    surface: surface.clone(),
++                    generation: scene.resource_revision,
++                },
++            );
++        }
+         win.buffers[slot].attach_to(surface)?;
+         win.window.commit();
+         win.last_draw = Some(Instant::now());
+@@ -587,6 +657,17 @@ impl App {
+                 .collect();
+         }
+         win.drawn += 1;
++        if bead_core::profile::frame_trace() {
++            println!(
++                "WINDOW_FRAME monotonic_ns={} epoch={} update={} generation={} frame={} render_ms={:.3} damage=0,0,{},{}",
++                super::monotonic_ns(), win.epoch, win.ui_serial, win.scene.resource_revision, win.drawn,
++                frame_started.elapsed().as_secs_f64() * 1000., w, h
++            );
++            println!(
++                "WINDOW_COMMIT monotonic_ns={} epoch={} update={} generation={} frame={}",
++                super::monotonic_ns(), win.epoch, win.ui_serial, win.scene.resource_revision, win.drawn
++            );
++        }
+         Ok(())
+     }
+     pub(super) fn window_key(&mut self, event: &KeyEvent) {

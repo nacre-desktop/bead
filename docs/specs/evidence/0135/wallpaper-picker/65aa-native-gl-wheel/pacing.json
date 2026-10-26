@@ -1,0 +1,153 @@
+{
+ "arm": "bead",
+ "hz": 120,
+ "real_ref": 1792989917.741249,
+ "vsync_ms": 8.333333333333334,
+ "backend": "default",
+ "presentation_clock_ids": [
+  "1"
+ ],
+ "presented_refresh_ns_median": 0,
+ "presented_refresh_hz": null,
+ "presented_refresh_matches_requested_hz": false,
+ "input_pattern": "single-midpoint-reversal",
+ "input_oscillation_period": null,
+ "wheel_input_interval_ms": 120,
+ "private_launcher_fixture": null,
+ "trace_profile": {
+  "worker_prepare_count": 29,
+  "worker_prepare_ms": {
+   "p50": 3.105,
+   "p95": 179.982,
+   "p99": 188.834,
+   "max": 188.834
+  },
+  "worker_builds_max": 153,
+  "input_patch_misses": {},
+  "input_profile_wall_ms_by_stage": {},
+  "input_profile_cpu_ms_by_stage": {},
+  "timeline_marks_by_stage": {},
+  "recovery_bundle_generations": [
+   1,
+   2,
+   3,
+   1
+  ]
+ },
+ "presentation_discarded": 0,
+ "presentation_discarded_trace_collected": true,
+ "errors": [],
+ "memory_kib": {
+  "idle": {
+   "VmRSS": 78040,
+   "RssAnon": 28636,
+   "Pss": 59391,
+   "Pss_Anon": 28636,
+   "Pss_File": 19919,
+   "Pss_Shmem": 10836,
+   "SwapPss": 0,
+   "DRM": 0
+  },
+  "scroll-wallpaper-picker-wheel": {
+   "VmRSS": 263636,
+   "RssAnon": 138296,
+   "Pss": 194865,
+   "Pss_Anon": 138296,
+   "Pss_File": 45627,
+   "Pss_Shmem": 10941,
+   "SwapPss": 0,
+   "DRM": 291124.0
+  }
+ },
+ "memory_phase_kib": {
+  "scroll-wallpaper-picker-wheel": [
+   {
+    "repeat": 0,
+    "shell": {
+     "VmRSS": 286456,
+     "RssAnon": 161116,
+     "Pss": 217671,
+     "Pss_Anon": 161116,
+     "Pss_File": 45613,
+     "Pss_Shmem": 10941,
+     "SwapPss": 0,
+     "DRM": 277404.0
+    },
+    "apps": {}
+   }
+  ]
+ },
+ "windows": [
+  {
+   "animation": "scroll-wallpaper-picker-wheel",
+   "phase": "open",
+   "repeat": 0,
+   "start": 4.935189485549927,
+   "end": 6.657012462615967,
+   "mono_start": 4.935190050047822,
+   "mono_start_ns": 859554255097275,
+   "mono_end_ns": 859555976920860,
+   "screenshot_sampled": false,
+   "surface": "shell.log:103",
+   "commits": 3,
+   "active_ms": 1343.9,
+   "first_frame_ms": 132.8,
+   "interval_ms": {
+    "p50": 42.85,
+    "p95": 42.85,
+    "p99": 42.85
+   },
+   "longest_gap_ms": 42.9,
+   "housekeeping_commits": 1,
+   "dropped": 4,
+   "slow_intervals": 1,
+   "drop_rate": 0.8,
+   "presented_interval_ms": {
+    "p50": 123.12,
+    "p95": 123.12,
+    "p99": 123.12
+   },
+   "render_ms": {
+    "p50": 0.744,
+    "p95": 0.86,
+    "p99": 0.86,
+    "max": 0.86
+   },
+   "render_over_vsync": 0.0,
+   "presentation_source": "ui:shell.log:true",
+   "presented_frames": 4,
+   "presentation_interval_ms": {
+    "p50": 123.12,
+    "p95": 1301.05,
+    "p99": 1301.05
+   },
+   "presented_dropped": 173,
+   "presented_drop_rate": 0.983,
+   "presented_long_gaps": 1,
+   "presented_max_gap_ms": 1301.05,
+   "presented_discarded": 0,
+   "presented_refresh_ns": 0,
+   "input_cadence": {
+    "events": 12,
+    "interval_ms": {
+     "p50": 120.0,
+     "p95": 120.07,
+     "max": 120.07
+    }
+   },
+   "reversal": {
+    "status": "proven",
+    "store": "extras.scroll",
+    "input_reversal_ns": 859555076458509,
+    "delivered_reversal_ns": 859555084984765,
+    "presented_direction_change_ns": 859555739071229,
+    "input_to_visible_ms": 662.61,
+    "delivery_to_visible_ms": 654.09,
+    "input_delta": -1.0,
+    "delivered_delta": -112.4287736084126,
+    "presented_samples": 4
+   },
+   "content_commit_ms": 4.3
+  }
+ ]
+}

@@ -1,0 +1,13 @@
+diff --git a/crates/nacre-shell/src/app.rs b/crates/nacre-shell/src/app.rs
+index 103b9cb1..56d1873c 100644
+--- a/crates/nacre-shell/src/app.rs
++++ b/crates/nacre-shell/src/app.rs
+@@ -685,6 +685,8 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
+         output,
+         interactive: true,
+         keyboard_focus: true,
++        trace_state: cfg!(feature = "trace")
++            && std::env::var("BEAD_TRACE_STATE").is_ok_and(|value| value == "1"),
+         app: Some(args.clone()),
+         app_as_pearl: pearl,
+         ..Options::default()

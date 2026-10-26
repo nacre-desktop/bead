@@ -1,0 +1,5 @@
+# Native/default 80-wallpaper wheel-only pass
+
+Fresh one-scene FemtovgGL run on candidate65aa (same source/tree and80-wallpaper fixture as the failing combined run), finger history not reused, no `UI_ERROR` lines, capture safety rc0, source pin passed and host swap used0 KiB. The hexagon layout loaded and `extras.scroll` reversal was proven from trace; this verifies the wheel path separately from the finger cache-owner stress.
+
+The device sent12 notches at measured120.07ms p95. Only3 presented frames occurred; render p95=0.860ms, canonical all-gap presentation p95=1301.05ms, missed-slot upper bound173, and reversal input→visible654.09ms. The interval includes clamped/idle time, but the scroll target is not met. Presentation refresh prediction is0; this is not a physical120Hz claim. See [before](65aa-native-gl-wheel/before.png), [after](65aa-native-gl-wheel/after.png), and [pacing JSON](65aa-native-gl-wheel/pacing.json). This isolated pass does not erase the separate finger→close→reopen failure with180 retained-cache-budget errors.

@@ -1,0 +1,26 @@
+{
+  "control": {
+    "state_key": "settings.scroll",
+    "sample_count": 166,
+    "min": 0.0,
+    "max": 63.0,
+    "unique_offsets": [
+      0.0,
+      21.0,
+      42.0,
+      63.0
+    ]
+  },
+  "candidate": {
+    "state_key": "settings.scroll",
+    "sample_count": 166,
+    "min": 0.0,
+    "max": 21.0,
+    "unique_offsets": [
+      0.0,
+      7.0,
+      14.0,
+      21.0
+    ]
+  }
+}

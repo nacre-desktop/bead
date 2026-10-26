@@ -1,0 +1,129 @@
+{
+  "final_run": "b0135-ai-chat-pearl-315c83b8-20261026-05",
+  "status": "candidate_scroll_moved; reversal_proven; latency_target_failed",
+  "method": {
+    "scene": "public pearls.open ai route; synthetic Codex provider",
+    "renderer": "CPU; source configured by the pearl PanelSpec in pearls.rs:717, no CLI or environment renderer override",
+    "output_mode": [
+      2880,
+      1800
+    ],
+    "scale": 1.5,
+    "logical_size": [
+      1920,
+      1200
+    ],
+    "gesture": "virtual pointer up 80 x -7 then down 80 x +7, 8 ms requested interval",
+    "pointer_wire_source_claimed": false,
+    "axis_marker_note": "input helper records AXIS_SENT/AXIS_STOP source=finger; nested compositor wire source and stop delivery are not independently certified",
+    "nacre_reference": "37583d61928368bc22a46aa806fd0a2e06cfee55",
+    "qml_shell_manifest": "69ac2783d98bddf93cdf1cabf1ed7ce821c1f6f97148327698c289d93d126e8f",
+    "harness_sha256": "d3bbed42b4e9ccedf72fe51c295dc5ad1c4cf8ed1728d56f234170b9617a2415",
+    "one_off_probe_sha256": "dd9f0ad07e160547900a0fb91c6d7056ef0ec0e41396248caf8de6f09fb99525",
+    "pointer_helper_sha256": "c8b201892a92bd2a116bd30e0fbde5e126be63a45b27486cfeb14411651147b7",
+    "synthetic_provider_source_sha256_before_after": "874e3c32c4aaa287da6ade6b2dcbf37caf5aec31e946c68d17dc889195a32098",
+    "source_validation": "Nacre QML 754-entry manifest passed before the pair; per-arm helper/provider and binary hashes were recorded",
+    "swap_used_before_after_mib": 0,
+    "arm_rc": 0,
+    "harness_errors": []
+  },
+  "geometry": {
+    "window_app_id": "bead.pearl",
+    "window_title": "Nacre Pearl AI 1",
+    "window_rect_logical": [
+      725.333333,
+      274.666667,
+      470,
+      810
+    ],
+    "transcript_rect_app_local": [
+      16,
+      181.666667,
+      438,
+      460.333334
+    ],
+    "transcript_extent": 2709.599854,
+    "input_point_logical": [
+      960.333333,
+      686.5
+    ]
+  },
+  "control": {
+    "source_tree": "aac59abb1f2b9c2b65c6c0bb858ba51c63d98203",
+    "binary_sha256": "e3545eefe0bd939f72ad711ae07394b82d3a0797f6731de9478edf324a6a6a3e",
+    "axis_deliveries": {
+      "negative": 80,
+      "positive": 184,
+      "total": 264
+    },
+    "scroll_store": "chat.scroll",
+    "scroll_samples": 268,
+    "scroll_unique_values": 1,
+    "scroll_min_max": [
+      2249.266602,
+      2249.266602
+    ],
+    "reversal": "unmeasured; viewport did not move",
+    "render_p95_ms": 0.039,
+    "presented_interval_p95_ms_all_gaps": 16.23,
+    "presented_missed_vsync_upper_bound": 110,
+    "presented_refresh_ns": 0
+  },
+  "candidate": {
+    "source_tree": "315c83b80d31285cfdcf0c9f938fdaae565676ad",
+    "shell_tree": "52a5777ab4f7a86a9ceaefb8d0024ad267170eca",
+    "unit_patch": "82f6410ac54a55413c85283a9ee52625d309050faf684c128e0ff26a752c6c45",
+    "binary_sha256": "07384dc83e14e495dc98170f3c6225f0bd99f6c9ae3264b16c4a3566452c28c1",
+    "axis_deliveries": {
+      "negative": 80,
+      "positive": 80,
+      "total": 160
+    },
+    "scroll_store": "chat.scroll",
+    "scroll_samples": 164,
+    "scroll_unique_values": 82,
+    "scroll_min_max": [
+      1689,
+      2249.266602
+    ],
+    "reversal_proof": {
+      "status": "proven",
+      "input_reversal_monotonic_ns": 867676785008959,
+      "delivered_reversal_monotonic_ns": 867676794232832,
+      "first_opposite_store_value": 1696,
+      "first_opposite_store_commit": {
+        "generation": 2,
+        "update": 85,
+        "monotonic_ns": 867676795998961,
+        "value": 1696
+      },
+      "presented_direction_change": {
+        "generation": 2,
+        "update": 87,
+        "monotonic_ns": 867676834228893,
+        "value": 1710
+      },
+      "presented_direction_change_monotonic_ns": 867676834228893,
+      "delivery_to_visible_ms": 40.0,
+      "input_to_visible_ms": 49.22,
+      "prior_presented_offset": {
+        "generation": 2,
+        "update": 83,
+        "value": 1696,
+        "monotonic_ns": 867676802199466
+      },
+      "interpretation": "Update85 presents the same1696 offset as update83, so it is not visible opposite movement. Update87 first presents a larger offset (1710), giving the reported49.22/40.00ms."
+    },
+    "render_p95_ms": 2.093,
+    "presented_interval_p95_ms_all_gaps": 16.03,
+    "presented_missed_vsync_upper_bound": 89,
+    "presented_refresh_ns": 0
+  },
+  "previous_candidate_diagnostic": {
+    "run": "b0135-ai-chat-pearl-203f19d8-20261026-04",
+    "candidate_tree": "203f19d8764b0a41577eea8bed42481d88f26835",
+    "candidate_binary_sha256": "952082d790fcf3b8951e5d97c0660c88f24c64e1fba3938a6f8bfffc2ca567de",
+    "result": "both arms stayed at chat.scroll=2249.266602; no reversal could be measured"
+  },
+  "interpretation": "Candidate moves and reverses the transcript, unlike the matched control. Its 40 ms presentation-joined reversal exceeds the one-frame target. refresh_ns=0 and 16 ms presented intervals do not certify 120 Hz physical scanout; missed-vsync counts include intervals outside active motion."
+}

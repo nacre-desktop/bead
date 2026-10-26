@@ -1,0 +1,2077 @@
+{
+  "status": "FAIL",
+  "method": {
+    "renderer": "CPU",
+    "comparison": "five alternating same-host control/candidate pairs, pairs 7\u201311",
+    "sampling": "private nested session; idle, open and closed+12s phases; three fresh lifecycles per arm",
+    "unreclaimable_mib": "Pss_Anon + Pss_Shmem + SwapPss + DRM",
+    "informational_components_mib": [
+      "Pss",
+      "Pss_File"
+    ],
+    "original_median_gate_mib": 0.5,
+    "new_feature_budget_mib": {
+      "notifications_list_open": 1.0,
+      "clipboard_open": 1.0
+    },
+    "backend": "CPU renderer; daemon/provider totals excluded",
+    "cohort": "unit-only candidate203 scrolling snapshot on matched baseline; excludes later non-allocating AI-follow fix/main idle-preparation guard; no AI lifecycle; pairs1\u20132 excluded diagnostics"
+  },
+  "source": {
+    "control_tree": "aac59abb1f2b9c2b65c6c0bb858ba51c63d98203",
+    "control_shell_tree": "b7d6f89d48b983180a75ef06839c18d3d67c5ab1",
+    "candidate_tree": "203f19d8764b0a41577eea8bed42481d88f26835",
+    "candidate_shell_tree": "52a5777ab4f7a86a9ceaefb8d0024ad267170eca",
+    "harness_sha256": "d3bbed42b4e9ccedf72fe51c295dc5ad1c4cf8ed1728d56f234170b9617a2415",
+    "tests_sha256": "782532ad84e6ca6477658f86357ae851edc3816a29ea7aadb07b6a9fffb82c5a",
+    "source_audit": "PASS",
+    "control_binary_sha256": "e3545eefe0bd939f72ad711ae07394b82d3a0797f6731de9478edf324a6a6a3e",
+    "candidate_binary_sha256": "952082d790fcf3b8951e5d97c0660c88f24c64e1fba3938a6f8bfffc2ca567de",
+    "control_bundle_sha256": "3fca92c940048732cc56b5315e315571853fabe089fdc2ab215fbe295d21312b",
+    "candidate_bundle_sha256": "4983abe14c3fe0540288aad6bde86bcb6506378a8fc8bdaecf0ec08bd32d41a4"
+  },
+  "phases": {
+    "idle": {
+      "sample_count": 5,
+      "median_delta_unreclaimable_mib": 0.2031,
+      "original_0_5_mib_gate": "PASS",
+      "new_feature_budget_mib": null,
+      "new_feature_budget_verdict": "N/A",
+      "samples": [
+        {
+          "pair": 7,
+          "control_unreclaimable_mib": 38.3711,
+          "candidate_unreclaimable_mib": 38.5742,
+          "delta_unreclaimable_mib": 0.2031,
+          "control_components_mib": {
+            "Pss": 57.9111,
+            "Pss_File": 19.54,
+            "Pss_Anon": 27.7891,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 58.1982,
+            "Pss_File": 19.624,
+            "Pss_Anon": 27.9922,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 8,
+          "control_unreclaimable_mib": 38.4844,
+          "candidate_unreclaimable_mib": 41.4258,
+          "delta_unreclaimable_mib": 2.9414,
+          "control_components_mib": {
+            "Pss": 58.2793,
+            "Pss_File": 19.7949,
+            "Pss_Anon": 27.9023,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 61.1084,
+            "Pss_File": 19.6826,
+            "Pss_Anon": 30.8438,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 9,
+          "control_unreclaimable_mib": 38.5156,
+          "candidate_unreclaimable_mib": 38.5117,
+          "delta_unreclaimable_mib": -0.0039,
+          "control_components_mib": {
+            "Pss": 57.8838,
+            "Pss_File": 19.3682,
+            "Pss_Anon": 27.9336,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 58.0186,
+            "Pss_File": 19.5068,
+            "Pss_Anon": 27.9297,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 10,
+          "control_unreclaimable_mib": 38.5352,
+          "candidate_unreclaimable_mib": 38.5,
+          "delta_unreclaimable_mib": -0.0352,
+          "control_components_mib": {
+            "Pss": 58.2754,
+            "Pss_File": 19.7402,
+            "Pss_Anon": 27.9531,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 58.0664,
+            "Pss_File": 19.5664,
+            "Pss_Anon": 27.918,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 11,
+          "control_unreclaimable_mib": 38.6289,
+          "candidate_unreclaimable_mib": 39.7109,
+          "delta_unreclaimable_mib": 1.082,
+          "control_components_mib": {
+            "Pss": 58.0391,
+            "Pss_File": 19.4102,
+            "Pss_Anon": 28.0469,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 59.3623,
+            "Pss_File": 19.6514,
+            "Pss_Anon": 29.1289,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        }
+      ]
+    },
+    "scroll-settings-content-touchpad/open": {
+      "sample_count": 5,
+      "median_delta_unreclaimable_mib": 0.0664,
+      "original_0_5_mib_gate": "PASS",
+      "new_feature_budget_mib": null,
+      "new_feature_budget_verdict": "N/A",
+      "samples": [
+        {
+          "pair": 7,
+          "control_unreclaimable_mib": 42.8594,
+          "candidate_unreclaimable_mib": 43.1172,
+          "delta_unreclaimable_mib": 0.2578,
+          "control_components_mib": {
+            "Pss": 54.7363,
+            "Pss_File": 11.877,
+            "Pss_Anon": 32.2773,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 54.6455,
+            "Pss_File": 11.5283,
+            "Pss_Anon": 32.5352,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 8,
+          "control_unreclaimable_mib": 42.9414,
+          "candidate_unreclaimable_mib": 47.8438,
+          "delta_unreclaimable_mib": 4.9023,
+          "control_components_mib": {
+            "Pss": 54.7471,
+            "Pss_File": 11.8057,
+            "Pss_Anon": 32.3594,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 59.5146,
+            "Pss_File": 11.6709,
+            "Pss_Anon": 36.5625,
+            "Pss_Shmem": 11.2812,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 9,
+          "control_unreclaimable_mib": 42.9844,
+          "candidate_unreclaimable_mib": 43.0508,
+          "delta_unreclaimable_mib": 0.0664,
+          "control_components_mib": {
+            "Pss": 54.5146,
+            "Pss_File": 11.5303,
+            "Pss_Anon": 32.4023,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 54.5918,
+            "Pss_File": 11.541,
+            "Pss_Anon": 32.4688,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 10,
+          "control_unreclaimable_mib": 43.0234,
+          "candidate_unreclaimable_mib": 43.0742,
+          "delta_unreclaimable_mib": 0.0508,
+          "control_components_mib": {
+            "Pss": 54.876,
+            "Pss_File": 11.8525,
+            "Pss_Anon": 32.4414,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 54.8848,
+            "Pss_File": 11.8105,
+            "Pss_Anon": 32.4922,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 11,
+          "control_unreclaimable_mib": 43.0273,
+          "candidate_unreclaimable_mib": 38.6016,
+          "delta_unreclaimable_mib": -4.4258,
+          "control_components_mib": {
+            "Pss": 54.8516,
+            "Pss_File": 11.8242,
+            "Pss_Anon": 32.4453,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 50.415,
+            "Pss_File": 11.8135,
+            "Pss_Anon": 28.0195,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        }
+      ]
+    },
+    "scroll-settings-nav-touchpad/open": {
+      "sample_count": 5,
+      "median_delta_unreclaimable_mib": 0.0391,
+      "original_0_5_mib_gate": "PASS",
+      "new_feature_budget_mib": null,
+      "new_feature_budget_verdict": "N/A",
+      "samples": [
+        {
+          "pair": 7,
+          "control_unreclaimable_mib": 43.2031,
+          "candidate_unreclaimable_mib": 43.4531,
+          "delta_unreclaimable_mib": 0.25,
+          "control_components_mib": {
+            "Pss": 54.7246,
+            "Pss_File": 11.5215,
+            "Pss_Anon": 32.6211,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 54.8574,
+            "Pss_File": 11.4043,
+            "Pss_Anon": 32.8711,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 8,
+          "control_unreclaimable_mib": 43.4336,
+          "candidate_unreclaimable_mib": 43.4727,
+          "delta_unreclaimable_mib": 0.0391,
+          "control_components_mib": {
+            "Pss": 55.1562,
+            "Pss_File": 11.7227,
+            "Pss_Anon": 32.8516,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 55.0059,
+            "Pss_File": 11.5332,
+            "Pss_Anon": 32.8906,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 9,
+          "control_unreclaimable_mib": 43.4375,
+          "candidate_unreclaimable_mib": 43.5156,
+          "delta_unreclaimable_mib": 0.0781,
+          "control_components_mib": {
+            "Pss": 54.9033,
+            "Pss_File": 11.4658,
+            "Pss_Anon": 32.8555,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 55.1279,
+            "Pss_File": 11.6123,
+            "Pss_Anon": 32.9336,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 10,
+          "control_unreclaimable_mib": 43.4688,
+          "candidate_unreclaimable_mib": 43.4727,
+          "delta_unreclaimable_mib": 0.0039,
+          "control_components_mib": {
+            "Pss": 55.2275,
+            "Pss_File": 11.7588,
+            "Pss_Anon": 32.8867,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 55.165,
+            "Pss_File": 11.6924,
+            "Pss_Anon": 32.8906,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 11,
+          "control_unreclaimable_mib": 43.4766,
+          "candidate_unreclaimable_mib": 43.4219,
+          "delta_unreclaimable_mib": -0.0547,
+          "control_components_mib": {
+            "Pss": 54.6846,
+            "Pss_File": 11.208,
+            "Pss_Anon": 32.8945,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 55.0322,
+            "Pss_File": 11.6104,
+            "Pss_Anon": 32.8398,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        }
+      ]
+    },
+    "scroll-notifications-list-touchpad/open": {
+      "sample_count": 5,
+      "median_delta_unreclaimable_mib": 1.4844,
+      "original_0_5_mib_gate": "FAIL",
+      "new_feature_budget_mib": 1.0,
+      "new_feature_budget_verdict": "FAIL",
+      "samples": [
+        {
+          "pair": 7,
+          "control_unreclaimable_mib": 60.5566,
+          "candidate_unreclaimable_mib": 61.4785,
+          "delta_unreclaimable_mib": 0.9219,
+          "control_components_mib": {
+            "Pss": 80.665,
+            "Pss_File": 20.1084,
+            "Pss_Anon": 42.9727,
+            "Pss_Shmem": 17.584,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 81.4463,
+            "Pss_File": 19.9678,
+            "Pss_Anon": 43.7617,
+            "Pss_Shmem": 17.7168,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 8,
+          "control_unreclaimable_mib": 61.3574,
+          "candidate_unreclaimable_mib": 61.7754,
+          "delta_unreclaimable_mib": 0.418,
+          "control_components_mib": {
+            "Pss": 81.7158,
+            "Pss_File": 20.3584,
+            "Pss_Anon": 43.6406,
+            "Pss_Shmem": 17.7168,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 82.0693,
+            "Pss_File": 20.2939,
+            "Pss_Anon": 44.0586,
+            "Pss_Shmem": 17.7168,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 9,
+          "control_unreclaimable_mib": 60.7676,
+          "candidate_unreclaimable_mib": 62.252,
+          "delta_unreclaimable_mib": 1.4844,
+          "control_components_mib": {
+            "Pss": 80.7666,
+            "Pss_File": 19.999,
+            "Pss_Anon": 43.1836,
+            "Pss_Shmem": 17.584,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 82.416,
+            "Pss_File": 20.1641,
+            "Pss_Anon": 44.5352,
+            "Pss_Shmem": 17.7168,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 10,
+          "control_unreclaimable_mib": 60.1934,
+          "candidate_unreclaimable_mib": 61.6934,
+          "delta_unreclaimable_mib": 1.5,
+          "control_components_mib": {
+            "Pss": 80.5615,
+            "Pss_File": 20.3682,
+            "Pss_Anon": 42.6094,
+            "Pss_Shmem": 17.584,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 81.9463,
+            "Pss_File": 20.2529,
+            "Pss_Anon": 43.9766,
+            "Pss_Shmem": 17.7168,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 11,
+          "control_unreclaimable_mib": 56.5254,
+          "candidate_unreclaimable_mib": 62.248,
+          "delta_unreclaimable_mib": 5.7227,
+          "control_components_mib": {
+            "Pss": 76.5596,
+            "Pss_File": 20.0342,
+            "Pss_Anon": 38.8086,
+            "Pss_Shmem": 17.7168,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 82.5029,
+            "Pss_File": 20.2549,
+            "Pss_Anon": 44.6641,
+            "Pss_Shmem": 17.584,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        }
+      ]
+    },
+    "scroll-notifications-popup-touchpad/open": {
+      "sample_count": 5,
+      "median_delta_unreclaimable_mib": 1.2578,
+      "original_0_5_mib_gate": "FAIL",
+      "new_feature_budget_mib": null,
+      "new_feature_budget_verdict": "N/A",
+      "samples": [
+        {
+          "pair": 7,
+          "control_unreclaimable_mib": 68.0234,
+          "candidate_unreclaimable_mib": 69.2812,
+          "delta_unreclaimable_mib": 1.2578,
+          "control_components_mib": {
+            "Pss": 88.1318,
+            "Pss_File": 20.1084,
+            "Pss_Anon": 49.7461,
+            "Pss_Shmem": 18.2773,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 89.3643,
+            "Pss_File": 20.083,
+            "Pss_Anon": 50.8281,
+            "Pss_Shmem": 18.4531,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 8,
+          "control_unreclaimable_mib": 68.1562,
+          "candidate_unreclaimable_mib": 69.2148,
+          "delta_unreclaimable_mib": 1.0586,
+          "control_components_mib": {
+            "Pss": 88.5146,
+            "Pss_File": 20.3584,
+            "Pss_Anon": 49.8789,
+            "Pss_Shmem": 18.2773,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 89.5088,
+            "Pss_File": 20.2939,
+            "Pss_Anon": 50.7617,
+            "Pss_Shmem": 18.4531,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 9,
+          "control_unreclaimable_mib": 68.4141,
+          "candidate_unreclaimable_mib": 69.9648,
+          "delta_unreclaimable_mib": 1.5508,
+          "control_components_mib": {
+            "Pss": 88.4131,
+            "Pss_File": 19.999,
+            "Pss_Anon": 50.1367,
+            "Pss_Shmem": 18.2773,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 90.1289,
+            "Pss_File": 20.1641,
+            "Pss_Anon": 51.5117,
+            "Pss_Shmem": 18.4531,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 10,
+          "control_unreclaimable_mib": 67.6445,
+          "candidate_unreclaimable_mib": 69.3047,
+          "delta_unreclaimable_mib": 1.6602,
+          "control_components_mib": {
+            "Pss": 88.0127,
+            "Pss_File": 20.3682,
+            "Pss_Anon": 49.3672,
+            "Pss_Shmem": 18.2773,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 89.5576,
+            "Pss_File": 20.2529,
+            "Pss_Anon": 50.8516,
+            "Pss_Shmem": 18.4531,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 11,
+          "control_unreclaimable_mib": 67.8086,
+          "candidate_unreclaimable_mib": 62.5352,
+          "delta_unreclaimable_mib": -5.2734,
+          "control_components_mib": {
+            "Pss": 87.8467,
+            "Pss_File": 20.0381,
+            "Pss_Anon": 49.5312,
+            "Pss_Shmem": 18.2773,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 82.79,
+            "Pss_File": 20.2549,
+            "Pss_Anon": 44.082,
+            "Pss_Shmem": 18.4531,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        }
+      ]
+    },
+    "scroll-settings-content-touchpad/closed+12s": {
+      "sample_count": 5,
+      "median_delta_unreclaimable_mib": 0.0312,
+      "original_0_5_mib_gate": "PASS",
+      "new_feature_budget_mib": null,
+      "new_feature_budget_verdict": "N/A",
+      "samples": [
+        {
+          "pair": 7,
+          "control_unreclaimable_mib": 42.8867,
+          "candidate_unreclaimable_mib": 38.8672,
+          "delta_unreclaimable_mib": -4.0195,
+          "control_components_mib": {
+            "Pss": 62.5127,
+            "Pss_File": 19.626,
+            "Pss_Anon": 32.3047,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 58.4717,
+            "Pss_File": 19.6045,
+            "Pss_Anon": 28.2852,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 8,
+          "control_unreclaimable_mib": 43.1172,
+          "candidate_unreclaimable_mib": 43.1484,
+          "delta_unreclaimable_mib": 0.0312,
+          "control_components_mib": {
+            "Pss": 63.0059,
+            "Pss_File": 19.8887,
+            "Pss_Anon": 32.5352,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 62.9268,
+            "Pss_File": 19.7783,
+            "Pss_Anon": 32.5664,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 9,
+          "control_unreclaimable_mib": 38.875,
+          "candidate_unreclaimable_mib": 43.1992,
+          "delta_unreclaimable_mib": 4.3242,
+          "control_components_mib": {
+            "Pss": 58.3936,
+            "Pss_File": 19.5186,
+            "Pss_Anon": 28.293,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 62.8643,
+            "Pss_File": 19.665,
+            "Pss_Anon": 32.6172,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 10,
+          "control_unreclaimable_mib": 43.082,
+          "candidate_unreclaimable_mib": 38.9766,
+          "delta_unreclaimable_mib": -4.1055,
+          "control_components_mib": {
+            "Pss": 62.9824,
+            "Pss_File": 19.9004,
+            "Pss_Anon": 32.5,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 58.7578,
+            "Pss_File": 19.7812,
+            "Pss_Anon": 28.3945,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 11,
+          "control_unreclaimable_mib": 43.0703,
+          "candidate_unreclaimable_mib": 43.1211,
+          "delta_unreclaimable_mib": 0.0508,
+          "control_components_mib": {
+            "Pss": 62.6465,
+            "Pss_File": 19.5762,
+            "Pss_Anon": 32.4883,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 62.8691,
+            "Pss_File": 19.748,
+            "Pss_Anon": 32.5391,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        }
+      ]
+    },
+    "scroll-settings-nav-touchpad/closed+12s": {
+      "sample_count": 5,
+      "median_delta_unreclaimable_mib": 0.1055,
+      "original_0_5_mib_gate": "PASS",
+      "new_feature_budget_mib": null,
+      "new_feature_budget_verdict": "N/A",
+      "samples": [
+        {
+          "pair": 7,
+          "control_unreclaimable_mib": 43.1797,
+          "candidate_unreclaimable_mib": 43.3398,
+          "delta_unreclaimable_mib": 0.1602,
+          "control_components_mib": {
+            "Pss": 62.8184,
+            "Pss_File": 19.6387,
+            "Pss_Anon": 32.5977,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 62.957,
+            "Pss_File": 19.6172,
+            "Pss_Anon": 32.7578,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 8,
+          "control_unreclaimable_mib": 43.3438,
+          "candidate_unreclaimable_mib": 43.4883,
+          "delta_unreclaimable_mib": 0.1445,
+          "control_components_mib": {
+            "Pss": 63.248,
+            "Pss_File": 19.9043,
+            "Pss_Anon": 32.7617,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 63.2852,
+            "Pss_File": 19.7969,
+            "Pss_Anon": 32.9062,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 9,
+          "control_unreclaimable_mib": 43.4648,
+          "candidate_unreclaimable_mib": 39.793,
+          "delta_unreclaimable_mib": -3.6719,
+          "control_components_mib": {
+            "Pss": 62.999,
+            "Pss_File": 19.5342,
+            "Pss_Anon": 32.8828,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 59.4736,
+            "Pss_File": 19.6807,
+            "Pss_Anon": 29.2109,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 10,
+          "control_unreclaimable_mib": 43.4023,
+          "candidate_unreclaimable_mib": 43.5078,
+          "delta_unreclaimable_mib": 0.1055,
+          "control_components_mib": {
+            "Pss": 63.3145,
+            "Pss_File": 19.9121,
+            "Pss_Anon": 32.8203,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 63.3027,
+            "Pss_File": 19.7949,
+            "Pss_Anon": 32.9258,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 11,
+          "control_unreclaimable_mib": 43.4609,
+          "candidate_unreclaimable_mib": 43.418,
+          "delta_unreclaimable_mib": -0.043,
+          "control_components_mib": {
+            "Pss": 63.0537,
+            "Pss_File": 19.5928,
+            "Pss_Anon": 32.8789,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 63.1816,
+            "Pss_File": 19.7637,
+            "Pss_Anon": 32.8359,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        }
+      ]
+    },
+    "scroll-notifications-list-touchpad/closed+12s": {
+      "sample_count": 5,
+      "median_delta_unreclaimable_mib": 0.2578,
+      "original_0_5_mib_gate": "PASS",
+      "new_feature_budget_mib": null,
+      "new_feature_budget_verdict": "N/A",
+      "samples": [
+        {
+          "pair": 7,
+          "control_unreclaimable_mib": 52.7793,
+          "candidate_unreclaimable_mib": 52.3496,
+          "delta_unreclaimable_mib": -0.4297,
+          "control_components_mib": {
+            "Pss": 72.8877,
+            "Pss_File": 20.1084,
+            "Pss_Anon": 38.9844,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 72.3174,
+            "Pss_File": 19.9678,
+            "Pss_Anon": 38.5547,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 8,
+          "control_unreclaimable_mib": 53.3418,
+          "candidate_unreclaimable_mib": 52.6074,
+          "delta_unreclaimable_mib": -0.7344,
+          "control_components_mib": {
+            "Pss": 73.6973,
+            "Pss_File": 20.3555,
+            "Pss_Anon": 39.5469,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 72.9014,
+            "Pss_File": 20.2939,
+            "Pss_Anon": 38.8125,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 9,
+          "control_unreclaimable_mib": 52.8535,
+          "candidate_unreclaimable_mib": 53.3262,
+          "delta_unreclaimable_mib": 0.4727,
+          "control_components_mib": {
+            "Pss": 72.8525,
+            "Pss_File": 19.999,
+            "Pss_Anon": 39.0586,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 73.4902,
+            "Pss_File": 20.1641,
+            "Pss_Anon": 39.5312,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 10,
+          "control_unreclaimable_mib": 52.5332,
+          "candidate_unreclaimable_mib": 52.791,
+          "delta_unreclaimable_mib": 0.2578,
+          "control_components_mib": {
+            "Pss": 72.9014,
+            "Pss_File": 20.3682,
+            "Pss_Anon": 38.7383,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 73.0439,
+            "Pss_File": 20.2529,
+            "Pss_Anon": 38.9961,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 11,
+          "control_unreclaimable_mib": 52.7168,
+          "candidate_unreclaimable_mib": 53.4551,
+          "delta_unreclaimable_mib": 0.7383,
+          "control_components_mib": {
+            "Pss": 72.7559,
+            "Pss_File": 20.0391,
+            "Pss_Anon": 38.9219,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 73.71,
+            "Pss_File": 20.2549,
+            "Pss_Anon": 39.6602,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        }
+      ]
+    },
+    "scroll-notifications-popup-touchpad/closed+12s": {
+      "sample_count": 5,
+      "median_delta_unreclaimable_mib": -0.5,
+      "original_0_5_mib_gate": "PASS",
+      "new_feature_budget_mib": null,
+      "new_feature_budget_verdict": "N/A",
+      "samples": [
+        {
+          "pair": 7,
+          "control_unreclaimable_mib": 57.0996,
+          "candidate_unreclaimable_mib": 53.0176,
+          "delta_unreclaimable_mib": -4.082,
+          "control_components_mib": {
+            "Pss": 77.208,
+            "Pss_File": 20.1084,
+            "Pss_Anon": 43.3047,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 73.1006,
+            "Pss_File": 20.083,
+            "Pss_Anon": 39.2227,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 8,
+          "control_unreclaimable_mib": 57.1426,
+          "candidate_unreclaimable_mib": 56.6426,
+          "delta_unreclaimable_mib": -0.5,
+          "control_components_mib": {
+            "Pss": 77.4951,
+            "Pss_File": 20.3525,
+            "Pss_Anon": 43.3477,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 76.9365,
+            "Pss_File": 20.2939,
+            "Pss_Anon": 42.8477,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 9,
+          "control_unreclaimable_mib": 53.6465,
+          "candidate_unreclaimable_mib": 57.4824,
+          "delta_unreclaimable_mib": 3.8359,
+          "control_components_mib": {
+            "Pss": 73.6455,
+            "Pss_File": 19.999,
+            "Pss_Anon": 39.8516,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 77.6465,
+            "Pss_File": 20.1641,
+            "Pss_Anon": 43.6875,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 10,
+          "control_unreclaimable_mib": 56.7676,
+          "candidate_unreclaimable_mib": 53.1504,
+          "delta_unreclaimable_mib": -3.6172,
+          "control_components_mib": {
+            "Pss": 77.1357,
+            "Pss_File": 20.3682,
+            "Pss_Anon": 42.9727,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 73.4033,
+            "Pss_File": 20.2529,
+            "Pss_Anon": 39.3555,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 11,
+          "control_unreclaimable_mib": 56.8145,
+          "candidate_unreclaimable_mib": 57.627,
+          "delta_unreclaimable_mib": 0.8125,
+          "control_components_mib": {
+            "Pss": 76.8525,
+            "Pss_File": 20.0381,
+            "Pss_Anon": 43.0195,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 77.8818,
+            "Pss_File": 20.2549,
+            "Pss_Anon": 43.832,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        }
+      ]
+    },
+    "clipboard/idle": {
+      "sample_count": 5,
+      "median_delta_unreclaimable_mib": 0.0703,
+      "original_0_5_mib_gate": "PASS",
+      "new_feature_budget_mib": null,
+      "new_feature_budget_verdict": "N/A",
+      "samples": [
+        {
+          "pair": 7,
+          "control_unreclaimable_mib": 38.5273,
+          "candidate_unreclaimable_mib": 38.7109,
+          "delta_unreclaimable_mib": 0.1836,
+          "control_components_mib": {
+            "Pss": 58.0049,
+            "Pss_File": 19.4775,
+            "Pss_Anon": 27.9453,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 58.1221,
+            "Pss_File": 19.4111,
+            "Pss_Anon": 28.1289,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 8,
+          "control_unreclaimable_mib": 38.625,
+          "candidate_unreclaimable_mib": 38.5156,
+          "delta_unreclaimable_mib": -0.1094,
+          "control_components_mib": {
+            "Pss": 58.127,
+            "Pss_File": 19.502,
+            "Pss_Anon": 28.043,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 58.1992,
+            "Pss_File": 19.6836,
+            "Pss_Anon": 27.9336,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 9,
+          "control_unreclaimable_mib": 38.5469,
+          "candidate_unreclaimable_mib": 41.3945,
+          "delta_unreclaimable_mib": 2.8477,
+          "control_components_mib": {
+            "Pss": 58.0176,
+            "Pss_File": 19.4707,
+            "Pss_Anon": 27.9648,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 61.0732,
+            "Pss_File": 19.6787,
+            "Pss_Anon": 30.8125,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 10,
+          "control_unreclaimable_mib": 38.5742,
+          "candidate_unreclaimable_mib": 38.6445,
+          "delta_unreclaimable_mib": 0.0703,
+          "control_components_mib": {
+            "Pss": 58.1797,
+            "Pss_File": 19.6055,
+            "Pss_Anon": 27.9922,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 58.082,
+            "Pss_File": 19.4375,
+            "Pss_Anon": 28.0625,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 11,
+          "control_unreclaimable_mib": 38.5664,
+          "candidate_unreclaimable_mib": 38.6172,
+          "delta_unreclaimable_mib": 0.0508,
+          "control_components_mib": {
+            "Pss": 58.0488,
+            "Pss_File": 19.4824,
+            "Pss_Anon": 27.9844,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 58.248,
+            "Pss_File": 19.6309,
+            "Pss_Anon": 28.0352,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        }
+      ]
+    },
+    "clipboard/open": {
+      "sample_count": 5,
+      "median_delta_unreclaimable_mib": 2.1758,
+      "original_0_5_mib_gate": "FAIL",
+      "new_feature_budget_mib": 1.0,
+      "new_feature_budget_verdict": "FAIL",
+      "samples": [
+        {
+          "pair": 7,
+          "control_unreclaimable_mib": 54.4863,
+          "candidate_unreclaimable_mib": 56.9238,
+          "delta_unreclaimable_mib": 2.4375,
+          "control_components_mib": {
+            "Pss": 74.3896,
+            "Pss_File": 19.9033,
+            "Pss_Anon": 36.9023,
+            "Pss_Shmem": 17.584,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 76.751,
+            "Pss_File": 19.8271,
+            "Pss_Anon": 39.3398,
+            "Pss_Shmem": 17.584,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 8,
+          "control_unreclaimable_mib": 54.791,
+          "candidate_unreclaimable_mib": 56.7715,
+          "delta_unreclaimable_mib": 1.9805,
+          "control_components_mib": {
+            "Pss": 74.7051,
+            "Pss_File": 19.9141,
+            "Pss_Anon": 37.207,
+            "Pss_Shmem": 17.584,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 76.8506,
+            "Pss_File": 20.0791,
+            "Pss_Anon": 39.1875,
+            "Pss_Shmem": 17.584,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 9,
+          "control_unreclaimable_mib": 54.5176,
+          "candidate_unreclaimable_mib": 56.7793,
+          "delta_unreclaimable_mib": 2.2617,
+          "control_components_mib": {
+            "Pss": 74.4902,
+            "Pss_File": 19.9727,
+            "Pss_Anon": 36.9336,
+            "Pss_Shmem": 17.584,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 76.8398,
+            "Pss_File": 20.0605,
+            "Pss_Anon": 39.1953,
+            "Pss_Shmem": 17.584,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 10,
+          "control_unreclaimable_mib": 54.709,
+          "candidate_unreclaimable_mib": 56.8848,
+          "delta_unreclaimable_mib": 2.1758,
+          "control_components_mib": {
+            "Pss": 74.5576,
+            "Pss_File": 19.8486,
+            "Pss_Anon": 37.125,
+            "Pss_Shmem": 17.584,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 76.708,
+            "Pss_File": 19.8232,
+            "Pss_Anon": 39.3008,
+            "Pss_Shmem": 17.584,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 11,
+          "control_unreclaimable_mib": 54.7129,
+          "candidate_unreclaimable_mib": 56.8691,
+          "delta_unreclaimable_mib": 2.1562,
+          "control_components_mib": {
+            "Pss": 74.625,
+            "Pss_File": 19.9121,
+            "Pss_Anon": 37.1289,
+            "Pss_Shmem": 17.584,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 76.7354,
+            "Pss_File": 19.8662,
+            "Pss_Anon": 39.2852,
+            "Pss_Shmem": 17.584,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        }
+      ]
+    },
+    "clipboard/closed+12s": {
+      "sample_count": 5,
+      "median_delta_unreclaimable_mib": 0.4258,
+      "original_0_5_mib_gate": "PASS",
+      "new_feature_budget_mib": null,
+      "new_feature_budget_verdict": "N/A",
+      "samples": [
+        {
+          "pair": 7,
+          "control_unreclaimable_mib": 50.4512,
+          "candidate_unreclaimable_mib": 51.1426,
+          "delta_unreclaimable_mib": 0.6914,
+          "control_components_mib": {
+            "Pss": 70.3887,
+            "Pss_File": 19.9375,
+            "Pss_Anon": 36.6562,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 71.0039,
+            "Pss_File": 19.8613,
+            "Pss_Anon": 37.3477,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 8,
+          "control_unreclaimable_mib": 50.6465,
+          "candidate_unreclaimable_mib": 50.9473,
+          "delta_unreclaimable_mib": 0.3008,
+          "control_components_mib": {
+            "Pss": 70.5957,
+            "Pss_File": 19.9492,
+            "Pss_Anon": 36.8516,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 71.0605,
+            "Pss_File": 20.1133,
+            "Pss_Anon": 37.1523,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 9,
+          "control_unreclaimable_mib": 50.5137,
+          "candidate_unreclaimable_mib": 50.9395,
+          "delta_unreclaimable_mib": 0.4258,
+          "control_components_mib": {
+            "Pss": 70.5205,
+            "Pss_File": 20.0068,
+            "Pss_Anon": 36.7188,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 71.0352,
+            "Pss_File": 20.0957,
+            "Pss_Anon": 37.1445,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 10,
+          "control_unreclaimable_mib": 50.6035,
+          "candidate_unreclaimable_mib": 51.0371,
+          "delta_unreclaimable_mib": 0.4336,
+          "control_components_mib": {
+            "Pss": 70.4863,
+            "Pss_File": 19.8828,
+            "Pss_Anon": 36.8086,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 70.8945,
+            "Pss_File": 19.8574,
+            "Pss_Anon": 37.2422,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 11,
+          "control_unreclaimable_mib": 50.5723,
+          "candidate_unreclaimable_mib": 50.9746,
+          "delta_unreclaimable_mib": 0.4023,
+          "control_components_mib": {
+            "Pss": 70.5195,
+            "Pss_File": 19.9473,
+            "Pss_Anon": 36.7773,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 70.876,
+            "Pss_File": 19.9014,
+            "Pss_Anon": 37.1797,
+            "Pss_Shmem": 13.7949,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        }
+      ]
+    },
+    "picker/idle": {
+      "sample_count": 5,
+      "median_delta_unreclaimable_mib": -0.0273,
+      "original_0_5_mib_gate": "PASS",
+      "new_feature_budget_mib": null,
+      "new_feature_budget_verdict": "N/A",
+      "samples": [
+        {
+          "pair": 7,
+          "control_unreclaimable_mib": 38.5312,
+          "candidate_unreclaimable_mib": 38.668,
+          "delta_unreclaimable_mib": 0.1367,
+          "control_components_mib": {
+            "Pss": 58.2773,
+            "Pss_File": 19.7461,
+            "Pss_Anon": 27.9492,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 58.3438,
+            "Pss_File": 19.6758,
+            "Pss_Anon": 28.0859,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 8,
+          "control_unreclaimable_mib": 38.5234,
+          "candidate_unreclaimable_mib": 38.4961,
+          "delta_unreclaimable_mib": -0.0273,
+          "control_components_mib": {
+            "Pss": 57.9873,
+            "Pss_File": 19.4639,
+            "Pss_Anon": 27.9414,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 58.127,
+            "Pss_File": 19.6309,
+            "Pss_Anon": 27.9141,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 9,
+          "control_unreclaimable_mib": 38.3398,
+          "candidate_unreclaimable_mib": 38.4727,
+          "delta_unreclaimable_mib": 0.1328,
+          "control_components_mib": {
+            "Pss": 58.1064,
+            "Pss_File": 19.7666,
+            "Pss_Anon": 27.7578,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 57.9854,
+            "Pss_File": 19.5127,
+            "Pss_Anon": 27.8906,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 10,
+          "control_unreclaimable_mib": 40.5078,
+          "candidate_unreclaimable_mib": 38.5352,
+          "delta_unreclaimable_mib": -1.9727,
+          "control_components_mib": {
+            "Pss": 60.0029,
+            "Pss_File": 19.4951,
+            "Pss_Anon": 29.9258,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 58.2852,
+            "Pss_File": 19.75,
+            "Pss_Anon": 27.9531,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 11,
+          "control_unreclaimable_mib": 38.5938,
+          "candidate_unreclaimable_mib": 38.457,
+          "delta_unreclaimable_mib": -0.1367,
+          "control_components_mib": {
+            "Pss": 58.043,
+            "Pss_File": 19.4492,
+            "Pss_Anon": 28.0117,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 58.1846,
+            "Pss_File": 19.7275,
+            "Pss_Anon": 27.875,
+            "Pss_Shmem": 10.582,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        }
+      ]
+    },
+    "picker/open": {
+      "sample_count": 5,
+      "median_delta_unreclaimable_mib": -36.6055,
+      "original_0_5_mib_gate": "PASS",
+      "new_feature_budget_mib": null,
+      "new_feature_budget_verdict": "N/A",
+      "samples": [
+        {
+          "pair": 7,
+          "control_unreclaimable_mib": 137.5801,
+          "candidate_unreclaimable_mib": 100.9746,
+          "delta_unreclaimable_mib": -36.6055,
+          "control_components_mib": {
+            "Pss": 157.6846,
+            "Pss_File": 20.1045,
+            "Pss_Anon": 97.1445,
+            "Pss_Shmem": 40.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 120.9004,
+            "Pss_File": 19.9258,
+            "Pss_Anon": 80.5391,
+            "Pss_Shmem": 20.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 8,
+          "control_unreclaimable_mib": 137.5879,
+          "candidate_unreclaimable_mib": 100.6973,
+          "delta_unreclaimable_mib": -36.8906,
+          "control_components_mib": {
+            "Pss": 157.4434,
+            "Pss_File": 19.8555,
+            "Pss_Anon": 97.1523,
+            "Pss_Shmem": 40.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 120.6396,
+            "Pss_File": 19.9424,
+            "Pss_Anon": 80.2617,
+            "Pss_Shmem": 20.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 9,
+          "control_unreclaimable_mib": 136.2168,
+          "candidate_unreclaimable_mib": 100.9395,
+          "delta_unreclaimable_mib": -35.2773,
+          "control_components_mib": {
+            "Pss": 156.3408,
+            "Pss_File": 20.124,
+            "Pss_Anon": 95.7812,
+            "Pss_Shmem": 40.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 120.7656,
+            "Pss_File": 19.8262,
+            "Pss_Anon": 80.5039,
+            "Pss_Shmem": 20.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 10,
+          "control_unreclaimable_mib": 137.5879,
+          "candidate_unreclaimable_mib": 100.998,
+          "delta_unreclaimable_mib": -36.5898,
+          "control_components_mib": {
+            "Pss": 157.4209,
+            "Pss_File": 19.833,
+            "Pss_Anon": 97.1523,
+            "Pss_Shmem": 40.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 121.04,
+            "Pss_File": 20.042,
+            "Pss_Anon": 80.5625,
+            "Pss_Shmem": 20.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 11,
+          "control_unreclaimable_mib": 137.5527,
+          "candidate_unreclaimable_mib": 100.9395,
+          "delta_unreclaimable_mib": -36.6133,
+          "control_components_mib": {
+            "Pss": 157.2803,
+            "Pss_File": 19.7275,
+            "Pss_Anon": 97.1172,
+            "Pss_Shmem": 40.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 120.9805,
+            "Pss_File": 20.041,
+            "Pss_Anon": 80.5039,
+            "Pss_Shmem": 20.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        }
+      ]
+    },
+    "picker/closed+12s": {
+      "sample_count": 5,
+      "median_delta_unreclaimable_mib": -1.4961,
+      "original_0_5_mib_gate": "PASS",
+      "new_feature_budget_mib": null,
+      "new_feature_budget_verdict": "N/A",
+      "samples": [
+        {
+          "pair": 7,
+          "control_unreclaimable_mib": 99.752,
+          "candidate_unreclaimable_mib": 97.8887,
+          "delta_unreclaimable_mib": -1.8633,
+          "control_components_mib": {
+            "Pss": 119.8564,
+            "Pss_File": 20.1045,
+            "Pss_Anon": 79.3164,
+            "Pss_Shmem": 20.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 117.8135,
+            "Pss_File": 19.9248,
+            "Pss_Anon": 77.4531,
+            "Pss_Shmem": 20.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 8,
+          "control_unreclaimable_mib": 99.8574,
+          "candidate_unreclaimable_mib": 98.0332,
+          "delta_unreclaimable_mib": -1.8242,
+          "control_components_mib": {
+            "Pss": 119.707,
+            "Pss_File": 19.8496,
+            "Pss_Anon": 79.4219,
+            "Pss_Shmem": 20.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 117.9756,
+            "Pss_File": 19.9424,
+            "Pss_Anon": 77.5977,
+            "Pss_Shmem": 20.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 9,
+          "control_unreclaimable_mib": 99.2363,
+          "candidate_unreclaimable_mib": 98.0215,
+          "delta_unreclaimable_mib": -1.2148,
+          "control_components_mib": {
+            "Pss": 119.3594,
+            "Pss_File": 20.123,
+            "Pss_Anon": 78.8008,
+            "Pss_Shmem": 20.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 117.8477,
+            "Pss_File": 19.8262,
+            "Pss_Anon": 77.5859,
+            "Pss_Shmem": 20.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 10,
+          "control_unreclaimable_mib": 99.5918,
+          "candidate_unreclaimable_mib": 98.0957,
+          "delta_unreclaimable_mib": -1.4961,
+          "control_components_mib": {
+            "Pss": 119.4238,
+            "Pss_File": 19.832,
+            "Pss_Anon": 79.1562,
+            "Pss_Shmem": 20.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 118.1367,
+            "Pss_File": 20.041,
+            "Pss_Anon": 77.6602,
+            "Pss_Shmem": 20.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 11,
+          "control_unreclaimable_mib": 99.6113,
+          "candidate_unreclaimable_mib": 98.1504,
+          "delta_unreclaimable_mib": -1.4609,
+          "control_components_mib": {
+            "Pss": 119.3389,
+            "Pss_File": 19.7275,
+            "Pss_Anon": 79.1758,
+            "Pss_Shmem": 20.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 118.1914,
+            "Pss_File": 20.041,
+            "Pss_Anon": 77.7148,
+            "Pss_Shmem": 20.4355,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        }
+      ]
+    }
+  },
+  "separate_application_memory": {
+    "scroll-settings-content-touchpad/settings": {
+      "sample_count": 5,
+      "median_delta_unreclaimable_mib": 12.0312,
+      "status": "reported separately; not part of always-on shell gate",
+      "component_median_deltas_mib": {
+        "Pss_median_delta_mib": 12.0771,
+        "Pss_File_median_delta_mib": 0.0264,
+        "Pss_Anon_median_delta_mib": 6.8985,
+        "Pss_Shmem_median_delta_mib": 5.1524,
+        "SwapPss_median_delta_mib": 0.0,
+        "DRM_median_delta_mib": 0.0
+      },
+      "samples": [
+        {
+          "pair": 7,
+          "control_unreclaimable_mib": 33.1855,
+          "candidate_unreclaimable_mib": 45.4355,
+          "delta_unreclaimable_mib": 12.25,
+          "control_components_mib": {
+            "Pss": 42.3799,
+            "Pss_File": 9.1943,
+            "Pss_Anon": 24.3789,
+            "Pss_Shmem": 8.8066,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 54.5527,
+            "Pss_File": 9.1172,
+            "Pss_Anon": 31.4766,
+            "Pss_Shmem": 13.959,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 8,
+          "control_unreclaimable_mib": 33.3613,
+          "candidate_unreclaimable_mib": 45.3926,
+          "delta_unreclaimable_mib": 12.0312,
+          "control_components_mib": {
+            "Pss": 42.8203,
+            "Pss_File": 9.459,
+            "Pss_Anon": 24.5547,
+            "Pss_Shmem": 8.8066,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 54.792,
+            "Pss_File": 9.3994,
+            "Pss_Anon": 31.4336,
+            "Pss_Shmem": 13.959,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 9,
+          "control_unreclaimable_mib": 37.5117,
+          "candidate_unreclaimable_mib": 45.2637,
+          "delta_unreclaimable_mib": 7.752,
+          "control_components_mib": {
+            "Pss": 46.9922,
+            "Pss_File": 9.4805,
+            "Pss_Anon": 24.3008,
+            "Pss_Shmem": 13.2109,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 54.8398,
+            "Pss_File": 9.5762,
+            "Pss_Anon": 31.3047,
+            "Pss_Shmem": 13.959,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 10,
+          "control_unreclaimable_mib": 33.3262,
+          "candidate_unreclaimable_mib": 45.377,
+          "delta_unreclaimable_mib": 12.0508,
+          "control_components_mib": {
+            "Pss": 42.7256,
+            "Pss_File": 9.3994,
+            "Pss_Anon": 24.5195,
+            "Pss_Shmem": 8.8066,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 54.8027,
+            "Pss_File": 9.4258,
+            "Pss_Anon": 31.418,
+            "Pss_Shmem": 13.959,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 11,
+          "control_unreclaimable_mib": 33.3379,
+          "candidate_unreclaimable_mib": 45.3652,
+          "delta_unreclaimable_mib": 12.0273,
+          "control_components_mib": {
+            "Pss": 42.583,
+            "Pss_File": 9.2451,
+            "Pss_Anon": 24.5312,
+            "Pss_Shmem": 8.8066,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 54.6865,
+            "Pss_File": 9.3213,
+            "Pss_Anon": 31.4062,
+            "Pss_Shmem": 13.959,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        }
+      ]
+    },
+    "scroll-settings-nav-touchpad/settings": {
+      "sample_count": 5,
+      "median_delta_unreclaimable_mib": 7.3242,
+      "status": "reported separately; not part of always-on shell gate",
+      "component_median_deltas_mib": {
+        "Pss_median_delta_mib": 7.3653,
+        "Pss_File_median_delta_mib": 0.041,
+        "Pss_Anon_median_delta_mib": 2.0781,
+        "Pss_Shmem_median_delta_mib": 5.2461,
+        "SwapPss_median_delta_mib": 0.0,
+        "DRM_median_delta_mib": 0.0
+      },
+      "samples": [
+        {
+          "pair": 7,
+          "control_unreclaimable_mib": 32.916,
+          "candidate_unreclaimable_mib": 40.5801,
+          "delta_unreclaimable_mib": 7.6641,
+          "control_components_mib": {
+            "Pss": 42.5762,
+            "Pss_File": 9.6602,
+            "Pss_Anon": 24.1094,
+            "Pss_Shmem": 8.8066,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 50.2705,
+            "Pss_File": 9.6904,
+            "Pss_Anon": 26.5273,
+            "Pss_Shmem": 14.0527,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 8,
+          "control_unreclaimable_mib": 33.1152,
+          "candidate_unreclaimable_mib": 40.6777,
+          "delta_unreclaimable_mib": 7.5625,
+          "control_components_mib": {
+            "Pss": 42.833,
+            "Pss_File": 9.7178,
+            "Pss_Anon": 24.3086,
+            "Pss_Shmem": 8.8066,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 50.5283,
+            "Pss_File": 9.8506,
+            "Pss_Anon": 26.625,
+            "Pss_Shmem": 14.0527,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 9,
+          "control_unreclaimable_mib": 33.1191,
+          "candidate_unreclaimable_mib": 40.4434,
+          "delta_unreclaimable_mib": 7.3242,
+          "control_components_mib": {
+            "Pss": 42.7822,
+            "Pss_File": 9.6631,
+            "Pss_Anon": 24.3125,
+            "Pss_Shmem": 8.8066,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 50.1475,
+            "Pss_File": 9.7041,
+            "Pss_Anon": 26.3906,
+            "Pss_Shmem": 14.0527,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 10,
+          "control_unreclaimable_mib": 33.3418,
+          "candidate_unreclaimable_mib": 40.4785,
+          "delta_unreclaimable_mib": 7.1367,
+          "control_components_mib": {
+            "Pss": 42.7988,
+            "Pss_File": 9.457,
+            "Pss_Anon": 24.5352,
+            "Pss_Shmem": 8.8066,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 49.8984,
+            "Pss_File": 9.4199,
+            "Pss_Anon": 26.4258,
+            "Pss_Shmem": 14.0527,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        },
+        {
+          "pair": 11,
+          "control_unreclaimable_mib": 33.3652,
+          "candidate_unreclaimable_mib": 40.5098,
+          "delta_unreclaimable_mib": 7.1445,
+          "control_components_mib": {
+            "Pss": 43.0264,
+            "Pss_File": 9.6611,
+            "Pss_Anon": 24.5586,
+            "Pss_Shmem": 8.8066,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          },
+          "candidate_components_mib": {
+            "Pss": 50.2656,
+            "Pss_File": 9.7559,
+            "Pss_Anon": 26.457,
+            "Pss_Shmem": 14.0527,
+            "SwapPss": 0.0,
+            "DRM": 0.0
+          }
+        }
+      ]
+    }
+  },
+  "limitations": [
+    "The result measures shell/application process memory; daemon/provider totals were not measured.",
+    "QML Updates exposes a cached count only; no matched package-list scrolling fixture was available.",
+    "Timing and scanout conclusions are reported in the scrolling evidence, not inferred from these memory captures."
+  ]
+}

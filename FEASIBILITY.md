@@ -5,14 +5,16 @@
 One source-aware policy replaces amplified finger input and queued wheel reversal.
 Virtual lists, retained poses and viewport damage reduce repeated CPU work.
 Real finger-stop motion and cancellation pass; most latency/cadence targets still fail.
-Full remote CI passes; five-pair CPU memory validation is in progress.
+Full remote CI passes; five-pair CPU memory fails history/Clipboard open budgets.
 
 | Matched private probes, scale 1.5 | Before | Candidate |
 | --- | ---: | ---: |
-| Bounded Settings finger render p95 / reversal, ms | 15.79 / 45.13 | 6.78 / 29.25 (reversal fails) |
+| AI transcript finger render p95 / reversal, ms | stuck at bottom | 2.09 / 49.22 (reversal fails) |
 | Settings side-tab wheel render p95, 3 repeats ms | 15.59–16.15 | 1.29–1.51 |
 | Rapid notification wheel reversal, 3 repeats ms | 63.34–63.91 | 19.08–19.56 (fails) |
 | Direct-Labwc finger-stop reversal, ms | 16.41 | 11.35 (fails) |
+| History / Clipboard open median unreclaimable Δ, MiB | — | +1.484 / +2.176 (both fail 1 MiB) |
+| Eight-image picker open median unreclaimable Δ, MiB | — | −36.606 |
 | GL80 finger / reopened wheel render p95, ms | setup fails | 0.86 / 0.74 |
 | GL80 reversal finger / wheel, ms | unavailable | 281.93 / 559.72 (fails) |
 
