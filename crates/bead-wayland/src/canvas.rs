@@ -646,10 +646,10 @@ impl App {
                         eprintln!("CANVAS_ERROR {error}");
                         return;
                     }
-                    if canvas.initial_bounds.is_some() {
-                        if let Err(error) = self.canvas_map_bounds(key, surface_bounds) {
-                            eprintln!("CANVAS_ERROR {error}");
-                        }
+                    if canvas.initial_bounds.is_some()
+                        && let Err(error) = self.canvas_map_bounds(key, surface_bounds)
+                    {
+                        eprintln!("CANVAS_ERROR {error}");
                     }
                     return;
                 }
