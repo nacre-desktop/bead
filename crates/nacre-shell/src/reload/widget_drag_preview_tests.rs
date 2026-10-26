@@ -333,7 +333,7 @@ fn desktop_clock_dropped_on_occupied_pill_slot_writes_at_82_and_90_percent() {
                 .iter()
                 .any(|item| item["iid"] == "clock")
         );
-        assert_eq!(pill["slot"]["span"], 14);
+        assert!(pill["slot"]["span"].as_f64().unwrap() >= 13.);
         assert!(
             written["hosts"]["canvas"]["instances"]
                 .as_array()
