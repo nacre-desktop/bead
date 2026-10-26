@@ -1,0 +1,1152 @@
+{
+  "pairs": 5,
+  "backend": "cpu",
+  "geometry": {
+    "name": "winit",
+    "mode": [
+      2880,
+      1800
+    ],
+    "scale": 1.5,
+    "logical": [
+      1920,
+      1200
+    ]
+  },
+  "phases": {
+    "cold": {
+      "control_first_presented_ms": {
+        "median": 61.988861,
+        "min": 61.499063,
+        "max": 62.118471,
+        "samples": [
+          61.499063,
+          62.118471,
+          62.083882,
+          61.721086,
+          61.988861
+        ]
+      },
+      "candidate_first_presented_ms": {
+        "median": 62.409236,
+        "min": 61.166998,
+        "max": 64.196217,
+        "samples": [
+          62.409236,
+          64.196217,
+          61.166998,
+          62.927798,
+          62.2076
+        ]
+      },
+      "paired_first_presented_delta_ms": {
+        "median": 0.9101730000000003,
+        "min": -0.9168840000000031,
+        "max": 2.0777460000000048,
+        "samples": [
+          0.9101730000000003,
+          2.0777460000000048,
+          -0.9168840000000031,
+          1.2067120000000031,
+          0.21873899999999935
+        ]
+      },
+      "control_all_icons_ms": {
+        "median": 190.034803,
+        "min": 174.759924,
+        "max": 190.466542,
+        "samples": [
+          189.633877,
+          190.466542,
+          174.759924,
+          190.034803,
+          190.12637
+        ]
+      },
+      "candidate_all_icons_ms": {
+        "median": 62.409236,
+        "min": 61.166998,
+        "max": 64.196217,
+        "samples": [
+          62.409236,
+          64.196217,
+          61.166998,
+          62.927798,
+          62.2076
+        ]
+      },
+      "control_missing_presentations": [
+        7,
+        6,
+        6,
+        7,
+        7
+      ],
+      "candidate_missing_presentations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_total_presentations": [
+        20,
+        20,
+        19,
+        20,
+        20
+      ],
+      "candidate_prewarm": [
+        {
+          "icons": "64",
+          "raster_success": "64",
+          "result_rasters": "64",
+          "fallback_or_error": "0",
+          "query_errors": "0",
+          "raster_bytes": "1283012",
+          "charged_bytes": "1352568",
+          "limit_bytes": "1572864",
+          "scale": "1.500"
+        },
+        {
+          "icons": "64",
+          "raster_success": "64",
+          "result_rasters": "64",
+          "fallback_or_error": "0",
+          "query_errors": "0",
+          "raster_bytes": "1283012",
+          "charged_bytes": "1352568",
+          "limit_bytes": "1572864",
+          "scale": "1.500"
+        },
+        {
+          "icons": "64",
+          "raster_success": "64",
+          "result_rasters": "64",
+          "fallback_or_error": "0",
+          "query_errors": "0",
+          "raster_bytes": "1283012",
+          "charged_bytes": "1352568",
+          "limit_bytes": "1572864",
+          "scale": "1.500"
+        },
+        {
+          "icons": "64",
+          "raster_success": "64",
+          "result_rasters": "64",
+          "fallback_or_error": "0",
+          "query_errors": "0",
+          "raster_bytes": "1283012",
+          "charged_bytes": "1352568",
+          "limit_bytes": "1572864",
+          "scale": "1.500"
+        },
+        {
+          "icons": "64",
+          "raster_success": "64",
+          "result_rasters": "64",
+          "fallback_or_error": "0",
+          "query_errors": "0",
+          "raster_bytes": "1283012",
+          "charged_bytes": "1352568",
+          "limit_bytes": "1572864",
+          "scale": "1.500"
+        }
+      ]
+    },
+    "warm": {
+      "control_first_presented_ms": {
+        "median": 14.732159,
+        "min": 14.428103,
+        "max": 15.085663,
+        "samples": [
+          15.085663,
+          14.428103,
+          14.636798,
+          14.732159,
+          14.86574
+        ]
+      },
+      "candidate_first_presented_ms": {
+        "median": 14.856696,
+        "min": 14.59072,
+        "max": 15.053268,
+        "samples": [
+          14.753416,
+          14.856696,
+          15.053268,
+          14.59072,
+          14.94757
+        ]
+      },
+      "paired_first_presented_delta_ms": {
+        "median": 0.08183000000000007,
+        "min": -0.3322470000000006,
+        "max": 0.42859299999999934,
+        "samples": [
+          -0.3322470000000006,
+          0.42859299999999934,
+          0.41646999999999856,
+          -0.1414390000000001,
+          0.08183000000000007
+        ]
+      },
+      "control_all_icons_ms": {
+        "median": 14.732159,
+        "min": 14.428103,
+        "max": 15.085663,
+        "samples": [
+          15.085663,
+          14.428103,
+          14.636798,
+          14.732159,
+          14.86574
+        ]
+      },
+      "candidate_all_icons_ms": {
+        "median": 14.856696,
+        "min": 14.59072,
+        "max": 15.053268,
+        "samples": [
+          14.753416,
+          14.856696,
+          15.053268,
+          14.59072,
+          14.94757
+        ]
+      },
+      "control_missing_presentations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_missing_presentations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_total_presentations": [
+        19,
+        19,
+        19,
+        19,
+        19
+      ],
+      "candidate_prewarm": [
+        {
+          "icons": "64",
+          "raster_success": "64",
+          "result_rasters": "64",
+          "fallback_or_error": "0",
+          "query_errors": "0",
+          "raster_bytes": "1283012",
+          "charged_bytes": "1352568",
+          "limit_bytes": "1572864",
+          "scale": "1.500"
+        },
+        {
+          "icons": "64",
+          "raster_success": "64",
+          "result_rasters": "64",
+          "fallback_or_error": "0",
+          "query_errors": "0",
+          "raster_bytes": "1283012",
+          "charged_bytes": "1352568",
+          "limit_bytes": "1572864",
+          "scale": "1.500"
+        },
+        {
+          "icons": "64",
+          "raster_success": "64",
+          "result_rasters": "64",
+          "fallback_or_error": "0",
+          "query_errors": "0",
+          "raster_bytes": "1283012",
+          "charged_bytes": "1352568",
+          "limit_bytes": "1572864",
+          "scale": "1.500"
+        },
+        {
+          "icons": "64",
+          "raster_success": "64",
+          "result_rasters": "64",
+          "fallback_or_error": "0",
+          "query_errors": "0",
+          "raster_bytes": "1283012",
+          "charged_bytes": "1352568",
+          "limit_bytes": "1572864",
+          "scale": "1.500"
+        },
+        {
+          "icons": "64",
+          "raster_success": "64",
+          "result_rasters": "64",
+          "fallback_or_error": "0",
+          "query_errors": "0",
+          "raster_bytes": "1283012",
+          "charged_bytes": "1352568",
+          "limit_bytes": "1572864",
+          "scale": "1.500"
+        }
+      ]
+    },
+    "expired": {
+      "control_first_presented_ms": {
+        "median": 59.03386,
+        "min": 58.662234,
+        "max": 59.680447,
+        "samples": [
+          58.662234,
+          59.03386,
+          59.680447,
+          59.24716,
+          59.007074
+        ]
+      },
+      "candidate_first_presented_ms": {
+        "median": 62.94399,
+        "min": 61.541671,
+        "max": 66.319787,
+        "samples": [
+          62.007473,
+          65.509613,
+          61.541671,
+          66.319787,
+          62.94399
+        ]
+      },
+      "paired_first_presented_delta_ms": {
+        "median": 3.9369159999999965,
+        "min": 1.861224,
+        "max": 7.072627000000004,
+        "samples": [
+          3.3452389999999994,
+          6.4757530000000045,
+          1.861224,
+          7.072627000000004,
+          3.9369159999999965
+        ]
+      },
+      "control_all_icons_ms": {
+        "median": 91.282998,
+        "min": 90.709719,
+        "max": 107.072661,
+        "samples": [
+          90.709719,
+          107.072661,
+          91.728654,
+          91.282998,
+          91.055884
+        ]
+      },
+      "candidate_all_icons_ms": {
+        "median": 62.94399,
+        "min": 61.541671,
+        "max": 66.319787,
+        "samples": [
+          62.007473,
+          65.509613,
+          61.541671,
+          66.319787,
+          62.94399
+        ]
+      },
+      "control_missing_presentations": [
+        1,
+        2,
+        1,
+        1,
+        1
+      ],
+      "candidate_missing_presentations": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidate_total_presentations": [
+        20,
+        20,
+        20,
+        20,
+        20
+      ],
+      "candidate_prewarm": [
+        {
+          "icons": "64",
+          "raster_success": "64",
+          "result_rasters": "64",
+          "fallback_or_error": "0",
+          "query_errors": "0",
+          "raster_bytes": "1283012",
+          "charged_bytes": "1352568",
+          "limit_bytes": "1572864",
+          "scale": "1.500"
+        },
+        {
+          "icons": "64",
+          "raster_success": "64",
+          "result_rasters": "64",
+          "fallback_or_error": "0",
+          "query_errors": "0",
+          "raster_bytes": "1283012",
+          "charged_bytes": "1352568",
+          "limit_bytes": "1572864",
+          "scale": "1.500"
+        },
+        {
+          "icons": "64",
+          "raster_success": "64",
+          "result_rasters": "64",
+          "fallback_or_error": "0",
+          "query_errors": "0",
+          "raster_bytes": "1283012",
+          "charged_bytes": "1352568",
+          "limit_bytes": "1572864",
+          "scale": "1.500"
+        },
+        {
+          "icons": "64",
+          "raster_success": "64",
+          "result_rasters": "64",
+          "fallback_or_error": "0",
+          "query_errors": "0",
+          "raster_bytes": "1283012",
+          "charged_bytes": "1352568",
+          "limit_bytes": "1572864",
+          "scale": "1.500"
+        },
+        {
+          "icons": "64",
+          "raster_success": "64",
+          "result_rasters": "64",
+          "fallback_or_error": "0",
+          "query_errors": "0",
+          "raster_bytes": "1283012",
+          "charged_bytes": "1352568",
+          "limit_bytes": "1572864",
+          "scale": "1.500"
+        }
+      ]
+    }
+  },
+  "memory_mib": {
+    "idle": {
+      "control_unreclaimable": {
+        "median": 31.634765625,
+        "min": 27.005859375,
+        "max": 31.998046875,
+        "samples": [
+          27.005859375,
+          31.998046875,
+          31.697265625,
+          27.251953125,
+          31.634765625
+        ]
+      },
+      "candidate_unreclaimable": {
+        "median": 33.396484375,
+        "min": 33.287109375,
+        "max": 34.947265625,
+        "samples": [
+          33.607421875,
+          33.396484375,
+          34.947265625,
+          33.287109375,
+          33.357421875
+        ]
+      },
+      "paired_unreclaimable_delta": {
+        "median": 3.25,
+        "min": 1.3984375,
+        "max": 6.6015625,
+        "samples": [
+          6.6015625,
+          1.3984375,
+          3.25,
+          6.03515625,
+          1.72265625
+        ]
+      },
+      "paired_anon_delta": {
+        "median": 2.73828125,
+        "min": 1.72265625,
+        "max": 6.6015625,
+        "samples": [
+          6.6015625,
+          1.91015625,
+          2.73828125,
+          6.03515625,
+          1.72265625
+        ]
+      },
+      "paired_shmem_delta": {
+        "median": 0.0,
+        "min": -0.51171875,
+        "max": 0.51171875,
+        "samples": [
+          0.0,
+          -0.51171875,
+          0.51171875,
+          0.0,
+          0.0
+        ]
+      },
+      "paired_file_pss_delta_info": {
+        "median": 0.869140625,
+        "min": 0.673828125,
+        "max": 0.9287109375,
+        "samples": [
+          0.869140625,
+          0.7685546875,
+          0.8974609375,
+          0.9287109375,
+          0.673828125
+        ]
+      },
+      "drm_kib": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "swap_pss_kib": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "cold_open": {
+      "control_unreclaimable": {
+        "median": 48.79296875,
+        "min": 43.03125,
+        "max": 49.16015625,
+        "samples": [
+          43.03125,
+          48.91796875,
+          48.79296875,
+          44.17578125,
+          49.16015625
+        ]
+      },
+      "candidate_unreclaimable": {
+        "median": 50.80859375,
+        "min": 50.29296875,
+        "max": 51.0703125,
+        "samples": [
+          51.0703125,
+          50.80859375,
+          50.78515625,
+          50.83203125,
+          50.29296875
+        ]
+      },
+      "paired_unreclaimable_delta": {
+        "median": 1.9921875,
+        "min": 1.1328125,
+        "max": 8.0390625,
+        "samples": [
+          8.0390625,
+          1.890625,
+          1.9921875,
+          6.65625,
+          1.1328125
+        ]
+      },
+      "paired_anon_delta": {
+        "median": 1.9921875,
+        "min": 1.1328125,
+        "max": 8.0390625,
+        "samples": [
+          8.0390625,
+          1.77734375,
+          1.9921875,
+          6.65625,
+          1.1328125
+        ]
+      },
+      "paired_shmem_delta": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.11328125,
+        "samples": [
+          0.0,
+          0.11328125,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "paired_file_pss_delta_info": {
+        "median": 0.6826171875,
+        "min": 0.4921875,
+        "max": 0.6875,
+        "samples": [
+          0.6865234375,
+          0.6875,
+          0.6826171875,
+          0.623046875,
+          0.4921875
+        ]
+      },
+      "drm_kib": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "swap_pss_kib": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "cold_closed": {
+      "control_unreclaimable": {
+        "median": 45.087890625,
+        "min": 44.509765625,
+        "max": 46.794921875,
+        "samples": [
+          44.541015625,
+          46.279296875,
+          45.087890625,
+          44.509765625,
+          46.794921875
+        ]
+      },
+      "candidate_unreclaimable": {
+        "median": 48.103515625,
+        "min": 47.228515625,
+        "max": 48.294921875,
+        "samples": [
+          48.158203125,
+          48.294921875,
+          48.025390625,
+          48.103515625,
+          47.228515625
+        ]
+      },
+      "paired_unreclaimable_delta": {
+        "median": 2.9375,
+        "min": 0.43359375,
+        "max": 3.6171875,
+        "samples": [
+          3.6171875,
+          2.015625,
+          2.9375,
+          3.59375,
+          0.43359375
+        ]
+      },
+      "paired_anon_delta": {
+        "median": 2.9375,
+        "min": 0.43359375,
+        "max": 3.6171875,
+        "samples": [
+          3.6171875,
+          2.015625,
+          2.9375,
+          3.59375,
+          0.43359375
+        ]
+      },
+      "paired_shmem_delta": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "samples": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "paired_file_pss_delta_info": {
+        "median": 0.68359375,
+        "min": 0.4921875,
+        "max": 0.6875,
+        "samples": [
+          0.6875,
+          0.6875,
+          0.68359375,
+          0.6240234375,
+          0.4921875
+        ]
+      },
+      "drm_kib": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "swap_pss_kib": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "warm_open": {
+      "control_unreclaimable": {
+        "median": 45.9140625,
+        "min": 45.0390625,
+        "max": 47.234375,
+        "samples": [
+          45.0390625,
+          47.08203125,
+          45.9140625,
+          45.234375,
+          47.234375
+        ]
+      },
+      "candidate_unreclaimable": {
+        "median": 49.0,
+        "min": 48.12890625,
+        "max": 49.1640625,
+        "samples": [
+          49.1640625,
+          48.94140625,
+          49.0,
+          49.00390625,
+          48.12890625
+        ]
+      },
+      "paired_unreclaimable_delta": {
+        "median": 3.0859375,
+        "min": 0.89453125,
+        "max": 4.125,
+        "samples": [
+          4.125,
+          1.859375,
+          3.0859375,
+          3.76953125,
+          0.89453125
+        ]
+      },
+      "paired_anon_delta": {
+        "median": 3.0859375,
+        "min": 0.89453125,
+        "max": 4.125,
+        "samples": [
+          4.125,
+          1.859375,
+          3.0859375,
+          3.76953125,
+          0.89453125
+        ]
+      },
+      "paired_shmem_delta": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "samples": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "paired_file_pss_delta_info": {
+        "median": 0.6826171875,
+        "min": 0.4912109375,
+        "max": 0.6875,
+        "samples": [
+          0.6865234375,
+          0.6875,
+          0.6826171875,
+          0.623046875,
+          0.4912109375
+        ]
+      },
+      "drm_kib": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "swap_pss_kib": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "warm_closed": {
+      "control_unreclaimable": {
+        "median": 45.962890625,
+        "min": 45.388671875,
+        "max": 48.474609375,
+        "samples": [
+          45.388671875,
+          47.693359375,
+          45.962890625,
+          45.447265625,
+          48.474609375
+        ]
+      },
+      "candidate_unreclaimable": {
+        "median": 49.189453125,
+        "min": 48.138671875,
+        "max": 49.908203125,
+        "samples": [
+          49.123046875,
+          49.189453125,
+          49.904296875,
+          49.908203125,
+          48.138671875
+        ]
+      },
+      "paired_unreclaimable_delta": {
+        "median": 3.734375,
+        "min": -0.3359375,
+        "max": 4.4609375,
+        "samples": [
+          3.734375,
+          1.49609375,
+          3.94140625,
+          4.4609375,
+          -0.3359375
+        ]
+      },
+      "paired_anon_delta": {
+        "median": 3.734375,
+        "min": -0.3359375,
+        "max": 4.4609375,
+        "samples": [
+          3.734375,
+          1.49609375,
+          3.94140625,
+          4.4609375,
+          -0.3359375
+        ]
+      },
+      "paired_shmem_delta": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "samples": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "paired_file_pss_delta_info": {
+        "median": 0.6767578125,
+        "min": 0.4912109375,
+        "max": 0.693359375,
+        "samples": [
+          0.693359375,
+          0.6875,
+          0.6767578125,
+          0.623046875,
+          0.4912109375
+        ]
+      },
+      "drm_kib": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "swap_pss_kib": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "expired_closed": {
+      "control_unreclaimable": {
+        "median": 46.064453125,
+        "min": 45.919921875,
+        "max": 47.048828125,
+        "samples": [
+          45.919921875,
+          46.353515625,
+          46.064453125,
+          45.962890625,
+          47.048828125
+        ]
+      },
+      "candidate_unreclaimable": {
+        "median": 46.837890625,
+        "min": 46.158203125,
+        "max": 47.658203125,
+        "samples": [
+          46.849609375,
+          46.548828125,
+          47.658203125,
+          46.158203125,
+          46.837890625
+        ]
+      },
+      "paired_unreclaimable_delta": {
+        "median": 0.1953125,
+        "min": -0.2109375,
+        "max": 1.59375,
+        "samples": [
+          0.9296875,
+          0.1953125,
+          1.59375,
+          0.1953125,
+          -0.2109375
+        ]
+      },
+      "paired_anon_delta": {
+        "median": 0.1953125,
+        "min": -0.2109375,
+        "max": 1.59375,
+        "samples": [
+          0.9296875,
+          0.1953125,
+          1.59375,
+          0.1953125,
+          -0.2109375
+        ]
+      },
+      "paired_shmem_delta": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "samples": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "paired_file_pss_delta_info": {
+        "median": 0.5517578125,
+        "min": -0.49609375,
+        "max": 0.6826171875,
+        "samples": [
+          0.5517578125,
+          0.5576171875,
+          0.6826171875,
+          -0.49609375,
+          0.498046875
+        ]
+      },
+      "drm_kib": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "swap_pss_kib": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "expired_open": {
+      "control_unreclaimable": {
+        "median": 45.6328125,
+        "min": 45.34765625,
+        "max": 47.44921875,
+        "samples": [
+          45.34765625,
+          45.6171875,
+          45.6328125,
+          47.44921875,
+          45.96484375
+        ]
+      },
+      "candidate_unreclaimable": {
+        "median": 46.1953125,
+        "min": 45.62109375,
+        "max": 46.75,
+        "samples": [
+          46.47265625,
+          45.97265625,
+          46.75,
+          45.62109375,
+          46.1953125
+        ]
+      },
+      "paired_unreclaimable_delta": {
+        "median": 0.35546875,
+        "min": -1.828125,
+        "max": 1.125,
+        "samples": [
+          1.125,
+          0.35546875,
+          1.1171875,
+          -1.828125,
+          0.23046875
+        ]
+      },
+      "paired_anon_delta": {
+        "median": 0.35546875,
+        "min": -1.12890625,
+        "max": 1.125,
+        "samples": [
+          1.125,
+          0.35546875,
+          1.1171875,
+          -1.12890625,
+          0.23046875
+        ]
+      },
+      "paired_shmem_delta": {
+        "median": 0.0,
+        "min": -0.69921875,
+        "max": 0.0,
+        "samples": [
+          0.0,
+          0.0,
+          0.0,
+          -0.69921875,
+          0.0
+        ]
+      },
+      "paired_file_pss_delta_info": {
+        "median": -0.451171875,
+        "min": -0.556640625,
+        "max": -0.3486328125,
+        "samples": [
+          -0.451171875,
+          -0.4423828125,
+          -0.3486328125,
+          -0.49609375,
+          -0.556640625
+        ]
+      },
+      "drm_kib": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "swap_pss_kib": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "first_key_cpu_ms": {
+    "control": {
+      "median": 3.656208,
+      "min": 3.233004,
+      "max": 3.735188,
+      "samples": [
+        3.618877,
+        3.735188,
+        3.233004,
+        3.656208,
+        3.671049
+      ]
+    },
+    "candidate": {
+      "median": 3.655996,
+      "min": 3.210636,
+      "max": 3.684838,
+      "samples": [
+        3.673746,
+        3.655996,
+        3.318404,
+        3.684838,
+        3.210636
+      ]
+    }
+  }
+}

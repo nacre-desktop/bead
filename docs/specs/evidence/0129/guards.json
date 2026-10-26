@@ -1,0 +1,222 @@
+[
+  {
+    "arm": "control",
+    "pair": 0,
+    "generation_loads": {
+      "cold": 1,
+      "warm": 0,
+      "expired": 1
+    },
+    "status": "complete",
+    "capture_returncode": 0,
+    "scope_returncode": 0,
+    "containment": true,
+    "oom": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "watchdog_kinds": [
+      "memory"
+    ],
+    "swap_used_before_kib": 0,
+    "host_swap_in_pages": 0
+  },
+  {
+    "arm": "candidate",
+    "pair": 0,
+    "generation_loads": {
+      "cold": 1,
+      "warm": 0,
+      "expired": 1
+    },
+    "status": "complete",
+    "capture_returncode": 0,
+    "scope_returncode": 0,
+    "containment": true,
+    "oom": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "watchdog_kinds": [
+      "memory"
+    ],
+    "swap_used_before_kib": 0,
+    "host_swap_in_pages": 0
+  },
+  {
+    "arm": "control",
+    "pair": 1,
+    "generation_loads": {
+      "cold": 1,
+      "warm": 0,
+      "expired": 1
+    },
+    "status": "complete",
+    "capture_returncode": 0,
+    "scope_returncode": 0,
+    "containment": true,
+    "oom": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "watchdog_kinds": [
+      "memory"
+    ],
+    "swap_used_before_kib": 0,
+    "host_swap_in_pages": 0
+  },
+  {
+    "arm": "candidate",
+    "pair": 1,
+    "generation_loads": {
+      "cold": 1,
+      "warm": 0,
+      "expired": 1
+    },
+    "status": "complete",
+    "capture_returncode": 0,
+    "scope_returncode": 0,
+    "containment": true,
+    "oom": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "watchdog_kinds": [
+      "memory"
+    ],
+    "swap_used_before_kib": 0,
+    "host_swap_in_pages": 0
+  },
+  {
+    "arm": "control",
+    "pair": 2,
+    "generation_loads": {
+      "cold": 1,
+      "warm": 0,
+      "expired": 1
+    },
+    "status": "complete",
+    "capture_returncode": 0,
+    "scope_returncode": 0,
+    "containment": true,
+    "oom": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "watchdog_kinds": [
+      "memory"
+    ],
+    "swap_used_before_kib": 0,
+    "host_swap_in_pages": 0
+  },
+  {
+    "arm": "candidate",
+    "pair": 2,
+    "generation_loads": {
+      "cold": 1,
+      "warm": 0,
+      "expired": 1
+    },
+    "status": "complete",
+    "capture_returncode": 0,
+    "scope_returncode": 0,
+    "containment": true,
+    "oom": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "watchdog_kinds": [
+      "memory"
+    ],
+    "swap_used_before_kib": 0,
+    "host_swap_in_pages": 0
+  },
+  {
+    "arm": "control",
+    "pair": 3,
+    "generation_loads": {
+      "cold": 1,
+      "warm": 0,
+      "expired": 1
+    },
+    "status": "complete",
+    "capture_returncode": 0,
+    "scope_returncode": 0,
+    "containment": true,
+    "oom": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "watchdog_kinds": [
+      "memory"
+    ],
+    "swap_used_before_kib": 0,
+    "host_swap_in_pages": 0
+  },
+  {
+    "arm": "candidate",
+    "pair": 3,
+    "generation_loads": {
+      "cold": 1,
+      "warm": 0,
+      "expired": 1
+    },
+    "status": "complete",
+    "capture_returncode": 0,
+    "scope_returncode": 0,
+    "containment": true,
+    "oom": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "watchdog_kinds": [
+      "memory"
+    ],
+    "swap_used_before_kib": 0,
+    "host_swap_in_pages": 0
+  },
+  {
+    "arm": "control",
+    "pair": 4,
+    "generation_loads": {
+      "cold": 1,
+      "warm": 0,
+      "expired": 1
+    },
+    "status": "complete",
+    "capture_returncode": 0,
+    "scope_returncode": 0,
+    "containment": true,
+    "oom": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "watchdog_kinds": [
+      "memory"
+    ],
+    "swap_used_before_kib": 0,
+    "host_swap_in_pages": 0
+  },
+  {
+    "arm": "candidate",
+    "pair": 4,
+    "generation_loads": {
+      "cold": 1,
+      "warm": 0,
+      "expired": 1
+    },
+    "status": "complete",
+    "capture_returncode": 0,
+    "scope_returncode": 0,
+    "containment": true,
+    "oom": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "watchdog_kinds": [
+      "memory"
+    ],
+    "swap_used_before_kib": 0,
+    "host_swap_in_pages": 0
+  }
+]

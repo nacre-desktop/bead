@@ -1,0 +1,298 @@
+{
+  "scope": "first-key presented echo versus final non-pending search results; UI CPU excludes daemon CPU",
+  "pairs": [
+    {
+      "pair": 0,
+      "control": {
+        "status": "ok",
+        "echo": {
+          "wall_ms": 3.887608,
+          "ui_cpu_ms": 3.534628,
+          "rows": 12.0,
+          "update": 4
+        },
+        "results_ready": {
+          "wall_ms": 24.923827,
+          "ui_cpu_ms": 12.297619,
+          "rows": 64.0,
+          "update": 5
+        },
+        "distinct_updates": true
+      },
+      "candidate": {
+        "status": "ok",
+        "echo": {
+          "wall_ms": 4.082908,
+          "ui_cpu_ms": 3.686637,
+          "rows": 12.0,
+          "update": 4
+        },
+        "results_ready": {
+          "wall_ms": 22.099119,
+          "ui_cpu_ms": 10.955522,
+          "rows": 64.0,
+          "update": 5
+        },
+        "distinct_updates": true
+      }
+    },
+    {
+      "pair": 1,
+      "control": {
+        "status": "ok",
+        "echo": {
+          "wall_ms": 3.50622,
+          "ui_cpu_ms": 3.128423,
+          "rows": 12.0,
+          "update": 4
+        },
+        "results_ready": {
+          "wall_ms": 23.645319,
+          "ui_cpu_ms": 11.573303,
+          "rows": 64.0,
+          "update": 5
+        },
+        "distinct_updates": true
+      },
+      "candidate": {
+        "status": "ok",
+        "echo": {
+          "wall_ms": 4.124008,
+          "ui_cpu_ms": 3.703377,
+          "rows": 12.0,
+          "update": 4
+        },
+        "results_ready": {
+          "wall_ms": 22.448523,
+          "ui_cpu_ms": 10.7691,
+          "rows": 64.0,
+          "update": 5
+        },
+        "distinct_updates": true
+      }
+    },
+    {
+      "pair": 2,
+      "control": {
+        "status": "ok",
+        "echo": {
+          "wall_ms": 3.588897,
+          "ui_cpu_ms": 3.207976,
+          "rows": 12.0,
+          "update": 5
+        },
+        "results_ready": {
+          "wall_ms": 22.556412,
+          "ui_cpu_ms": 11.450136,
+          "rows": 64.0,
+          "update": 6
+        },
+        "distinct_updates": true
+      },
+      "candidate": {
+        "status": "ok",
+        "echo": {
+          "wall_ms": 3.959148,
+          "ui_cpu_ms": 3.584145,
+          "rows": 12.0,
+          "update": 4
+        },
+        "results_ready": {
+          "wall_ms": 22.59829,
+          "ui_cpu_ms": 10.916889,
+          "rows": 64.0,
+          "update": 5
+        },
+        "distinct_updates": true
+      }
+    },
+    {
+      "pair": 3,
+      "control": {
+        "status": "ok",
+        "echo": {
+          "wall_ms": 3.428268,
+          "ui_cpu_ms": 3.072976,
+          "rows": 12.0,
+          "update": 4
+        },
+        "results_ready": {
+          "wall_ms": 22.798997,
+          "ui_cpu_ms": 11.463787,
+          "rows": 64.0,
+          "update": 5
+        },
+        "distinct_updates": true
+      },
+      "candidate": {
+        "status": "ok",
+        "echo": {
+          "wall_ms": 4.30417,
+          "ui_cpu_ms": 3.927757,
+          "rows": 12.0,
+          "update": 4
+        },
+        "results_ready": {
+          "wall_ms": 23.451387,
+          "ui_cpu_ms": 11.286922,
+          "rows": 64.0,
+          "update": 5
+        },
+        "distinct_updates": true
+      }
+    },
+    {
+      "pair": 4,
+      "control": {
+        "status": "ok",
+        "echo": {
+          "wall_ms": 3.942468,
+          "ui_cpu_ms": 3.560086,
+          "rows": 12.0,
+          "update": 4
+        },
+        "results_ready": {
+          "wall_ms": 24.233081,
+          "ui_cpu_ms": 12.123607,
+          "rows": 64.0,
+          "update": 5
+        },
+        "distinct_updates": true
+      },
+      "candidate": {
+        "status": "ok",
+        "echo": {
+          "wall_ms": 3.976478,
+          "ui_cpu_ms": 3.616348,
+          "rows": 12.0,
+          "update": 4
+        },
+        "results_ready": {
+          "wall_ms": 22.063972,
+          "ui_cpu_ms": 10.744992,
+          "rows": 64.0,
+          "update": 5
+        },
+        "distinct_updates": true
+      }
+    }
+  ],
+  "summary": {
+    "control": {
+      "echo": {
+        "wall_ms": {
+          "samples": [
+            3.887608,
+            3.50622,
+            3.588897,
+            3.428268,
+            3.942468
+          ],
+          "n": 5,
+          "median": 3.588897,
+          "min": 3.428268,
+          "max": 3.942468
+        },
+        "ui_cpu_ms": {
+          "samples": [
+            3.534628,
+            3.128423,
+            3.207976,
+            3.072976,
+            3.560086
+          ],
+          "n": 5,
+          "median": 3.207976,
+          "min": 3.072976,
+          "max": 3.560086
+        }
+      },
+      "results_ready": {
+        "wall_ms": {
+          "samples": [
+            24.923827,
+            23.645319,
+            22.556412,
+            22.798997,
+            24.233081
+          ],
+          "n": 5,
+          "median": 23.645319,
+          "min": 22.556412,
+          "max": 24.923827
+        },
+        "ui_cpu_ms": {
+          "samples": [
+            12.297619,
+            11.573303,
+            11.450136,
+            11.463787,
+            12.123607
+          ],
+          "n": 5,
+          "median": 11.573303,
+          "min": 11.450136,
+          "max": 12.297619
+        }
+      }
+    },
+    "candidate": {
+      "echo": {
+        "wall_ms": {
+          "samples": [
+            4.082908,
+            4.124008,
+            3.959148,
+            4.30417,
+            3.976478
+          ],
+          "n": 5,
+          "median": 4.082908,
+          "min": 3.959148,
+          "max": 4.30417
+        },
+        "ui_cpu_ms": {
+          "samples": [
+            3.686637,
+            3.703377,
+            3.584145,
+            3.927757,
+            3.616348
+          ],
+          "n": 5,
+          "median": 3.686637,
+          "min": 3.584145,
+          "max": 3.927757
+        }
+      },
+      "results_ready": {
+        "wall_ms": {
+          "samples": [
+            22.099119,
+            22.448523,
+            22.59829,
+            23.451387,
+            22.063972
+          ],
+          "n": 5,
+          "median": 22.448523,
+          "min": 22.063972,
+          "max": 23.451387
+        },
+        "ui_cpu_ms": {
+          "samples": [
+            10.955522,
+            10.7691,
+            10.916889,
+            11.286922,
+            10.744992
+          ],
+          "n": 5,
+          "median": 10.916889,
+          "min": 10.744992,
+          "max": 11.286922
+        }
+      }
+    }
+  }
+}

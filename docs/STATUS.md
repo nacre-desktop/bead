@@ -1,5 +1,17 @@
 # Status
 
+## 2026-10-26 — B0129 launcher icons on the first frame
+
+Five alternating private CPU pairs show zero missing-icon presentations on all
+cold, warm and expired opens. Median first-presented deltas are -1.040 / +0.081 /
++0.713 ms; first-key echo UI CPU max is 3.928 ms. The largest phase median
+unreclaimable cost is +2.895 MiB against the explicitly allowed 4 MiB budget.
+Full remote Arch CI passes; native generation markers verify actual panel-worker expiry.
+[Evidence, spreads and remaining QML differences](specs/0129-launcher-icons.md).
+Final search-results UI CPU remains 10.917 ms median; the 8 ms gate above measures the first echo.
+Startup excursions exceed 4 MiB; acceptance uses five-pair phase medians, not peak residency.
+No live desktop change or laptop absolute-memory acceptance.
+
 ## 2026-10-26 — B0137 shared edge-panel hover
 
 AI and control panels share lip/body/focus exit grace. Backdrops preserve stable

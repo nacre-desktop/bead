@@ -1,0 +1,87 @@
+{
+  "scope": "one native integrated smoke; excluded from five-pair acceptance statistics",
+  "source": "c487227fce00ee3336bc781a1ef412e5d1db7f1a",
+  "binary_sha256": "bbbad6849ca7d742cafd8983e47159d1a8e424b9d6ea2f0ee7e9799d121e0636",
+  "backend": "cpu",
+  "geometry": {
+    "name": "winit",
+    "mode": [
+      2880,
+      1800
+    ],
+    "scale": 1.5,
+    "logical": [
+      1920,
+      1200
+    ]
+  },
+  "phases": {
+    "cold": {
+      "first_presented_ms": 55.534979,
+      "first_all_icons_presented_ms": 55.534979,
+      "presented_frames": 20,
+      "missing_icon_presentations": 0,
+      "prewarm_before_open": {
+        "icons": "64",
+        "raster_success": "64",
+        "result_rasters": "64",
+        "fallback_or_error": "0",
+        "query_errors": "0",
+        "raster_bytes": "1283140",
+        "charged_bytes": "1353376",
+        "limit_bytes": "1572864",
+        "scale": "1.500"
+      },
+      "generation_loads": 1
+    },
+    "warm": {
+      "first_presented_ms": 14.634677,
+      "first_all_icons_presented_ms": 14.634677,
+      "presented_frames": 21,
+      "missing_icon_presentations": 0,
+      "prewarm_before_open": {
+        "icons": "64",
+        "raster_success": "64",
+        "result_rasters": "64",
+        "fallback_or_error": "0",
+        "query_errors": "0",
+        "raster_bytes": "1283140",
+        "charged_bytes": "1353376",
+        "limit_bytes": "1572864",
+        "scale": "1.500"
+      },
+      "generation_loads": 0
+    },
+    "expired": {
+      "first_presented_ms": 61.742954,
+      "first_all_icons_presented_ms": 61.742954,
+      "presented_frames": 20,
+      "missing_icon_presentations": 0,
+      "prewarm_before_open": {
+        "icons": "64",
+        "raster_success": "64",
+        "result_rasters": "64",
+        "fallback_or_error": "0",
+        "query_errors": "0",
+        "raster_bytes": "1283140",
+        "charged_bytes": "1353376",
+        "limit_bytes": "1572864",
+        "scale": "1.500"
+      },
+      "generation_loads": 1
+    }
+  },
+  "first_key_echo_ui_cpu_ms": 3.188815,
+  "guards": {
+    "status": "complete",
+    "capture_returncode": 0,
+    "scope_returncode": 0,
+    "containment": true,
+    "oom": {
+      "oom": 0,
+      "oom_kill": 0
+    },
+    "swap_used_before_kib": 0,
+    "host_swap_in_pages": 0
+  }
+}

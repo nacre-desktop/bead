@@ -1,0 +1,132 @@
+{
+  "scope": "one informational idle-only pair; launcher never opened; excluded from five-pair gate",
+  "control_source": "ef7496f7a24ba2e561d63e4e64a7463680ffc9ec",
+  "candidate_source": "40b4055a7faf933fd87e62c712a38511090a6102",
+  "backend": "cpu",
+  "geometry": {
+    "name": "winit",
+    "mode": [
+      2880,
+      1800
+    ],
+    "scale": 1.5,
+    "logical": [
+      1920,
+      1200
+    ]
+  },
+  "phases": {
+    "startup": {
+      "control": {
+        "ui_kib": {
+          "Pss": 47373,
+          "Pss_Anon": 26556,
+          "Pss_File": 20107,
+          "Pss_Shmem": 710,
+          "SwapPss": 0,
+          "DRM": 0
+        },
+        "daemon_tree": {
+          "processes": 3,
+          "sum_kib": {
+            "Pss": 68463,
+            "Pss_Anon": 42236,
+            "Pss_File": 26227,
+            "Pss_Shmem": 0,
+            "SwapPss": 0,
+            "DRM": 0
+          }
+        }
+      },
+      "candidate": {
+        "ui_kib": {
+          "Pss": 55828,
+          "Pss_Anon": 34708,
+          "Pss_File": 19886,
+          "Pss_Shmem": 1234,
+          "SwapPss": 0,
+          "DRM": 0
+        },
+        "daemon_tree": {
+          "processes": 3,
+          "sum_kib": {
+            "Pss": 68912,
+            "Pss_Anon": 43092,
+            "Pss_File": 25820,
+            "Pss_Shmem": 0,
+            "SwapPss": 0,
+            "DRM": 0
+          }
+        }
+      }
+    },
+    "settled_123s": {
+      "control": {
+        "ui_kib": {
+          "Pss": 47223,
+          "Pss_Anon": 26348,
+          "Pss_File": 20165,
+          "Pss_Shmem": 710,
+          "SwapPss": 0,
+          "DRM": 0
+        },
+        "daemon_tree": {
+          "processes": 2,
+          "sum_kib": {
+            "Pss": 50457,
+            "Pss_Anon": 26924,
+            "Pss_File": 23533,
+            "Pss_Shmem": 0,
+            "SwapPss": 0,
+            "DRM": 0
+          }
+        }
+      },
+      "candidate": {
+        "ui_kib": {
+          "Pss": 49377,
+          "Pss_Anon": 28732,
+          "Pss_File": 19935,
+          "Pss_Shmem": 710,
+          "SwapPss": 0,
+          "DRM": 0
+        },
+        "daemon_tree": {
+          "processes": 2,
+          "sum_kib": {
+            "Pss": 51292,
+            "Pss_Anon": 27660,
+            "Pss_File": 23632,
+            "Pss_Shmem": 0,
+            "SwapPss": 0,
+            "DRM": 0
+          }
+        }
+      }
+    }
+  },
+  "candidate_warm_events": [
+    {
+      "icons": "64",
+      "raster_success": "64",
+      "result_rasters": "64",
+      "fallback_or_error": "0",
+      "query_errors": "0",
+      "raster_bytes": "1283140",
+      "charged_bytes": "1353376",
+      "limit_bytes": "1572864",
+      "scale": "1.500"
+    },
+    {
+      "icons": "64",
+      "raster_success": "64",
+      "result_rasters": "64",
+      "fallback_or_error": "0",
+      "query_errors": "0",
+      "raster_bytes": "1283140",
+      "charged_bytes": "1353376",
+      "limit_bytes": "1572864",
+      "scale": "1.500"
+    }
+  ]
+}

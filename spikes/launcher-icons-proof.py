@@ -182,7 +182,11 @@ if os.environ.get('ICON_PARITY') == '1':
         cleanup = [('release',)] if action == 'press' else []
         m.STATES[state] = ([('ui', 'nacre', 'launcher', ''), ('sleep', 1.4),
                             (action, 655, 714)], [*cleanup, ('ui', 'nacre', 'close')], 0)
-    m.STATE_SETTLE.update({'launcher-hover': .18, 'launcher-pressed': .05})
+    m.STATES['launcher-search'] = ([('ui', 'nacre', 'launcher', ''),
+                                    ('sleep', 1.4), ('type', 'a')],
+                                   [('ui', 'nacre', 'close')], 0)
+    m.STATE_SETTLE.update({'launcher-hover': .18, 'launcher-pressed': .05,
+                          'launcher-search': 1.0})
 else:
     m.build_gallery = lambda args, names: {}
 if __name__ == '__main__':

@@ -1,5 +1,25 @@
 # Feasibility
 
+## 2026-10-26 — B0129 launcher first-frame icons
+
+The launcher retains a bounded shared SVG/PNG raster set after its panel closes.
+It primes the first real Panel query and shares only immutable embedded Luau compiler bytes.
+Five alternating private CPU pairs remove missing icons on cold, warm and actual 120-second expiry opens.
+The measured feature cost exceeds the preferred 1 MiB but fits this unit’s allowed 4 MiB smoothness budget.
+
+| Median candidate − control | Cold | Warm | Expired |
+| --- | ---: | ---: | ---: |
+| First presented, ms | -1.040 | +0.081 | +0.713 |
+| Candidate missing-icon presentations | 0 | 0 | 0 |
+
+First-key echo UI CPU max is 3.928 ms; largest phase median unreclaimable delta
+is +2.895 MiB (warm_closed). File PSS is informational; UI-only numbers exclude daemon/providers.
+Full remote Arch CI passes; matched QML/Bead state captures expose the listed visual gaps.
+[All samples, spreads, rejected candidate and limits](docs/specs/0129-launcher-icons.md).
+Final search-results UI CPU remains 10.917 ms median; the 8 ms gate above measures the first echo.
+Startup excursions exceed 4 MiB; acceptance uses five-pair phase medians, not peak residency.
+No live/laptop-cap or physical scanout acceptance is claimed.
+
 ## 2026-10-26 — B0126 shared slider paint and local values
 
 Fill and handle now share one value and one small buffer, preventing independent lag.
