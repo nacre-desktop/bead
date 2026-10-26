@@ -74,7 +74,6 @@ pub(super) struct App {
     pub(super) gpu: Option<bead_render::gpu::Transport>,
     #[cfg(feature = "native-gl")]
     pub(super) gl: Option<bead_render::gl::Transport>,
-    #[cfg(any(feature = "native-gl", feature = "wgpu"))]
     pub(super) conn: Connection,
     pub(super) registry: RegistryState,
     pub(super) output: OutputState,
@@ -291,7 +290,6 @@ pub fn run_runtime(
         gpu: None,
         #[cfg(feature = "native-gl")]
         gl: None,
-        #[cfg(any(feature = "native-gl", feature = "wgpu"))]
         conn: conn.clone(),
         registry: RegistryState::new(&globals),
         output: OutputState::new(&globals, &qh),
