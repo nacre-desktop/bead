@@ -307,3 +307,19 @@ readiness and private local VFS now precede measurement. Earlier-source results
 were superseded after integrating B0110/B0118 and refreshing QML/daemon main.
 Nacre store registration remains the one-line request above. Phase 2 owns the
 edit/menu/settings UI, content-preset grid editing policy and canvas host.
+
+## B0151 finish-slice gate — 2026-10-26 (not accepted)
+
+Occupied status-pill drops now save the desktop clock at 82% and 90% of bar width.
+Six-state file/store drags and the app, resize, pearl detach/dock, and popup-focus captures pass.
+The default bar remains byte-identical to its accepted goldens, and remote Bead CI passes.
+Memory and 60 Hz CPU snap gates fail; Niri's private output did not reach 120 Hz.
+
+| Gate | Measurement |
+| --- | --- |
+| First-key UI CPU | Candidate 26.45–28.17 ms; limit 8 ms. |
+| 5-pair unreclaimable Δ, CPU | Idle +1.758 MiB; launcher +7.834; typed +12.670; closed +162.533; after drag/close +378.191. Budget 2 MiB. |
+| 60 Hz snap | First overlay 143–166 ms; first bar paint 145–146 ms; 24–26 dropped bar frames/repeat. |
+| 120 Hz | Not measured; nested Niri stayed at 60 Hz under the private 120 Hz parent/custom-mode requests. |
+
+The official memory summarizer rejected the five pairs for first-key CPU >8 ms. A diagnostic copy relaxed only that validator to calculate the paired memory medians above; these numbers are evidence of a failed gate, not acceptance. No push was made. The preview-stage visual gap remains with B0152; existing default-bar paired QML/Bead crops remain linked above.
