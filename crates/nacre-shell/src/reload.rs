@@ -1366,11 +1366,9 @@ impl Runtime {
         if self.widget_drag_is_active() {
             return;
         }
-        if self.widgets_write.is_none() {
-            if self.widget_drag_controller_primed {
-                self.widget_drag_controller = None;
-                self.widget_drag_controller_primed = false;
-            }
+        if self.widgets_write.is_none() && self.widget_drag_controller_primed {
+            self.widget_drag_controller = None;
+            self.widget_drag_controller_primed = false;
         }
         let Some(previous) = self.widget_hover_preview.take() else {
             return;
