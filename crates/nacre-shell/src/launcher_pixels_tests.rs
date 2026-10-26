@@ -306,6 +306,34 @@ fn ranked_prefix_keeps_actual_visible_pixels_and_actions_exact() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn launcher_grid_and_results_scroll_from_their_actual_hit_regions() -> Result<()> {
+    for query in ["", "a"] {
+        let mut h = harness(query, 0.)?;
+        let viewport = h
+            .session
+            .view_nodes()
+            .iter()
+            .find(|node| node.scroll_store.as_deref() == Some("launcher.scroll.y"))
+            .expect("launcher has a scroll viewport");
+        let rect = bead::ui::rect(&viewport.draw);
+        assert!(viewport.scroll_limit.is_some_and(|limit| limit > 400.));
+        for (delta, expected) in [(7., 7.), (-7., 0.)] {
+            h.script([bead_test::Input::Scroll {
+                x: rect.x + rect.w / 2.,
+                y: rect.y + rect.h / 2.,
+                delta,
+            }])?;
+            assert_eq!(
+                h.session.stores.get("launcher.scroll.y"),
+                Some(&Value::Number(expected)),
+                "query {query:?}: viewport {rect:?} must follow input"
+            );
+        }
+    }
+    Ok(())
+}
+
 /// B0037: `launcher-layout` order and hidden ids drive the category rail live; Home is
 /// never hidden and rows outside the order keep their place at the end.
 #[test]
