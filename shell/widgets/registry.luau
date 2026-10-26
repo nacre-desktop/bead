@@ -330,7 +330,7 @@ function M.renderer(document)
             and available_width and available_width>0 then
             local natural: number
             if content_layout then
-                natural=reserved and reserved>0 and reserved or measured_width(node,0)
+                natural=measured_width(node,0)
             elseif item.widget=="pill" and item.host=="top_bar" then
                 natural=available_width
             else
