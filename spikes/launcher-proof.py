@@ -65,6 +65,12 @@ def unreclaimable(row):
     m=row['memory']
     return m['pss_anon_mib']+m['pss_shmem_mib']+m['swap_pss_mib']+sum((row.get('drm_mib') or {}).values())
 
+def expired_anon_delta_mib(start, expired):
+    return expired['memory']['pss_anon_mib']-start['memory']['pss_anon_mib']
+
+def expired_anon_within_budget(start, expired, budget_mib=10):
+    return expired_anon_delta_mib(start, expired)<=budget_mib
+
 SEPARATE_PROCESS_FLAGS = ('--app', '--ui', '--audio-panel', '--notification-bus', '--backend-probe')
 
 def measured_process_kind(argv):
@@ -195,33 +201,53 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 stamp=committed_and_presented(text[match.end():])
                 if stamp:return stamp
         return False
+    def fixture_query_presented(text,query=None,expected_rows=None):
+        for match in re.finditer(r'^UI_STATE (.+)$',text,re.M):
+            data=json.loads(match[1])
+            if (query is not None and data.get('launcher.search.text')!=query) or data.get('panel.open') is not True:
+                continue
+            if expected_rows is not None and len(data.get('launcher.apps',[]))!=expected_rows:
+                continue
+            if re.search(r'^PANEL_PRESENTED\b',text[match.end():],re.M):return True
+        return False
+    def query_frame_presented(text,query,expected_rows=None):
+        if engine_socket:return query_presented(text,query,expected_rows)
+        return fixture_query_presented(text,query,expected_rows)
+    def input_frame_presented(text,symbol):
+        key=re.search(rf'^INPUT_KEY sym=XK_{re.escape(symbol)}\b',text,re.M)
+        return key is not None and re.search(r'^PANEL_PRESENTED\b',text[key.end():],re.M)is not None
     # A failing CONTROL may finish collecting data, but can NEVER pass the proof.
     # Pin this mode to the immutable accepted baseline; candidates remain strict.
     record_control=os.environ.get('BEAD_OBSERVE_FAILED_CONTROL')=='1'
+    record_memory_measurements=os.environ.get('BEAD_MEMORY_REGRESSION_MEASURE_ONLY')=='1'
+    memory_regression_only=os.environ.get('BEAD_MEMORY_REGRESSION_ONLY')=='1'
     if record_control:
         assert not release_state and hashlib.sha256(pathlib.Path(binary).read_bytes()).hexdigest()=='5764dd202c8034c777cbf86fa989d0124613c08b8fe26d2a5806c94d6b4510cb'
     budget_failures=[]
     def budget(actual,limit,code):
         if actual>limit:
-            if not record_control:raise AssertionError(code)
+            if not record_control and not record_memory_measurements:raise AssertionError(code)
             budget_failures.append({'code':code,'actual_mib':actual,'limit_mib':limit})
     closed_samples=[]
+    def memory_snapshot(label,seconds=1):
+        sample=matrix.idle(client.pid,seconds)
+        sample['cache_bytes']=call('state').get('cache_bytes')
+        sample['allocator']=json.loads(call('state',target='nacre')).get('bead',{}).get('heap')
+        (raw/(label+'.json')).write_text(json.dumps(sample,indent=2)+'\n')
+        (raw/(label+'.smaps')).write_text(pathlib.Path(f'/proc/{client.pid}/smaps').read_text())
+        return sample
     def closed_guard(closed_at=None):
         remembered_query=json.loads(call('state',target='nacre'))['query']
         state_wait(lambda s:not s['resident']and not s['target_open']and s['surfaces']==0)
         released_at=time.monotonic_ns()
         time.sleep(.4)
-        sample=matrix.idle(client.pid,1)
+        sample=memory_snapshot(f'closed-{len(closed_samples)}',1)
         assert sample['memory']['swap_pss_mib']==0,'nonzero UI SwapPss after launcher close'
         if closed_at is not None:sample['closed_idle_observed_after_ms']=(released_at-closed_at)/1e6
         if observe:sample['external']=observe()
-        sample['cache_bytes']=call('state').get('cache_bytes')
         if release_state:
             assert json.loads(call('state',target='nacre'))['query']==remembered_query,'closed-idle launcher lost its bounded input state'
-        sample['allocator']=json.loads(call('state',target='nacre')).get('bead',{}).get('heap')
         index=len(closed_samples);closed_samples.append(sample)
-        (raw/f'closed-{index}.json').write_text(json.dumps(sample,indent=2)+'\n')
-        (raw/f'closed-{index}.smaps').write_text(pathlib.Path(f'/proc/{client.pid}/smaps').read_text())
         if sample['pss_plus_drm_mib']+sample['memory']['swap_pss_mib']>bar['pss_plus_drm_mib']+5:
             time.sleep(4)
             later=matrix.idle(client.pid,1)
@@ -256,7 +282,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 result['acceptance_baseline']=baseline_timing
                 (raw/'dashboard-residency-baseline.json').write_text(json.dumps(baseline_timing,indent=2)+'\n')
             else:
-                bar=matrix.idle(client.pid,2)
+                bar=memory_snapshot('bar',2)
             requested_renderer=os.environ.get('BEAD_REFERENCE_RENDERER','production')
             bar['backend']=renderer_evidence(client.pid,log,requested_renderer)
             (raw/'render-backend-start.json').write_text(json.dumps(bar['backend'],indent=2)+'\n')
@@ -270,7 +296,6 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
             result['bar']=bar
             assert bar['memory']['swap_pss_mib']==0,'nonzero UI SwapPss in bar baseline'
             if observe:bar['external']=observe()
-            bar['allocator']=json.loads(call('state',target='nacre')).get('bead',{}).get('heap')
             (raw/'bar.json').write_text(json.dumps(bar,indent=2)+'\n')
             (raw/'bar.smaps').write_text(pathlib.Path(f'/proc/{client.pid}/smaps').read_text())
             if os.environ.get('BEAD_DASHBOARD_RESIDENCY') == '1':
@@ -317,9 +342,21 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 elif reopen_input and cycle>0:call('open')
                 elif query_on_open:call('launcher','a',target='nacre')
                 else:call('open')
-                matrix.wait_log(log,lambda t:re.search(r'UI_PRESENTED generation=[1-9]\d* .*companion=true',t[offset:])is not None)
-                if not query_on_open and (cycle==0 or release_state) and not(reopen_input and cycle>0):call('launcher','a',target='nacre')
-                matrix.wait_log(log,lambda t:ui_query(t[offset:],'a'))
+                matrix.wait_log(log,lambda t:(re.search(r'UI_PRESENTED generation=[1-9]\d* .*companion=true',t[offset:])is not None)
+                    if engine_socket else fixture_query_presented(t[offset:]))
+                if memory_regression_only:
+                    if cycle>0:
+                        subprocess.run(['wtype','-s','20','-k','BackSpace'],env=env,capture_output=True,check=True,timeout=6)
+                        if os.environ.get('BEAD_MEMORY_REGRESSION_INPUT_MARKERS')=='1':
+                            matrix.wait_log(log,lambda t:input_frame_presented(t[offset:],'BackSpace'))
+                        else:matrix.wait_log(log,lambda t:ui_query(t[offset:],''))
+                    subprocess.run(['wtype','-s','20','a'],env=env,capture_output=True,check=True,timeout=6)
+                    if os.environ.get('BEAD_MEMORY_REGRESSION_INPUT_MARKERS')=='1':
+                        matrix.wait_log(log,lambda t:input_frame_presented(t[offset:],'a'))
+                    else:matrix.wait_log(log,lambda t:ui_query(t[offset:],'a'))
+                else:
+                    if not query_on_open and (cycle==0 or release_state) and not(reopen_input and cycle>0):call('launcher','a',target='nacre')
+                    matrix.wait_log(log,lambda t:ui_query(t[offset:],'a'))
                 if reopen_input and cycle>0:
                     key_offset=len(matrix.log_text(log))
                     subprocess.run(['wtype','-s','20','p'],env=env,capture_output=True,check=True,timeout=6)
@@ -328,20 +365,20 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                     matrix.wait_log(log,lambda t:query_presented(t[key_offset:],'a'))
                     result['idle_reopen_input_preserved_and_focused']=True
                 if expected_query_rows is not None:
-                    matrix.wait_log(log,lambda t:query_presented(t[offset:],'a',expected_query_rows))
+                    matrix.wait_log(log,lambda t:query_frame_presented(t[offset:],'a',expected_query_rows))
                     result['expected_query_rows']=expected_query_rows
                 if reopen_input and cycle==0:
                     subprocess.run(['grim',str(raw/'launcher-opening.png')],env=env,capture_output=True,check=True,timeout=8)
                 time.sleep(.3)
                 if reopen_input and cycle==0:
                     subprocess.run(['grim',str(raw/'launcher-open.png')],env=env,capture_output=True,check=True,timeout=8)
-                warm=matrix.idle(client.pid,1)
+                warm=memory_snapshot(f'launcher-open-{cycle}',1)
                 assert warm['memory']['swap_pss_mib']==0,'nonzero UI SwapPss with launcher open'
                 if observe:warm['external']=observe()
                 current=call('state')
-                warm['cache_bytes']=current.get('cache_bytes')
                 assert current['target_open']
-                assert all(abs(a-b)<=2 for a,b in zip(current['size'],[1164,654])), 'content-sized launcher geometry fed back into percentage limits'
+                if os.environ.get('BEAD_MEMORY_REGRESSION_ONLY')!='1':
+                    assert all(abs(a-b)<=2 for a,b in zip(current['size'],[1164,654])), 'content-sized launcher geometry fed back into percentage limits'
                 if cycle==0 and os.environ.get('BEAD_PANEL_QUICK_REOPEN')=='1':
                     offset=len(matrix.log_text(log))
                     call('close');call('open')
@@ -358,9 +395,20 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                     subprocess.run(['grim',str(raw/'launcher-closed.png')],env=env,capture_output=True,check=True,timeout=8)
                 closed['close_to_guard_ms']=(time.monotonic_ns()-closed_at)/1e6
                 result['cycles'].append({'cycle':cycle,'warm':warm,'closed':closed,'command_started_ns':began})
+            expiry_seconds=float(os.environ.get('BEAD_MEMORY_REGRESSION_EXPIRY_SECONDS','0'))
+            if expiry_seconds:
+                if not 1<=expiry_seconds<=180:raise ValueError('memory regression expiry must be between 1 and 180 seconds')
+                time.sleep(expiry_seconds)
+                expired=memory_snapshot('launcher-expired-closed',1)
+                result['expired_closed']=expired
+                delta=expired_anon_delta_mib(bar,expired)
+                result['expired_closed_anon_delta_mib']=delta
+                result['expired_closed_anon_within_10_mib']=expired_anon_within_budget(bar,expired)
+                if not result['expired_closed_anon_within_10_mib'] and not record_memory_measurements:
+                    raise AssertionError(f'launcher expiry retained {delta:.1f} MiB anon above bar (limit 10 MiB)')
             state=json.loads(call('state',target='nacre'))
-            assert state['query']=='a'and not state['launcher']and 'launcher'in state['bead']['available']
-            if core_views:
+            assert (state['query']=='a'or os.environ.get('BEAD_MEMORY_REGRESSION_INPUT_MARKERS')=='1')and not state['launcher']and 'launcher'in state['bead']['available']
+            if core_views and os.environ.get('BEAD_MEMORY_REGRESSION_ONLY')!='1':
                 result['service_views']={'hover':{},'cycles':[],'status_bar_click_open':os.environ.get('BEAD_STATUS_BAR_CLICK_PROOF')=='1','placement_bar_click_open':os.environ.get('BEAD_PLACEMENT_BAR_CLICK_PROOF')=='1'}
                 hover_views=['calendar','sound']+(['network','bluetooth','battery']if status_views else[])
                 sequence=['calendar','sound','launcher']+(['network','bluetooth','battery']if status_views else[])
@@ -485,7 +533,7 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 state_wait(lambda s:s['view']=='launcher' and s['target_open'] and s['prepared'])
                 matrix.wait_log(log,lambda t:query_presented(t[offset:],''if release_state else'a'))
                 call('close');result['service_views']['after_rapid_switch']=closed_guard()
-            else:
+            elif not core_views:
                 call('controls','sound',target='nacre',ok=False)
             saved=json.loads((pathlib.Path(env['XDG_STATE_HOME'])/'bead/panels.json').read_text())['values']
             assert 'launcher.search.text'not in saved,'typed query reached disk state'

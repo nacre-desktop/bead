@@ -1,5 +1,15 @@
 # Status
 
+## 2026-10-26 — B0153 launcher memory investigation
+
+The reported ~500 MiB post-expiry anon growth has not reproduced on the desktop.
+Bead 900369fb measured 27.5 → 28.7 MiB after expiry; current main measured 28.2
+→ 29.1 MiB with copied owner app/icon data. Exact B0150 source 2d49b069 measured
+25.7 MiB bar → 27.4 MiB after expiry, with transient closed peaks of 55.4 MiB.
+Current main with 128 notification rows ended at 33.9 MiB from 29.1 MiB. Each
+run used three launcher cycles at 2880×1800/1.5 and a 125-second expiry wait.
+The B0150 claim remains unattributed and unreproduced; no product fix is claimed.
+
 ## 2026-10-26 — B0148 cache admission (synthetic checks pass; real gate blocked)
 
 Cache-admission failures no longer log as UI errors; retained panels keep drawing
@@ -14,7 +24,6 @@ cross-owner eviction plus pointer hover/pressed parity remain unverified.
 ## 2026-10-26 — B0149 held-key OSD (shipped)
 
 Nacre daemon-backed steps and Bead's 130 ms retargeting shipped after full remote desktop CI passed in both repositories. A private nested 2-second capture at 2880×1800, scale 1.5 and synthetic 60 Hz showed all 16 volume values commit within 12.8 ms; 17 of 20 changed brightness values commit within 16.7 ms. The first cross-kind shadow raster takes 131.6 ms and two near-zero updates take 19.3 / 25.1 ms; these remain a renderer follow-up. The trigger was synthetic `niri msg spawn-sh`, and no physical key-repeat or scanout claim is made. [Scope and evidence](specs/0149-osd-smooth.md). No live change.
-
 ## 2026-10-26 — B0145 idle video renderer release
 
 The B0142 renderer now releases after 60 seconds with static wallpapers across
