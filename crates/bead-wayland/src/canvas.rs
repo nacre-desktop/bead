@@ -434,13 +434,13 @@ impl App {
             canvas.dirty = false;
             canvas.pressed = false;
             canvas.input = None;
-            if let Some(layer) = &canvas.layer {
-                if canvas.lifecycle.unmap() {
-                    layer.wl_surface().attach(None, 0, 0);
-                    layer.commit();
-                    canvas.configured = false;
-                    canvas.mapped_bounds = None;
-                }
+            if let Some(layer) = &canvas.layer
+                && canvas.lifecycle.unmap()
+            {
+                layer.wl_surface().attach(None, 0, 0);
+                layer.commit();
+                canvas.configured = false;
+                canvas.mapped_bounds = None;
             }
         }
     }
