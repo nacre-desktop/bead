@@ -699,6 +699,7 @@ impl App {
                 surface,
                 &self.qh,
                 PresentationData {
+                    visibility: 0,
                     source_epoch: win.epoch,
                     update: win.ui_serial,
                     surface: surface.clone(),
