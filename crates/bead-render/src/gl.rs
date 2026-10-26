@@ -200,13 +200,14 @@ impl Transport {
     }
     pub fn activate(&self, surface: &Surface, w: u32, h: u32) -> Result<()> {
         let context = self.context.as_ref().ok_or("missing EGL context")?;
-        context.make_current(&surface.surface)?;
-        surface.height.set(h);
+        // EGL can acquire its backbuffer on bind; resize the native window first.
         surface.surface.resize(
             context,
             NonZeroU32::new(w).ok_or("zero width")?,
             NonZeroU32::new(h).ok_or("zero height")?,
         );
+        context.make_current(&surface.surface)?;
+        surface.height.set(h);
         Ok(())
     }
     pub fn present(&self, surface: &Surface, damage: &[Damage]) -> Result<()> {
