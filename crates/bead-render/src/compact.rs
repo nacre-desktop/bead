@@ -20,6 +20,8 @@ pub(crate) struct CompactRect {
 }
 
 #[derive(Clone, Debug)]
+// Only the GPU upload paths read the region geometry.
+#[cfg_attr(not(any(feature = "native-gl", feature = "wgpu")), allow(dead_code))]
 pub(crate) struct CompactRegion {
     /// Source pixels in the original raster.
     pub(crate) source: CompactRect,
