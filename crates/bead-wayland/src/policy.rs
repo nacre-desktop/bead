@@ -262,7 +262,11 @@ impl Callbacks {
     /// Buffer ownership and callback credit are independent: fresh SHM buffers
     /// may commit while the existing callback remains the sole wakeup request.
     pub fn request_if_idle(&mut self) -> Option<u64> {
-        if self.pending { None } else { Some(self.request()) }
+        if self.pending {
+            None
+        } else {
+            Some(self.request())
+        }
     }
     pub fn invalidate(&mut self) {
         self.epoch = self.epoch.wrapping_add(1);
