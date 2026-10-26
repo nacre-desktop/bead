@@ -122,6 +122,7 @@ fn crop_scene(mut scene: Scene, bounds: Rect) -> Scene {
 struct CanvasLifecycle {
     open: bool,
     pending_open: bool,
+    unmapped: bool,
     warmup_packets_pending: usize,
     retention_generation: u64,
 }
@@ -130,6 +131,7 @@ impl CanvasLifecycle {
         Self {
             open,
             pending_open: false,
+            unmapped: false,
             warmup_packets_pending,
             retention_generation: 0,
         }
@@ -148,6 +150,20 @@ impl CanvasLifecycle {
     fn close(&mut self) {
         self.set_open(false);
         self.pending_open = false;
+    }
+    fn unmap(&mut self) -> bool {
+        if self.unmapped {
+            return false;
+        }
+        self.unmapped = true;
+        true
+    }
+    fn begin_remap(&mut self) -> bool {
+        if !self.unmapped {
+            return false;
+        }
+        self.unmapped = false;
+        true
     }
     fn warmup_response(&mut self) -> bool {
         if self.warmup_packets_pending == 0 {
@@ -419,8 +435,12 @@ impl App {
             canvas.pressed = false;
             canvas.input = None;
             if let Some(layer) = &canvas.layer {
-                layer.wl_surface().attach(None, 0, 0);
-                layer.commit();
+                if canvas.lifecycle.unmap() {
+                    layer.wl_surface().attach(None, 0, 0);
+                    layer.commit();
+                    canvas.configured = false;
+                    canvas.mapped_bounds = None;
+                }
             }
         }
     }
@@ -668,6 +688,9 @@ impl App {
         layer.set_margin(bounds.y.round() as i32, 0, 0, bounds.x.round() as i32);
         if let Some(canvas) = self.canvases.get_mut(key) {
             canvas.layer = Some(layer.clone());
+            if canvas.lifecycle.begin_remap() {
+                canvas.configured = false;
+            }
             if let Some(viewport) = &canvas.viewport {
                 viewport.set_destination(size.0 as i32, size.1 as i32);
             }
@@ -1123,10 +1146,21 @@ mod tests {
 
         lifecycle.close();
         let closed = lifecycle.retention_generation;
+        assert!(lifecycle.unmap());
+        lifecycle.close();
+        assert!(
+            !lifecycle.unmap(),
+            "repeated close offers must not submit another null-buffer commit"
+        );
         assert!(!lifecycle.expires(opened));
         assert!(lifecycle.expires(closed));
 
         lifecycle.offer_open();
+        assert!(
+            lifecycle.begin_remap(),
+            "a retained layer must reconfigure on an empty commit before drawing again"
+        );
+        assert!(!lifecycle.begin_remap());
         assert!(lifecycle.accept_scene(false));
         let reopened = lifecycle.retention_generation;
         assert!(!lifecycle.expires(closed));
