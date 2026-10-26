@@ -17,6 +17,15 @@ pub(crate) fn prepared_frame_ready(
 ) -> bool {
     configured && placed && snapshot == Some(current)
 }
+
+/// Run native preparation only for an accepted drag press on the docked panel.
+pub(crate) fn prepare_native_for_drag_press<T>(
+    accepted_press: bool,
+    docked_source: bool,
+    prepare: impl FnOnce() -> T,
+) -> Option<T> {
+    (accepted_press && docked_source).then(prepare)
+}
 /// An initial native frame is hidden until the latest complete geometry was
 /// placed. Replies for superseded rectangles cannot uncover an older pose.
 #[derive(Default)]
@@ -56,6 +65,32 @@ impl Handoff {
 #[cfg(test)]
 mod handoff_tests {
     use super::{PreparedFrameKey, prepared_frame_ready};
+
+    #[test]
+    fn panel_open_close_without_drag_creates_zero_toplevels() {
+        use super::prepare_native_for_drag_press;
+        use std::cell::Cell;
+
+        let creations = Cell::new(0);
+        let prepare = || creations.set(creations.get() + 1);
+
+        for _ in 0..20 {
+            assert_eq!(prepare_native_for_drag_press(false, true, prepare), None);
+        }
+        assert_eq!(
+            creations.get(),
+            0,
+            "opening and closing without dragging cannot create a toplevel"
+        );
+        assert_eq!(
+            prepare_native_for_drag_press(true, false, prepare),
+            None,
+            "a pearl press cannot reserve a second native target"
+        );
+        assert_eq!(creations.get(), 0);
+        assert_eq!(prepare_native_for_drag_press(true, true, prepare), Some(()));
+        assert_eq!(creations.get(), 1, "a valid docked drag may prewarm once");
+    }
 
     #[test]
     fn prewarm_requires_current_placement_configuration_and_snapshot() {

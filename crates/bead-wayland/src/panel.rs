@@ -972,6 +972,11 @@ impl App {
             self.release_panel();
             return;
         }
+        // Prepared native targets are created only when a docked drag starts;
+        // closing the resident panel always retires that target and reservation.
+        self.cancel_prepared_native();
+        self.reserved_pearl_id = None;
+        self.prewarm_attempted = false;
         self.notify_panel_owner(UiEvent::PanelDismissed);
         self.panel_target = false;
         self.edges_panel_changed(true);
@@ -981,9 +986,6 @@ impl App {
             .as_ref()
             .is_some_and(|spec| spec.retain_when_closed)
         {
-            self.cancel_prepared_native();
-            self.reserved_pearl_id = None;
-            self.prewarm_attempted = false;
             // Keep its stacking order below the prepared panel. Recreating the
             // catcher on reopen would also recreate the panel surface/buffers.
             if let Err(error) = self.set_dismiss_enabled(false) {

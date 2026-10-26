@@ -749,9 +749,9 @@ impl App {
                 .is_some_and(|options| options.native.is_some())
     }
 
-    /// Admit a hidden native window after the open panel has produced a real
-    /// configured frame. This never changes the active layer renderer.
-    pub(super) fn prewarm_resident_panel(&mut self) {
+    /// Prepare a hidden native target after a valid drag press on this docked
+    /// panel. The active layer remains the renderer and input surface.
+    fn prewarm_drag_target(&mut self) {
         if self.pearl.is_some()
             || !self.pearls_on()
             || !self.panel_target
@@ -2543,8 +2543,14 @@ impl App {
         {
             return false;
         }
-        let Some(Some((body, source, edge, screen, point, lifted))) =
-            self.on_surface(surface, |app| app.gesture_subject(surface, local))
+        let Some(Some((body, source, edge, screen, point, lifted))) = self.on_surface(surface, |app| {
+            let subject = app.gesture_subject(surface, local)?;
+            let docked_source = subject.1 == Source::Docked;
+            let _ = policy::prepare_native_for_drag_press(true, docked_source, || {
+                app.prewarm_drag_target();
+            });
+            Some(subject)
+        })
         else {
             return false;
         };
@@ -2659,8 +2665,12 @@ impl App {
                 }
                 self.save_pearls();
             }
-            // Never pulled: the press was only a press.
-            (_, None) => {}
+            // Never pulled: retire the target created for this drag press.
+            (_, None) => {
+                self.cancel_prepared_native();
+                self.reserved_pearl_id = None;
+                self.prewarm_attempted = false;
+            }
         }
         self.end_guides();
     }
