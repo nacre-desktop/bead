@@ -1641,7 +1641,6 @@ impl App {
                     feedback: self
                         .presentation
                         .as_ref()
-                        .filter(|_| bead_core::profile::enabled())
                         .map(|p| (p, &self.qh, frame.revision)),
                 },
                 &frame.rgba,
@@ -1759,7 +1758,6 @@ impl App {
                     feedback: self
                         .presentation
                         .as_ref()
-                        .filter(|_| bead_core::profile::enabled())
                         .zip(transition.commit.as_ref())
                         .map(|(p, (revision, _))| (p, &self.qh, *revision)),
                 },

@@ -1790,6 +1790,7 @@ dependencies = [
  "fontdb",
  "freedesktop-icons",
  "gdk-pixbuf",
+ "glow",
  "glutin",
  "image",
  "libc",

@@ -49,6 +49,9 @@ use wayland_client::{
     globals::registry_queue_init,
     protocol::{wl_callback, wl_output, wl_shm, wl_surface},
 };
+use wayland_protocols::wp::alpha_modifier::v1::client::{
+    wp_alpha_modifier_surface_v1::WpAlphaModifierSurfaceV1, wp_alpha_modifier_v1::WpAlphaModifierV1,
+};
 use wayland_protocols::wp::viewporter::client::{
     wp_viewport::WpViewport, wp_viewporter::WpViewporter,
 };
@@ -58,10 +61,18 @@ const NAMESPACE: &str = "bead-wallpaper-video";
 /// presented (switched off, or fully occluded): stop decoding until it comes back.
 const STARVED_AFTER: Duration = Duration::from_millis(1500);
 const MAX_BUFFERS: usize = 2;
+const FADE_DURATION: Duration = Duration::from_millis(120);
+const FADE_TICK: Duration = Duration::from_millis(16);
+const FADE_START: f32 = 0.08;
+const ALPHA_MAX: u32 = u32::MAX;
 
 /// `*` in the render list stands for every output (used when the controller knows none).
 fn wants(render: &BTreeSet<String>, name: &str) -> bool {
     render.contains(name) || render.contains("*")
+}
+
+fn fade_factor(alpha: f32) -> u32 {
+    (f64::from(alpha.clamp(0.0, 1.0)) * f64::from(ALPHA_MAX)) as u32
 }
 
 fn emit(event: &Event) {
@@ -85,6 +96,7 @@ fn place(
     scale: i32,
     surface: &wl_surface::WlSurface,
     qh: &QueueHandle<Engine>,
+    generation: u64,
 ) {
     if let Some(viewport) = viewport {
         viewport.set_destination(logical.0.max(1), logical.1.max(1));
@@ -92,7 +104,7 @@ fn place(
     } else {
         surface.set_buffer_scale(scale.max(1));
     }
-    surface.frame(qh, Frame(surface.clone()));
+    surface.frame(qh, Frame(surface.clone(), generation));
 }
 
 struct Out {
@@ -115,6 +127,10 @@ struct Out {
     pending: Option<Instant>,
     stale: bool,
     first_frame: bool,
+    first_frame_pending: Option<u64>,
+    alpha: Option<WpAlphaModifierSurfaceV1>,
+    fade: Option<(Instant, u64)>,
+    opacity: f32,
 }
 
 /// Which presentation path the renderer uses. `Untried` waits for a configured output.
@@ -139,6 +155,7 @@ struct Engine {
     layers: LayerShell,
     shm: Shm,
     viewporter: Option<WpViewporter>,
+    alpha_modifier: Option<WpAlphaModifierV1>,
     qh: QueueHandle<Engine>,
     handle: LoopHandle<'static, Engine>,
     signal: LoopSignal,
@@ -151,6 +168,7 @@ struct Engine {
     hwdec_reported: bool,
     outs: Vec<Out>,
     source: Option<Source>,
+    source_generation: u64,
     decoder: Decoder,
     render: BTreeSet<String>,
     player: Option<mpv::Player>,
@@ -163,6 +181,7 @@ struct Engine {
     failed: bool,
     starved: bool,
     timer_armed: bool,
+    fade_timer_armed: bool,
 }
 
 impl Engine {
@@ -170,15 +189,20 @@ impl Engine {
         match command {
             Command::Quit => self.signal.stop(),
             Command::Source { source } => {
-                // Keep the mpv render context, hardware device and output surfaces while
-                // browsing videos. `loadfile replace` releases the previous decoder.
+                self.source_generation = self.source_generation.wrapping_add(1);
+                // Keep mpv and its EGL context warm across wallpaper changes.
                 let reuse = match (&source, self.player.as_ref()) {
                     (Some(Source::Video { .. }), Some(player)) => {
                         !player.is_gl() || self.bind_any()
                     }
+                    (None, Some(player)) => {
+                        player.set_paused(true);
+                        player.stop();
+                        true
+                    }
                     _ => false,
                 };
-                let loaded = if reuse {
+                let loaded = if reuse && source.is_some() {
                     let player = self.player.as_ref().unwrap();
                     player.set_paused(true);
                     let _ = player.notices();
@@ -192,9 +216,9 @@ impl Engine {
                 } else {
                     false
                 };
-                if !loaded {
+                if !loaded && source.is_some() {
                     self.drop_player();
-                } else {
+                } else if loaded {
                     eprintln!("bead-wallpaper-video: reusing mpv render context");
                 }
                 self.source_loaded = false;
@@ -205,14 +229,15 @@ impl Engine {
                 self.starved = false;
                 self.render.clear();
                 self.decoder = Decoder::Release;
+                self.unmap_all();
                 for out in &mut self.outs {
                     out.first_frame = false;
+                    out.first_frame_pending = None;
+                    out.pending = None;
                 }
                 self.source = source;
                 if self.source.is_some() {
                     self.ensure_outputs();
-                } else {
-                    self.unmap_all();
                 }
             }
             Command::State { decoder, render } => {
@@ -236,7 +261,7 @@ impl Engine {
     fn reconcile(&mut self) {
         let wanted = self.source.is_some() && self.decoder != Decoder::Release && !self.failed;
         if !wanted {
-            if self.player.is_some() {
+            if self.source.is_some() && self.player.is_some() {
                 self.resume_s = self.drop_player().unwrap_or(self.resume_s);
                 self.compact();
             }
@@ -414,6 +439,7 @@ impl Engine {
             hwdec_reported,
             gl,
             qh,
+            source_generation,
             ..
         } = self;
         let (Some(player), Some(out)) = (player.as_ref(), outs.get_mut(index)) else {
@@ -427,6 +453,13 @@ impl Engine {
             return false;
         }
         let surface = out.layer.wl_surface().clone();
+        let opacity_available =
+            matches!(&*gl, GlPath::Ready(context) if context.has_opacity_fade());
+        let begin_fade =
+            !out.first_frame && (out.alpha.is_some() || player.is_gl() && opacity_available);
+        if begin_fade && out.alpha.is_none() {
+            out.opacity = FADE_START;
+        }
         if let (true, GlPath::Ready(gl)) = (player.is_gl(), &*gl) {
             if out.egl.is_none() {
                 // SAFETY: the surface proxy and display belong to this live connection.
@@ -442,8 +475,21 @@ impl Engine {
                 return false;
             }
             report_hwdec(player, hwdec_reported);
+            if begin_fade && let Some(alpha) = &out.alpha {
+                alpha.set_multiplier(fade_factor(FADE_START));
+            }
+            if out.alpha.is_none() && out.opacity < 1.0 {
+                gl.apply_opacity(out.opacity, (width, height));
+            }
             // The swap attaches the new dmabuf and commits these requests with it.
-            place(out.viewport.as_ref(), out.logical, out.scale, &surface, qh);
+            place(
+                out.viewport.as_ref(),
+                out.logical,
+                out.scale,
+                &surface,
+                qh,
+                *source_generation,
+            );
             if !gl.swap(window) {
                 return false;
             }
@@ -478,7 +524,17 @@ impl Engine {
                 return false;
             }
             report_hwdec(player, hwdec_reported);
-            place(out.viewport.as_ref(), out.logical, out.scale, &surface, qh);
+            if begin_fade && let Some(alpha) = &out.alpha {
+                alpha.set_multiplier(fade_factor(FADE_START));
+            }
+            place(
+                out.viewport.as_ref(),
+                out.logical,
+                out.scale,
+                &surface,
+                qh,
+                *source_generation,
+            );
             if out.buffers[i].attach_to(&surface).is_err() {
                 return false;
             }
@@ -491,11 +547,15 @@ impl Engine {
         out.pending = Some(Instant::now());
         if !out.first_frame {
             out.first_frame = true;
-            emit(&Event::FirstFrame {
-                output: out.name.clone(),
-            });
+            out.first_frame_pending = Some(*source_generation);
+            if begin_fade {
+                out.fade = Some((Instant::now(), *source_generation));
+            }
         }
         self.arm_starve_timer();
+        if begin_fade {
+            self.arm_fade_timer();
+        }
         true
     }
 
@@ -511,6 +571,60 @@ impl Engine {
                 engine.check_starved();
                 TimeoutAction::Drop
             });
+    }
+
+    fn arm_fade_timer(&mut self) {
+        if self.fade_timer_armed || !self.outs.iter().any(|out| out.fade.is_some()) {
+            return;
+        }
+        self.fade_timer_armed = true;
+        let _ = self
+            .handle
+            .insert_source(Timer::from_duration(FADE_TICK), |_, _, engine| {
+                if engine.update_fades() {
+                    TimeoutAction::ToDuration(FADE_TICK)
+                } else {
+                    engine.fade_timer_armed = false;
+                    TimeoutAction::Drop
+                }
+            });
+    }
+
+    fn update_fades(&mut self) -> bool {
+        let now = Instant::now();
+        let mut active = false;
+        for out in &mut self.outs {
+            let Some((started, generation)) = out.fade else {
+                continue;
+            };
+            if generation != self.source_generation {
+                out.fade = None;
+                continue;
+            }
+            let elapsed = now.duration_since(started);
+            let progress = (elapsed.as_secs_f32() / FADE_DURATION.as_secs_f32()).min(1.0);
+            let factor = FADE_START + (1.0 - FADE_START) * progress;
+            if let Some(alpha) = &out.alpha {
+                alpha.set_multiplier(fade_factor(factor));
+                out.layer.wl_surface().commit();
+            } else {
+                out.opacity = factor;
+                out.stale = true;
+            }
+            if progress >= 1.0 {
+                out.fade = None;
+            } else {
+                active = true;
+            }
+        }
+        if self.player.as_ref().is_some_and(mpv::Player::is_gl) {
+            for index in 0..self.outs.len() {
+                if self.outs[index].alpha.is_none() && self.outs[index].stale {
+                    self.draw(index);
+                }
+            }
+        }
+        active
     }
 
     fn check_starved(&mut self) {
@@ -569,15 +683,22 @@ impl Engine {
 
     fn unmap_all(&mut self) {
         for out in &mut self.outs {
-            out.egl = None;
-            let surface = out.layer.wl_surface();
-            surface.attach(None, 0, 0);
-            out.layer.commit();
+            if out.shown {
+                if let Some(alpha) = &out.alpha {
+                    alpha.set_multiplier(ALPHA_MAX);
+                }
+                let surface = out.layer.wl_surface();
+                surface.attach(None, 0, 0);
+                out.layer.commit();
+                out.configured = false;
+            }
             out.buffers.clear();
             out.current = None;
             out.shown = false;
             out.pending = None;
-            out.stale = false;
+            out.stale = true;
+            out.fade = None;
+            out.opacity = 1.0;
             if let Ok(pool) = SlotPool::new(4096, &self.shm) {
                 out.pool = pool;
             }
@@ -610,6 +731,16 @@ impl Engine {
         if let Some(index) = self.outs.iter().position(|o| o.output == *output) {
             let out = &mut self.outs[index];
             out.scale = scale;
+            if !out.configured {
+                // A layer surface needs a fresh empty commit and configure after unmap.
+                out.layer
+                    .set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
+                out.layer.set_size(0, 0);
+                out.layer.set_exclusive_zone(-1);
+                out.layer
+                    .set_keyboard_interactivity(KeyboardInteractivity::None);
+                out.layer.commit();
+            }
             let pixels = Self::pixels(out.viewport.is_some(), mode, out.logical, scale);
             if pixels != out.pixels {
                 out.pixels = pixels;
@@ -630,6 +761,10 @@ impl Engine {
             .viewporter
             .as_ref()
             .map(|manager| manager.get_viewport(&surface, &self.qh, ()));
+        let alpha = self
+            .alpha_modifier
+            .as_ref()
+            .map(|manager| manager.get_surface(&surface, &self.qh, ()));
         let layer = self.layers.create_layer_surface(
             &self.qh,
             surface,
@@ -662,6 +797,10 @@ impl Engine {
             pending: None,
             stale: true,
             first_frame: false,
+            first_frame_pending: None,
+            alpha,
+            fade: None,
+            opacity: 1.0,
         });
     }
 
@@ -683,7 +822,10 @@ impl Engine {
         (w as u32, h as u32)
     }
 
-    fn frame_done(&mut self, surface: &wl_surface::WlSurface) {
+    fn frame_done(&mut self, surface: &wl_surface::WlSurface, generation: u64) {
+        if generation != self.source_generation {
+            return;
+        }
         let Some(index) = self
             .outs
             .iter()
@@ -692,6 +834,11 @@ impl Engine {
             return;
         };
         self.outs[index].pending = None;
+        if self.outs[index].first_frame_pending.take() == Some(generation) {
+            emit(&Event::FirstFrame {
+                output: self.outs[index].name.clone(),
+            });
+        }
         if self.starved {
             self.starved = false;
             self.reconcile();
@@ -740,7 +887,7 @@ impl CompositorHandler for Engine {
     }
 }
 /// Frame callbacks carry their surface so presentation stalls can be told per output.
-struct Frame(wl_surface::WlSurface);
+struct Frame(wl_surface::WlSurface, u64);
 impl Dispatch<wl_callback::WlCallback, Frame> for Engine {
     fn event(
         engine: &mut Self,
@@ -751,12 +898,14 @@ impl Dispatch<wl_callback::WlCallback, Frame> for Engine {
         _: &QueueHandle<Self>,
     ) {
         if matches!(event, wl_callback::Event::Done { .. }) {
-            engine.frame_done(&data.0);
+            engine.frame_done(&data.0, data.1);
         }
     }
 }
 delegate_noop!(Engine: ignore WpViewporter);
 delegate_noop!(Engine: ignore WpViewport);
+delegate_noop!(Engine: ignore WpAlphaModifierV1);
+delegate_noop!(Engine: ignore WpAlphaModifierSurfaceV1);
 impl OutputHandler for Engine {
     fn output_state(&mut self) -> &mut OutputState {
         &mut self.output_state
@@ -873,6 +1022,12 @@ fn run(
             }
             let _ = sender.send(Command::Quit);
         })?;
+    let alpha_modifier = globals.bind(&qh, 1..=1, ()).ok();
+    if alpha_modifier.is_none() {
+        eprintln!(
+            "bead-wallpaper-video: compositor lacks alpha-modifier-v1; GL opacity fallback will be used when available"
+        );
+    }
     let mut engine = Engine {
         conn: conn.clone(),
         gl: GlPath::Untried,
@@ -883,6 +1038,7 @@ fn run(
         layers: LayerShell::bind(&globals, &qh)?,
         shm: Shm::bind(&globals, &qh)?,
         viewporter: globals.bind(&qh, 1..=1, ()).ok(),
+        alpha_modifier,
         qh,
         handle: handle.clone(),
         signal: event_loop.get_signal(),
@@ -892,6 +1048,7 @@ fn run(
         hwdec_reported: false,
         outs: Vec::new(),
         source: None,
+        source_generation: 0,
         decoder: Decoder::Release,
         render: BTreeSet::new(),
         player: None,
@@ -901,6 +1058,7 @@ fn run(
         failed: false,
         starved: false,
         timer_armed: false,
+        fade_timer_armed: false,
     };
     emit(&Event::Ready {
         pid: std::process::id(),

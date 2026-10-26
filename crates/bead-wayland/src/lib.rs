@@ -176,6 +176,8 @@ pub trait WallpaperProvider: Send + Sync {
         revision: u64,
         token: &std::sync::Arc<dyn std::any::Any + Send + Sync>,
     );
+    /// The compositor reported presentation of this wallpaper revision.
+    fn presented(&self, _output: &str, _revision: u64) {}
     fn discarded(&self, output: &str, revision: u64);
     fn output_removed(&self, output: &str);
 }

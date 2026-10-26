@@ -264,9 +264,12 @@ fn run(deps: Deps, supervisor: supervisor::Supervisor, receiver: mpsc::Receiver<
             Ok(Msg::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
             Ok(Msg::Poke) | Err(mpsc::RecvTimeoutError::Timeout) => {}
         }
-        // Coalesce bursts (window events arrive in clusters).
-        std::thread::sleep(Duration::from_millis(20));
-        while receiver.try_recv().is_ok_and(|m| !matches!(m, Msg::Stop)) {}
+        // Coalesce queued window events without delaying a poster/source handoff.
+        while let Ok(message) = receiver.try_recv() {
+            if matches!(message, Msg::Stop) {
+                return;
+            }
+        }
     }
 }
 
@@ -586,8 +589,8 @@ mod tests {
         );
         clear_tx.send(()).unwrap();
         assert!(
-            seen("\"cmd\":\"quit\"").await,
-            "clearing the motion member stops the renderer"
+            seen("\"cmd\":\"source\",\"source\":null").await,
+            "clearing motion hides video without terminating the warm renderer"
         );
         drop(controller);
         server.abort();

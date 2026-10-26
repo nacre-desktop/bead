@@ -183,11 +183,30 @@ try:
         send(proc, {"cmd": "state", "decoder": "play", "render": [output]})
         events = read_events(proc, "first-frame")
         result["format_switch_ms"][extension] = round((time.monotonic() - started) * 1000, 2)
+        # First-frame time above includes the start of the opacity blend. Compare
+        # the final colour only after the compositor-side fade has settled.
+        time.sleep(0.25)
         check("replacement_" + extension, any(e.get("event") == "first-frame" for e in events)
               and near(shot("format-" + extension).getpixel((54, 54)), (255, 255, 0), 20))
     send(proc, {"cmd": "source", "source": {"kind": "video", "path": str(motion), "loop": True}})
     send(proc, {"cmd": "state", "decoder": "play", "render": [output]})
     check("resume_motion_after_formats", any(e.get("event") == "first-frame" for e in read_events(proc, "first-frame")))
+    # Clear the video layer to reveal the compositor wallpaper, then load again in
+    # the same renderer. This covers video→static→video and confirms the new frame
+    # is visible after the output layer has completed its unmap/configure cycle.
+    send(proc, {"cmd": "source", "source": None})
+    send(proc, {"cmd": "source", "source": None})
+    time.sleep(0.25)
+    cleared = shot("source-cleared")
+    check("source_clear_reveals_static", near(cleared.getpixel((54, 54)), (32, 32, 32), 4))
+    switched = time.monotonic()
+    send(proc, {"cmd": "source", "source": {"kind": "video", "path": str(motion), "fit": "crop", "loop": True}})
+    send(proc, {"cmd": "state", "decoder": "play", "render": [output]})
+    events = read_events(proc, "first-frame")
+    result["clear_to_video_first_frame_ms"] = round((time.monotonic() - switched) * 1000, 2)
+    check("video_after_clear_first_frame", any(e.get("event") == "first-frame" for e in events))
+    resumed = shot("video-after-clear")
+    check("video_after_clear_visible", not near(resumed.getpixel((54, 54)), (32, 32, 32), 4))
     # 3. Pause: frozen picture, ~zero CPU.
     send(proc, {"cmd": "state", "decoder": "pause", "render": []})
     time.sleep(0.5)

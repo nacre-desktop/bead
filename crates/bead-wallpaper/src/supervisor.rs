@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Keeps a wallpaper renderer process alive without ever depending on it. The renderer is
-//! spawned only while a source exists, restarted with backoff after a crash (the desired
-//! source and state are replayed), and abandoned after too many quick failures so a broken
+//! spawned on the first source and kept warm when cleared, restarted with backoff after
+//! a crash while a source is wanted (desired source/state replay), and abandoned after too
+//! many quick failures so a broken
 //! decoder cannot spin. The controller process never blocks on or panics because of the child.
 use crate::protocol::{self, Command, Event};
 use std::{
@@ -173,7 +174,11 @@ impl Worker {
                 self.update(|s| s.abandoned = false);
                 if source.is_none() {
                     self.retry_at = None;
-                    self.stop_child();
+                    // Keep the renderer warm between wallpapers. It unmaps its video
+                    // surface and stops decoding while a static layer is shown.
+                    if self.child.is_some() {
+                        self.write(&command);
+                    }
                     return;
                 }
             }
@@ -417,15 +422,25 @@ mod tests {
     }
 
     #[test]
-    fn clearing_the_source_stops_the_renderer_and_a_missing_binary_does_not_panic() {
+    fn clearing_and_replacing_a_source_reuses_the_renderer_and_missing_binary_does_not_panic() {
         let dir = std::env::temp_dir().join(format!("bead-wp-sup2-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let log = dir.join("stdin.log");
         let sup = Supervisor::start(fast(recorder(&log)), |_| {});
         sup.send(video("/clip.mp4"));
         assert!(wait(|| sup.status().pid.is_some()));
+        let pid = sup.status().pid;
         sup.send(Command::Source { source: None });
-        assert!(wait(|| sup.status().pid.is_none()));
+        std::thread::sleep(Duration::from_millis(50));
+        assert_eq!(sup.status().pid, pid, "clear keeps the renderer warm");
+        assert_eq!(sup.status().starts, 1);
+        sup.send(video("/next.mp4"));
+        assert!(wait(|| {
+            std::fs::read_to_string(&log)
+                .unwrap_or_default()
+                .contains("/next.mp4")
+        }));
+        assert_eq!(sup.status().pid, pid, "replacement uses the same process");
         assert_eq!(sup.status().starts, 1);
         drop(sup);
         let missing = Supervisor::start(

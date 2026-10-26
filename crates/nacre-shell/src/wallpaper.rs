@@ -34,6 +34,7 @@ fn activation_reply_matches(
 
 #[derive(Clone)]
 struct PreviewSelection {
+    requested_at: Instant,
     boot: String,
     id: String,
     kind: String,
@@ -435,6 +436,16 @@ impl Preview {
         video_predecode: Option<nacre_protocol::wallpaper::WallpaperVideoPredecode>,
     ) -> u64 {
         let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
+        // Repeated activation (for example Right followed by Enter) must not
+        // discard the same in-flight poster and decode its pixels a second time.
+        if let Some(selected) = &state.selected
+            && selected.boot == boot
+            && selected.id == id
+            && selected.kind == kind
+            && selected.video_predecode == video_predecode
+        {
+            return selected.generation;
+        }
         state.generation = state.generation.saturating_add(1).max(1);
         let generation = state.generation;
         let selected = (boot.len() <= 128
@@ -442,6 +453,7 @@ impl Preview {
             && valid_local_path(&id)
             && matches!(kind.as_str(), "image" | "video"))
         .then(|| PreviewSelection {
+            requested_at: Instant::now(),
             boot: boot.clone(),
             id: id.clone(),
             kind,
@@ -524,8 +536,10 @@ pub(crate) struct Consumer {
     subscriptions: Mutex<Vec<Subscription>>,
     displayed: Mutex<BTreeMap<String, ActiveWallpaper>>,
     motion_commits: Publisher,
+    visibility: Mutex<BTreeMap<String, (u64, Instant, &'static str)>>,
 }
 struct PairToken {
+    requested_at: Option<Instant>,
     boot: String,
     pair: ActiveWallpaper,
 }
@@ -558,6 +572,7 @@ impl Consumer {
             preview,
             subscriptions: Mutex::new(Vec::new()),
             displayed: Mutex::new(BTreeMap::new()),
+            visibility: Mutex::new(BTreeMap::new()),
             motion_commits: Publisher::new(
                 "wallpaper-motion-commits".into(),
                 serde_json::json!({}),
@@ -640,6 +655,7 @@ impl Consumer {
     ) -> Option<Arc<dyn std::any::Any + Send + Sync>> {
         let state = self.state().ok()?;
         Some(Arc::new(PairToken {
+            requested_at: None,
             boot: self.client.status().boot?,
             pair: state.outputs.get(output)?.clone(),
         }))
@@ -729,6 +745,12 @@ impl Consumer {
         bead::core::profile::mark("wallpaper_decode_finished");
         let decoded_pair = decoded.pair.clone();
         let commit_token: Arc<dyn std::any::Any + Send + Sync> = Arc::new(PairToken {
+            requested_at: selection
+                .as_ref()
+                .filter(|selection| {
+                    selection.boot == boot && pair_matches_id(&decoded_pair, &selection.id)
+                })
+                .map(|selection| selection.requested_at),
             boot: boot.clone(),
             pair: decoded_pair.clone(),
         });
@@ -870,8 +892,29 @@ impl bead::wayland::WallpaperProvider for Consumer {
         {
             return;
         }
-        if let Ok(mut displayed) = self.displayed.lock() {
-            displayed.insert(output.into(), pair.pair.clone());
+        let previous_video = if let Ok(mut displayed) = self.displayed.lock() {
+            displayed
+                .insert(output.into(), pair.pair.clone())
+                .is_some_and(|old| old.motion.is_some())
+        } else {
+            false
+        };
+        if let Some(requested_at) = pair.requested_at
+            && let Ok(mut visibility) = self.visibility.lock()
+        {
+            visibility.insert(
+                output.into(),
+                (
+                    revision,
+                    requested_at,
+                    match (previous_video, pair.pair.motion.is_some()) {
+                        (false, false) => "static-to-static",
+                        (false, true) => "static-to-video-poster",
+                        (true, false) => "video-to-static",
+                        (true, true) => "video-to-video-poster",
+                    },
+                ),
+            );
         }
         if let Some(selection) = self.preview.selected().filter(|selection| {
             selection.boot == pair.boot && pair_matches_id(&pair.pair, &selection.id)
@@ -882,8 +925,27 @@ impl bead::wayland::WallpaperProvider for Consumer {
             .motion_commits
             .publish(serde_json::json!({"output":output,"revision":revision}));
     }
+    fn presented(&self, output: &str, revision: u64) {
+        let Ok(mut visibility) = self.visibility.lock() else {
+            return;
+        };
+        let Some(&(wanted, requested_at, path)) = visibility.get(output) else {
+            return;
+        };
+        if revision != wanted {
+            return;
+        }
+        visibility.remove(output);
+        println!(
+            "WALLPAPER_SWITCH_LATENCY output={output} revision={revision} path={path} request=selection endpoint=presentation-feedback ms={:.3}",
+            requested_at.elapsed().as_secs_f64() * 1000.,
+        );
+    }
     fn discarded(&self, _output: &str, _revision: u64) {}
     fn output_removed(&self, output: &str) {
+        if let Ok(mut visibility) = self.visibility.lock() {
+            visibility.remove(output);
+        }
         if let Ok(mut displayed) = self.displayed.lock() {
             displayed.remove(output);
         }
@@ -1506,6 +1568,12 @@ mod tests {
             &*consumer, &frame
         ));
         assert!(preview.cancel(superseding));
+        preview.select(
+            "00000000-0000-4000-8000-000000000021".into(),
+            expected_pair.path.clone(),
+            "image".into(),
+            None,
+        );
         let prepare_consumer = consumer.clone();
         let confirmed = tokio::task::spawn_blocking(move || {
             prepare_consumer.prepare("DP-1".into(), 2, 1).unwrap()
@@ -1533,6 +1601,17 @@ mod tests {
             "a successful commit releases the selection fence for future external updates"
         );
         assert_eq!(consumer.displayed("DP-1"), Some(expected_pair.clone()));
+        assert!(consumer.visibility.lock().unwrap().contains_key("DP-1"));
+        bead::wayland::WallpaperProvider::presented(&*consumer, "DP-1", confirmed.revision + 1);
+        assert!(
+            consumer.visibility.lock().unwrap().contains_key("DP-1"),
+            "unrelated feedback cannot report visibility"
+        );
+        bead::wayland::WallpaperProvider::presented(&*consumer, "DP-1", confirmed.revision);
+        assert!(
+            consumer.visibility.lock().unwrap().is_empty(),
+            "matching presentation reports once and releases timing state"
+        );
 
         let (staged_frame_tx, staged_frame_rx) = tokio::sync::oneshot::channel();
         let staged_consumer = consumer.clone();
@@ -1766,6 +1845,22 @@ mod tests {
             expires: Instant::now() + PREDECODE_LIFETIME,
         });
         drop(state);
+        assert_eq!(
+            preview.select("boot-a".into(), path.clone(), "image".into(), None),
+            generation
+        );
+        assert_eq!(
+            preview.selected().unwrap().requested_at,
+            selection.requested_at
+        );
+        assert!(
+            preview.predecode.signal.lock().cached.is_some(),
+            "duplicate activation preserves prepared pixels"
+        );
+        assert!(
+            preview.predecode.signal.lock().pending.is_some(),
+            "duplicate activation does not cancel the in-flight decode"
+        );
         assert!(preview.cancel(generation));
         assert!(preview.predecode.signal.lock().cached.is_none());
         assert!(preview.predecode.signal.lock().pending.is_none());

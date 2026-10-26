@@ -348,6 +348,9 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
             {
                 let ns = ((u64::from(tv_sec_hi) << 32) | u64::from(tv_sec_lo)) * 1_000_000_000
                     + u64::from(tv_nsec);
+                if let Some(provider) = &state.options.wallpaper {
+                    provider.presented(&surface.name, data.update);
+                }
                 println!(
                     "WALLPAPER_PRESENTED output={} revision={} monotonic_ns={ns} refresh_ns={refresh}",
                     surface.name, data.update

@@ -235,6 +235,10 @@ impl Player {
                 // Unknown options in older libmpv versions are ignored on purpose.
                 player.option(name, value);
             }
+            if gl.is_some() && hwdec == "vaapi" {
+                // Avoid probing CUDA interop on Intel/AMD VA-API render nodes.
+                player.option("gpu-hwdec-interop", "vaapi");
+            }
             // Diagnostics only: a verbose libmpv log (hwdec selection, fallbacks) in a file.
             if let Ok(path) = std::env::var("BEAD_WALLPAPER_MPV_LOG") {
                 player.option("log-file", &path);
@@ -324,6 +328,12 @@ impl Player {
     }
     pub fn set_paused(&self, paused: bool) {
         self.property("pause", if paused { "yes" } else { "no" });
+    }
+    /// Stop demuxing and decoding while retaining libmpv and its render context.
+    pub fn stop(&self) {
+        let mut args = [c"stop".as_ptr(), std::ptr::null()];
+        // SAFETY: NUL-terminated command array is valid for the duration of the call.
+        unsafe { (self.api.command)(self.handle, args.as_mut_ptr()) };
     }
     pub fn position(&self) -> Option<f64> {
         let mut value: c_double = 0.0;
