@@ -38,17 +38,6 @@ mod keyboard_policy_tests {
     }
 }
 
-#[cfg(test)]
-mod native_gl_extent_tests {
-    use super::*;
-
-    #[test]
-    fn detached_gl_extent_keeps_natural_height_when_docked_layer_is_clipped() {
-        assert_eq!(native_gl_dimensions(1164., 0., 654., 0., 180).unwrap(), (1746, 981));
-        assert_eq!(native_gl_dimensions(1164., 0., 632., 0., 180).unwrap(), (1746, 948));
-    }
-}
-
 fn content_body(scene: &Scene) -> Option<bead_render::Rect> {
     scene
         .layers
@@ -70,15 +59,12 @@ fn content_body(scene: &Scene) -> Option<bead_render::Rect> {
 
 /// The docked layer may be clipped to the output while its detached window
 /// must retain the complete panel content extent.
-fn native_gl_dimensions(
-    bounds_width: f32,
-    bounds_y: f32,
-    bounds_height: f32,
-    offset_y: f32,
-    scale120: u32,
-) -> Result<(u32, u32), Box<dyn Error>> {
-    let width = bounds_width.ceil().max(1.) as u32;
-    let height = (bounds_y + bounds_height + offset_y).ceil().max(1.) as u32;
+#[cfg(any(feature = "native-gl", test))]
+fn native_gl_dimensions(scene: &Scene, scale120: u32) -> Result<(u32, u32), Box<dyn Error>> {
+    let width = scene.bounds.w.ceil().max(1.) as u32;
+    let height = (scene.bounds.y + scene.bounds.h + scene.offset.1)
+        .ceil()
+        .max(1.) as u32;
     let (width, height, _, _) = buffer_dimensions(width, height, scale120)?;
     Ok((width as u32, height as u32))
 }
@@ -1029,13 +1015,7 @@ impl App {
                     && prepared.configured
                     && prepared.scale120 == s.scale120
                 {
-                    let (native_w, native_h) = native_gl_dimensions(
-                        scene.bounds.w,
-                        scene.bounds.y,
-                        scene.bounds.h,
-                        scene.offset.1,
-                        s.scale120,
-                    )?;
+                    let (native_w, native_h) = native_gl_dimensions(scene, s.scale120)?;
                     let key = policy::PreparedFrameKey {
                         generation: prepared.size_generation,
                         ui_serial: s.ui_serial,
@@ -1052,7 +1032,7 @@ impl App {
                             // EGL retains its old backbuffer until a swap. Recreate
                             // on a genuine natural-extent change instead of resizing
                             // an unswapped surface and presenting stale dimensions.
-                            prepared.gl.take();
+                            drop(prepared.gl.take());
                             prepared.gl_size = None;
                         }
                         if prepared.gl.is_none() {
@@ -2302,6 +2282,20 @@ mod input_tests {
             bounds: Rect::new(-32., -32., 264., 164.),
         }
     }
+
+    #[test]
+    fn detached_gl_extent_uses_natural_scene_instead_of_clipped_source_buffer() {
+        let mut scene = scene();
+        scene.bounds = Rect::new(0., 0., 1164., 654.);
+        scene.offset = (0., 0.);
+
+        let natural = native_gl_dimensions(&scene, 180).unwrap();
+        let (clipped_width, clipped_height, _, _) = buffer_dimensions(1164, 632, 180).unwrap();
+
+        assert_eq!(natural, (1746, 981));
+        assert_eq!((clipped_width, clipped_height), (1746, 948));
+    }
+
     #[test]
     fn painted_content_excludes_shadow_and_survives_background_replacement() {
         let mut scene = scene();
