@@ -1474,13 +1474,7 @@ impl App {
                 )?;
             }
             let transparent = warm_target.and_then(|_| {
-                transparent_corner(
-                    canvas,
-                    w as u32,
-                    h as u32,
-                    stride as usize,
-                    preferred_pixel,
-                )
+                transparent_corner(canvas, w as u32, h as u32, stride as usize, preferred_pixel)
             });
             if std::env::var_os("BEAD_PROFILE_DAMAGE").is_some() {
                 println!(
@@ -1582,12 +1576,7 @@ impl App {
                     {
                         let target = window.wl_surface();
                         target.set_buffer_scale(1);
-                        viewport.set_source(
-                            f64::from(pixel.0),
-                            f64::from(pixel.1),
-                            1.0,
-                            1.0,
-                        );
+                        viewport.set_source(f64::from(pixel.0), f64::from(pixel.1), 1.0, 1.0);
                         viewport.set_destination(s.width as i32, s.height as i32);
                         buffer.attach_to(target)?;
                         target.damage_buffer(0, 0, w, h);
@@ -1617,8 +1606,7 @@ impl App {
                         );
                         target.commit();
                         prepared.server_attached_key = Some(key);
-                        prepared.server_pending_frame =
-                            Some((frame_epoch, prepared.epoch, key));
+                        prepared.server_pending_frame = Some((frame_epoch, prepared.epoch, key));
                         prepared.server_warm_pixel = Some(pixel);
                     }
                 }
@@ -2007,7 +1995,10 @@ mod repair_tests {
             pixels[y * 16 + x * 4 + 3] = 0;
         }
         assert_eq!(transparent_corner(&pixels, 3, 3, 16, None), Some((0, 0)));
-        assert_eq!(transparent_corner(&pixels, 3, 3, 16, Some((9, 9))), Some((0, 0)));
+        assert_eq!(
+            transparent_corner(&pixels, 3, 3, 16, Some((9, 9))),
+            Some((0, 0))
+        );
         pixels[23] = 1; // A filtered inward neighbor must also be transparent.
         assert_eq!(transparent_corner(&pixels, 3, 3, 16, None), None);
         let mut opaque_corners = vec![0xff; 36];

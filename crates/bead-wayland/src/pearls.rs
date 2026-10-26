@@ -242,9 +242,7 @@ fn cpu_warm_callback_current(
     prepared_epoch: u64,
     key: policy::PreparedFrameKey,
 ) -> bool {
-    pending == Some((epoch, prepared_epoch, key))
-        && attached == Some(key)
-        && snapshot == Some(key)
+    pending == Some((epoch, prepared_epoch, key)) && attached == Some(key) && snapshot == Some(key)
 }
 
 /// The resident-panel state, as one movable unit.
@@ -2779,11 +2777,19 @@ mod placement_tests {
             Some(key),
             Some((0, 0))
         ));
-        assert!(!cpu_alias_already_attached(true, Some(key), Some(key), None));
         assert!(!cpu_alias_already_attached(
             true,
             Some(key),
-            Some(policy::PreparedFrameKey { ui_serial: 7, ..key }),
+            Some(key),
+            None
+        ));
+        assert!(!cpu_alias_already_attached(
+            true,
+            Some(key),
+            Some(policy::PreparedFrameKey {
+                ui_serial: 7,
+                ..key
+            }),
             Some((0, 0))
         ));
         assert!(cpu_warm_callback_current(
@@ -2813,7 +2819,10 @@ mod placement_tests {
         assert!(!cpu_warm_callback_current(
             Some((3, 9, key)),
             Some(key),
-            Some(policy::PreparedFrameKey { generation: 5, ..key }),
+            Some(policy::PreparedFrameKey {
+                generation: 5,
+                ..key
+            }),
             3,
             9,
             key
