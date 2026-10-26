@@ -1809,8 +1809,7 @@ fn bar_hover_prewarms_once_retires_on_leave_and_reuses_the_warm_destination() {
 
 #[test]
 fn completed_drag_retirement_stops_stationary_hover_renewal_until_reentry() {
-    let dir =
-        std::env::temp_dir().join(format!("widget-drag-hover-retire-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("widget-drag-hover-retire-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let mut runtime = real_bar_runtime(dir.join("widgets.json"));
@@ -1888,7 +1887,11 @@ fn completed_drag_retirement_stops_stationary_hover_renewal_until_reentry() {
             })
             .count()
     };
-    assert_eq!(prepares(), 1, "empty-model wakeups do not rewarm the retired view");
+    assert_eq!(
+        prepares(),
+        1,
+        "empty-model wakeups do not rewarm the retired view"
+    );
 
     if runtime.stage(UiEvent::Hover { x, y }).unwrap().is_some() {
         runtime.commit();

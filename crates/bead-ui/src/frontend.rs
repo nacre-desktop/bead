@@ -1105,10 +1105,7 @@ mod animation_tests {
                 Duration::from_micros(1_500),
                 Duration::from_nanos(16_667_000),
             ),
-            (
-                Duration::from_millis(35),
-                Duration::from_nanos(50_001_000),
-            ),
+            (Duration::from_millis(35), Duration::from_nanos(50_001_000)),
         ] {
             assert_eq!(
                 animation_frame_deadline(start + elapsed, start, interval, end),
@@ -1136,12 +1133,7 @@ mod animation_tests {
             "the final animation frame is scheduled exactly at its end"
         );
         assert_eq!(
-            animation_frame_deadline(
-                start,
-                start,
-                interval,
-                start + Duration::from_millis(10),
-            ),
+            animation_frame_deadline(start, start, interval, start + Duration::from_millis(10),),
             start + Duration::from_millis(10),
             "a short motion ends before its first frame slot"
         );
