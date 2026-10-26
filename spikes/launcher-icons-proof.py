@@ -176,7 +176,14 @@ original_drive = m.Arm.drive
 m.Arm.start_daemon = daemon
 m.Arm.spawn = spawn
 m.Arm.drive = drive
-if os.environ.get('ICON_PARITY') != '1':
+if os.environ.get('ICON_PARITY') == '1':
+    # The Recent column shifts quick controls; target the same fixture app tile.
+    for state, action in [('launcher-hover', 'pointer'), ('launcher-pressed', 'press')]:
+        cleanup = [('release',)] if action == 'press' else []
+        m.STATES[state] = ([('ui', 'nacre', 'launcher', ''), ('sleep', 1.4),
+                            (action, 655, 714)], [*cleanup, ('ui', 'nacre', 'close')], 0)
+    m.STATE_SETTLE.update({'launcher-hover': .18, 'launcher-pressed': .05})
+else:
     m.build_gallery = lambda args, names: {}
 if __name__ == '__main__':
     raise SystemExit(m.main())
