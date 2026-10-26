@@ -2235,7 +2235,13 @@ impl App {
     }
     /// Close every open pearl and forget entries for absent outputs as well.
     pub(super) fn reset_pearls(&mut self) {
-        self.gesture = None;
+        if let Some(gesture) = self.gesture.take() {
+            self.on_surface(&gesture.surface, |app| {
+                app.cancel_prepared_native();
+                app.reserved_pearl_id = None;
+                app.prewarm_attempted = false;
+            });
+        }
         self.end_guides();
         self.pending_pearls.clear();
         let ids: Vec<_> = self
