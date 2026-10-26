@@ -23,6 +23,23 @@ local function clock_with_seconds(time,seconds)
     if prefix then return prefix..":"..suffix..meridiem end
     return time..":"..suffix
 end
+local function natural_content_width(style)
+    local time=ui.resolve_for_check(ui.bind("bar.clock.text")) or ""
+    if style=="time" then
+        local shown=measure.ellipsize(time,time_max,clock_font,t.clock_font)
+        return math.max(t.clock_min_width,ui.text_width(shown,clock_font,t.clock_font))
+    elseif style=="seconds" then
+        local seconds=ui.resolve_for_check(ui.bind("bead.desktop.clock.seconds")) or ""
+        local value=measure.ellipsize(clock_with_seconds(time,seconds),seconds_max,clock_font,t.clock_font)
+        return ui.text_width(value,clock_font,t.clock_font)
+    end
+    local date=ui.resolve_for_check(ui.bind("bead.desktop.clock.date")) or ""
+    local shown_time=measure.ellipsize(time,time_max,clock_font,t.clock_font)
+    local shown_date=measure.ellipsize(date,date_max,clock_font,t.detail_font)
+    local time_width=ui.text_width(shown_time,clock_font,t.clock_font)
+    local date_width=ui.text_width(shown_date,clock_font,t.detail_font)
+    return time_width+date_width+(time_width>0 and date_width>0 and t.item_gap or 0)
+end
 local function clock_content(style,instance_id,available_width)
     local time=ui.resolve_for_check(ui.bind("bar.clock.text")) or ""
     local time_capacity=math.min(time_max,available_width or time_max)
@@ -30,8 +47,8 @@ local function clock_content(style,instance_id,available_width)
         local shown=measure.ellipsize(time,time_capacity,clock_font,t.clock_font)
         local natural=math.min(time_capacity,math.max(math.min(t.clock_min_width,time_capacity),
             ui.text_width(shown,clock_font,t.clock_font)))
-        local width=ui.animate("clock-time-width:"..tostring(instance_id or "clock"),natural,.18,"out-cubic")
-        return status_text{id="time",text=shown,width=math.min(time_capacity,width),max_width=time_capacity,shrink=0,font_size=t.clock_font,color="tertiary"}
+        ui.animate("clock-date-width:"..tostring(instance_id or "clock"),natural,0,"out-cubic")
+        return status_text{id="time",text=shown,width=natural,max_width=time_capacity,shrink=0,font_size=t.clock_font,color="tertiary"}
     elseif style=="seconds" then
         local seconds=ui.resolve_for_check(ui.bind("bead.desktop.clock.seconds")) or ""
         local capacity=math.min(seconds_max,available_width or seconds_max)
@@ -73,12 +90,12 @@ local function desktop(props,_settings,_data)
             clock_content(props.form_style,props.instance and props.instance.iid),
         }}
 end
-local function bar_style(title,style,preferred,requires,natural_width)
+local function bar_style(title,style,preferred,requires)
     local descriptor={title=title,min_span=1,max_span=60,preferred_span=preferred,requires=requires,render=function(props,settings,data)
         props.form_style=style
         return bar(props,settings,data)
     end}
-    descriptor.reserve_width=function(_) return reserve_clock(natural_width) end
+    descriptor.reserve_width=function(_) return reserve_clock(natural_content_width(style)) end
     return descriptor
 end
 local function preferred_span(width)
@@ -92,8 +109,8 @@ local function desktop_style(title,style,preferred,requires)
 end
 return {id="clock",title="Clock",icon="schedule",category="bar",data={topics={},actions={}},settings={},defaults={},budget={fps_active=0,fps_idle=0,pause_on={"fullscreen","lock","battery_saver"}},
     forms={bar={default_style="time",styles={
-        time=bar_style("Time","time",preferred_span(time_max),nil,time_max),["time+date"]=bar_style("Time + date","time+date",preferred_span(date_content_max),{"bead.desktop.clock.date"},date_content_max),
-        seconds=bar_style("Seconds","seconds",preferred_span(seconds_max),{"bead.desktop.clock.seconds"},seconds_max),
+        time=bar_style("Time","time",preferred_span(time_max),nil),["time+date"]=bar_style("Time + date","time+date",preferred_span(date_content_max),{"bead.desktop.clock.date"}),
+        seconds=bar_style("Seconds","seconds",preferred_span(seconds_max),{"bead.desktop.clock.seconds"}),
     }},desktop={default_style="time",styles={
         time=desktop_style("Time","time",220),["time+date"]=desktop_style("Time + date","time+date",360,{"bead.desktop.clock.date"}),
         seconds=desktop_style("Seconds","seconds",240,{"bead.desktop.clock.seconds"}),
