@@ -1745,6 +1745,14 @@ impl App {
                     } else {
                         app.renderer.trim_transient_idle()
                     };
+                    if remaining.is_none() {
+                        // The last repair can outlive the revision's heap trim.
+                        // Reclaim its freed pages only after scratch becomes idle.
+                        #[cfg(all(target_os = "linux", target_env = "gnu"))]
+                        unsafe {
+                            libc::malloc_trim(0);
+                        }
+                    }
                     remaining.map_or(TimeoutAction::Drop, TimeoutAction::ToDuration)
                 },
             ) {
