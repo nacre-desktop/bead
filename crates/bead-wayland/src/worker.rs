@@ -112,6 +112,7 @@ enum Job {
     PanelAnchor(Option<PanelAnchor>),
     Presented(u64),
     Idle(bool),
+    FrameInterval(std::time::Duration),
     Stage(UiEvent, Vec<f32>),
     ContentScroll(UiEvent, Vec<f32>),
     Viewport(u32, u32),
@@ -161,6 +162,7 @@ fn enqueue(queue: &mut VecDeque<Job>, mut job: Job) {
         }
     }
     let replace = match (queue.back(), &job) {
+        (Some(Job::FrameInterval(_)), Job::FrameInterval(_)) => true,
         (Some(Job::Stage(UiEvent::Hover { .. }, _)), Job::Stage(UiEvent::Hover { .. }, _))
         | (Some(Job::Stage(UiEvent::Drag { .. }, _)), Job::Stage(UiEvent::Drag { .. }, _))
         | (
@@ -193,6 +195,7 @@ pub struct Source {
     current: Scene,
     candidate: Option<Scene>,
     viewport: Option<(u32, u32)>,
+    frame_interval: Option<std::time::Duration>,
 }
 impl Source {
     pub fn new(factory: Factory, fallback: Scene) -> Self {
@@ -210,6 +213,7 @@ impl Source {
             current: fallback,
             candidate: None,
             viewport: None,
+            frame_interval: None,
         }
     }
     pub fn with_image_policy(mut self, policy: bead_render::tree::ImagePolicy) -> Self {
@@ -462,6 +466,7 @@ impl SceneSource for Source {
                                 libc::malloc_trim(0);
                             }
                         }
+                        Job::FrameInterval(interval) => source.frame_interval(interval),
                         Job::Viewport(w, h) => {
                             source.viewport(w, h);
                         }
@@ -672,6 +677,18 @@ impl SceneSource for Source {
                 report(UiEvent::Fatal("script worker panicked".into()));
             }
         }));
+        if let Some(interval) = self.frame_interval {
+            let _ = self.send(Job::FrameInterval(interval));
+        }
+    }
+    fn frame_interval(&mut self, interval: std::time::Duration) {
+        if self.frame_interval == Some(interval) {
+            return;
+        }
+        self.frame_interval = Some(interval);
+        if self.sender.is_some() {
+            let _ = self.send(Job::FrameInterval(interval));
+        }
     }
     fn set_idle(&mut self, idle: bool) {
         let _ = self.send(Job::Idle(idle));
@@ -856,6 +873,27 @@ mod tests {
             offset: (0., 0.),
             bounds: bead_render::Rect::new(0., 0., 16., 16.),
         }
+    }
+    #[test]
+    fn unchanged_frame_interval_sends_no_worker_job_and_queued_changes_coalesce() {
+        let mut source = Source::new(Box::new(|| Err("unused".into())), scene());
+        let (sender, receiver) = mpsc::channel();
+        source.sender = Some(sender);
+        let slow = Duration::from_nanos(1_000_000_000_000 / 60_000);
+        let fast = Duration::from_nanos(1_000_000_000_000 / 120_000);
+        source.frame_interval(slow);
+        source.frame_interval(slow);
+        assert!(matches!(receiver.try_recv(), Ok(Job::FrameInterval(interval)) if interval == slow));
+        assert!(matches!(receiver.try_recv(), Err(mpsc::TryRecvError::Empty)));
+
+        let mut queue = VecDeque::new();
+        enqueue(&mut queue, Job::FrameInterval(slow));
+        enqueue(&mut queue, Job::FrameInterval(fast));
+        assert_eq!(queue.len(), 1);
+        assert!(matches!(queue.pop_front(), Some(Job::FrameInterval(interval)) if interval == fast));
+        source.frame_interval(fast);
+        assert!(matches!(receiver.try_recv(), Ok(Job::FrameInterval(interval)) if interval == fast));
+        assert!(matches!(receiver.try_recv(), Err(mpsc::TryRecvError::Empty)));
     }
     #[test]
     fn worker_dismissal_and_cursor_use_the_topmost_clipped_polygon_hit() {

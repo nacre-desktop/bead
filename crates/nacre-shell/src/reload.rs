@@ -4242,6 +4242,10 @@ impl SceneSource for Runtime {
         .min()
     }
 
+    fn frame_interval(&mut self, interval: std::time::Duration) {
+        self.session.set_frame_interval(interval);
+    }
+
     fn initial_model(
         &mut self,
         values: BTreeMap<String, bead::core::Value>,

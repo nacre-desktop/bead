@@ -321,6 +321,17 @@ pub(crate) struct Gesture {
 }
 
 impl App {
+    pub(super) fn pearl_output_mode_changed(
+        &mut self,
+        output: &wl_output::WlOutput,
+        interval: std::time::Duration,
+    ) {
+        for group in self.slots.iter_mut().filter(|group| group.output.as_ref() == Some(output)) {
+            if let Some(source) = &mut group.runtime {
+                source.frame_interval(interval);
+            }
+        }
+    }
     /// Renderer retirement must include parked panels and both sides of a handoff.
     #[cfg(any(feature = "native-gl", feature = "wgpu"))]
     fn retained_surfaces(&self) -> impl Iterator<Item = &Surface> {

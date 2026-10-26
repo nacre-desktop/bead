@@ -48,6 +48,7 @@ pub(super) struct Canvas {
     pub(super) callbacks: policy::Callbacks,
     pub(super) frame_pending: bool,
     pub(super) dirty: bool,
+    pub(super) refresh_ns: u32,
 }
 
 impl Drop for Canvas {
@@ -185,6 +186,30 @@ impl CanvasLifecycle {
 }
 
 impl App {
+    pub(super) fn canvas_presentation(
+        &mut self,
+        data: &PresentationData,
+        event: &wp_presentation_feedback::Event,
+    ) -> bool {
+        let Some(canvas) = self.canvases.values_mut().find(|canvas| {
+            canvas.epoch == data.source_epoch
+                && canvas
+                    .layer
+                    .as_ref()
+                    .is_some_and(|layer| layer.wl_surface() == &data.surface)
+        }) else {
+            return false;
+        };
+        if let wp_presentation_feedback::Event::Presented { refresh, .. } = event
+            && *refresh > 0
+        {
+            canvas.refresh_ns = *refresh;
+            canvas
+                .source
+                .frame_interval(Duration::from_nanos(u64::from(*refresh)));
+        }
+        true
+    }
     pub(super) fn canvas_surface(&self, surface: &wl_surface::WlSurface) -> bool {
         self.canvases.values().any(|canvas| {
             canvas
@@ -344,6 +369,7 @@ impl App {
             Box::new(move || factory(true)),
             fallback.clone(),
         ));
+        source.frame_interval(self.output_frame_interval(&output));
         let Some(sender) = self.event_sender.clone() else {
             return;
         };
@@ -415,6 +441,7 @@ impl App {
                 callbacks: Default::default(),
                 frame_pending: false,
                 dirty: false,
+                refresh_ns: 0,
             },
         );
         if let Some(palette) = self.wallpaper_palette.clone() {
@@ -882,6 +909,19 @@ impl App {
         canvas.frame_pending = true;
         canvas.dirty = false;
         canvas.buffers[slot].attach_to(&surface)?;
+        if let Some(presentation) = &self.presentation {
+            presentation.feedback(
+                &surface,
+                &self.qh,
+                PresentationData {
+                    source_epoch: canvas.epoch,
+                    visibility: 0,
+                    update: canvas.scene.resource_revision,
+                    surface: surface.clone(),
+                    generation: canvas.scene.resource_revision,
+                },
+            );
+        }
         canvas
             .layer
             .as_ref()

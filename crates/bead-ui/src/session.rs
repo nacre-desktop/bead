@@ -32,6 +32,7 @@ pub struct Session {
     projector: Option<Projector>,
     pointer_input: std::rc::Rc<std::cell::Cell<bool>>,
     pub(super) preview_deadline: Option<std::time::Instant>,
+    frame_interval: std::time::Duration,
     pointer_inside: bool,
     pointer_seen: bool,
     edge_hover: bead_core::edge_hover::EdgeHover,
@@ -143,6 +144,7 @@ impl Session {
             projector: None,
             pointer_input: Default::default(),
             preview_deadline: None,
+            frame_interval: std::time::Duration::from_millis(16),
             pointer_inside: false,
             pointer_seen: false,
             edge_hover: Default::default(),
@@ -361,6 +363,7 @@ impl Session {
             self.attempts,
             self.font_picker.clone(),
         )?;
+        generation.set_frame_interval(self.frame_interval);
         bead_core::profile::mark("generation_ready");
         if self.generation.is_none()
             && let Some(saved) = &self.restore
@@ -817,6 +820,27 @@ impl Session {
         let changed = self.viewport != next;
         self.viewport = next;
         changed
+    }
+    pub fn set_frame_interval(&mut self, interval: std::time::Duration) {
+        let interval = if interval.is_zero() {
+            std::time::Duration::from_millis(16)
+        } else {
+            interval
+        };
+        if self.frame_interval == interval {
+            return;
+        }
+        self.frame_interval = interval;
+        if let Some(generation) = &self.generation {
+            generation.set_frame_interval(interval);
+        }
+        if let Some(generation) = self
+            .pending
+            .as_ref()
+            .and_then(|pending| pending.generation.as_ref())
+        {
+            generation.set_frame_interval(interval);
+        }
     }
     pub fn relayout(&mut self) -> Result<Option<Scene>, Diagnostic> {
         let Some(generation) = &self.generation else {

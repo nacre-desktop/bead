@@ -146,6 +146,15 @@ pub(super) struct OutputSession {
     pub(super) animations: bead_core::animation::Animations,
 }
 
+pub(super) fn frame_interval_from_refresh_millihz(refresh_rate: i32) -> Duration {
+    match u64::try_from(refresh_rate) {
+        Ok(refresh_rate) if refresh_rate > 0 => {
+            Duration::from_nanos(1_000_000_000_000 / refresh_rate)
+        }
+        _ => Duration::from_millis(16),
+    }
+}
+
 pub(super) struct PendingPalette {
     pub(super) palette: std::collections::BTreeMap<String, [u8; 4]>,
     pub(super) expected: std::collections::BTreeSet<String>,
@@ -695,6 +704,104 @@ pub fn run_runtime(
     Ok(())
 }
 impl App {
+    pub(super) fn output_frame_interval(&self, output: &wl_output::WlOutput) -> Duration {
+        self.output
+            .info(output)
+            .and_then(|info| {
+                info.modes
+                    .iter()
+                    .find(|mode| mode.current)
+                    .map(|mode| frame_interval_from_refresh_millihz(mode.refresh_rate))
+            })
+            .unwrap_or_else(|| Duration::from_millis(16))
+    }
+    fn presented_output_frame_interval(&self, output: &wl_output::WlOutput) -> Duration {
+        self.surfaces
+            .iter()
+            .filter(|surface| surface.output == *output && !surface.companion)
+            .filter_map(|surface| (surface.refresh_ns > 0).then_some(surface.refresh_ns))
+            .min()
+            .map_or_else(|| self.output_frame_interval(output), |ns| Duration::from_nanos(u64::from(ns)))
+    }
+    fn shared_primary_frame_interval(&self) -> Duration {
+        self.output
+            .outputs()
+            .map(|output| self.presented_output_frame_interval(&output))
+            .min()
+            .unwrap_or_else(|| Duration::from_millis(16))
+    }
+    pub(super) fn output_mode_changed(&mut self, output: &wl_output::WlOutput) {
+        for surface in self.surfaces.iter_mut().filter(|surface| surface.output == *output) {
+            surface.refresh_ns = 0;
+        }
+        for canvas in self.canvases.values_mut().filter(|canvas| canvas.output == *output) {
+            canvas.refresh_ns = 0;
+        }
+        let name = self.output_id(output);
+        let interval = self.output_frame_interval(output);
+        if let Some(session) = self.output_sessions.get_mut(&name)
+            && let Some(source) = &mut session.source
+        {
+            source.frame_interval(interval);
+        }
+        if self.active_output.as_deref() == Some(&name)
+            && let Some(source) = &mut self.runtime
+        {
+            source.frame_interval(interval);
+        }
+        if self.options.primary_factory.is_none() {
+            let shared = self.shared_primary_frame_interval();
+            if let Some(source) = &mut self.runtime {
+                source.frame_interval(shared);
+            }
+        }
+        if self.panel_output.as_ref() == Some(output)
+            && let Some(source) = &mut self.panel_runtime
+        {
+            source.frame_interval(interval);
+        }
+        self.pearl_output_mode_changed(output, interval);
+        for canvas in self.canvases.values_mut().filter(|canvas| canvas.output == *output) {
+            canvas.source.frame_interval(interval);
+        }
+        self.window_output_mode_changed(&name, interval);
+    }
+    pub(super) fn output_presented(
+        &mut self,
+        output: &wl_output::WlOutput,
+        output_name: &str,
+        companion: bool,
+        refresh_ns: u32,
+    ) {
+        if refresh_ns == 0 {
+            return;
+        }
+        let interval = Duration::from_nanos(u64::from(refresh_ns));
+        if companion {
+            if self.panel_output.as_ref() == Some(output)
+                && let Some(source) = &mut self.panel_runtime
+            {
+                source.frame_interval(interval);
+            }
+        } else if self.options.primary_factory.is_some() {
+            if self.active_output.as_deref() == Some(output_name) {
+                if let Some(source) = &mut self.runtime {
+                    source.frame_interval(interval);
+                }
+            } else if let Some(source) = self
+                .output_sessions
+                .get_mut(output_name)
+                .and_then(|session| session.source.as_mut())
+            {
+                source.frame_interval(interval);
+            }
+        } else {
+            let fastest = self.shared_primary_frame_interval();
+            if let Some(source) = &mut self.runtime {
+                source.frame_interval(fastest);
+            }
+        }
+    }
     pub(super) fn output_id(&self, output: &wl_output::WlOutput) -> String {
         self.output
             .info(output)
@@ -2035,6 +2142,7 @@ impl App {
                             );
                         }
                     }
+                    source.frame_interval(self.output_frame_interval(&output));
                     self.output_sessions.insert(
                         output_id.clone(),
                         OutputSession {
@@ -2464,9 +2572,26 @@ mod palette_barrier_tests {
     use super::{
         PendingPalette, StagedWallpaperBuffer, aborted_palette_retry_outputs,
         accepted_palette_waits_for_confirmation, frame_is_unconfirmed,
-        has_unconfirmed_palette_frame, wallpaper_palette_group_ready,
+        frame_interval_from_refresh_millihz, has_unconfirmed_palette_frame,
+        wallpaper_palette_group_ready,
     };
     use std::sync::Arc;
+
+    #[test]
+    fn output_refresh_millihertz_maps_to_deadline_period() {
+        assert_eq!(
+            frame_interval_from_refresh_millihz(120_000),
+            std::time::Duration::from_nanos(8_333_333)
+        );
+        assert_eq!(
+            frame_interval_from_refresh_millihz(60_000),
+            std::time::Duration::from_nanos(16_666_666)
+        );
+        assert_eq!(
+            frame_interval_from_refresh_millihz(0),
+            std::time::Duration::from_millis(16)
+        );
+    }
 
     #[test]
     fn staged_wallpaper_requires_exact_frame_token_revision_and_dimensions() {

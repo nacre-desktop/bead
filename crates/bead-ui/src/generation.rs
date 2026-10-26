@@ -161,6 +161,11 @@ impl Loader {
     }
 }
 impl Generation {
+    pub(super) fn set_frame_interval(&self, interval: std::time::Duration) {
+        if let Some(frontend) = &self.markup_frontend {
+            frontend.set_frame_interval(interval);
+        }
+    }
     pub(super) fn animation_deadline(&self) -> Option<std::time::Instant> {
         self.markup_frontend
             .as_ref()

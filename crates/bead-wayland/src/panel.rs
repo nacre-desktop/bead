@@ -795,6 +795,7 @@ impl App {
         source.services(Box::new(move |event| {
             let _ = notify.send(UiEvent::Panel(epoch, Box::new(event)));
         }));
+        source.frame_interval(self.output_frame_interval(&output));
         source.panel_center(self.panel_center);
         source.panel_anchor(self.panel_anchor);
         source

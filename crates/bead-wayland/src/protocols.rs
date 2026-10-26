@@ -375,10 +375,14 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
         if state.window_presentation(data, &event) || state.overlay_presentation(data, &event) {
             return;
         }
+        if state.canvas_presentation(data, &event) {
+            return;
+        }
         if let Some(id) = state.slot_of_surface(&data.surface) {
             state.in_slot(id, |app| Self::event(app, proxy, event, data, conn, qh));
             return;
         }
+        let mut frame_interval_update = None;
         if let Some(s) = state
             .surfaces
             .iter_mut()
@@ -393,6 +397,14 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
                     flags,
                     ..
                 } => {
+                    if refresh > 0 && s.refresh_ns != refresh {
+                        frame_interval_update = Some((
+                            s.output.clone(),
+                            s.output_name.clone(),
+                            s.companion,
+                            refresh,
+                        ));
+                    }
                     let ns = ((u64::from(tv_sec_hi) << 32) | u64::from(tv_sec_lo)) * 1_000_000_000
                         + u64::from(tv_nsec);
                     crate::scroll::note_refresh(refresh);
@@ -446,6 +458,9 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
                 _ => {}
             }
         }
+        if let Some((output, name, companion, refresh_ns)) = frame_interval_update {
+            state.output_presented(&output, &name, companion, refresh_ns);
+        }
         if matches!(event, wp_presentation_feedback::Event::Presented { .. }) {
             state.record_first_frame(&data.surface, data.generation, data.source_epoch);
         }
@@ -459,7 +474,8 @@ impl OutputHandler for App {
         &mut self.output
     }
     fn new_output(&mut self, _: &Connection, qh: &QueueHandle<Self>, output: wl_output::WlOutput) {
-        self.add_output(qh, output);
+        self.add_output(qh, output.clone());
+        self.output_mode_changed(&output);
         self.restore_pearls();
         self.sync_edges();
         self.app_open_pending();
@@ -471,6 +487,7 @@ impl OutputHandler for App {
         output: wl_output::WlOutput,
     ) {
         self.add_output(qh, output.clone());
+        self.output_mode_changed(&output);
         self.restore_pearls();
         self.sync_edges();
         self.app_open_pending();

@@ -234,10 +234,42 @@ struct Animations {
     states: BTreeMap<String, ScalarMotion>,
     seen: BTreeSet<String>,
     next_frame: Option<Instant>,
+    frame_interval: Duration,
 }
 #[derive(Clone)]
 pub(super) struct AnimationSnapshot(Animations);
 impl Animations {
+    fn frame_interval(&self) -> Duration {
+        if self.frame_interval.is_zero() {
+            Duration::from_millis(16)
+        } else {
+            self.frame_interval
+        }
+    }
+    fn set_frame_interval(&mut self, interval: Duration) {
+        let interval = if interval.is_zero() {
+            Duration::from_millis(16)
+        } else {
+            interval
+        };
+        if self.frame_interval == interval {
+            return;
+        }
+        self.frame_interval = interval;
+        let now = Instant::now();
+        self.next_frame = self
+            .states
+            .values()
+            .filter(|motion| motion.from != motion.to && now < motion.started + motion.duration)
+            .map(|motion| (now + interval).min(motion.started + motion.duration))
+            .min();
+    }
+    fn restore(&mut self, snapshot: AnimationSnapshot) {
+        let frame_interval = self.frame_interval();
+        let mut restored = snapshot.0;
+        restored.set_frame_interval(frame_interval);
+        *self = restored;
+    }
     fn begin_build(&mut self) {
         self.seen.clear();
         self.next_frame = None;
@@ -311,7 +343,7 @@ impl Animations {
         let motion = self.states.get(&key).expect("inserted animation");
         let value = if reduced { target } else { motion.value(now) };
         if !reduced && now < motion.started + motion.duration && motion.from != motion.to {
-            let deadline = (now + Duration::from_millis(16)).min(motion.started + motion.duration);
+            let deadline = (now + self.frame_interval()).min(motion.started + motion.duration);
             self.next_frame = Some(self.next_frame.map_or(deadline, |old| old.min(deadline)));
         }
         Ok(value)
@@ -427,11 +459,14 @@ impl LuauFrontEnd {
     pub(super) fn animation_deadline(&self) -> Option<Instant> {
         self.animations.borrow().next_frame
     }
+    pub(super) fn set_frame_interval(&self, interval: Duration) {
+        self.animations.borrow_mut().set_frame_interval(interval);
+    }
     pub(super) fn animation_snapshot(&self) -> AnimationSnapshot {
         AnimationSnapshot(self.animations.borrow().clone())
     }
     pub(super) fn restore_animations(&self, snapshot: AnimationSnapshot) {
-        *self.animations.borrow_mut() = snapshot.0;
+        self.animations.borrow_mut().restore(snapshot);
         // A rejected candidate may have populated the raw-view cache with its
         // interpolated pose. Rebuild it against the restored animation state.
         *self.materialized.borrow_mut() = None;
@@ -1022,5 +1057,72 @@ mod animation_tests {
         );
         animations.finish_build();
         assert!(animations.next_frame.is_none());
+    }
+
+    #[test]
+    fn animation_deadlines_follow_independent_display_intervals() {
+        let start = Instant::now();
+        let intervals = [
+            Duration::from_nanos(1_000_000_000_000 / 60_000),
+            Duration::from_nanos(1_000_000_000_000 / 120_000),
+        ];
+        let mut deadlines = Vec::new();
+        for interval in intervals {
+            let mut animations = Animations::default();
+            animations.set_frame_interval(interval);
+            animations.states.insert(
+                "x".into(),
+                ScalarMotion {
+                    from: 0.,
+                    to: 0.,
+                    started: start,
+                    duration: Duration::from_secs(1),
+                    curve: AnimationCurve::Linear,
+                },
+            );
+            animations.begin_build();
+            animations
+                .animate_as("x".into(), 1., 0.3, "linear", start, false)
+                .unwrap();
+            deadlines.push(animations.next_frame.unwrap());
+        }
+        assert_eq!(deadlines[0] - start, intervals[0]);
+        assert_eq!(deadlines[1] - start, intervals[1]);
+        assert!(deadlines[1] < deadlines[0]);
+    }
+
+    #[test]
+    fn rejected_animation_candidate_restores_motion_and_current_interval() {
+        let start = Instant::now();
+        let interval = Duration::from_nanos(1_000_000_000_000 / 120_000);
+        let mut animations = Animations::default();
+        animations.set_frame_interval(interval);
+        animations.states.insert(
+            "x".into(),
+            ScalarMotion {
+                from: 0.,
+                to: 0.,
+                started: start,
+                duration: Duration::from_secs(1),
+                curve: AnimationCurve::Linear,
+            },
+        );
+        animations.begin_build();
+        animations
+            .animate_as("x".into(), 1., 0.3, "linear", start, false)
+            .unwrap();
+        let snapshot = AnimationSnapshot(animations.clone());
+        let snapshot_deadline = snapshot.0.next_frame.unwrap();
+        let rejected = start + Duration::from_millis(5);
+        animations.set_frame_interval(Duration::from_millis(16));
+        animations.begin_build();
+        animations
+            .animate_as("x".into(), 9., 0.3, "linear", rejected, false)
+            .unwrap();
+
+        animations.restore(snapshot);
+        assert_eq!(animations.frame_interval(), Duration::from_millis(16));
+        assert_eq!(animations.states["x"].to, 1.);
+        assert!(animations.next_frame.unwrap() > snapshot_deadline);
     }
 }

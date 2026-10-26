@@ -43,6 +43,8 @@ pub(super) struct Win {
     window: Window,
     epoch: u64,
     source: Box<dyn SceneSource>,
+    output_name: Option<String>,
+    refresh_ns: u32,
     scene: Scene,
     renderer: Box<dyn Renderer>,
     pool: Option<SlotPool>,
@@ -204,6 +206,10 @@ impl App {
                 ..
             } => {
                 crate::scroll::note_refresh(*refresh);
+                if *refresh > 0 && win.refresh_ns != *refresh {
+                    win.refresh_ns = *refresh;
+                    win.source.frame_interval(std::time::Duration::from_nanos(u64::from(*refresh)));
+                }
                 let monotonic_ns = ((u64::from(*tv_sec_hi) << 32) | u64::from(*tv_sec_lo))
                     * 1_000_000_000
                     + u64::from(*tv_nsec);
@@ -243,6 +249,20 @@ impl App {
     }
     pub(super) fn window_surface(&self) -> Option<&wl_surface::WlSurface> {
         self.window.as_ref().map(|w| w.window.wl_surface())
+    }
+    pub(super) fn window_output_mode_changed(
+        &mut self,
+        output_name: &str,
+        interval: std::time::Duration,
+    ) {
+        if let Some(window) = self
+            .window
+            .as_mut()
+            .filter(|window| window.output_name.as_deref() == Some(output_name))
+        {
+            window.refresh_ns = 0;
+            window.source.frame_interval(interval);
+        }
     }
     pub(super) fn window_command(&mut self, request: std::sync::Arc<Remote>) -> bool {
         let call = &request.call;
@@ -355,17 +375,20 @@ impl App {
                 let _ = sender.send(UiEvent::Window(epoch, Box::new(event)));
             }))
             .map_err(|e| e.to_string())?;
-        let output_size = self
-            .output
-            .outputs()
-            .filter_map(|o| self.output.info(&o))
-            .filter(|info| {
-                self.options
-                    .output
-                    .as_ref()
-                    .is_none_or(|name| info.name.as_ref() == Some(name))
+        let selected_output = self.output.outputs().find(|output| {
+            self.options.output.as_ref().is_none_or(|name| {
+                self.output.info(output).and_then(|info| info.name).as_ref() == Some(name)
             })
-            .find_map(|info| info.logical_size)
+        });
+        let output_name = selected_output.as_ref().map(|output| self.output_id(output));
+        let frame_interval = selected_output.as_ref().map_or_else(
+            || std::time::Duration::from_millis(16),
+            |output| self.output_frame_interval(output),
+        );
+        source.frame_interval(frame_interval);
+        let output_size = selected_output
+            .as_ref()
+            .and_then(|output| self.output.info(output).and_then(|info| info.logical_size))
             .map(|(w, h)| (w.max(1) as u32, h.max(1) as u32));
         let size = match (&spec.size_for_output, output_size) {
             (Some(policy), Some(output)) => policy(output),
@@ -377,6 +400,8 @@ impl App {
             window,
             epoch,
             source,
+            output_name,
+            refresh_ns: 0,
             scene: spec.fallback.clone(),
             renderer,
             pool: None,
