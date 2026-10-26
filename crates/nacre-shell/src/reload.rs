@@ -1087,10 +1087,10 @@ impl Runtime {
         if self.widget_app || !(self.bar || self.widget_canvas) {
             return;
         }
-        let Some((source, origin, rect)) = self.session.transfer_candidate() else {
+        let Some(candidate) = self.session.transfer_candidate() else {
             return;
         };
-        let bead::core::Value::List(items) = &source else {
+        let bead::core::Value::List(items) = &candidate.payload else {
             return;
         };
         let Some(item) = items.first() else {
@@ -1121,10 +1121,10 @@ impl Runtime {
         } else {
             (number("bead.surface.x"), number("bead.surface.y"))
         };
-        let pointer_x = f64::from(origin.0) + surface_x;
-        let pointer_y = f64::from(origin.1) + surface_y;
-        let source_left = f64::from(rect.0) + surface_x;
-        let source_top = f64::from(rect.1) + surface_y;
+        let pointer_x = f64::from(candidate.origin.0) + surface_x;
+        let pointer_y = f64::from(candidate.origin.1) + surface_y;
+        let source_left = f64::from(candidate.source_rect.0) + surface_x;
+        let source_top = f64::from(candidate.source_rect.1) + surface_y;
         let Some(output) =
             self.output
                 .clone()
@@ -1139,7 +1139,7 @@ impl Runtime {
         let mut set = |key: &str, value| values.insert(key.into(), value);
         set("bead.output.name", bead::core::Value::Text(output.clone()));
         set("widgets.drag.active", bead::core::Value::Bool(true));
-        set("widgets.drag.source", source);
+        set("widgets.drag.source", candidate.payload);
         set(
             "widgets.drag.phase",
             bead::core::Value::Text("prepare".into()),
@@ -1161,19 +1161,19 @@ impl Runtime {
         set("widgets.drag.start_y", bead::core::Value::Number(pointer_y));
         set(
             "widgets.drag.width",
-            bead::core::Value::Number(f64::from(rect.2.max(1.))),
+            bead::core::Value::Number(f64::from(candidate.source_rect.2.max(1.))),
         );
         set(
             "widgets.drag.height",
-            bead::core::Value::Number(f64::from(rect.3.max(1.))),
+            bead::core::Value::Number(f64::from(candidate.source_rect.3.max(1.))),
         );
         set(
             "widgets.drag.grab_x",
-            bead::core::Value::Number(f64::from(x - rect.0)),
+            bead::core::Value::Number(f64::from(x - candidate.source_rect.0)),
         );
         set(
             "widgets.drag.grab_y",
-            bead::core::Value::Number(f64::from(y - rect.1)),
+            bead::core::Value::Number(f64::from(y - candidate.source_rect.1)),
         );
         set(
             "widgets.drag.snap_x",

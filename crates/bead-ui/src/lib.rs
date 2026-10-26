@@ -132,6 +132,13 @@ pub struct Node {
     #[serde(default)]
     pub label: String,
 }
+
+/// A validated drag source captured before the movement threshold is crossed.
+pub struct TransferCandidate {
+    pub payload: Value,
+    pub origin: (f32, f32),
+    pub source_rect: (f32, f32, f32, f32),
+}
 fn default_true() -> bool {
     true
 }
