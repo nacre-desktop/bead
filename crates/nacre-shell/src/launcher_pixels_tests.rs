@@ -310,6 +310,14 @@ fn ranked_prefix_keeps_actual_visible_pixels_and_actions_exact() -> Result<()> {
 fn launcher_grid_and_results_scroll_from_their_actual_hit_regions() -> Result<()> {
     for query in ["", "a"] {
         let mut h = harness(query, 0.)?;
+        let Some(Value::List(rows)) = h.session.stores.get("launcher.apps") else {
+            panic!("launcher fixture rows")
+        };
+        h.update(BTreeMap::from([
+            ("launcher.apps".into(), Value::list(rows[..81].to_vec())),
+            ("launcher.result_count".into(), Value::Number(81.)),
+            ("launcher.total_count".into(), Value::Number(81.)),
+        ]))?;
         let viewport = h
             .session
             .view_nodes()
@@ -317,6 +325,10 @@ fn launcher_grid_and_results_scroll_from_their_actual_hit_regions() -> Result<()
             .find(|node| node.scroll_store.as_deref() == Some("launcher.scroll.y"))
             .expect("launcher has a scroll viewport");
         let rect = bead::ui::rect(&viewport.draw);
+        eprintln!(
+            "launcher {query:?}: viewport={rect:?}, limit={:?}",
+            viewport.scroll_limit
+        );
         assert!(viewport.scroll_limit.is_some_and(|limit| limit > 400.));
         for (delta, expected) in [(7., 7.), (-7., 0.)] {
             h.script([bead_test::Input::Scroll {
