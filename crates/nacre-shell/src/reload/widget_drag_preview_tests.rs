@@ -1808,6 +1808,99 @@ fn bar_hover_prewarms_once_retires_on_leave_and_reuses_the_warm_destination() {
 }
 
 #[test]
+fn completed_drag_retirement_stops_stationary_hover_renewal_until_reentry() {
+    let dir =
+        std::env::temp_dir().join(format!("widget-drag-hover-retire-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut runtime = real_bar_runtime(dir.join("widgets.json"));
+    runtime = runtime
+        .with_shared_desktop(
+            bead::services::Desktop::start_config(bead::services::Config {
+                audio: false,
+                bus: false,
+            }),
+            true,
+        )
+        .unwrap();
+    let document = hover_prewarm_document();
+    if runtime
+        .stage(UiEvent::Model(BTreeMap::from([
+            ("widgets.layout".into(), Value::list(vec![document])),
+            ("widgets.rev".into(), Value::Number(1.)),
+        ])))
+        .unwrap()
+        .is_some()
+    {
+        runtime.commit();
+    }
+    let source = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| {
+            node.drag_action.as_deref() == Some("widgets.drag") && node.id.contains("clock")
+        })
+        .expect("the real bar exposes a draggable clock inside its status pill");
+    let bounds = bead::ui::rect(&source.draw);
+    let (x, y) = (bounds.x + bounds.w / 2., bounds.y + bounds.h / 2.);
+    let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sent = events.clone();
+    runtime.wakeup = Some(std::sync::Arc::new(move |event| {
+        sent.lock().unwrap().push(event);
+    }));
+
+    if runtime.stage(UiEvent::Hover { x, y }).unwrap().is_some() {
+        runtime.commit();
+    }
+    assert!(runtime.widget_hover_preview.is_some());
+    assert!(runtime.widget_drag_controller.is_some());
+    assert!(runtime.widget_drag_controller_primed);
+
+    runtime.widget_drag_model = Some(BTreeMap::from([(
+        "widgets.drag.active".into(),
+        Value::Bool(false),
+    )]));
+    runtime.widget_drag_retire_cleanup = true;
+    runtime.commit();
+
+    assert!(runtime.widget_drag_controller.is_none());
+    assert!(!runtime.widget_drag_controller_primed);
+    assert!(runtime.widget_drag_model.is_none());
+    assert!(runtime.widget_hover_preview.is_none());
+    assert!(events.lock().unwrap().iter().any(|event| matches!(event,
+        UiEvent::CanvasOffer { view, open: false, .. } if view == "widgets-drag")));
+
+    if runtime
+        .stage(UiEvent::Model(BTreeMap::new()))
+        .unwrap()
+        .is_some()
+    {
+        runtime.commit();
+    }
+    let prepares = || {
+        events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|event| {
+                matches!(event, UiEvent::CanvasPrepare { view, .. } if view == "widgets-drag")
+            })
+            .count()
+    };
+    assert_eq!(prepares(), 1, "empty-model wakeups do not rewarm the retired view");
+
+    if runtime.stage(UiEvent::Hover { x, y }).unwrap().is_some() {
+        runtime.commit();
+    }
+    assert_eq!(prepares(), 2, "a fresh pointer hover may prewarm again");
+    assert!(runtime.widget_hover_preview.is_some());
+    assert!(runtime.widget_drag_controller_primed);
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn bar_drag_threshold_offers_ghost_before_root_reflow_commit() {
     let dir = std::env::temp_dir().join(format!(
         "widget-drag-threshold-offer-{}",

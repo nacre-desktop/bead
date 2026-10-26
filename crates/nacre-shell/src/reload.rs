@@ -1537,6 +1537,8 @@ impl Runtime {
             self.widget_drag_controller_primed = false;
             self.widget_drag_model = None;
             self.widget_drag_retire_cleanup = false;
+            self.widget_drag_wanted = false;
+            self.retire_widget_hover_preview();
         }
         Ok(scene)
     }
@@ -8356,6 +8358,8 @@ impl SceneSource for Runtime {
             self.widget_drag_controller_primed = false;
             self.widget_drag_model = None;
             self.widget_drag_retire_cleanup = false;
+            self.widget_drag_wanted = false;
+            self.retire_widget_hover_preview();
         }
         Ok(scene)
     }
@@ -8644,6 +8648,8 @@ impl SceneSource for Runtime {
             self.widget_drag_controller_primed = false;
             self.widget_drag_model = None;
             self.widget_drag_retire_cleanup = false;
+            self.widget_drag_wanted = false;
+            self.retire_widget_hover_preview();
         }
         true
     }
