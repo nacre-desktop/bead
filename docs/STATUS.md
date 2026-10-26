@@ -12,6 +12,18 @@ Final search-results UI CPU remains 10.917 ms median; the 8 ms gate above measur
 Startup excursions exceed 4 MiB; acceptance uses five-pair phase medians, not peak residency.
 No live desktop change or laptop absolute-memory acceptance.
 
+## 2026-10-26 — B0136 small parity fixes
+
+Notification adapters retain app identity, favourite markers use the filled glyph,
+and Today matches the wallpaper action row. The published daemon owns bounded
+Previous history and availability; Bead consumes the published contract. Full
+remote Bead/Nacre CI and official jobs pass, including the real pointer-release
+regression found during capture. Five-pair CPU memory fails: idle +0.516 MiB exceeds the
++0.5 limit; hovered favourites +1.703 MiB exceeds the declared 1 MiB budget.
+All 13 final Today states and the matched static Colors pointer pair pass.
+Opening smoothness remains unproven; [the spec](specs/0136-small-parity.md) records
+source-pinned pairs and remaining visual gaps. No live change.
+
 ## 2026-10-26 — B0137 shared edge-panel hover
 
 AI and control panels share lip/body/focus exit grace. Backdrops preserve stable

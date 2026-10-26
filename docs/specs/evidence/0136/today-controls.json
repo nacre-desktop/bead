@@ -1,0 +1,1245 @@
+{
+  "capture": "B0136 Today wallpaper controls, final pointer/action proof",
+  "resolution": [
+    2880,
+    1800
+  ],
+  "scale": 1.5,
+  "renderer": "CPU",
+  "compositor": "private nested Niri",
+  "scheduler": "SCHED_IDLE image-sequence proxy; no physical-scanout claim",
+  "crop": {
+    "x": 1650,
+    "y": 300,
+    "width": 650,
+    "height": 370,
+    "same_for_both_arms": true,
+    "resized": false
+  },
+  "provenance": {
+    "qml_commit": "70459b21c7010fb2422c7778c953b58ccf8011f0",
+    "qml_helper_sha256": "5851c53cca004b5cb81e6fd51cbc264ca282d043b41fa33bac67d607baddf3a7",
+    "bead_source_commit": "ad75dad877420dd5d826ebc773ccd04d1203dfdc",
+    "bead_published_fix_commit": "2526dee37a8fdb00e3042c2dae3265ee2aa4ca24",
+    "bead_shell_sha256": "94d888fa3e09dbf587700003c5e7bed1738af0366276b985a04a8bad494ba13d",
+    "bead_helper_sha256": "5851c53cca004b5cb81e6fd51cbc264ca282d043b41fa33bac67d607baddf3a7",
+    "bead_source_tree_note": "Visual shell binary was built from private source snapshot ad75dad8; published fix commit 2526dee3 is recorded separately. Do not treat these as the same source tree."
+  },
+  "state_capture_sources": {
+    "qml_default": "visual-final/qml, QML source 70459b21",
+    "qml_colors": "visual-final/qml-notifications-r3, corrected Colors hover/pressed point; colors-open-action reports visible=true, 1100x780",
+    "bead": "visual-final/bead-colorsfix-full13-r3, visual binary source ad75dad8 plus published Colors fix 2526dee3"
+  },
+  "state_count": 13,
+  "colors_static_wallpaper_identity": {
+    "qml": {
+      "basename": "generated-1.png",
+      "size_bytes": 38237,
+      "catalogue_count": 5
+    },
+    "bead": {
+      "basename": "generated-1.png",
+      "size_bytes": 38237,
+      "catalogue_count": 3
+    },
+    "active_file_hash_recorded": false,
+    "limit": "Both active records identify generated-1.png at 38,237 bytes from the deterministic harness fixture. The original private files were not retained, so a source-file SHA comparison is unavailable. The static-only Bead arm has three catalogue entries; QML included two video fixtures and reported a five-item pool. Colors captures are not navigation evidence."
+  },
+  "qml_colors_corrected_capture": "QML Colors hover/pressed use qml-notifications-r3 (correct button coordinate); the earlier final-QML Colors captures targeted Next and are excluded.",
+  "state_sheets": {
+    "today-idle": {
+      "qml": {
+        "file_sha256": "3b8c66240be89c577bf958ece783e4e2ef034c27e08b67767965fb3f734eb1f3",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "qml full Today 13-state capture"
+      },
+      "bead": {
+        "file_sha256": "550185a16ad1e181a1e32b063aa065e852e0cef99f6260c2e636a07fcc33c051",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "Bead final Colors-fixed 13-state capture"
+      }
+    },
+    "today-previous-disabled-hover": {
+      "qml": {
+        "file_sha256": "c4b04af8e6ff809642a83ad16bf272e39df9ebe846d0915e8d0f2ae18226b5ad",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "qml full Today 13-state capture"
+      },
+      "bead": {
+        "file_sha256": "7f49d567bf5d58ff0540645134bdde0ecffbcdc0c35abece1b5bd0d0bb3272e8",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "Bead final Colors-fixed 13-state capture"
+      }
+    },
+    "today-previous-disabled-pressed": {
+      "qml": {
+        "file_sha256": "c6cd001114218a4983aec3818db504da9d4a98400589d79d6a1b2a600bc48ee3",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "qml full Today 13-state capture"
+      },
+      "bead": {
+        "file_sha256": "ecf312a05e70aa87be635eb8d8ade2e6a978e39dfb2fb446991e7071e3463e4d",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "Bead final Colors-fixed 13-state capture"
+      }
+    },
+    "today-availability": {
+      "sheet_sha256": "9f3acc81df9e5b304b335dbc059f64ffa0aaf3eef95e91123b43ad287b8dc23f",
+      "dimensions": [
+        1308,
+        1210
+      ],
+      "states": [
+        "today-idle",
+        "today-previous-disabled-hover",
+        "today-previous-disabled-pressed"
+      ]
+    },
+    "today-next-hover": {
+      "qml": {
+        "file_sha256": "648d29b3efbc6b85d4f18bfd881764e6718984f078c79c06e9c74a10ee80ddc7",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "qml full Today 13-state capture"
+      },
+      "bead": {
+        "file_sha256": "66d5568848631ae61027b043f8e327be3641331e41860034a4591a560b637345",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "Bead final Colors-fixed 13-state capture"
+      }
+    },
+    "today-next-pressed": {
+      "qml": {
+        "file_sha256": "46a1f3be6849822d6b7892a2f88fe2375e3f348c709127782726be4461b11607",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "qml full Today 13-state capture"
+      },
+      "bead": {
+        "file_sha256": "b44ac79de486b202f5f22f549ae67179322b2410679ea2496dc075ea85ba7f3b",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "Bead final Colors-fixed 13-state capture"
+      }
+    },
+    "today-previous-hover": {
+      "qml": {
+        "file_sha256": "b514930c52a9e807bfc22ef251910be5dc9932d2c00bf6e6e12cf3932aebac2c",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "qml full Today 13-state capture"
+      },
+      "bead": {
+        "file_sha256": "1cd62c944b5a3ebea226dfd335dda8de0574cd249dc53026b7390c9c4cdc0547",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "Bead final Colors-fixed 13-state capture"
+      }
+    },
+    "today-previous-pressed": {
+      "qml": {
+        "file_sha256": "6935a621a5a6c906dd3f1985f37c8db491b083d612bf6446c2ef5b135122210e",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "qml full Today 13-state capture"
+      },
+      "bead": {
+        "file_sha256": "ed7b339aff767b45cbf324b08dcc5fa3ca19a18898b498db1154f3ad78bd5dad",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "Bead final Colors-fixed 13-state capture"
+      }
+    },
+    "today-navigation": {
+      "sheet_sha256": "da95c26f94d4f37b4dcd090335ed23fb88ff1aa8311945deff00e82d278eff3b",
+      "dimensions": [
+        1308,
+        1616
+      ],
+      "states": [
+        "today-next-hover",
+        "today-next-pressed",
+        "today-previous-hover",
+        "today-previous-pressed"
+      ]
+    },
+    "today-pause-static": {
+      "qml": {
+        "file_sha256": "a7a42cef2be5f239012769f2d2dfb851c86a7a27bef8d9ec7a2bcab85d0f0d3b",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "qml full Today 13-state capture"
+      },
+      "bead": {
+        "file_sha256": "223d35e33eca2d98b806778771b5e45a4dff70fc9657140ba7fb49d68ffca8ea",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "Bead final Colors-fixed 13-state capture"
+      }
+    },
+    "today-pause-hover": {
+      "qml": {
+        "file_sha256": "8967fa10b52dbede25c0b671c1df8919146939ffcd9f88b8206dd2d150a77057",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "qml full Today 13-state capture"
+      },
+      "bead": {
+        "file_sha256": "79e92e8b25a9676fb91efae11d201e92970e1c77fd9d27074cc7a745ec9d4157",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "Bead final Colors-fixed 13-state capture"
+      }
+    },
+    "today-pause-pressed": {
+      "qml": {
+        "file_sha256": "5921b5b8814dd9055d7d7386d0f3fe4b23daa5475ae66965ff9ec1d36ec10951",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "qml full Today 13-state capture"
+      },
+      "bead": {
+        "file_sha256": "ef399a318e526d28a87b5d1d5c6084b8261241c15f9881db6c243519ab8aded3",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "Bead final Colors-fixed 13-state capture"
+      }
+    },
+    "today-pause-paused": {
+      "qml": {
+        "file_sha256": "924e03cf00dd100c296ee41773c0472458a2415b4cdc7957b958cfe3e6d24822",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "qml full Today 13-state capture"
+      },
+      "bead": {
+        "file_sha256": "44bd0085ef979dad6668d4f558a4854ac2973592c9bfea76b1f6a30dffb712d6",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "Bead final Colors-fixed 13-state capture"
+      }
+    },
+    "today-pause": {
+      "sheet_sha256": "f560c1f003235fcf50c3d749676449ddceb24663392db41a87d58a98f0254858",
+      "dimensions": [
+        1308,
+        1616
+      ],
+      "states": [
+        "today-pause-static",
+        "today-pause-hover",
+        "today-pause-pressed",
+        "today-pause-paused"
+      ]
+    },
+    "today-colors-hover": {
+      "qml": {
+        "file_sha256": "5e1838961923bd5355f739e442a1646efb35c7d73950bad54db26e7ae218ca4d",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "qml-notifications-r3 corrected Colors pointer capture"
+      },
+      "bead": {
+        "file_sha256": "a169cfd81345e2175d330777af95f058e9a4ddd67857c2532dfb1230f729845a",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "bead-colors-staticfix-r1 static-only Colors capture; wallpaper-videos=0"
+      }
+    },
+    "today-colors-pressed": {
+      "qml": {
+        "file_sha256": "b90c6a1aadc7ad6aa5ffd1567dc9b8d1932b5b75790a9f4fe5ea61c73165ad97",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "qml-notifications-r3 corrected Colors pointer capture"
+      },
+      "bead": {
+        "file_sha256": "cf37550c9655c0ccaaf2194dc15785dc5557ebf36259b266bdaf257d2e0a1a6d",
+        "source_dimensions": [
+          2880,
+          1800
+        ],
+        "capture_source": "bead-colors-staticfix-r1 static-only Colors capture; wallpaper-videos=0"
+      }
+    },
+    "today-colors": {
+      "sheet_sha256": "e77eac0ebabd53aa9a3cbfc09677e95e60bed791deae1ac50a3c80c89142e71e",
+      "dimensions": [
+        1308,
+        804
+      ],
+      "states": [
+        "today-colors-hover",
+        "today-colors-pressed"
+      ]
+    }
+  },
+  "action_receipts": {
+    "qml": {
+      "next": {
+        "before": "generated-1.png",
+        "after": "generated-2.png",
+        "changed": true
+      },
+      "previous": {
+        "before": "generated-3.png",
+        "after_next": "motion-1.mp4",
+        "after_previous": "generated-3.png",
+        "returned_to_prior": true,
+        "source": "QML NacreWallpapers local history"
+      },
+      "pause": {
+        "paused": true,
+        "source": "private wallpaper-picker settings snapshot"
+      },
+      "previous_disabled": {
+        "previous_available": null,
+        "rotation_pool": 1,
+        "active_unchanged": true
+      },
+      "colors": {
+        "opened": true,
+        "visible": true,
+        "size": [
+          1100,
+          780
+        ]
+      }
+    },
+    "bead": {
+      "next": {
+        "before": "generated-1.png",
+        "after": "generated-2.png",
+        "changed": true,
+        "settled": true,
+        "within_private_pool": true,
+        "catalogue_count": 5,
+        "previous_available": true,
+        "pointer": {
+          "target": "today-next",
+          "before_hover": "dashboard.stage.today.hero.wallpaper-transport.wallpaper-next",
+          "button_down_hover": "dashboard.stage.today.hero.wallpaper-transport.wallpaper-next",
+          "button_down_pressed": true,
+          "before_release_pressed": true,
+          "after_release_pressed": false
+        }
+      },
+      "previous": {
+        "before": "generated-3.png",
+        "after_next": "motion-1.mp4",
+        "after_previous": "generated-3.png",
+        "returned_to_prior": true,
+        "source": "wallpaper.previous plus wallpaper.active.previous_available",
+        "pointer": {
+          "target": "today-previous",
+          "before_hover": "dashboard.stage.today.hero.wallpaper-transport.wallpaper-previous",
+          "button_down_hover": "dashboard.stage.today.hero.wallpaper-transport.wallpaper-previous",
+          "button_down_pressed": false,
+          "before_release_pressed": true,
+          "after_release_pressed": false
+        }
+      },
+      "pause": {
+        "paused": true,
+        "source": "private wallpaper-picker settings snapshot after actual pointer release",
+        "pointer": {
+          "target": "today-pause",
+          "before_hover": "dashboard.stage.today.hero.wallpaper-transport.wallpaper-pause",
+          "button_down_hover": "dashboard.stage.today.hero.wallpaper-transport.wallpaper-pause",
+          "button_down_pressed": true,
+          "before_release_pressed": true,
+          "after_release_pressed": false
+        },
+        "active_motion_basename": "motion-1.mp4",
+        "playback_parity_verified": false,
+        "playback_limit": "private Bead environment lacked libmpv; Pause proof covers the wallpaper-picker preference contract, not matched video frames"
+      },
+      "previous_disabled": {
+        "previous_available": false,
+        "catalogue_count": 1,
+        "active_unchanged": true,
+        "pointer": {
+          "target": "today-previous",
+          "before_hover": "dashboard.stage.today.hero.wallpaper-transport.wallpaper-previous",
+          "button_down_hover": "",
+          "button_down_pressed": true,
+          "before_release_pressed": true,
+          "after_release_pressed": false
+        }
+      },
+      "colors": {
+        "opened": true,
+        "route": "app-colors.sock bead.window.state (size/drawn)",
+        "size": [
+          1100,
+          760
+        ],
+        "drawn": 1,
+        "pointer": {
+          "target": "today-colors",
+          "before_hover": "dashboard.stage.today.hero.wallpaper-actions.colors",
+          "button_down_hover": "dashboard.stage.today.hero.wallpaper-actions.colors",
+          "button_down_pressed": true,
+          "before_release_pressed": true,
+          "after_release_pressed": false
+        }
+      }
+    }
+  },
+  "motion_proxy": {
+    "image": "today-motion-proxy.png",
+    "strips": {
+      "qml_open": {
+        "sha256": "e7e7a3b39138bf7441b80decee43a89762040f6e9060999e2a2e59c1bb53c9e8",
+        "dimensions": [
+          3288,
+          170
+        ]
+      },
+      "bead_open": {
+        "sha256": "10798b1fbc005788928ea40fbea1491ec4f93d823ff48a17280b4b5bc27fd23f",
+        "dimensions": [
+          3288,
+          170
+        ]
+      },
+      "qml_close": {
+        "sha256": "7c3057e25dada21bcffb281016c2337bd18453d6e06c752ee2ae06a1a103a493",
+        "dimensions": [
+          3288,
+          170
+        ]
+      },
+      "bead_close": {
+        "sha256": "265b5e0095bac6936aeca6ce891258046fe5ee7038932379aad2aa33f9037cc2",
+        "dimensions": [
+          3288,
+          170
+        ]
+      }
+    },
+    "capture": {
+      "frames_per_arm_phase": 32,
+      "nominal_spawn_interval_ms": 25,
+      "strip_samples": 12,
+      "strip_scale": 0.5,
+      "timing_source": "grim process spawn timestamps; capture scheduling adds uncertainty; not physical scanout"
+    },
+    "sample_timestamps_ms": {
+      "qml_open": [
+        0,
+        76,
+        151,
+        201,
+        277,
+        353,
+        430,
+        507,
+        585,
+        636,
+        713,
+        789
+      ],
+      "qml_close": [
+        0,
+        75,
+        151,
+        201,
+        276,
+        351,
+        426,
+        501,
+        577,
+        629,
+        705,
+        781
+      ],
+      "bead_open": [
+        0,
+        75,
+        151,
+        201,
+        277,
+        354,
+        431,
+        507,
+        584,
+        635,
+        713,
+        790
+      ],
+      "bead_close": [
+        0,
+        75,
+        151,
+        201,
+        276,
+        351,
+        428,
+        506,
+        583,
+        634,
+        711,
+        786
+      ]
+    },
+    "qml": {
+      "open": {
+        "start": 101,
+        "end": 302,
+        "frames": 32,
+        "progress": {
+          "t10": 152,
+          "t50": 230,
+          "t90": 296
+        },
+        "edge": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            25,
+            26,
+            726
+          ],
+          [
+            50,
+            26,
+            726
+          ],
+          [
+            76,
+            42,
+            733
+          ],
+          [
+            101,
+            53,
+            733
+          ],
+          [
+            126,
+            70,
+            733
+          ],
+          [
+            151,
+            93,
+            733
+          ],
+          [
+            176,
+            120,
+            733
+          ],
+          [
+            201,
+            155,
+            733
+          ],
+          [
+            226,
+            236,
+            733
+          ],
+          [
+            251,
+            295,
+            733
+          ],
+          [
+            277,
+            313,
+            733
+          ],
+          [
+            302,
+            338,
+            733
+          ],
+          [
+            328,
+            350,
+            733
+          ],
+          [
+            353,
+            350,
+            733
+          ],
+          [
+            379,
+            350,
+            733
+          ],
+          [
+            404,
+            350,
+            733
+          ],
+          [
+            430,
+            350,
+            733
+          ],
+          [
+            456,
+            350,
+            733
+          ],
+          [
+            482,
+            350,
+            733
+          ],
+          [
+            507,
+            350,
+            733
+          ],
+          [
+            533,
+            350,
+            733
+          ],
+          [
+            559,
+            350,
+            733
+          ],
+          [
+            585,
+            350,
+            733
+          ],
+          [
+            611,
+            350,
+            733
+          ],
+          [
+            636,
+            350,
+            733
+          ],
+          [
+            662,
+            350,
+            733
+          ],
+          [
+            688,
+            350,
+            733
+          ],
+          [
+            713,
+            350,
+            733
+          ],
+          [
+            738,
+            350,
+            733
+          ],
+          [
+            763,
+            350,
+            733
+          ],
+          [
+            789,
+            350,
+            733
+          ]
+        ]
+      },
+      "close": {
+        "start": 100,
+        "end": 276,
+        "frames": 32,
+        "progress": {
+          "t10": 101,
+          "t50": 167,
+          "t90": 241
+        },
+        "edge": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            25,
+            159,
+            696
+          ],
+          [
+            50,
+            350,
+            726
+          ],
+          [
+            75,
+            350,
+            726
+          ],
+          [
+            100,
+            350,
+            726
+          ],
+          [
+            126,
+            350,
+            726
+          ],
+          [
+            151,
+            350,
+            726
+          ],
+          [
+            176,
+            350,
+            726
+          ],
+          [
+            201,
+            350,
+            726
+          ],
+          [
+            226,
+            350,
+            726
+          ],
+          [
+            251,
+            350,
+            726
+          ],
+          [
+            276,
+            350,
+            726
+          ],
+          [
+            301,
+            350,
+            732
+          ],
+          [
+            326,
+            350,
+            733
+          ],
+          [
+            351,
+            350,
+            733
+          ],
+          [
+            376,
+            350,
+            733
+          ],
+          [
+            401,
+            350,
+            733
+          ],
+          [
+            426,
+            350,
+            733
+          ],
+          [
+            451,
+            350,
+            733
+          ],
+          [
+            476,
+            350,
+            733
+          ],
+          [
+            501,
+            350,
+            733
+          ],
+          [
+            526,
+            350,
+            733
+          ],
+          [
+            552,
+            350,
+            733
+          ],
+          [
+            577,
+            350,
+            733
+          ],
+          [
+            603,
+            350,
+            733
+          ],
+          [
+            629,
+            350,
+            733
+          ],
+          [
+            654,
+            350,
+            733
+          ],
+          [
+            679,
+            350,
+            733
+          ],
+          [
+            705,
+            350,
+            733
+          ],
+          [
+            730,
+            350,
+            733
+          ],
+          [
+            756,
+            350,
+            733
+          ],
+          [
+            781,
+            350,
+            733
+          ]
+        ]
+      }
+    },
+    "bead": {
+      "open": {
+        "start": null,
+        "end": null,
+        "frames": 32,
+        "progress": null,
+        "edge": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            25,
+            0,
+            0
+          ],
+          [
+            50,
+            0,
+            0
+          ],
+          [
+            75,
+            0,
+            0
+          ],
+          [
+            101,
+            26,
+            733
+          ],
+          [
+            126,
+            26,
+            733
+          ],
+          [
+            151,
+            26,
+            733
+          ],
+          [
+            176,
+            26,
+            733
+          ],
+          [
+            201,
+            26,
+            733
+          ],
+          [
+            226,
+            26,
+            733
+          ],
+          [
+            252,
+            26,
+            733
+          ],
+          [
+            277,
+            26,
+            733
+          ],
+          [
+            303,
+            26,
+            733
+          ],
+          [
+            328,
+            26,
+            733
+          ],
+          [
+            354,
+            26,
+            733
+          ],
+          [
+            380,
+            26,
+            733
+          ],
+          [
+            406,
+            26,
+            733
+          ],
+          [
+            431,
+            26,
+            733
+          ],
+          [
+            457,
+            26,
+            733
+          ],
+          [
+            482,
+            26,
+            733
+          ],
+          [
+            507,
+            26,
+            733
+          ],
+          [
+            533,
+            26,
+            733
+          ],
+          [
+            559,
+            26,
+            733
+          ],
+          [
+            584,
+            26,
+            733
+          ],
+          [
+            610,
+            26,
+            733
+          ],
+          [
+            635,
+            26,
+            733
+          ],
+          [
+            661,
+            26,
+            733
+          ],
+          [
+            687,
+            26,
+            733
+          ],
+          [
+            713,
+            26,
+            733
+          ],
+          [
+            739,
+            26,
+            733
+          ],
+          [
+            764,
+            26,
+            733
+          ],
+          [
+            790,
+            26,
+            733
+          ]
+        ]
+      },
+      "close": {
+        "start": 251,
+        "end": 351,
+        "frames": 32,
+        "progress": {
+          "t10": 230,
+          "t50": 245,
+          "t90": 300
+        },
+        "edge": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            25,
+            0,
+            0
+          ],
+          [
+            50,
+            0,
+            0
+          ],
+          [
+            75,
+            0,
+            0
+          ],
+          [
+            100,
+            0,
+            0
+          ],
+          [
+            125,
+            0,
+            0
+          ],
+          [
+            151,
+            0,
+            0
+          ],
+          [
+            176,
+            0,
+            0
+          ],
+          [
+            201,
+            0,
+            0
+          ],
+          [
+            226,
+            248,
+            675
+          ],
+          [
+            251,
+            350,
+            726
+          ],
+          [
+            276,
+            350,
+            726
+          ],
+          [
+            301,
+            350,
+            726
+          ],
+          [
+            326,
+            350,
+            726
+          ],
+          [
+            351,
+            350,
+            726
+          ],
+          [
+            376,
+            350,
+            733
+          ],
+          [
+            402,
+            350,
+            734
+          ],
+          [
+            428,
+            350,
+            733
+          ],
+          [
+            454,
+            350,
+            733
+          ],
+          [
+            480,
+            350,
+            733
+          ],
+          [
+            506,
+            350,
+            733
+          ],
+          [
+            532,
+            350,
+            733
+          ],
+          [
+            557,
+            350,
+            733
+          ],
+          [
+            583,
+            350,
+            733
+          ],
+          [
+            609,
+            350,
+            733
+          ],
+          [
+            634,
+            350,
+            733
+          ],
+          [
+            660,
+            350,
+            733
+          ],
+          [
+            686,
+            350,
+            733
+          ],
+          [
+            711,
+            350,
+            733
+          ],
+          [
+            736,
+            350,
+            733
+          ],
+          [
+            761,
+            350,
+            733
+          ],
+          [
+            786,
+            350,
+            733
+          ]
+        ]
+      }
+    },
+    "sampled_visibility": {
+      "qml_panel_visible_in_sequence": "visible during the open proxy; analyzer geometry start=101ms/end=302ms",
+      "bead_panel_visible_in_selected_open_frames": false,
+      "bead_last_selected_open_frame_ms": 790,
+      "bead_settled_screenshot_has_today_panel": true
+    },
+    "limit": "The Bead Today panel is absent from all 12 displayed open-proxy samples through 790ms and present in the later settled screenshot. Concurrent grim scheduling does not establish its exact appearance time, smoothness, dropped-frame behavior or physical scanout. QML and Bead previous/pause screenshots use independently timed wallpaper-video states; no frame alignment is claimed.",
+    "composite_sha256": "975248ff7a88c86f6518f9b17a7b008a4c422b880fadf7804e8e231fe326cfef"
+  },
+  "known_visual_differences": [
+    "QML shows delayed transport tooltips; Bead exposes accessible labels without the same tooltip treatment.",
+    "QML and Bead clocks differ because the arms were captured at different wall-clock times; the contact crops focus on the control row and omit the clock.",
+    "In the Bead open sequence proxy, Today is absent from the 12 displayed image samples through 790ms, while the later settled screenshot shows it. This proxy does not establish the exact appearance time or physical smoothness."
+  ]
+}

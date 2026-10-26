@@ -1,0 +1,103 @@
+{
+  "capture": "B0136 notification app icon source variants",
+  "resolution": [
+    2880,
+    1800
+  ],
+  "scale": 1.5,
+  "compositor": "private nested Niri",
+  "renderer": {
+    "qml": "Quickshell QtQuick on private CPU-rendered nested session",
+    "bead": "Bead CPU renderer"
+  },
+  "crop": {
+    "origin": [
+      2200,
+      50
+    ],
+    "size": [
+      680,
+      460
+    ],
+    "resized": false
+  },
+  "provenance": {
+    "qml_source_commit": "70459b21c7010fb2422c7778c953b58ccf8011f0",
+    "qml_helper_sha256": "5851c53cca004b5cb81e6fd51cbc264ca282d043b41fa33bac67d607baddf3a7",
+    "bead_source_commit": "7b4763e1aed61c96b07bce8ab4f92cfd205387e3",
+    "bead_git_tree": "ae51fb15fcfcc88a794139b3852a9909c0c97487",
+    "bead_shell_sha256": "c54541b87d0fd97099c074c142445216b05965be34a63611a9ce8a31ad24b95f"
+  },
+  "states": [
+    "notification-theme",
+    "notification-local",
+    "notification-desktop-hint",
+    "notification-image-path"
+  ],
+  "arms": {
+    "qml": {
+      "notification-theme": {
+        "sha256": "e91d8ffcdf59ca15ec6248c721dd1500992e7756f356e1c28e5f63c2c4e58d6c",
+        "dimensions": [
+          2880,
+          1800
+        ]
+      },
+      "notification-local": {
+        "sha256": "a798ace9d0d453c7a07a8df9bf993bcf014b2759313be5817892071d5f9b3709",
+        "dimensions": [
+          2880,
+          1800
+        ]
+      },
+      "notification-desktop-hint": {
+        "sha256": "72f6f8fbe6d56442a820d11ad767a7a76b95327c037eeaead7890a545fb4365a",
+        "dimensions": [
+          2880,
+          1800
+        ]
+      },
+      "notification-image-path": {
+        "sha256": "6ece2d56d7e9ab7e7f562369ae1c12783bced1b99fe47c492bd2bf911bd294fb",
+        "dimensions": [
+          2880,
+          1800
+        ]
+      }
+    },
+    "bead": {
+      "notification-theme": {
+        "sha256": "5f670e45d2490baf125a4230f9d294bd9d5eb9b4e0bc4cd7577902e25ed3334a",
+        "dimensions": [
+          2880,
+          1800
+        ]
+      },
+      "notification-local": {
+        "sha256": "b31d5e9987d9eb29f42ac6d1155144c94c6fc03dd463c92ab783cbdd6cbd736d",
+        "dimensions": [
+          2880,
+          1800
+        ]
+      },
+      "notification-desktop-hint": {
+        "sha256": "52512e04845341daf33d765f9e3d2a76e97ec6a34a7e5ae5d1d37b687b42d524",
+        "dimensions": [
+          2880,
+          1800
+        ]
+      },
+      "notification-image-path": {
+        "sha256": "8e48417a3412167f9dc692554fedbc003b5de3a2f1dc48d0360b2b4725ccf92d",
+        "dimensions": [
+          2880,
+          1800
+        ]
+      }
+    }
+  },
+  "known_visual_differences": [
+    "The image-path fixture shows QML compact Nacre branding in the app header while Bead uses the supplied local icon."
+  ],
+  "sheet_sha256": "542839c646a3cde9b3374aad1bd478e1d48b38cf187f94897206d4766b07d513"
+}

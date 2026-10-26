@@ -1,0 +1,145 @@
+{
+  "capture": "B0136 native notification history popout",
+  "crop": [
+    2230,
+    55,
+    2880,
+    980
+  ],
+  "scale": 1.5,
+  "resolution": [
+    2880,
+    1800
+  ],
+  "resized": false,
+  "compositor": "private nested Niri",
+  "renderer": {
+    "qml": "Quickshell QtQuick on the private CPU-rendered nested session",
+    "bead": "Bead CPU renderer"
+  },
+  "provenance": {
+    "qml_source_commit": "70459b21c7010fb2422c7778c953b58ccf8011f0",
+    "qml_helper_sha256": "5851c53cca004b5cb81e6fd51cbc264ca282d043b41fa33bac67d607baddf3a7",
+    "bead_source_commit": "7b4763e1aed61c96b07bce8ab4f92cfd205387e3",
+    "bead_git_tree": "ae51fb15fcfcc88a794139b3852a9909c0c97487",
+    "bead_shell_sha256": "c54541b87d0fd97099c074c142445216b05965be34a63611a9ce8a31ad24b95f"
+  },
+  "arms": {
+    "qml": {
+      "filename": "qml-history.png",
+      "sha256": "5de4f97531078a13cc87d5d28cedfd226248f3c3b79697a87ca1bccb0be993b1",
+      "dimensions": [
+        2880,
+        1800
+      ]
+    },
+    "bead": {
+      "filename": "bead-history.png",
+      "sha256": "5e0098e829959ddffc21f575f7e5fb5bb1aa289b3850e0fe6fe8e73841b7aa9b",
+      "dimensions": [
+        2880,
+        1800
+      ]
+    }
+  },
+  "actions": {
+    "qml": {
+      "route": "nacre.popout notifications 1767.796875",
+      "top_bar_enabled": true,
+      "notifications_target": {
+        "name": "notifications",
+        "x": 1767.796875,
+        "y": 24.6953125
+      },
+      "popup_open": true,
+      "popup_size_at_route_query": [
+        410,
+        361.1748934001808
+      ],
+      "popup_query_phase": "opening; the image captures the settled popup",
+      "returncode": 0
+    },
+    "bead": {
+      "route": "bead.panel open notifications 1767.796875",
+      "bar_enabled": true,
+      "core_views_enabled": true,
+      "view": "notifications",
+      "target_open": true,
+      "prepared": true,
+      "resident": true,
+      "size_at_route_query": [
+        452,
+        174
+      ],
+      "state_query_phase": "opened/prepared first observation; image captures settled content",
+      "notice_ready": true,
+      "notice_count": 4.0,
+      "notices": [
+        {
+          "summary": "Image hint",
+          "icon_name": false,
+          "icon_path_present": true,
+          "desktop_entry_present": false,
+          "image_path_present": true
+        },
+        {
+          "summary": "Desktop hint",
+          "icon_name": false,
+          "icon_path_present": true,
+          "desktop_entry_present": true,
+          "image_path_present": false
+        },
+        {
+          "summary": "Local icon",
+          "icon_name": true,
+          "icon_path_present": true,
+          "desktop_entry_present": false,
+          "image_path_present": false
+        },
+        {
+          "summary": "Theme icon",
+          "icon_name": true,
+          "icon_path_present": true,
+          "desktop_entry_present": false,
+          "image_path_present": false
+        }
+      ]
+    }
+  },
+  "notification_fixtures": {
+    "qml": {
+      "required_summaries": [
+        "Theme icon",
+        "Local icon",
+        "Desktop hint",
+        "Image hint"
+      ],
+      "submitted_summaries": [
+        "Theme icon",
+        "Local icon",
+        "Desktop hint",
+        "Image hint"
+      ],
+      "submitted_count": 4
+    },
+    "bead": {
+      "required_summaries": [
+        "Theme icon",
+        "Local icon",
+        "Desktop hint",
+        "Image hint"
+      ],
+      "submitted_summaries": [
+        "Theme icon",
+        "Local icon",
+        "Desktop hint",
+        "Image hint"
+      ],
+      "submitted_count": 4
+    }
+  },
+  "known_visual_differences": [
+    "QML history rows include time, expand and dismiss controls; Bead uses compact rows without those elements, and QML clips more of the list at the same viewport height.",
+    "For the image-path test, QML shows its compact Nacre fallback in the app header while Bead shows the supplied local image icon."
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "capture": "B0136 launcher favorite marker idle and hover",
+  "resolution": [
+    2880,
+    1800
+  ],
+  "scale": 1.5,
+  "compositor": "private nested Niri",
+  "renderer": {
+    "qml": "Quickshell QtQuick on private CPU-rendered nested session",
+    "bead": "Bead CPU renderer"
+  },
+  "crop": {
+    "origin": [
+      340,
+      520
+    ],
+    "size": [
+      1240,
+      680
+    ],
+    "resized": false
+  },
+  "provenance": {
+    "qml_source_commit": "70459b21c7010fb2422c7778c953b58ccf8011f0",
+    "qml_helper_sha256": "5851c53cca004b5cb81e6fd51cbc264ca282d043b41fa33bac67d607baddf3a7",
+    "bead_source_commit": "7b4763e1aed61c96b07bce8ab4f92cfd205387e3",
+    "bead_git_tree": "ae51fb15fcfcc88a794139b3852a9909c0c97487",
+    "bead_shell_sha256": "c54541b87d0fd97099c074c142445216b05965be34a63611a9ce8a31ad24b95f"
+  },
+  "states": [
+    "launcher-favorites",
+    "launcher-favorites-hover"
+  ],
+  "arms": {
+    "qml": {
+      "launcher-favorites": {
+        "sha256": "225f824d09fd051931d8d266cadd48c963cbf65ffe3cb4df06773bc9ac4e6227",
+        "dimensions": [
+          2880,
+          1800
+        ]
+      },
+      "launcher-favorites-hover": {
+        "sha256": "0986c7e67e2b791f294c5c4a122a04754acbdd5494409bd9a24bfa3ec333b529",
+        "dimensions": [
+          2880,
+          1800
+        ]
+      }
+    },
+    "bead": {
+      "launcher-favorites": {
+        "sha256": "bca126f6d711443df1613f0c5862427b109df05ab503cc31aa290671dc495736",
+        "dimensions": [
+          2880,
+          1800
+        ]
+      },
+      "launcher-favorites-hover": {
+        "sha256": "879f2bdba78292fe3644ec549e3e8ac218cb63bef7c93fec63ffef4adb3fde5b",
+        "dimensions": [
+          2880,
+          1800
+        ]
+      }
+    }
+  },
+  "known_visual_differences": [
+    "The marker is hidden at rest in both captures. On hover both show a filled favorite heart; QML places it on a rounded tile while Bead uses a smaller standalone glyph. Surrounding launcher typography and layout retain inherited visual differences."
+  ],
+  "sheet_sha256": "5906330794e873981b4692a8ef760f596d8866b44870c1d054082255d10bacb5"
+}
