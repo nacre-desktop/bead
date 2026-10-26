@@ -24,6 +24,16 @@ CPU/GL each pass 20 control + 20 top-dashboard open/close cycles with zero
 native requests/windows, and 20 detach image trials with no blanks/reversals.
 Full remote CI passes. Capture-loaded handoff timing still misses 33 ms; no new
 latency claim. [Evidence](specs/0139-prewarm-toplevel.md). No live deployment.
+## 2026-10-26 — B0141 scrolling follow-up
+
+The uninstalled B0135 candidate remains blocked by active picker memory, an
+unexplained allocator abort, reversal latency and open-view memory increases.
+B0134 resource-retirement changes are integrated at588d9506; its final evidence
+is still in flight. Remote allocator reproduction/sanitizer work and shared
+cache/latency investigations are running. Picker must fit the shared40 MiB
+budget, AI reversal one frame, and history/popup/Clipboard at most2 MiB each
+with measured justification. Require full CI and a30-minute zero-abort scroll
+soak; no live change. [Scope and gates](specs/0141-scrolling-followup.md).
 
 ## 2026-10-26 — B0131 warm covered release
 
