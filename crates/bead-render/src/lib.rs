@@ -435,6 +435,9 @@ impl Scene {
                 .zip(positions.get(index + 1))
                 .is_some_and(|(before, after)| after > before)
         };
+        let keep_mask = (0..self.primitives.len())
+            .map(&retained)
+            .collect::<Vec<_>>();
         let remap = |index: usize| positions.get(index).copied().unwrap_or(index);
         let mut index = 0;
         self.primitives.retain(|_| {
@@ -467,7 +470,24 @@ impl Scene {
                 }
             }
         }
-        self.prepared.clear();
+        if self
+            .motion
+            .as_ref()
+            .is_some_and(|motion| !motion.progress.is_finite() || motion.progress != 1.)
+        {
+            self.prepared.clear();
+        } else {
+            self.prepared = std::mem::take(&mut self.prepared)
+                .into_iter()
+                .filter_map(|(scale, frame)| {
+                    (frame.scale.to_bits() == scale)
+                        .then_some(frame)
+                        .and_then(|frame| frame.filtered(&keep_mask))
+                        .map(std::sync::Arc::new)
+                        .map(|frame| (scale, frame))
+                })
+                .collect();
+        }
     }
 
     /// Content can slide behind a stationary reveal contour without moving the edge join.
@@ -2008,8 +2028,19 @@ mod tests {
             ],
             art: None,
         });
+        let mut prepared_cache = tree::TreeCache::default();
+        prepared_cache.prepare(&scene, 1.).unwrap();
+        scene.prepared.insert(
+            1_f32.to_bits(),
+            prepared_cache.frame.as_ref().unwrap().clone(),
+        );
         scene.retain_primitives(
             |primitive| !matches!(primitive, Primitive::Rounded { rect, .. } if rect.x == 20.),
+        );
+        assert_eq!(
+            scene.prepared[&1_f32.to_bits()].items.len(),
+            2,
+            "settled full-open motion keeps its prepared frame"
         );
         assert_eq!(scene.primitives.len(), 2);
         assert_eq!(scene.layers[0].own, 0..1);
@@ -2034,6 +2065,92 @@ mod tests {
             .unwrap()
             .prepare(&scene, 1.)
             .unwrap();
+    }
+
+    #[test]
+    fn resource_pruning_drops_prepared_frame_during_motion() {
+        let mut scene = font_pool_scene();
+        scene.primitives = (0..2)
+            .map(|index| Primitive::Rounded {
+                rect: Rect::new(index as f32 * 20., 0., 20., 20.),
+                radius: 2.,
+                fill: [30, 40, 50, 255],
+                border: None,
+            })
+            .collect();
+        scene.motion = Some(Motion {
+            id: "opening".into(),
+            open: true,
+            duration: 0.3,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            fade: false,
+            reveal: true,
+            progress: 0.5,
+            parts: Vec::new(),
+            art: None,
+        });
+        let mut cache = tree::TreeCache::default();
+        cache.prepare(&scene, 1.5).unwrap();
+        scene
+            .prepared
+            .insert(1.5_f32.to_bits(), cache.frame.as_ref().unwrap().clone());
+        scene.retain_primitives(
+            |primitive| !matches!(primitive, Primitive::Rounded { rect, .. } if rect.x == 0.),
+        );
+        assert!(scene.prepared.is_empty());
+    }
+
+    #[test]
+    fn resource_pruning_keeps_and_remaps_static_prepared_frame() {
+        let mut scene = font_pool_scene();
+        scene.primitives = (0..3)
+            .map(|index| Primitive::Rounded {
+                rect: Rect::new(index as f32 * 20., 0., 20., 20.),
+                radius: 2.,
+                fill: [30, 40, 50, 255],
+                border: None,
+            })
+            .collect();
+        scene.clips.insert(1, Rect::new(20., 0., 20., 20.));
+        let clip = Rect::new(40., 0., 20., 20.);
+        scene.clips.insert(2, clip);
+        scene.layers = vec![SceneLayer {
+            id: "root".into(),
+            parent: None,
+            own: 0..3,
+            subtree_end: 3,
+            bounds: Rect::new(0., 0., 60., 20.),
+        }];
+        let mut cache = tree::TreeCache::default();
+        cache.prepare(&scene, 1.5).unwrap();
+        let original = cache.frame.as_ref().unwrap().clone();
+        scene.prepared.insert(1.5_f32.to_bits(), original.clone());
+
+        scene.retain_primitives(
+            |primitive| !matches!(primitive, Primitive::Rounded { rect, .. } if rect.x == 20.),
+        );
+        let filtered = scene.prepared.get(&1.5_f32.to_bits()).unwrap();
+        assert_eq!(
+            original.items.len(),
+            3,
+            "the source frame remains unchanged"
+        );
+        assert_eq!(filtered.items.len(), 2);
+        assert_eq!(scene.layers[0].own, 0..2);
+        assert_eq!(scene.layers[0].subtree_end, 2);
+        assert_eq!(filtered.items[1].clip, Some(clip));
+        assert_eq!(
+            tree::rect(&filtered.items[0].primitive),
+            tree::rect(&original.items[0].primitive)
+        );
+        assert_eq!(
+            tree::rect(&filtered.items[1].primitive),
+            tree::rect(&original.items[2].primitive)
+        );
+        assert!(filtered.items.iter().all(|item| item.raster.is_none()));
     }
 
     use super::*;

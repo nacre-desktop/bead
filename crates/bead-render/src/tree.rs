@@ -4,9 +4,9 @@ use crate::{
     CpuRenderer, Damage, PixelFormat, Primitive, Rect, Renderer, Result, Scene, ShmTarget,
 };
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     hash::{Hash, Hasher},
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
 use tiny_skia::{
     FillRule, Mask, Paint, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Stroke, Transform,
@@ -57,6 +57,134 @@ pub struct Frame {
     pub layer_count: usize,
     pub layers: Vec<LayerPose>,
     pub(crate) _accounting: Option<bead_core::cache::Charge>,
+}
+impl Frame {
+    /// Keep immutable raster work when a scene drops primitives without changing their pixels.
+    pub(crate) fn filtered(&self, keep: &[bool]) -> Option<Self> {
+        if keep.len() != self.items.len() || !self.scale.is_finite() || self.scale <= 0. {
+            return None;
+        }
+        let kept_indices = keep
+            .iter()
+            .enumerate()
+            .filter_map(|(index, keep)| keep.then_some(index))
+            .collect::<Vec<_>>();
+        if kept_indices.len() == keep.len() {
+            return None;
+        }
+        let kept_ids = kept_indices
+            .iter()
+            .map(|index| self.items[*index].id.as_str())
+            .collect::<BTreeSet<_>>();
+        let changed_layers = self
+            .layers
+            .iter()
+            .map(|pose| {
+                let own = pose
+                    .layer
+                    .own
+                    .iter()
+                    .filter(|id| kept_ids.contains(id.as_str()))
+                    .collect::<Vec<_>>();
+                (!own.iter().copied().eq(pose.layer.own.iter())).then_some(own)
+            })
+            .collect::<Vec<_>>();
+
+        let mut bytes = std::mem::size_of::<Frame>()
+            .checked_add(
+                kept_indices
+                    .len()
+                    .checked_mul(std::mem::size_of::<Item>())?,
+            )?
+            .checked_add(
+                self.layers
+                    .len()
+                    .checked_mul(std::mem::size_of::<LayerPose>())?,
+            )?;
+        for index in &kept_indices {
+            let item = &self.items[*index];
+            bytes = bytes
+                .checked_add(item.id.capacity())?
+                .checked_add(crate::primitive_bytes(&item.primitive))?;
+        }
+        for (pose, own) in self.layers.iter().zip(&changed_layers) {
+            let Some(own) = own else { continue };
+            let layer = &pose.layer;
+            let own_bytes = own
+                .iter()
+                .try_fold(0usize, |total, id| total.checked_add(id.capacity()))?;
+            let layer_bytes = std::mem::size_of::<RetainedLayer>()
+                .checked_add(layer.id.capacity())?
+                .checked_add(layer.parent.as_ref().map_or(0, String::capacity))?
+                .checked_add(
+                    layer
+                        .children
+                        .capacity()
+                        .checked_mul(std::mem::size_of::<String>())?,
+                )?
+                .checked_add(
+                    layer
+                        .children
+                        .iter()
+                        .try_fold(0usize, |total, child| total.checked_add(child.capacity()))?,
+                )?
+                .checked_add(own.len().checked_mul(std::mem::size_of::<String>())?)?
+                .checked_add(own_bytes)?;
+            bytes = bytes.checked_add(layer_bytes)?;
+        }
+        static FILTERED_FRAME_BUDGET: OnceLock<bead_core::cache::Budget> = OnceLock::new();
+        let accounting = FILTERED_FRAME_BUDGET
+            .get_or_init(|| {
+                bead_core::cache::Budget::new("filtered-frame-metadata", 8 * bead_core::cache::MIB)
+            })
+            .reserve(bytes)
+            .ok()?;
+
+        let items: Vec<_> = kept_indices
+            .iter()
+            .map(|index| self.items[*index].clone())
+            .collect();
+        let layers: Vec<_> = self
+            .layers
+            .iter()
+            .zip(changed_layers)
+            .map(|(pose, own)| {
+                let Some(own) = own else {
+                    return pose.clone();
+                };
+                let own = own.into_iter().cloned().collect::<Vec<_>>();
+                let mut key = std::collections::hash_map::DefaultHasher::new();
+                pose.layer.key.hash(&mut key);
+                own.hash(&mut key);
+                LayerPose {
+                    layer: Arc::new(RetainedLayer {
+                        id: pose.layer.id.clone(),
+                        parent: pose.layer.parent.clone(),
+                        children: pose.layer.children.clone(),
+                        key: key.finish(),
+                        own,
+                        _charge: accounting.clone(),
+                    }),
+                    bounds: pose.bounds,
+                }
+            })
+            .collect();
+        let mut key = std::collections::hash_map::DefaultHasher::new();
+        self.key.hash(&mut key);
+        kept_indices.hash(&mut key);
+        Some(Self {
+            layer_count: if self.layers.is_empty() {
+                items.len()
+            } else {
+                self.layer_count
+            },
+            items,
+            scale: self.scale,
+            key: key.finish(),
+            layers,
+            _accounting: Some(accounting),
+        })
+    }
 }
 /// A retained subtree packet; unchanged row content reuses this allocation.
 pub struct RetainedLayer {
@@ -3413,6 +3541,138 @@ mod tests {
             ],
             offset: (0., 0.),
             bounds: Rect::new(0., 0., 24., 20.),
+        }
+    }
+    #[test]
+    fn filtered_frame_reuses_kept_rasters_and_unchanged_layers() {
+        let mut source = scene();
+        source.primitives = vec![
+            Primitive::Rounded {
+                rect: Rect::new(2., 2., 8., 8.),
+                radius: 1.,
+                fill: [20, 40, 80, 255],
+                border: None,
+            },
+            Primitive::Text {
+                rect: Rect::new(2., 12., 18., 8.),
+                text: "retained café".into(),
+                family: "IBM Plex Sans".into(),
+                size: 12.,
+                color: [240, 230, 210, 255],
+                weight: 400,
+                align: None,
+            },
+            Primitive::Text {
+                rect: Rect::new(2., 2., 18., 8.),
+                text: "other retained text".into(),
+                family: "IBM Plex Sans".into(),
+                size: 12.,
+                color: [210, 220, 240, 255],
+                weight: 400,
+                align: None,
+            },
+        ];
+        source.font_files = vec![
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../bead-test/fonts/IBMPlexSans.ttf"),
+        ];
+        source.layers = vec![
+            crate::SceneLayer {
+                id: "root".into(),
+                parent: None,
+                own: 0..2,
+                subtree_end: 3,
+                bounds: source.bounds,
+            },
+            crate::SceneLayer {
+                id: "kept".into(),
+                parent: Some("root".into()),
+                own: 2..3,
+                subtree_end: 3,
+                bounds: Rect::new(2., 2., 18., 8.),
+            },
+        ];
+        let mut fresh_scene = source.clone();
+        fresh_scene.primitives.remove(0);
+        fresh_scene.layers[0].own = 0..1;
+        fresh_scene.layers[0].subtree_end = 2;
+        fresh_scene.layers[1].own = 1..2;
+        fresh_scene.layers[1].subtree_end = 2;
+        for scale in [1., 1.5] {
+            let mut cache = TreeCache::default();
+            cache.prepare(&source, scale).unwrap();
+            let original = cache.frame.as_ref().unwrap().clone();
+            let filtered = original.filtered(&[false, true, true]).unwrap();
+            let mut fresh_cache = TreeCache::default();
+            fresh_cache.prepare(&fresh_scene, scale).unwrap();
+            let fresh = fresh_cache.frame.as_ref().unwrap();
+
+            assert_eq!(original.items.len(), 3, "source frame remains unchanged");
+            assert_eq!(filtered.items.len(), 2);
+            assert!(Arc::ptr_eq(
+                filtered.items[0].raster.as_ref().unwrap(),
+                original.items[1].raster.as_ref().unwrap(),
+            ));
+            assert_eq!(
+                filtered.items[0].raster.as_ref().unwrap().pixels.data(),
+                fresh.items[0].raster.as_ref().unwrap().pixels.data(),
+                "filtered text raster matches a fresh bake at scale {scale}"
+            );
+            assert!(Arc::ptr_eq(
+                filtered.items[1].raster.as_ref().unwrap(),
+                original.items[2].raster.as_ref().unwrap(),
+            ));
+            assert_eq!(
+                filtered.items[1].raster.as_ref().unwrap().pixels.data(),
+                fresh.items[1].raster.as_ref().unwrap().pixels.data(),
+                "second filtered text raster matches a fresh bake at scale {scale}"
+            );
+            assert!(!Arc::ptr_eq(
+                &filtered.layers[0].layer,
+                &original.layers[0].layer,
+            ));
+            assert_eq!(filtered.layers[0].layer.own.len(), 1);
+            assert!(Arc::ptr_eq(
+                &filtered.layers[1].layer,
+                &original.layers[1].layer,
+            ));
+            assert_eq!(filtered.layers[1].layer.own, original.layers[1].layer.own);
+
+            let width = (source.bounds.w * scale).ceil() as u32;
+            let height = (source.bounds.h * scale).ceil() as u32;
+            let mut filtered_pixels = vec![0; (width * height * 4) as usize];
+            let mut fresh_pixels = filtered_pixels.clone();
+            let damage = Damage::full(width, height);
+            paint(
+                &filtered,
+                (0., 0.),
+                ShmTarget {
+                    bytes: &mut filtered_pixels,
+                    width,
+                    height,
+                    scale,
+                    format: PixelFormat::Rgba,
+                },
+                damage,
+            )
+            .unwrap();
+            paint(
+                fresh,
+                (0., 0.),
+                ShmTarget {
+                    bytes: &mut fresh_pixels,
+                    width,
+                    height,
+                    scale,
+                    format: PixelFormat::Rgba,
+                },
+                damage,
+            )
+            .unwrap();
+            assert_eq!(
+                filtered_pixels, fresh_pixels,
+                "masked scene pixels at {scale}"
+            );
         }
     }
     #[test]

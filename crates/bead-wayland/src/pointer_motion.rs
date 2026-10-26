@@ -39,6 +39,7 @@ impl Visual {
         !self.released && !self.retiring
     }
     pub(super) fn stage_commit(&mut self) -> Result<(), Box<dyn Error>> {
+        let _stage = bead_core::profile::Span::new("slider_stage");
         if self.retiring {
             self.surface.attach(None, 0, 0);
             self.surface.commit();
@@ -51,15 +52,6 @@ impl Visual {
                 .position(|buffer| buffer.canvas(&mut self.pool).is_some());
             let slot = if let Some(slot) = free {
                 slot
-            } else if self.buffers.len() < 2 {
-                let (buffer, _) = self.pool.create_buffer(
-                    self.pixels.0 as i32,
-                    self.pixels.1 as i32,
-                    self.pixels.0 as i32 * 4,
-                    wl_shm::Format::Argb8888,
-                )?;
-                self.buffers.push(buffer);
-                self.buffers.len() - 1
             } else {
                 // Keep the previous coherent slider; the parent's next callback retries.
                 return Ok(());
@@ -188,6 +180,7 @@ fn paint_child(
     x: f32,
     opacity: f32,
 ) -> Result<(), Box<dyn Error>> {
+    let _paint = bead_core::profile::Span::new("slider_paint");
     target.bytes.fill(0);
     let alpha = |mut color: [u8; 4]| {
         color[3] = (color[3] as f32 * opacity.clamp(0., 1.)).round() as u8;
@@ -355,6 +348,7 @@ impl App {
         spec: DragVisual,
         x: f32,
     ) -> Result<(), Box<dyn Error>> {
+        let _create = bead_core::profile::Span::new("slider_create");
         let Some((original, _, _)) = &self.companion else {
             return Ok(());
         };
@@ -446,6 +440,7 @@ impl App {
         else {
             return Ok(());
         };
+        let allocate = bead_core::profile::Span::new("slider_allocate");
         let mut pool = SlotPool::new((bytes * 2).max(4096), &self.shm)?;
         let (buffer, pixels) = pool.create_buffer(
             width as i32,
@@ -454,20 +449,34 @@ impl App {
             wl_shm::Format::Argb8888,
         )?;
         let target = pose(&spec, x);
-        paint_child(
-            &mut ShmTarget {
-                bytes: pixels,
-                width,
-                height,
-                scale,
-                format: PixelFormat::Bgra,
-            },
-            &spec,
-            &draw,
-            bounds,
-            target,
-            original.opacity,
-        )?;
+        if spec.fill.is_none() {
+            paint_child(
+                &mut ShmTarget {
+                    bytes: pixels,
+                    width,
+                    height,
+                    scale,
+                    format: PixelFormat::Bgra,
+                },
+                &spec,
+                &draw,
+                bounds,
+                target,
+                original.opacity,
+            )?;
+        }
+        let mut buffers = vec![buffer];
+        // Both slots exist before the first commit; drag frames only borrow a free slot.
+        if spec.fill.is_some() {
+            let (spare, _) = pool.create_buffer(
+                width as i32,
+                height as i32,
+                width as i32 * 4,
+                wl_shm::Format::Argb8888,
+            )?;
+            buffers.push(spare);
+        }
+        drop(allocate);
         let subcompositor = self.subcompositor.as_ref().ok_or("missing subcompositor")?;
         let viewporter = self.viewporter.as_ref().ok_or("missing viewporter")?;
         let child = self.compositor.create_surface(&self.qh);
@@ -478,7 +487,6 @@ impl App {
         let empty = Region::new(&self.compositor)?;
         child.set_input_region(Some(empty.wl_region()));
         role.set_sync();
-        let target = pose(&spec, x);
         let release_target = spec.release_serial;
         self.surfaces[index].pointer_visual = Some(Visual {
             spec,
@@ -486,7 +494,7 @@ impl App {
             surface: child,
             role,
             viewport,
-            buffers: vec![buffer],
+            buffers,
             pool,
             bounds,
             opacity: original.opacity,
@@ -669,6 +677,7 @@ impl App {
     }
     /// A scratch scene leaves the source transaction and worker rasters intact.
     pub(super) fn pointer_visual_scene(&mut self, index: usize) -> Option<Scene> {
+        let _mask = bead_core::profile::Span::new("slider_mask");
         let id = self.surfaces[index]
             .pointer_visual
             .as_ref()?
@@ -746,7 +755,6 @@ impl App {
             index += 1;
             keep
         });
-        scene.prepared.clear();
         Some(scene)
     }
     pub(super) fn pointer_visual_retire(&mut self, index: usize) -> Vec<UiEvent> {
