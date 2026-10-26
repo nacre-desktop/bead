@@ -113,8 +113,8 @@ SCROLL_SCENES = {
     # The picker is bottom-docked; scroll the hexagon grid, not the carousel.
     'wallpaper-picker': (m.STATES['wallpaper-hexagons'][0] + [('sleep', 1.0), ('click', 1070, 900)],
                          960, 1000, 80, 1.6),
-    # Widgets has a Bead-only route in this harness; the natural registry drives the gallery.
-    'widgets-gallery': ([('shell', 'nacre', 'menu', 'widgets')], 960, 600, 80, 1.6),
+    # Widgets has a Bead-only route; use the published on-demand widgets.open route.
+    'widgets-gallery': ([('ui', 'widgets', 'open')], 960, 600, 80, 1.6),
     'updates-popout': ([('ui', 'nacre', 'controls', 'updates')], 1600, 600, 80, 1.6),
     'clipboard': ([('only', 'qml', ('ui', 'drawers', 'toggle', 'dashboard')),
                    ('ui', 'nacre', 'tab', '6')], 800, 600, 80, 1.6),
