@@ -1596,14 +1596,6 @@ impl Dispatch<wayland_client::protocol::wl_callback::WlCallback, FrameData> for 
             state.canvas_frame(&data.surface, data.epoch);
             return;
         }
-        if matches!(
-            &event,
-            wayland_client::protocol::wl_callback::Event::Done { .. }
-        ) && let Some(frame) = data.prepared_frame
-        {
-            state.prepared_native_frame(&data.surface, frame);
-            return;
-        }
         if let wayland_client::protocol::wl_callback::Event::Done { callback_data } = event
             && let Some(surface) = state
                 .surfaces

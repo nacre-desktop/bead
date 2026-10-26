@@ -61,8 +61,6 @@ pub(crate) struct Handoff {
     pool: SlotPool,
     buffers: Vec<Reusable>,
     pub(super) first_frame: Option<Buffer>,
-    /// The CPU alias is already attached with a verified transparent 1x1 crop.
-    pub(super) first_frame_attached: bool,
     #[cfg(feature = "native-gl")]
     pub(super) first_gl_frame: bool,
     #[cfg(feature = "wgpu")]
@@ -98,8 +96,7 @@ impl Handoff {
 }
 
 /// A configured native target prepared while its source layer keeps rendering
-/// and following the drag. CPU snapshots use a verified transparent viewport
-/// crop until the release geometry and full viewport are committed.
+/// and following the drag. CPU snapshots stay client-side until release.
 pub(crate) struct PreparedNative {
     // Destroy surface-attached protocol objects before SCTK's owned wl_surface.
     pub(super) fractional: Option<WpFractionalScaleV1>,
@@ -130,12 +127,6 @@ pub(crate) struct PreparedNative {
     pub(super) snapshot_size: (u32, u32),
     pub(super) snapshot_scale120: u32,
     pub(super) ready_logged_generation: Option<u64>,
-    pub(super) server_attached_key: Option<policy::PreparedFrameKey>,
-    pub(super) server_warm_key: Option<policy::PreparedFrameKey>,
-    pub(super) server_frame_epoch: u64,
-    pub(super) server_pending_frame: Option<(u64, u64, policy::PreparedFrameKey)>,
-    pub(super) server_warm_pixel: Option<(u32, u32)>,
-    pub(super) server_ready_logged_generation: Option<u64>,
 }
 impl Drop for PreparedNative {
     fn drop(&mut self) {
@@ -229,24 +220,8 @@ fn placement_monitor<'a>(
         .or_else(|| monitors.first())
 }
 
-fn cpu_alias_already_attached(
-    has_cpu_snapshot: bool,
-    snapshot: Option<policy::PreparedFrameKey>,
-    attached: Option<policy::PreparedFrameKey>,
-    pixel: Option<(u32, u32)>,
-) -> bool {
-    has_cpu_snapshot && snapshot.is_some() && snapshot == attached && pixel.is_some()
-}
-
-fn cpu_warm_callback_current(
-    pending: Option<(u64, u64, policy::PreparedFrameKey)>,
-    attached: Option<policy::PreparedFrameKey>,
-    snapshot: Option<policy::PreparedFrameKey>,
-    epoch: u64,
-    prepared_epoch: u64,
-    key: policy::PreparedFrameKey,
-) -> bool {
-    pending == Some((epoch, prepared_epoch, key)) && attached == Some(key) && snapshot == Some(key)
+fn clear_transparent_bootstrap_buffer(bytes: &mut [u8]) {
+    bytes.fill(0);
 }
 
 /// The resident-panel state, as one movable unit.
@@ -911,12 +886,6 @@ impl App {
                 snapshot_size: (0, 0),
                 snapshot_scale120: 0,
                 ready_logged_generation: None,
-                server_attached_key: None,
-                server_warm_key: None,
-                server_frame_epoch: 0,
-                server_pending_frame: None,
-                server_warm_pixel: None,
-                server_ready_logged_generation: None,
             });
         }
         if self.pearl_watch.is_none()
@@ -1008,7 +977,6 @@ impl App {
                 ),
                 buffers: std::mem::take(&mut s.buffers),
                 first_frame: None,
-                first_frame_attached: false,
                 #[cfg(feature = "native-gl")]
                 first_gl_frame: false,
                 #[cfg(feature = "wgpu")]
@@ -1170,11 +1138,6 @@ impl App {
                 prepared.configured = false;
                 prepared.placed = false;
                 prepared.snapshot = None;
-                prepared.server_attached_key = None;
-                prepared.server_warm_key = None;
-                prepared.server_pending_frame = None;
-                prepared.server_warm_pixel = None;
-                prepared.server_ready_logged_generation = None;
                 #[cfg(feature = "native-gl")]
                 {
                     prepared.gl_ready = false;
@@ -1358,11 +1321,6 @@ impl App {
         prepared.configured = false;
         prepared.placed = false;
         prepared.snapshot = None;
-        prepared.server_attached_key = None;
-        prepared.server_warm_key = None;
-        prepared.server_pending_frame = None;
-        prepared.server_warm_pixel = None;
-        prepared.server_ready_logged_generation = None;
         #[cfg(feature = "native-gl")]
         {
             prepared.gl_ready = false;
@@ -1465,12 +1423,13 @@ impl App {
             eprintln!("PEARL_PREWARM_ERROR transparent bootstrap allocation failed");
             return;
         };
-        canvas.fill(0);
+        clear_transparent_bootstrap_buffer(canvas);
         let Ok(empty) = Region::new(&self.compositor) else {
             eprintln!("PEARL_PREWARM_ERROR input region allocation failed");
             return;
         };
         surface.set_input_region(Some(empty.wl_region()));
+        surface.set_opaque_region(None);
         if let Some(viewport) = &prepared.viewport {
             surface.set_buffer_scale(1);
             viewport.set_source(-1.0, -1.0, -1.0, -1.0);
@@ -1492,11 +1451,6 @@ impl App {
         prepared.source_size = (s.width, s.height);
         prepared.configured = true;
         prepared.placed = false;
-        prepared.server_attached_key = None;
-        prepared.server_warm_key = None;
-        prepared.server_pending_frame = None;
-        prepared.server_warm_pixel = None;
-        prepared.server_ready_logged_generation = None;
         if !snapshot_current {
             prepared.snapshot = None;
             #[cfg(feature = "native-gl")]
@@ -1645,57 +1599,6 @@ impl App {
         }
     }
 
-    pub(super) fn prepared_native_frame(
-        &mut self,
-        surface: &wl_surface::WlSurface,
-        frame: PreparedFrameData,
-    ) {
-        let panel_epoch = self.panel_epoch;
-        let Some(prepared_surface) = self.surfaces.iter_mut().find(|surface_state| {
-            surface_state
-                .prepared_native
-                .as_ref()
-                .and_then(|prepared| prepared.window.as_ref())
-                .is_some_and(|window| window.wl_surface() == surface)
-        }) else {
-            return;
-        };
-        let Some(prepared) = prepared_surface.prepared_native.as_mut() else {
-            return;
-        };
-        let key = policy::PreparedFrameKey {
-            generation: frame.size_generation,
-            ui_serial: frame.ui_serial,
-            size: (prepared_surface.width, prepared_surface.height),
-            scale120: prepared_surface.scale120,
-        };
-        if !cpu_warm_callback_current(
-            prepared.server_pending_frame,
-            prepared.server_attached_key,
-            prepared.snapshot_key(),
-            frame.epoch,
-            frame.prepared_epoch,
-            key,
-        ) || prepared.epoch != frame.prepared_epoch
-            || panel_epoch != frame.prepared_epoch
-        {
-            return;
-        }
-        prepared.server_pending_frame = None;
-        prepared.server_warm_key = Some(key);
-        if prepared.server_ready_logged_generation != Some(frame.size_generation) {
-            prepared.server_ready_logged_generation = Some(frame.size_generation);
-            println!(
-                "PEARL_SERVER_PREWARM_READY id={} epoch={} generation={} ui_serial={} monotonic_ns={}",
-                prepared.id,
-                prepared.epoch,
-                frame.size_generation,
-                frame.ui_serial,
-                bead_core::profile::monotonic_ns()
-            );
-        }
-    }
-
     pub(super) fn cancel_prepared_native(&mut self) {
         for surface in &mut self.surfaces {
             surface.prepared_native = None;
@@ -1795,6 +1698,7 @@ impl App {
             let s = &mut self.surfaces[i];
             let mut prepared = s.prepared_native.take().unwrap();
             let surface = prepared.window.as_ref().unwrap().wl_surface().clone();
+            surface.set_opaque_region(None);
             let dx = (rect.x - prepared.anchor.x).round() as i32;
             let dy = (rect.y - prepared.anchor.y).round() as i32;
             surface.offset(dx, dy);
@@ -1808,21 +1712,6 @@ impl App {
             } else if let Ok(empty) = Region::new(&self.compositor) {
                 surface.set_input_region(Some(empty.wl_region()));
             }
-            let snapshot_key = prepared.snapshot_key();
-            let first_frame_attached = cpu_alias_already_attached(
-                prepared.snapshot.is_some(),
-                snapshot_key,
-                prepared.server_attached_key,
-                prepared.server_warm_pixel,
-            );
-            let server_callback_ready =
-                snapshot_key.is_some() && prepared.server_warm_key == snapshot_key;
-            bead_core::vprintln!(
-                "PEARL_SERVER_PREWARM_ACTIVATE id={} attached={} callback_ready={}",
-                prepared.id,
-                first_frame_attached,
-                server_callback_ready
-            );
             if let Some(viewport) = &prepared.viewport {
                 viewport.set_source(-1.0, -1.0, -1.0, -1.0);
                 viewport.set_destination(s.width as i32, s.height as i32);
@@ -1852,7 +1741,6 @@ impl App {
                 pool: cover_pool,
                 buffers: cover_buffers,
                 first_frame: snapshot,
-                first_frame_attached,
                 #[cfg(feature = "native-gl")]
                 first_gl_frame: prepared.gl_ready,
                 #[cfg(feature = "wgpu")]
@@ -2825,75 +2713,11 @@ mod placement_tests {
     use super::*;
 
     #[test]
-    fn attached_cpu_alias_stays_on_the_same_buffer_while_callback_is_pending() {
-        let key = policy::PreparedFrameKey {
-            generation: 4,
-            ui_serial: 8,
-            size: (900, 600),
-            scale120: 180,
-        };
-        assert!(cpu_alias_already_attached(
-            true,
-            Some(key),
-            Some(key),
-            Some((0, 0))
-        ));
-        assert!(!cpu_alias_already_attached(
-            false,
-            Some(key),
-            Some(key),
-            Some((0, 0))
-        ));
-        assert!(!cpu_alias_already_attached(
-            true,
-            Some(key),
-            Some(key),
-            None
-        ));
-        assert!(!cpu_alias_already_attached(
-            true,
-            Some(key),
-            Some(policy::PreparedFrameKey {
-                ui_serial: 7,
-                ..key
-            }),
-            Some((0, 0))
-        ));
-        assert!(cpu_warm_callback_current(
-            Some((3, 9, key)),
-            Some(key),
-            Some(key),
-            3,
-            9,
-            key
-        ));
-        assert!(!cpu_warm_callback_current(
-            Some((2, 9, key)),
-            Some(key),
-            Some(key),
-            3,
-            9,
-            key
-        ));
-        assert!(!cpu_warm_callback_current(
-            Some((3, 8, key)),
-            Some(key),
-            Some(key),
-            3,
-            9,
-            key
-        ));
-        assert!(!cpu_warm_callback_current(
-            Some((3, 9, key)),
-            Some(key),
-            Some(policy::PreparedFrameKey {
-                generation: 5,
-                ..key
-            }),
-            3,
-            9,
-            key
-        ));
+    fn transparent_bootstrap_buffer_has_zero_argb_and_alpha_bytes() {
+        let mut bytes = [0xff; 8];
+        clear_transparent_bootstrap_buffer(&mut bytes);
+        assert_eq!(bytes, [0; 8]);
+        assert!(bytes.chunks_exact(4).all(|pixel| pixel[3] == 0));
     }
 
     #[test]

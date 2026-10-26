@@ -1045,7 +1045,6 @@ impl App {
                         epoch: s.callbacks.request(),
                         generation,
                         source_epoch,
-                        prepared_frame: None,
                     },
                 );
                 s.callbacks.pending = true;
@@ -1069,9 +1068,7 @@ impl App {
                     );
                 }
                 bead_core::profile::mark("panel_commit");
-                if handoff.first_frame_attached {
-                    wl_surface.commit();
-                } else if let Some(first_frame) = handoff.first_frame.as_ref() {
+                if let Some(first_frame) = handoff.first_frame.as_ref() {
                     first_frame.attach_to(&wl_surface)?;
                     wl_surface.commit();
                 }
@@ -1455,11 +1452,6 @@ impl App {
                             Damage::full(native_w, native_h),
                         )?;
                         prepared.snapshot = None;
-                        prepared.server_attached_key = None;
-                        prepared.server_warm_key = None;
-                        prepared.server_pending_frame = None;
-                        prepared.server_warm_pixel = None;
-                        prepared.server_ready_logged_generation = None;
                         prepared.snapshot_size_generation = key.generation;
                         prepared.snapshot_ui_serial = key.ui_serial;
                         prepared.snapshot_size = key.size;
@@ -1488,7 +1480,6 @@ impl App {
                             epoch: s.callbacks.request(),
                             generation: scene.resource_revision,
                             source_epoch: if s.companion { self.panel_epoch } else { 0 },
-                            prepared_frame: None,
                         },
                     );
                     s.callbacks.pending = true;
@@ -1563,7 +1554,6 @@ impl App {
                         epoch: s.callbacks.request(),
                         generation: scene.resource_revision,
                         source_epoch: if s.companion { self.panel_epoch } else { 0 },
-                        prepared_frame: None,
                     },
                 );
                 s.callbacks.pending = true;
@@ -1701,7 +1691,6 @@ impl App {
                             epoch: s.callbacks.request(),
                             generation: scene.resource_revision,
                             source_epoch: if s.companion { self.panel_epoch } else { 0 },
-                            prepared_frame: None,
                         },
                     );
                     s.callbacks.pending = true;
@@ -1880,13 +1869,6 @@ impl App {
                 .buffer
                 .canvas(&mut s.pool)
                 .ok_or("compositor owns buffer")?;
-            let warm_target = s.prepared_native.as_ref().filter(|prepared| {
-                prepared.configured
-                    && prepared.viewport.is_some()
-                    && prepared.source_size == (s.width, s.height)
-                    && prepared.scale120 == s.scale120
-            });
-            let preferred_pixel = warm_target.and_then(|prepared| prepared.server_warm_pixel);
             for damage in repairs {
                 renderer.draw(
                     scene,
@@ -1900,9 +1882,6 @@ impl App {
                     *damage,
                 )?;
             }
-            let transparent = warm_target.and_then(|_| {
-                transparent_corner(canvas, w as u32, h as u32, stride as usize, preferred_pixel)
-            });
             if std::env::var_os("BEAD_PROFILE_DAMAGE").is_some() {
                 println!(
                     "INPUT_REPAIR rects={} pixels={} bounding_pixels={}",
@@ -1934,7 +1913,6 @@ impl App {
                     epoch: s.callbacks.request(),
                     generation: scene.resource_revision,
                     source_epoch: if s.companion { self.panel_epoch } else { 0 },
-                    prepared_frame: None,
                 },
             );
             s.callbacks.pending = true;
@@ -1992,55 +1970,6 @@ impl App {
                     prepared.snapshot_ui_serial = s.ui_serial;
                     prepared.snapshot_size = (s.width, s.height);
                     prepared.snapshot_scale120 = s.scale120;
-                    prepared.server_attached_key = None;
-                    prepared.server_warm_key = None;
-                    prepared.server_pending_frame = None;
-                    prepared.server_warm_pixel = None;
-                    if let Some(pixel) = transparent
-                        && prepared.configured
-                        && prepared.source_size == (s.width, s.height)
-                        && prepared.scale120 == s.scale120
-                        && let (Some(viewport), Some(buffer), Some(window)) = (
-                            prepared.viewport.as_ref(),
-                            prepared.snapshot.as_ref(),
-                            prepared.window.as_ref(),
-                        )
-                    {
-                        let target = window.wl_surface();
-                        target.set_buffer_scale(1);
-                        viewport.set_source(f64::from(pixel.0), f64::from(pixel.1), 1.0, 1.0);
-                        viewport.set_destination(s.width as i32, s.height as i32);
-                        buffer.attach_to(target)?;
-                        target.damage_buffer(0, 0, w, h);
-                        prepared.server_frame_epoch =
-                            prepared.server_frame_epoch.wrapping_add(1).max(1);
-                        let frame_epoch = prepared.server_frame_epoch;
-                        let key = policy::PreparedFrameKey {
-                            generation: prepared.size_generation,
-                            ui_serial: s.ui_serial,
-                            size: (s.width, s.height),
-                            scale120: s.scale120,
-                        };
-                        target.frame(
-                            qh,
-                            FrameData {
-                                surface: target.clone(),
-                                epoch: frame_epoch,
-                                generation: scene.resource_revision,
-                                source_epoch: if s.companion { self.panel_epoch } else { 0 },
-                                prepared_frame: Some(PreparedFrameData {
-                                    epoch: frame_epoch,
-                                    prepared_epoch: prepared.epoch,
-                                    size_generation: key.generation,
-                                    ui_serial: key.ui_serial,
-                                }),
-                            },
-                        );
-                        target.commit();
-                        prepared.server_attached_key = Some(key);
-                        prepared.server_pending_frame = Some((frame_epoch, prepared.epoch, key));
-                        prepared.server_warm_pixel = Some(pixel);
-                    }
                 }
             }
             b.pending.clear();
@@ -2386,66 +2315,11 @@ fn repair_plan<'a>(
     Some((slot, adopt))
 }
 
-fn transparent_corner(
-    bytes: &[u8],
-    width: u32,
-    height: u32,
-    stride: usize,
-    preferred: Option<(u32, u32)>,
-) -> Option<(u32, u32)> {
-    let alpha_zero = |(x, y): (u32, u32)| {
-        x < width
-            && y < height
-            && bytes
-                .get(y as usize * stride + x as usize * 4 + 3)
-                .is_some_and(|alpha| *alpha == 0)
-    };
-    let right = width.checked_sub(1)?;
-    let bottom = height.checked_sub(1)?;
-    let clear_corner = |(x, y): (u32, u32)| {
-        if !(x == 0 || x == right) || !(y == 0 || y == bottom) {
-            return false;
-        }
-        let nx = if x == 0 { right.min(1) } else { x - 1 };
-        let ny = if y == 0 { bottom.min(1) } else { y - 1 };
-        // Linear filtering can sample inward neighbors of the 1x1 crop.
-        [(x, y), (nx, y), (x, ny), (nx, ny)]
-            .into_iter()
-            .all(alpha_zero)
-    };
-    if let Some(pixel) = preferred.filter(|pixel| clear_corner(*pixel)) {
-        return Some(pixel);
-    }
-    // Warming is optional: checking corners keeps opaque-scene work bounded.
-    [(0, 0), (right, 0), (0, bottom), (right, bottom)]
-        .into_iter()
-        .find(|pixel| clear_corner(*pixel))
-}
-
 #[cfg(test)]
 mod repair_tests {
     use super::*;
     use bead_render::{Primitive, Rect, Renderer, Scene, tree::TreeCpuRenderer};
     use std::collections::BTreeMap;
-
-    #[test]
-    fn transparent_corner_requires_verified_zero_alpha_and_honors_row_stride() {
-        let mut pixels = vec![0xff; 48];
-        for (x, y) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
-            pixels[y * 16 + x * 4 + 3] = 0;
-        }
-        assert_eq!(transparent_corner(&pixels, 3, 3, 16, None), Some((0, 0)));
-        assert_eq!(
-            transparent_corner(&pixels, 3, 3, 16, Some((9, 9))),
-            Some((0, 0))
-        );
-        pixels[23] = 1; // A filtered inward neighbor must also be transparent.
-        assert_eq!(transparent_corner(&pixels, 3, 3, 16, None), None);
-        let mut opaque_corners = vec![0xff; 36];
-        opaque_corners[19] = 0; // An interior hole does not trigger a full scan.
-        assert_eq!(transparent_corner(&opaque_corners, 3, 3, 12, None), None);
-        assert_eq!(transparent_corner(&[], 0, 0, 0, None), None);
-    }
 
     #[test]
     fn settled_pixels_win_over_animation_debt_but_held_slots_are_never_written() {
