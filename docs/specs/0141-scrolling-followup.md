@@ -1,6 +1,6 @@
 # B0141 — scrolling follow-up
 
-Status: implementation and validation in progress. B0135 is on main; no live installation.
+Status: allocator fix (Luau 0.742 analyzer), Chrome scroll physics, bounded GL/CPU picker caches and the fresh-update replacement are landed with full Arch CI (all steps pass except the sway-based wallpaper-video smoke, which cannot exec sway in the dev-2 container). Native memory pairs, the 30-minute soak, AI-reversal and history/popup/Clipboard final-source measurements remain open. B0135 is on main; no live installation.
 
 ## Scope and gates
 
