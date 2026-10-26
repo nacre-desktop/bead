@@ -12,10 +12,10 @@ use tiny_skia::{
     FillRule, Mask, Paint, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Stroke, Transform,
 };
 
-// Old and candidate frames overlap until presenter acknowledgement; steady cache remains 64 MiB.
-// Charge every live overlap against 128 MiB per owner and the unchanged process-wide cap.
-const STEADY_RASTER_LIMIT: usize = 64 * bead_core::cache::MIB;
-const LIVE_RASTER_LIMIT: usize = 128 * bead_core::cache::MIB;
+// Bound each prepared frame at 68 MiB; old and candidate frames may overlap until presentation.
+// The 136 MiB per-owner overlap cap leaves the independent process-wide cap unchanged.
+pub(crate) const STEADY_RASTER_LIMIT: usize = 68 * bead_core::cache::MIB;
+const LIVE_RASTER_LIMIT: usize = 2 * STEADY_RASTER_LIMIT;
 
 fn validate_frame_rasters(items: &[Item]) -> Result<()> {
     let bytes = items
@@ -3285,6 +3285,7 @@ mod tests {
         scene.prepared.insert(1.5_f32.to_bits(), candidate.clone());
         cache.prepare(&scene, 1.5).unwrap();
         assert!(Arc::ptr_eq(cache.frame.as_ref().unwrap(), &candidate));
+        assert!(budget.used() > STEADY_RASTER_LIMIT);
         assert!(budget.used() > old_bytes);
         assert!(budget.used() <= LIVE_RASTER_LIMIT);
         drop(old);
@@ -3327,7 +3328,7 @@ mod tests {
         assert!(!Arc::ptr_eq(&old_raster, &new_raster));
         assert_ne!(old_pixels, new_raster.pixels.data());
         let overlap_bytes = budget.used();
-        assert!(overlap_bytes > 64 * bead_core::cache::MIB);
+        assert!(overlap_bytes > STEADY_RASTER_LIMIT);
         assert!(overlap_bytes <= LIVE_RASTER_LIMIT);
 
         drop(old_frame);

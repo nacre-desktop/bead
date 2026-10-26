@@ -300,7 +300,10 @@ impl GlRenderer {
                 .is_none_or(|old| old.pixels.width() != w || old.pixels.height() != h)
             {
                 let budget = self.image_budget.get_or_insert_with(|| {
-                    bead_core::cache::Budget::new("native-gl-images", 64 * bead_core::cache::MIB)
+                    bead_core::cache::Budget::new(
+                        "native-gl-images",
+                        crate::tree::STEADY_RASTER_LIMIT,
+                    )
                 });
                 let charge = loop {
                     match budget.reserve(w as usize * h as usize * 4 + slot.0.capacity() + 192) {
