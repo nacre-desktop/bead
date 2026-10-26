@@ -3997,7 +3997,9 @@ fn resized_widget_app_gallery_launcher_accepts_a_real_pointer_click() {
         .into_iter()
         .find(|region| region.id.ends_with("widget-card-launcher"))
         .expect("launcher card is present after window configure");
-    let rect = region.clip.map_or(region.rect, |clip| region.rect.intersect(clip));
+    let rect = region
+        .clip
+        .map_or(region.rect, |clip| region.rect.intersect(clip));
     let x = rect.x + rect.w / 2.;
     let y = rect.y + rect.h / 2.;
     runtime.stage(UiEvent::Hover { x, y }).unwrap();
