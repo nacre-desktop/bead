@@ -342,7 +342,11 @@ impl Animations {
             "out-cubic" => AnimationCurve::OutCubic,
             "out-back" => AnimationCurve::OutBack,
             "in-out-cubic" => AnimationCurve::InOutCubic,
-            _ => return Err("animation transition must be linear, out-cubic, out-back, or in-out-cubic"),
+            _ => {
+                return Err(
+                    "animation transition must be linear, out-cubic, out-back, or in-out-cubic",
+                );
+            }
         };
         if !self.states.contains_key(&key) && self.states.len() >= 1024 {
             return Err("a view may animate at most 1024 scalar values");

@@ -325,9 +325,20 @@ fn desktop_clock_dropped_on_occupied_pill_slot_writes_at_82_and_90_percent() {
             .iter()
             .find(|item| item["iid"] == "status-pill")
             .unwrap();
-        assert!(pill["children"].as_array().unwrap().iter().any(|item| item["iid"] == "clock"));
+        assert!(
+            pill["children"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item["iid"] == "clock")
+        );
         assert_eq!(pill["slot"]["span"], 14);
-        assert!(written["hosts"]["canvas"]["instances"].as_array().unwrap().is_empty());
+        assert!(
+            written["hosts"]["canvas"]["instances"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
     }
 }
 fn assert_unique_iids(document: &Json) {
