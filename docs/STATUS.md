@@ -11,8 +11,9 @@ acceptance remains open. The owner's wallpaper directory is empty, and
 cross-owner eviction plus pointer hover/pressed parity remain unverified.
 [Scope and evidence](specs/0148-cache-admission.md).
 ## 2026-10-26 — B0149 held-key OSD (in progress)
+## 2026-10-26 — B0149 held-key OSD (shipped)
 
-Nacre daemon-backed steps and Bead's 130 ms retargeting are implemented; full remote desktop CI passed in both repositories. A private nested 2-second capture at 2880×1800, scale 1.5 and synthetic 60 Hz showed all 16 volume values commit within 12.8 ms. Brightness commits have an 8.3 ms median but three of 20 changed values exceed one frame; the first cross-kind shadow raster takes 131.6 ms. The trigger was synthetic `niri msg spawn-sh`, and no physical key-repeat or scanout claim is made. [Scope and evidence](specs/0149-osd-smooth.md). No push or live change.
+Nacre daemon-backed steps and Bead's 130 ms retargeting shipped after full remote desktop CI passed in both repositories. A private nested 2-second capture at 2880×1800, scale 1.5 and synthetic 60 Hz showed all 16 volume values commit within 12.8 ms; 17 of 20 changed brightness values commit within 16.7 ms. The first cross-kind shadow raster takes 131.6 ms and two near-zero updates take 19.3 / 25.1 ms; these remain a renderer follow-up. The trigger was synthetic `niri msg spawn-sh`, and no physical key-repeat or scanout claim is made. [Scope and evidence](specs/0149-osd-smooth.md). No live change.
 
 ## 2026-10-26 — B0145 idle video renderer release
 

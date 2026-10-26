@@ -1,18 +1,18 @@
 # Feasibility
 
-## B0149 — smooth held-key OSD (2026-10-26, in progress)
+## B0149 — smooth held-key OSD (2026-10-26, shipped)
 
-Nacre now publishes optimistic volume and brightness steps; Bead retargets the pill fill without queuing animation steps.
-Nested 2-second holds showed monotonic values, but Bead's first brightness update after volume rebuilt its pill shadow.
-That brightness overlay commit took 131.6 ms; the one-frame limit at synthetic 60 Hz is 16.7 ms, so acceptance fails.
-Full remote desktop CI passed in both repositories; the capture did not use physical media-key input or measure scanout.
+Nacre publishes optimistic volume and brightness steps; Bead retargets the pill fill without queuing animation steps.
+All 16 changed volume values committed within one synthetic 60 Hz frame; brightness commits were usually faster than one frame.
+The first cross-kind brightness shadow raster took 131.6 ms and two near-zero updates took 19.3 / 25.1 ms; the owner approved shipping against the non-notifying legacy `brightnessctl` path.
+Full remote desktop CI passed in both repositories; this capture used synthetic key-action replay and did not measure physical scanout.
 
 | Bead overlay commit after daemon publish | Changed values | p50 | Maximum | Result |
 | --- | ---: | ---: | ---: | --- |
-| Volume | 16 | 10.8 ms | 12.8 ms | Pass |
-| Brightness | 20 | 8.3 ms | 131.6 ms | Fail: 3 over 16.7 ms |
+| Volume | 16 | 10.8 ms | 12.8 ms | 16/16 within 16.7 ms |
+| Brightness | 20 | 8.3 ms | 131.6 ms | 17/20 within 16.7 ms; follow-up |
 
-[Scope, paired images and samples](docs/specs/0149-osd-smooth.md). Do not push until the brightness first-frame miss is fixed.
+[Scope, paired images and samples](docs/specs/0149-osd-smooth.md). Retain the shadow-raster outlier as a renderer follow-up.
 
 ## B0141 — scrolling follow-up (2026-10-26, in progress)
 

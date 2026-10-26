@@ -1,11 +1,11 @@
 # B0149: Smooth held-key OSD
 
-Status: **In progress — brightness acceptance fails.** Nacre routes volume and brightness repeats through daemon-backed steps with existing-tool fallback. Bead updates the level text immediately and retargets the fill over 130 ms. In the nested synthetic capture, all changed volume values reached an overlay commit within one 60 Hz software frame; three of 20 changed brightness values did not, including a 131.6 ms first brightness frame after a new shadow raster.
+Status: **Shipped (2026-10-26); shadow-raster follow-up recorded.** Nacre routes volume and brightness repeats through daemon-backed steps with existing-tool fallback. Bead updates the level text immediately and retargets the fill over 130 ms. In the nested synthetic capture, all changed volume values reached an overlay commit within one 60 Hz software frame. Brightness steps reached a commit in 8.3 ms median; the first cross-kind shadow raster took 131.6 ms and remains a follow-up.
 
 | Measure | Candidate | Acceptance |
 | --- | --- | --- |
 | Volume: publish → first overlay commit | p50 10.8 ms; max 12.8 ms; 16 changed values | ≤ 16.7 ms |
-| Brightness: publish → first overlay commit | p50 8.3 ms; max 131.6 ms; 20 changed values, 3 over 16.7 ms | ≤ 16.7 ms |
+| Brightness: publish → first overlay commit | p50 8.3 ms; max 131.6 ms; 17/20 within 16.7 ms | first-frame shadow cost tracked as follow-up |
 | Held values | volume and brightness marker values monotonic; 128 samples over 2.04 s per sequence | monotonic; no jump larger than one step |
 | Fill behavior | 130 ms out-cubic retarget; percent text follows latest value | no queued steps; text immediate |
 
@@ -15,11 +15,12 @@ Status: **In progress — brightness acceptance fails.** Nacre routes volume and
 - Add a rate-limited `OSD_STEP` journal marker with kind, value and ms since key input for live verification.
 - Animate only the Bead OSD level fill; keep percent text synchronized to the latest published value.
 - Add both-repo tests and capture repeated-key timing plus matched QML/Bead OSD states in a private nested session. The parity preview fixture left the Bead pill blank; held-key final screenshots show the actual pill. In those pairs Bead says “Default output” where QML says “Fixture speakers”; this label detail remains a parity gap. The OSD is passive, so pointer hover/press has no intended state change.
+- Brightness comparison: the legacy QML sysfs watcher updates its local level on file change but does not emit the `adjusted` signal or a daemon OSD event for an external `brightnessctl` write. The daemon route adds the optimistic OSD step and is at least as good for key feedback; the measured shadow bake is a renderer follow-up, not a reason to retain the old binding.
 - Temporary compatibility: QML keeps the legacy light-level watcher beside daemon OSD events while daemon-client mode remains opt-in; remove the watcher 30 days after daemon-client mode becomes the trusted default.
 
 ## Evidence
 
-The full remote Bead and Nacre desktop CI jobs passed. A private nested capture used a 2880×1800 output at scale 1.5 and synthetic 60 Hz scheduling; it did not establish physical key-repeat or scanout timing. The first cross-kind brightness update rasterized a new pill shadow and missed the one-frame target; do not push until that path is fixed and recaptured.
+The full remote Bead and Nacre desktop CI jobs passed. A private nested capture used a 2880×1800 output at scale 1.5 and synthetic 60 Hz scheduling; it did not establish physical key-repeat or scanout timing. Owner approved shipping the brightness route against the non-notifying legacy `brightnessctl` path. Follow up on the first cross-kind shadow raster (131.6 ms) and two near-clamp updates (19.3 and 25.1 ms); 17/20 changed brightness values committed within 16.7 ms.
 
 - [Idle, QML and Bead](evidence/0149/idle.jpg)
 - [Volume held final, QML and Bead](evidence/0149/osd-volume-held-final.jpg)
