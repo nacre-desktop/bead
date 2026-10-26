@@ -2032,6 +2032,13 @@ impl App {
         }
         self.panel_ui(UiEvent::PanelDetached(false));
         self.panel_ui(UiEvent::PanelVisibility(true));
+        self.set_dismiss_enabled(
+            self.panel_ready
+                && self
+                    .panel_runtime
+                    .as_ref()
+                    .is_some_and(|source| source.outside_dismiss()),
+        )?;
         self.reposition_companions(true);
         self.sync_all_decorations()?;
         self.save_pearls();
