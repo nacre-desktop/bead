@@ -10,6 +10,58 @@ use std::{
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell")
 }
+
+#[test]
+fn idle_bar_minute_model_changes_damage_the_real_clock_widget() -> Result<()> {
+    use bead::render::{damage::FrameDamage, tree::TreeCache};
+    for scale in [1., 1.5] {
+        let mut values = super::initial_models()?;
+        values.insert("bead.desktop.clock".into(), Value::Text("10:11".into()));
+        let h = Harness::load(
+            &root(),
+            Path::new("bar/main.luau"),
+            &root().join("palette.json"),
+            values,
+            Config {
+                width: 1920,
+                height: 70,
+                scale,
+            },
+        )?;
+        let mut cache = TreeCache::default();
+        let mut damage = FrameDamage::default();
+        let width = (1920. * scale) as u32;
+        let height = (70. * scale) as u32;
+        cache.prepare(h.scene(), scale)?;
+        damage.update(cache.frame.as_ref().unwrap(), (0., 0.), 1., width, height)?;
+        let mut session = h.session;
+        for minute in ["10:12", "10:13", "11:14", "09:15"] {
+            let scene = session
+                .update_model(BTreeMap::from([(
+                    "bead.desktop.clock".into(),
+                    Value::Text(minute.into()),
+                )]))?
+                .ok_or("idle clock update was filtered out")?;
+            assert!(scene.primitives.iter().any(|p| matches!(p,
+                bead::render::Primitive::Text {text,..} if text == minute)));
+            cache.prepare(&scene, scale)?;
+            let regions =
+                damage.update(cache.frame.as_ref().unwrap(), (0., 0.), 1., width, height)?;
+            assert!(!regions.is_empty(), "changed minute needs surface damage");
+            session.commit(scene);
+            assert!(
+                session
+                    .update_model(BTreeMap::from([(
+                        "bead.desktop.clock".into(),
+                        Value::Text(minute.into())
+                    ),]))?
+                    .is_none(),
+                "unchanged minute must stay idle"
+            );
+        }
+    }
+    Ok(())
+}
 fn calendar(year: u16, month: u8, first: u8, scale: f32) -> Result<Harness> {
     Harness::load(
         &root(),

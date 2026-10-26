@@ -101,27 +101,33 @@ async fn connect(
     refresh_sensors(shared, &system).await;
     refresh_lock(shared, &system).await;
     refresh_tray(shared, &tray);
-    shared.change(update_clock);
     let mut clock_sample = None;
+    let mut clock_slot = None;
     loop {
         if shared.stop.load(Ordering::SeqCst) {
             return Ok(());
         }
         let wall_now = SystemTime::now();
         let monotonic_now = tokio::time::Instant::now();
-        if let Some((previous_wall, previous_monotonic)) = clock_sample
-            && clock_drifted(
-                wall_now.duration_since(previous_wall).unwrap_or_default(),
-                monotonic_now.duration_since(previous_monotonic),
-            )
+        let seconds_enabled = shared.clock_seconds_leases.load(Ordering::Acquire) > 0;
+        // A signal handler can straddle the boundary while the select's sleep
+        // is cancelled. Publish the current slot before arming the next one,
+        // even when the wall and monotonic clocks have advanced together.
+        let due = clock_slot_changed(&mut clock_slot, wall_now, seconds_enabled);
+        if due
+            || clock_sample.is_some_and(|(previous_wall, previous_monotonic)| {
+                clock_drifted(
+                    wall_now.duration_since(previous_wall).unwrap_or_default(),
+                    monotonic_now.duration_since(previous_monotonic),
+                )
+            })
         {
             shared.change(update_clock);
         }
         clock_sample = Some((wall_now, monotonic_now));
-        let seconds_enabled = shared.clock_seconds_leases.load(Ordering::Acquire) > 0;
         let delay = next_clock_delay(wall_now, seconds_enabled);
         tokio::select! {
-            _=tokio::time::sleep(delay)=>shared.change(update_clock),
+            _=tokio::time::sleep(delay)=>{},
             command=receiver.recv()=>match command {
                 Some(Command::Stop)|None=>return Ok(()),
                 Some(Command::ClockResolutionChanged)=>shared.change(update_clock),
@@ -232,6 +238,18 @@ fn next_clock_delay(now: SystemTime, seconds_enabled: bool) -> Duration {
         .as_millis() as u64;
     let period = if seconds_enabled { 1_000 } else { 60_000 };
     Duration::from_millis(period - millis % period)
+}
+fn clock_slot_changed(
+    previous: &mut Option<(bool, u64)>,
+    now: SystemTime,
+    seconds_enabled: bool,
+) -> bool {
+    let seconds = now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    let slot = (
+        seconds_enabled,
+        seconds / if seconds_enabled { 1 } else { 60 },
+    );
+    previous.replace(slot) != Some(slot)
 }
 fn clock_drifted(wall_elapsed: Duration, monotonic_elapsed: Duration) -> bool {
     wall_elapsed.abs_diff(monotonic_elapsed) > Duration::from_secs(2)
@@ -774,6 +792,22 @@ mod clock_tests {
         ));
         assert!(clock_drifted(Duration::from_secs(2_400), Duration::ZERO));
         assert!(clock_drifted(Duration::ZERO, Duration::from_secs(3)));
+    }
+
+    #[test]
+    fn clock_slots_survive_busy_boundaries_resume_and_resolution_changes() {
+        let mut slot = None;
+        assert!(clock_slot_changed(&mut slot, epoch(59), false));
+        assert!(!clock_slot_changed(&mut slot, epoch(59), false));
+        // A handler straddles the minute with no monotonic/realtime drift.
+        assert!(clock_slot_changed(&mut slot, epoch(61), false));
+        assert!(!clock_slot_changed(&mut slot, epoch(62), false));
+        assert!(clock_slot_changed(&mut slot, epoch(3_661), false));
+        assert!(clock_slot_changed(&mut slot, epoch(3_661), true));
+        assert!(clock_slot_changed(&mut slot, epoch(3_662), true));
+        assert!(clock_slot_changed(&mut slot, epoch(3_662), false));
+        // A backwards wall-clock adjustment also refreshes immediately.
+        assert!(clock_slot_changed(&mut slot, epoch(60), false));
     }
 
     #[test]

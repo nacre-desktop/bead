@@ -99,6 +99,9 @@ jobs:
       - name: Private SNI and DBusMenu lifecycle
         run: |
           dbus-run-session -- bash -c 'export DBUS_SYSTEM_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" BEAD_PRIVATE_SERVICES_TEST=1 BEAD_FIXTURE_UPDATE=1; cargo test -p bead-services --test tray_private_bus --locked -j2 -- --ignored --nocapture'
+      - name: Clock tick across a busy minute boundary
+        run: |
+          dbus-run-session -- bash -c 'export DBUS_SYSTEM_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" BEAD_PRIVATE_SERVICES_TEST=1; cargo test -p bead-services --test clock_private_bus --locked -j2 -- --ignored --nocapture'
       - name: Install cargo-deny
         run: |
           asset=cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz
