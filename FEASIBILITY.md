@@ -1,5 +1,19 @@
 # Feasibility
 
+## B0149 — smooth held-key OSD (2026-10-26, in progress)
+
+Nacre now publishes optimistic volume and brightness steps; Bead retargets the pill fill without queuing animation steps.
+Nested 2-second holds showed monotonic values, but Bead's first brightness update after volume rebuilt its pill shadow.
+That brightness overlay commit took 131.6 ms; the one-frame limit at synthetic 60 Hz is 16.7 ms, so acceptance fails.
+Full remote desktop CI passed in both repositories; the capture did not use physical media-key input or measure scanout.
+
+| Bead overlay commit after daemon publish | Changed values | p50 | Maximum | Result |
+| --- | ---: | ---: | ---: | --- |
+| Volume | 16 | 10.8 ms | 12.8 ms | Pass |
+| Brightness | 20 | 8.3 ms | 131.6 ms | Fail: 3 over 16.7 ms |
+
+[Scope, paired images and samples](docs/specs/0149-osd-smooth.md). Do not push until the brightness first-frame miss is fixed.
+
 ## B0141 — scrolling follow-up (2026-10-26, in progress)
 
 The historical allocator abort comes from the standalone Luau analyzer's parallel reporter race.
