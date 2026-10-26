@@ -1203,6 +1203,7 @@ impl App {
         animation_active: bool,
     ) -> bool {
         if animation_active
+            || self.scrolls.is_animating()
             || self.options.animate
             || self.options.debug_continuous
             || self.pearl.is_some()

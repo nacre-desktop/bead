@@ -182,6 +182,11 @@ pub(super) struct State {
     pixels: std::collections::BTreeMap<(Target, bool), Pixels>,
     flings: std::collections::BTreeMap<(Target, bool), Fling>,
 }
+impl State {
+    pub(super) fn is_animating(&self) -> bool {
+        !self.motions.is_empty() || !self.flings.is_empty()
+    }
+}
 struct Fling {
     serial: u64,
     started: Instant,
