@@ -104,8 +104,10 @@ fn visible_bounds(scene: &Scene, output: (u32, u32)) -> Option<Rect> {
     let bounds = bounds?;
     let left = bounds.x.floor();
     let top = bounds.y.floor();
-    let right = (bounds.x + bounds.w).ceil();
-    let bottom = (bounds.y + bounds.h).ceil();
+    // A constant outward pixel keeps fractional translation from toggling the
+    // layer size and forcing a configure round trip on each movement.
+    let right = (left + bounds.w.ceil() + 1.).min(output.0 as f32);
+    let bottom = (top + bounds.h.ceil() + 1.).min(output.1 as f32);
     Some(Rect::new(left, top, right - left, bottom - top))
 }
 
@@ -1317,9 +1319,9 @@ mod tests {
         for offset in [(0., 0.), (32., 32.)] {
             let original = scene(offset);
             let bounds = visible_bounds(&original, (1920, 1080)).unwrap();
-            assert_eq!(bounds, Rect::new(96. + offset.0, 96. + offset.1, 88., 34.));
+            assert_eq!(bounds, Rect::new(96. + offset.0, 96. + offset.1, 89., 35.));
             let cropped = crop_scene(original, bounds);
-            let mut bytes = vec![0; 88 * 34 * 4];
+            let mut bytes = vec![0; 89 * 35 * 4];
             let mut renderer = bead_render::renderer(RendererKind::Cpu).unwrap();
             renderer.prepare(&cropped, 1.).unwrap();
             renderer
@@ -1327,21 +1329,30 @@ mod tests {
                     &cropped,
                     RenderTarget::Shm(ShmTarget {
                         bytes: &mut bytes,
-                        width: 88,
-                        height: 34,
+                        width: 89,
+                        height: 35,
                         scale: 1.,
                         format: PixelFormat::Rgba,
                     }),
-                    Damage::full(88, 34),
+                    Damage::full(89, 35),
                 )
                 .unwrap();
-            assert!(
-                bytes
-                    .as_chunks::<4>()
-                    .0
-                    .iter()
-                    .all(|pixel| *pixel == [200, 0, 0, 255])
-            );
+            for (index, pixel) in bytes.as_chunks::<4>().0.iter().enumerate() {
+                let painted = index % 89 < 88 && index / 89 < 34;
+                assert_eq!(*pixel, if painted { [200, 0, 0, 255] } else { [0; 4] });
+            }
+        }
+    }
+    #[test]
+    fn fractional_canvas_translation_keeps_size_and_contains_painted_content() {
+        for fraction in [0., 0.25, 0.5, 0.75] {
+            let original = scene((fraction, fraction));
+            let bounds = visible_bounds(&original, (1920, 1080)).unwrap();
+            assert_eq!((bounds.w, bounds.h), (89., 35.));
+            let painted = Rect::new(96. + fraction, 96. + fraction, 88., 34.);
+            assert!(bounds.x <= painted.x && bounds.y <= painted.y);
+            assert!(bounds.x + bounds.w >= painted.x + painted.w);
+            assert!(bounds.y + bounds.h >= painted.y + painted.h);
         }
     }
     #[test]

@@ -1226,14 +1226,15 @@ impl Runtime {
         let target_origin_y = number("widgets.screen_origin_y");
         let left = source_left - target_origin_x;
         let top = source_top - target_origin_y;
-        let right = left + f64::from(candidate.source_rect.2.max(1.));
-        let bottom = top + f64::from(candidate.source_rect.3.max(1.));
-        let (left, top, right, bottom) = (left.floor(), top.floor(), right.ceil(), bottom.ceil());
+        // Match the canvas's constant outward pixel for fractional translation.
+        let width = f64::from(candidate.source_rect.2.max(1.)).ceil() + 1.;
+        let height = f64::from(candidate.source_rect.3.max(1.)).ceil() + 1.;
+        let (left, top) = (left.floor(), top.floor());
         let initial_bounds = bead::render::Rect::new(
             left as f32,
             top as f32,
-            (right - left) as f32,
-            (bottom - top) as f32,
+            width as f32,
+            height as f32,
         );
         if ![
             initial_bounds.x,
