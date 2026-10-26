@@ -1,5 +1,14 @@
 # Status
 
+## 2026-10-26 — B0144 clock publication across busy boundaries
+
+Fixed a service timer cancellation gap that could skip minute updates without
+suspend. The private-bus regression fails before and passes after; real clock
+widget damage, six-minute nested idle captures, retained GL suspend/reopen and
+short process-stop/private-resume proofs pass. Full remote CI passes. The old
+live journal cannot conclusively identify the reported occurrence. No live
+deployment. [Evidence](specs/0144-clock-frozen.md).
+
 ## 2026-10-26 — B0139 dropdown-open native-window regression
 
 Native pearl admission no longer runs on dropdown open. It starts only with an

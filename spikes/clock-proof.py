@@ -23,7 +23,7 @@ original_spawn = m.Arm.spawn
 
 
 def publication(text):
-    ticks = re.findall(r'CLOCK_TICK value=(\S+)', text)
+    ticks = re.findall(r'CLOCK_TICK value=(\d\d:\d\d)', text)
     primary = re.search(r'get_layer_surface\([^\n]*wl_surface[@#](\d+),[^\n]*"bead-dev"', text)
     commits = len(re.findall(r'wl_surface[@#]' + primary[1] + r'\.commit\(', text)) if primary else 0
     return ticks, commits
@@ -83,6 +83,19 @@ def drive(self, _names):
         time.sleep(1)
         self.grab(shots / 'calendar-open.png')
         self.dispatch('nacre', 'close')
+        # Calendar is transient. The wallpaper picker is the retained GL panel
+        # that actually exercises PANEL_GPU_SUSPENDED on this revision.
+        def wallpaper_ready():
+            state = self.dispatch('nacre', 'state')
+            if isinstance(state, str):
+                state = json.loads(state)
+            return state['launcherMode'] == 'wallpaper' and panel_ready()
+
+        self.dispatch('nacre', 'launcher', '>wallpaper ')
+        m.wait_until(wallpaper_ready, 20, 'retained wallpaper picker first frame')
+        time.sleep(1)
+        self.grab(shots / 'wallpaper-open.png')
+        self.dispatch('nacre', 'close')
         m.wait_until(lambda: 'PANEL_GPU_SUSPENDED' in (self.logs / 'shell.log').read_text(errors='replace'),
                      30, 'closed panel GPU suspend')
         # Leave the bar untouched across another boundary after panel teardown.
@@ -95,15 +108,20 @@ def drive(self, _names):
         assert pixels != previous_pixels, 'clock pixels stopped after panel GPU suspend'
         rows.append(dict(gpu_suspended=True, wall=time.strftime('%H:%M'), ticks=ticks,
                          bar_commits=commits, clock_pixels_sha256=pixels))
-        self.dispatch('nacre', 'popout', 'calendar', '1560')
-        m.wait_until(panel_ready, 15, 'calendar first frame after GPU suspend')
+        self.dispatch('nacre', 'launcher', '>wallpaper ')
+        m.wait_until(wallpaper_ready, 20, 'wallpaper picker first frame after GPU suspend')
         time.sleep(1)
-        self.grab(shots / 'calendar-reopened.png')
+        self.grab(shots / 'wallpaper-reopened.png')
         self.dispatch('nacre', 'close')
     if os.environ.get('CLOCK_PROOF_RESUME') == '1':
+        # Cross a minute with a short stop. A long SIGSTOP deliberately trips
+        # the main-loop watchdog; keep that protection enabled in this proof.
+        self.run(['gdbus', 'emit', '--session', '--object-path', '/org/freedesktop/login1',
+                  '--signal', 'org.freedesktop.login1.Manager.PrepareForSleep', 'true'])
+        time.sleep((60 - time.time() % 60 - .5) % 60)
         self.shell.send_signal(signal.SIGSTOP)
         try:
-            time.sleep(65)
+            time.sleep(2)
         finally:
             self.shell.send_signal(signal.SIGCONT)
         self.run(['gdbus', 'emit', '--session', '--object-path', '/org/freedesktop/login1',

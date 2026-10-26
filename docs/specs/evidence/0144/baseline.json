@@ -1,0 +1,41 @@
+{
+  "ticks": [
+    {
+      "value": "15:17",
+      "bar_commits_before_next_tick": 15
+    },
+    {
+      "value": "15:18",
+      "bar_commits_before_next_tick": 2
+    },
+    {
+      "value": "15:19",
+      "bar_commits_before_next_tick": 2
+    },
+    {
+      "value": "15:20",
+      "bar_commits_before_next_tick": 2
+    },
+    {
+      "value": "15:21",
+      "bar_commits_before_next_tick": 2
+    },
+    {
+      "value": "15:22",
+      "bar_commits_before_next_tick": 2
+    },
+    {
+      "value": "15:23",
+      "bar_commits_before_next_tick": 2
+    }
+  ],
+  "clock_pixels_sha256": [
+    "420e739731e319ae7016a032427fd6fd96cec83ae4f9249ee5b5b087d280b047",
+    "af1d1424637628045fee60780eb2e19605633fbb57a766abe405933855efa9f5",
+    "3bbc617053dce159f184c6b47ae7dccd7aa002faf370a56f083877330ad0da4d",
+    "38fab4d904f6de61e887d124ee9b1070896e69f8170256febb7e22fab4480b0e",
+    "27b5152b19a7133a620c0338a42d8fa2a8730c14bddf09114ac4b08a8bc65459",
+    "49c6bfdbecf408f89f74b449192cc0ec217547e184d986bd3a6001b869d28413",
+    "0645100597676f150f605fce1169ca3c6bce839a906faa2d36a9fbd1b476629e"
+  ]
+}
