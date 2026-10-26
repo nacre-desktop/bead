@@ -129,7 +129,12 @@ fn reserve_canvas_size(source: Option<Rect>, prepared: Option<Rect>) -> Option<(
 
 fn canvas_bounds_with_reserve(bounds: Rect, reserved_size: Option<(f32, f32)>) -> Rect {
     reserved_size.map_or(bounds, |(width, height)| {
-        Rect::new(bounds.x, bounds.y, width.max(bounds.w), height.max(bounds.h))
+        Rect::new(
+            bounds.x,
+            bounds.y,
+            width.max(bounds.w),
+            height.max(bounds.h),
+        )
     })
 }
 
@@ -612,10 +617,8 @@ impl App {
                 }
                 canvas.lifecycle.accept_scene(warmup_response);
                 let hidden_prepare = !canvas.lifecycle.open && canvas.initial_bounds.is_some();
-                let mut bounds = visible_bounds(
-                    &scene,
-                    (!hidden_prepare).then_some(canvas.viewport_size),
-                );
+                let mut bounds =
+                    visible_bounds(&scene, (!hidden_prepare).then_some(canvas.viewport_size));
                 if canvas.interactive {
                     for region in canvas
                         .source
@@ -1301,18 +1304,18 @@ mod tests {
 
         for (x, y, natural_width) in [(20., 22., 71.), (40., 26., 111.), (80., 30., 221.)] {
             assert_eq!(
-                canvas_bounds_with_reserve(
-                    Rect::new(x, y, natural_width, 29.),
-                    reserved,
-                ),
+                canvas_bounds_with_reserve(Rect::new(x, y, natural_width, 29.), reserved,),
                 Rect::new(x, y, 221., 97.),
                 "active content moves naturally inside the fixed reservation"
             );
         }
 
         let larger = Rect::new(40., 30., 300., 120.);
-        assert_eq!(canvas_bounds_with_reserve(larger, reserved), larger,
-            "a reservation cannot crop content that legitimately grows beyond its hint");
+        assert_eq!(
+            canvas_bounds_with_reserve(larger, reserved),
+            larger,
+            "a reservation cannot crop content that legitimately grows beyond its hint"
+        );
 
         let next_source = Rect::new(12., 18., 42., 24.);
         let next_prepared = Rect::new(80., 90., 55., 33.);
