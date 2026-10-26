@@ -18,7 +18,7 @@ all outputs; video selection and an open picker hold it warm. The private nested
 desktop check found the renderer gone after the grace and captured the poster
 63.8 ms after video selection. Full remote CI passes. The desktop lacks libmpv,
 so motion decoding was unavailable during this poster-focused check. [Evidence](specs/0145-video-idle.md).
-## 2026-10-26 — B0146 live wallpaper switch latency (blocked)
+## 2026-10-26 — B0146 live wallpaper switch latency (cache ready for live measurement)
 
 The owner's live static switch samples span 412–1558 ms, while earlier nested
 tests used small fixtures. Bead now emits selection-relative switch phases with
@@ -28,8 +28,14 @@ real wallpaper set measured 71.6 MiB in the desktop copy (9 PNG, 8 JPEG). A
 379.5 ms p95 and 379.8 ms p99; it excludes daemon, upload and presentation.
 The private catalogue returns 17 entries, but wallpaper activation fails during
 palette publication and produces no new active revision; QML's UI-provider check
-also times out. End-to-end latency and the cache gate remain unmeasured. Full
-remote Bead CI passes. No live deployment.
+also times out. The shell now uses a 144 MiB path/mtime/size/output-keyed raw
+RGBA+zstd disk LRU, writes entries at nice-10 priority, and reuses the picker
+predecoder for selected/hovered wallpaper memory prefetch. Cache invalidation,
+LRU bound and corrupt-entry fallback tests pass. The release dev-2 benchmark on
+all 17 real files measured cache load plus BGRA SHM staging at 16.30 ms p50 /
+22.57 ms p95, and decode misses at 53.34 ms p50 / 319.29 ms p95. The hit p95 is
+2.57 ms above target; full CI and live phase measurements remain. No live
+deployment.
 [Scope and evidence](specs/0146-live-wallpaper-latency.md).
 
 ## 2026-10-26 — B0144 clock publication across busy boundaries

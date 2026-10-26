@@ -3,7 +3,7 @@
 The live shell takes 0.4–1.6 s to switch between static wallpapers.
 Nested measurements were 125–150 ms and used small fixtures, so they did not cover the owner's 4K JPEG workload.
 Phase markers now report the selection-relative path through daemon calls, decode, upload, commit and presentation.
-The next measurement uses the 17-file private desktop set at 2880×1800 output resolution and scale 1.5.
+Release decoder and cache microbenchmarks use the 17-file private set at 2880×1800 output resolution and scale 1.5.
 
 | Measure | Baseline | Gate |
 | --- | ---: | ---: |
@@ -11,7 +11,7 @@ The next measurement uses the 17-file private desktop set at 2880×1800 output r
 | Full-resolution presentation | not yet split by phase | ≤400 ms |
 | Owner-reported source set | 17 JPEGs, about 72 MB total | same files on nested desktop |
 | Measured desktop copy | 17 files: 9 PNG, 8 JPEG, 71.6 MiB | use all copied inputs |
-| Persistent decoded cache | not implemented | ≤384 MiB, identity/size/mtime invalidation |
+| Display cache | implemented: raw RGBA + zstd, 2880×1800 | 144 MiB LRU cap; keyed by path, mtime, size and output dimensions |
 
 ## Instrumentation
 
@@ -21,11 +21,12 @@ The JPEG decoder scales while decoding, so current parent-side `decode_end` and 
 
 ## Optimization plan
 
-Use phase data from the real files to choose the dominant cost. If decode/scale dominates, reuse a bounded per-source-identity and output-size decoded cache, build entries off the interaction path, prefetch the next visible picker item, and show the already-loaded thumbnail until full resolution is ready. Cache files are private, output-size-specific and invalidated by source identity, size and mtime; cap disk use at 384 MiB with least-recently-used eviction. Keep the first frame visible and blend to the full image. If daemon work or process startup dominates, fix that path instead.
+The shell caches private, output-sized raw RGBA rasters compressed with zstd level 1. Entries are atomically written by a nice-10 worker, validated against path, source identity/mtime/size and output dimensions, and evicted least-recently-used above 144 MiB. Cache misses return decoded pixels immediately and regenerate in the background. Current and recently used wallpapers stay warm by access; the existing picker predecoder keeps the selected/hovered neighbour in memory and writes its disk entry. The 144 MiB budget holds seven uncompressed 2880×1800 rasters, and more when compression permits.
 
 ## Evidence and status
 
 - Initial live static-to-static samples: 412, 441, 527, 822, 905, 1034, 1074, 1209, 1266, 1316, 1558 ms; video-to-static: 509 ms.
 - Real wallpaper files were copied to the task-private desktop test directory. No live desktop shell, installed files or configuration were changed.
 - Full remote Bead CI passes with phase telemetry and the neutral upload callback. A 34-run release decoder-only cohort on the copied files at 2880×1800 scale 1.5 measures wall p50/p95/p99 60.0/379.5/379.8 ms and CPU p95 224.7 ms; it excludes daemon, buffer upload, and compositor presentation.
-- The private catalogue returns 17 entries, but `wallpaper.activate` fails during palette publication and the active revision does not change; QML's UI-provider check also times out. End-to-end selection/presentation and the p95/full-resolution gates remain unmeasured. No persistent cache was implemented.
+- On dev-2, the optimized raw RGBA+zstd build measured 16.30 ms p50 / 22.57 ms p95 for cache load plus BGRA SHM staging, and 53.34 ms p50 / 319.29 ms p95 for decode misses across all 17 real files. The p95 hit is 2.57 ms over the ≤20 ms target; the lead's live run will measure the actual SHM attach boundary. The QOI prototype was replaced after a slower hit cohort.
+- Cache unit tests cover identity/dimension invalidation, size-bound LRU eviction, and corrupt-entry fallback. Live selection-to-visible timing, SHM upload/presentation, and current-format cache timing remain for the lead's live measurement.

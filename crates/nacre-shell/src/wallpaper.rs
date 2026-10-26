@@ -272,6 +272,10 @@ impl Drop for Predecoder {
 }
 
 fn predecode_loop(signal: Arc<PredecodeSignal>) {
+    // Picker warmup is background work; keep interactive UI and switch work ahead of it.
+    unsafe {
+        libc::setpriority(libc::PRIO_PROCESS, libc::gettid() as u32, 10);
+    }
     let mut idle_deadline = Instant::now() + PREDECODE_LIFETIME;
     loop {
         let job = {
@@ -1119,10 +1123,16 @@ pub(crate) fn decode_pair(
     width: u32,
     height: u32,
 ) -> Result<Decoded, String> {
-    #[cfg(test)]
-    let rgba = crate::wallpaper_decode::decode_pair(pair.clone(), width, height)?;
-    #[cfg(not(test))]
-    let rgba = decode_in_worker(&pair, width, height)?;
+    let rgba = crate::wallpaper_cache::load_or_decode(&pair, width, height, || {
+        #[cfg(test)]
+        {
+            crate::wallpaper_decode::decode_pair(pair.clone(), width, height)
+        }
+        #[cfg(not(test))]
+        {
+            decode_in_worker(&pair, width, height)
+        }
+    })?;
     Ok(Decoded {
         width,
         height,

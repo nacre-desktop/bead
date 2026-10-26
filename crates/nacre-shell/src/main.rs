@@ -50,6 +50,7 @@ mod status_views;
 mod tray;
 mod ui_provider;
 mod wallpaper;
+mod wallpaper_cache;
 #[cfg(test)]
 mod wallpaper_decode;
 mod wallpaper_motion;
