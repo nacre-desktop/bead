@@ -327,6 +327,17 @@ impl App {
                 self.loop_handle.insert_source(Timer::from_duration(Duration::from_secs(2)), move |_, _, app| {
                     if !app.release_timer||app.companion.is_none(){return TimeoutAction::Drop;}
                     let now = app.started.elapsed().as_secs_f64();
+                    if app.panel_target
+                        && app
+                            .surfaces
+                            .iter()
+                            .any(|surface| surface.companion && surface.pointer_visual.is_some())
+                    {
+                        app.companion_policy.touch(now);
+                        return TimeoutAction::ToDuration(Duration::from_secs_f64(
+                            app.companion_policy.remaining(now),
+                        ));
+                    }
                     if app.companion_policy.expire(now) {
                         if let Some((_, renderer, kind)) = &mut app.companion {
                             match bead_render::renderer(RendererKind::Cpu) {

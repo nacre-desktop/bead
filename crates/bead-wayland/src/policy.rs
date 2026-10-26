@@ -99,15 +99,20 @@ impl Policy {
             return false;
         }
         if animated {
-            self.last_active = now;
+            self.touch(now);
         }
         if !self.gpu && (!self.warmed || animated) {
             self.warmed = true;
             self.gpu = true;
-            self.last_active = now;
+            self.touch(now);
             return true;
         }
         false
+    }
+    pub fn touch(&mut self, now: f64) {
+        if self.gpu {
+            self.last_active = now;
+        }
     }
     pub fn remaining(&self, now: f64) -> f64 {
         (2. - (now - self.last_active)).max(0.001)
@@ -137,6 +142,17 @@ mod tests {
         assert!(!p.frame(5., true));
         assert!(!p.expire(6.));
         assert!(p.expire(7.));
+    }
+
+    #[test]
+    fn active_gpu_touch_defers_expiry_until_idle() {
+        let mut p = Policy::default();
+        assert!(!p.frame(0., false));
+        assert!(p.frame(0.01, false));
+        p.touch(1.99);
+        assert!((p.remaining(1.99) - 2.).abs() < f64::EPSILON);
+        assert!(!p.expire(3.98));
+        assert!(p.expire(4.0));
     }
 }
 
