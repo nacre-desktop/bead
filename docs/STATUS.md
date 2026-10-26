@@ -55,7 +55,7 @@ private interaction captures pass. Five-pair CPU unreclaimable deltas pass the
 +0.5 MiB gate: idle +0.168, open +0.117, closed +0.066 MiB (unit-only snapshot).
 [Evidence and remaining parity limits](specs/0132-today-controls.md). No live change.
 
-## 2026-10-26 — B0126 instant drag shipped through ef9d5c01
+## 2026-10-26 — B0126 instant drag shipped through 27abdf62
 
 The integrated CPU build passes the current QML-relative gate across three
 alternating pairs per rate: Bead p95 26.271/11.764 ms at 60/120 Hz versus QML
@@ -71,6 +71,13 @@ fixture first-key CPU is 7.110 ms, below 8 ms. Native AMD GL p95 11.921 ms is
 slower here; controls keep their CPU default. All five stages passed full remote
 Arch and exact-commit GitHub CI; final GitHub CI passed an unchanged-source retry
 after an unrelated Widgets spawn assertion.
+
+Later-main first-key CPU regressed to 9.254 ms median when native preparation
+resized the source on the key. `27abdf62` primes that existing buffer on accepted
+idle frame credit: all three keys pass (median 7.346, max 7.374 ms), with no
+key-time resize. Fresh drag p95 is 26.274/11.764 ms, p99 26.382/11.939 ms;
+182 native paints and 41 ROI images remain coherent. Five additional memory
+pairs pass (largest phase median +0.080 MiB). Full remote Arch CI passes.
 
 These are private synthetic labwc feedback results at queried 2880×1800, scale
 1.5. Physical scanout, Intel/laptop latency, absolute laptop memory and complete

@@ -1,11 +1,12 @@
 # B0126 — instant slider drag
 
-Status: shipped by default through `ef9d5c01`. The final integrated CPU build
-passes the current QML-relative p95 and two-frame p99 gates at both 60/120 Hz,
-plus five-pair relative memory, first-key and shared fill/handle checks. All five
-steps passed full remote Arch CI and exact-commit GitHub CI. These are private
-synthetic presentation-feedback results; physical scanout, Intel/laptop latency
-and the absolute laptop memory cap remain unmeasured.
+Status: shipped by default through `27abdf62`. The current CPU build passes
+QML-relative p95 and two-frame p99 at 60/120 Hz, shared fill/handle checks,
+three paired first-key checks and five-pair relative memory. All six source
+steps passed full remote Arch CI. The primary three-pair timing dataset and
+first five exact-commit GitHub results remain below. These are private synthetic
+presentation-feedback results; physical scanout, Intel/laptop latency and the
+absolute laptop memory cap remain unmeasured.
 
 The preserved
 [patch](evidence/0126/compositor-knob.rejected.patch) applies to `61e73507`.
@@ -16,6 +17,59 @@ moving pixel error at 2000 physical px/s strictly below QML, first-key UI CPU
 ≤8 ms, and ≤1 MiB added unreclaimable memory. Unreclaimable means anonymous
 + SHM + DRM + SwapPss. File-backed PSS is informational. Five alternating
 control/candidate pairs are required for memory acceptance.
+
+## Integration follow-up: prepare native extent before input
+
+A later-main check at `ef7d6aa3` still passes drag: p95 26.335/11.736 ms and
+p99 26.740/11.973 ms at 60/120 Hz. Its Home proof has 182 shared paints with
+zero fill/handle gap and 41/41 coherent slider ROI images. However, fixture
+first-key CPU regressed to 9.396 ms; three alternating repeats confirm median
+7.128 ms on `ef9d5c01` versus 9.254 ms on the later integrated main. This failed
+first-key result is retained in [integration evidence](evidence/0126/qml-parity-integration.json)
+and [all repeated key samples](evidence/0126/qml-parity-key-integration.json).
+
+A separate stage-logging pair isolates the increase to composition: 1.506 ms
+thread CPU before versus 4.009 ms after, while worker preparation stays near
+4.5 ms. Preparing a hidden native target leaves the docked source at its clipped
+1164×632 extent until the next accepted scene, where native synchronization
+changes it to 1164×654 and replaces the SHM pool. The first key paid that cold
+paint. These dimensions describe this fixture, not product constants.
+
+`27abdf62` performs the existing natural-extent synchronization on accepted idle
+frame credit, after opening animation and before later input. It preserves the
+existing CPU snapshot and natural GL target invariants. The hook excludes
+closed/unready panels, detached pearls and pointer visuals; all companion
+callbacks must be free, and every changed companion receives one replacement
+frame. No timer, extra callback credit, feature flag or UI-specific rule is added.
+The same natural-size source was already used after the first update; this moves
+its allocation and first paint into idle preparation rather than changing the
+release format. The new CPU timing arms retain all twelve gestures: p95
+26.274/11.764 ms and p99 26.382/11.939 ms at 60/120 Hz, passing the unchanged QML
+cohort and two-frame gates.
+
+Three alternating first-key pairs now pass in every candidate: 7.295, 7.374 and
+7.346 ms, against 9.092, 9.149 and 9.218 ms control. Median CPU falls from 9.149
+to 7.346 ms. Each natural-extent frame is presented before input, with no pool
+resize on the key. The separate Home proof has 182/182 zero-gap native paints
+and 41/41 coherent slider ROI images. [Every arm and trace bracket](evidence/0126/qml-parity-step6.json).
+Five CPU memory pairs versus `ef7d6aa3` give median unreclaimable deltas
+idle/open/post-drag/closed −0.004/−2.514/−0.010/+0.080 MiB, all below +0.5 MiB.
+The open reduction is mostly SHM (−2.479 MiB), while median anonymous deltas stay
+within −0.035 to +0.082 MiB; file-backed PSS remains informational. This uses the
+existing nested memory harness, separate from direct-path timing, with zero
+host swap-in and process SwapPss. [All phase components and pairs](evidence/0126/qml-parity-step6-memory.json).
+
+Latest Home screenshots (paired against the frozen QML states below):
+[idle](evidence/0126/qml-parity-step6-home-idle.png),
+[open](evidence/0126/qml-parity-step6-home-open.png),
+[hover](evidence/0126/qml-parity-step6-home-hover.png),
+[pressed](evidence/0126/qml-parity-step6-home-pressed.png),
+[after drags](evidence/0126/qml-parity-step6-home-after-drags.png).
+The open and pressed states were also inspected visually. Existing wider-page
+parity gaps listed below remain. The full canonical Arch job passes on the exact
+`crates/**` and `shell/**` blobs of `27abdf62`; no deadline/assertion was weakened.
+This follow-up adds 51 and removes 2 product lines; the six-step continuation
+adds 526 and removes 106 product lines.
 
 ## Latest continuation: QML-relative gates
 

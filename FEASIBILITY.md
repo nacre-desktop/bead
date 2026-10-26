@@ -38,6 +38,11 @@ Five-pair unreclaimable deltas idle/open/post-drag/closed are −0.055/+0.156/�
 Fixture first-key CPU is 7.110 ms; native home/Sound poses agree 384/384 and sampled frames 84/84 per implementation.
 Timing uses queried 2880×1800 scale 1.5 synthetic labwc feedback, not physical niri scanout.
 Intel/laptop latency, absolute laptop memory, general cursor-error superiority and complete page parity remain unmeasured.
+The later-main native-size first-key regression is also fixed by `27abdf62`:
+idle frame credit primes the existing buffer before input; median key CPU 9.149→7.346 ms (max 7.374).
+Fresh CPU60/120 p95 26.274/11.764 ms and p99 26.382/11.939 ms pass the same QML cohort.
+Five extra CPU memory pairs pass; largest phase median +0.080 MiB, open −2.514 MiB (mostly SHM).
+Another 182 native paints and 41 ROI images are coherent. Full remote Arch CI passes.
 [All samples, earlier regressions, source provenance and paired images](docs/specs/0126-instant-drag.md).
 
 ## 2026-10-26 — B0126 shared slider paint and local values

@@ -1,6 +1,27 @@
 # B0126 validation record
 
 
+## Later-main idle preparation follow-up
+
+`27abdf62` passes the same full canonical Arch command and every workflow step;
+its final log ends `CI_ALL_OK`, exit zero. The complete `crates/**` and `shell/**`
+blob manifest matches the public source. Its release binary SHA-256 is
+`cd637822d1b807b4e46b1119129a992a93128c54678d18d5539fac95d9e47f3a`.
+All three first-key pairs, both timing arms, the separate Home visual arm and
+five alternating memory pairs pass unchanged source/geometry/full-window,
+containment/watchdog, host swap-in and process SwapPss guards. The pre-fix failed
+integration key and all repeats remain in the public JSON; stage-logging
+measurements are separate from clocks-only acceptance.
+
+Private raw archive SHA-256: CI/binary/source patch
+`b87a62151be2d28b0bc9eda5c223d840c40737e8c2a008ee0e6a19b2e3311e8a`;
+proofs/drivers/binary
+`bf1274962c1a94e77b67ded1e7462c07a921108578eab171e1ee41a02d43ba4f`;
+five memory pairs/driver
+`cc227e4d9dc606b7aa34e580b7129369907e8e43e69e8eddb58659837be1cfe5`.
+The public integration-head workflow is checked after safe-push; the final
+worker report records its exact run and result.
+
 ## QML-relative continuation through ef9d5c01
 
 Each step ran `RUST_TEST_THREADS=2 nice -n 10 bash /task/ci-canonical.sh`

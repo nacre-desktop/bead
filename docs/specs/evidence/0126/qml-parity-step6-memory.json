@@ -1,0 +1,426 @@
+{
+  "first_key": null,
+  "memory": {
+    "backend": "cpu",
+    "clean_file_note": "Pss_File/file-backed PSS is informational and is not part of the unreclaimable gate",
+    "pair_count": 5,
+    "phases": {
+      "closed": {
+        "anon_mib": {
+          "candidate_median_mib": 31.046875,
+          "control_median_mib": 30.910156,
+          "median_delta_mib": 0.082031,
+          "pair_deltas_mib": [
+            0.570312,
+            -0.359375,
+            0.082031,
+            0.5625,
+            -0.484375
+          ]
+        },
+        "drm_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "file_backed_mib": {
+          "candidate_median_mib": 21.320312,
+          "control_median_mib": 21.333008,
+          "median_delta_mib": -0.017578,
+          "pair_deltas_mib": [
+            -0.291016,
+            0.022461,
+            -0.017578,
+            -0.012695,
+            -0.15625
+          ]
+        },
+        "pss_mib": {
+          "candidate_median_mib": 55.605469,
+          "control_median_mib": 55.62793,
+          "median_delta_mib": 0.0625,
+          "pair_deltas_mib": [
+            0.277344,
+            -0.338867,
+            0.0625,
+            0.547852,
+            -0.642578
+          ]
+        },
+        "pss_plus_drm_mib": {
+          "candidate_median_mib": 55.605469,
+          "control_median_mib": 55.62793,
+          "median_delta_mib": 0.0625,
+          "pair_deltas_mib": [
+            0.277344,
+            -0.338867,
+            0.0625,
+            0.547852,
+            -0.642578
+          ]
+        },
+        "shmem_mib": {
+          "candidate_median_mib": 3.21875,
+          "control_median_mib": 3.220703,
+          "median_delta_mib": -0.001953,
+          "pair_deltas_mib": [
+            -0.001953,
+            -0.001953,
+            -0.001953,
+            -0.001953,
+            -0.001953
+          ]
+        },
+        "swap_pss_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "unreclaimable_mib": {
+          "candidate_median_mib": 34.265625,
+          "control_median_mib": 34.130859,
+          "median_delta_mib": 0.080078,
+          "pair_deltas_mib": [
+            0.568359,
+            -0.361328,
+            0.080078,
+            0.560547,
+            -0.486328
+          ]
+        }
+      },
+      "idle": {
+        "anon_mib": {
+          "candidate_median_mib": 20.292969,
+          "control_median_mib": 20.273438,
+          "median_delta_mib": -0.003906,
+          "pair_deltas_mib": [
+            -0.027344,
+            -0.0625,
+            -0.003906,
+            0.300781,
+            0.046875
+          ]
+        },
+        "drm_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "file_backed_mib": {
+          "candidate_median_mib": 20.588867,
+          "control_median_mib": 20.641602,
+          "median_delta_mib": -0.051758,
+          "pair_deltas_mib": [
+            -0.34375,
+            0.073242,
+            -0.020508,
+            -0.051758,
+            -0.151367
+          ]
+        },
+        "pss_mib": {
+          "candidate_median_mib": 41.598633,
+          "control_median_mib": 41.587891,
+          "median_delta_mib": -0.024414,
+          "pair_deltas_mib": [
+            -0.371094,
+            0.010742,
+            -0.024414,
+            0.249023,
+            -0.104492
+          ]
+        },
+        "pss_plus_drm_mib": {
+          "candidate_median_mib": 41.598633,
+          "control_median_mib": 41.587891,
+          "median_delta_mib": -0.024414,
+          "pair_deltas_mib": [
+            -0.371094,
+            0.010742,
+            -0.024414,
+            0.249023,
+            -0.104492
+          ]
+        },
+        "shmem_mib": {
+          "candidate_median_mib": 0.693359,
+          "control_median_mib": 0.693359,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "swap_pss_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "unreclaimable_mib": {
+          "candidate_median_mib": 20.986328,
+          "control_median_mib": 20.966797,
+          "median_delta_mib": -0.003906,
+          "pair_deltas_mib": [
+            -0.027344,
+            -0.0625,
+            -0.003906,
+            0.300781,
+            0.046875
+          ]
+        }
+      },
+      "open": {
+        "anon_mib": {
+          "candidate_median_mib": 30.261719,
+          "control_median_mib": 30.171875,
+          "median_delta_mib": -0.035156,
+          "pair_deltas_mib": [
+            0.121094,
+            -0.070312,
+            0.28125,
+            -0.035156,
+            -0.046875
+          ]
+        },
+        "drm_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "file_backed_mib": {
+          "candidate_median_mib": 21.267578,
+          "control_median_mib": 21.274414,
+          "median_delta_mib": -0.013672,
+          "pair_deltas_mib": [
+            -0.291016,
+            0.025391,
+            -0.013672,
+            -0.006836,
+            -0.148438
+          ]
+        },
+        "pss_mib": {
+          "candidate_median_mib": 54.75,
+          "control_median_mib": 57.270508,
+          "median_delta_mib": -2.523438,
+          "pair_deltas_mib": [
+            -2.648438,
+            -2.523438,
+            -2.210938,
+            -2.520508,
+            -2.673828
+          ]
+        },
+        "pss_plus_drm_mib": {
+          "candidate_median_mib": 54.75,
+          "control_median_mib": 57.270508,
+          "median_delta_mib": -2.523438,
+          "pair_deltas_mib": [
+            -2.648438,
+            -2.523438,
+            -2.210938,
+            -2.520508,
+            -2.673828
+          ]
+        },
+        "shmem_mib": {
+          "candidate_median_mib": 3.220703,
+          "control_median_mib": 5.699219,
+          "median_delta_mib": -2.478516,
+          "pair_deltas_mib": [
+            -2.478516,
+            -2.478516,
+            -2.478516,
+            -2.478516,
+            -2.478516
+          ]
+        },
+        "swap_pss_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "unreclaimable_mib": {
+          "candidate_median_mib": 33.482422,
+          "control_median_mib": 35.871094,
+          "median_delta_mib": -2.513672,
+          "pair_deltas_mib": [
+            -2.357422,
+            -2.548828,
+            -2.197266,
+            -2.513672,
+            -2.525391
+          ]
+        }
+      },
+      "open_after_drags": {
+        "anon_mib": {
+          "candidate_median_mib": 30.917969,
+          "control_median_mib": 30.851562,
+          "median_delta_mib": -0.007812,
+          "pair_deltas_mib": [
+            0.066406,
+            -0.171875,
+            -0.007812,
+            0.148438,
+            -0.09375
+          ]
+        },
+        "drm_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "file_backed_mib": {
+          "candidate_median_mib": 21.300781,
+          "control_median_mib": 21.307617,
+          "median_delta_mib": -0.013672,
+          "pair_deltas_mib": [
+            -0.291016,
+            0.025391,
+            -0.013672,
+            -0.006836,
+            -0.152344
+          ]
+        },
+        "pss_mib": {
+          "candidate_median_mib": 60.119141,
+          "control_median_mib": 60.258789,
+          "median_delta_mib": -0.148438,
+          "pair_deltas_mib": [
+            -0.226562,
+            -0.148438,
+            -0.023438,
+            0.139648,
+            -0.248047
+          ]
+        },
+        "pss_plus_drm_mib": {
+          "candidate_median_mib": 60.119141,
+          "control_median_mib": 60.258789,
+          "median_delta_mib": -0.148438,
+          "pair_deltas_mib": [
+            -0.226562,
+            -0.148438,
+            -0.023438,
+            0.139648,
+            -0.248047
+          ]
+        },
+        "shmem_mib": {
+          "candidate_median_mib": 7.990234,
+          "control_median_mib": 7.992188,
+          "median_delta_mib": -0.001953,
+          "pair_deltas_mib": [
+            -0.001953,
+            -0.001953,
+            -0.001953,
+            -0.001953,
+            -0.001953
+          ]
+        },
+        "swap_pss_mib": {
+          "candidate_median_mib": 0.0,
+          "control_median_mib": 0.0,
+          "median_delta_mib": 0.0,
+          "pair_deltas_mib": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "unreclaimable_mib": {
+          "candidate_median_mib": 38.908203,
+          "control_median_mib": 38.84375,
+          "median_delta_mib": -0.009766,
+          "pair_deltas_mib": [
+            0.064453,
+            -0.173828,
+            -0.009766,
+            0.146484,
+            -0.095703
+          ]
+        }
+      }
+    },
+    "refresh_hz": 120
+  },
+  "schema": "b0126-final-analysis-v1",
+  "source_hashes_by_phase": {
+    "candidate": {
+      "bead_shell_tree": "89b01362a4eaebf49f9da9172d52a9a8b926afe1da6360cd6da1471621fb2de4",
+      "capture_driver": "505acb2ecf411e4e3c61f2adf1ac68e7480563c13e5502acac12589ccd833e39",
+      "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+      "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+      "nacre_shell": "cd637822d1b807b4e46b1119129a992a93128c54678d18d5539fac95d9e47f3a",
+      "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49",
+      "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+      "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046"
+    },
+    "control": {
+      "bead_shell_tree": "89b01362a4eaebf49f9da9172d52a9a8b926afe1da6360cd6da1471621fb2de4",
+      "capture_driver": "505acb2ecf411e4e3c61f2adf1ac68e7480563c13e5502acac12589ccd833e39",
+      "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+      "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+      "nacre_shell": "494606faaed2d6d6803fb0701980c2ceb01cf2f21a5d0ee58bebbba8631e7545",
+      "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49",
+      "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+      "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046"
+    }
+  }
+}

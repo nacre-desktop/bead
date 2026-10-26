@@ -1,0 +1,231 @@
+{
+  "scope": "pre-fix: three alternating first-key pairs, ef9d5c01 control versus ef7d6aa3 integrated main; unchanged clocks-only driver; all captures retained",
+  "pairs": [
+    {
+      "pair": 1,
+      "order": [
+        "control",
+        "candidate"
+      ],
+      "arms": {
+        "control": {
+          "first_key": {
+            "cpu_ms": 7.127935,
+            "input_to_feedback_ms": 7.403756,
+            "fixture_apps": 320,
+            "favorites": 12,
+            "recents": 8,
+            "result_rows": 64,
+            "generation": 1,
+            "update": 3,
+            "method": "exact typed state and generation/update feedback, clocks-only process CPU; local fixture transport"
+          },
+          "source_hashes": {
+            "nacre_shell": "e36cd77c94a193e05e6d2bed2e62337fda10dfbf4c74383da193aaa3d289cd0b",
+            "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+            "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+            "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+            "bead_shell_tree": "37be1bfd01888c0f8b31079c45b493fcb5fdda046c209c92e5f39cdce3feaaff",
+            "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+            "capture_driver": "3312a092b870623c16a5862e5413a22d499fb21a57904a2a9397da23da9e3595",
+            "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+          },
+          "shell_log_sha256": "17b6aa60c2cd4fb4d1e10494e18be9f3d3959c7fcb4b1cb079b24e509123cd3a",
+          "host_swapin_pages": 0
+        },
+        "candidate": {
+          "first_key": {
+            "cpu_ms": 9.104914,
+            "input_to_feedback_ms": 10.965686,
+            "fixture_apps": 320,
+            "favorites": 12,
+            "recents": 8,
+            "result_rows": 64,
+            "generation": 1,
+            "update": 3,
+            "method": "exact typed state and generation/update feedback, clocks-only process CPU; local fixture transport"
+          },
+          "source_hashes": {
+            "nacre_shell": "494606faaed2d6d6803fb0701980c2ceb01cf2f21a5d0ee58bebbba8631e7545",
+            "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+            "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+            "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+            "bead_shell_tree": "89b01362a4eaebf49f9da9172d52a9a8b926afe1da6360cd6da1471621fb2de4",
+            "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+            "capture_driver": "3312a092b870623c16a5862e5413a22d499fb21a57904a2a9397da23da9e3595",
+            "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+          },
+          "shell_log_sha256": "38503a0e816e44c92c34a4d59ccde6c8f4a72d90d9e61e9c19e551fdcef3b080",
+          "host_swapin_pages": 0
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "order": [
+        "candidate",
+        "control"
+      ],
+      "arms": {
+        "control": {
+          "first_key": {
+            "cpu_ms": 7.115984,
+            "input_to_feedback_ms": 7.387497,
+            "fixture_apps": 320,
+            "favorites": 12,
+            "recents": 8,
+            "result_rows": 64,
+            "generation": 1,
+            "update": 3,
+            "method": "exact typed state and generation/update feedback, clocks-only process CPU; local fixture transport"
+          },
+          "source_hashes": {
+            "nacre_shell": "e36cd77c94a193e05e6d2bed2e62337fda10dfbf4c74383da193aaa3d289cd0b",
+            "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+            "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+            "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+            "bead_shell_tree": "37be1bfd01888c0f8b31079c45b493fcb5fdda046c209c92e5f39cdce3feaaff",
+            "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+            "capture_driver": "3312a092b870623c16a5862e5413a22d499fb21a57904a2a9397da23da9e3595",
+            "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+          },
+          "shell_log_sha256": "839b4451f70888569a74952750c95fb8e66664260cc46916b1bcc68726c6a404",
+          "host_swapin_pages": 0
+        },
+        "candidate": {
+          "first_key": {
+            "cpu_ms": 9.364566,
+            "input_to_feedback_ms": 11.272385,
+            "fixture_apps": 320,
+            "favorites": 12,
+            "recents": 8,
+            "result_rows": 64,
+            "generation": 1,
+            "update": 3,
+            "method": "exact typed state and generation/update feedback, clocks-only process CPU; local fixture transport"
+          },
+          "source_hashes": {
+            "nacre_shell": "494606faaed2d6d6803fb0701980c2ceb01cf2f21a5d0ee58bebbba8631e7545",
+            "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+            "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+            "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+            "bead_shell_tree": "89b01362a4eaebf49f9da9172d52a9a8b926afe1da6360cd6da1471621fb2de4",
+            "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+            "capture_driver": "3312a092b870623c16a5862e5413a22d499fb21a57904a2a9397da23da9e3595",
+            "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+          },
+          "shell_log_sha256": "319fa3720f2fdf00932239e1d0eecf3a767c76fd85c0edb272f2bda45b837653",
+          "host_swapin_pages": 0
+        }
+      }
+    },
+    {
+      "pair": 3,
+      "order": [
+        "control",
+        "candidate"
+      ],
+      "arms": {
+        "control": {
+          "first_key": {
+            "cpu_ms": 7.405274,
+            "input_to_feedback_ms": 7.681507,
+            "fixture_apps": 320,
+            "favorites": 12,
+            "recents": 8,
+            "result_rows": 64,
+            "generation": 1,
+            "update": 3,
+            "method": "exact typed state and generation/update feedback, clocks-only process CPU; local fixture transport"
+          },
+          "source_hashes": {
+            "nacre_shell": "e36cd77c94a193e05e6d2bed2e62337fda10dfbf4c74383da193aaa3d289cd0b",
+            "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+            "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+            "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+            "bead_shell_tree": "37be1bfd01888c0f8b31079c45b493fcb5fdda046c209c92e5f39cdce3feaaff",
+            "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+            "capture_driver": "3312a092b870623c16a5862e5413a22d499fb21a57904a2a9397da23da9e3595",
+            "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+          },
+          "shell_log_sha256": "2e070d1e1f869c8e40de492e7b67cef6529c729e96abae0b52d9a4db58b08079",
+          "host_swapin_pages": 0
+        },
+        "candidate": {
+          "first_key": {
+            "cpu_ms": 9.253543,
+            "input_to_feedback_ms": 11.116775,
+            "fixture_apps": 320,
+            "favorites": 12,
+            "recents": 8,
+            "result_rows": 64,
+            "generation": 1,
+            "update": 3,
+            "method": "exact typed state and generation/update feedback, clocks-only process CPU; local fixture transport"
+          },
+          "source_hashes": {
+            "nacre_shell": "494606faaed2d6d6803fb0701980c2ceb01cf2f21a5d0ee58bebbba8631e7545",
+            "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+            "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+            "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+            "bead_shell_tree": "89b01362a4eaebf49f9da9172d52a9a8b926afe1da6360cd6da1471621fb2de4",
+            "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+            "capture_driver": "3312a092b870623c16a5862e5413a22d499fb21a57904a2a9397da23da9e3595",
+            "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+          },
+          "shell_log_sha256": "5837443dcf62f2ab33ce6598d4b2a78ec95a512481421307eb891a438f35bd17",
+          "host_swapin_pages": 0
+        }
+      }
+    }
+  ],
+  "median_cpu_ms": {
+    "control": 7.127935,
+    "candidate": 9.253543
+  },
+  "candidate_pass_8ms": false,
+  "diagnostic_spans": {
+    "control": {
+      "spans": [
+        {
+          "stage": "present_prepare",
+          "wall_ms": 0.0012,
+          "thread_cpu_ms": 0.0012
+        },
+        {
+          "stage": "repair_setup",
+          "wall_ms": 0.472,
+          "thread_cpu_ms": 0.4721
+        },
+        {
+          "stage": "compose",
+          "wall_ms": 1.5107,
+          "thread_cpu_ms": 1.5061
+        }
+      ],
+      "shell_log_sha256": "f207d375c0306727125cb0774cff6b405b911a61a127fb7fbfd7ca17e9c07395",
+      "scope": "separate stage-logging arm, excluded from clocks-only CPU acceptance"
+    },
+    "candidate": {
+      "spans": [
+        {
+          "stage": "present_prepare",
+          "wall_ms": 0.0013,
+          "thread_cpu_ms": 0.0012
+        },
+        {
+          "stage": "repair_setup",
+          "wall_ms": 0.0738,
+          "thread_cpu_ms": 0.0738
+        },
+        {
+          "stage": "compose",
+          "wall_ms": 4.0225,
+          "thread_cpu_ms": 4.0091
+        }
+      ],
+      "shell_log_sha256": "166c90203eb6eb596a7720590fbb512699ee8026bc00a0a972cfed5e032f63eb",
+      "scope": "separate stage-logging arm, excluded from clocks-only CPU acceptance"
+    }
+  }
+}
