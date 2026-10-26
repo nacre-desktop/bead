@@ -2290,8 +2290,8 @@ mod input_tests {
     #[test]
     fn detached_gl_extent_uses_natural_scene_instead_of_clipped_source_buffer() {
         let mut scene = scene();
-        scene.bounds = Rect::new(0., 0., 1164., 654.);
-        scene.offset = (0., 0.);
+        scene.bounds = Rect::new(-32., -32., 1164., 654.);
+        scene.offset = (32., 32.);
 
         let natural = native_gl_dimensions(&scene, 180).unwrap();
         let (clipped_width, clipped_height, _, _) = buffer_dimensions(1164, 632, 180).unwrap();
