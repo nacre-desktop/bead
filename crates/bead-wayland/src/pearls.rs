@@ -2549,14 +2549,15 @@ impl App {
         {
             return false;
         }
-        let Some(Some((body, source, edge, screen, point, lifted))) = self.on_surface(surface, |app| {
-            let subject = app.gesture_subject(surface, local)?;
-            let docked_source = subject.1 == Source::Docked;
-            let _ = policy::prepare_native_for_drag_press(true, docked_source, || {
-                app.prewarm_drag_target();
-            });
-            Some(subject)
-        })
+        let Some(Some((body, source, edge, screen, point, lifted))) =
+            self.on_surface(surface, |app| {
+                let subject = app.gesture_subject(surface, local)?;
+                let docked_source = subject.1 == Source::Docked;
+                let _ = policy::prepare_native_for_drag_press(true, docked_source, || {
+                    app.prewarm_drag_target();
+                });
+                Some(subject)
+            })
         else {
             return false;
         };
