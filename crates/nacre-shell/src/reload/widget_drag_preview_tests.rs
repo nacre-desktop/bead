@@ -48,9 +48,15 @@ fn prepared_source_bounds_clip_before_padding_at_output_edges() {
 fn dropped_ghost_stays_released_until_pointer_leaves_target() {
     let mut suppressed = true;
     assert!(suppress_widget_drag_hover(&mut suppressed, true));
-    assert!(suppressed, "hovering the drop target must not rebuild the ghost");
+    assert!(
+        suppressed,
+        "hovering the drop target must not rebuild the ghost"
+    );
     assert!(!suppress_widget_drag_hover(&mut suppressed, false));
-    assert!(!suppressed, "leaving the target permits a later hover prewarm");
+    assert!(
+        !suppressed,
+        "leaving the target permits a later hover prewarm"
+    );
     assert!(!suppress_widget_drag_hover(&mut suppressed, true));
 }
 
