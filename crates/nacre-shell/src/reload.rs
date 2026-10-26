@@ -8002,10 +8002,10 @@ impl SceneSource for Runtime {
                 let marker = records
                     .iter()
                     .find(|record| record["widget_layout"] == true)?;
-                Some((serde_json::json!([
-                    marker["viewport_width"],
-                    marker["viewport_height"]
-                ]), marker["catalogue"].clone()))
+                Some((
+                    serde_json::json!([marker["viewport_width"], marker["viewport_height"]]),
+                    marker["catalogue"].clone(),
+                ))
             });
             if let (Some((viewport, catalogue)), Ok(serde_json::Value::Object(mut values))) = (
                 viewport,
