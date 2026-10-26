@@ -1147,7 +1147,6 @@ impl Dashboard {
                     .chain(s.history.order.iter().filter_map(|id| {
                         s.history.items.get(id).map(|n| (id, n, "forget"))
                     }))
-                    .take(12)
                     .map(|(id, n, op)| {
                         let verb = tr(
                             if op == "dismiss" {

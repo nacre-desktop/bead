@@ -292,7 +292,7 @@ fn pages_have_deterministic_pixels_and_only_declared_actions() -> Result<()> {
 }
 
 #[test]
-fn notification_and_clipboard_pages_preserve_their_existing_pixels() -> Result<()> {
+fn notification_and_clipboard_pages_match_viewport_goldens() -> Result<()> {
     for page in [Page::Notifications, Page::Clipboard] {
         for scale in [1., 1.5] {
             let model = page_view(page, fixture(page.name())).project();
@@ -349,46 +349,91 @@ fn dashboard_scroll_limit(harness: &Harness, store: &str) -> f64 {
         .expect("dashboard list owns its scroll store")
 }
 
+fn long_dashboard_history_fixture(page: Page, count: usize) -> Json {
+    let mut data = fixture(page.name());
+    let id_prefix = match page {
+        Page::Notifications => "n",
+        Page::Clipboard => "c",
+        _ => unreachable!("only history pages use this fixture"),
+    };
+    let order = (0..count)
+        .map(|index| format!("{id_prefix}{index:03}"))
+        .collect::<Vec<_>>();
+    match page {
+        Page::Notifications => {
+            let template = data["history"]["items"]["n2"].clone();
+            let mut items = serde_json::Map::new();
+            for (index, id) in order.iter().enumerate() {
+                let mut row = template.clone();
+                row["app_name"] = json!(format!("App {index:03}"));
+                row["summary"] = json!(format!("Item {index:03}"));
+                row["created_ms"] = json!(1709193600000_u64.saturating_sub(index as u64));
+                row["revision"] = json!(index as u64 + 1);
+                items.insert(id.clone(), row);
+            }
+            data["active"]["items"] = json!({});
+            data["active"]["order"] = json!([]);
+            data["history"]["items"] = Json::Object(items);
+            data["history"]["order"] = json!(order);
+            data["history_count"] = json!(count);
+        }
+        Page::Clipboard => {
+            let template = data["entries"]["items"]["c12"].clone();
+            let mut items = serde_json::Map::new();
+            for (index, id) in order.iter().enumerate() {
+                let mut row = template.clone();
+                row["preview"] = json!(format!("App {index:03}: Item {index:03}"));
+                row["created_ms"] = json!(1709193600000_u64.saturating_sub(index as u64));
+                items.insert(id.clone(), row);
+            }
+            data["entries"]["items"] = Json::Object(items);
+            data["entries"]["order"] = json!(order);
+        }
+        _ => unreachable!("only history pages use this fixture"),
+    }
+    data
+}
+
 #[test]
 fn dashboard_history_lists_scroll_both_edges_virtualize_and_keep_headers_fixed() -> Result<()> {
-    for (page, store, action_prefix, revisioned) in [
+    for (page, store, action_prefix) in [
         (
             Page::Notifications,
             "dashboard.notifications.scroll",
             "notif.forget:",
-            true,
         ),
-        (
-            Page::Clipboard,
-            "dashboard.clipboard.scroll",
-            "clip.copy:",
-            false,
-        ),
+        (Page::Clipboard, "dashboard.clipboard.scroll", "clip.copy:"),
     ] {
-        let make_rows = |count| {
-            (0..count)
-                .map(|index| {
-                    let id = format!("row-{index:03}");
-                    let action = if revisioned {
-                        format!("{action_prefix}{id}|1")
-                    } else {
-                        format!("{action_prefix}{id}")
-                    };
-                    serde_json::json!({
-                        "id": id,
-                        "label": format!("App {index:03}: Item {index:03}"),
-                        "value": if revisioned { "Forget" } else { "Copy" },
-                        "act": action,
-                    })
-                })
-                .collect::<Vec<_>>()
+        let count = if page == Page::Notifications {
+            120
+        } else {
+            nacre_protocol::dashboard_extras::MAX_CLIPBOARD_ENTRIES
         };
-        let mut model = page_view(page, fixture(page.name())).project();
+        assert!(
+            count > 12,
+            "fixture should exceed the materialized viewport"
+        );
+        let fixture = long_dashboard_history_fixture(page, count);
+        let model = page_view(page, fixture).project();
+        assert_eq!(model["dashboard.ready"], Value::Bool(true));
+        let projected = rows(&model, "dashboard.rows");
+        assert_eq!(projected.len(), count, "{} source projection", page.name());
+        let id_prefix = if page == Page::Notifications {
+            "n"
+        } else {
+            "c"
+        };
+        let first_id = format!("{id_prefix}000");
+        let last_row_id = format!("{id_prefix}{:03}", count - 1);
+        assert_eq!(
+            projected[count - 1]["id"].as_str(),
+            Some(last_row_id.as_str())
+        );
         let heading = match &model["dashboard.heading"] {
             Value::Text(text) => text.clone(),
             other => panic!("unexpected {} heading: {other:?}", page.name()),
         };
-        model.insert("dashboard.rows".into(), Value::list(make_rows(120)));
+        let mut model = model;
         model.insert("dashboard.control".into(), Value::Bool(true));
         model.insert(store.into(), Value::Number(0.));
         let mut harness = extra_harness(page, model, 1.)?;
@@ -396,14 +441,14 @@ fn dashboard_history_lists_scroll_both_edges_virtualize_and_keep_headers_fixed()
 
         let heading_rect = dashboard_heading_rect(&harness, &heading);
         let rows_at_top = scroll_row_nodes(&harness, action_prefix);
-        assert!(rows_at_top.iter().any(|(id, _)| id == "row-000"));
+        assert!(rows_at_top.iter().any(|(id, _)| id == &first_id));
         assert!(
             rows_at_top.len() <= 12,
             "{} viewport plus overscan should materialize at most 12 rows, got {}",
             page.name(),
             rows_at_top.len()
         );
-        assert!(!rows_at_top.iter().any(|(id, _)| id == "row-119"));
+        assert!(!rows_at_top.iter().any(|(id, _)| id == &last_row_id));
 
         let viewport = harness
             .session
@@ -417,23 +462,23 @@ fn dashboard_history_lists_scroll_both_edges_virtualize_and_keep_headers_fixed()
             delta,
         };
         let full_limit = dashboard_scroll_limit(&harness, store);
-        assert!(full_limit > 4_000.);
+        assert!(full_limit > 1_000.);
         harness.script([scroll(100_000.)])?;
         let rows_at_bottom = scroll_row_nodes(&harness, action_prefix);
         assert_eq!(
             harness.session.stores.get(store),
             Some(&Value::Number(full_limit))
         );
-        let last_id = rows_at_bottom
+        let last_node_id = rows_at_bottom
             .iter()
-            .find(|(id, _)| id == "row-119")
+            .find(|(id, _)| id == &last_row_id)
             .map(|(_, node_id)| node_id.clone())
             .expect("last item reaches the viewport");
         let last_node = harness
             .session
             .view_nodes()
             .iter()
-            .find(|node| node.id == last_id)
+            .find(|node| node.id == last_node_id)
             .expect("last row has a hit target");
         let last_rect = bead::ui::rect(&last_node.draw);
         assert!(last_node.contains(
@@ -445,24 +490,25 @@ fn dashboard_history_lists_scroll_both_edges_virtualize_and_keep_headers_fixed()
 
         harness.script([scroll(-100_000.)])?;
         let reversed = scroll_row_nodes(&harness, action_prefix);
-        assert!(reversed.iter().any(|(id, _)| id == "row-000"));
-        assert!(!reversed.iter().any(|(id, _)| id == "row-119"));
+        assert!(reversed.iter().any(|(id, _)| id == &first_id));
+        assert!(!reversed.iter().any(|(id, _)| id == &last_row_id));
         assert_eq!(dashboard_heading_rect(&harness, &heading), heading_rect);
         harness.script([scroll(100_000.)])?;
         assert!(
             scroll_row_nodes(&harness, action_prefix)
                 .iter()
-                .any(|(id, node_id)| id == "row-119" && node_id == &last_id)
+                .any(|(id, node_id)| id == &last_row_id && node_id == &last_node_id)
         );
 
         harness.update(BTreeMap::from([(
             "dashboard.rows".into(),
-            Value::list(make_rows(6)),
+            Value::list(projected.into_iter().take(6).collect()),
         )]))?;
         assert_eq!(dashboard_scroll_limit(&harness, store), 0.);
         let after_update = scroll_row_nodes(&harness, action_prefix);
         assert_eq!(after_update.len(), 6);
-        assert!(after_update.iter().any(|(id, _)| id == "row-005"));
+        let retained_id = format!("{id_prefix}005");
+        assert!(after_update.iter().any(|(id, _)| id == &retained_id));
         assert_eq!(dashboard_heading_rect(&harness, &heading), heading_rect);
     }
     Ok(())

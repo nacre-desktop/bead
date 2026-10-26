@@ -826,7 +826,7 @@ impl Dashboard {
                     },
                     48,
                 );
-                rows = s.entries.order.iter().take(7).filter_map(|id| s.entries.items.get(id).map(|e| {
+                rows = s.entries.order.iter().filter_map(|id| s.entries.items.get(id).map(|e| {
                     json!({"id":id.0,"label":line(&e.preview,72),
                         "value":tr(if e.kind == nacre_protocol::dashboard_extras::ClipKind::Image {"bead.dashboard.clipboard-image"} else {"bead.dashboard.clipboard-text"}, &[]),
                         "detail":"","act":format!("clip.copy:{}", id.0)})

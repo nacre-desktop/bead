@@ -142,7 +142,7 @@ def start_daemon(self):
         cliphist.write_text(
             '#!/bin/sh\n'
             'test "$1" = list || exit 2\n'
-            'i=120\n'
+            'i=50\n'
             'while test "$i" -gt 0; do printf "%s\\tSynthetic clipboard row %03d\\n" "$i" "$i"; i=$((i - 1)); done\n'
         )
         cliphist.chmod(0o700)
@@ -219,7 +219,7 @@ def seed_clipboard_fixture(arm):
     fixture_root.mkdir(parents=True, exist_ok=True)
     extras.mkdir(parents=True, exist_ok=True)
     now_ms = int(time.time() * 1000)
-    ids = [f'c{index:03d}' for index in range(120, 0, -1)]
+    ids = [f'c{index:03d}' for index in range(50, 0, -1)]
     items = {
         item_id: {'kind': 'text', 'preview': f'Synthetic clipboard row {int(item_id[1:]):03d}',
                   'created_ms': now_ms - offset}

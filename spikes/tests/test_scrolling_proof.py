@@ -299,10 +299,10 @@ class ScrollReversalProofTests(unittest.TestCase):
         fixture = __import__("json").loads(path.read_text())
         order = fixture["entries"]["order"]
         items = fixture["entries"]["items"]
-        self.assertEqual(len(order), 120)
-        self.assertEqual(order[0], "c120")
+        self.assertEqual(len(order), 50)
+        self.assertEqual(order[0], "c050")
         self.assertEqual(order[-1], "c001")
-        self.assertEqual(items[order[0]]["preview"], "Synthetic clipboard row 120")
+        self.assertEqual(items[order[0]]["preview"], "Synthetic clipboard row 050")
         self.assertEqual(items[order[-1]]["preview"], "Synthetic clipboard row 001")
         self.assertTrue(all(item["kind"] == "text" for item in items.values()))
 
