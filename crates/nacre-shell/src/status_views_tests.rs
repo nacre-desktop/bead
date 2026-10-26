@@ -187,7 +187,14 @@ fn updates_dropdown_goldens_cover_count_packages_scroll_and_empty() -> Result<()
         "../../../shell/tests/fixtures/status/updates-packages.json"
     ))?;
     for scale in [1., 1.5] {
-        for case in ["count", "packages", "scroll", "empty", "unavailable"] {
+        for case in [
+            "count",
+            "packages",
+            "scroll",
+            "empty",
+            "refreshing",
+            "unavailable",
+        ] {
             let mut data = fixture.clone();
             match case {
                 "count" => {
@@ -198,6 +205,10 @@ fn updates_dropdown_goldens_cover_count_packages_scroll_and_empty() -> Result<()
                 }
                 "empty" => {
                     data["count"] = serde_json::json!(0);
+                    data["packages"] = serde_json::json!([]);
+                }
+                "refreshing" => {
+                    data["refreshing"] = serde_json::json!(true);
                     data["packages"] = serde_json::json!([]);
                 }
                 "unavailable" => {

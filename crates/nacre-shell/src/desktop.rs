@@ -260,6 +260,13 @@ mod tests {
     }
     /// The real bar bundle at 1920 px with these workspace rows, reloaded but not yet committed.
     fn bar_session(rows: Vec<serde_json::Value>) -> (bead::ui::Session, bead::render::Scene) {
+        bar_session_with_updates(rows, false, 0.)
+    }
+    fn bar_session_with_updates(
+        rows: Vec<serde_json::Value>,
+        popouts: bool,
+        update_count: f64,
+    ) -> (bead::ui::Session, bead::render::Scene) {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shell");
         let palette_path = root.join("palette.json");
         let fallback = bead::render::Scene {
@@ -290,6 +297,8 @@ mod tests {
             "bead.focused_title".into(),
             Value::Text("Fixture title".into()),
         );
+        state.insert("bar.popouts".into(), Value::Bool(popouts));
+        state.insert("bar.updates.count".into(), Value::Number(update_count));
         session.stores = session.stores.reconcile(&state).unwrap();
         session.set_viewport(1920, 1200);
         let scene = session.reload().unwrap();
@@ -318,6 +327,29 @@ mod tests {
                 .iter()
                 .any(|node| node.action.as_deref() == Some("services.audio"))
         );
+    }
+    #[test]
+    fn updates_bar_button_stays_visible_and_openable_at_zero() {
+        let rows =
+            vec![serde_json::json!({"id":"fixture-stable-id","name":"1","index":1,"active":true})];
+        for count in [0., 4.] {
+            let (mut session, scene) = bar_session_with_updates(rows.clone(), true, count);
+            assert!(scene.primitives.iter().any(|draw| matches!(draw,
+                bead::render::Primitive::Text { text, .. } if text == &count.to_string()
+            )));
+            session.commit(scene);
+            assert!(
+                session.view_nodes().iter().any(|node| {
+                    node.action.as_deref() == Some("status.pill.open")
+                        && node
+                            .action_arg
+                            .as_ref()
+                            .and_then(crate::widgets::dropdown_view)
+                            == Some("updates")
+                }),
+                "updates icon must remain clickable at count {count}"
+            );
+        }
     }
     /// Widths of the workspace cells and every text drawn, for a set of workspace rows.
     fn capsule(rows: Vec<serde_json::Value>) -> (Vec<f32>, Vec<String>) {
