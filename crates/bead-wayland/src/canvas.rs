@@ -361,9 +361,7 @@ impl App {
         let scale120 = self
             .surfaces
             .iter()
-            .find(|surface| {
-                surface.output == output && !surface.companion && surface.configured
-            })
+            .find(|surface| surface.output == output && !surface.companion && surface.configured)
             .map(|surface| surface.scale120)
             .or_else(|| {
                 self.output
