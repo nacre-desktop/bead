@@ -401,6 +401,37 @@ return ui.Panel{id="panel",width=240,height=200,
 }
 
 #[test]
+fn panel_shadow_can_be_disabled_without_changing_the_default() {
+    let f = fixture();
+    let path = f.0.join("ui/main.luau");
+    fs::write(
+        &path,
+        "local ui=require('bead.ui')\nreturn ui.Panel{id='panel',width=160,height=80}",
+    )
+    .unwrap();
+    let default_scene = session(&f).current;
+    assert!(
+        default_scene
+            .primitives
+            .iter()
+            .any(|primitive| matches!(primitive, Primitive::Shadow { .. }))
+    );
+
+    fs::write(
+        &path,
+        "local ui=require('bead.ui')\nreturn ui.Panel{id='panel',width=160,height=80,shadow=false}",
+    )
+    .unwrap();
+    let disabled_scene = session(&f).current;
+    assert!(
+        !disabled_scene
+            .primitives
+            .iter()
+            .any(|primitive| matches!(primitive, Primitive::Shadow { .. }))
+    );
+}
+
+#[test]
 fn host_policy_resolves_staged_computed_values_and_reject_keeps_previous_state() {
     let f = fixture();
     let path = f.0.join("ui/behavior.luau");

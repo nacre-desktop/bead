@@ -213,8 +213,15 @@ async fn lab_with_activation_behavior(
                                     && ids.iter().any(|id| id.as_str() == entry["id"].as_str())
                                 {
                                     entry["thumbnail"] = fixture_image.clone().into();
-                                    if entry["id"] != "/fixture/next.jpg" {
+                                    if entry["id"] != "/fixture/next.jpg" && entry["id"] != "/fixture/next.mp4" {
                                         entry["preview"] = fixture_image.clone().into();
+                                    }
+                                    if entry["id"] == "/fixture/next.mp4" {
+                                        entry["video_predecode"] = json!({
+                                            "poster_path":fixture_image,
+                                            "poster_file_identity":{"device":"1","inode":"2","size":4,"mtime_sec":1,"mtime_nsec":0,"ctime_sec":1,"ctime_nsec":0},
+                                            "source_file_identity":{"device":"1","inode":"3","size":32,"mtime_sec":1,"mtime_nsec":0,"ctime_sec":1,"ctime_nsec":0}
+                                        });
                                     }
                                 }
                                 entry
@@ -519,7 +526,7 @@ async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_previe
             fit: ImageFit::Fill,
             clip_polygon: None,
             rect: Rect::new(0., 0., 8., 6.),
-            path: std::path::PathBuf::from("@icon:wallpaper:preview:/fixture/next.jpg"),
+            path: std::path::PathBuf::from("@icon:wallpaper:preview:/fixture/next.mp4"),
         }],
         offset: (0., 0.),
         bounds: Rect::new(0., 0., 8., 6.),
@@ -533,7 +540,7 @@ async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_previe
         lab.calls.recv().await.unwrap(),
         (
             "wallpaper.catalogue".into(),
-            json!({"ids":["/fixture/next.jpg"]})
+            json!({"ids":["/fixture/next.mp4"]})
         )
     );
     for _ in 0..200 {
@@ -553,7 +560,7 @@ async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_previe
         let next = state
             .catalogue_result
             .iter()
-            .find(|entry| entry["id"] == "/fixture/next.jpg")
+            .find(|entry| entry["id"] == "/fixture/next.mp4")
             .unwrap();
         let expected = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../shell/sample.png")
@@ -563,13 +570,18 @@ async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_previe
         assert_eq!(next["thumbnail"].as_str(), Some(expected.as_ref()));
         assert_eq!(
             next["preview"], "",
-            "the fake hydrates only the requested ID's advertised thumbnail"
+            "the moving poster comes from the explicit predecode descriptor"
+        );
+        assert_eq!(next["video_predecode"]["poster_path"], expected.as_ref());
+        assert_eq!(
+            next["video_predecode"]["source_file_identity"]["inode"],
+            "3"
         );
         assert!(
             state
                 .catalogue_result
                 .iter()
-                .filter(|entry| entry["id"] != "/fixture/next.jpg")
+                .filter(|entry| entry["id"] != "/fixture/next.mp4")
                 .all(|entry| entry["thumbnail"] == "" && entry["preview"] == "")
         );
     }
@@ -589,7 +601,7 @@ async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_previe
             fit: ImageFit::Fill,
             clip_polygon: None,
             rect: Rect::new(0., 0., 8., 6.),
-            path: std::path::PathBuf::from("@icon:wallpaper:preview:/fixture/next.jpg"),
+            path: std::path::PathBuf::from("@icon:wallpaper:preview:/fixture/next.mp4"),
         }],
         offset: (0., 0.),
         bounds: Rect::new(0., 0., 8., 6.),
@@ -607,6 +619,78 @@ async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_previe
         repeated.asset_data.values().any(|bytes| !bytes.is_empty()),
         "the advertised thumbnail remains a fallback"
     );
+    // Cached thumbnails still need the palette/publication-thumbnail prewarm.
+    let mut cached = repeated.clone();
+    if let Primitive::Image { path, .. } = &mut cached.primitives[0] {
+        *path = std::path::PathBuf::from("@icon:wallpaper:thumbnail:/fixture/next.mp4");
+    }
+    let template = cached.clone();
+    let ready_revision = wallpaper.state.borrow().image_revision;
+    wallpaper.attach_images(&mut cached, Some(wake.clone()));
+    assert!(
+        wallpaper.content_ready(),
+        "palette prewarming must not delay ready images"
+    );
+    assert_eq!(
+        lab.calls.recv().await.unwrap(),
+        (
+            "wallpaper.catalogue".into(),
+            json!({"ids":["/fixture/next.mp4"]})
+        )
+    );
+    for _ in 0..200 {
+        wallpaper.project(&open, Some(wake.clone()));
+        if wallpaper.state.borrow().catalogue.is_none() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert_eq!(
+        wallpaper.state.borrow().image_revision,
+        ready_revision,
+        "palette-only preparation must not discard prepared render content"
+    );
+    wallpaper.attach_images(&mut template.clone(), Some(wake.clone()));
+    assert!(
+        lab.calls.try_recv().is_err(),
+        "a settled visible set is prepared once"
+    );
+    let mut other_visible = template.clone();
+    other_visible.asset_data.clear();
+    if let Primitive::Image { path, .. } = &mut other_visible.primitives[0] {
+        *path = std::path::PathBuf::from("@icon:wallpaper:preview:/fixture/next.jpg");
+    }
+    let mut hydrated_other = other_visible.clone();
+    wallpaper.attach_images(&mut other_visible, Some(wake.clone()));
+    assert_eq!(
+        lab.calls.recv().await.unwrap(),
+        (
+            "wallpaper.catalogue".into(),
+            json!({"ids":["/fixture/next.jpg"]})
+        )
+    );
+    for _ in 0..200 {
+        wallpaper.project(&open, Some(wake.clone()));
+        if wallpaper.state.borrow().catalogue.is_none() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert!(
+        wallpaper
+            .state
+            .borrow()
+            .catalogue_result
+            .iter()
+            .any(|entry| {
+                entry["id"] == "/fixture/next.mp4"
+                    && entry["video_predecode"]["source_file_identity"]["inode"] == "3"
+            }),
+        "metadata for another requested card preserves the hydrated video's descriptor"
+    );
+    wallpaper.attach_images(&mut hydrated_other, Some(wake.clone()));
+    assert!(wallpaper.content_ready());
+
     // A real refresh ticket may be pending while displayed paths remain hydrated.
     wallpaper.state.borrow_mut().catalogue =
         wallpaper.begin("wallpaper.catalogue", json!({"ids":[]}), Some(wake));
@@ -799,9 +883,9 @@ async fn wallpaper_refreshes_deleted_cache_paths_and_settles_still_broken_paths(
         lab.calls.recv().await.unwrap(),
         (
             "wallpaper.catalogue".into(),
-            json!({"ids":["/fixture/broken.jpg"]})
+            json!({"ids":["/fixture/broken.jpg","/fixture/current.jpg"]})
         ),
-        "a changed visible set gets one fresh attempt for its still-broken item"
+        "a changed visible set retries its broken image and prewarms cached visible images"
     );
     for _ in 0..200 {
         wallpaper.project(&open, Some(wake.clone()));
@@ -1440,6 +1524,11 @@ async fn wallpaper_thumbnail_cache_is_advertised_bounded_and_released_on_close()
         state.catalogue_boot = Some("extras-boot".into());
         state.catalogue_request_boot = Some("extras-boot".into());
         state.image_revision = 9;
+        // A previously visible file must not remain warm after leaving the scene.
+        assert!(
+            cached_wallpaper_image(&mut state, &unadvertised, 16 * bead::core::cache::MIB)
+                .is_some()
+        );
     }
 
     let logical =
@@ -1483,6 +1572,7 @@ async fn wallpaper_thumbnail_cache_is_advertised_bounded_and_released_on_close()
     };
     extras.attach_images(&mut scene, None);
     assert!(scene.asset_data.contains_key(&thumbnail));
+    assert_eq!(extras.state.borrow().images.len(), 1);
     assert!(extras.image_bytes() > 0 && extras.image_bytes() <= 16 * bead::core::cache::MIB);
     let bead::render::Primitive::Image { path: loaded, .. } = &scene.primitives[0] else {
         panic!("image primitive")
@@ -2367,9 +2457,8 @@ async fn failed_activation_retires_its_early_preview_outside_the_view() {
     let generation = preview.select(
         "extras-boot".into(),
         "/fixture/next.jpg".into(),
-        "/fixture/next-preview.jpg".into(),
         "image".into(),
-        false,
+        None,
     );
     let mut admission = WallpaperActivationQueue::new(lab.client.clone());
     admission.preview = Some(preview.clone());

@@ -155,6 +155,17 @@ pub trait PaletteFeed: Send + Sync {
 pub trait WallpaperProvider: Send + Sync {
     fn watch(&self, changed: Box<dyn Fn() + Send + Sync>) -> Result<(), String>;
     fn prepare(&self, output: String, width: u32, height: u32) -> Result<WallpaperFrame, String>;
+    /// `Some` preserves legacy return behavior without calling `staged`; `None`
+    /// requires one staged callback and successful confirmation. `Err` aborts it.
+    fn prepare_staged(
+        &self,
+        output: String,
+        width: u32,
+        height: u32,
+        _staged: &mut dyn FnMut(WallpaperFrame),
+    ) -> Result<Option<WallpaperFrame>, String> {
+        Ok(Some(self.prepare(output, width, height)?))
+    }
     fn prepare_transition(&self, _output: &str, _width: u32, _height: u32) -> Option<Vec<u8>> {
         None
     }
@@ -342,7 +353,7 @@ pub enum UiEvent {
     Reload,
     /// Deliberately block the script executor for a bounded diagnostic interval.
     DebugScriptStall(u64),
-    WallpaperFrame(std::sync::Arc<WallpaperFrame>),
+    WallpaperFrame(WallpaperFrameEvent),
     WallpaperRefresh,
     WallpaperFailed(String),
     WallpaperTick(String),
@@ -401,6 +412,29 @@ pub enum UiEvent {
         text: String,
         backspace: bool,
     },
+}
+
+#[derive(Clone)]
+pub struct WallpaperFrameConfirmation {
+    pub output: String,
+    pub revision: u64,
+    pub commit_token: std::sync::Arc<dyn std::any::Any + Send + Sync>,
+    pub accepted: bool,
+}
+impl std::fmt::Debug for WallpaperFrameConfirmation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "WallpaperFrameConfirmation({}, {}, {})",
+            self.output, self.revision, self.accepted
+        )
+    }
+}
+#[derive(Clone, Debug)]
+pub enum WallpaperFrameEvent {
+    Ready(std::sync::Arc<WallpaperFrame>),
+    Staged(std::sync::Arc<WallpaperFrame>),
+    Confirmation(WallpaperFrameConfirmation),
 }
 /// Candidate state is committed only after render resources have been prepared.
 #[cfg(any(feature = "native-gl", feature = "wgpu"))]
@@ -763,6 +797,7 @@ struct PreparedFrameData {
 }
 struct PresentationData {
     source_epoch: u64,
+    visibility: u64,
     update: u64,
     surface: wl_surface::WlSurface,
     generation: u64,
@@ -873,10 +908,32 @@ struct WallpaperSurface {
     layer: LayerSurface,
     pool: SlotPool,
     buffers: Vec<Buffer>,
+    staged: Option<StagedWallpaperBuffer>,
     viewport: Option<WpViewport>,
     viewport_destination: Option<(i32, i32)>,
     pixels: Option<Vec<u8>>,
     transition: Option<WallpaperTransition>,
+}
+struct StagedWallpaperBuffer {
+    revision: u64,
+    token: std::sync::Arc<dyn std::any::Any + Send + Sync>,
+    width: u32,
+    height: u32,
+    index: usize,
+}
+impl StagedWallpaperBuffer {
+    fn matches(
+        &self,
+        revision: u64,
+        token: &std::sync::Arc<dyn std::any::Any + Send + Sync>,
+        width: u32,
+        height: u32,
+    ) -> bool {
+        self.revision == revision
+            && self.width == width
+            && self.height == height
+            && std::sync::Arc::ptr_eq(&self.token, token)
+    }
 }
 struct WallpaperTransition {
     commit: Option<(u64, std::sync::Arc<dyn std::any::Any + Send + Sync>)>,

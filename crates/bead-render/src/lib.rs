@@ -783,6 +783,12 @@ pub trait Renderer {
         None
     }
 
+    /// Release backend-owned GPU resources while preserving prepared CPU-side
+    /// data (including retained tree rasters). Backends without GPU caches do
+    /// nothing. A backend that requires a current graphics context documents
+    /// that requirement on its implementation.
+    fn release_gpu_resources(&mut self) {}
+
     /// Per-surface presentation hint, not global activity on another surface.
     fn presentation_motion(&mut self, _active: bool) {}
     fn prepared_frame(&self) -> Option<std::sync::Arc<tree::Frame>> {

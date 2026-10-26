@@ -664,6 +664,11 @@ impl App {
             .ok_or("panel output not available")?;
         self.panel_close_epoch = self.panel_close_epoch.wrapping_add(1);
         self.panel_target = open;
+        if open {
+            self.panel_gpu_suspended = false;
+            #[cfg(feature = "native-gl")]
+            self.prepare_panel_gl().map_err(|error| error.to_string())?;
+        }
         if let Some(m) = spec.fallback.motion.as_ref().filter(|m| m.reveal) {
             let now = self.started.elapsed().as_secs_f64();
             let curve = m.curve.unwrap_or(bead_core::animation::Curve::EaseOut);
@@ -714,6 +719,8 @@ impl App {
                 )?;
                 for surface in self.surfaces.iter_mut().filter(|surface| surface.companion) {
                     surface.callbacks.invalidate();
+                    // Visibility is a new presentation even when cached content keeps its update ID.
+                    surface.presented_generation = None;
                 }
             }
             // PanelVisibility forces a draw of the last prepared scene even if
@@ -736,26 +743,27 @@ impl App {
         let epoch = self.panel_epoch;
         self.panel_reload_pending = false;
         self.panel_ready = false;
+        #[cfg(feature = "native-gl")]
+        {
+            self.panel_cpu_cached = false;
+        }
         self.panel_output = Some(output.clone());
         if open && spec.keyboard_focus && self.pearl.is_none() {
             self.create_dismiss(&output)?;
         }
         self.companion_policy = Default::default();
         self.options.companion = Some((spec.fallback.clone(), spec.renderer));
-        let gpu_first = cfg!(feature = "native-gl")
-            && spec.retain_when_closed
-            && spec.renderer == RendererKind::FemtovgGl;
-        self.options.lazy_gl = !gpu_first;
-        let renderer_kind = if gpu_first {
-            spec.renderer
-        } else {
-            RendererKind::Cpu
-        };
+        self.options.lazy_gl = true;
+        let renderer_kind = RendererKind::Cpu;
         self.companion = Some((
             spec.fallback.clone(),
             bead_render::renderer(renderer_kind).map_err(|e| e.to_string())?,
             renderer_kind,
         ));
+        #[cfg(feature = "native-gl")]
+        if open {
+            self.prepare_panel_gl().map_err(|error| error.to_string())?;
+        }
         self.sync_all_decorations()?;
         let factory = spec.factory.clone();
         let mut source: Box<dyn SceneSource> = Box::new(worker::Source::new(
@@ -1023,6 +1031,25 @@ impl App {
             .as_ref()
             .is_some_and(|spec| spec.retain_when_closed)
         {
+            #[cfg(feature = "native-gl")]
+            {
+                let epoch = self.panel_epoch;
+                if let Err(error) = self.loop_handle.insert_source(
+                    Timer::from_duration(Duration::from_secs(2)),
+                    move |_, _, app| {
+                        if !app.panel_target
+                            && app.panel_epoch == epoch
+                            && app.panel_close_epoch == token
+                            && let Err(error) = app.start_panel_snapshot()
+                        {
+                            app.fail(error);
+                        }
+                        TimeoutAction::Drop
+                    },
+                ) {
+                    self.fail(error);
+                }
+            }
             return;
         }
         let qh = self.qh.clone();
@@ -1048,6 +1075,12 @@ impl App {
         self.cancel_prepared_native();
         self.reserved_pearl_id = None;
         self.prewarm_attempted = false;
+        self.panel_gpu_suspended = false;
+        #[cfg(feature = "native-gl")]
+        {
+            self.panel_gl_prewarm_error = None;
+            self.panel_cpu_cached = false;
+        }
         // Trace probes are weak: observing retirement must not extend raster lifetime.
         #[cfg(all(target_os = "linux", target_env = "gnu"))]
         let retired_images = self.options.trace_state.then(|| {

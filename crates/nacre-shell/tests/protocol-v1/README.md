@@ -2,7 +2,9 @@
 
 GPL-3.0-only; generated Nacre contract data retained in the GPL application.
 The Rust contract crate is pinned in `crates/nacre-shell/Cargo.toml` to published
-Nacre `70459b21c7010fb2422c7778c953b58ccf8011f0`. B0136 copies its
+Nacre `6abe2498a86fc5ce93662f98849c6fc24f06207f`. B0134 copies its
+`wallpaper-catalogue.jsonl` (optional identity-pinned video poster predecode).
+B0136 copies its
 `wallpaper-active.jsonl` (manual-navigation readiness) and
 `core-dashboard-updates.jsonl` (the published bounded package list).
 

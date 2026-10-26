@@ -3,7 +3,10 @@
 use crate::{Damage, RenderTarget, Renderer, Result, Scene, ShmTarget};
 use glutin::{
     config::{Config, ConfigTemplateBuilder},
-    context::{ContextApi, ContextAttributesBuilder, PossiblyCurrentContext, Version},
+    context::{
+        ContextApi, ContextAttributesBuilder, NotCurrentContext, NotCurrentGlContext,
+        PossiblyCurrentContext, Version,
+    },
     display::{AsRawDisplay, Display, DisplayApiPreference},
     prelude::*,
     surface::{
@@ -30,6 +33,24 @@ pub struct Transport {
         i32,
     ) -> u32,
 }
+/// EGL display/config/context setup that can be created on a worker thread and
+/// handed to the render thread before any window surface exists.
+///
+/// The context is not current, so this type can move between threads without
+/// an unsafe `Send` implementation. Keep the native connection alive until this
+/// value is converted or shut down. Serialize initialization against other
+/// setup for the same native display; EGL driver initialization is not performed
+/// concurrently by this API.
+pub struct PreparedTransport {
+    // Keep context/config before display so normal field drop order releases
+    // EGL children before the display handle.
+    context: Option<NotCurrentContext>,
+    config: Config,
+    pub display: Display,
+    swap_damage: DamageSwap,
+}
+fn assert_send<T: Send>() {}
+const _: fn() = assert_send::<PreparedTransport>;
 pub struct Surface {
     surface: EglSurface<WindowSurface>,
     height: std::cell::Cell<u32>,
@@ -45,6 +66,197 @@ impl Drop for Transport {
             drop(context);
         }
     }
+}
+impl PreparedTransport {
+    /// Prepare the EGL display, config, extension function, and non-current
+    /// OpenGL 3.3 context without requiring a window handle.
+    ///
+    /// # Safety
+    /// The native display/connection must remain alive until this value and all
+    /// surfaces created from it are destroyed. Do not initialize another
+    /// transport concurrently for the same native display; the caller must
+    /// serialize setup and later convert this value into the sole `Transport`.
+    pub unsafe fn new(display: RawDisplayHandle) -> Result<Self> {
+        let (display, config, swap_damage, supports_surfaceless) =
+            unsafe { initialize_display(display) }?;
+        let attrs = ContextAttributesBuilder::new()
+            .with_context_api(ContextApi::OpenGl(Some(Version::new(3, 3))))
+            .build(None);
+        // SAFETY: config belongs to this retained EGL display; no native window is needed.
+        let context = match unsafe { display.create_context(&config, &attrs) } {
+            Ok(context) => context,
+            Err(error) => {
+                drop(config);
+                if let Err(cleanup_error) = unsafe { terminate_exclusive(&display) } {
+                    eprintln!(
+                        "GL_PREPARE_CLEANUP_ERROR context_error={error} cleanup_error={cleanup_error}"
+                    );
+                }
+                return Err(Box::new(error));
+            }
+        };
+        let context = if supports_surfaceless {
+            match warm_surfaceless(context, &display) {
+                Ok(context) => context,
+                Err(error) => {
+                    drop(config);
+                    if let Err(cleanup_error) = unsafe { terminate_exclusive(&display) } {
+                        eprintln!(
+                            "GL_PREPARE_CLEANUP_ERROR context_error={error} cleanup_error={cleanup_error}"
+                        );
+                    }
+                    return Err(error);
+                }
+            }
+        } else {
+            context
+        };
+        Ok(Self {
+            context: Some(context),
+            config,
+            display,
+            swap_damage,
+        })
+    }
+
+    /// Convert setup into the render-thread transport. The context remains
+    /// non-current until `create_surface` binds it to the first window.
+    pub fn into_transport(mut self) -> Transport {
+        let context = self
+            .context
+            .take()
+            .expect("prepared EGL context already consumed")
+            .treat_as_possibly_current();
+        Transport {
+            display: self.display,
+            config: self.config,
+            context: Some(context),
+            swap_damage: self.swap_damage,
+        }
+    }
+
+    /// Release an unused prepared context and the EGL display pool.
+    ///
+    /// # Safety
+    /// No other transport, surface, renderer, or library may use this native
+    /// display. The prepared context is destroyed before `eglTerminate` runs.
+    pub unsafe fn shutdown_exclusive(self) -> Result<()> {
+        let Self {
+            context,
+            config,
+            display,
+            ..
+        } = self;
+        drop(context);
+        drop(config);
+        unsafe { terminate_exclusive(&display) }
+    }
+}
+/// # Safety
+/// The caller must retain the native display for the returned EGL objects.
+unsafe fn initialize_display(
+    raw_display: RawDisplayHandle,
+) -> Result<(Display, Config, DamageSwap, bool)> {
+    // SAFETY: the public caller guarantees the native display remains alive.
+    let display = unsafe { Display::new(raw_display, DisplayApiPreference::Egl) }?;
+    let template = ConfigTemplateBuilder::new()
+        .with_alpha_size(8)
+        .with_stencil_size(8)
+        .with_transparency(true)
+        .build();
+    // SAFETY: config enumeration does not access a native window.
+    let config = unsafe { display.find_configs(template) }?
+        .next()
+        .ok_or("no transparent EGL config")?;
+    let query = display.get_proc_address(c"eglQueryString");
+    if query.is_null() {
+        return Err("missing EGL extension query".into());
+    }
+    let raw_display = match display.raw_display() {
+        glutin::display::RawDisplay::Egl(display) => display,
+        #[allow(unreachable_patterns)]
+        _ => return Err("native EGL required".into()),
+    };
+    // SAFETY: initialized EGL display; EGL_EXTENSIONS returns a driver-owned string.
+    let query: unsafe extern "system" fn(*const std::ffi::c_void, i32) -> *const std::ffi::c_char =
+        unsafe { std::mem::transmute(query) };
+    // SAFETY: raw_display belongs to this live Display, and 0x3055 is EGL_EXTENSIONS.
+    let extensions = unsafe { query(raw_display, 0x3055) };
+    if extensions.is_null() {
+        return Err("missing EGL extension string".into());
+    }
+    // SAFETY: validated non-null driver-owned extension string.
+    let extensions = unsafe { std::ffi::CStr::from_ptr(extensions) }.to_string_lossy();
+    let supports_surfaceless = extensions
+        .split_whitespace()
+        .any(|extension| extension == "EGL_KHR_surfaceless_context");
+    let name = if extensions
+        .split_whitespace()
+        .any(|e| e == "EGL_KHR_swap_buffers_with_damage")
+    {
+        c"eglSwapBuffersWithDamageKHR"
+    } else if extensions
+        .split_whitespace()
+        .any(|e| e == "EGL_EXT_swap_buffers_with_damage")
+    {
+        c"eglSwapBuffersWithDamageEXT"
+    } else {
+        return Err("EGL damage swaps unavailable; use CPU fallback".into());
+    };
+    let address = display.get_proc_address(name);
+    if address.is_null() {
+        return Err("missing EGL damage swap function".into());
+    }
+    // SAFETY: both advertised extensions use the standard EGL damage-swap signature.
+    let swap_damage: DamageSwap = unsafe { std::mem::transmute(address) };
+    Ok((display, config, swap_damage, supports_surfaceless))
+}
+
+fn warm_surfaceless(context: NotCurrentContext, display: &Display) -> Result<NotCurrentContext> {
+    match context {
+        NotCurrentContext::Egl(context) => {
+            let current = context.make_current_surfaceless()?;
+            let warmed = (|| -> Result<()> {
+                let _span = bead_core::profile::Span::new("panel_shader_prewarm");
+                // SAFETY: this worker owns the current context. These temporary
+                // resources are dropped here; no !Send Canvas crosses threads.
+                let renderer = unsafe {
+                    femtovg::renderer::OpenGl::new_from_function_cstr(|name| {
+                        display.get_proc_address(name).cast()
+                    })
+                }?;
+                let _canvas = femtovg::Canvas::new(renderer)?;
+                Ok(())
+            })();
+            // Unbind even if shader setup failed, before the caller retires EGL.
+            let context = current.make_not_current()?;
+            warmed?;
+            Ok(NotCurrentContext::Egl(context))
+        }
+        #[allow(unreachable_patterns)]
+        _ => Err("surfaceless warmup requires EGL".into()),
+    }
+}
+
+/// # Safety
+/// The caller must have exclusive ownership of the EGL display.
+unsafe fn terminate_exclusive(display: &Display) -> Result<()> {
+    #[allow(unreachable_patterns)]
+    let raw = match display.raw_display() {
+        glutin::display::RawDisplay::Egl(raw) => raw,
+        _ => return Err("exclusive shutdown requires EGL".into()),
+    };
+    let address = display.get_proc_address(c"eglTerminate");
+    if address.is_null() {
+        return Err("missing eglTerminate".into());
+    }
+    // SAFETY: EGL exports this signature; the caller guarantees exclusive ownership.
+    let terminate: unsafe extern "system" fn(*const std::ffi::c_void) -> u32 =
+        unsafe { std::mem::transmute(address) };
+    if unsafe { terminate(raw) } == 0 {
+        return Err("eglTerminate failed".into());
+    }
+    Ok(())
 }
 pub struct GlTarget<'a> {
     pub display: &'a Display,
@@ -62,77 +274,12 @@ impl Transport {
             context.make_not_current_in_place()?;
             drop(context);
         }
-        #[allow(unreachable_patterns)]
-        let raw = match self.display.raw_display() {
-            glutin::display::RawDisplay::Egl(raw) => raw,
-            _ => return Err("exclusive shutdown requires EGL".into()),
-        };
-        let address = self.display.get_proc_address(c"eglTerminate");
-        if address.is_null() {
-            return Err("missing eglTerminate".into());
-        }
-        // SAFETY: EGL exports this signature; exclusive ownership is the caller's contract.
-        let terminate: unsafe extern "system" fn(*const std::ffi::c_void) -> u32 =
-            unsafe { std::mem::transmute(address) };
-        if unsafe { terminate(raw) } == 0 {
-            return Err("eglTerminate failed".into());
-        }
-        Ok(())
+        unsafe { terminate_exclusive(&self.display) }
     }
     /// # Safety
     /// Display must remain alive until the context and all surfaces are destroyed.
     pub unsafe fn new(display: RawDisplayHandle) -> Result<Self> {
-        // SAFETY: the caller retains the native Wayland connection.
-        let display = unsafe { Display::new(display, DisplayApiPreference::Egl) }?;
-        let template = ConfigTemplateBuilder::new()
-            .with_alpha_size(8)
-            .with_stencil_size(8)
-            .with_transparency(true)
-            .build();
-        // SAFETY: configuration enumeration does not access a native window.
-        let config = unsafe { display.find_configs(template) }?
-            .next()
-            .ok_or("no transparent EGL config")?;
-        let query = display.get_proc_address(c"eglQueryString");
-        if query.is_null() {
-            return Err("missing EGL extension query".into());
-        }
-        let raw_display = match display.raw_display() {
-            glutin::display::RawDisplay::Egl(display) => display,
-            #[allow(unreachable_patterns)] // Other consumers may enable additional glutin APIs.
-            _ => return Err("native EGL required".into()),
-        };
-        // SAFETY: initialized retained EGL display; EGL_EXTENSIONS returns a driver-owned C string.
-        let query: unsafe extern "system" fn(
-            *const std::ffi::c_void,
-            i32,
-        ) -> *const std::ffi::c_char = unsafe { std::mem::transmute(query) };
-        // SAFETY: raw_display belongs to this live Display, and 0x3055 is EGL_EXTENSIONS.
-        let extensions = unsafe { query(raw_display, 0x3055) };
-        if extensions.is_null() {
-            return Err("missing EGL extension string".into());
-        }
-        // SAFETY: validated non-null driver-owned extension string.
-        let extensions = unsafe { std::ffi::CStr::from_ptr(extensions) }.to_string_lossy();
-        let name = if extensions
-            .split_whitespace()
-            .any(|e| e == "EGL_KHR_swap_buffers_with_damage")
-        {
-            c"eglSwapBuffersWithDamageKHR"
-        } else if extensions
-            .split_whitespace()
-            .any(|e| e == "EGL_EXT_swap_buffers_with_damage")
-        {
-            c"eglSwapBuffersWithDamageEXT"
-        } else {
-            return Err("EGL damage swaps unavailable; use CPU fallback".into());
-        };
-        let address = display.get_proc_address(name);
-        if address.is_null() {
-            return Err("missing EGL damage swap function".into());
-        }
-        // SAFETY: both advertised extensions use the standard EGL damage-swap signature.
-        let swap_damage: DamageSwap = unsafe { std::mem::transmute(address) };
+        let (display, config, swap_damage, _) = unsafe { initialize_display(display) }?;
         Ok(Self {
             display,
             config,
@@ -208,6 +355,13 @@ impl Transport {
         );
         context.make_current(&surface.surface)?;
         surface.height.set(h);
+        Ok(())
+    }
+    /// Unbind before destroying window surfaces so EGL can release their buffers.
+    pub fn unbind(&self) -> Result<()> {
+        if let Some(context) = &self.context {
+            context.make_not_current_in_place()?;
+        }
         Ok(())
     }
     pub fn present(&self, surface: &Surface, damage: &[Damage]) -> Result<()> {
@@ -582,6 +736,37 @@ impl GlRenderer {
     }
 }
 impl Renderer for GlRenderer {
+    /// Release GL image and canvas allocations while the renderer's EGL context
+    /// is current. `TreeCache` is deliberately retained so the CPU rasterized
+    /// layers can be uploaded again without rerasterizing them.
+    fn release_gpu_resources(&mut self) {
+        let image_bytes: usize = self.images.values().map(|t| t.pixels.data().len()).sum();
+        let group_bytes = self
+            .group
+            .map_or(0, |(_, w, h, _)| u64::from(w) * u64::from(h) * 4);
+        println!(
+            "GL_CACHE_RELEASE images={} image_bytes={image_bytes} composite_bytes={group_bytes}",
+            self.images.len()
+        );
+        if let Some(canvas) = self.canvas.as_mut() {
+            for (_, texture) in std::mem::take(&mut self.images) {
+                canvas.delete_image(texture.image);
+            }
+            if let Some((image, _, _, _)) = self.group.take() {
+                canvas.delete_image(image);
+            }
+        } else {
+            self.images.clear();
+            self.group = None;
+        }
+        self.group_charge = None;
+        // Dropping femtovg's canvas also releases renderer-owned GL state.
+        // Keep both budgets so a later upload remains accounted against the
+        // same process-wide cache accounting.
+        self.canvas = None;
+        self.cache.trim_idle();
+    }
+
     fn prepared_frame(&self) -> Option<std::sync::Arc<crate::tree::Frame>> {
         self.cache.frame.clone()
     }

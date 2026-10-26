@@ -12,6 +12,7 @@ bead-test = { path = "../bead-test" }
 bead={path="../bead",default-features=false}
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 gdk-pixbuf = "0.22"
+fast_image_resize = "=6.1.0"
 libc = "0.2"
 notify = { version = "=8.2.0", default-features = false }
 niri-ipc = "=26.4.0"
@@ -33,7 +34,7 @@ fontconfig = "=0.11.0"
 fontdb = "=0.23.0"
 skrifa = "=0.44.0"
 
-nacre-protocol = { git = "https://github.com/nacre-desktop/nacre", rev = "70459b21c7010fb2422c7778c953b58ccf8011f0" }
+nacre-protocol = { git = "https://github.com/nacre-desktop/nacre", rev = "6abe2498a86fc5ce93662f98849c6fc24f06207f" }
 tokio = { version = "1", features = ["rt", "sync", "net", "io-util", "time", "macros"] }
 
 [features]

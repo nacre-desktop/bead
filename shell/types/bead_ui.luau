@@ -49,6 +49,7 @@ export type Props = {
     border_color:any?,
     border_width:any?,
     radius:any?,
+    shadow:any?,
     font_size:any?,
     font_weight:any?,
     family:any?,

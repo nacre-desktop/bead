@@ -24,12 +24,17 @@ fn worker_returns_exact_pixels_and_rejects_changed_identity_and_oversized_output
         "file_identity":WallpaperFileIdentity::from_metadata(&std::fs::metadata(&path).unwrap()),
         "presentation":"crop", "palette":{"mode":"dark", "colours":{"background":"#101820", "onSurface":"#ffffff", "primary":"#2255aa"}}
     })).unwrap();
-    let run = |pair: &ActiveWallpaper, width, height| {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_nacre-wallpaper-decode"))
+    let run = |pair: &ActiveWallpaper, width, height, profile: bool| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_nacre-wallpaper-decode"));
+        command
+            .env_remove("BEAD_PROFILE_INPUT")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .spawn()
-            .unwrap();
+            .stderr(Stdio::piped());
+        if profile {
+            command.env("BEAD_PROFILE_INPUT", "1");
+        }
+        let mut child = command.spawn().unwrap();
         child
             .stdin
             .take()
@@ -38,12 +43,15 @@ fn worker_returns_exact_pixels_and_rejects_changed_identity_and_oversized_output
             .unwrap();
         child.wait_with_output().unwrap()
     };
-    let output = run(&pair, 2, 1);
+    let output = run(&pair, 2, 1, true);
     assert!(output.status.success());
     assert_eq!(output.stdout, [30, 80, 120, 255, 30, 80, 120, 255]);
-    assert!(!run(&pair, 16_385, 1).status.success());
+    let diagnostics = String::from_utf8(output.stderr).unwrap();
+    assert!(diagnostics.contains("INPUT_PROFILE stage=wallpaper_png"));
+    assert!(diagnostics.contains("INPUT_PROFILE stage=wallpaper_rgba_output"));
+    assert!(!run(&pair, 16_385, 1, false).status.success());
     std::fs::write(&path, b"changed").unwrap();
-    let output = run(&pair, 2, 1);
+    let output = run(&pair, 2, 1, false);
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
     std::fs::remove_dir_all(root).unwrap();

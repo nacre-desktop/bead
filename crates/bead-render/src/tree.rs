@@ -275,6 +275,9 @@ pub struct LayerPose {
 }
 struct Entry {
     raster: Arc<Raster>,
+    /// One prior image extent can be reused when subpixel carousel motion
+    /// alternates between adjacent raster sizes. Other primitive kinds stay single-entry.
+    previous: Option<Arc<Raster>>,
     touched: u64,
 }
 #[derive(Default)]
@@ -573,6 +576,9 @@ impl TreeCache {
     /// Release the entries no bake since `serial` has used (a look that was replaced).
     pub fn drop_unused_since(&mut self, serial: u64) {
         self.entries.retain(|_, entry| entry.touched > serial);
+        for entry in self.entries.values_mut() {
+            entry.previous = None;
+        }
         self.nodes.retain(|_, (_, touched)| *touched > serial);
         // Finished rasters own their pixels. The baker's fonts, decoded textures
         // and glyph scratch must not keep a replaced view resident.
@@ -582,7 +588,23 @@ impl TreeCache {
     pub fn trim_idle(&mut self) {
         self.raster = CpuRenderer::default();
         self.entries.retain(|_, entry| entry.touched == self.serial);
+        for entry in self.entries.values_mut() {
+            entry.previous = None;
+        }
         self.nodes.retain(|_, (_, touched)| *touched == self.serial);
+    }
+    fn evict_previous_variant(&mut self) -> bool {
+        let victim = self
+            .entries
+            .iter()
+            .filter(|(_, entry)| entry.previous.is_some())
+            .min_by_key(|(_, entry)| entry.touched)
+            .map(|(key, _)| key.clone());
+        let Some(victim) = victim else {
+            return false;
+        };
+        self.entries.get_mut(&victim).unwrap().previous = None;
+        true
     }
     /// B0117: the geometry of a growing piece (the joined-frame artwork or the panel's shadow) for the edge
     /// template, or None when it is not worth or not possible to slide a template (small reveals).
@@ -1198,6 +1220,18 @@ impl TreeCache {
                 None
             } else {
                 let slot = (id.clone(), scale.to_bits());
+                if kind == "image"
+                    && let Some(entry) = self.entries.get_mut(&slot)
+                    && entry.raster.key != key
+                    && entry
+                        .previous
+                        .as_ref()
+                        .is_some_and(|raster| raster.key == key)
+                {
+                    let previous = entry.previous.take().unwrap();
+                    let current = std::mem::replace(&mut entry.raster, previous);
+                    entry.previous = Some(current);
+                }
                 if self
                     .entries
                     .get(&slot)
@@ -1274,6 +1308,17 @@ impl TreeCache {
                         match budget.reserve(bytes) {
                             Ok(c) => break c,
                             Err(e) => {
+                                let previous_variant = self
+                                    .entries
+                                    .iter()
+                                    .filter(|(_, entry)| entry.previous.is_some())
+                                    .min_by_key(|(_, entry)| entry.touched)
+                                    .map(|(key, _)| key.clone());
+                                if let Some(previous_variant) = previous_variant {
+                                    self.entries.get_mut(&previous_variant).unwrap().previous =
+                                        None;
+                                    continue;
+                                }
                                 let victim = self
                                     .entries
                                     .iter()
@@ -1296,10 +1341,17 @@ impl TreeCache {
                         base_key,
                         changed,
                     });
+                    let previous = if kind == "image" {
+                        self.entries.remove(&slot).map(|entry| entry.raster)
+                    } else {
+                        self.entries.remove(&slot);
+                        None
+                    };
                     self.entries.insert(
                         slot.clone(),
                         Entry {
                             raster,
+                            previous,
                             touched: self.serial,
                         },
                     );
@@ -1462,14 +1514,24 @@ impl TreeCache {
         validate_frame_rasters(&items)?;
         // Keep offscreen rows for scrolling, but cap cache residency and entry count
         // before replacing the last successfully prepared frame.
-        while self.entries.len() > 1024
-            || self
+        loop {
+            let retained_bytes = self
                 .entries
                 .values()
-                .map(|e| e.raster.pixels.data().len())
-                .sum::<usize>()
-                > STEADY_RASTER_LIMIT
-        {
+                .map(|entry| {
+                    entry.raster.pixels.data().len()
+                        + entry
+                            .previous
+                            .as_ref()
+                            .map_or(0, |previous| previous.pixels.data().len())
+                })
+                .sum::<usize>();
+            if self.entries.len() <= 1024 && retained_bytes <= STEADY_RASTER_LIMIT {
+                break;
+            }
+            if self.evict_previous_variant() {
+                continue;
+            }
             let victim = self
                 .entries
                 .iter()
@@ -2309,11 +2371,104 @@ pub struct TreeCpuRenderer {
     /// Opaque frames compose primitives directly rather than reuse an opacity group.
     pub direct_composites: usize,
     repair_scratch: RepairScratch,
-    flattened: Option<(u64, f32, Pixmap)>,
+    flattened: Option<(u64, f32, FlattenedPixels)>,
     group_budget: Option<bead_core::cache::Budget>,
     group_charge: Option<bead_core::cache::Charge>,
+    keep_hidden_group: bool,
+    sparse_snapshot: bool,
+}
+enum FlattenedPixels {
+    Dense(Pixmap),
+    Sparse(SparsePixels),
+}
+struct SparsePixels {
+    width: u32,
+    height: u32,
+    rows: Vec<usize>,
+    words: Vec<u32>,
+}
+impl FlattenedPixels {
+    fn bytes(&self) -> usize {
+        match self {
+            Self::Dense(pixels) => pixels.data().len(),
+            Self::Sparse(sparse) => sparse.bytes(),
+        }
+    }
 }
 impl TreeCpuRenderer {
+    /// Freeze prepared CPU content for immediate painting after retiring a GPU backend.
+    /// Position and opacity remain live; the cached group also survives the hidden pose.
+    pub fn snapshot(scene: &Scene, scale: f32) -> Result<Self> {
+        let mut content = scene.clone();
+        content.motion = None;
+        let mut renderer = Self::with_opaque_composition(OpaqueComposition::Cached);
+        renderer.keep_hidden_group = true;
+        renderer.sparse_snapshot = true;
+        renderer.prepare(&content, scale)?;
+        renderer.cache_content(&content)?;
+        Ok(renderer)
+    }
+    fn cache_content(&mut self, scene: &Scene) -> Result<()> {
+        let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
+        if self
+            .flattened
+            .as_ref()
+            .is_some_and(|(key, scale, _)| *key == frame.key && *scale == frame.scale)
+        {
+            return Ok(());
+        }
+        let (w, h) = (
+            (scene.bounds.w * frame.scale).ceil() as u32,
+            (scene.bounds.h * frame.scale).ceil() as u32,
+        );
+        let full_bytes = u64::from(w) * u64::from(h) * 4;
+        if full_bytes > 64 * 1024 * 1024 {
+            return Err("opacity group exceeds budget".into());
+        }
+        self.flattened = None;
+        self.group_charge = None;
+        let full_charge = self
+            .group_budget
+            .get_or_insert_with(|| {
+                bead_core::cache::Budget::new("cpu-composite", 64 * bead_core::cache::MIB)
+            })
+            .reserve(w as usize * h as usize * 4 + 64)?;
+        let mut pixels = Pixmap::new(w, h).ok_or("opacity group")?;
+        paint(
+            frame,
+            (-scene.bounds.x, -scene.bounds.y),
+            ShmTarget {
+                bytes: pixels.data_mut(),
+                width: w,
+                height: h,
+                scale: frame.scale,
+                format: PixelFormat::Rgba,
+            },
+            Damage::full(w, h),
+        )?;
+        let pixels = if self.sparse_snapshot {
+            compress_rows(pixels)
+        } else {
+            FlattenedPixels::Dense(pixels)
+        };
+        if self.sparse_snapshot {
+            bead_core::vprintln!(
+                "CPU_SNAPSHOT full_bytes={full_bytes} retained_bytes={}",
+                pixels.bytes()
+            );
+        }
+        drop(full_charge);
+        self.group_charge = Some(
+            self.group_budget
+                .get_or_insert_with(|| {
+                    bead_core::cache::Budget::new("cpu-composite", 64 * bead_core::cache::MIB)
+                })
+                .reserve(pixels.bytes() + 64)?,
+        );
+        self.opacity_builds += 1;
+        self.flattened = Some((frame.key, frame.scale, pixels));
+        Ok(())
+    }
     pub fn with_opaque_composition(mode: OpaqueComposition) -> Self {
         Self {
             opaque_composition: mode,
@@ -2372,8 +2527,10 @@ impl Renderer for TreeCpuRenderer {
             );
         }
         if scene.opacity <= 0. {
-            self.flattened = None;
-            self.group_charge = None;
+            if !self.keep_hidden_group {
+                self.flattened = None;
+                self.group_charge = None;
+            }
             let ShmTarget { bytes, width, .. } = target;
             for y in damage.y..damage.y + damage.h {
                 let i = (y * width + damage.x) as usize * 4;
@@ -2383,43 +2540,7 @@ impl Renderer for TreeCpuRenderer {
         }
         // Group opacity preserves previous semantics; compose cached local rasters,
         // never reload fonts or re-bake glyphs for an animated pose.
-        if self
-            .flattened
-            .as_ref()
-            .is_none_or(|(key, scale, _)| *key != frame.key || *scale != frame.scale)
-        {
-            let (w, h) = (
-                (scene.bounds.w * frame.scale).ceil() as u32,
-                (scene.bounds.h * frame.scale).ceil() as u32,
-            );
-            if u64::from(w) * u64::from(h) * 4 > 64 * 1024 * 1024 {
-                return Err("opacity group exceeds budget".into());
-            }
-            self.flattened = None;
-            self.group_charge = None;
-            self.group_charge = Some(
-                self.group_budget
-                    .get_or_insert_with(|| {
-                        bead_core::cache::Budget::new("cpu-composite", 64 * bead_core::cache::MIB)
-                    })
-                    .reserve(w as usize * h as usize * 4 + 64)?,
-            );
-            let mut pixels = Pixmap::new(w, h).ok_or("opacity group")?;
-            paint(
-                frame,
-                (-scene.bounds.x, -scene.bounds.y),
-                ShmTarget {
-                    bytes: pixels.data_mut(),
-                    width: w,
-                    height: h,
-                    scale: frame.scale,
-                    format: PixelFormat::Rgba,
-                },
-                Damage::full(w, h),
-            )?;
-            self.opacity_builds += 1;
-            self.flattened = Some((frame.key, frame.scale, pixels));
-        }
+        self.cache_content(scene)?;
         let (_, _, pixels) = self.flattened.as_ref().ok_or("opacity group missing")?;
         let ShmTarget {
             bytes,
@@ -2428,25 +2549,165 @@ impl Renderer for TreeCpuRenderer {
             scale,
             format,
         } = target;
-        blit_with_opacity(
-            bytes,
-            (width, height),
-            damage,
-            pixels.as_ref(),
-            (
-                ((scene.offset.0 + scene.bounds.x) * scale).round() as i32,
-                ((scene.offset.1 + scene.bounds.y) * scale).round() as i32,
-            ),
-            scene.opacity.clamp(0., 1.),
-            format == PixelFormat::Bgra,
+        let origin = (
+            ((scene.offset.0 + scene.bounds.x) * scale).round() as i32,
+            ((scene.offset.1 + scene.bounds.y) * scale).round() as i32,
         );
+        match pixels {
+            FlattenedPixels::Dense(pixels) => blit_with_opacity(
+                bytes,
+                (width, height),
+                damage,
+                pixels.as_ref(),
+                origin,
+                scene.opacity.clamp(0., 1.),
+                format == PixelFormat::Bgra,
+            ),
+            FlattenedPixels::Sparse(pixels) => pixels.blit(
+                bytes,
+                (width, height),
+                damage,
+                origin,
+                scene.opacity.clamp(0., 1.),
+                format == PixelFormat::Bgra,
+            ),
+        }
         Ok(())
     }
 }
 
-/// Writes `pixels * opacity` at `origin` into the cleared `damage` rectangle of a `size` target.
-/// The target is transparent there, so source-over reduces to a premultiplied scale: no mask, no
-/// per-frame allocation, and the BGRA swap rides along (this is the per-frame cost of every fade).
+/// Store exact repeated pixels compactly, including transparent and dimmer borders.
+fn compress_rows(pixels: Pixmap) -> FlattenedPixels {
+    let (width, height) = (pixels.width(), pixels.height());
+    let mut rows = Vec::with_capacity(height as usize + 1);
+    let mut words = Vec::new();
+    for y in 0..height as usize {
+        rows.push(words.len());
+        let row = &pixels.data()[y * width as usize * 4..(y + 1) * width as usize * 4];
+        let pixel = |x: usize| u32::from_ne_bytes(row[x * 4..x * 4 + 4].try_into().unwrap());
+        let mut x = 0;
+        while x < width as usize {
+            let mut run = 1;
+            while x + run < width as usize && pixel(x + run) == pixel(x) {
+                run += 1;
+            }
+            if run >= 3 {
+                words.extend([0x8000_0000 | run as u32, pixel(x)]);
+                x += run;
+            } else {
+                let start = x;
+                x += run;
+                while x < width as usize {
+                    let mut next = 1;
+                    while x + next < width as usize && pixel(x + next) == pixel(x) {
+                        next += 1;
+                    }
+                    if next >= 3 {
+                        break;
+                    }
+                    x += next;
+                }
+                words.push((x - start) as u32);
+                words.extend((start..x).map(pixel));
+            }
+        }
+    }
+    rows.push(words.len());
+    rows.shrink_to_fit();
+    words.shrink_to_fit();
+    let sparse = SparsePixels {
+        width,
+        height,
+        rows,
+        words,
+    };
+    if sparse.bytes() >= pixels.data().len() {
+        FlattenedPixels::Dense(pixels)
+    } else {
+        FlattenedPixels::Sparse(sparse)
+    }
+}
+impl SparsePixels {
+    fn bytes(&self) -> usize {
+        self.words.capacity() * 4
+            + self.rows.capacity() * std::mem::size_of::<usize>()
+            + std::mem::size_of::<Self>()
+    }
+    fn blit(
+        &self,
+        bytes: &mut [u8],
+        size: (u32, u32),
+        damage: Damage,
+        origin: (i32, i32),
+        opacity: f32,
+        swap_red_blue: bool,
+    ) {
+        let (width, height) = size;
+        let alpha = u32::from((opacity * 255.).round() as u8);
+        let scale = |v: u8| (((u32::from(v) * alpha + 128) * 257) >> 16) as u8;
+        for y in damage.y.min(height)..(damage.y + damage.h).min(height) {
+            let x0 = damage.x.min(width) as i64;
+            let x1 = (damage.x + damage.w).min(width) as i64;
+            let out = &mut bytes[(y as usize * width as usize + x0 as usize) * 4
+                ..(y as usize * width as usize + x1 as usize) * 4];
+            out.fill(0);
+            let sy = i64::from(y) - i64::from(origin.1);
+            if sy < 0 || sy >= i64::from(self.height) {
+                continue;
+            }
+            let sx0 = x0.max(i64::from(origin.0)).max(0) - i64::from(origin.0);
+            let sx1 = x1
+                .min(i64::from(origin.0) + i64::from(self.width))
+                .min(i64::from(width))
+                - i64::from(origin.0);
+            let (mut x, mut index) = (0_i64, self.rows[sy as usize]);
+            while index < self.rows[sy as usize + 1] {
+                let command = self.words[index];
+                index += 1;
+                let repeat = command & 0x8000_0000 != 0;
+                let len = (command & 0x7fff_ffff) as i64;
+                let start = x.max(sx0);
+                let end = (x + len).min(sx1);
+                if start < end {
+                    if repeat {
+                        let [r, g, b, a] = self.words[index].to_ne_bytes();
+                        let color = [
+                            if swap_red_blue { scale(b) } else { scale(r) },
+                            scale(g),
+                            if swap_red_blue { scale(r) } else { scale(b) },
+                            scale(a),
+                        ];
+                        let from = (y as usize * width as usize
+                            + (i64::from(origin.0) + start) as usize)
+                            * 4;
+                        let to = from + (end - start) as usize * 4;
+                        bytes[from..to].as_chunks_mut::<4>().0.fill(color);
+                    } else {
+                        for sx in start..end {
+                            let [r, g, b, a] = self.words[index + (sx - x) as usize].to_ne_bytes();
+                            let dst = (y as usize * width as usize
+                                + (i64::from(origin.0) + sx) as usize)
+                                * 4;
+                            bytes[dst..dst + 4].copy_from_slice(&[
+                                if swap_red_blue { scale(b) } else { scale(r) },
+                                scale(g),
+                                if swap_red_blue { scale(r) } else { scale(b) },
+                                scale(a),
+                            ]);
+                        }
+                    }
+                }
+                if repeat {
+                    index += 1;
+                } else {
+                    index += len as usize;
+                }
+                x += len;
+            }
+        }
+    }
+}
+/// Write premultiplied pixels into cleared damage, with opacity and optional BGRA swap.
 fn blit_with_opacity(
     bytes: &mut [u8],
     (width, height): (u32, u32),
@@ -3975,6 +4236,127 @@ mod tests {
         }
     }
     #[test]
+    fn frozen_cpu_content_survives_hidden_pose_and_reopens_without_repainting() {
+        let mut scene = scene();
+        let mut frozen = TreeCpuRenderer::snapshot(&scene, 1.).unwrap();
+        scene.offset = (3., 4.);
+        for format in [PixelFormat::Rgba, PixelFormat::Bgra] {
+            for opacity in [0., 0.2, 1.] {
+                scene.opacity = opacity;
+                let mut reference =
+                    TreeCpuRenderer::with_opaque_composition(OpaqueComposition::Cached);
+                reference.prepare(&scene, 1.).unwrap();
+                let mut expected = vec![255; 40 * 40 * 4];
+                let mut actual = expected.clone();
+                for (renderer, bytes) in
+                    [(&mut reference, &mut expected), (&mut frozen, &mut actual)]
+                {
+                    renderer
+                        .render(
+                            &scene,
+                            ShmTarget {
+                                bytes,
+                                width: 40,
+                                height: 40,
+                                scale: 1.,
+                                format,
+                            },
+                            Damage::full(40, 40),
+                        )
+                        .unwrap();
+                }
+                assert_eq!(actual, expected);
+            }
+        }
+        assert_eq!(
+            frozen.opacity_builds, 1,
+            "hidden and reopened poses reuse the frozen pixels"
+        );
+    }
+    #[test]
+    fn rle_snapshot_matches_dense_opacity_blits_and_saves_uniform_margins() {
+        let mut scene = scene();
+        scene.width = 100.;
+        scene.bounds = Rect::new(0., 0., 100., 80.);
+        scene.layers.clear();
+        scene.primitives.insert(
+            0,
+            Primitive::Rounded {
+                rect: Rect::new(1., 1., 98., 78.),
+                radius: 0.,
+                fill: [20, 25, 35, 160],
+                border: None,
+            },
+        );
+        scene.offset = (0., 0.);
+        let mut sparse = TreeCpuRenderer::snapshot(&scene, 1.).unwrap();
+        let mut dense = TreeCpuRenderer::with_opaque_composition(OpaqueComposition::Cached);
+        dense.prepare(&scene, 1.).unwrap();
+        dense.cache_content(&scene).unwrap();
+        let Some((_, _, FlattenedPixels::Sparse(pixels))) = sparse.flattened.as_ref() else {
+            panic!("snapshot should RLE-compress its repeated pixels");
+        };
+        let stored = pixels.bytes();
+        assert!(
+            stored * 2 < (pixels.width * pixels.height * 4) as usize,
+            "stored={stored}, full={}x{}",
+            pixels.width,
+            pixels.height
+        );
+        for format in [PixelFormat::Rgba, PixelFormat::Bgra] {
+            for opacity in [0., 0.2, 1.] {
+                scene.opacity = opacity;
+                for offset in [(0., 0.), (-3.25, 4.5), (3.25, -4.5), (-3.25, -4.5)] {
+                    scene.offset = offset;
+                    for damage in [
+                        Damage {
+                            x: 0,
+                            y: 0,
+                            w: 12,
+                            h: 20,
+                        },
+                        Damage {
+                            x: 7,
+                            y: 9,
+                            w: 23,
+                            h: 17,
+                        },
+                        Damage {
+                            x: 28,
+                            y: 0,
+                            w: 12,
+                            h: 40,
+                        },
+                    ] {
+                        let mut expected = vec![0x5a; 40 * 40 * 4];
+                        let mut actual = expected.clone();
+                        for (renderer, bytes) in
+                            [(&mut dense, &mut expected), (&mut sparse, &mut actual)]
+                        {
+                            renderer
+                                .render(
+                                    &scene,
+                                    ShmTarget {
+                                        bytes,
+                                        width: 40,
+                                        height: 40,
+                                        scale: 1.,
+                                        format,
+                                    },
+                                    damage,
+                                )
+                                .unwrap();
+                        }
+                        assert_eq!(
+                            actual, expected,
+                            "format={format:?} opacity={opacity} offset={offset:?} damage={damage:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+    #[test]
     fn partial_repairs_match_full_pixels_with_opaque_background_corners_clip_and_alpha() {
         let mut scene = scene();
         scene.width = 80.;
@@ -4122,6 +4504,134 @@ mod tests {
         assert_ne!(before.layers[0].bounds, after.layers[0].bounds);
     }
     #[test]
+    fn image_raster_cache_reuses_one_previous_extent_exactly() {
+        let mut scene = scene();
+        let mut cache = TreeCache::default();
+        cache.prepare(&scene, 1.5).unwrap();
+        let first = cache.frame.as_ref().unwrap().items[0]
+            .raster
+            .as_ref()
+            .unwrap()
+            .pixels
+            .data()
+            .to_vec();
+
+        if let Primitive::Image { rect, .. } = &mut scene.primitives[0] {
+            rect.h = 9.;
+        }
+        cache.prepare(&scene, 1.5).unwrap();
+        let second = cache.frame.as_ref().unwrap().items[0]
+            .raster
+            .as_ref()
+            .unwrap()
+            .pixels
+            .data()
+            .to_vec();
+        assert_ne!(first, second, "the altered extent has its own raster");
+        assert_eq!(cache.builds, 2);
+
+        if let Primitive::Image { rect, .. } = &mut scene.primitives[0] {
+            rect.h = 8.;
+        }
+        cache.prepare(&scene, 1.5).unwrap();
+        assert_eq!(
+            cache.builds, 2,
+            "returning to either exact key reuses its variant"
+        );
+        assert_eq!(
+            cache.frame.as_ref().unwrap().items[0]
+                .raster
+                .as_ref()
+                .unwrap()
+                .pixels
+                .data(),
+            first
+        );
+        let mut fresh = TreeCache::default();
+        fresh.prepare(&scene, 1.5).unwrap();
+        assert_eq!(
+            fresh.frame.as_ref().unwrap().items[0]
+                .raster
+                .as_ref()
+                .unwrap()
+                .pixels
+                .data(),
+            first,
+            "a reused image raster matches fresh rendering"
+        );
+    }
+
+    #[test]
+    fn image_raster_variants_release_on_idle_and_look_retirement() {
+        let mut scene = scene();
+        let mut cache = TreeCache::default();
+        cache.prepare(&scene, 1.5).unwrap();
+        let slot = ("row/image/0".to_owned(), 1.5_f32.to_bits());
+        let first = Arc::downgrade(&cache.entries[&slot].raster);
+        if let Primitive::Image { rect, .. } = &mut scene.primitives[0] {
+            rect.h = 9.;
+        }
+        cache.prepare(&scene, 1.5).unwrap();
+        assert!(
+            first.upgrade().is_some(),
+            "the prior extent is retained while active"
+        );
+        let builds = cache.builds;
+        cache.trim_idle();
+        assert!(
+            first.upgrade().is_none(),
+            "idle trim releases the extra variant"
+        );
+        cache.prepare(&scene, 1.5).unwrap();
+        assert_eq!(
+            cache.builds, builds,
+            "the current extent survives idle trim"
+        );
+
+        let since = cache.serial();
+        if let Primitive::Image { rect, .. } = &mut scene.primitives[0] {
+            rect.h = 8.;
+        }
+        cache.prepare(&scene, 1.5).unwrap();
+        let retired = Arc::downgrade(cache.entries[&slot].previous.as_ref().unwrap());
+        assert!(retired.upgrade().is_some());
+        cache.drop_unused_since(since);
+        assert!(
+            retired.upgrade().is_none(),
+            "look retirement releases extra variants"
+        );
+    }
+
+    #[test]
+    fn image_variant_budget_discards_prior_extent_before_failing() {
+        let mut scene = scene();
+        let budget = bead_core::cache::Budget::new("test-image-variants", 1024);
+        let mut cache = TreeCache {
+            raster_budget: Some(budget.clone()),
+            ..TreeCache::default()
+        };
+        if let Primitive::Image { rect, .. } = &mut scene.primitives[0] {
+            rect.h = 7.;
+        }
+        cache.prepare(&scene, 1.).unwrap();
+        let first = Arc::downgrade(&cache.entries[&("row/image/0".into(), 1_f32.to_bits())].raster);
+        if let Primitive::Image { rect, .. } = &mut scene.primitives[0] {
+            rect.h = 8.;
+        }
+        cache.prepare(&scene, 1.).unwrap();
+        assert!(first.upgrade().is_some());
+        if let Primitive::Image { rect, .. } = &mut scene.primitives[0] {
+            rect.h = 9.;
+        }
+        cache.prepare(&scene, 1.).unwrap();
+        assert!(
+            first.upgrade().is_none(),
+            "budget pressure evicts the previous variant first"
+        );
+        assert!(budget.used() <= 1024);
+    }
+
+    #[test]
     fn same_path_asset_update_has_one_pixel_delta_and_dynamic_fill_never_bakes() {
         let mut scene = scene();
         let mut cache = TreeCache::default();
@@ -4153,6 +4663,18 @@ mod tests {
                 w: 1,
                 h: 1
             }
+        );
+        let builds = cache.builds;
+        let bytes = scene.asset_data[std::path::Path::new("proof.png")].clone();
+        scene.asset_data.insert("proof-renamed.png".into(), bytes);
+        if let Primitive::Image { path, .. } = &mut scene.primitives[0] {
+            *path = "proof-renamed.png".into();
+        }
+        cache.prepare(&scene, 1.).unwrap();
+        assert_eq!(
+            cache.builds,
+            builds + 1,
+            "a changed image path remains a full-signature miss"
         );
     }
     #[test]

@@ -198,6 +198,44 @@ fn advise_frame_pages(bytes: &mut [u8], include_edges: bool) {
 /// Set `SHM_COMPACT_FOCUSED_IDLE` to `SHM_COMPACT_IDLE` for the previous behaviour.
 const SHM_COMPACT_IDLE: Duration = Duration::from_millis(250);
 const SHM_COMPACT_FOCUSED_IDLE: Duration = Duration::from_secs(5);
+
+#[cfg(feature = "native-gl")]
+pub(super) struct GlPreparation {
+    result: std::sync::mpsc::Receiver<Result<bead_render::gl::PreparedTransport, String>>,
+    worker: Option<std::thread::JoinHandle<()>>,
+    // Declared last: unused EGL objects are destroyed before the connection.
+    _connection: Connection,
+}
+#[cfg(feature = "native-gl")]
+impl Drop for GlPreparation {
+    fn drop(&mut self) {
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+        if let Ok(Ok(prepared)) = self.result.try_recv() {
+            // SAFETY: one preparation is allowed, and no UI GL transport was installed.
+            if let Err(error) = unsafe { prepared.shutdown_exclusive() } {
+                eprintln!("GL_RELEASE_ERROR {error}");
+            }
+        }
+    }
+}
+#[cfg(feature = "native-gl")]
+struct PanelSnapshotWorker(Option<std::thread::JoinHandle<()>>);
+#[cfg(feature = "native-gl")]
+impl PanelSnapshotWorker {
+    fn join(&mut self) -> Option<std::thread::Result<()>> {
+        self.0.take().map(std::thread::JoinHandle::join)
+    }
+}
+#[cfg(feature = "native-gl")]
+impl Drop for PanelSnapshotWorker {
+    fn drop(&mut self) {
+        if let Some(worker) = self.0.take() {
+            let _ = worker.join();
+        }
+    }
+}
 fn shm_compact_idle(surface: &Surface) -> Duration {
     if surface
         .keyboard_visible
@@ -209,6 +247,296 @@ fn shm_compact_idle(surface: &Surface) -> Duration {
     }
 }
 impl App {
+    #[cfg(feature = "native-gl")]
+    pub(super) fn prepare_panel_gl(&mut self) -> Result<(), Box<dyn Error>> {
+        if self.gl.is_some()
+            || self.gl_preparation.is_some()
+            || self.panel_gl_prewarm_error.is_some()
+            || self.options.renderer != RendererKind::Cpu
+            || !self.panel_target
+            || !self
+                .options
+                .panel_spec
+                .as_ref()
+                .is_some_and(|s| s.retain_when_closed)
+            || self.options.companion.as_ref().map(|(_, kind)| *kind)
+                != Some(RendererKind::FemtovgGl)
+        {
+            return Ok(());
+        }
+        let (sender, result) = std::sync::mpsc::channel();
+        let connection = self.conn.clone();
+        let worker = std::thread::Builder::new()
+            .name("bead-gl-prepare".into())
+            .spawn(move || {
+                use raw_window_handle::{RawDisplayHandle, WaylandDisplayHandle};
+                let prepared = (|| {
+                    let _span = bead_core::profile::Span::new("panel_transport_prewarm");
+                    let pointer = std::ptr::NonNull::new(connection.backend().display_ptr().cast())
+                        .ok_or("native display missing")?;
+                    let display = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(pointer));
+                    // SAFETY: App serializes setup, and the preparation guard holds the connection.
+                    unsafe { bead_render::gl::PreparedTransport::new(display) }
+                        .map_err(|e| e.to_string())
+                })();
+                if let Err(std::sync::mpsc::SendError(Ok(prepared))) = sender.send(prepared) {
+                    // SAFETY: no receiver installed this transport, and setup is exclusive.
+                    let _ = unsafe { prepared.shutdown_exclusive() };
+                }
+            })?;
+        self.gl_preparation = Some(GlPreparation {
+            result,
+            worker: Some(worker),
+            _connection: self.conn.clone(),
+        });
+        if let Err(error) = self.loop_handle.insert_source(
+            Timer::from_duration(Duration::from_millis(2)),
+            |_, _, app| {
+                let Some(preparation) = &app.gl_preparation else {
+                    return TimeoutAction::Drop;
+                };
+                match preparation.result.try_recv() {
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {
+                        return TimeoutAction::ToDuration(Duration::from_millis(2));
+                    }
+                    ready => {
+                        let prepared = ready
+                            .unwrap_or_else(|_| Err("GL preparation worker disconnected".into()));
+                        let _guard = app.gl_preparation.take();
+                        let active_gl_companion = app
+                            .companion
+                            .as_ref()
+                            .is_some_and(|(_, _, kind)| *kind == RendererKind::FemtovgGl);
+                        let wanted = app.gl.is_none()
+                            && app.panel_runtime.is_some()
+                            && (!app.panel_gpu_suspended || active_gl_companion)
+                            && app.options.companion.as_ref().map(|(_, kind)| *kind)
+                                == Some(RendererKind::FemtovgGl);
+                        match prepared {
+                            Ok(prepared) if wanted => app.gl = Some(prepared.into_transport()),
+                            // Another transport owns the display: only drop this context.
+                            Ok(prepared) if app.gl.is_some() => drop(prepared),
+                            Ok(prepared) => {
+                                // SAFETY: no GPU renderer or surface was created during preparation.
+                                if let Err(error) = unsafe { prepared.shutdown_exclusive() } {
+                                    app.fail(error);
+                                }
+                            }
+                            Err(error) if wanted => app.panel_gl_prewarm_error = Some(error),
+                            Err(_) => (),
+                        }
+                    }
+                }
+                let qh = app.qh.clone();
+                let indices: Vec<_> = app
+                    .surfaces
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, s)| s.companion)
+                    .map(|(i, _)| i)
+                    .collect();
+                for index in indices {
+                    app.draw(index, &qh);
+                }
+                TimeoutAction::Drop
+            },
+        ) {
+            self.gl_preparation.take();
+            return Err(error.into());
+        }
+        Ok(())
+    }
+    /// Cache a CPU first frame, then retire closed-panel GPU and SHM allocations.
+    #[cfg(feature = "native-gl")]
+    pub(super) fn start_panel_snapshot(&mut self) -> Result<(), Box<dyn Error>> {
+        if self.panel_snapshot_pending
+            || self.panel_target
+            || self.panel_runtime.is_none()
+            || !self
+                .options
+                .panel_spec
+                .as_ref()
+                .is_some_and(|spec| spec.retain_when_closed)
+            || self.options.companion.as_ref().map(|(_, kind)| *kind)
+                != Some(RendererKind::FemtovgGl)
+        {
+            return Ok(());
+        }
+        let Some((scene, _, _)) = &self.companion else {
+            return Ok(());
+        };
+        let scene = scene.clone();
+        let epoch = self.panel_epoch;
+        let close_epoch = self.panel_close_epoch;
+        let ui_serial = self.panel_ui_serial;
+        let scale = self
+            .surfaces
+            .iter()
+            .find(|surface| surface.companion)
+            .map_or(1., |surface| surface.scale120 as f32 / 120.);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let worker = std::thread::Builder::new()
+            .name("bead-panel-cpu-snapshot".into())
+            .spawn(move || {
+                let _span = bead_core::profile::Span::new("panel_cpu_snapshot");
+                let result = bead_render::tree::TreeCpuRenderer::snapshot(&scene, scale)
+                    .map_err(|error| error.to_string());
+                let _ = sender.send(result);
+            })?;
+        self.panel_snapshot_pending = true;
+        let mut worker = PanelSnapshotWorker(Some(worker));
+        if let Err(error) = self.loop_handle.insert_source(
+            Timer::from_duration(Duration::from_millis(2)),
+            move |_, _, app| match receiver.try_recv() {
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    TimeoutAction::ToDuration(Duration::from_millis(2))
+                }
+                result => {
+                    let joined = worker.join().is_some_and(|result| result.is_ok());
+                    app.panel_snapshot_pending = false;
+                    if !joined {
+                        app.fail("panel CPU snapshot worker panicked");
+                        return TimeoutAction::Drop;
+                    }
+                    let current_scale = app
+                        .surfaces
+                        .iter()
+                        .find(|surface| surface.companion)
+                        .map_or(1., |surface| surface.scale120 as f32 / 120.);
+                    let current = !app.panel_target
+                        && app.panel_runtime.is_some()
+                        && app.panel_epoch == epoch
+                        && app.panel_close_epoch == close_epoch
+                        && app.panel_ui_serial == ui_serial
+                        && current_scale.to_bits() == scale.to_bits();
+                    if current {
+                        match result.unwrap_or_else(|_| Err("snapshot worker disconnected".into()))
+                        {
+                            Ok(snapshot) => {
+                                if let Err(error) = app.suspend_panel_gpu(snapshot) {
+                                    app.fail(error);
+                                }
+                            }
+                            Err(error) => app.fail(error),
+                        }
+                    } else if !app.panel_target
+                        && app.panel_runtime.is_some()
+                        && let Err(error) = app.start_panel_snapshot()
+                    {
+                        app.fail(error);
+                    }
+                    TimeoutAction::Drop
+                }
+            },
+        ) {
+            self.panel_snapshot_pending = false;
+            return Err(error.into());
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "native-gl")]
+    fn release_companion_gpu_resources(&mut self) -> Result<(), Box<dyn Error>> {
+        if !self
+            .companion
+            .as_ref()
+            .is_some_and(|(_, _, kind)| *kind == RendererKind::FemtovgGl)
+        {
+            return Ok(());
+        }
+        if let Some(transport) = &self.gl
+            && let Some(surface) = self.surfaces.iter().find(|s| s.companion && s.gl.is_some())
+        {
+            let scale = surface.scale120 as f32 / 120.;
+            transport.activate(
+                surface.gl.as_ref().unwrap(),
+                (surface.width as f32 * scale).ceil() as u32,
+                (surface.height as f32 * scale).ceil() as u32,
+            )?;
+            if let Some((_, renderer, _)) = &mut self.companion {
+                renderer.release_gpu_resources();
+            }
+            transport.unbind()?;
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "native-gl")]
+    pub(super) fn suspend_panel_gpu(
+        &mut self,
+        snapshot: bead_render::tree::TreeCpuRenderer,
+    ) -> Result<(), Box<dyn Error>> {
+        let _span = bead_core::profile::Span::new("panel_gpu_retire");
+        #[cfg(feature = "native-gl")]
+        if self.options.companion.as_ref().map(|(_, kind)| *kind) == Some(RendererKind::FemtovgGl) {
+            self.release_companion_gpu_resources()?;
+            if let Some((_, renderer, kind)) = &mut self.companion {
+                *renderer = Box::new(snapshot);
+                *kind = RendererKind::Cpu;
+                self.panel_cpu_cached = true;
+            }
+            for surface in self.surfaces.iter_mut().filter(|s| s.companion) {
+                // Replace the transparent GL buffer too: otherwise the compositor
+                // can retain its BO after our EGL display has been terminated.
+                // Keep the role mapped; a null attachment resets layer-shell state.
+                let wl_surface = surface.wl_surface().clone();
+                drop(surface.gl.take());
+                surface.gl_prepared = false;
+                surface.gl_prepare_pending = false;
+                surface.callbacks.invalidate();
+                surface.visual_damage = Default::default();
+                surface.buffers.clear();
+                surface.pool = SlotPool::new(4096, &self.shm)?;
+                surface.previous = None;
+                let scale = surface.scale120 as f32 / 120.;
+                let (width, height) = if let Some(viewport) = &surface.viewport {
+                    wl_surface.set_buffer_scale(1);
+                    viewport.set_destination(surface.width as i32, surface.height as i32);
+                    (1, 1)
+                } else {
+                    (
+                        (surface.width as f32 * scale).ceil() as i32,
+                        (surface.height as f32 * scale).ceil() as i32,
+                    )
+                };
+                // A fresh memfd is zero-filled; do not fault transparent pages in.
+                let (buffer, _) = surface.pool.create_buffer(
+                    width,
+                    height,
+                    width * 4,
+                    wl_shm::Format::Argb8888,
+                )?;
+                buffer.attach_to(&wl_surface)?;
+                wl_surface.damage_buffer(0, 0, width, height);
+                wl_surface.commit();
+                surface.buffers.push(Reusable {
+                    buffer,
+                    pending: Vec::new(),
+                    painted: false,
+                });
+                surface.geometry = (0, 0);
+            }
+            if self.options.renderer == RendererKind::Cpu
+                && !self.has_gl_surfaces()
+                && let Some(transport) = self.gl.take()
+            {
+                // SAFETY: renderers and all EGL surfaces are gone; the CPU bar owns no EGL objects.
+                unsafe { transport.shutdown_exclusive() }?;
+            }
+            self.options.lazy_gl = true;
+            self.companion_policy = Default::default();
+            self.panel_gpu_suspended = true;
+            #[cfg(all(target_os = "linux", target_env = "gnu"))]
+            unsafe {
+                libc::malloc_trim(0);
+            }
+            println!(
+                "PANEL_GPU_SUSPENDED shared_context_retained={}",
+                self.gl.is_some()
+            );
+        }
+        Ok(())
+    }
     fn trim_idle_shm(&mut self, index: usize) {
         let surface = &mut self.surfaces[index];
         if surface.shm_trim_pending
@@ -317,13 +645,43 @@ impl App {
         if desired != Some(RendererKind::FemtovgGl) {
             return Ok(());
         }
+        #[cfg(feature = "native-gl")]
+        if self.gl_preparation.is_some()
+            || (self.options.renderer == RendererKind::Cpu
+                && self.gl.is_none()
+                && self
+                    .options
+                    .panel_spec
+                    .as_ref()
+                    .is_some_and(|s| s.retain_when_closed))
+        {
+            return Ok(());
+        }
         let now = self.started.elapsed().as_secs_f64();
         // Moving a cached surface does not need a cold GPU upgrade. Keep an
         // existing GL renderer warm during prewarm, but let an idle CPU panel
         // hand off and return using its already rendered pixels.
         let animated = self.options.animate
             || (self.panel_dock_transition.is_none() && self.animations.active(now));
-        if self.companion_policy.frame(now, animated) {
+        let promote = self.companion_policy.frame(now, animated);
+        #[cfg(feature = "native-gl")]
+        let promote = if self.panel_dock_transition.is_none()
+            && self.gl.is_some()
+            && self
+                .options
+                .panel_spec
+                .as_ref()
+                .is_some_and(|s| s.retain_when_closed)
+        {
+            // Cold content may use already-prepared GL immediately. A warm open
+            // paints its CPU snapshot while the one replacement context starts.
+            self.companion
+                .as_ref()
+                .is_some_and(|(_, _, kind)| *kind != RendererKind::FemtovgGl)
+        } else {
+            promote
+        };
+        if promote {
             if let Some((_, renderer, kind)) = &mut self.companion {
                 *renderer = bead_render::renderer(RendererKind::FemtovgGl)?;
                 *kind = RendererKind::FemtovgGl;
@@ -358,6 +716,10 @@ impl App {
                         app.companion_policy.frame(now, true);
                     }
                     if app.companion_policy.expire(now) {
+                        #[cfg(feature="native-gl")]
+                        if let Err(error) = app.release_companion_gpu_resources() {
+                            app.fail(error); return TimeoutAction::Drop;
+                        }
                         if let Some((_, renderer, kind)) = &mut app.companion {
                             match bead_render::renderer(RendererKind::Cpu) {
                                 Ok(cpu) => { *renderer = cpu; *kind = RendererKind::Cpu; }
@@ -416,6 +778,13 @@ impl App {
         use std::ptr::NonNull;
         let surface = &mut self.surfaces[index];
         let (w, h, _, _) = buffer_dimensions(surface.width, surface.height, surface.scale120)?;
+        let renderer_kind = if surface.companion {
+            self.companion
+                .as_ref()
+                .map_or(RendererKind::Cpu, |(_, _, kind)| *kind)
+        } else {
+            self.options.renderer
+        };
         let display = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
             NonNull::new(self.conn.backend().display_ptr().cast())
                 .ok_or("native display missing")?,
@@ -425,7 +794,7 @@ impl App {
                 .ok_or("native surface missing")?,
         ));
         #[cfg(feature = "native-gl")]
-        if self.options.renderer == RendererKind::FemtovgGl {
+        if renderer_kind == RendererKind::FemtovgGl {
             if self.gl.is_none() {
                 // SAFETY: the retained connection outlives the EGL context/surfaces.
                 self.gl = Some(unsafe { bead_render::gl::Transport::new(display) }?);
@@ -463,7 +832,7 @@ impl App {
                         window,
                         w as u32,
                         h as u32,
-                        self.options.renderer,
+                        renderer_kind,
                     )
                 }?);
             }
@@ -474,6 +843,16 @@ impl App {
         if self.hidden {
             return;
         }
+        if self.surfaces[index].companion && self.panel_gpu_suspended && !self.panel_target {
+            return;
+        }
+        #[cfg(feature = "native-gl")]
+        if self.surfaces[index].companion
+            && let Err(error) = self.prepare_panel_gl()
+        {
+            self.fail(error);
+            return;
+        }
         if self.wallpaper_palette_outputs.is_some() {
             self.surfaces[index].redraw = true;
             return;
@@ -482,6 +861,18 @@ impl App {
             // A worker failure publishes an error scene. A loading worker must never
             // expose the fallback buffer, even when hydration takes longer than a frame.
             if !self.panel_ready {
+                self.surfaces[index].redraw = true;
+                return;
+            }
+            #[cfg(feature = "native-gl")]
+            if self.gl_preparation.is_some()
+                && self.gl.is_none()
+                && (self
+                    .companion
+                    .as_ref()
+                    .is_some_and(|(_, _, kind)| *kind == RendererKind::FemtovgGl)
+                    || !self.panel_cpu_cached)
+            {
                 self.surfaces[index].redraw = true;
                 return;
             }
@@ -630,6 +1021,12 @@ impl App {
         // (motion id, clock of this frame) once this frame is the first to show a motion.
         let mut motion_clock: Option<(String, f64)> = None;
         let result = (|| -> Result<(), Box<dyn Error>> {
+            #[cfg(feature = "native-gl")]
+            if self.surfaces[index].companion
+                && let Some(error) = self.panel_gl_prewarm_error.take()
+            {
+                return Err(Box::new(GpuUnavailable(error)));
+            }
             let s = &mut self.surfaces[index];
             let wl_surface = s.wl_surface().clone();
             if s.configured
@@ -667,6 +1064,11 @@ impl App {
                         qh,
                         PresentationData {
                             source_epoch,
+                            visibility: if s.companion {
+                                self.panel_close_epoch
+                            } else {
+                                0
+                            },
                             update: s.ui_serial,
                             surface: wl_surface.clone(),
                             generation,
@@ -1184,6 +1586,11 @@ impl App {
                         qh,
                         PresentationData {
                             source_epoch: if s.companion { self.panel_epoch } else { 0 },
+                            visibility: if s.companion {
+                                self.panel_close_epoch
+                            } else {
+                                0
+                            },
                             update: s.ui_serial,
                             surface: wl_surface.clone(),
                             generation: scene.resource_revision,
@@ -1317,6 +1724,11 @@ impl App {
                             qh,
                             PresentationData {
                                 source_epoch: if s.companion { self.panel_epoch } else { 0 },
+                                visibility: if s.companion {
+                                    self.panel_close_epoch
+                                } else {
+                                    0
+                                },
                                 update: s.ui_serial,
                                 surface: wl_surface.clone(),
                                 generation: scene.resource_revision,
@@ -1545,6 +1957,11 @@ impl App {
                     qh,
                     PresentationData {
                         source_epoch: if s.companion { self.panel_epoch } else { 0 },
+                        visibility: if s.companion {
+                            self.panel_close_epoch
+                        } else {
+                            0
+                        },
                         update: s.ui_serial,
                         surface: wl_surface.clone(),
                         generation: scene.resource_revision,

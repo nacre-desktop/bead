@@ -46,6 +46,22 @@ opt-level = 3
 [profile.release.package.cosmic-text]
 opt-level = 3
 
+# Wallpaper decoding is an interactive hot path, like raster/text work.
+[profile.release.package.zune-jpeg]
+opt-level = 3
+
+[profile.release.package.zune-core]
+opt-level = 3
+
+[profile.release.package.png]
+opt-level = 3
+
+[profile.release.package.fdeflate]
+opt-level = 3
+
+[profile.release.package.fast_image_resize]
+opt-level = 3
+
 # Upstream 0.8.9 leaves DBusMenu signal tasks alive after an item exits.
 [patch.crates-io]
 system-tray = { path = "vendor/system-tray" }

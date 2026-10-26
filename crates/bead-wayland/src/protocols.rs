@@ -394,7 +394,9 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
                             s.companion
                         );
                     }
-                    if s.presented_generation != Some(data.update) {
+                    if s.presented_generation != Some(data.update)
+                        && (!s.companion || data.visibility == state.panel_close_epoch)
+                    {
                         bead_core::vprintln!(
                             "UI_PRESENTED generation={} monotonic_ns={} refresh_ns={} companion={} update={} cpu_ns={}",
                             data.generation,

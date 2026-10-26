@@ -594,6 +594,8 @@ impl Extras {
                     })
                     .filter(|catalogue| catalogue.validate().is_ok());
                 if let Some(catalogue) = catalogue {
+                    let mut resources_changed =
+                        request_ids.is_empty() || !state.catalogue_pending_handles.is_empty();
                     let mut seen = std::collections::BTreeSet::new();
                     let incoming: Vec<Json> = catalogue
                         .entries
@@ -618,15 +620,21 @@ impl Extras {
                             {
                                 for field in ["thumbnail", "preview"] {
                                     if entry[field].as_str().is_some_and(|path| !path.is_empty()) {
+                                        resources_changed |= existing[field] != entry[field];
                                         existing[field] = entry[field].clone();
                                     }
                                 }
                                 existing["active"] = entry["active"].clone();
+                                if request_ids.iter().any(|requested| requested.as_str() == id) {
+                                    existing["video_predecode"] = entry["video_predecode"].clone();
+                                }
                             }
                         }
                         state.catalogue_settled_handles.extend(request_handles);
                     }
-                    state.image_revision = state.image_revision.wrapping_add(1);
+                    if resources_changed {
+                        state.image_revision = state.image_revision.wrapping_add(1);
+                    }
                     state.message.clear();
                 } else {
                     for handle in request_handles {
@@ -884,17 +892,11 @@ impl Extras {
                 .preview
                 .clone();
             let generation = preview.as_ref().map(|preview| {
-                let path = entry["preview"]
-                    .as_str()
-                    .filter(|path| !path.is_empty())
-                    .or_else(|| entry["thumbnail"].as_str())
-                    .unwrap_or_default();
                 preview.select(
                     boot.clone(),
                     id.into(),
-                    path.into(),
                     entry["kind"].as_str().unwrap_or("image").into(),
-                    entry["animated"] == true,
+                    serde_json::from_value(entry["video_predecode"].clone()).ok(),
                 )
             });
             let admitted = WallpaperActivationQueue::submit(
@@ -1022,7 +1024,7 @@ impl Extras {
             state.close = true;
         }
     }
-    /// Resolve only advertised cache paths; the byte-accounted cache dies with this open panel.
+    /// Resolve advertised cache paths; keep encoded leases only for this scene's images.
     pub fn attach_images(&self, scene: &mut bead::render::Scene, wake: Option<CallWake>) {
         const LIMIT: usize = 16 * bead::core::cache::MIB;
         let mut state = self.state.borrow_mut();
@@ -1081,15 +1083,13 @@ impl Extras {
             let primary_image = primary_file
                 .as_ref()
                 .and_then(|file| cached_wallpaper_image(&mut state, file, LIMIT));
-            let fallback_image = fallback_file
-                .as_ref()
-                .and_then(|file| cached_wallpaper_image(&mut state, file, LIMIT));
             if primary_image.is_none() && !state.catalogue_settled_handles.contains(&logical) {
                 visible_handles.insert(logical.clone());
             }
-            let loaded = primary_image
-                .zip(primary_file)
-                .or_else(|| fallback_image.zip(fallback_file));
+            let loaded = primary_image.zip(primary_file).or_else(|| {
+                let file = fallback_file?;
+                cached_wallpaper_image(&mut state, &file, LIMIT).map(|bytes| (bytes, file))
+            });
             let Some((bytes, file)) = loaded else {
                 continue;
             };
@@ -1107,15 +1107,34 @@ impl Extras {
             !matches!(primitive, bead::render::Primitive::Image { path, .. }
                 if path.to_str().is_some_and(|name| name.starts_with("@icon:wallpaper:")))
         });
+        if self.kind == Kind::Wallpaper {
+            // Luau includes the visible cards and their neighbours in this scene.
+            // Do not keep encoded files from every earlier carousel position warm.
+            state
+                .images
+                .retain(|path, _| scene.asset_data.contains_key(path));
+            state.image_bytes = state
+                .images
+                .iter()
+                .map(|(path, bytes)| bytes.len() + path.capacity() + 128)
+                .sum();
+        }
+        // Palette preparation is required even when the advertised thumbnails
+        // are already cached. It must not hold back that ready first frame.
+        let request_handles: std::collections::BTreeSet<String> = state
+            .catalogue_visible_handles
+            .difference(&state.catalogue_settled_handles)
+            .cloned()
+            .collect();
         state.catalogue_pending_handles = visible_handles;
         if self.kind == Kind::Wallpaper
             && state.wallpaper_open
             && state.catalogue.is_none()
             && let Some(wake) = wake
-            && !state.catalogue_pending_handles.is_empty()
+            && !request_handles.is_empty()
         {
             let mut ids = Vec::new();
-            for handle in &state.catalogue_pending_handles {
+            for handle in &request_handles {
                 if let Some((id, _)) = parse_wallpaper_handle(handle)
                     && !ids.iter().any(|known: &String| known == id)
                 {
@@ -1125,8 +1144,7 @@ impl Extras {
                     }
                 }
             }
-            let requested_handles: Vec<String> = state
-                .catalogue_pending_handles
+            let requested_handles: Vec<String> = request_handles
                 .iter()
                 .filter(|handle| {
                     parse_wallpaper_handle(handle)

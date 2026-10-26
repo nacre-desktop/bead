@@ -31,6 +31,11 @@ pub(super) struct App {
     pub(super) panel_ready: bool,
     pub(super) panel_reload_pending: bool,
     pub(super) panel_target: bool,
+    pub(super) panel_gpu_suspended: bool,
+    #[cfg(feature = "native-gl")]
+    pub(super) panel_cpu_cached: bool,
+    #[cfg(feature = "native-gl")]
+    pub(super) panel_snapshot_pending: bool,
     /// The shown view was offered by a service (see `UiEvent::CompanionOffer`).
     pub(super) panel_ambient: bool,
     pub(super) panel_hovered: Option<String>,
@@ -74,6 +79,10 @@ pub(super) struct App {
     pub(super) gpu: Option<bead_render::gpu::Transport>,
     #[cfg(feature = "native-gl")]
     pub(super) gl: Option<bead_render::gl::Transport>,
+    #[cfg(feature = "native-gl")]
+    pub(super) panel_gl_prewarm_error: Option<String>,
+    #[cfg(feature = "native-gl")]
+    pub(super) gl_preparation: Option<rendering::GlPreparation>,
     pub(super) conn: Connection,
     pub(super) registry: RegistryState,
     pub(super) output: OutputState,
@@ -100,6 +109,7 @@ pub(super) struct App {
     pub(super) wallpaper_palette: Option<std::collections::BTreeMap<String, [u8; 4]>>,
     pub(super) wallpaper_palette_outputs: Option<PendingPalette>,
     pub(super) wallpaper_pending_frames: Vec<WallpaperFrame>,
+    pub(super) wallpaper_unconfirmed: Vec<crate::WallpaperFrameConfirmation>,
     pub(super) report_surfaces: Vec<serde_json::Value>,
     pub(super) options: Options,
     pub(super) signal: LoopSignal,
@@ -160,6 +170,88 @@ impl PendingPalette {
     pub(super) fn ready(&self) -> bool {
         self.expected.is_subset(&self.settled) && (self.panel_epoch.is_none() || self.panel_settled)
     }
+}
+
+fn frame_matches_palette(
+    frame: &WallpaperFrame,
+    palette: &std::collections::BTreeMap<String, [u8; 4]>,
+) -> bool {
+    frame.palette.0.len() == palette.len()
+        && frame
+            .palette
+            .0
+            .iter()
+            .all(|(key, value)| palette.get(key) == Some(value))
+}
+
+fn same_wallpaper_frame(
+    frame: &WallpaperFrame,
+    output: &str,
+    revision: u64,
+    token: &std::sync::Arc<dyn std::any::Any + Send + Sync>,
+) -> bool {
+    frame.output == output
+        && frame.revision == revision
+        && std::sync::Arc::ptr_eq(&frame.commit_token, token)
+}
+
+fn frame_is_unconfirmed(
+    frame: &WallpaperFrame,
+    unconfirmed: &[crate::WallpaperFrameConfirmation],
+) -> bool {
+    unconfirmed.iter().any(|pending| {
+        same_wallpaper_frame(
+            frame,
+            &pending.output,
+            pending.revision,
+            &pending.commit_token,
+        )
+    })
+}
+
+fn has_unconfirmed_palette_frame(
+    frames: &[WallpaperFrame],
+    unconfirmed: &[crate::WallpaperFrameConfirmation],
+    palette: &std::collections::BTreeMap<String, [u8; 4]>,
+) -> bool {
+    frames.iter().any(|frame| {
+        frame_matches_palette(frame, palette) && frame_is_unconfirmed(frame, unconfirmed)
+    })
+}
+
+fn accepted_palette_waits_for_confirmation(
+    accepted: bool,
+    frames: &[WallpaperFrame],
+    unconfirmed: &[crate::WallpaperFrameConfirmation],
+    palette: &std::collections::BTreeMap<String, [u8; 4]>,
+) -> bool {
+    accepted && has_unconfirmed_palette_frame(frames, unconfirmed, palette)
+}
+
+fn wallpaper_palette_group_ready(
+    waiting: &PendingPalette,
+    frames: &[WallpaperFrame],
+    unconfirmed: &[crate::WallpaperFrameConfirmation],
+) -> bool {
+    waiting.ready() && !has_unconfirmed_palette_frame(frames, unconfirmed, &waiting.palette)
+}
+
+fn aborted_palette_retry_outputs(
+    failed_output: &str,
+    has_newer_request: bool,
+    frames: &[WallpaperFrame],
+    palette: &std::collections::BTreeMap<String, [u8; 4]>,
+) -> Vec<String> {
+    if !has_newer_request {
+        return Vec::new();
+    }
+    frames
+        .iter()
+        .filter(|frame| frame.output != failed_output && frame_matches_palette(frame, palette))
+        .map(|frame| frame.output.clone())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 pub(crate) fn output_event_is_current(current_epoch: Option<u64>, event_epoch: u64) -> bool {
@@ -249,6 +341,11 @@ pub fn run_runtime(
         panel_ready: true,
         panel_reload_pending: false,
         panel_target: false,
+        panel_gpu_suspended: false,
+        #[cfg(feature = "native-gl")]
+        panel_cpu_cached: false,
+        #[cfg(feature = "native-gl")]
+        panel_snapshot_pending: false,
         panel_ambient: false,
         panel_hovered: None,
         panel_output: None,
@@ -290,6 +387,10 @@ pub fn run_runtime(
         gpu: None,
         #[cfg(feature = "native-gl")]
         gl: None,
+        #[cfg(feature = "native-gl")]
+        panel_gl_prewarm_error: None,
+        #[cfg(feature = "native-gl")]
+        gl_preparation: None,
         conn: conn.clone(),
         registry: RegistryState::new(&globals),
         output: OutputState::new(&globals, &qh),
@@ -315,6 +416,7 @@ pub fn run_runtime(
         wallpaper_palette: None,
         wallpaper_palette_outputs: None,
         wallpaper_pending_frames: Vec::new(),
+        wallpaper_unconfirmed: Vec::new(),
         report_surfaces: Vec::new(),
         options,
         signal: loop_.get_signal(),
@@ -656,6 +758,7 @@ impl App {
             surface.pixels = None;
             surface.transition = None;
             surface.buffers.clear();
+            surface.staged = None;
             if let Ok(pool) = SlotPool::new(4096, &self.shm) {
                 surface.pool = pool;
             } else {
@@ -700,6 +803,7 @@ impl App {
                 layer,
                 pool: SlotPool::new(4096, &self.shm)?,
                 buffers: Vec::with_capacity(2),
+                staged: None,
                 viewport,
                 viewport_destination: None,
                 pixels: None,
@@ -746,19 +850,64 @@ impl App {
                 .iter()
                 .find(|surface| surface.name == name)
                 .is_none_or(|surface| surface.pixels.is_none() && surface.transition.is_none());
-        std::thread::spawn(
-            move || match provider.prepare(name.clone(), width, height) {
-                Ok(mut frame) => {
-                    if animate {
-                        frame.previous_rgba = provider.prepare_transition(&name, width, height);
+        let confirmed_prepare = self.options.primary_factory.is_some() && !animate;
+        std::thread::spawn(move || {
+            if confirmed_prepare {
+                let mut identity = None;
+                let mut duplicate = false;
+                let result = provider.prepare_staged(name.clone(), width, height, &mut |frame| {
+                    if identity.is_some() || frame.output != name {
+                        duplicate = true;
+                        return;
                     }
-                    let _ = sender.send(UiEvent::WallpaperFrame(std::sync::Arc::new(frame)));
+                    identity = Some(crate::WallpaperFrameConfirmation {
+                        output: frame.output.clone(),
+                        revision: frame.revision,
+                        commit_token: frame.commit_token.clone(),
+                        accepted: false,
+                    });
+                    let _ = sender.send(UiEvent::WallpaperFrame(
+                        crate::WallpaperFrameEvent::Staged(std::sync::Arc::new(frame)),
+                    ));
+                });
+                match (result, identity, duplicate) {
+                    (Ok(Some(frame)), None, false) => {
+                        let _ = sender.send(UiEvent::WallpaperFrame(
+                            crate::WallpaperFrameEvent::Ready(std::sync::Arc::new(frame)),
+                        ));
+                    }
+                    (Ok(None), Some(mut confirmation), false) => {
+                        confirmation.accepted = true;
+                        let _ = sender.send(UiEvent::WallpaperFrame(
+                            crate::WallpaperFrameEvent::Confirmation(confirmation),
+                        ));
+                    }
+                    (_result, Some(mut confirmation), _) => {
+                        confirmation.accepted = false;
+                        let _ = sender.send(UiEvent::WallpaperFrame(
+                            crate::WallpaperFrameEvent::Confirmation(confirmation),
+                        ));
+                    }
+                    _ => {
+                        let _ = sender.send(UiEvent::WallpaperFailed(failed_name));
+                    }
                 }
-                Err(_) => {
-                    let _ = sender.send(UiEvent::WallpaperFailed(failed_name));
+            } else {
+                match provider.prepare(name.clone(), width, height) {
+                    Ok(mut frame) => {
+                        if animate {
+                            frame.previous_rgba = provider.prepare_transition(&name, width, height);
+                        }
+                        let _ = sender.send(UiEvent::WallpaperFrame(
+                            crate::WallpaperFrameEvent::Ready(std::sync::Arc::new(frame)),
+                        ));
+                    }
+                    Err(_) => {
+                        let _ = sender.send(UiEvent::WallpaperFailed(failed_name));
+                    }
                 }
-            },
-        );
+            }
+        });
     }
 
     pub(super) fn refresh_wallpapers(&mut self) {
@@ -795,12 +944,35 @@ impl App {
     }
 
     pub(super) fn complete_wallpaper(&mut self, frame: WallpaperFrame) {
-        self.wallpaper_jobs.remove(&frame.output);
+        self.complete_wallpaper_inner(frame, false);
+    }
+
+    pub(super) fn stage_wallpaper_frame(&mut self, frame: WallpaperFrame) {
+        self.wallpaper_unconfirmed
+            .push(crate::WallpaperFrameConfirmation {
+                output: frame.output.clone(),
+                revision: frame.revision,
+                commit_token: frame.commit_token.clone(),
+                accepted: false,
+            });
+        self.complete_wallpaper_inner(frame, true);
+    }
+
+    fn complete_wallpaper_inner(&mut self, frame: WallpaperFrame, staged: bool) {
+        if !staged {
+            self.wallpaper_jobs.remove(&frame.output);
+        }
         let output_name = frame.output.clone();
-        if let Some(provider) = &self.options.wallpaper
-            && !provider.is_current(&frame)
-        {
-            provider.discarded(&frame.output, frame.revision);
+        let current = self
+            .options
+            .wallpaper
+            .as_ref()
+            .is_none_or(|provider| provider.is_current(&frame));
+        if !current {
+            if let Some(provider) = &self.options.wallpaper {
+                provider.discarded(&frame.output, frame.revision);
+            }
+            self.clear_staged_wallpaper_frame(&frame);
             // A newer request may have arrived while this superseded frame was
             // decoding. Retain coalescing, but do not strand that latest request.
             self.request_dirty_wallpaper(&output_name);
@@ -812,10 +984,19 @@ impl App {
             .iter()
             .map(|(key, value)| (key.clone(), *value))
             .collect();
+        let stage_revision = frame.revision;
+        let stage_token = frame.commit_token.clone();
         if self.options.primary_factory.is_some() {
             if self.wallpaper_palette.as_ref() == Some(&palette_key)
                 || self.output_sessions.is_empty()
             {
+                if staged {
+                    self.wallpaper_pending_frames.push(frame);
+                    if self.wallpaper_palette_outputs.is_none() {
+                        self.stage_pending_wallpaper(&output_name, stage_revision, &stage_token);
+                    }
+                    return;
+                }
                 if let Some(control) = &self.options.control {
                     control.palette_changed(&palette_key);
                 }
@@ -830,6 +1011,7 @@ impl App {
                 .is_some_and(|pending| pending.palette == palette_key)
             {
                 self.wallpaper_pending_frames.push(frame);
+                self.stage_pending_wallpaper(&output_name, stage_revision, &stage_token);
                 self.request_dirty_wallpaper(&output_name);
                 return;
             }
@@ -838,6 +1020,7 @@ impl App {
             }
             self.wallpaper_pending_frames.push(frame);
             self.prepare_wallpaper_palette_group(palette_key);
+            self.stage_pending_wallpaper(&output_name, stage_revision, &stage_token);
             self.request_dirty_wallpaper(&output_name);
             return;
         }
@@ -858,6 +1041,7 @@ impl App {
                 .is_some_and(|pending| pending.palette.0 == frame.palette.0)
             {
                 self.wallpaper_pending_frames.push(frame);
+                self.stage_pending_wallpaper(&output_name, stage_revision, &stage_token);
                 if self.wallpaper_dirty.remove(&output_name) {
                     self.request_wallpaper(&output_name);
                 }
@@ -901,8 +1085,166 @@ impl App {
                     self.commit_pending_wallpapers(&palette_key);
                 }
             }
+            self.stage_pending_wallpaper(&output_name, stage_revision, &stage_token);
         }
         self.request_dirty_wallpaper(&output_name);
+    }
+
+    pub(super) fn confirm_staged_wallpaper(
+        &mut self,
+        confirmation: crate::WallpaperFrameConfirmation,
+    ) {
+        let Some(index) = self.wallpaper_unconfirmed.iter().position(|pending| {
+            pending.output == confirmation.output
+                && pending.revision == confirmation.revision
+                && std::sync::Arc::ptr_eq(&pending.commit_token, &confirmation.commit_token)
+        }) else {
+            return;
+        };
+        self.wallpaper_unconfirmed.remove(index);
+        let frame_index = self.wallpaper_pending_frames.iter().position(|frame| {
+            frame.output == confirmation.output
+                && frame.revision == confirmation.revision
+                && std::sync::Arc::ptr_eq(&frame.commit_token, &confirmation.commit_token)
+        });
+        if let Some(frame_index) = frame_index
+            && self
+                .wallpaper_palette_outputs
+                .as_ref()
+                .is_some_and(|waiting| {
+                    frame_matches_palette(
+                        &self.wallpaper_pending_frames[frame_index],
+                        &waiting.palette,
+                    )
+                })
+        {
+            if !confirmation.accepted {
+                let retries =
+                    self.wallpaper_palette_outputs
+                        .as_ref()
+                        .map_or_else(Vec::new, |waiting| {
+                            aborted_palette_retry_outputs(
+                                &confirmation.output,
+                                self.wallpaper_dirty.contains(&confirmation.output),
+                                &self.wallpaper_pending_frames,
+                                &waiting.palette,
+                            )
+                        });
+                if let Some(waiting) = self.wallpaper_palette_outputs.take() {
+                    self.wallpaper_palette_settled(&waiting.palette, false);
+                }
+                for output in retries {
+                    self.request_wallpaper(&output);
+                }
+            } else {
+                self.try_finish_wallpaper_palette_group();
+            }
+            self.finish_staged_wallpaper_job(&confirmation.output);
+            return;
+        }
+        if let Some(frame_index) = frame_index {
+            let frame = self.wallpaper_pending_frames.remove(frame_index);
+            if confirmation.accepted {
+                self.complete_wallpaper(frame);
+                return;
+            } else {
+                self.clear_staged_wallpaper_frame(&frame);
+                if let Some(provider) = &self.options.wallpaper {
+                    provider.discarded(&frame.output, frame.revision);
+                }
+            }
+        }
+        self.finish_staged_wallpaper_job(&confirmation.output);
+    }
+
+    fn finish_staged_wallpaper_job(&mut self, output: &str) {
+        self.wallpaper_jobs.remove(output);
+        self.request_dirty_wallpaper(output);
+    }
+
+    fn stage_pending_wallpaper(
+        &mut self,
+        output: &str,
+        revision: u64,
+        token: &std::sync::Arc<dyn std::any::Any + Send + Sync>,
+    ) {
+        let Some(frame_index) = self.wallpaper_pending_frames.iter().position(|frame| {
+            frame.output == output
+                && frame.revision == revision
+                && std::sync::Arc::ptr_eq(&frame.commit_token, token)
+        }) else {
+            return;
+        };
+        let Some(surface_index) = self
+            .wallpaper_surfaces
+            .iter()
+            .position(|surface| surface.name == output)
+        else {
+            return;
+        };
+        let (frames, surfaces) = (&self.wallpaper_pending_frames, &mut self.wallpaper_surfaces);
+        let frame = &frames[frame_index];
+        let surface = &mut surfaces[surface_index];
+        if frame.revision == 0
+            || surface.transition.is_some()
+            || surface
+                .palette
+                .as_ref()
+                .is_some_and(|palette| palette.0 == frame.palette.0)
+            || (surface.width, surface.height) != (frame.width, frame.height)
+        {
+            return;
+        }
+        let _span = bead_core::profile::Span::new("wallpaper_stage_buffer");
+        let staged = if let Ok(index) = prepare_wallpaper_buffer(
+            &mut surface.pool,
+            &mut surface.buffers,
+            frame.width,
+            frame.height,
+            &frame.rgba,
+            None,
+        ) {
+            surface.staged = Some(StagedWallpaperBuffer {
+                revision,
+                token: token.clone(),
+                width: frame.width,
+                height: frame.height,
+                index,
+            });
+            true
+        } else {
+            false
+        };
+        if staged {
+            self.schedule_wallpaper_release_poll(output.to_owned());
+        }
+    }
+
+    fn clear_staged_wallpaper_frame(&mut self, frame: &WallpaperFrame) {
+        let cleared = if let Some(surface) = self
+            .wallpaper_surfaces
+            .iter_mut()
+            .find(|surface| surface.name == frame.output)
+        {
+            if surface.staged.as_ref().is_some_and(|staged| {
+                staged.matches(
+                    frame.revision,
+                    &frame.commit_token,
+                    frame.width,
+                    frame.height,
+                )
+            }) {
+                surface.staged = None;
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        if cleared {
+            self.schedule_wallpaper_release_poll(frame.output.clone());
+        }
     }
 
     fn request_dirty_wallpaper(&mut self, output: &str) {
@@ -942,9 +1284,16 @@ impl App {
                 .as_ref()
                 .is_none_or(|provider| provider.is_current(&frame));
             if same && current {
+                if frame_is_unconfirmed(&frame, &self.wallpaper_unconfirmed) {
+                    keep.push(frame);
+                    continue;
+                }
                 self.install_wallpaper(frame);
-            } else if let Some(provider) = &self.options.wallpaper {
-                provider.discarded(&frame.output, frame.revision);
+            } else {
+                self.clear_staged_wallpaper_frame(&frame);
+                if let Some(provider) = &self.options.wallpaper {
+                    provider.discarded(&frame.output, frame.revision);
+                }
             }
         }
         self.wallpaper_pending_frames = keep;
@@ -953,6 +1302,7 @@ impl App {
     pub(super) fn discard_pending_wallpapers(&mut self) {
         self.wallpaper_palette_outputs = None;
         for frame in std::mem::take(&mut self.wallpaper_pending_frames) {
+            self.clear_staged_wallpaper_frame(&frame);
             if let Some(provider) = &self.options.wallpaper {
                 provider.discarded(&frame.output, frame.revision);
             }
@@ -965,6 +1315,14 @@ impl App {
         &mut self,
         palette: std::collections::BTreeMap<String, [u8; 4]>,
     ) {
+        self.apply_wallpaper_palette(palette, true);
+    }
+
+    fn apply_wallpaper_palette(
+        &mut self,
+        palette: std::collections::BTreeMap<String, [u8; 4]>,
+        notify_panel: bool,
+    ) {
         if self.wallpaper_palette.as_ref() == Some(&palette) {
             return;
         }
@@ -972,7 +1330,7 @@ impl App {
         if let Some(control) = &self.options.control {
             control.palette_changed(&palette);
         }
-        if self.panel_runtime.is_some() {
+        if notify_panel && self.panel_runtime.is_some() {
             self.panel_ui(UiEvent::WallpaperPalette(palette.clone()));
         }
         if self.overlay.is_some() {
@@ -993,24 +1351,13 @@ impl App {
             }
             waiting.settled.insert(output);
             waiting.accepted &= accepted;
-            if waiting.ready() {
-                let waiting = self.wallpaper_palette_outputs.take().unwrap();
-                self.wallpaper_palette_settled(&waiting.palette, waiting.accepted);
-            }
+            self.try_finish_wallpaper_palette_group();
             return;
         }
         let matching: Vec<_> = self
             .wallpaper_pending_frames
             .iter()
-            .filter(|frame| {
-                frame
-                    .palette
-                    .0
-                    .iter()
-                    .map(|(key, value)| (key.clone(), *value))
-                    .collect::<std::collections::BTreeMap<_, _>>()
-                    == *palette
-            })
+            .filter(|frame| frame_matches_palette(frame, palette))
             .collect();
         if matching.is_empty() {
             if accepted && self.wallpaper_palette.as_ref() != Some(palette) {
@@ -1018,6 +1365,14 @@ impl App {
             } else if accepted {
                 self.draw_palette_group();
             }
+            return;
+        }
+        if accepted_palette_waits_for_confirmation(
+            accepted,
+            &self.wallpaper_pending_frames,
+            &self.wallpaper_unconfirmed,
+            palette,
+        ) {
             return;
         }
         let has_current = matching.iter().any(|frame| {
@@ -1028,7 +1383,9 @@ impl App {
         });
         if accepted && has_current {
             bead_core::profile::mark("wallpaper_palette_accepted");
-            self.set_wallpaper_palette(palette.clone());
+            // The grouped primary flow already committed the current panel epoch.
+            // Do not queue a second palette job after that fence has settled.
+            self.apply_wallpaper_palette(palette.clone(), self.options.primary_factory.is_none());
             self.commit_pending_wallpapers(palette);
             // The new scenes were prepared while their previous buffers stayed
             // visible. Submit the ready group in this turn, ignoring callbacks
@@ -1045,6 +1402,7 @@ impl App {
                     .collect::<std::collections::BTreeMap<_, _>>()
                     == *palette;
                 if same {
+                    self.clear_staged_wallpaper_frame(&frame);
                     if let Some(provider) = &self.options.wallpaper {
                         provider.discarded(&frame.output, frame.revision);
                     }
@@ -1055,6 +1413,21 @@ impl App {
             self.wallpaper_pending_frames = keep;
             self.restore_wallpaper_palette();
         }
+    }
+
+    fn try_finish_wallpaper_palette_group(&mut self) {
+        let Some(waiting) = self.wallpaper_palette_outputs.as_ref() else {
+            return;
+        };
+        if !wallpaper_palette_group_ready(
+            waiting,
+            &self.wallpaper_pending_frames,
+            &self.wallpaper_unconfirmed,
+        ) {
+            return;
+        }
+        let waiting = self.wallpaper_palette_outputs.take().unwrap();
+        self.wallpaper_palette_settled(&waiting.palette, waiting.accepted);
     }
 
     fn draw_palette_group(&mut self) {
@@ -1134,13 +1507,14 @@ impl App {
         palette: &std::collections::BTreeMap<String, [u8; 4]>,
         accepted: bool,
     ) {
-        if let Some(waiting) = &mut self.wallpaper_palette_outputs
-            && waiting.palette == *palette
-            && waiting.settle_panel(epoch, accepted)
-            && waiting.ready()
-        {
-            let waiting = self.wallpaper_palette_outputs.take().unwrap();
-            self.wallpaper_palette_settled(&waiting.palette, waiting.accepted);
+        let settled = self
+            .wallpaper_palette_outputs
+            .as_mut()
+            .is_some_and(|waiting| {
+                waiting.palette == *palette && waiting.settle_panel(epoch, accepted)
+            });
+        if settled {
+            self.try_finish_wallpaper_palette_group();
         }
     }
 
@@ -1171,10 +1545,16 @@ impl App {
     }
 
     pub(super) fn install_wallpaper(&mut self, frame: WallpaperFrame) {
-        if let Some(provider) = &self.options.wallpaper
-            && !provider.is_current(&frame)
-        {
-            provider.discarded(&frame.output, frame.revision);
+        let current = self
+            .options
+            .wallpaper
+            .as_ref()
+            .is_none_or(|provider| provider.is_current(&frame));
+        if !current {
+            if let Some(provider) = &self.options.wallpaper {
+                provider.discarded(&frame.output, frame.revision);
+            }
+            self.clear_staged_wallpaper_frame(&frame);
             return;
         }
         let Some(index) = self
@@ -1208,6 +1588,18 @@ impl App {
         let output = self.wallpaper_surfaces[index].output.clone();
         let logical = self.output.info(&output).and_then(|info| info.logical_size);
         let surface = &mut self.wallpaper_surfaces[index];
+        let staged_matches = surface.staged.as_ref().is_some_and(|staged| {
+            staged.matches(
+                frame.revision,
+                &frame.commit_token,
+                frame.width,
+                frame.height,
+            )
+        });
+        if surface.staged.is_some() && !staged_matches {
+            surface.staged = None;
+        }
+        let staged_index = surface.staged.as_ref().map(|staged| staged.index);
         let old_pixels = surface
             .transition
             .take()
@@ -1223,6 +1615,8 @@ impl App {
                 .as_ref()
                 .is_some_and(|palette| palette.0 == frame.palette.0);
         if transitioning {
+            // A staged final image cannot substitute an intermediate blend.
+            surface.staged = None;
             surface.transition = Some(WallpaperTransition {
                 commit: Some((frame.revision, frame.commit_token.clone())),
                 palette: frame.palette.clone(),
@@ -1242,6 +1636,8 @@ impl App {
                     width: surface.width,
                     height: surface.height,
                     logical,
+                    reserved_buffer: staged_index,
+                    prepared_buffer: staged_index.filter(|_| staged_matches),
                     feedback: self
                         .presentation
                         .as_ref()
@@ -1265,6 +1661,9 @@ impl App {
                 surface.release_wait_ms = 0;
                 self.schedule_wallpaper_tick(frame.output);
                 return;
+            }
+            if staged_matches {
+                surface.staged = None;
             }
             surface.pixels = self.options.animate.then_some(frame.rgba);
         }
@@ -1323,6 +1722,17 @@ impl App {
             let Some(transition) = surface.transition.as_mut() else {
                 return;
             };
+            let prepared_buffer = transition
+                .commit
+                .as_ref()
+                .filter(|_| transition.target.is_none())
+                .and_then(|(revision, token)| {
+                    surface.staged.as_ref().and_then(|staged| {
+                        staged
+                            .matches(*revision, token, surface.width, surface.height)
+                            .then_some(staged.index)
+                    })
+                });
             if let Some(target) = &transition.target {
                 let remaining = transition.remaining.max(1) as u16;
                 for (current, target) in transition.pixels.iter_mut().zip(target.iter()) {
@@ -1344,6 +1754,8 @@ impl App {
                     width: surface.width,
                     height: surface.height,
                     logical,
+                    reserved_buffer: surface.staged.as_ref().map(|staged| staged.index),
+                    prepared_buffer,
                     feedback: self
                         .presentation
                         .as_ref()
@@ -1357,6 +1769,9 @@ impl App {
             {
                 (false, None)
             } else {
+                if prepared_buffer.is_some() {
+                    surface.staged = None;
+                }
                 surface.palette = Some(transition.palette.clone());
                 if let Some((revision, _)) = &transition.commit {
                     surface.revision = *revision;
@@ -1443,6 +1858,14 @@ impl App {
             return;
         };
         self.wallpaper_surfaces[index].release_timer_pending = false;
+        if self.wallpaper_surfaces[index].staged.is_some() {
+            let surface = &mut self.wallpaper_surfaces[index];
+            surface.release_wait_ms = surface.release_wait_ms.saturating_add(100);
+            if surface.release_wait_ms <= 3000 {
+                self.schedule_wallpaper_release_poll(output.to_owned());
+            }
+            return;
+        }
         if self.wallpaper_surfaces[index].buffers.is_empty() {
             return;
         }
@@ -1464,6 +1887,7 @@ impl App {
         let surface = &mut self.wallpaper_surfaces[index];
         if released {
             surface.buffers.clear();
+            surface.staged = None;
             surface.pixels = None;
             if let Some(pool) = replacement_pool {
                 surface.pool = pool;
@@ -1870,7 +2294,58 @@ struct WallpaperBufferTarget<'a> {
     width: u32,
     height: u32,
     logical: Option<(i32, i32)>,
+    reserved_buffer: Option<usize>,
+    prepared_buffer: Option<usize>,
     feedback: Option<(&'a WpPresentation, &'a QueueHandle<App>, u64)>,
+}
+
+fn prepare_wallpaper_buffer(
+    pool: &mut SlotPool,
+    buffers: &mut Vec<smithay_client_toolkit::shm::slot::Buffer>,
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+    reserved: Option<usize>,
+) -> Result<usize, String> {
+    let expected = (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|pixels| pixels.checked_mul(4))
+        .ok_or("wallpaper frame too large")?;
+    if width == 0
+        || height == 0
+        || width > MAX_WALLPAPER_DIMENSION
+        || height > MAX_WALLPAPER_DIMENSION
+        || expected > MAX_WALLPAPER_RGBA_BYTES
+        || rgba.len() != expected
+    {
+        return Err("wallpaper frame size mismatch".into());
+    }
+    let stride = i32::try_from(width.checked_mul(4).ok_or("wallpaper stride overflow")?)
+        .map_err(|_| "wallpaper stride overflow")?;
+    let buffer_width = i32::try_from(width).map_err(|_| "wallpaper width overflow")?;
+    let buffer_height = i32::try_from(height).map_err(|_| "wallpaper height overflow")?;
+    for (index, buffer) in buffers.iter_mut().enumerate() {
+        if Some(index) != reserved
+            && let Some(bytes) = buffer.canvas(pool)
+        {
+            write_bgra(bytes, rgba);
+            return Ok(index);
+        }
+    }
+    if buffers.len() < 2 {
+        let (buffer, bytes) = pool
+            .create_buffer(
+                buffer_width,
+                buffer_height,
+                stride,
+                wl_shm::Format::Argb8888,
+            )
+            .map_err(|_| "wallpaper SHM allocation failed")?;
+        write_bgra(bytes, rgba);
+        buffers.push(buffer);
+        return Ok(buffers.len() - 1);
+    }
+    Err("wallpaper buffers busy".into())
 }
 
 fn attach_wallpaper_buffer(target: WallpaperBufferTarget<'_>, rgba: &[u8]) -> Result<(), String> {
@@ -1883,6 +2358,8 @@ fn attach_wallpaper_buffer(target: WallpaperBufferTarget<'_>, rgba: &[u8]) -> Re
         width,
         height,
         logical,
+        reserved_buffer,
+        prepared_buffer,
         feedback,
     } = target;
     let expected = (width as usize)
@@ -1892,34 +2369,17 @@ fn attach_wallpaper_buffer(target: WallpaperBufferTarget<'_>, rgba: &[u8]) -> Re
     if rgba.len() != expected {
         return Err("wallpaper frame size mismatch".into());
     }
-    let stride = i32::try_from(width.checked_mul(4).ok_or("wallpaper stride overflow")?)
-        .map_err(|_| "wallpaper stride overflow")?;
-    let buffer_width = i32::try_from(width).map_err(|_| "wallpaper width overflow")?;
-    let buffer_height = i32::try_from(height).map_err(|_| "wallpaper height overflow")?;
-    let mut selected = None;
-    for (index, buffer) in buffers.iter_mut().enumerate() {
-        if let Some(bytes) = buffer.canvas(pool) {
-            write_bgra(bytes, rgba);
-            selected = Some(index);
-            break;
+    let selected = if let Some(index) = prepared_buffer {
+        if Some(index) != reserved_buffer || index >= buffers.len() {
+            return Err("staged wallpaper buffer unavailable".into());
         }
-    }
-    if selected.is_none() && buffers.len() < 2 {
-        let (buffer, bytes) = pool
-            .create_buffer(
-                buffer_width,
-                buffer_height,
-                stride,
-                wl_shm::Format::Argb8888,
-            )
-            .map_err(|_| "wallpaper SHM allocation failed")?;
-        write_bgra(bytes, rgba);
-        buffers.push(buffer);
-        selected = Some(buffers.len() - 1);
-    }
-    let buffer = selected
-        .and_then(|index| buffers.get(index))
-        .ok_or("wallpaper buffers busy")?;
+        index
+    } else {
+        prepare_wallpaper_buffer(pool, buffers, width, height, rgba, reserved_buffer)?
+    };
+    let buffer = buffers
+        .get(selected)
+        .ok_or("wallpaper buffer unavailable")?;
     if let Some(viewport) = viewport {
         if let Some((width, height)) = logical {
             viewport.set_destination(width.max(1), height.max(1));
@@ -1939,6 +2399,7 @@ fn attach_wallpaper_buffer(target: WallpaperBufferTarget<'_>, rgba: &[u8]) -> Re
                 surface: layer.wl_surface().clone(),
                 generation: revision,
                 source_epoch: 0,
+                visibility: 0,
                 update: revision,
             },
         );
@@ -1964,7 +2425,29 @@ fn write_bgra(bytes: &mut [u8], rgba: &[u8]) {
 
 #[cfg(test)]
 mod palette_barrier_tests {
-    use super::PendingPalette;
+    use super::{
+        PendingPalette, StagedWallpaperBuffer, aborted_palette_retry_outputs,
+        accepted_palette_waits_for_confirmation, frame_is_unconfirmed,
+        has_unconfirmed_palette_frame, wallpaper_palette_group_ready,
+    };
+    use std::sync::Arc;
+
+    #[test]
+    fn staged_wallpaper_requires_exact_frame_token_revision_and_dimensions() {
+        let token: Arc<dyn std::any::Any + Send + Sync> = Arc::new("boot-pair");
+        let staged = StagedWallpaperBuffer {
+            revision: 9,
+            token: token.clone(),
+            width: 2880,
+            height: 1800,
+            index: 1,
+        };
+        let other: Arc<dyn std::any::Any + Send + Sync> = Arc::new("boot-pair");
+        assert!(staged.matches(9, &token, 2880, 1800));
+        assert!(!staged.matches(9, &other, 2880, 1800));
+        assert!(!staged.matches(10, &token, 2880, 1800));
+        assert!(!staged.matches(9, &token, 1920, 1200));
+    }
 
     #[test]
     fn palette_group_waits_for_both_output_and_companion_in_either_order() {
@@ -2023,5 +2506,133 @@ mod palette_barrier_tests {
         assert!(!group.ready());
         group.settled.insert("output".to_owned());
         assert!(group.ready());
+    }
+
+    #[test]
+    fn wallpaper_palette_waits_for_only_the_exact_staged_frame_confirmation() {
+        let token: Arc<dyn std::any::Any + Send + Sync> = Arc::new("frame-a");
+        let palette = std::collections::BTreeMap::from([("background".into(), [1, 2, 3, 255])]);
+        let frame = super::WallpaperFrame {
+            output: "DP-1".into(),
+            revision: 9,
+            width: 1,
+            height: 1,
+            rgba: vec![0, 0, 0, 255],
+            previous_rgba: None,
+            palette: bead_render::Palette(Arc::new(palette.clone().into_iter().collect())),
+            commit_token: token.clone(),
+        };
+        let pending = crate::WallpaperFrameConfirmation {
+            output: "DP-1".into(),
+            revision: 9,
+            commit_token: token.clone(),
+            accepted: false,
+        };
+        assert!(has_unconfirmed_palette_frame(
+            std::slice::from_ref(&frame),
+            std::slice::from_ref(&pending),
+            &palette,
+        ));
+        assert!(frame_is_unconfirmed(&frame, std::slice::from_ref(&pending)));
+        assert!(accepted_palette_waits_for_confirmation(
+            true,
+            std::slice::from_ref(&frame),
+            std::slice::from_ref(&pending),
+            &palette,
+        ));
+        assert!(!accepted_palette_waits_for_confirmation(
+            false,
+            std::slice::from_ref(&frame),
+            std::slice::from_ref(&pending),
+            &palette,
+        ));
+        let stale_token: Arc<dyn std::any::Any + Send + Sync> = Arc::new("frame-a");
+        let stale = crate::WallpaperFrameConfirmation {
+            commit_token: stale_token,
+            ..pending.clone()
+        };
+        assert!(!has_unconfirmed_palette_frame(
+            std::slice::from_ref(&frame),
+            std::slice::from_ref(&stale),
+            &palette,
+        ));
+        assert!(!frame_is_unconfirmed(&frame, std::slice::from_ref(&stale)));
+        assert!(!has_unconfirmed_palette_frame(
+            std::slice::from_ref(&frame),
+            std::slice::from_ref(&stale),
+            &Default::default(),
+        ));
+        for workers_first in [false, true] {
+            let mut group = PendingPalette {
+                palette: palette.clone(),
+                expected: ["DP-1".to_owned()].into_iter().collect(),
+                settled: Default::default(),
+                accepted: true,
+                panel_epoch: Some(4),
+                panel_settled: false,
+            };
+            let mut pending_frame = Some(pending.clone());
+            if workers_first {
+                group.settled.insert("DP-1".into());
+                group.panel_settled = true;
+                assert!(!wallpaper_palette_group_ready(
+                    &group,
+                    std::slice::from_ref(&frame),
+                    std::slice::from_ref(pending_frame.as_ref().unwrap()),
+                ));
+                pending_frame = None;
+                assert!(wallpaper_palette_group_ready(
+                    &group,
+                    std::slice::from_ref(&frame),
+                    pending_frame.as_slice(),
+                ));
+            } else {
+                group.panel_settled = true;
+                pending_frame = None;
+                assert!(!wallpaper_palette_group_ready(
+                    &group,
+                    std::slice::from_ref(&frame),
+                    pending_frame.as_slice(),
+                ));
+                group.settled.insert("DP-1".into());
+                assert!(wallpaper_palette_group_ready(
+                    &group,
+                    std::slice::from_ref(&frame),
+                    pending_frame.as_slice(),
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn aborted_group_retries_unique_matching_outputs_only_for_a_newer_request() {
+        let palette = std::collections::BTreeMap::from([("background".into(), [1, 2, 3, 255])]);
+        let other_palette =
+            std::collections::BTreeMap::from([("background".into(), [7, 8, 9, 255])]);
+        let make_frame = |output: &str, color: [u8; 4], revision: u64| super::WallpaperFrame {
+            output: output.into(),
+            revision,
+            width: 1,
+            height: 1,
+            rgba: vec![0, 0, 0, 255],
+            previous_rgba: None,
+            palette: bead_render::Palette(Arc::new(std::collections::HashMap::from([(
+                "background".into(),
+                color,
+            )]))),
+            commit_token: Arc::new(revision),
+        };
+        let frames = [
+            make_frame("DP-1", [1, 2, 3, 255], 1),
+            make_frame("DP-2", [1, 2, 3, 255], 2),
+            make_frame("DP-2", [1, 2, 3, 255], 3),
+            make_frame("DP-3", [4, 5, 6, 255], 4),
+        ];
+        assert_eq!(
+            aborted_palette_retry_outputs("DP-1", true, &frames, &palette),
+            vec!["DP-2".to_owned()]
+        );
+        assert!(aborted_palette_retry_outputs("DP-1", false, &frames, &palette).is_empty());
+        assert!(aborted_palette_retry_outputs("DP-1", true, &frames, &other_palette).is_empty());
     }
 }

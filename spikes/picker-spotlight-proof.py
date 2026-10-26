@@ -20,6 +20,7 @@ pref = ("wallpaper-pref", "static", "spotlight")
 for state, preparation in [
     ("spotlight-cold", []),
     ("spotlight-repeat", [open_picker, ("sleep", 4), close_picker, ("sleep", 1)]),
+    ("spotlight-settled", [open_picker, ("sleep", 4), close_picker, ("sleep", 3), ("sample", "settled-closed")]),
     ("spotlight-expired", [open_picker, ("sleep", 4), close_picker, ("sleep", 125), ("sample", "expired-closed")]),
 ]:
     m.STATE_PREPARE[state] = [pref, ("bar-window",), *preparation]
@@ -34,7 +35,8 @@ for state, kind in [("spotlight-hover", "pointer"), ("spotlight-pressed", "press
     m.STATE_SETTLE[state] = .1
 palette_layout = "spotlight" if os.environ.get("PICKER_PALETTE_LAYOUT") == "spotlight" else "carousel"
 m.STATE_PREPARE["palette-sync"] = [("wallpaper-pref", "static", palette_layout), open_picker, ("sleep", 8)]
-m.STATES["palette-sync"] = ([("selection-key", "Right")], [close_picker], 3)
+selection = ("selection-click", 1225, 1060) if os.environ.get("PICKER_SELECTION_CLICK") == "1" else ("selection-key", "Right")
+m.STATES["palette-sync"] = ([selection], [close_picker], 3)
 m.STATE_SETTLE["palette-sync"] = 3
 m.STATE_CLEANUP["palette-sync"] = [("active-assert", "generated-2.jpg")]
 original_spawn = m.Arm.spawn
@@ -89,6 +91,13 @@ def steps(self, operations):
             phases = json.loads(path.read_text()) if path.exists() else {}
             phases[step[1]] = self.rss()
             path.write_text(json.dumps(phases))
+        elif step[0] == "selection-click":
+            original_steps(self, [("pointer", step[1], step[2])])
+            press_send_ns = time.monotonic_ns()
+            original_steps(self, [("press", step[1], step[2])])
+            self.selection_keys.append({"key": "Pointer", "press_send_ns": press_send_ns, "send_ns": time.monotonic_ns(), "state_start_ns": round(self.state_start*1e9)})
+            original_steps(self, [("release",)])
+            (self.out / "selection-clocks.json").write_text(json.dumps(self.selection_keys))
         else:
             original_steps(self, [step])
 

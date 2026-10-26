@@ -7,7 +7,6 @@ local viewport_w=ui.resolve_for_check(ui.bind("extras.viewport.width")) or T.wal
 local viewport_h=ui.resolve_for_check(ui.bind("extras.viewport.height")) or T.wallpaper.viewport_fallback_height
 local layout=ui.resolve_for_check(ui.bind("extras.wallpaper.layout")) or "carousel"
 local kind=ui.resolve_for_check(ui.bind("extras.wallpaper.kind")) or "static"
-local resource_revision=ui.resolve_for_check(ui.bind("extras.wallpaper.resource_revision")) or 0
 local carousel=layout=="carousel"
 local spotlight=layout=="spotlight"
 local search_focused=ui.resolve_for_check(ui.bind("bead.focused"))=="extras.search"
@@ -97,7 +96,7 @@ local function card(item, card_w, card_h, x, y, selected_card, clip)
   local kids={}
   local path=selected_card and not carousel and item.preview~="" and item.preview or item.thumbnail
   if path and path~="" then
-    kids[#kids+1]=ui.Image{id="thumbnail-"..tostring(resource_revision),position="absolute",left=image_inset,top=image_inset,width=card_w-image_inset*2,height=image_h,
+    kids[#kids+1]=ui.Image{id="thumbnail",position="absolute",left=image_inset,top=image_inset,width=card_w-image_inset*2,height=image_h,
       icon=path,image_fit="cover",clip_polygon=hex and hex_clip or rounded_clip(card_w-image_inset*2,image_h),aria_label=item.title or "Wallpaper"}
   else
     kids[#kids+1]=ui.Text{id="missing-thumbnail",position="absolute",left=0,top=0,width=card_w,height=image_h,
@@ -209,7 +208,7 @@ local nav=ui.Row{id="wallpaper-navigation",position="absolute",left=0,
     font_size=T.wallpaper.nav_font,text_align="center",color=(carousel or spotlight) and "onSurface" or T.wallpaper.photo_ink},
   nav_button("next","Next wallpaper","chevron_right","extras.next")}
 
-local backdrop=layout=="hexagons" and ui.Image{id="gallery-backdrop-"..tostring(resource_revision),position="absolute",left=0,top=0,width=width,height=height,
+local backdrop=layout=="hexagons" and ui.Image{id="gallery-backdrop",position="absolute",left=0,top=0,width=width,height=height,
   visible=ui.bind("extras.wallpaper.backdrop_visible"),icon=ui.bind("extras.wallpaper.backdrop"),image_fit="cover",aria_label="Selected wallpaper preview"} or nil
 local scrim=layout=="hexagons" and ui.Box{id="gallery-scrim",position="absolute",left=0,top=0,width=width,height=height,
   fill=ui.alpha("shadow",T.wallpaper.scrim_alpha)} or nil
@@ -229,7 +228,7 @@ local children={
     text_align="center",color="onSurfaceVariant"}}
 if backdrop then table.insert(children,1,scrim);table.insert(children,1,backdrop) end
 if spotlight then
-  return kit.Panel{id="extras",edge="bottom",open=ui.bind("panel.open"),width=viewport_w,height=viewport_h,
+  return kit.Panel{id="extras",edge="bottom",open=ui.bind("panel.open"),width=viewport_w,height=viewport_h,shadow=false,
     duration=T.panel.duration,transition=T.panel.transition,reveal=false,slide_distance=0,fade=true,radius=0,
     fill=ui.alpha("shadow",T.wallpaper.scrim_alpha),padding=0,gap=0,
     on_activate=ui.action("close"),aria_label="Close wallpaper picker",

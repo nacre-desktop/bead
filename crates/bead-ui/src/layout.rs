@@ -125,6 +125,7 @@ pub const PROPERTIES: &[&str] = &[
     "border_color",
     "border_width",
     "radius",
+    "shadow",
     "font_size",
     "font_weight",
     "family",
@@ -213,6 +214,7 @@ pub struct ViewSpec {
     pub border_color: Option<Json>,
     pub border_width: f32,
     pub radius: f32,
+    pub shadow: bool,
     pub blur: f32,
     pub start_angle: f32,
     pub sweep_angle: f32,
@@ -735,6 +737,9 @@ impl ViewSpec {
             if p.contains_key("focus_on_pointer") && raw.kind != Widget::Button {
                 return Err(source.error("focus_on_pointer is only valid on Button"));
             }
+            if p.contains_key("shadow") && raw.kind != Widget::Panel {
+                return Err(source.error("shadow is only valid on Panel"));
+            }
             let child_scope = if p.contains_key("id") && raw.kind != Widget::Group {
                 format!("{id}.")
             } else {
@@ -830,6 +835,7 @@ impl ViewSpec {
                     if raw.kind == Widget::Panel { 12. } else { 9. },
                     source,
                 )?,
+                shadow: boolean(p, "shadow", true, source)?,
                 font_size,
                 font_weight,
                 family,
@@ -1155,7 +1161,7 @@ pub fn layout(
                 out.scene.clips.insert(index, c);
             }
         };
-        if view.kind == Widget::Panel {
+        if view.kind == Widget::Panel && view.shadow {
             emit(Primitive::Shadow {
                 rect: Rect::new(r.x - 30., r.y - 30., r.w + 60., r.h + 60.),
                 radius: view.radius,

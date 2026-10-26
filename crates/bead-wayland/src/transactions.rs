@@ -164,8 +164,20 @@ impl App {
                 return;
             }
             UiEvent::WallpaperFrame(frame) => {
-                if let Ok(frame) = std::sync::Arc::try_unwrap(frame) {
-                    self.complete_wallpaper(frame);
+                match frame {
+                    crate::WallpaperFrameEvent::Ready(frame) => {
+                        if let Ok(frame) = std::sync::Arc::try_unwrap(frame) {
+                            self.complete_wallpaper(frame);
+                        }
+                    }
+                    crate::WallpaperFrameEvent::Staged(frame) => {
+                        if let Ok(frame) = std::sync::Arc::try_unwrap(frame) {
+                            self.stage_wallpaper_frame(frame);
+                        }
+                    }
+                    crate::WallpaperFrameEvent::Confirmation(confirmation) => {
+                        self.confirm_staged_wallpaper(confirmation);
+                    }
                 }
                 return;
             }
