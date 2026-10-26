@@ -161,13 +161,25 @@ unsafe fn initialize_display(
     let display = unsafe { Display::new(raw_display, DisplayApiPreference::Egl) }?;
     let template = ConfigTemplateBuilder::new()
         .with_alpha_size(8)
+        // Femtovg's path fill and stroke pipeline uses stencil, but this
+        // renderer does not use a depth buffer. Ask EGL to admit zero-depth
+        // configs, then rank the available configs below.
+        .with_depth_size(0)
         .with_stencil_size(8)
         .with_transparency(true)
         .build();
     // SAFETY: config enumeration does not access a native window.
     let config = unsafe { display.find_configs(template) }?
-        .next()
+        .min_by_key(|config| (config.depth_size(), config.num_samples()))
         .ok_or("no transparent EGL config")?;
+    bead_core::vprintln!(
+        "GL_CONFIG alpha={} depth={} stencil={} samples={} transparency={:?}",
+        config.alpha_size(),
+        config.depth_size(),
+        config.stencil_size(),
+        config.num_samples(),
+        config.supports_transparency()
+    );
     let query = display.get_proc_address(c"eglQueryString");
     if query.is_null() {
         return Err("missing EGL extension query".into());
