@@ -47,17 +47,24 @@ fn prepared_source_bounds_clip_before_padding_at_output_edges() {
 #[test]
 fn dropped_ghost_stays_released_until_pointer_leaves_target() {
     let mut suppressed = true;
-    assert!(suppress_widget_drag_hover(&mut suppressed, true));
+    assert!(suppress_widget_drag_hover(&mut suppressed, true, false));
+    assert!(
+        suppressed,
+        "timer refreshes while over the target must not rebuild the ghost"
+    );
+    assert!(suppress_widget_drag_hover(&mut suppressed, true, true));
     assert!(
         suppressed,
         "hovering the drop target must not rebuild the ghost"
     );
-    assert!(!suppress_widget_drag_hover(&mut suppressed, false));
+    assert!(suppress_widget_drag_hover(&mut suppressed, false, false));
+    assert!(suppressed, "non-pointer updates do not prove pointer leave");
+    assert!(!suppress_widget_drag_hover(&mut suppressed, false, true));
     assert!(
         !suppressed,
         "leaving the target permits a later hover prewarm"
     );
-    assert!(!suppress_widget_drag_hover(&mut suppressed, true));
+    assert!(!suppress_widget_drag_hover(&mut suppressed, true, true));
 }
 
 fn catalogue() -> Json {
@@ -2036,7 +2043,7 @@ fn bar_drag_threshold_offers_ghost_before_root_reflow_commit() {
     runtime.wakeup = Some(std::sync::Arc::new(move |event| {
         sent.lock().unwrap().push(event);
     }));
-    runtime.prewarm_widget_drag_hover(x, y);
+    runtime.prewarm_widget_drag_hover(x, y, true);
     assert!(runtime.widget_drag_controller_primed);
     if runtime.stage(UiEvent::Click { x, y }).unwrap().is_some() {
         runtime.commit();

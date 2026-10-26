@@ -365,11 +365,15 @@ struct WidgetHoverPreview {
     key: WidgetHoverPreviewKey,
     prepared_at: std::time::Instant,
 }
-fn suppress_widget_drag_hover(suppressed: &mut bool, has_candidate: bool) -> bool {
+fn suppress_widget_drag_hover(
+    suppressed: &mut bool,
+    has_candidate: bool,
+    pointer_event: bool,
+) -> bool {
     if !*suppressed {
         return false;
     }
-    if has_candidate {
+    if has_candidate || !pointer_event {
         true
     } else {
         *suppressed = false;
@@ -2060,7 +2064,7 @@ impl Runtime {
             });
         }
     }
-    fn prewarm_widget_drag_hover(&mut self, x: f32, y: f32) {
+    fn prewarm_widget_drag_hover(&mut self, x: f32, y: f32, pointer_event: bool) {
         if self.widget_drag_is_active() {
             return;
         }
@@ -2068,6 +2072,7 @@ impl Runtime {
         if suppress_widget_drag_hover(
             &mut self.widget_drag_suppress_hover_until_leave,
             candidate.is_some(),
+            pointer_event,
         ) {
             return;
         }
@@ -5868,7 +5873,7 @@ impl SceneSource for Runtime {
                 .as_ref()
                 .is_some_and(|preview| preview.prepared_at.elapsed() >= WIDGET_HOVER_PREVIEW_RENEW)
         {
-            self.prewarm_widget_drag_hover(self.pointer_at.0, self.pointer_at.1);
+            self.prewarm_widget_drag_hover(self.pointer_at.0, self.pointer_at.1, false);
         }
         // Finish the old gesture before release can retire its final target. A final flush is exempt from the continuous-drag cap.
         if matches!(&event, UiEvent::Release)
@@ -8947,7 +8952,7 @@ impl SceneSource for Runtime {
                 value,
             } => self.session.accessibility_action(target, &action, value)?,
             UiEvent::Hover { x, y } => {
-                self.prewarm_widget_drag_hover(x, y);
+                self.prewarm_widget_drag_hover(x, y, true);
                 let before = self.status_pill.clone();
                 let pill_item = self
                     .session
