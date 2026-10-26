@@ -4,6 +4,7 @@ use super::*;
 struct RecordingMenuSource {
     fixture: crate::launcher::Fixture,
     queries: std::sync::Mutex<Vec<serde_json::Value>>,
+    calls: std::sync::Mutex<Vec<(String, serde_json::Value)>>,
 }
 
 impl bead::core::source::Source for RecordingMenuSource {
@@ -22,6 +23,10 @@ impl bead::core::source::Source for RecordingMenuSource {
         if method == "menu.query" {
             self.queries.lock().unwrap().push(params.clone());
         }
+        self.calls
+            .lock()
+            .unwrap()
+            .push((method.clone(), params.clone()));
         self.fixture.invoke(method, params)
     }
 
@@ -54,6 +59,7 @@ fn first_panel_reload_primes_query_before_markup_load() {
     let source = std::sync::Arc::new(RecordingMenuSource {
         fixture,
         queries: std::sync::Mutex::new(Vec::new()),
+        calls: std::sync::Mutex::new(Vec::new()),
     });
     let memory = std::sync::Arc::new(std::sync::Mutex::new(
         crate::key_routes::Launch {
@@ -132,4 +138,167 @@ fn every_launcher_panel_open_returns_focus_to_search() {
     );
     assert!(!panel_visibility_changes(false, true).contains_key("bead.focused"));
     assert!(!panel_visibility_changes(true, false).contains_key("bead.focused"));
+}
+
+#[test]
+fn runtime_scroll_over_launcher_actions_only_scrolls_and_click_still_activates() {
+    crate::i18n::init();
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+    let palette = root.join("palette.json");
+    let colors = bead::render::Palette::read(&palette).unwrap();
+    let fallback = crate::sound::fallback(colors.get("surface").unwrap());
+    let mut session =
+        bead::ui::Session::new(root, "ui/main.luau".into(), palette, colors, fallback);
+    session.set_viewport(1920, 1200);
+    let rows = (0..81)
+        .map(|index| {
+            serde_json::json!({
+                "id": format!("app-{index}"),
+                "name": format!("Fixture application {index}"),
+                "description": "Runtime launcher scroll regression",
+                "icon": "applications-other",
+            })
+        })
+        .collect();
+    let source = std::sync::Arc::new(RecordingMenuSource {
+        fixture: crate::launcher::Fixture::new(serde_json::json!({
+            "queries": {"": crate::launcher::fixture_reply("", rows)}
+        }))
+        .unwrap(),
+        queries: std::sync::Mutex::new(Vec::new()),
+        calls: std::sync::Mutex::new(Vec::new()),
+    });
+    let mut runtime = Runtime::new(session)
+        .with_launcher(Some(source.clone()))
+        .unwrap();
+    runtime.state_file = None;
+    runtime.session.restore_on_start(BTreeMap::new());
+    runtime.stage(UiEvent::Reload).unwrap();
+    runtime.commit();
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    loop {
+        runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
+        runtime.commit();
+        if matches!(runtime.session.stores.get("launcher.apps"),
+            Some(bead::core::Value::List(rows)) if rows.len() == 81)
+        {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "launcher query did not finish"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+
+    let viewport = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| node.scroll_store.as_deref() == Some("launcher.scroll.y"))
+        .expect("real launcher markup has a scroll viewport");
+    assert!(viewport.scroll_limit.is_some_and(|limit| limit > 7.));
+    let row = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| node.action.as_deref() == Some("select_app"))
+        .expect("runtime fixture projects a selectable app");
+    let selected_id = match &row.action_arg {
+        Some(bead::core::Value::Text(id)) => id.clone(),
+        _ => panic!("launcher row lost its ID"),
+    };
+    let rect = bead::ui::rect(&row.draw);
+    let point = (rect.x + rect.w / 2., rect.y + rect.h / 2.);
+
+    for (delta, expected) in [(7., 7.), (-7., 0.)] {
+        runtime
+            .stage(UiEvent::Scroll {
+                x: point.0,
+                y: point.1,
+                delta,
+            })
+            .unwrap();
+        runtime.commit();
+        let calls = source.calls.lock().unwrap().clone();
+        eprintln!(
+            "launcher scroll delta={delta}: offset={:?}, calls={calls:?}",
+            runtime.session.stores.get("launcher.scroll.y")
+        );
+        assert_eq!(
+            runtime.session.stores.get("launcher.scroll.y"),
+            Some(&bead::core::Value::Number(expected)),
+            "scroll over selectable launcher row must not dispatch its action; calls={calls:?}"
+        );
+        assert!(
+            !calls.iter().any(|(method, params)| {
+                method == "menu.activate"
+                    || (method == "menu.preferences" && params["action"] == "favorite")
+            }),
+            "scroll must not activate or favorite a row: {calls:?}"
+        );
+    }
+
+    runtime
+        .stage(UiEvent::Hover {
+            x: point.0,
+            y: point.1,
+        })
+        .unwrap();
+    runtime.commit();
+    let favorite = runtime
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| {
+            node.action.as_deref() == Some("toggle_favorite")
+                && node.action_arg == Some(bead::core::Value::Text(selected_id.clone()))
+        })
+        .expect("hovered launcher row exposes its actual favorite badge");
+    let favorite_rect = bead::ui::rect(&favorite.draw);
+    let favorite_point = (
+        favorite_rect.x + favorite_rect.w / 2.,
+        favorite_rect.y + favorite_rect.h / 2.,
+    );
+    for (delta, expected) in [(7., 7.), (-7., 0.)] {
+        runtime
+            .stage(UiEvent::Scroll {
+                x: favorite_point.0,
+                y: favorite_point.1,
+                delta,
+            })
+            .unwrap();
+        runtime.commit();
+        let calls = source.calls.lock().unwrap().clone();
+        assert_eq!(
+            runtime.session.stores.get("launcher.scroll.y"),
+            Some(&bead::core::Value::Number(expected)),
+            "scroll over favorite badge must scroll, not toggle it; calls={calls:?}"
+        );
+        assert!(
+            !calls.iter().any(|(method, params)| {
+                method == "menu.activate"
+                    || (method == "menu.preferences" && params["action"] == "favorite")
+            }),
+            "scroll over favorite badge must not invoke a menu action: {calls:?}"
+        );
+    }
+
+    runtime
+        .stage(UiEvent::Click {
+            x: point.0,
+            y: point.1,
+        })
+        .unwrap();
+    runtime.commit();
+    assert!(
+        source
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(method, params)| method == "menu.activate" && params["id"] == selected_id),
+        "a real click must still invoke the selected app"
+    );
 }

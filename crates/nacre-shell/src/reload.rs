@@ -3573,6 +3573,15 @@ impl SceneSource for Runtime {
                 .or_else(|| self.session.drag_action(*x, *y)),
             _ => None,
         };
+        if matches!(
+            &event,
+            UiEvent::Scroll { .. } | UiEvent::HorizontalScroll { .. }
+        ) && host_action
+            .as_ref()
+            .is_some_and(|(_, name, _)| matches!(name.as_str(), "select_app" | "toggle_favorite"))
+        {
+            host_action = None;
+        }
         if let Some((_, name, argument)) = &mut host_action
             && name == "status.pill.open"
             && let Some(view) = crate::widgets::dropdown_view(argument)
