@@ -177,7 +177,10 @@ impl App {
                                 .as_ref()
                                 .and_then(|spec| spec.position.as_ref()),
                         ) {
-                            let (x, y) = positioner(scene, self.panel_center, size);
+                            let (x, y) = self.panel_anchor.map_or_else(
+                                || positioner(scene, self.panel_center, size),
+                                |anchor| panels::anchored_position(scene, anchor, size),
+                            );
                             value["origin"] = serde_json::json!([x, y]);
                         }
                     }
