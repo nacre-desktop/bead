@@ -3076,3 +3076,26 @@ Intel, laptop memory-cap or complete smoothness acceptance is claimed.
 Owner continuation 2026-10-25: accept the measured B0126 thumb candidate and enable
 it by default. Continue dispatch, coherent fill/handle and local slider damage,
 in that order; revised 120 Hz total p95 ≤25 ms gate. Old rejection is historical.
+
+## B0131 — warm pearl release (2026-10-26)
+
+Prepare the native target before drag, then commit its final pose under cover.
+CPU reuses and preimports SHM; GL shares its context and full-size backbuffer.
+The cold CPU tail was reveal geometry/composition; build-profile effects are explicit.
+Active memory buys smoothness; the declared always-on UI budget is 1 MiB.
+
+| Private niri release build | CPU | GL |
+| --- | ---: | ---: |
+| Presentation-only20 handoff p95 / render p99 ms | 31.120 / 9.217 | 31.390 / 2.947 |
+| Separate image20 blanks / reversals | 0 / 0 | 0 / 0 |
+| Capture-loaded handoff p95 ms (≤33) | 36.680, fail | 34.830, fail |
+| Matched5 captured median control→candidate ms | 504.506→36.043 | 504.530→33.432 |
+| Idle / closed median delta MiB (five pairs) | −0.266 / −0.078 | −0.242 / +0.047 |
+| Docked / detached median delta MiB | +4.736 / +8.207 | +21.209 / −13.182 |
+| QML / Bead return2px settle ms | 182.964 / 135.557 | — |
+
+Unreclaimable is anon+SHM+DRM+SwapPss; clean-file PSS is separate. Private niri CPU
+closed +41.223 MiB (mostly DRM) is frame-history-sensitive in an extra-capture/UI-exit
+probe; no combined desktop-memory budget pass. No physical 120 Hz/17 ms claim;
+the child backend is 60 Hz and timestamps are software. Host easing is 180 ms OutCubic.
+[Methods, matched controls, all cohorts and limits](docs/specs/0131-pearl-release.md).

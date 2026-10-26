@@ -1,15 +1,25 @@
-B0131 remote Arch container check — 2026-10-25
-Image: ghcr.io/archlinux/archlinux:latest; Rust 1.99.0; nice 10; Cargo -j2.
-Command: bash full-ci.sh (adjacent complete job replica).
-Result: exit 0, FULL_CI_OK, including the cold transparent-size repair.
-Source SHA-256 manifest matched the worktree for crates, shell, scripts, spikes,
-tools, workflows, packaging and Cargo/license manifests.
-Final rebased manifest: d6663df9aa6e1b5e91784de026367d8d07827336dad05488bdfed98afd8f3424.
-Captured build's source manifest: 32a25e6e8cbfab58f7905ccd7d5ac81827507db6a342f45ee9166c9ddfdaec3a.
-All formatting, denied-warning Clippy, workspace/trace tests, renderer feature
-configurations, facade, Luau, Python, packaging, wallpaper smoke, service/tray
-lifecycle and dependency/license graph checks passed. Classifier suite: 15 passed.
-RUST_TEST_THREADS=1; existing product evaluation deadlines unchanged.
-Virtual pointer also compiled with cc -Wall -Wextra -Werror, Wayland scanner,
--lwayland-client -lm; direct relative motion is flushed on monotonic deadlines.
-No build, test, capture, installation or live configuration change on the laptop.
+B0131 follow-up remote Arch CI — 2026-10-26
+Source: 29649df3, integrating origin/main bb054fa2; release profile, nice 10, Cargo -j2.
+Image: ghcr.io/archlinux/archlinux:latest; Rust 1.99.0.
+Command: bash /work/full-ci.sh (adjacent complete workflow-command replica).
+Result: exit 0, FULL_CI_OK. Workspace and trace-memory tests, denied-warning
+Clippy, formatting, service boundary, all renderer feature configurations,
+facade, Luau schema/analyzer, Python suites (including 22 pearl proof tests and
+launcher icon proof tests), packaging, wallpaper smoke, service/tray lifecycle,
+and cargo-deny root plus independent framework graphs all passed.
+
+Candidate source-file manifest SHA256:
+879401115ac630e5709e1c80ab9cc29d6053892f2f4f0820fcbc6e059c737f87
+Candidate nacre-shell binary SHA256:
+6bc24a719d886c2dad1b502c7d62ac1fa064d922f2046c0c3527d22f47895406
+The manifest covers crates, shell, spikes, tools and Cargo manifests; byte checks
+against the build container passed. Source and binary hashes are different
+identities. build-identity.json also records the matched control and helper.
+
+RUST_TEST_THREADS=1; existing 50 ms Luau deadlines unchanged. TMPDIR is a fresh
+root-owned 0700 directory under /tmp; no security checks were relaxed. An initial
+integrated run found a newly added Motion test fixture missing the optional
+return fields; that fixture was fixed before this complete pass. Switching the
+shared target back from control required invalidating stale build artifacts;
+all workspace sources were touched and rebuilt before this final run.
+No local build/test/capture and no live installation or desktop config change.

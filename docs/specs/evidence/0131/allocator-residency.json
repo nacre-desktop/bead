@@ -1,0 +1,215 @@
+{
+  "method": "One matched CPU control/candidate diagnostic at docked idle; a private preload thread calls glibc malloc_trim outside the timing cohorts. KiB. Live allocations unchanged; this attributes residency to reclaimable allocator pages, not to a named arena.",
+  "control_source": "c720b8d5",
+  "candidate_source": "2d6cb5c7",
+  "arms": {
+    "control": {
+      "sample_index": 1,
+      "rss_before_kib": {
+        "VmRSS": 104184,
+        "RssAnon": 39160,
+        "Pss": 78357,
+        "Pss_Anon": 39160,
+        "Pss_File": 21067,
+        "Pss_Shmem": 18130,
+        "SwapPss": 0,
+        "DRM": 0
+      },
+      "rss_after_kib": {
+        "VmRSS": 103920,
+        "RssAnon": 38896,
+        "Pss": 78093,
+        "Pss_Anon": 38896,
+        "Pss_File": 21067,
+        "Pss_Shmem": 18130,
+        "SwapPss": 0,
+        "DRM": 0
+      },
+      "rss_delta": {
+        "VmRSS": -264,
+        "Pss_File": 0,
+        "Pss_Anon": -264,
+        "SwapPss": 0,
+        "Pss_Shmem": 0,
+        "DRM": 0,
+        "RssAnon": -264,
+        "Pss": -264
+      },
+      "malloc_trim": {
+        "malloc_trim_return": 1,
+        "before": {
+          "arena": 51195904,
+          "ordblks": 3789,
+          "uordblks": 26721680,
+          "fordblks": 24474224,
+          "keepcost": 133296
+        },
+        "after": {
+          "arena": 51064832,
+          "ordblks": 3789,
+          "uordblks": 26721680,
+          "fordblks": 24343152,
+          "keepcost": 2224
+        }
+      }
+    },
+    "candidate": {
+      "sample_index": 1,
+      "rss_before_kib": {
+        "VmRSS": 108492,
+        "RssAnon": 43612,
+        "Pss": 82689,
+        "Pss_Anon": 43612,
+        "Pss_File": 20945,
+        "Pss_Shmem": 18132,
+        "SwapPss": 0,
+        "DRM": 0
+      },
+      "rss_after_kib": {
+        "VmRSS": 103900,
+        "RssAnon": 39020,
+        "Pss": 78097,
+        "Pss_Anon": 39020,
+        "Pss_File": 20945,
+        "Pss_Shmem": 18132,
+        "SwapPss": 0,
+        "DRM": 0
+      },
+      "rss_delta": {
+        "RssAnon": -4592,
+        "Pss": -4592,
+        "VmRSS": -4592,
+        "Pss_File": 0,
+        "DRM": 0,
+        "SwapPss": 0,
+        "Pss_Anon": -4592,
+        "Pss_Shmem": 0
+      },
+      "malloc_trim": {
+        "malloc_trim_return": 1,
+        "before": {
+          "arena": 51372032,
+          "ordblks": 3970,
+          "uordblks": 26862288,
+          "fordblks": 24509744,
+          "keepcost": 133600
+        },
+        "after": {
+          "arena": 51240960,
+          "ordblks": 3970,
+          "uordblks": 26862288,
+          "fordblks": 24378672,
+          "keepcost": 2528
+        }
+      }
+    }
+  },
+  "additional_gl_diagnostic": {
+    "method": "One matched GL control/candidate diagnostic at docked idle; same private preload trim, separate from formal cohorts and five memory pairs.",
+    "control_source": "d4a2585c",
+    "candidate_source": "29649df3",
+    "arms": {
+      "control": {
+        "sample_index": 1,
+        "rss_before_kib": {
+          "VmRSS": 197224,
+          "RssAnon": 64824,
+          "Pss": 125185,
+          "Pss_Anon": 64824,
+          "Pss_File": 46185,
+          "Pss_Shmem": 14175,
+          "SwapPss": 0,
+          "DRM": 118440.0
+        },
+        "rss_after_kib": {
+          "VmRSS": 197204,
+          "RssAnon": 64804,
+          "Pss": 125165,
+          "Pss_Anon": 64804,
+          "Pss_File": 46185,
+          "Pss_Shmem": 14175,
+          "SwapPss": 0,
+          "DRM": 118440.0
+        },
+        "rss_delta": {
+          "Pss": -20,
+          "Pss_Anon": -20,
+          "DRM": 0.0,
+          "VmRSS": -20,
+          "RssAnon": -20,
+          "Pss_File": 0,
+          "Pss_Shmem": 0,
+          "SwapPss": 0
+        },
+        "malloc_trim": {
+          "malloc_trim_return": 1,
+          "before": {
+            "arena": 66949120,
+            "ordblks": 3721,
+            "uordblks": 43816160,
+            "fordblks": 23132960,
+            "keepcost": 1072
+          },
+          "after": {
+            "arena": 66949120,
+            "ordblks": 3721,
+            "uordblks": 43816160,
+            "fordblks": 23132960,
+            "keepcost": 1072
+          }
+        }
+      },
+      "candidate": {
+        "sample_index": 1,
+        "rss_before_kib": {
+          "VmRSS": 202468,
+          "RssAnon": 69984,
+          "Pss": 130443,
+          "Pss_Anon": 69984,
+          "Pss_File": 46281,
+          "Pss_Shmem": 14177,
+          "SwapPss": 0,
+          "DRM": 134736.0
+        },
+        "rss_after_kib": {
+          "VmRSS": 198448,
+          "RssAnon": 65964,
+          "Pss": 126423,
+          "Pss_Anon": 65964,
+          "Pss_File": 46281,
+          "Pss_Shmem": 14177,
+          "SwapPss": 0,
+          "DRM": 134736.0
+        },
+        "rss_delta": {
+          "VmRSS": -4020,
+          "DRM": 0.0,
+          "RssAnon": -4020,
+          "Pss": -4020,
+          "Pss_Anon": -4020,
+          "Pss_Shmem": 0,
+          "Pss_File": 0,
+          "SwapPss": 0
+        },
+        "malloc_trim": {
+          "malloc_trim_return": 1,
+          "before": {
+            "arena": 71081984,
+            "ordblks": 4116,
+            "uordblks": 43916544,
+            "fordblks": 27165440,
+            "keepcost": 3136
+          },
+          "after": {
+            "arena": 71081984,
+            "ordblks": 4116,
+            "uordblks": 43916544,
+            "fordblks": 27165440,
+            "keepcost": 3136
+          }
+        }
+      }
+    }
+  },
+  "raw_evidence": "allocator-residency-trials.json.gz"
+}

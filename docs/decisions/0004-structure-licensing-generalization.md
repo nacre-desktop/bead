@@ -78,6 +78,8 @@ After Bead's core switch on Nacre, plan support for:
 
 ## Generalization list (framework pieces added by feature work)
 
+- B0131: optional native-target prewarming and generation-checked covered commits preserve authored content and geometry; `Motion.return_duration`/`return_curve` let hosts choose dock easing. Backend admission stays behind the neutral pearl interface.
+
 - B0126: `SceneSource::drag_visuals` carries authored pointer/travel bounds and stable visual identity; the toolkit slider supplies metadata, with no service IDs in the compositor primitive. Optional fill metadata uses one shared pose and bounded regional SHM paint; `Session::local_range_feedback` applies authored numeric/text arguments without view/layout work; service completion remains outside projection.
 
 - B0114: `clip_children` crops descendant painting and pointer regions to a view rectangle without scroll state.

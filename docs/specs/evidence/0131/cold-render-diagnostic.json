@@ -1,0 +1,20 @@
+{
+  "method": "Diagnostic CPU traces of source dd9a3d01: 3 held relative release trials per build profile, 1 s before release through native handoff. Dev and release use identical production sources (archive byte comparison passed). Profiles differ; these are not a like-for-like code-only speedup claim or a formal 20-trial gate.",
+  "source": "dd9a3d01",
+  "dev_binary_sha256": "8a151467cb8e7910b340bd46cbd4452f6b39c24b270ec4f184ca2a846e5edd90",
+  "release_binary_sha256": "b47e435aab5f6e02f3b7cd4808a0822d24d28b75ddf3eacd26b7655e9f243d54",
+  "dev": {
+    "ui_frame_count": 53,
+    "ui_frame_p99_ms": 439.216,
+    "reveal_edge_build_p99_ms": 208.5659,
+    "compose_p99_ms": 231.6468,
+    "editor_shape_p99_ms": 1.5975
+  },
+  "release": {
+    "ui_frame_count": 69,
+    "ui_frame_p99_ms": 15.912,
+    "reveal_edge_build_p99_ms": 7.329,
+    "compose_p99_ms": 8.5038
+  },
+  "finding": "The original CPU tail was dominated by cold reveal-edge geometry and composition, with small text-shaping time. CPU rendering excludes GL context creation as its cause. Prewarming stable content removes cold work from release; the GL path separately shares the context and avoids first-buffer extent changes."
+}

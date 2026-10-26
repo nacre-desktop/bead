@@ -1,7 +1,18 @@
-# Sanitized final pair evidence
+# Sanitized paired contours
 
-Header PNGs crop 260×110 logical pixels around each launcher's upper-left contour/header at 1.5× scale. They omit the top bar and central/right provider content. `pair-summary.json` contains only geometry, API outcomes, sparse endpoint RGB comparisons, and the Bead layer-margin trace.
+Each PNG is a 48×48 logical (72×72 physical) crop around the upper-left contour,
+or the lower-left join for `*-bottom.png`. Crops cover idle, open, hover, pressed,
+detached and redocked states, omitting text, provider inventory and the top bar.
+`pair-summary.json` records geometry and the control/AI API outcomes.
 
-The QML redocked endpoint is retained at its expected docked crop, where the static sample found no panel pixels. The pair did not produce a visible QML return, so it is not counted as a successful visual redock.
+QML is pinned to the public source recorded in the summary; the Bead state and
+return captures use source `2d6cb5c7`. Both private sessions use the same output,
+scale, palette and wallpaper. Full screenshots remain private. These crops
+compare contour placement, not complete pixel-style parity: gesture input
+regions and hover/focus content differ.
 
-Additional crops: `*-idle.png` show the expected initial top-left ROI while idle; `*-drag-held.png` use the latest ready frame strictly before exact pointer release; `*-open-bottom.png`, `*-detached-bottom.png`, and `*-redocked-bottom.png` show the bottom-left contour/search-field area. All remain 260×110 logical pixels and omit the right provider area and top bar.
+Both return trajectories are monotonic and blank-free, using 180 ms OutCubic.
+QML/Bead settle within 2 px after 182.964/135.557 ms respectively. Sampling gaps
+make the first changed image an upper bound on onset, not a measured stall.
+Control and AI cold API detach commit native content and restore docked state;
+AI's detached flag clears. No daily desktop changes were made.

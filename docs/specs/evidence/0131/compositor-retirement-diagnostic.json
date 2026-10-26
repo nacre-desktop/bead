@@ -1,0 +1,371 @@
+{
+  "method": "One matched CPU diagnostic, separate from formal cohorts and five memory pairs: closed+3s, then five additional screencopies with 150ms waits; terminate only the diagnostic private UI process, then three further captures. This probes compositor frame-history/resource accounting; it does not establish a cache mechanism or a combined desktop budget pass.",
+  "control_source": "d4a2585c",
+  "candidate_source": "29649df3",
+  "arms": {
+    "control": [
+      {
+        "label": "closed-plus3s-before-extra-frame",
+        "memory_kib": {
+          "VmRSS": 80572,
+          "RssAnon": 31540,
+          "Pss": 61803,
+          "Pss_Anon": 31540,
+          "Pss_File": 19427,
+          "Pss_Shmem": 10836,
+          "SwapPss": 0,
+          "DRM": 0,
+          "private_compositor": {
+            "VmRSS": 189048,
+            "RssAnon": 35732,
+            "Pss": 126660,
+            "Pss_Anon": 35732,
+            "Pss_File": 59679,
+            "Pss_Shmem": 31249,
+            "SwapPss": 0,
+            "DRM": 171588.0
+          }
+        }
+      },
+      {
+        "label": "after-extra-frame-1",
+        "memory_kib": {
+          "VmRSS": 80572,
+          "RssAnon": 31540,
+          "Pss": 61803,
+          "Pss_Anon": 31540,
+          "Pss_File": 19427,
+          "Pss_Shmem": 10836,
+          "SwapPss": 0,
+          "DRM": 0,
+          "private_compositor": {
+            "VmRSS": 189048,
+            "RssAnon": 35732,
+            "Pss": 126660,
+            "Pss_Anon": 35732,
+            "Pss_File": 59679,
+            "Pss_Shmem": 31249,
+            "SwapPss": 0,
+            "DRM": 192408.0
+          }
+        }
+      },
+      {
+        "label": "after-extra-frame-2",
+        "memory_kib": {
+          "VmRSS": 80572,
+          "RssAnon": 31540,
+          "Pss": 61803,
+          "Pss_Anon": 31540,
+          "Pss_File": 19427,
+          "Pss_Shmem": 10836,
+          "SwapPss": 0,
+          "DRM": 0,
+          "private_compositor": {
+            "VmRSS": 189048,
+            "RssAnon": 35732,
+            "Pss": 126660,
+            "Pss_Anon": 35732,
+            "Pss_File": 59679,
+            "Pss_Shmem": 31249,
+            "SwapPss": 0,
+            "DRM": 214584.0
+          }
+        }
+      },
+      {
+        "label": "after-extra-frame-3",
+        "memory_kib": {
+          "VmRSS": 80572,
+          "RssAnon": 31540,
+          "Pss": 61802,
+          "Pss_Anon": 31540,
+          "Pss_File": 19426,
+          "Pss_Shmem": 10836,
+          "SwapPss": 0,
+          "DRM": 0,
+          "private_compositor": {
+            "VmRSS": 189048,
+            "RssAnon": 35732,
+            "Pss": 126660,
+            "Pss_Anon": 35732,
+            "Pss_File": 59679,
+            "Pss_Shmem": 31249,
+            "SwapPss": 0,
+            "DRM": 214584.0
+          }
+        }
+      },
+      {
+        "label": "after-extra-frame-4",
+        "memory_kib": {
+          "VmRSS": 80572,
+          "RssAnon": 31540,
+          "Pss": 61802,
+          "Pss_Anon": 31540,
+          "Pss_File": 19426,
+          "Pss_Shmem": 10836,
+          "SwapPss": 0,
+          "DRM": 0,
+          "private_compositor": {
+            "VmRSS": 189048,
+            "RssAnon": 35732,
+            "Pss": 126660,
+            "Pss_Anon": 35732,
+            "Pss_File": 59679,
+            "Pss_Shmem": 31249,
+            "SwapPss": 0,
+            "DRM": 214584.0
+          }
+        }
+      },
+      {
+        "label": "after-extra-frame-5",
+        "memory_kib": {
+          "VmRSS": 80572,
+          "RssAnon": 31540,
+          "Pss": 61802,
+          "Pss_Anon": 31540,
+          "Pss_File": 19426,
+          "Pss_Shmem": 10836,
+          "SwapPss": 0,
+          "DRM": 0,
+          "private_compositor": {
+            "VmRSS": 189048,
+            "RssAnon": 35732,
+            "Pss": 126660,
+            "Pss_Anon": 35732,
+            "Pss_File": 59679,
+            "Pss_Shmem": 31249,
+            "SwapPss": 0,
+            "DRM": 214584.0
+          }
+        }
+      },
+      {
+        "label": "after-private-ui-exit-frame-1",
+        "compositor_memory_kib": {
+          "VmRSS": 167376,
+          "RssAnon": 35732,
+          "Pss": 116477,
+          "Pss_Anon": 35732,
+          "Pss_File": 60332,
+          "Pss_Shmem": 20413,
+          "SwapPss": 0,
+          "DRM": 214584.0
+        },
+        "ui_returncode": -15
+      },
+      {
+        "label": "after-private-ui-exit-frame-2",
+        "compositor_memory_kib": {
+          "VmRSS": 167376,
+          "RssAnon": 35732,
+          "Pss": 116477,
+          "Pss_Anon": 35732,
+          "Pss_File": 60332,
+          "Pss_Shmem": 20413,
+          "SwapPss": 0,
+          "DRM": 214584.0
+        },
+        "ui_returncode": -15
+      },
+      {
+        "label": "after-private-ui-exit-frame-3",
+        "compositor_memory_kib": {
+          "VmRSS": 167376,
+          "RssAnon": 35732,
+          "Pss": 116477,
+          "Pss_Anon": 35732,
+          "Pss_File": 60332,
+          "Pss_Shmem": 20413,
+          "SwapPss": 0,
+          "DRM": 214584.0
+        },
+        "ui_returncode": -15
+      }
+    ],
+    "candidate": [
+      {
+        "label": "closed-plus3s-before-extra-frame",
+        "memory_kib": {
+          "VmRSS": 80512,
+          "RssAnon": 31388,
+          "Pss": 61672,
+          "Pss_Anon": 31388,
+          "Pss_File": 19448,
+          "Pss_Shmem": 10836,
+          "SwapPss": 0,
+          "DRM": 0,
+          "private_compositor": {
+            "VmRSS": 188304,
+            "RssAnon": 35532,
+            "Pss": 126140,
+            "Pss_Anon": 35532,
+            "Pss_File": 59359,
+            "Pss_Shmem": 31249,
+            "SwapPss": 0,
+            "DRM": 218684.0
+          }
+        }
+      },
+      {
+        "label": "after-extra-frame-1",
+        "memory_kib": {
+          "VmRSS": 80512,
+          "RssAnon": 31388,
+          "Pss": 61672,
+          "Pss_Anon": 31388,
+          "Pss_File": 19448,
+          "Pss_Shmem": 10836,
+          "SwapPss": 0,
+          "DRM": 0,
+          "private_compositor": {
+            "VmRSS": 188304,
+            "RssAnon": 35532,
+            "Pss": 126140,
+            "Pss_Anon": 35532,
+            "Pss_File": 59359,
+            "Pss_Shmem": 31249,
+            "SwapPss": 0,
+            "DRM": 197084.0
+          }
+        }
+      },
+      {
+        "label": "after-extra-frame-2",
+        "memory_kib": {
+          "VmRSS": 80512,
+          "RssAnon": 31388,
+          "Pss": 61672,
+          "Pss_Anon": 31388,
+          "Pss_File": 19448,
+          "Pss_Shmem": 10836,
+          "SwapPss": 0,
+          "DRM": 0,
+          "private_compositor": {
+            "VmRSS": 188304,
+            "RssAnon": 35532,
+            "Pss": 126140,
+            "Pss_Anon": 35532,
+            "Pss_File": 59359,
+            "Pss_Shmem": 31249,
+            "SwapPss": 0,
+            "DRM": 219252.0
+          }
+        }
+      },
+      {
+        "label": "after-extra-frame-3",
+        "memory_kib": {
+          "VmRSS": 80512,
+          "RssAnon": 31388,
+          "Pss": 61672,
+          "Pss_Anon": 31388,
+          "Pss_File": 19448,
+          "Pss_Shmem": 10836,
+          "SwapPss": 0,
+          "DRM": 0,
+          "private_compositor": {
+            "VmRSS": 188304,
+            "RssAnon": 35532,
+            "Pss": 126140,
+            "Pss_Anon": 35532,
+            "Pss_File": 59359,
+            "Pss_Shmem": 31249,
+            "SwapPss": 0,
+            "DRM": 219252.0
+          }
+        }
+      },
+      {
+        "label": "after-extra-frame-4",
+        "memory_kib": {
+          "VmRSS": 80512,
+          "RssAnon": 31388,
+          "Pss": 61672,
+          "Pss_Anon": 31388,
+          "Pss_File": 19448,
+          "Pss_Shmem": 10836,
+          "SwapPss": 0,
+          "DRM": 0,
+          "private_compositor": {
+            "VmRSS": 188304,
+            "RssAnon": 35532,
+            "Pss": 126140,
+            "Pss_Anon": 35532,
+            "Pss_File": 59359,
+            "Pss_Shmem": 31249,
+            "SwapPss": 0,
+            "DRM": 219252.0
+          }
+        }
+      },
+      {
+        "label": "after-extra-frame-5",
+        "memory_kib": {
+          "VmRSS": 80512,
+          "RssAnon": 31388,
+          "Pss": 61672,
+          "Pss_Anon": 31388,
+          "Pss_File": 19448,
+          "Pss_Shmem": 10836,
+          "SwapPss": 0,
+          "DRM": 0,
+          "private_compositor": {
+            "VmRSS": 188304,
+            "RssAnon": 35532,
+            "Pss": 126140,
+            "Pss_Anon": 35532,
+            "Pss_File": 59359,
+            "Pss_Shmem": 31249,
+            "SwapPss": 0,
+            "DRM": 219252.0
+          }
+        }
+      },
+      {
+        "label": "after-private-ui-exit-frame-1",
+        "compositor_memory_kib": {
+          "VmRSS": 166696,
+          "RssAnon": 35532,
+          "Pss": 116012,
+          "Pss_Anon": 35532,
+          "Pss_File": 60067,
+          "Pss_Shmem": 20413,
+          "SwapPss": 0,
+          "DRM": 219252.0
+        },
+        "ui_returncode": -15
+      },
+      {
+        "label": "after-private-ui-exit-frame-2",
+        "compositor_memory_kib": {
+          "VmRSS": 166696,
+          "RssAnon": 35532,
+          "Pss": 116008,
+          "Pss_Anon": 35532,
+          "Pss_File": 60063,
+          "Pss_Shmem": 20413,
+          "SwapPss": 0,
+          "DRM": 197076.0
+        },
+        "ui_returncode": -15
+      },
+      {
+        "label": "after-private-ui-exit-frame-3",
+        "compositor_memory_kib": {
+          "VmRSS": 166696,
+          "RssAnon": 35532,
+          "Pss": 116012,
+          "Pss_Anon": 35532,
+          "Pss_File": 60067,
+          "Pss_Shmem": 20413,
+          "SwapPss": 0,
+          "DRM": 197076.0
+        },
+        "ui_returncode": -15
+      }
+    ]
+  }
+}

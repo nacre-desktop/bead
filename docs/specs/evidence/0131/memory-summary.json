@@ -1,0 +1,2321 @@
+{
+  "method": "five alternating control/candidate pairs per backend, same output and flags; KiB; main UI gated; private compositor reported separately",
+  "backends": {
+    "cpu": {
+      "candidate_source": "29649df3",
+      "control_source": "d4a2585c",
+      "phases": {
+        "idle": {
+          "median_kib": {
+            "control": {
+              "Pss_Anon": 29820,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0,
+              "Pss_File": 20204,
+              "Pss": 60995,
+              "unreclaimable": 40656
+            },
+            "candidate": {
+              "Pss_Anon": 29616,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0,
+              "Pss_File": 20305,
+              "Pss": 60505,
+              "unreclaimable": 40452
+            }
+          },
+          "paired_delta_kib": {
+            "Pss_Anon": [
+              -5032,
+              -120,
+              -204,
+              -272,
+              -1032
+            ],
+            "Pss_Shmem": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "DRM": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "SwapPss": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "Pss_File": [
+              112,
+              -257,
+              -243,
+              117,
+              426
+            ],
+            "Pss": [
+              -4920,
+              -377,
+              -447,
+              -155,
+              -606
+            ],
+            "unreclaimable": [
+              -5032,
+              -120,
+              -204,
+              -272,
+              -1032
+            ]
+          },
+          "median_paired_delta_kib": {
+            "Pss_Anon": -272,
+            "Pss_Shmem": 0,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 112,
+            "Pss": -447,
+            "unreclaimable": -272
+          },
+          "private_compositor": {
+            "median_kib": {
+              "control": {
+                "Pss_Anon": 35580,
+                "Pss_Shmem": 31249,
+                "DRM": 177844.0,
+                "SwapPss": 0,
+                "Pss_File": 59331,
+                "Pss": 126425,
+                "unreclaimable": 244417.0
+              },
+              "candidate": {
+                "Pss_Anon": 35296,
+                "Pss_Shmem": 31249,
+                "DRM": 175796.0,
+                "SwapPss": 0,
+                "Pss_File": 59514,
+                "Pss": 126105,
+                "unreclaimable": 242313.0
+              }
+            },
+            "paired_delta_kib": {
+              "Pss_Anon": [
+                -356,
+                196,
+                -284,
+                -1324,
+                92
+              ],
+              "Pss_Shmem": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "DRM": [
+                20252.0,
+                -2048.0,
+                0.0,
+                -2048.0,
+                -2048.0
+              ],
+              "SwapPss": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "Pss_File": [
+                29,
+                206,
+                -294,
+                -6,
+                210
+              ],
+              "Pss": [
+                -327,
+                403,
+                -579,
+                -1330,
+                303
+              ],
+              "unreclaimable": [
+                19896.0,
+                -1852.0,
+                -284.0,
+                -3372.0,
+                -1956.0
+              ]
+            },
+            "median_paired_delta_kib": {
+              "Pss_Anon": -284,
+              "Pss_Shmem": 0,
+              "DRM": -2048.0,
+              "SwapPss": 0,
+              "Pss_File": 29,
+              "Pss": -327,
+              "unreclaimable": -1852.0
+            }
+          }
+        },
+        "docked": {
+          "median_kib": {
+            "control": {
+              "Pss_Anon": 38912,
+              "Pss_Shmem": 18006,
+              "DRM": 0,
+              "SwapPss": 0,
+              "Pss_File": 20949,
+              "Pss": 78038,
+              "unreclaimable": 56918
+            },
+            "candidate": {
+              "Pss_Anon": 43764,
+              "Pss_Shmem": 18008,
+              "DRM": 0,
+              "SwapPss": 0,
+              "Pss_File": 21047,
+              "Pss": 82660,
+              "unreclaimable": 61772
+            }
+          },
+          "paired_delta_kib": {
+            "Pss_Anon": [
+              4136,
+              4848,
+              4848,
+              4888,
+              5180
+            ],
+            "Pss_Shmem": [
+              2,
+              2,
+              2,
+              2,
+              126
+            ],
+            "DRM": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "SwapPss": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "Pss_File": [
+              98,
+              -263,
+              -140,
+              167,
+              379
+            ],
+            "Pss": [
+              4236,
+              4587,
+              4710,
+              5057,
+              5685
+            ],
+            "unreclaimable": [
+              4138,
+              4850,
+              4850,
+              4890,
+              5306
+            ]
+          },
+          "median_paired_delta_kib": {
+            "Pss_Anon": 4848,
+            "Pss_Shmem": 2,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 98,
+            "Pss": 4710,
+            "unreclaimable": 4850
+          },
+          "private_compositor": {
+            "median_kib": {
+              "control": {
+                "Pss_Anon": 35580,
+                "Pss_Shmem": 38419,
+                "DRM": 198136.0,
+                "SwapPss": 0,
+                "Pss_File": 59331,
+                "Pss": 133595,
+                "unreclaimable": 272051.0
+              },
+              "candidate": {
+                "Pss_Anon": 35300,
+                "Pss_Shmem": 38421,
+                "DRM": 200088.0,
+                "SwapPss": 0,
+                "Pss_File": 59669,
+                "Pss": 133390,
+                "unreclaimable": 273765.0
+              }
+            },
+            "paired_delta_kib": {
+              "Pss_Anon": [
+                -348,
+                204,
+                -280,
+                -1316,
+                100
+              ],
+              "Pss_Shmem": [
+                2,
+                2,
+                2,
+                2,
+                -122
+              ],
+              "DRM": [
+                -88.0,
+                1912.0,
+                2108.0,
+                2140.0,
+                -3792.0
+              ],
+              "SwapPss": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "Pss_File": [
+                199,
+                350,
+                -129,
+                132,
+                365
+              ],
+              "Pss": [
+                -146,
+                556,
+                -408,
+                -1182,
+                343
+              ],
+              "unreclaimable": [
+                -434.0,
+                2118.0,
+                1830.0,
+                826.0,
+                -3814.0
+              ]
+            },
+            "median_paired_delta_kib": {
+              "Pss_Anon": -280,
+              "Pss_Shmem": 2,
+              "DRM": 1912.0,
+              "SwapPss": 0,
+              "Pss_File": 199,
+              "Pss": -146,
+              "unreclaimable": 826.0
+            }
+          }
+        },
+        "handoff": {
+          "median_kib": {
+            "control": {
+              "Pss_Anon": 39144,
+              "Pss_Shmem": 18004,
+              "DRM": 0,
+              "SwapPss": 0,
+              "Pss_File": 20934,
+              "Pss": 78261,
+              "unreclaimable": 57148
+            },
+            "candidate": {
+              "Pss_Anon": 40364,
+              "Pss_Shmem": 18006,
+              "DRM": 0,
+              "SwapPss": 0,
+              "Pss_File": 21026,
+              "Pss": 79328,
+              "unreclaimable": 58370
+            }
+          },
+          "paired_delta_kib": {
+            "Pss_Anon": [
+              456,
+              1236,
+              1324,
+              1240,
+              1100
+            ],
+            "Pss_Shmem": [
+              2,
+              2,
+              2,
+              2,
+              2
+            ],
+            "DRM": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "SwapPss": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "Pss_File": [
+              92,
+              -201,
+              -136,
+              162,
+              374
+            ],
+            "Pss": [
+              550,
+              1037,
+              1190,
+              1404,
+              1476
+            ],
+            "unreclaimable": [
+              458,
+              1238,
+              1326,
+              1242,
+              1102
+            ]
+          },
+          "median_paired_delta_kib": {
+            "Pss_Anon": 1236,
+            "Pss_Shmem": 2,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 92,
+            "Pss": 1190,
+            "unreclaimable": 1238
+          },
+          "private_compositor": {
+            "median_kib": {
+              "control": {
+                "Pss_Anon": 35764,
+                "Pss_Shmem": 57109,
+                "DRM": 225680.0,
+                "SwapPss": 0,
+                "Pss_File": 59421,
+                "Pss": 152195,
+                "unreclaimable": 318485.0
+              },
+              "candidate": {
+                "Pss_Anon": 35664,
+                "Pss_Shmem": 42271,
+                "DRM": 251868.0,
+                "SwapPss": 0,
+                "Pss_File": 59714,
+                "Pss": 137701,
+                "unreclaimable": 329803.0
+              }
+            },
+            "paired_delta_kib": {
+              "Pss_Anon": [
+                -344,
+                1000,
+                -220,
+                -464,
+                96
+              ],
+              "Pss_Shmem": [
+                -14838,
+                -14838,
+                -14838,
+                6,
+                6
+              ],
+              "DRM": [
+                32060.0,
+                15196.0,
+                26164.0,
+                28220.0,
+                26192.0
+              ],
+              "SwapPss": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "Pss_File": [
+                246,
+                324,
+                -62,
+                72,
+                418
+              ],
+              "Pss": [
+                -14936,
+                -13513,
+                -15121,
+                -385,
+                520
+              ],
+              "unreclaimable": [
+                16878.0,
+                1358.0,
+                11106.0,
+                27762.0,
+                26294.0
+              ]
+            },
+            "median_paired_delta_kib": {
+              "Pss_Anon": -220,
+              "Pss_Shmem": -14838,
+              "DRM": 26192.0,
+              "SwapPss": 0,
+              "Pss_File": 246,
+              "Pss": -13513,
+              "unreclaimable": 16878.0
+            }
+          }
+        },
+        "detached": {
+          "median_kib": {
+            "control": {
+              "Pss_Anon": 39844,
+              "Pss_Shmem": 14182,
+              "DRM": 0,
+              "SwapPss": 0,
+              "Pss_File": 20945,
+              "Pss": 75145,
+              "unreclaimable": 54026
+            },
+            "candidate": {
+              "Pss_Anon": 44376,
+              "Pss_Shmem": 18006,
+              "DRM": 0,
+              "SwapPss": 0,
+              "Pss_File": 21046,
+              "Pss": 83248,
+              "unreclaimable": 62382
+            }
+          },
+          "paired_delta_kib": {
+            "Pss_Anon": [
+              4000,
+              4372,
+              4588,
+              4580,
+              5076
+            ],
+            "Pss_Shmem": [
+              3824,
+              3824,
+              3824,
+              3824,
+              3824
+            ],
+            "DRM": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "SwapPss": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "Pss_File": [
+              101,
+              -194,
+              -138,
+              116,
+              317
+            ],
+            "Pss": [
+              7925,
+              8002,
+              8274,
+              8520,
+              9217
+            ],
+            "unreclaimable": [
+              7824,
+              8196,
+              8412,
+              8404,
+              8900
+            ]
+          },
+          "median_paired_delta_kib": {
+            "Pss_Anon": 4580,
+            "Pss_Shmem": 3824,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 101,
+            "Pss": 8274,
+            "unreclaimable": 8404
+          },
+          "private_compositor": {
+            "median_kib": {
+              "control": {
+                "Pss_Anon": 35764,
+                "Pss_Shmem": 34595,
+                "DRM": 239952.0,
+                "SwapPss": 0,
+                "Pss_File": 59788,
+                "Pss": 130215,
+                "unreclaimable": 310115.0
+              },
+              "candidate": {
+                "Pss_Anon": 35664,
+                "Pss_Shmem": 38419,
+                "DRM": 229008.0,
+                "SwapPss": 0,
+                "Pss_File": 59739,
+                "Pss": 133868,
+                "unreclaimable": 303087.0
+              }
+            },
+            "paired_delta_kib": {
+              "Pss_Anon": [
+                -344,
+                1000,
+                -220,
+                -464,
+                96
+              ],
+              "Pss_Shmem": [
+                3824,
+                3824,
+                3824,
+                3824,
+                3824
+              ],
+              "DRM": [
+                -6856.0,
+                -10392.0,
+                15312.0,
+                -10376.0,
+                -10948.0
+              ],
+              "SwapPss": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "Pss_File": [
+                -22,
+                -49,
+                -277,
+                -244,
+                82
+              ],
+              "Pss": [
+                3458,
+                4776,
+                3327,
+                3115,
+                4002
+              ],
+              "unreclaimable": [
+                -3376.0,
+                -5568.0,
+                18916.0,
+                -7016.0,
+                -7028.0
+              ]
+            },
+            "median_paired_delta_kib": {
+              "Pss_Anon": -220,
+              "Pss_Shmem": 3824,
+              "DRM": -10376.0,
+              "SwapPss": 0,
+              "Pss_File": -49,
+              "Pss": 3458,
+              "unreclaimable": -5568.0
+            }
+          }
+        },
+        "closed": {
+          "median_kib": {
+            "control": {
+              "Pss_Anon": 31704,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0,
+              "Pss_File": 19561,
+              "Pss": 62217,
+              "unreclaimable": 42540
+            },
+            "candidate": {
+              "Pss_Anon": 31608,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0,
+              "Pss_File": 19591,
+              "Pss": 61943,
+              "unreclaimable": 42444
+            }
+          },
+          "paired_delta_kib": {
+            "Pss_Anon": [
+              -588,
+              -80,
+              4,
+              -8,
+              -288
+            ],
+            "Pss_Shmem": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "DRM": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "SwapPss": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "Pss_File": [
+              30,
+              -194,
+              -118,
+              117,
+              382
+            ],
+            "Pss": [
+              -558,
+              -274,
+              -114,
+              109,
+              94
+            ],
+            "unreclaimable": [
+              -588,
+              -80,
+              4,
+              -8,
+              -288
+            ]
+          },
+          "median_paired_delta_kib": {
+            "Pss_Anon": -80,
+            "Pss_Shmem": 0,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 30,
+            "Pss": -114,
+            "unreclaimable": -80
+          },
+          "private_compositor": {
+            "median_kib": {
+              "control": {
+                "Pss_Anon": 35828,
+                "Pss_Shmem": 31249,
+                "DRM": 175680.0,
+                "SwapPss": 0,
+                "Pss_File": 59788,
+                "Pss": 126869,
+                "unreclaimable": 242757.0
+              },
+              "candidate": {
+                "Pss_Anon": 35544,
+                "Pss_Shmem": 31249,
+                "DRM": 218128.0,
+                "SwapPss": 0,
+                "Pss_File": 59739,
+                "Pss": 126638,
+                "unreclaimable": 285037.0
+              }
+            },
+            "paired_delta_kib": {
+              "Pss_Anon": [
+                -344,
+                180,
+                -220,
+                -1284,
+                -164
+              ],
+              "Pss_Shmem": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "DRM": [
+                42440.0,
+                43000.0,
+                42432.0,
+                43016.0,
+                42444.0
+              ],
+              "SwapPss": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "Pss_File": [
+                -152,
+                -49,
+                -278,
+                -245,
+                83
+              ],
+              "Pss": [
+                -497,
+                131,
+                -497,
+                -1528,
+                -82
+              ],
+              "unreclaimable": [
+                42096.0,
+                43180.0,
+                42212.0,
+                41732.0,
+                42280.0
+              ]
+            },
+            "median_paired_delta_kib": {
+              "Pss_Anon": -220,
+              "Pss_Shmem": 0,
+              "DRM": 42444.0,
+              "SwapPss": 0,
+              "Pss_File": -152,
+              "Pss": -497,
+              "unreclaimable": 42212.0
+            }
+          }
+        },
+        "drag_peak": {
+          "median_kib": {
+            "control": {
+              "Pss_Anon": 40940,
+              "Pss_Shmem": 21376,
+              "DRM": 0,
+              "SwapPss": 0,
+              "Pss_File": 20938,
+              "Pss": 85544,
+              "unreclaimable": 64690
+            },
+            "candidate": {
+              "Pss_Anon": 43656,
+              "Pss_Shmem": 20824,
+              "DRM": 0,
+              "SwapPss": 0,
+              "Pss_File": 21025,
+              "Pss": 85469,
+              "unreclaimable": 64480
+            }
+          },
+          "paired_delta_kib": {
+            "Pss_Anon": [
+              3496,
+              -2084,
+              4432,
+              2764,
+              2708
+            ],
+            "Pss_Shmem": [
+              688,
+              -552,
+              688,
+              -2926,
+              -2926
+            ],
+            "DRM": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "SwapPss": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "Pss_File": [
+              87,
+              -213,
+              -144,
+              164,
+              375
+            ],
+            "Pss": [
+              4271,
+              -2849,
+              4976,
+              2,
+              157
+            ],
+            "unreclaimable": [
+              4184,
+              -2636,
+              5120,
+              -162,
+              -218
+            ]
+          },
+          "median_paired_delta_kib": {
+            "Pss_Anon": 2764,
+            "Pss_Shmem": -552,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 87,
+            "Pss": 157,
+            "unreclaimable": -162
+          },
+          "private_compositor": {
+            "median_kib": {
+              "control": {
+                "Pss_Anon": 35764,
+                "Pss_Shmem": 60593,
+                "DRM": 249176.0,
+                "SwapPss": 0,
+                "Pss_File": 59430,
+                "Pss": 156116,
+                "unreclaimable": 345633.0
+              },
+              "candidate": {
+                "Pss_Anon": 35664,
+                "Pss_Shmem": 40505,
+                "DRM": 264376.0,
+                "SwapPss": 0,
+                "Pss_File": 59686,
+                "Pss": 135905,
+                "unreclaimable": 340569.0
+              }
+            },
+            "paired_delta_kib": {
+              "Pss_Anon": [
+                -348,
+                1000,
+                -224,
+                -468,
+                96
+              ],
+              "Pss_Shmem": [
+                -20088,
+                -5852,
+                -14680,
+                -25198,
+                -25198
+              ],
+              "DRM": [
+                15200.0,
+                22068.0,
+                15200.0,
+                6524.0,
+                6544.0
+              ],
+              "SwapPss": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "Pss_File": [
+                170,
+                256,
+                -157,
+                95,
+                437
+              ],
+              "Pss": [
+                -20267,
+                -4595,
+                -15061,
+                -25571,
+                -24665
+              ],
+              "unreclaimable": [
+                -5236.0,
+                17216.0,
+                296.0,
+                -19142.0,
+                -18558.0
+              ]
+            },
+            "median_paired_delta_kib": {
+              "Pss_Anon": -224,
+              "Pss_Shmem": -20088,
+              "DRM": 15200.0,
+              "SwapPss": 0,
+              "Pss_File": 170,
+              "Pss": -20267,
+              "unreclaimable": -5236.0
+            }
+          }
+        }
+      },
+      "visual_outcomes": [
+        {
+          "control": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          },
+          "candidate": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          }
+        },
+        {
+          "control": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          },
+          "candidate": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          }
+        },
+        {
+          "control": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          },
+          "candidate": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          }
+        },
+        {
+          "control": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          },
+          "candidate": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          }
+        },
+        {
+          "control": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          },
+          "candidate": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          }
+        }
+      ],
+      "pair_count": 5
+    },
+    "gl": {
+      "candidate_source": "29649df3",
+      "control_source": "d4a2585c",
+      "phases": {
+        "idle": {
+          "median_kib": {
+            "control": {
+              "Pss_Anon": 29748,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0,
+              "Pss_File": 20161,
+              "Pss": 60778,
+              "unreclaimable": 40584
+            },
+            "candidate": {
+              "Pss_Anon": 29488,
+              "Pss_Shmem": 10836,
+              "DRM": 0,
+              "SwapPss": 0,
+              "Pss_File": 20278,
+              "Pss": 60620,
+              "unreclaimable": 40324
+            }
+          },
+          "paired_delta_kib": {
+            "Pss_Anon": [
+              -248,
+              -756,
+              -552,
+              -28,
+              12
+            ],
+            "Pss_Shmem": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "DRM": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "SwapPss": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "Pss_File": [
+              -563,
+              117,
+              184,
+              109,
+              -79
+            ],
+            "Pss": [
+              -811,
+              -639,
+              -368,
+              81,
+              -67
+            ],
+            "unreclaimable": [
+              -248,
+              -756,
+              -552,
+              -28,
+              12
+            ]
+          },
+          "median_paired_delta_kib": {
+            "Pss_Anon": -248,
+            "Pss_Shmem": 0,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 109,
+            "Pss": -368,
+            "unreclaimable": -248
+          },
+          "private_compositor": {
+            "median_kib": {
+              "control": {
+                "Pss_Anon": 35284,
+                "Pss_Shmem": 31249,
+                "DRM": 175796.0,
+                "SwapPss": 0,
+                "Pss_File": 59478,
+                "Pss": 126018,
+                "unreclaimable": 242649.0
+              },
+              "candidate": {
+                "Pss_Anon": 35584,
+                "Pss_Shmem": 31249,
+                "DRM": 175796.0,
+                "SwapPss": 0,
+                "Pss_File": 59545,
+                "Pss": 126402,
+                "unreclaimable": 242629.0
+              }
+            },
+            "paired_delta_kib": {
+              "Pss_Anon": [
+                324,
+                -116,
+                644,
+                12,
+                -504
+              ],
+              "Pss_Shmem": [
+                0,
+                0,
+                -24,
+                0,
+                0
+              ],
+              "DRM": [
+                2048.0,
+                -20252.0,
+                -4096.0,
+                20252.0,
+                0.0
+              ],
+              "SwapPss": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "Pss_File": [
+                162,
+                245,
+                67,
+                144,
+                -89
+              ],
+              "Pss": [
+                487,
+                129,
+                687,
+                157,
+                -593
+              ],
+              "unreclaimable": [
+                2372.0,
+                -20368.0,
+                -3476.0,
+                20264.0,
+                -504.0
+              ]
+            },
+            "median_paired_delta_kib": {
+              "Pss_Anon": 12,
+              "Pss_Shmem": 0,
+              "DRM": 0.0,
+              "SwapPss": 0,
+              "Pss_File": 144,
+              "Pss": 157,
+              "unreclaimable": -504.0
+            }
+          }
+        },
+        "docked": {
+          "median_kib": {
+            "control": {
+              "Pss_Anon": 64784,
+              "Pss_Shmem": 14175,
+              "DRM": 118440.0,
+              "SwapPss": 0,
+              "Pss_File": 46063,
+              "Pss": 125110,
+              "unreclaimable": 197399.0
+            },
+            "candidate": {
+              "Pss_Anon": 70224,
+              "Pss_Shmem": 14177,
+              "DRM": 134736.0,
+              "SwapPss": 0,
+              "Pss_File": 46125,
+              "Pss": 130527,
+              "unreclaimable": 219137.0
+            }
+          },
+          "paired_delta_kib": {
+            "Pss_Anon": [
+              4880,
+              4660,
+              5808,
+              5424,
+              5420
+            ],
+            "Pss_Shmem": [
+              2,
+              2,
+              2,
+              2,
+              2
+            ],
+            "DRM": [
+              16296.0,
+              16296.0,
+              16296.0,
+              16296.0,
+              16296.0
+            ],
+            "SwapPss": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "Pss_File": [
+              -496,
+              154,
+              62,
+              111,
+              -59
+            ],
+            "Pss": [
+              4386,
+              4815,
+              5872,
+              5536,
+              5363
+            ],
+            "unreclaimable": [
+              21178.0,
+              20958.0,
+              22106.0,
+              21722.0,
+              21718.0
+            ]
+          },
+          "median_paired_delta_kib": {
+            "Pss_Anon": 5420,
+            "Pss_Shmem": 2,
+            "DRM": 16296.0,
+            "SwapPss": 0,
+            "Pss_File": 62,
+            "Pss": 5363,
+            "unreclaimable": 21718.0
+          },
+          "private_compositor": {
+            "median_kib": {
+              "control": {
+                "Pss_Anon": 35284,
+                "Pss_Shmem": 34459,
+                "DRM": 183800.0,
+                "SwapPss": 0,
+                "Pss_File": 47004,
+                "Pss": 116783,
+                "unreclaimable": 253799.0
+              },
+              "candidate": {
+                "Pss_Anon": 35588,
+                "Pss_Shmem": 34461,
+                "DRM": 185848.0,
+                "SwapPss": 0,
+                "Pss_File": 46993,
+                "Pss": 117067,
+                "unreclaimable": 255897.0
+              }
+            },
+            "paired_delta_kib": {
+              "Pss_Anon": [
+                328,
+                -116,
+                648,
+                20,
+                -500
+              ],
+              "Pss_Shmem": [
+                2,
+                2,
+                -22,
+                2,
+                2
+              ],
+              "DRM": [
+                2048.0,
+                2048.0,
+                1496.0,
+                2048.0,
+                2048.0
+              ],
+              "SwapPss": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "Pss_File": [
+                154,
+                234,
+                -11,
+                149,
+                -80
+              ],
+              "Pss": [
+                484,
+                120,
+                615,
+                171,
+                -579
+              ],
+              "unreclaimable": [
+                2378.0,
+                1934.0,
+                2122.0,
+                2070.0,
+                1550.0
+              ]
+            },
+            "median_paired_delta_kib": {
+              "Pss_Anon": 20,
+              "Pss_Shmem": 2,
+              "DRM": 2048.0,
+              "SwapPss": 0,
+              "Pss_File": 149,
+              "Pss": 171,
+              "unreclaimable": 2070.0
+            }
+          }
+        },
+        "handoff": {
+          "median_kib": {
+            "control": {
+              "Pss_Anon": 72216,
+              "Pss_Shmem": 14173,
+              "DRM": 134988.0,
+              "SwapPss": 0,
+              "Pss_File": 46142,
+              "Pss": 132626,
+              "unreclaimable": 221353.0
+            },
+            "candidate": {
+              "Pss_Anon": 73296,
+              "Pss_Shmem": 10943,
+              "DRM": 117892.0,
+              "SwapPss": 0,
+              "Pss_File": 46163,
+              "Pss": 130275,
+              "unreclaimable": 202131.0
+            }
+          },
+          "paired_delta_kib": {
+            "Pss_Anon": [
+              320,
+              -180,
+              1124,
+              1184,
+              1160
+            ],
+            "Pss_Shmem": [
+              -3230,
+              -3230,
+              -3230,
+              -3230,
+              -3230
+            ],
+            "DRM": [
+              -17096.0,
+              -17092.0,
+              -17096.0,
+              -9892.0,
+              -17096.0
+            ],
+            "SwapPss": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "Pss_File": [
+              -599,
+              42,
+              35,
+              11,
+              -52
+            ],
+            "Pss": [
+              -3510,
+              -3368,
+              -2071,
+              -2035,
+              -2121
+            ],
+            "unreclaimable": [
+              -20006.0,
+              -20502.0,
+              -19202.0,
+              -11938.0,
+              -19166.0
+            ]
+          },
+          "median_paired_delta_kib": {
+            "Pss_Anon": 1124,
+            "Pss_Shmem": -3230,
+            "DRM": -17096.0,
+            "SwapPss": 0,
+            "Pss_File": 11,
+            "Pss": -2121,
+            "unreclaimable": -19202.0
+          },
+          "private_compositor": {
+            "median_kib": {
+              "control": {
+                "Pss_Anon": 35524,
+                "Pss_Shmem": 49301,
+                "DRM": 251680.0,
+                "SwapPss": 0,
+                "Pss_File": 47030,
+                "Pss": 131469,
+                "unreclaimable": 329129.0
+              },
+              "candidate": {
+                "Pss_Anon": 35820,
+                "Pss_Shmem": 35075,
+                "DRM": 233440.0,
+                "SwapPss": 0,
+                "Pss_File": 47096,
+                "Pss": 118148,
+                "unreclaimable": 304351.0
+              }
+            },
+            "paired_delta_kib": {
+              "Pss_Anon": [
+                320,
+                -100,
+                664,
+                12,
+                -456
+              ],
+              "Pss_Shmem": [
+                -14614,
+                10550,
+                7058,
+                -14226,
+                -14230
+              ],
+              "DRM": [
+                -18248.0,
+                -11048.0,
+                -4388.0,
+                -11036.0,
+                -18240.0
+              ],
+              "SwapPss": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "Pss_File": [
+                140,
+                288,
+                52,
+                194,
+                19
+              ],
+              "Pss": [
+                -14154,
+                10738,
+                7775,
+                -14020,
+                -14668
+              ],
+              "unreclaimable": [
+                -32542.0,
+                -598.0,
+                3334.0,
+                -25250.0,
+                -32926.0
+              ]
+            },
+            "median_paired_delta_kib": {
+              "Pss_Anon": 12,
+              "Pss_Shmem": -14226,
+              "DRM": -11048.0,
+              "SwapPss": 0,
+              "Pss_File": 140,
+              "Pss": -14020,
+              "unreclaimable": -25250.0
+            }
+          }
+        },
+        "detached": {
+          "median_kib": {
+            "control": {
+              "Pss_Anon": 73164,
+              "Pss_Shmem": 14285,
+              "DRM": 132468.0,
+              "SwapPss": 0,
+              "Pss_File": 46182,
+              "Pss": 133756,
+              "unreclaimable": 219917.0
+            },
+            "candidate": {
+              "Pss_Anon": 77520,
+              "Pss_Shmem": 10943,
+              "DRM": 117892.0,
+              "SwapPss": 0,
+              "Pss_File": 46163,
+              "Pss": 134553,
+              "unreclaimable": 206355.0
+            }
+          },
+          "paired_delta_kib": {
+            "Pss_Anon": [
+              4748,
+              4416,
+              3732,
+              4568,
+              4156
+            ],
+            "Pss_Shmem": [
+              -3342,
+              -3342,
+              -3342,
+              -3342,
+              -3342
+            ],
+            "DRM": [
+              -14576.0,
+              -14572.0,
+              -14576.0,
+              -14572.0,
+              -14576.0
+            ],
+            "SwapPss": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "Pss_File": [
+              -609,
+              -19,
+              60,
+              12,
+              -107
+            ],
+            "Pss": [
+              797,
+              1054,
+              451,
+              1238,
+              707
+            ],
+            "unreclaimable": [
+              -13170.0,
+              -13498.0,
+              -14186.0,
+              -13346.0,
+              -13762.0
+            ]
+          },
+          "median_paired_delta_kib": {
+            "Pss_Anon": 4416,
+            "Pss_Shmem": -3342,
+            "DRM": -14576.0,
+            "SwapPss": 0,
+            "Pss_File": -19,
+            "Pss": 797,
+            "unreclaimable": -13498.0
+          },
+          "private_compositor": {
+            "median_kib": {
+              "control": {
+                "Pss_Anon": 35524,
+                "Pss_Shmem": 34569,
+                "DRM": 243412.0,
+                "SwapPss": 0,
+                "Pss_File": 47351,
+                "Pss": 117444,
+                "unreclaimable": 314257.0
+              },
+              "candidate": {
+                "Pss_Anon": 35820,
+                "Pss_Shmem": 31227,
+                "DRM": 236200.0,
+                "SwapPss": 0,
+                "Pss_File": 47116,
+                "Pss": 114200,
+                "unreclaimable": 303247.0
+              }
+            },
+            "paired_delta_kib": {
+              "Pss_Anon": [
+                320,
+                -100,
+                664,
+                8,
+                -456
+              ],
+              "Pss_Shmem": [
+                -3342,
+                -3342,
+                -3366,
+                -3342,
+                -3342
+              ],
+              "DRM": [
+                -7220.0,
+                -11316.0,
+                -11304.0,
+                -7208.0,
+                -7212.0
+              ],
+              "SwapPss": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "Pss_File": [
+                -101,
+                -42,
+                -284,
+                14,
+                -299
+              ],
+              "Pss": [
+                -3123,
+                -3484,
+                -2986,
+                -3321,
+                -4097
+              ],
+              "unreclaimable": [
+                -10242.0,
+                -14758.0,
+                -14006.0,
+                -10542.0,
+                -11010.0
+              ]
+            },
+            "median_paired_delta_kib": {
+              "Pss_Anon": 8,
+              "Pss_Shmem": -3342,
+              "DRM": -7220.0,
+              "SwapPss": 0,
+              "Pss_File": -101,
+              "Pss": -3321,
+              "unreclaimable": -11010.0
+            }
+          }
+        },
+        "closed": {
+          "median_kib": {
+            "control": {
+              "Pss_Anon": 44480,
+              "Pss_Shmem": 10844,
+              "DRM": 0,
+              "SwapPss": 0,
+              "Pss_File": 46047,
+              "Pss": 101252,
+              "unreclaimable": 55324
+            },
+            "candidate": {
+              "Pss_Anon": 44284,
+              "Pss_Shmem": 10844,
+              "DRM": 0,
+              "SwapPss": 0,
+              "Pss_File": 46082,
+              "Pss": 101233,
+              "unreclaimable": 55128
+            }
+          },
+          "paired_delta_kib": {
+            "Pss_Anon": [
+              384,
+              -668,
+              -788,
+              132,
+              48
+            ],
+            "Pss_Shmem": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "DRM": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "SwapPss": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "Pss_File": [
+              -605,
+              44,
+              77,
+              20,
+              -67
+            ],
+            "Pss": [
+              -221,
+              -624,
+              -711,
+              152,
+              -19
+            ],
+            "unreclaimable": [
+              384,
+              -668,
+              -788,
+              132,
+              48
+            ]
+          },
+          "median_paired_delta_kib": {
+            "Pss_Anon": 48,
+            "Pss_Shmem": 0,
+            "DRM": 0,
+            "SwapPss": 0,
+            "Pss_File": 20,
+            "Pss": -221,
+            "unreclaimable": 48
+          },
+          "private_compositor": {
+            "median_kib": {
+              "control": {
+                "Pss_Anon": 35524,
+                "Pss_Shmem": 31249,
+                "DRM": 214036.0,
+                "SwapPss": 0,
+                "Pss_File": 47350,
+                "Pss": 114123,
+                "unreclaimable": 281561.0
+              },
+              "candidate": {
+                "Pss_Anon": 35820,
+                "Pss_Shmem": 31249,
+                "DRM": 206820.0,
+                "SwapPss": 0,
+                "Pss_File": 47116,
+                "Pss": 114221,
+                "unreclaimable": 273889.0
+              }
+            },
+            "paired_delta_kib": {
+              "Pss_Anon": [
+                320,
+                -100,
+                664,
+                8,
+                -456
+              ],
+              "Pss_Shmem": [
+                0,
+                0,
+                -24,
+                0,
+                0
+              ],
+              "DRM": [
+                -7220.0,
+                -11316.0,
+                -11308.0,
+                -7212.0,
+                -7216.0
+              ],
+              "SwapPss": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "Pss_File": [
+                -101,
+                -42,
+                -284,
+                13,
+                -295
+              ],
+              "Pss": [
+                220,
+                -142,
+                356,
+                22,
+                -752
+              ],
+              "unreclaimable": [
+                -6900.0,
+                -11416.0,
+                -10668.0,
+                -7204.0,
+                -7672.0
+              ]
+            },
+            "median_paired_delta_kib": {
+              "Pss_Anon": 8,
+              "Pss_Shmem": 0,
+              "DRM": -7220.0,
+              "SwapPss": 0,
+              "Pss_File": -101,
+              "Pss": 22,
+              "unreclaimable": -7672.0
+            }
+          }
+        },
+        "drag_peak": {
+          "median_kib": {
+            "control": {
+              "Pss_Anon": 73532,
+              "Pss_Shmem": 14175,
+              "DRM": 134988.0,
+              "SwapPss": 0,
+              "Pss_File": 46115,
+              "Pss": 133950,
+              "unreclaimable": 222679.0
+            },
+            "candidate": {
+              "Pss_Anon": 70288,
+              "Pss_Shmem": 14177,
+              "DRM": 134736.0,
+              "SwapPss": 0,
+              "Pss_File": 46134,
+              "Pss": 130692,
+              "unreclaimable": 219201.0
+            }
+          },
+          "paired_delta_kib": {
+            "Pss_Anon": [
+              -3364,
+              -3804,
+              -2188,
+              -3252,
+              -3284
+            ],
+            "Pss_Shmem": [
+              2,
+              2,
+              2,
+              2,
+              2
+            ],
+            "DRM": [
+              -252.0,
+              -248.0,
+              -252.0,
+              6952.0,
+              -252.0
+            ],
+            "SwapPss": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "Pss_File": [
+              -627,
+              19,
+              54,
+              -7,
+              -77
+            ],
+            "Pss": [
+              -3988,
+              -3783,
+              -2132,
+              -3258,
+              -3359
+            ],
+            "unreclaimable": [
+              -3614.0,
+              -4050.0,
+              -2438.0,
+              3702.0,
+              -3534.0
+            ]
+          },
+          "median_paired_delta_kib": {
+            "Pss_Anon": -3284,
+            "Pss_Shmem": 2,
+            "DRM": -252.0,
+            "SwapPss": 0,
+            "Pss_File": -7,
+            "Pss": -3359,
+            "unreclaimable": -3534.0
+          },
+          "private_compositor": {
+            "median_kib": {
+              "control": {
+                "Pss_Anon": 35520,
+                "Pss_Shmem": 34459,
+                "DRM": 259872.0,
+                "SwapPss": 0,
+                "Pss_File": 47028,
+                "Pss": 117320,
+                "unreclaimable": 330159.0
+              },
+              "candidate": {
+                "Pss_Anon": 35816,
+                "Pss_Shmem": 64149,
+                "DRM": 236188.0,
+                "SwapPss": 0,
+                "Pss_File": 47034,
+                "Pss": 147093,
+                "unreclaimable": 336181.0
+              }
+            },
+            "paired_delta_kib": {
+              "Pss_Anon": [
+                324,
+                -100,
+                664,
+                12,
+                -460
+              ],
+              "Pss_Shmem": [
+                29690,
+                29690,
+                -10978,
+                29690,
+                31066
+              ],
+              "DRM": [
+                -23684.0,
+                -23680.0,
+                -24232.0,
+                -16480.0,
+                -23684.0
+              ],
+              "SwapPss": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "Pss_File": [
+                8,
+                183,
+                97,
+                75,
+                -94
+              ],
+              "Pss": [
+                30022,
+                29773,
+                -10217,
+                29776,
+                30511
+              ],
+              "unreclaimable": [
+                6330.0,
+                5910.0,
+                -34546.0,
+                13222.0,
+                6922.0
+              ]
+            },
+            "median_paired_delta_kib": {
+              "Pss_Anon": 12,
+              "Pss_Shmem": 29690,
+              "DRM": -23684.0,
+              "SwapPss": 0,
+              "Pss_File": 75,
+              "Pss": 29776,
+              "unreclaimable": 6330.0
+            }
+          }
+        }
+      },
+      "visual_outcomes": [
+        {
+          "control": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          },
+          "candidate": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          }
+        },
+        {
+          "control": {
+            "post_release_blank_frames": 1,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 1,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          },
+          "candidate": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          }
+        },
+        {
+          "control": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          },
+          "candidate": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          }
+        },
+        {
+          "control": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          },
+          "candidate": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          }
+        },
+        {
+          "control": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          },
+          "candidate": {
+            "post_release_blank_frames": 0,
+            "post_release_reversals": 0,
+            "post_handoff_blank_frames": 0,
+            "post_handoff_moving": false,
+            "final_body_stable": true,
+            "capture_returncode": 0,
+            "oom_delta": {
+              "oom": 0,
+              "oom_kill": 0
+            },
+            "containment_verified": true
+          }
+        }
+      ],
+      "pair_count": 5
+    }
+  },
+  "matched_handoff_diagnostic": {
+    "method": "Five release-build matched memory arms per backend, exact pointer release to native presentation software timestamp. Diagnostic medians, not a formal 20-trial p95 cohort; the failed GL control image arm is retained.",
+    "backends": {
+      "cpu": {
+        "control": {
+          "samples_ms": [
+            485.977412,
+            504.505534,
+            494.489718,
+            519.927157,
+            520.305897
+          ],
+          "median_ms": 504.505534
+        },
+        "candidate": {
+          "samples_ms": [
+            36.877573,
+            34.730753,
+            35.316404,
+            37.757173,
+            36.042633
+          ],
+          "median_ms": 36.042633
+        }
+      },
+      "gl": {
+        "control": {
+          "samples_ms": [
+            495.34769,
+            514.75161,
+            506.819688,
+            483.927665,
+            504.530225
+          ],
+          "median_ms": 504.530225
+        },
+        "candidate": {
+          "samples_ms": [
+            32.749265,
+            27.099415,
+            34.477251,
+            33.431932,
+            33.799251
+          ],
+          "median_ms": 33.431932
+        }
+      }
+    }
+  },
+  "raw_evidence": "memory-trials.json.gz"
+}

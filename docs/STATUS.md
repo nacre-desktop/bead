@@ -1,5 +1,18 @@
 # Status
 
+## 2026-10-26 — B0131 warm covered release
+
+Niri admits the detached target before drag and reuses cached content and the GL
+context. Separate 20-trial presentation cohorts pass: CPU/GL handoff p95
+31.12/31.39 ms and render p99 9.22/2.95 ms. Separate image cohorts are 20/20
+blank- and reversal-free; capture-loaded p95 36.68/34.83 ms still fails 33 ms.
+QML's 180 ms OutCubic return and control/AI detach–dock checks pass.
+Five-pair UI idle/closed deltas pass the 1 MiB budget; active warm memory is spent
+explicitly (CPU detached +8.21 MiB, GL docked +21.21 MiB). Private compositor DRM
+is frame-history-sensitive; no combined desktop cap or physical 120 Hz/17 ms
+claim. Full remote Arch CI passes. [Evidence and limits](specs/0131-pearl-release.md).
+No live change.
+
 ## 2026-10-26 — B0129 launcher icons on the first frame
 
 Five alternating private CPU pairs show zero missing-icon presentations on all

@@ -1,0 +1,326 @@
+{
+  "schema_version": 1,
+  "source": "29649df3",
+  "source_manifest_sha256": "879401115ac630e5709e1c80ab9cc29d6053892f2f4f0820fcbc6e059c737f87",
+  "integrated_origin": "bb054fa2",
+  "paired_qml_source": "5024d19fa73b47b0d75e17c20cb792805718a167",
+  "method": {
+    "parent": "Captured headless parent geometry at 2880x1800, scale 1.0, current 120 Hz mode; nested output scale 1.5; software scheduling and timestamps are not physical scanout.",
+    "image_cohorts": "20 trials per backend with live screencopy measurements; image gates and captured timing gates are reported independently.",
+    "presentation_cohorts": "20 trials per backend without live screencopy during drag/release; timing is reported, image gates remain unmeasured.",
+    "timing": "Wayland compositor software presentation timestamps and UI_FRAME render callbacks; nearest-rank percentiles.",
+    "child_niri_winit_refresh_hz": 60,
+    "physical_scanout_measured": false,
+    "seventeen_ms_target_demonstrated": false,
+    "cohorts_are_separate": true,
+    "combined_same_20_trial_guarantee": false
+  },
+  "cohorts": {
+    "images": {
+      "cpu": {
+        "renderer": "cpu",
+        "trial_count": 20,
+        "parent_geometry": {
+          "output_size_px": [
+            2880,
+            1800
+          ],
+          "refresh_hz": 120.0,
+          "scale": 1.0,
+          "output_count": 1,
+          "current_output_count": 1,
+          "evidence": "captured parent-geometry.json; current mode checked"
+        },
+        "timing": {
+          "reported_gate": {
+            "passed": false,
+            "failures": [
+              "release-to-native-presentation p95 36.680 ms exceeds 33.0 ms"
+            ],
+            "limits_ms": {
+              "release_to_native_presented_p95": 33.0,
+              "drag_release_ui_frame_p99": 16.0
+            }
+          },
+          "release_to_native_presented": {
+            "sample_count": 20,
+            "p50_ms": 35.156953,
+            "p95_ms": 36.680003,
+            "p99_ms": 37.025613,
+            "max_ms": 37.025613,
+            "percentile_method": "nearest-rank"
+          },
+          "release_to_covered_handoff_commit": {
+            "sample_count": 20,
+            "p50_ms": 12.505724,
+            "p95_ms": 14.284173,
+            "p99_ms": 14.873253,
+            "max_ms": 14.873253,
+            "percentile_method": "nearest-rank"
+          },
+          "drag_release_ui_frame_render": {
+            "sample_count": 892,
+            "p50_ms": 0.025,
+            "p95_ms": 5.011,
+            "p99_ms": 9.426,
+            "max_ms": 9.951,
+            "percentile_method": "nearest-rank"
+          }
+        },
+        "claims": {
+          "image_continuity_and_stationary_pose": {
+            "passed": true,
+            "requirements": "20/20 measured; zero post-release blanks and reversals; stationary native pose and stable body in every trial"
+          },
+          "ui_frame_render_p99": {
+            "passed": true,
+            "observed_ms": 9.426,
+            "limit_ms": 16.0
+          },
+          "captured_timing_gate": {
+            "passed": false,
+            "failures": [
+              "release-to-native-presentation p95 36.680 ms exceeds 33.0 ms"
+            ],
+            "note": "Preserved independently, including any screencopy-related failure; not waived by image-gate results."
+          }
+        },
+        "image_gates": {
+          "measured_trials": 20,
+          "post_release_blank_frames_total": 0,
+          "post_release_reversals_total": 0,
+          "post_handoff_blank_frames_total": 0,
+          "post_handoff_moving_trials": 0,
+          "stable_body_trials": 20,
+          "native_pose_stationary_trials": 20
+        },
+        "server_preimported_trials": 20
+      },
+      "gl": {
+        "renderer": "femtovg-gl with idle CPU fallback",
+        "trial_count": 20,
+        "parent_geometry": {
+          "output_size_px": [
+            2880,
+            1800
+          ],
+          "refresh_hz": 120.0,
+          "scale": 1.0,
+          "output_count": 1,
+          "current_output_count": 1,
+          "evidence": "captured parent-geometry.json; current mode checked"
+        },
+        "timing": {
+          "reported_gate": {
+            "passed": false,
+            "failures": [
+              "release-to-native-presentation p95 34.830 ms exceeds 33.0 ms"
+            ],
+            "limits_ms": {
+              "release_to_native_presented_p95": 33.0,
+              "drag_release_ui_frame_p99": 16.0
+            }
+          },
+          "release_to_native_presented": {
+            "sample_count": 20,
+            "p50_ms": 33.187974,
+            "p95_ms": 34.829962,
+            "p99_ms": 36.527031,
+            "max_ms": 36.527031,
+            "percentile_method": "nearest-rank"
+          },
+          "release_to_covered_handoff_commit": {
+            "sample_count": 20,
+            "p50_ms": 13.023323,
+            "p95_ms": 19.429439,
+            "p99_ms": 19.44849,
+            "max_ms": 19.44849,
+            "percentile_method": "nearest-rank"
+          },
+          "drag_release_ui_frame_render": {
+            "sample_count": 888,
+            "p50_ms": 0.024,
+            "p95_ms": 0.84,
+            "p99_ms": 3.266,
+            "max_ms": 4.095,
+            "percentile_method": "nearest-rank"
+          }
+        },
+        "claims": {
+          "image_continuity_and_stationary_pose": {
+            "passed": true,
+            "requirements": "20/20 measured; zero post-release blanks and reversals; stationary native pose and stable body in every trial"
+          },
+          "ui_frame_render_p99": {
+            "passed": true,
+            "observed_ms": 3.266,
+            "limit_ms": 16.0
+          },
+          "captured_timing_gate": {
+            "passed": false,
+            "failures": [
+              "release-to-native-presentation p95 34.830 ms exceeds 33.0 ms"
+            ],
+            "note": "Preserved independently, including any screencopy-related failure; not waived by image-gate results."
+          }
+        },
+        "image_gates": {
+          "measured_trials": 20,
+          "post_release_blank_frames_total": 0,
+          "post_release_reversals_total": 0,
+          "post_handoff_blank_frames_total": 0,
+          "post_handoff_moving_trials": 0,
+          "stable_body_trials": 20,
+          "native_pose_stationary_trials": 20
+        },
+        "cached_gl_handoff_trials": 20
+      }
+    },
+    "presentation": {
+      "cpu": {
+        "renderer": "cpu",
+        "trial_count": 20,
+        "parent_geometry": {
+          "output_size_px": [
+            2880,
+            1800
+          ],
+          "refresh_hz": 120.0,
+          "scale": 1.0,
+          "output_count": 1,
+          "current_output_count": 1,
+          "evidence": "captured parent-geometry.json; current mode checked"
+        },
+        "timing": {
+          "reported_gate": {
+            "passed": true,
+            "failures": [],
+            "limits_ms": {
+              "release_to_native_presented_p95": 33.0,
+              "drag_release_ui_frame_p99": 16.0
+            }
+          },
+          "release_to_native_presented": {
+            "sample_count": 20,
+            "p50_ms": 30.631276,
+            "p95_ms": 31.120376,
+            "p99_ms": 32.023245,
+            "max_ms": 32.023245,
+            "percentile_method": "nearest-rank"
+          },
+          "release_to_covered_handoff_commit": {
+            "sample_count": 20,
+            "p50_ms": 15.015813,
+            "p95_ms": 15.472693,
+            "p99_ms": 16.271032,
+            "max_ms": 16.271032,
+            "percentile_method": "nearest-rank"
+          },
+          "drag_release_ui_frame_render": {
+            "sample_count": 860,
+            "p50_ms": 0.024,
+            "p95_ms": 4.973,
+            "p99_ms": 9.217,
+            "max_ms": 9.436,
+            "percentile_method": "nearest-rank"
+          }
+        },
+        "claims": {
+          "presentation_timing": {
+            "passed": true,
+            "release_to_native_presented_p95_ms": 31.120376,
+            "limit_ms": 33.0,
+            "timing_gate_failures": []
+          },
+          "ui_frame_render_p99": {
+            "passed": true,
+            "observed_ms": 9.217,
+            "limit_ms": 16.0
+          },
+          "image_continuity_and_stationary_pose": {
+            "status": "unmeasured",
+            "claim": "No image-based continuity, blank-frame, reversal, stationary-pose, or stable-body guarantee is made for this cohort."
+          }
+        },
+        "image_gates": {
+          "measured": false,
+          "unmeasured_trial_count": 20,
+          "image_counts": null
+        },
+        "server_preimported_trials": 20
+      },
+      "gl": {
+        "renderer": "femtovg-gl with idle CPU fallback",
+        "trial_count": 20,
+        "parent_geometry": {
+          "output_size_px": [
+            2880,
+            1800
+          ],
+          "refresh_hz": 120.0,
+          "scale": 1.0,
+          "output_count": 1,
+          "current_output_count": 1,
+          "evidence": "captured parent-geometry.json; current mode checked"
+        },
+        "timing": {
+          "reported_gate": {
+            "passed": true,
+            "failures": [],
+            "limits_ms": {
+              "release_to_native_presented_p95": 33.0,
+              "drag_release_ui_frame_p99": 16.0
+            }
+          },
+          "release_to_native_presented": {
+            "sample_count": 20,
+            "p50_ms": 30.747904,
+            "p95_ms": 31.390084,
+            "p99_ms": 31.432274,
+            "max_ms": 31.432274,
+            "percentile_method": "nearest-rank"
+          },
+          "release_to_covered_handoff_commit": {
+            "sample_count": 20,
+            "p50_ms": 14.961163,
+            "p95_ms": 15.559372,
+            "p99_ms": 15.585132,
+            "max_ms": 15.585132,
+            "percentile_method": "nearest-rank"
+          },
+          "drag_release_ui_frame_render": {
+            "sample_count": 876,
+            "p50_ms": 0.024,
+            "p95_ms": 0.754,
+            "p99_ms": 2.947,
+            "max_ms": 3.494,
+            "percentile_method": "nearest-rank"
+          }
+        },
+        "claims": {
+          "presentation_timing": {
+            "passed": true,
+            "release_to_native_presented_p95_ms": 31.390084,
+            "limit_ms": 33.0,
+            "timing_gate_failures": []
+          },
+          "ui_frame_render_p99": {
+            "passed": true,
+            "observed_ms": 2.947,
+            "limit_ms": 16.0
+          },
+          "image_continuity_and_stationary_pose": {
+            "status": "unmeasured",
+            "claim": "No image-based continuity, blank-frame, reversal, stationary-pose, or stable-body guarantee is made for this cohort."
+          }
+        },
+        "image_gates": {
+          "measured": false,
+          "unmeasured_trial_count": 20,
+          "image_counts": null
+        },
+        "cached_gl_handoff_trials": 20
+      }
+    }
+  }
+}

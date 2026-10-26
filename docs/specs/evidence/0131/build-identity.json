@@ -1,0 +1,14 @@
+{
+  "runtime_source": "29649df3",
+  "integrated_origin": "bb054fa2",
+  "source_manifest_sha256": "879401115ac630e5709e1c80ab9cc29d6053892f2f4f0820fcbc6e059c737f87",
+  "runtime_binary_sha256": "6bc24a719d886c2dad1b502c7d62ac1fa064d922f2046c0c3527d22f47895406",
+  "control_source": "d4a2585c",
+  "control_source_manifest_sha256": "0c6af361dcf5513aa5c52ade894777bf35aac1195d83205e5cf4cf7daba3eea4",
+  "control_binary_sha256": "aa3a243344440197bab1ce599f3b243fc032dc49936054633bd7e94e11d6a026",
+  "profile": "cargo build -p nacre-shell --release --locked -j2; release opt-level3, dependencies size-optimized; shared host/flags/backends/output",
+  "source_verification": "sha256sum --check --quiet against complete source-file manifests passed in the build container",
+  "qml_source": "5024d19fa73b47b0d75e17c20cb792805718a167",
+  "helper_binary_sha256": "6300a8d42548205aed2c18e1050d12eed3b23124a4b9d11da92fdc946b1d4615",
+  "relative_pointer_binary_sha256": "aa7d73b7068c50f37f745cdb8f36cae3cecff84e5955d438ac7edd6e7301012d"
+}

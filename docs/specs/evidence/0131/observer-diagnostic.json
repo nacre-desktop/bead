@@ -1,0 +1,47 @@
+{
+  "method": "Three sequential alternating matched diagnostic pairs, CPU source2d6cb5c7, identical held relative input/output/flags, image sampling True/False then False/True then True/False. Six total trials are not a formal p95 cohort. Presentation timestamps are software, not physical scanout.",
+  "rows": [
+    {
+      "trial": 1,
+      "image_gates_measured": true,
+      "release_to_native_presented_ms": 33.384642,
+      "release_to_covered_handoff_commit_ms": 14.108093
+    },
+    {
+      "trial": 2,
+      "image_gates_measured": false,
+      "release_to_native_presented_ms": 30.667845,
+      "release_to_covered_handoff_commit_ms": 15.109123
+    },
+    {
+      "trial": 3,
+      "image_gates_measured": false,
+      "release_to_native_presented_ms": 31.533834,
+      "release_to_covered_handoff_commit_ms": 15.849062
+    },
+    {
+      "trial": 4,
+      "image_gates_measured": true,
+      "release_to_native_presented_ms": 34.745042,
+      "release_to_covered_handoff_commit_ms": 11.953824
+    },
+    {
+      "trial": 5,
+      "image_gates_measured": true,
+      "release_to_native_presented_ms": 33.779562,
+      "release_to_covered_handoff_commit_ms": 14.246442
+    },
+    {
+      "trial": 6,
+      "image_gates_measured": false,
+      "release_to_native_presented_ms": 30.631898,
+      "release_to_covered_handoff_commit_ms": 14.962869
+    }
+  ],
+  "paired_capture_cost_ms": [
+    2.7167969999999997,
+    3.211207999999999,
+    3.147663999999999
+  ],
+  "median_paired_capture_cost_ms": 3.147663999999999
+}

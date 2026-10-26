@@ -20,7 +20,7 @@ echo "7d4035db01816f977f6e4c42e3d5e8ef4235d95e9afe63a3c38905b42dde60f2  $RUNNER_
 unzip -qo "$RUNNER_TEMP/luau.zip" -d "$RUNNER_TEMP/luau"
 chmod +x "$RUNNER_TEMP/luau/luau-analyze"
 python tools/check-luau.py --analyzer "$RUNNER_TEMP/luau/luau-analyze" --binary "$PWD/target/debug/nacre-shell" --check-generated
-for suite in test_dashboard_capture_windows.py test_menu_engine_trace.py test_b0003_arm.py test_b0002_arm.py test_laptop_reference_capture.py test_foundation_preview.py test_fake_system.py test_fullscreen_lips.py test_pearl_release_proof.py; do
+for suite in test_dashboard_capture_windows.py test_menu_engine_trace.py test_b0003_arm.py test_b0002_arm.py test_laptop_reference_capture.py test_foundation_preview.py test_fake_system.py test_fullscreen_lips.py test_pearl_release_proof.py test_launcher_icons_proof.py; do
   python -m unittest discover -s spikes/tests -p "$suite"
 done
 python -m py_compile spikes/capture_safety.py spikes/measure.py spikes/bar-matrix.py spikes/dashboard-residency.py spikes/launcher-proof.py spikes/b0002-arm.py spikes/laptop-reference-capture.py spikes/laptop-reference-artifacts.py spikes/parity-compare.py spikes/fake-bluez.py spikes/fake-power.py spikes/fake_system.py spikes/foundation-preview.py spikes/menu-engine-proof.py spikes/menu_engine_trace.py spikes/b0003-arm.py spikes/tests/test_dashboard_capture_windows.py spikes/tests/test_menu_engine_trace.py spikes/tests/test_b0002_arm.py spikes/tests/test_laptop_reference_capture.py spikes/tests/test_b0003_arm.py spikes/tests/test_fake_system.py

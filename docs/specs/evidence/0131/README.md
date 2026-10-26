@@ -1,42 +1,69 @@
 # B0131 evidence
 
-`spikes/pearl-release-proof.py` wraps the existing guarded parity harness.
-The final cohort uses private nested niri at 2880×1800, scale 1.5, CPU rendering,
-and direct relative virtual-pointer input with a held button. Screencopy ready
-supplies sample timestamps; the C tool supplies the release timestamp. Source
-ordering tests cover stale placement, configure/bootstrap, failed/busy draws and
-retirement after content commit. Fifteen classifier tests cover the measurement.
+[Build identities](build-identity.json) distinguish source manifests and binaries.
+The release build prewarms a separate native target before release, sharing the
+renderer and GL context. CPU prewarm imports the existing SHM alias while a
+verified transparent corner hides it. GL paints an unswapped backbuffer at the
+complete natural extent. Release commits the final offset and content, then
+unmaps the retained source in the same connection flush. Stale generations and
+cold failures retain the source. Host Luau selects 180 ms OutCubic dock easing.
+[Cold CPU traces](cold-render-diagnostic.json) attribute the old roughly 442 ms tail
+to reveal-edge construction and composition, not GL context creation. The
+release-profile control is much faster too; no code-only speedup factor is claimed.
 
-[Aggregate](release-summary.json) and [compressed frame data](release-trials.json.gz)
-retain all 20 trials. Decompress the latter with `gzip -dc release-trials.json.gz`.
-The 1644×879 measurement is an interior fill bounding box; the requested window
-is 1100×590 logical (1650×885 physical). Raw forward movement before native
-handoff remains recorded in every trial; blanks and reversals are gated from
-exact input release, stationary position/size from native content commit, with
-at least eight post-handoff samples. Handoff takes 1.031 s median. Long capture
-and render gaps prevent a pacing/latency acceptance claim; refresh_ns is zero.
+[Aggregate](latest-summary.json) and [four raw cohorts](latest-release-proofs.json.gz)
+keep image and timing claims separate. Each backend has 20 image trials and 20
+presentation-only trials. The image cohort measures blanks, reversals, native
+pose and size, with at least eight samples after handoff. It retains its timing
+failure if present. The presentation cohort performs no live screencopy during
+drag/release and leaves all image gates unmeasured. Passing separate cohorts is
+not a simultaneous guarantee for one set of 20 trials. All retain the 33 ms
+handoff p95 and 16 ms render p99 limits; no threshold was relaxed.
 
-[Paired crops and functional outcomes](pairs/README.md) cover idle, open, hover,
-held drag, detached and redocked endpoints, including lower joining contours.
-Control and AI commit native content and restore docked state; AI's detached
-flag clears. Bead's 300 ms host easing measures 306 ms in its margin trace.
-The correctly routed QML API dock leaves no visible attached launcher at the
-endpoint, so no successful QML return trajectory or full visual parity is claimed.
-Drag starts differ: Bead uses a valid input region, QML its header with Meta.
-Interior hover/focus states therefore differ; these are contour/placement
-comparisons, not a full pixel-style parity pass. Frontend definitions are unchanged.
+The C pointer sends relative held-button motion directly to nested niri for
+650 ms. Exact input-release timestamps are matched to native-surface
+`wp_presentation_feedback.presented`; client commit latency is separate.
+`UI_FRAME` measures render callbacks during drag and release. Parent geometry
+verifies 2880×1800 at synthetic 120 Hz, scale 1; nested output scale is 1.5.
+Niri's Winit backend uses 60 Hz. These are compositor software timestamps,
+not physical scanout, and do not demonstrate the aspirational 17 ms target.
+[Three alternating screencopy/no-screencopy pairs](observer-diagnostic.json) isolate observer
+cost; they are a diagnostic, not another formal percentile cohort.
 
-[Complete check replica](full-ci.sh) and [receipt](ci.txt) describe full remote
-Arch CI. Test threads are serialized after shared-host parallel runs intermittently
-exceeded the existing 50 ms Luau evaluation budget; the product budget is unchanged.
-The capture build's binary SHA and source manifest SHA are distinct recorded
-identities. Runtime source includes the cold-size and upstream spotlight repairs.
-Capture build: `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_STRIP=debuginfo cargo build -p nacre-shell --locked -j2` (unoptimized development profile).
-Memory rows cover the main UI process; daemon/provider totals are separate.
-The later Today/notification/power rebase changes separate UI modules; the
-combined tree passed another full CI run. Runtime captures precede that rebase.
+[Memory summary](memory-summary.json) and [complete paired rows](memory-trials.json.gz) record five alternating release-build pairs per
+backend, matched to the same-host control. Unreclaimable is anon + SHM + DRM +
+SwapPss; clean-file PSS is separate. Private compositor memory is also separate.
+The always-on budget is 1 MiB; active warm buffers are an explicit smoothness
+trade. The matched memory arms also reduce captured handoff medians from
+about 504.5 ms to 36.0 ms CPU / 33.4 ms GL; these five-sample diagnostics
+are separate from the formal 20-trial percentiles. [Allocator diagnostic](allocator-residency.json) with [raw maps](allocator-residency-trials.json.gz) shows a 4.49 MiB trim
+without changing live allocations. The final implementation trims after idle
+repair scratch is freed, rather than before that cleanup; this does not eliminate
+all active allocator residency. The measured active cost remains explicit.
+The second GL control arm had a real pre-presentation blank; its complete safe
+memory rows remain in the paired statistics rather than being retried or removed.
+Every candidate memory arm passed its image checks. Private niri's CPU closed
+median is +41.223 MiB (mostly DRM). A [post-close diagnostic](compositor-retirement-diagnostic.json)
+shows the gap is frame-history-sensitive: extra captures changed a roughly
+46 MiB one-pair gap to 4.56 MiB, and it reversed after private UI exit. The exact
+mechanism is unresolved. The UI budget pass is not a combined desktop-memory
+budget pass.
+No laptop-cap claim.
 
-Full-output screenshots remain private because provider content includes a host
-package update inventory. Published crops omit that content and the top bar.
-No live installation or desktop configuration was changed. Memory phases are
-CPU information without matched controls; no relative gate or laptop-cap pass.
+[Paired contours and API outcomes](pairs/README.md) and [raw return trajectories](return-trials.json.gz)
+use pinned QML and Bead
+states independently of the final release cohorts. Return captures have no
+blanks and are monotonic; both configure 180 ms OutCubic. Their 2 px settling
+threshold is not exact animation completion. Control and AI cold API detach
+commit native content and restore docked state. Different gesture input regions
+and content prevent a full pixel-style parity claim. Full-output images remain
+private because provider content includes a package update inventory; published
+48×48 logical contour crops omit it and the top bar.
+
+[Complete CI replica](full-ci.sh) and [receipt](ci.txt) cover the remote Arch
+container. Tests use one thread to respect the existing 50 ms Luau budget;
+that product budget is unchanged. A fresh root-owned 0700 temporary directory
+avoids stale test fixtures and preserves temporary-directory security checks.
+Ordering tests cover stale placement, configuration, failed/busy draws and source
+retirement after content commit; proof tests cover measurement classification.
+No live installation, desktop configuration or installed shell was changed.
