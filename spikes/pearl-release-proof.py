@@ -51,8 +51,9 @@ def panel_call(self, method):
     return json.loads(reply) if isinstance(reply, str) else reply
 
 
-def capture_sequence(self, directory, trigger, seconds=2.0, region=None, follow_release=False):
-    """Capture every 25 ms with a small in-flight cap and protocol-ready timestamps."""
+def capture_sequence(self, directory, trigger, seconds=2.0, region=None, follow_release=False,
+                     capture_images=True):
+    """Capture 25 ms images, or observe release timing without live screencopies."""
     shutil.rmtree(directory, ignore_errors=True)
     directory.mkdir(parents=True)
     jobs, errors, marks = [], [], {}
@@ -62,6 +63,19 @@ def capture_sequence(self, directory, trigger, seconds=2.0, region=None, follow_
     protocol_dir.mkdir()
     if region is not None:
         (directory / 'capture-region.json').write_text(json.dumps(region) + '\n')
+
+    if not capture_images:
+        trigger(marks)
+        target_ns = minimum_end_ns
+        if follow_release:
+            release_ns = parse_pointer_release_ns(marks.get('pointer_stdout', ''))
+            target_ns = max(target_ns, release_ns + 1_500_000_000)
+        while time.monotonic_ns() < target_ns:
+            time.sleep(min(interval, (target_ns - time.monotonic_ns()) / 1_000_000_000))
+        if follow_release and time.monotonic_ns() >= maximum_end_ns:
+            raise RuntimeError('presentation observation reached 15 s before covering 1.5 s after pointer release')
+        marks['observation_end_monotonic_ns'] = time.monotonic_ns()
+        return marks, []
 
     def run_trigger():
         try:
@@ -423,7 +437,11 @@ def drive(self, _names):
         raise RuntimeError(f'PEARL_TRIALS={TRIALS} is fewer than the required 20 trials')
     out = self.out / 'release-proof'
     out.mkdir(parents=True, exist_ok=True)
-    report = {'method': 'Instrumented Wayland draws with compositor-reported wp_presentation software timestamps; 25ms cropped screencopy PNGs are padded to output coordinates; neither measures physical scanout',
+    image_mode = self.args.release_proof_mode == 'images'
+    report = {'method': ('Instrumented Wayland draws with compositor-reported wp_presentation software timestamps; 25ms cropped screencopy PNGs are padded to output coordinates; neither measures physical scanout'
+                         if image_mode else 'Presentation-only cohort: no live screencopy during drag or release; Wayland wp_presentation software timestamps and UI_FRAME instrumentation are not physical scanout'),
+              'release_proof_mode': self.args.release_proof_mode,
+              'image_gates_measured': image_mode,
               'renderer': 'cpu' if self.args.cpu else 'femtovg-gl with idle CPU fallback',
               'idle_memory_kib': self.rss(),
               'scale': 1.5, 'size': [2880, 1800], 'parent_hz': self.args.parent_hz, 'trials': [], 'required_trials': 20,
@@ -483,6 +501,10 @@ def drive(self, _names):
             region_b = min(logical_h, math.ceil(body_y + dy + body_h + 24))
             capture_region = [region_x, region_y, max(1, region_r - region_x), max(1, region_b - region_y)]
             log_mark = shell_log.stat().st_size if shell_log.exists() else 0
+            directory = out / f'trial-{trial + 1:02d}' / 'sequence'
+            if not image_mode:
+                directory.parent.mkdir(parents=True, exist_ok=True)
+                self.grab(directory.parent / 'initial-screen.png')
             self.release_pointer()
 
             def trigger(marks):
@@ -496,9 +518,9 @@ def drive(self, _names):
                 marks['handoff_memory_kib'] = self.rss()
                 time.sleep(1)
 
-            directory = out / f'trial-{trial + 1:02d}' / 'sequence'
-            marks, stamps = capture_sequence(self, directory, trigger, region=capture_region,
-                                             follow_release=True)
+            marks, stamps = capture_sequence(self, directory, trigger,
+                                             region=capture_region if image_mode else None,
+                                             follow_release=True, capture_images=image_mode)
             trace = shell_log.read_bytes()[log_mark:].decode(errors='replace') if shell_log.exists() else ''
             (directory.parent / 'native-frame-trace.log').write_text(
                 '\n'.join(line for line in trace.splitlines()
@@ -512,6 +534,7 @@ def drive(self, _names):
                 self.grab(directory.parent / 'final-screen.png')
                 report['trials'].append({'trial': trial + 1, 'detached': False,
                                          'failure': 'release did not detach a launcher pearl',
+                                         'image_gates_measured': image_mode,
                                          'handoff_committed': False,
                                          'pointer_stdout': marks.get('pointer_stdout'),
                                          'capture_region_logical': capture_region,
@@ -525,6 +548,7 @@ def drive(self, _names):
             if not handoff:
                 report['trials'].append({'trial': trial + 1, 'detached': True,
                                          'handoff_committed': False, 'pearl_id': pearl['id'],
+                                         'image_gates_measured': image_mode,
                                          'failure': 'PEARL_HANDOFF_COMMITTED marker absent'})
                 raise RuntimeError(f"trial {trial + 1}: missing PEARL_HANDOFF_COMMITTED id={pearl['id']}")
             try:
@@ -552,11 +576,13 @@ def drive(self, _names):
                     max(handoff_ns, release_ns + 1_500_000_000))
                 if not frame_samples:
                     raise RuntimeError('no companion UI_FRAME samples overlap drag start through handoff')
-                analysis = analyze(directory, final_screen, stamps, rect, 1.5,
-                                   release_ms, [dx, dy], handoff_start_ms=presented_ms)
+                analysis = (analyze(directory, final_screen, stamps, rect, 1.5,
+                                    release_ms, [dx, dy], handoff_start_ms=presented_ms)
+                            if image_mode else None)
             except RuntimeError as error:
                 report['trials'].append({'trial': trial + 1, 'detached': True,
                                          'handoff_committed': True, 'pearl_id': pearl['id'],
+                                         'image_gates_measured': image_mode,
                                          'failure': str(error)})
                 raise
             result = {'trial': trial + 1, 'detached': True, 'handoff_committed': True,
@@ -576,16 +602,20 @@ def drive(self, _names):
                       'pearl': pearl, 'pointer_stdout': marks['pointer_stdout'],
                       'docked_memory_kib': docked_memory,
                       'handoff_memory_kib': marks.get('handoff_memory_kib'),
-                      'detached_memory_kib': self.rss(), **analysis}
+                      'detached_memory_kib': self.rss(), 'image_gates_measured': image_mode}
+            if image_mode:
+                result.update(analysis)
+            else:
+                result['presentation_observation_end_monotonic_ns'] = marks['observation_end_monotonic_ns']
             report['trials'].append(result)
             self.dispatch('pearls', 'close', str(pearl['id']))
             self.dispatch('nacre', 'close')
             time.sleep(0.5)
             result['closed_memory_kib'] = self.rss()
-            if analysis['post_release_frame_count'] < 8:
+            if image_mode and analysis['post_release_frame_count'] < 8:
                 raise RuntimeError(f"trial {trial + 1}: only {analysis['post_release_frame_count']} "
                                    'post-release proxy frames; at least 8 required')
-            failures = handoff_gate_failures(analysis)
+            failures = handoff_gate_failures(analysis) if image_mode else []
             expected_backend = 'shm' if self.args.cpu else 'gl'
             if handoff_backend != expected_backend:
                 failures.append(f'prewarmed {expected_backend} frame was not used: {handoff_backend}')

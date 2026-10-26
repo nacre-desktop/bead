@@ -2,6 +2,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from PIL import Image, ImageDraw
 
@@ -97,6 +98,33 @@ class PearlReleaseClassifierTests(unittest.TestCase):
 
 
 class PearlReleaseTimestampTests(unittest.TestCase):
+    def test_presentation_observation_runs_trigger_without_screencopy(self):
+        class Capture:
+            env = {}
+
+        now = [1_000_000_000]
+        trigger_calls = []
+
+        def trigger(marks):
+            trigger_calls.append(True)
+            now[0] = 2_000_000_000
+            marks['pointer_stdout'] = 'POINTER_RELEASE monotonic_ns=2000000000'
+
+        def fake_sleep(seconds):
+            now[0] += max(1, int(seconds * 1_000_000_000))
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(proof.time, 'monotonic_ns', side_effect=lambda: now[0]), \
+                patch.object(proof.time, 'sleep', side_effect=fake_sleep), \
+                patch.object(proof.subprocess, 'Popen', side_effect=AssertionError('grim must not run')):
+            marks, stamps = proof.capture_sequence(Capture(), Path(tmp) / 'sequence', trigger,
+                                                    follow_release=True, capture_images=False)
+
+        self.assertEqual(trigger_calls, [True])
+        self.assertEqual(stamps, [])
+        self.assertGreaterEqual(marks['observation_end_monotonic_ns'], 3_500_000_000)
+        self.assertEqual(marks['capture_start_monotonic_ns'], 1_000_000_000)
+
     def test_screencopy_ready_timestamp_combines_high_low_seconds_and_nsec(self):
         text = ' -> zwlr_screencopy_frame_v1#27.ready(1, 2, 300)'
         self.assertEqual(proof.parse_capture_ns(text), ((1 << 32) + 2) * 1_000_000_000 + 300)

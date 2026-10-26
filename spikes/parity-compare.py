@@ -1533,6 +1533,8 @@ def main():
     parser.add_argument('--boot-settle', type=float, default=4.0)
     parser.add_argument('--seq-scale', type=float, default=0.5)
     parser.add_argument('--parent-hz', type=int, choices=(60, 120), default=60, help='private headless parent refresh; synthetic scheduling, not physical scanout')
+    parser.add_argument('--release-proof-mode', choices=('images', 'presentation'), default='images',
+                        help='B0131: separate image-gate and presentation-only release cohorts')
     parser.add_argument('--parent-output-tool', default=shutil.which('wlr-randr') or '', help='wlr-randr for the private parent output of pointer captures')
     parser.add_argument('--pointer-tool', default='', help='built spikes/virtual-pointer.c (hover and pressed states); empty skips them')
     parser.add_argument('--seq-interval', type=int, default=25, help='ms between overlapped grim captures of a transition (B0067)')
@@ -1609,7 +1611,8 @@ def main():
                     env.pop(key, None)
                 command = ['dbus-run-session', '--', sys.executable, __file__, '--run-arm', arm, '--private', private]
                 for flag in ['nacre', 'bead_bin', 'bead_shell', 'out', 'size', 'scale', 'presentation', 'wallpapers', 'wallpaper_videos', 'settle', 'closed_settle', 'boot_settle',
-                             'seq_scale', 'seq_interval', 'pointer_tool', 'parent_output_tool', 'parent_hz']:
+                             'seq_scale', 'seq_interval', 'pointer_tool', 'parent_output_tool', 'parent_hz',
+                             'release_proof_mode']:
                     value = getattr(args, flag)
                     command += ['--' + flag.replace('_', '-'), 'x'.join(map(str, value)) if flag == 'size' else str(value)]
                 command += ['--states', ','.join(args.states)] + (['--cpu'] if args.cpu else []) + (['--wallpaper-fixture'] if args.wallpaper_fixture else []) + (['--shortcut-fixture'] if args.shortcut_fixture else []) + (['--fake-nm'] if args.fake_nm else []) + (['--fake-wifi'] if args.fake_wifi else [])
