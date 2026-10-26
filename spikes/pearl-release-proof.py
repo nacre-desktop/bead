@@ -59,6 +59,9 @@ def capture_sequence(self, directory, trigger, seconds=2.0, region=None, follow_
     jobs, errors, marks = [], [], {}
     marks['capture_start_monotonic_ns'] = time.monotonic_ns()
     started = marks['capture_start_monotonic_ns'] / 1_000_000_000
+    interval = 0.025
+    minimum_end_ns = marks['capture_start_monotonic_ns'] + int(seconds * 1_000_000_000)
+    maximum_end_ns = marks['capture_start_monotonic_ns'] + 15_000_000_000
     protocol_dir = directory / 'protocol'
     protocol_dir.mkdir()
     if region is not None:
@@ -70,10 +73,14 @@ def capture_sequence(self, directory, trigger, seconds=2.0, region=None, follow_
         if follow_release:
             release_ns = parse_pointer_release_ns(marks.get('pointer_stdout', ''))
             target_ns = max(target_ns, release_ns + 1_500_000_000)
-        while time.monotonic_ns() < target_ns:
-            time.sleep(min(interval, (target_ns - time.monotonic_ns()) / 1_000_000_000))
-        if follow_release and time.monotonic_ns() >= maximum_end_ns:
-            raise RuntimeError('presentation observation reached 15 s before covering 1.5 s after pointer release')
+        while True:
+            now_ns = time.monotonic_ns()
+            if follow_release and now_ns >= maximum_end_ns:
+                raise RuntimeError('presentation observation reached 15 s before covering 1.5 s after pointer release')
+            remaining_ns = target_ns - now_ns
+            if remaining_ns <= 0:
+                break
+            time.sleep(min(interval, remaining_ns / 1_000_000_000))
         marks['observation_end_monotonic_ns'] = time.monotonic_ns()
         return marks, []
 
@@ -86,9 +93,6 @@ def capture_sequence(self, directory, trigger, seconds=2.0, region=None, follow_
     runner = threading.Thread(target=run_trigger)
     runner.start()
     index = 0
-    interval = 0.025
-    minimum_end_ns = marks['capture_start_monotonic_ns'] + int(seconds * 1_000_000_000)
-    maximum_end_ns = marks['capture_start_monotonic_ns'] + 15_000_000_000
     timed_out = False
     while True:
         now_ns = time.monotonic_ns()
