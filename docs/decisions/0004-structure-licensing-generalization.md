@@ -99,6 +99,7 @@ After Bead's core switch on Nacre, plan support for:
 - B0113: `ui.Host` expands a horizontal strip into region-local tile spans or content-packed rows,
   resolves bar/compact variants, and preserves unknown packages in the caller's document;
   `column_start`/`column_span` expose general grid placement. Packages, presets and persistence stay in the shell.
+- B0151: `out-back` is a reusable scalar easing token for short settle animations with a bounded overshoot.
 - B0109: `Scene::retain_primitives` remaps retained layers, clips and reveal indices when a service removes unavailable resources.
 - B0109: `ui.animate(key, target, seconds, curve)` interpolates scalar layout values through Session wakeups, keeping drawing and hit geometry together; reduced motion snaps and retired keys release state.
 

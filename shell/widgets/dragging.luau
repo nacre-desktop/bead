@@ -300,13 +300,16 @@ function M.ghost_node()
         local snap_y=ui.resolve_for_check(ui.bind("widgets.drag.snap_y")) or pointer_top
         left_target,top_target=snap_x,snap_y
     end
-    local position_duration=preparing and 0 or (phase=="settle" or phase=="return") and .18 or .06
-    local left=ui.animate("widgets.drag.ghost.left",left_target,position_duration,"out-cubic")
-    local top=ui.animate("widgets.drag.ghost.top",top_target,position_duration,"out-cubic")
+    local settling=phase=="settle" or phase=="return"
+    local position_duration=preparing and 0 or settling and .22 or .06
+    local position_curve=settling and "out-back" or "out-cubic"
+    local left=ui.animate("widgets.drag.ghost.left",left_target,position_duration,position_curve)
+    local top=ui.animate("widgets.drag.ghost.top",top_target,position_duration,position_curve)
     local node=preview.render(source.widget,form,style_name,settings,width,height,true)
     if not node then return nil end
     local marker=form=="bar" and ui.Box{id="widget-snap-marker",position="absolute",right=0,top=0,
-        width=kit.tokens.spacing.hairline*2,height=height,fill="primary"} or nil
+        width=kit.tokens.spacing.xs,height=height,radius=kit.tokens.radii.small,
+        fill=ui.alpha("primary",.9)} or nil
     return ui.Box{id="widgets-drag-ghost",position="absolute",
         left=left,top=top,width=width,height=height,clip_children=true,
         radius=kit.tokens.radii.medium,fill=ui.alpha("surfaceContainerHighest",.96),

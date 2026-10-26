@@ -368,6 +368,17 @@ function M.renderer(document)
             props.translate_x=require("context").ui.animate("widget-slot:"..item.iid,target,.18,"out-cubic")-target
             node.props=props
         end
+        if item.drag_placeholder==true and item.host=="top_bar" and host then
+            local viewport=require("context").ui.resolve_for_check(require("context").ui.bind("bead.viewport.width")) or 0
+            local width=available_width or (viewport/math.max(1,host.tiles)*(item.slot and item.slot.span or 1))
+            if width>0 then
+                node=ui.Box{id="widget-snap-slot-"..tostring(item.iid),width=width,
+                    height=require("context").t.status_height,padding=2,
+                    radius=kit.tokens.radii.large,
+                    fill=ui.alpha("primary",.12),border_width=kit.tokens.spacing.hairline*1.5,
+                    border_color="primary",node}
+            end
+        end
         -- Preserve historic IDs for the first copy; additional copies get stable scopes.
         if item.drag_placeholder==true then
             node.scope="drag-preview."..item.iid.."."

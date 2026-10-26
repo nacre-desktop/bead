@@ -219,6 +219,7 @@ pub struct LuauFrontEnd {
 enum AnimationCurve {
     Linear,
     OutCubic,
+    OutBack,
     InOutCubic,
 }
 #[derive(Clone, Copy)]
@@ -339,8 +340,9 @@ impl Animations {
         let curve = match transition {
             "linear" => AnimationCurve::Linear,
             "out-cubic" => AnimationCurve::OutCubic,
+            "out-back" => AnimationCurve::OutBack,
             "in-out-cubic" => AnimationCurve::InOutCubic,
-            _ => return Err("animation transition must be linear, out-cubic, or in-out-cubic"),
+            _ => return Err("animation transition must be linear, out-cubic, out-back, or in-out-cubic"),
         };
         if !self.states.contains_key(&key) && self.states.len() >= 1024 {
             return Err("a view may animate at most 1024 scalar values");
@@ -395,6 +397,10 @@ impl ScalarMotion {
         let eased = match self.curve {
             AnimationCurve::Linear => t,
             AnimationCurve::OutCubic => 1. - (1. - t).powi(3),
+            AnimationCurve::OutBack => {
+                let shifted = t - 1.;
+                1. + 2.70158 * shifted.powi(3) + 1.70158 * shifted.powi(2)
+            }
             AnimationCurve::InOutCubic if t < 0.5 => 4. * t.powi(3),
             AnimationCurve::InOutCubic => 1. - (-2. * t + 2.).powi(3) / 2.,
         };
@@ -1034,6 +1040,14 @@ mod animation_tests {
         };
         assert!((in_out.value(start + Duration::from_millis(250)) - 0.0625).abs() < 1e-9);
         assert_eq!(in_out.value(start + Duration::from_millis(500)), 0.5);
+
+        let out_back = ScalarMotion {
+            curve: AnimationCurve::OutBack,
+            ..out
+        };
+        let settle = out_back.value(start + Duration::from_millis(600));
+        assert!(settle > 1.09 && settle < 1.11, "soft overshoot is {settle}");
+        assert_eq!(out_back.value(start + Duration::from_secs(1)), 1.);
     }
 
     #[test]

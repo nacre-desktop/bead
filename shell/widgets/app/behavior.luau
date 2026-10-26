@@ -596,6 +596,19 @@ local function bar_drop_placement(doc,event,context,span)
     start=math.max(0,math.min(bounds.span-span,start))
     return {host="top_bar",slot={region=region,start=start,span=span}}
 end
+local function pill_overlapping_bar_slot(doc,placement)
+    local slot=placement and placement.slot
+    if type(slot)~="table" or type(slot.region)~="string" then return nil end
+    local first=tonumber(slot.start) or 0
+    local last=first+(tonumber(slot.span) or 1)
+    for _,item in doc.hosts.top_bar.instances or {} do
+        if item.widget=="pill" and item.slot and item.slot.region==slot.region then
+            local item_first=tonumber(item.slot.start) or 0
+            local item_last=item_first+(tonumber(item.slot.span) or 1)
+            if first<item_last and item_first<last then return item end
+        end
+    end
+end
 -- Resize previews share the transfer transaction and never change placement form.
 local function drag_resize(s,event,context,base,commit,undo_document,source)
     if source.app==true or source.host~="canvas" or type(source.iid)~="string" then return false end
@@ -745,7 +758,12 @@ local function drag_drop(s,event,context,base,commit,undo_document)
         span=math.floor(math.clamp(span,style.min_span or 1,style.max_span or 60))
         placement=bar_drop_placement(doc,event,context,span)
     end
-    local target_pill=form=="bar" and pill_at_pointer(doc,event,context) or nil
+    -- The drag anchor can sit just outside the pill while the destination slot
+    -- overlaps it (large desktop forms make this common). Treat that occupied
+    -- slot as a pill drop so the widget joins the existing pill instead of
+    -- trying to wedge a new top-level item through its reservation.
+    local target_pill=form=="bar" and (pill_at_pointer(doc,event,context)
+        or pill_overlapping_bar_slot(doc,placement)) or nil
     if target_pill then
         local source_form=source.form or (source.host=="canvas" and "desktop" or "bar")
         if live and source_form~=form and not existing then

@@ -266,14 +266,69 @@ fn default_widget_transfer(phase: &str) -> Value {
         "target_origin_x":0,"target_origin_y":0,"context":default_widget_context()}),
     ])
 }
-fn default_widget_bar_return_transfer(phase: &str) -> Value {
-    Value::list(vec![json!({
+fn default_widget_bar_return_transfer_at(phase: &str, x: f64) -> Value {
+    let mut event = json!({
         "phase":phase,"source":[{"iid":"clock","group":"clock","widget":"clock",
         "host":"canvas","form":"desktop","style":"time","settings":{"clock_fixture_sentinel":"keep-clock-setting"}}],
-        "destination":"bar","x":400,"y":20,"global_x":400,"global_y":20,
+        "destination":"bar","x":x,"y":20,"global_x":x,"global_y":20,
         "screen_width":1920,"screen_height":1200,"width":220,"height":120,"grab_x":16,"grab_y":8,
         "target_origin_x":0,"target_origin_y":0,"context":default_widget_context()
-    })])
+    });
+    event["context"]["geometry"][0]["x"] = json!(1600);
+    event["context"]["geometry"][0]["w"] = json!(352);
+    event["context"]["reservations"][0]["width"] = json!(352);
+    Value::list(vec![event])
+}
+fn default_widget_bar_return_transfer(phase: &str) -> Value {
+    default_widget_bar_return_transfer_at(phase, 400.)
+}
+#[test]
+fn desktop_clock_dropped_on_occupied_pill_slot_writes_at_82_and_90_percent() {
+    for x in [1920. * 0.82, 1920. * 0.90] {
+        let mut original = default_widget_fixture();
+        let pill = &mut original["hosts"]["top_bar"]["instances"][3];
+        pill["children"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|child| child["iid"] != "clock");
+        pill["slot"]["span"] = json!(11);
+        original["hosts"]["canvas"] = json!({"width":1920,"height":1200,"instances":[{
+            "iid":"clock","group":"clock","widget":"clock","host":"canvas","style":"time",
+            "settings":{"clock_fixture_sentinel":"keep-clock-setting"},
+            "slot":{"x":1700,"y":1080,"w":220,"h":120}
+        }]});
+        original["widgets"]["clock"]["forms"]["bar"]["enabled"] = json!(false);
+        original["widgets"]["clock"]["forms"]["desktop"]["enabled"] = json!(true);
+
+        let mut controller = Controller::new().unwrap();
+        controller
+            .sync(&BTreeMap::from([
+                ("widgets.layout".into(), Value::list(vec![original])),
+                ("widgets.screen_width".into(), Value::Number(1920.)),
+                ("widgets.screen_height".into(), Value::Number(1200.)),
+            ]))
+            .unwrap();
+        controller
+            .drag(default_widget_bar_return_transfer_at("move", x))
+            .unwrap();
+        let dropped = controller
+            .drag(default_widget_bar_return_transfer_at("drop", x))
+            .unwrap();
+        assert!(
+            matches!(&dropped["widgets.write"],Value::List(rows) if rows.len()==1),
+            "clock drop at {x}px must commit instead of rejecting the occupied pill slot: {dropped:?}"
+        );
+        let written = doc_from(&dropped, "widgets.write");
+        let pill = written["hosts"]["top_bar"]["instances"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["iid"] == "status-pill")
+            .unwrap();
+        assert!(pill["children"].as_array().unwrap().iter().any(|item| item["iid"] == "clock"));
+        assert_eq!(pill["slot"]["span"], 14);
+        assert!(written["hosts"]["canvas"]["instances"].as_array().unwrap().is_empty());
+    }
 }
 fn assert_unique_iids(document: &Json) {
     fn visit(items: &[Json], seen: &mut HashSet<String>) {
