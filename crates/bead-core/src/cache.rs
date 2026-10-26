@@ -278,4 +278,22 @@ mod tests {
         assert!(r.used_bytes <= r.limit_bytes);
         assert!(r.caches.iter().all(|c| c.used_bytes <= c.limit_bytes));
     }
+
+    #[test]
+    fn lru_pressure_evicts_old_entries_and_keeps_render_value_available() {
+        let mut cache = Lru::new("test-lru-pressure", 3 * MIB);
+        for key in 0..3 {
+            cache.insert(key, vec![key], MIB).unwrap();
+        }
+        assert_eq!(cache.get(&0), Some(&vec![0]));
+
+        // A new 2 MiB cache value forces both least-recently-used entries out.
+        // Admission remains bounded and the caller can render the incoming value.
+        cache.insert(3, vec![3], 2 * MIB).unwrap();
+        assert!(cache.get(&0).is_some());
+        assert!(cache.get(&1).is_none());
+        assert!(cache.get(&2).is_none());
+        assert_eq!(cache.get(&3), Some(&vec![3]));
+        assert_eq!(cache.bytes(), 3 * MIB);
+    }
 }

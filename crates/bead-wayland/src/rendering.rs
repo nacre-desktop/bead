@@ -2,6 +2,25 @@
 //! Per-surface rendering, GPU staging and idle release.
 use super::*;
 
+fn is_cache_pressure(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    error.contains("budget") || error.contains("admission") || error.contains("cache pressure")
+}
+
+fn report_cache_pressure(owner: &str, error: &str) {
+    static LAST_REPORT: std::sync::OnceLock<std::sync::Mutex<Option<Instant>>> =
+        std::sync::OnceLock::new();
+    let now = Instant::now();
+    let mut last = LAST_REPORT
+        .get_or_init(|| std::sync::Mutex::new(None))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if last.is_none_or(|last| now.duration_since(last) >= Duration::from_secs(5)) {
+        eprintln!("CACHE_PRESSURE owner={owner} action=render_without_snapshot detail={error}");
+        *last = Some(now);
+    }
+}
+
 pub(super) fn prepare_pending_images(
     error: &(dyn Error + 'static),
     source: &mut dyn SceneSource,
@@ -50,6 +69,13 @@ mod keyboard_policy_tests {
             panel_keyboard_mode(true, true, true),
             KeyboardInteractivity::OnDemand
         );
+    }
+
+    #[test]
+    fn cache_pressure_is_a_recoverable_render_condition() {
+        assert!(is_cache_pressure("retained cache byte budget exceeded"));
+        assert!(is_cache_pressure("CPU snapshot admission failed"));
+        assert!(!is_cache_pressure("invalid wallpaper image header"));
     }
 }
 
@@ -475,10 +501,43 @@ impl App {
                         {
                             Ok(snapshot) => {
                                 if let Err(error) = app.suspend_panel_gpu(snapshot) {
-                                    eprintln!("UI_ERROR CPU snapshot admission: {error}");
+                                    let detail = error.to_string();
+                                    if is_cache_pressure(&detail) {
+                                        report_cache_pressure("wallpaper-picker", &detail);
+                                        let qh = app.qh.clone();
+                                        let indices = app
+                                            .surfaces
+                                            .iter()
+                                            .enumerate()
+                                            .filter(|(_, surface)| surface.companion)
+                                            .map(|(index, _)| index)
+                                            .collect::<Vec<_>>();
+                                        for index in indices {
+                                            app.draw(index, &qh);
+                                        }
+                                    } else {
+                                        eprintln!("UI_ERROR CPU snapshot: {detail}");
+                                    }
                                 }
                             }
-                            Err(error) => eprintln!("UI_ERROR CPU snapshot: {error}"),
+                            Err(error) => {
+                                if is_cache_pressure(&error) {
+                                    report_cache_pressure("wallpaper-picker", &error);
+                                    let qh = app.qh.clone();
+                                    let indices = app
+                                        .surfaces
+                                        .iter()
+                                        .enumerate()
+                                        .filter(|(_, surface)| surface.companion)
+                                        .map(|(index, _)| index)
+                                        .collect::<Vec<_>>();
+                                    for index in indices {
+                                        app.draw(index, &qh);
+                                    }
+                                } else {
+                                    eprintln!("UI_ERROR CPU snapshot: {error}");
+                                }
+                            }
                         }
                     } else if app.panel_target {
                         drop(result);

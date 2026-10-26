@@ -5096,6 +5096,71 @@ mod tests {
         }
     }
 
+    #[test]
+    fn picker_snapshot_opens_with_twenty_four_4k_image_entries_at_scale_1_5() {
+        let _serial = LARGE_RASTER_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+        let mut source = Pixmap::new(3840, 2160).unwrap();
+        source.fill(tiny_skia::Color::from_rgba8(24, 48, 72, 255));
+        let encoded: Arc<[u8]> = Arc::from(source.encode_png().unwrap());
+        drop(source);
+
+        let mut picker = scene();
+        picker.width = 2880.;
+        picker.bounds = Rect::new(0., 0., 2880., 1800.);
+        picker.layers.clear();
+        picker.asset_data.clear();
+        picker.primitives.clear();
+        for index in 0..24 {
+            let path = PathBuf::from(format!("wallpaper-{index}.png"));
+            picker.asset_data.insert(path.clone(), encoded.clone());
+            let col = index % 6;
+            let row = index / 6;
+            picker.primitives.push(Primitive::Image {
+                rect: Rect::new(col as f32 * 480., row as f32 * 420., 460., 380.),
+                path,
+                fit: crate::ImageFit::Cover,
+                blur: 0.,
+                clip_polygon: None,
+            });
+        }
+
+        let mut image_cache = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+        image_cache
+            .prepare(&picker, 1.5)
+            .expect("the 24-card visible set fits its 40 MiB owner budget");
+        let budget = image_cache.resource_budget.as_ref().unwrap().clone();
+        assert!(budget.used() <= 40 * bead_core::cache::MIB);
+        picker
+            .prepared
+            .insert(1.5f32.to_bits(), image_cache.frame.clone().unwrap());
+
+        // Each visible thumbnail is 690×570 RGBA at the real 1.5 effective
+        // scale (~1.50 MiB); 24 entries total about 36 MiB, within the picker
+        // owner's 40 MiB retained budget. The 4K source files are decoded to
+        // their card extents before retention, leaving roughly 4 MiB for
+        // encoded thumbnails and metadata.
+        let snapshot = TreeCpuRenderer::prepare_snapshot(&picker, 1.5)
+            .expect("cache pressure must not reject a picker-sized image set");
+        let mut renderer = snapshot.accept().expect("snapshot stays admitted");
+        assert_eq!(picker.primitives.len(), 24);
+        assert!(renderer.flattened.is_some(), "first picker frame is ready");
+        let mut output = Pixmap::new(4320, 2700).unwrap();
+        renderer
+            .render(
+                &picker,
+                ShmTarget {
+                    bytes: output.data_mut(),
+                    width: 4320,
+                    height: 2700,
+                    scale: 1.5,
+                    format: PixelFormat::Rgba,
+                },
+                Damage::full(4320, 2700),
+            )
+            .unwrap();
+        assert!(output.data().iter().any(|byte| *byte != 0));
+    }
+
     fn clipped_wallpaper_scene(count: usize, first_x: f32) -> Scene {
         let mut scene = scene();
         scene.width = 32.;
