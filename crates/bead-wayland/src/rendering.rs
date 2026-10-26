@@ -1972,15 +1972,26 @@ fn transparent_corner(
                 .get(y as usize * stride + x as usize * 4 + 3)
                 .is_some_and(|alpha| *alpha == 0)
     };
-    if let Some(pixel) = preferred.filter(|pixel| alpha_zero(*pixel)) {
+    let right = width.checked_sub(1)?;
+    let bottom = height.checked_sub(1)?;
+    let clear_corner = |(x, y): (u32, u32)| {
+        if !(x == 0 || x == right) || !(y == 0 || y == bottom) {
+            return false;
+        }
+        let nx = if x == 0 { right.min(1) } else { x - 1 };
+        let ny = if y == 0 { bottom.min(1) } else { y - 1 };
+        // Linear filtering can sample inward neighbors of the 1x1 crop.
+        [(x, y), (nx, y), (x, ny), (nx, ny)]
+            .into_iter()
+            .all(alpha_zero)
+    };
+    if let Some(pixel) = preferred.filter(|pixel| clear_corner(*pixel)) {
         return Some(pixel);
     }
     // Warming is optional: checking corners keeps opaque-scene work bounded.
-    let right = width.checked_sub(1)?;
-    let bottom = height.checked_sub(1)?;
     [(0, 0), (right, 0), (0, bottom), (right, bottom)]
         .into_iter()
-        .find(|pixel| alpha_zero(*pixel))
+        .find(|pixel| clear_corner(*pixel))
 }
 
 #[cfg(test)]
@@ -1991,15 +2002,14 @@ mod repair_tests {
 
     #[test]
     fn transparent_corner_requires_verified_zero_alpha_and_honors_row_stride() {
-        let mut pixels = vec![0xff; 24];
-        pixels[7] = 0;
-        pixels[15] = 0;
-        assert_eq!(transparent_corner(&pixels, 2, 2, 12, Some((1, 0))), Some((1, 0)));
-        assert_eq!(transparent_corner(&pixels, 2, 2, 12, Some((0, 1))), Some((0, 1)));
-        pixels[7] = 1;
-        pixels[15] = 0xff;
-        assert_eq!(transparent_corner(&pixels, 2, 2, 12, None), None);
-        assert_eq!(transparent_corner(&pixels, 2, 2, 12, Some((9, 9))), None);
+        let mut pixels = vec![0xff; 48];
+        for (x, y) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+            pixels[y * 16 + x * 4 + 3] = 0;
+        }
+        assert_eq!(transparent_corner(&pixels, 3, 3, 16, None), Some((0, 0)));
+        assert_eq!(transparent_corner(&pixels, 3, 3, 16, Some((9, 9))), Some((0, 0)));
+        pixels[23] = 1; // A filtered inward neighbor must also be transparent.
+        assert_eq!(transparent_corner(&pixels, 3, 3, 16, None), None);
         let mut opaque_corners = vec![0xff; 36];
         opaque_corners[19] = 0; // An interior hole does not trigger a full scan.
         assert_eq!(transparent_corner(&opaque_corners, 3, 3, 12, None), None);
