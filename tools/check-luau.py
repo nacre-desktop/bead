@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT OR Apache-2.0
 """Analyze actual views against Rust-generated SDK declarations in a private mirror."""
-import argparse,json,os,pathlib,re,shutil,subprocess,tempfile
+import argparse,json,os,pathlib,re,shutil,signal,subprocess,sys,tempfile
 ROOT=pathlib.Path(__file__).resolve().parent.parent
 p=argparse.ArgumentParser();p.add_argument('--analyzer',required=True);p.add_argument('--binary',required=True);p.add_argument('--check-generated',action='store_true');a=p.parse_args()
 with tempfile.TemporaryDirectory(prefix='bead-luau-') as directory:
@@ -32,5 +32,11 @@ with tempfile.TemporaryDirectory(prefix='bead-luau-') as directory:
         f.write_text(text)
     result=subprocess.run([a.analyzer,'--mode=nonstrict',*map(str,files)],cwd=base,text=True,capture_output=True)
     print(result.stdout,end='');print(result.stderr,end='')
-    if result.returncode:raise SystemExit(result.returncode)
+    if result.returncode:
+        if result.returncode < 0:
+            try:failure=signal.Signals(-result.returncode).name
+            except ValueError:failure=f'SIGNAL_{-result.returncode}'
+            print(f'LUAU_ANALYZE_FAILED signal={failure}',file=sys.stderr)
+            raise SystemExit(1)
+        raise SystemExit(result.returncode)
     print('LUAU_ANALYZE_OK',len(files),'modules; actual source mirror, generated Rust SDK')
