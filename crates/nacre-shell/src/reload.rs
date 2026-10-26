@@ -1098,12 +1098,8 @@ impl Runtime {
         }
         projection
     }
-    fn publish_widget_drag_projection(
-        &mut self,
-        drag_values: BTreeMap<String, bead::core::Value>,
-    ) {
-        let active = drag_values.get("widgets.drag.active")
-            == Some(&bead::core::Value::Bool(true));
+    fn publish_widget_drag_projection(&mut self, drag_values: BTreeMap<String, bead::core::Value>) {
+        let active = drag_values.get("widgets.drag.active") == Some(&bead::core::Value::Bool(true));
         let output = drag_values
             .get("widgets.drag.target_output_id")
             .and_then(|value| {
@@ -7677,7 +7673,8 @@ impl SceneSource for Runtime {
                         self.widget_drag_model = Some(values.clone());
                         self.widget_drag_retire_cleanup = true;
                         let staged = self.stage_widget_drag_state(&values);
-                        let scene = self.session
+                        let scene = self
+                            .session
                             .update(staged)
                             .map_err(|error| -> Box<dyn Error> { Box::new(error) })?;
                         if scene.is_none() {

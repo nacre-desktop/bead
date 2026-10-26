@@ -1506,7 +1506,7 @@ fn bar_drag_threshold_offers_ghost_before_root_reflow_commit() {
     let source = runtime
         .session
         .view_nodes()
-        .into_iter()
+        .iter()
         .find(|node| {
             node.drag_action.as_deref() == Some("widgets.drag") && node.id.contains("clock")
         })
@@ -1523,7 +1523,12 @@ fn bar_drag_threshold_offers_ghost_before_root_reflow_commit() {
     }
     events.lock().unwrap().clear();
 
-    assert!(runtime.stage(UiEvent::Drag { x: x + 8., y }).unwrap().is_some());
+    assert!(
+        runtime
+            .stage(UiEvent::Drag { x: x + 8., y })
+            .unwrap()
+            .is_some()
+    );
     assert!(runtime.pending.is_some(), "root bar reflow remains pending");
     let events = events.lock().unwrap();
     let offer = events
@@ -1543,7 +1548,9 @@ fn bar_drag_threshold_offers_ghost_before_root_reflow_commit() {
         offer.1.get("widgets.drag.phase"),
         Some(&Value::Text("dragging".into()))
     );
-    assert!(matches!(offer.1.get("widgets.drag.layout"),Some(Value::List(rows)) if !rows.is_empty()));
+    assert!(
+        matches!(offer.1.get("widgets.drag.layout"),Some(Value::List(rows)) if !rows.is_empty())
+    );
     assert_eq!(offer.1.get("widgets.layout"), Some(&canonical));
     assert_eq!(offer.1.get("widgets.draft"), Some(&draft));
     assert!(
@@ -1557,8 +1564,14 @@ fn bar_drag_threshold_offers_ghost_before_root_reflow_commit() {
             Some(Value::List(rows)) if rows.is_empty()),
         "threshold preview never writes or persists the candidate layout"
     );
-    assert!(!file.exists(), "drag motion does not create the layout file");
-    assert_eq!(runtime.session.stores.get("widgets.layout"), Some(&canonical));
+    assert!(
+        !file.exists(),
+        "drag motion does not create the layout file"
+    );
+    assert_eq!(
+        runtime.session.stores.get("widgets.layout"),
+        Some(&canonical)
+    );
     drop(events);
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -1576,7 +1589,7 @@ fn rejected_threshold_transaction_returns_and_retires_ghost() {
     let source = runtime
         .session
         .view_nodes()
-        .into_iter()
+        .iter()
         .find(|node| {
             node.drag_action.as_deref() == Some("widgets.drag") && node.id.contains("clock")
         })
@@ -1595,19 +1608,24 @@ fn rejected_threshold_transaction_returns_and_retires_ghost() {
 
     let declared = runtime.session.stores.values().clone();
     let mut invalid = declared.clone();
-    invalid.insert("widgets.drag.layout".into(), Value::Text("wrong type".into()));
+    invalid.insert(
+        "widgets.drag.layout".into(),
+        Value::Text("wrong type".into()),
+    );
     runtime.session.stores = bead::core::Stores::default().reconcile(&invalid).unwrap();
     let _ = runtime.stage(UiEvent::Drag { x: x + 8., y }).unwrap();
     let token = runtime.widget_drag_epoch;
     {
         let events = events.lock().unwrap();
-        assert!(events.iter().any(|event| matches!(event,
+        assert!(
+            events.iter().any(|event| matches!(event,
             UiEvent::CanvasOffer { view, open: true, values, .. }
                 if view == "widgets-drag"
                     && values.get("widgets.drag.phase")==Some(&Value::Text("dragging".into())))),
             "the threshold starts a speculative ghost before root preflight"
         );
-        assert!(events.iter().any(|event| matches!(event,
+        assert!(
+            events.iter().any(|event| matches!(event,
             UiEvent::CanvasModel { view, values, .. }
                 if view == "widgets-drag"
                     && values.get("widgets.drag.phase")==Some(&Value::Text("return".into())))),
