@@ -98,7 +98,7 @@ def launcher_scroll_prepare():
 SCROLL_SCENES = {
     'settings-content': (m.STATES['settings'][0], 500, 600, 80, 1.6),
     'settings-nav': (m.STATES['settings'][0], 150, 600, 80, 1.6),
-    'launcher': (launcher_scroll_prepare(), 960, 600, 80, 1.6),
+    'launcher': (launcher_scroll_prepare(), 960, 800, 80, 1.6),
     # The private popup begins around logical y=628; y=900 lands in its list.
     'keybindings': (m.STATES['keybindings'][0], 960, 900, 80, 1.6),
     'colors-app': (m.STATES['colors-app'][0], 500, 650, 80, 1.6),
