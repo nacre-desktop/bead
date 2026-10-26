@@ -783,4 +783,80 @@ mod tests {
         }
         Ok(())
     }
+
+    /// B0149: level text updates immediately while the volume/brightness fill retargets smoothly.
+    #[test]
+    fn volume_and_brightness_osd_levels_animate_without_queuing_steps()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use std::{collections::BTreeMap, thread, time::Duration};
+
+        for kind in ["volume", "brightness"] {
+            let mut fixture = initial_models()?;
+            fixture.insert("panel.open".into(), Value::Bool(true));
+            for (key, value) in [
+                ("osd.open", Value::Bool(true)),
+                ("osd.kind", Value::Text(kind.into())),
+                ("osd.value", Value::Number(0.2)),
+                ("osd.muted", Value::Bool(false)),
+                ("osd.label", Value::Text(String::new())),
+                ("osd.device", Value::Text(String::new())),
+            ] {
+                fixture.insert(key.into(), value);
+            }
+            let mut harness = bead_test::Harness::load(
+                &root(),
+                Path::new("osd/main.luau"),
+                &root().join("palette.json"),
+                fixture,
+                bead_test::Config {
+                    width: 404,
+                    height: 144,
+                    scale: 1.,
+                },
+            )?;
+            let fill_width = |harness: &bead_test::Harness| {
+                harness
+                    .scene()
+                    .primitives
+                    .iter()
+                    .find_map(|primitive| match primitive {
+                        bead::render::Primitive::Image { rect, .. } => Some(rect.w),
+                        _ => None,
+                    })
+            };
+            let initial = fill_width(&harness).expect("OSD fill image");
+            harness.update(BTreeMap::from([("osd.value".into(), Value::Number(0.8))]))?;
+            assert!(
+                harness.scene().primitives.iter().any(|primitive| matches!(
+                    primitive,
+                    bead::render::Primitive::Text { text, .. } if text.as_str() == "80%"
+                )),
+                "{kind}: percentage text should follow the latest value immediately"
+            );
+            let at_input = fill_width(&harness).expect("OSD fill image");
+            assert!(
+                (at_input - initial).abs() < 0.01,
+                "{kind}: animation starts at prior fill"
+            );
+            let destination = initial / 0.2 * 0.8;
+
+            thread::sleep(Duration::from_millis(35));
+            harness.update(BTreeMap::new())?;
+            let midway = fill_width(&harness).expect("OSD fill image");
+            assert!(
+                midway > initial + 1. && midway < destination - 1.,
+                "{kind}: fill should advance smoothly, {initial} -> {midway} -> {destination}"
+            );
+
+            harness.update(BTreeMap::from([("osd.value".into(), Value::Number(0.4))]))?;
+            let retargeted = fill_width(&harness).expect("OSD fill image");
+            assert!(
+                retargeted > initial + 1.
+                    && retargeted < destination - 1.
+                    && (retargeted - midway).abs() < 25.,
+                "{kind}: a newer step must retarget near the current fill, {midway} -> {retargeted}"
+            );
+        }
+        Ok(())
+    }
 }
