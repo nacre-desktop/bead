@@ -220,10 +220,6 @@ fn placement_monitor<'a>(
         .or_else(|| monitors.first())
 }
 
-fn clear_transparent_bootstrap_buffer(bytes: &mut [u8]) {
-    bytes.fill(0);
-}
-
 /// The resident-panel state, as one movable unit.
 pub(crate) struct Group {
     runtime: Option<Box<dyn SceneSource>>,
@@ -1423,7 +1419,7 @@ impl App {
             eprintln!("PEARL_PREWARM_ERROR transparent bootstrap allocation failed");
             return;
         };
-        clear_transparent_bootstrap_buffer(canvas);
+        canvas.fill(0);
         let Ok(empty) = Region::new(&self.compositor) else {
             eprintln!("PEARL_PREWARM_ERROR input region allocation failed");
             return;
@@ -2711,14 +2707,6 @@ impl App {
 #[cfg(test)]
 mod placement_tests {
     use super::*;
-
-    #[test]
-    fn transparent_bootstrap_buffer_has_zero_argb_and_alpha_bytes() {
-        let mut bytes = [0xff; 8];
-        clear_transparent_bootstrap_buffer(&mut bytes);
-        assert_eq!(bytes, [0; 8]);
-        assert!(bytes.chunks_exact(4).all(|pixel| pixel[3] == 0));
-    }
 
     #[test]
     fn a_released_rect_selects_its_new_output_before_the_origin_fallback() {
