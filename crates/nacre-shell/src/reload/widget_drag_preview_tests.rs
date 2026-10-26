@@ -1463,14 +1463,8 @@ fn bar_press_prepares_the_exact_drag_source_without_starting_the_gesture() {
         bounds.x + number("widgets.drag.source_origin_x") - number("widgets.drag.target_origin_x");
     let source_top =
         bounds.y + number("widgets.drag.source_origin_y") - number("widgets.drag.target_origin_y");
-    assert!(
-        (initial_bounds.w - (bounds.w.max(1.).ceil() + 1.)).abs()
-            < 0.01
-    );
-    assert!(
-        (initial_bounds.h - (bounds.h.max(1.).ceil() + 1.)).abs()
-            < 0.01
-    );
+    assert!((initial_bounds.w - (bounds.w.max(1.).ceil() + 1.)).abs() < 0.01);
+    assert!((initial_bounds.h - (bounds.h.max(1.).ceil() + 1.)).abs() < 0.01);
     assert!((initial_bounds.x - source_left.floor()).abs() < 0.01);
     assert!((initial_bounds.y - source_top.floor()).abs() < 0.01);
     assert_eq!(

@@ -1230,12 +1230,8 @@ impl Runtime {
         let width = f64::from(candidate.source_rect.2.max(1.)).ceil() + 1.;
         let height = f64::from(candidate.source_rect.3.max(1.)).ceil() + 1.;
         let (left, top) = (left.floor(), top.floor());
-        let initial_bounds = bead::render::Rect::new(
-            left as f32,
-            top as f32,
-            width as f32,
-            height as f32,
-        );
+        let initial_bounds =
+            bead::render::Rect::new(left as f32, top as f32, width as f32, height as f32);
         if ![
             initial_bounds.x,
             initial_bounds.y,
