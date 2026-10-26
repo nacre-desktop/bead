@@ -303,9 +303,10 @@ impl App {
             view,
             output,
             values,
+            initial_bounds,
         } = event
         {
-            self.canvas_prepare(&view, output.as_deref(), values);
+            self.canvas_prepare(&view, output.as_deref(), values, initial_bounds);
             return;
         }
         if let UiEvent::CompanionOffer { view, output, open } = event {
@@ -1190,6 +1191,7 @@ mod panel_event_routing_tests {
             view: "widgets-drag".into(),
             output: Some("fixture-output".into()),
             values: BTreeMap::new(),
+            initial_bounds: None,
         }));
         assert!(panel_event_belongs_to_host(&UiEvent::PanelNavigated(
             "dashboard-weather".into()

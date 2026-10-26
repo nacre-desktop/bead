@@ -327,11 +327,12 @@ pub enum UiEvent {
         open: bool,
         values: std::collections::BTreeMap<String, bead_core::Value>,
     },
-    /// Prepare a canvas scene and renderer without creating or mapping its layer surface.
+    /// Prepare a canvas scene and renderer, with optional empty-layer source geometry.
     CanvasPrepare {
         view: String,
         output: Option<String>,
         values: std::collections::BTreeMap<String, bead_core::Value>,
+        initial_bounds: Option<bead_render::Rect>,
     },
     CanvasModel {
         view: String,

@@ -169,6 +169,7 @@ struct WidgetFloatingRequest {
 struct WidgetHoverPreviewKey {
     payload: bead::core::Value,
     source_rect: [u32; 4],
+    initial_bounds: bead::render::Rect,
     output: String,
     revision: u64,
 }
@@ -583,6 +584,7 @@ pub struct Runtime {
     widget_drag_latest_epoch: Option<u64>,
     widgets_drag_write: bool,
     widget_drag_controller: Option<crate::widgets::widget_drag::Controller>,
+    widget_drag_controller_primed: bool,
     widget_drag_subscription: Option<crate::widgets::widget_drag::Subscription>,
     widget_drag_app_announced: bool,
     widget_active_app: Option<(u32, u64)>,
@@ -1220,6 +1222,31 @@ impl Runtime {
                     Some(bead::core::Value::Text(name)) if !name.is_empty() => Some(name.clone()),
                     _ => None,
                 })?;
+        let target_origin_x = number("widgets.screen_origin_x");
+        let target_origin_y = number("widgets.screen_origin_y");
+        let left = source_left - target_origin_x;
+        let top = source_top - target_origin_y;
+        let right = left + f64::from(candidate.source_rect.2.max(1.));
+        let bottom = top + f64::from(candidate.source_rect.3.max(1.));
+        let (left, top, right, bottom) =
+            (left.floor(), top.floor(), right.ceil(), bottom.ceil());
+        let initial_bounds = bead::render::Rect::new(
+            left as f32,
+            top as f32,
+            (right - left) as f32,
+            (bottom - top) as f32,
+        );
+        if ![
+            initial_bounds.x,
+            initial_bounds.y,
+            initial_bounds.w,
+            initial_bounds.h,
+        ]
+        .into_iter()
+        .all(f32::is_finite)
+        {
+            return None;
+        }
         let key = WidgetHoverPreviewKey {
             payload: candidate.payload.clone(),
             source_rect: [
@@ -1228,6 +1255,7 @@ impl Runtime {
                 candidate.source_rect.2.to_bits(),
                 candidate.source_rect.3.to_bits(),
             ],
+            initial_bounds,
             output: output.clone(),
             revision: match self.session.stores.get("widgets.rev") {
                 Some(bead::core::Value::Number(revision))
@@ -1321,6 +1349,7 @@ impl Runtime {
             view: "widgets-drag".into(),
             output: Some(key.output.clone()),
             values,
+            initial_bounds: Some(key.initial_bounds),
         });
         true
     }
@@ -1337,6 +1366,12 @@ impl Runtime {
     fn retire_widget_hover_preview(&mut self) {
         if self.widget_drag_is_active() {
             return;
+        }
+        if self.widgets_write.is_none() {
+            if self.widget_drag_controller_primed {
+                self.widget_drag_controller = None;
+                self.widget_drag_controller_primed = false;
+            }
         }
         let Some(previous) = self.widget_hover_preview.take() else {
             return;
@@ -1402,6 +1437,15 @@ impl Runtime {
                 key,
                 prepared_at: now,
             });
+            if self.widget_drag_controller.is_none() && self.widgets_write.is_none() {
+                match crate::widgets::widget_drag::Controller::new() {
+                    Ok(controller) => {
+                        self.widget_drag_controller = Some(controller);
+                        self.widget_drag_controller_primed = true;
+                    }
+                    Err(error) => eprintln!("WIDGET_DRAG_PREWARM {error}"),
+                }
+            }
         }
     }
     fn stage_widget_drag_values(
@@ -1456,6 +1500,7 @@ impl Runtime {
         let scene = self.finish_scene(scene)?;
         if scene.is_none() {
             self.widget_drag_controller = None;
+            self.widget_drag_controller_primed = false;
             self.widget_drag_model = None;
             self.widget_drag_retire_cleanup = false;
         }
@@ -2185,6 +2230,7 @@ impl Runtime {
             widget_drag_latest_epoch: None,
             widgets_drag_write: false,
             widget_drag_controller: None,
+            widget_drag_controller_primed: false,
             widget_drag_subscription: None,
             widget_drag_app_announced: false,
             widget_active_app: None,
@@ -5470,6 +5516,7 @@ impl SceneSource for Runtime {
                     self.widget_drag_controller =
                         Some(crate::widgets::widget_drag::Controller::new()?);
                 }
+                self.widget_drag_controller_primed = false;
                 let current = self.widget_host_values();
                 let values = {
                     let controller = self
@@ -5748,6 +5795,7 @@ impl SceneSource for Runtime {
                     self.widget_drag_controller =
                         Some(crate::widgets::widget_drag::Controller::new()?);
                 }
+                self.widget_drag_controller_primed = false;
                 let current = self.widget_host_values();
                 let values = {
                     let controller = self
@@ -5786,6 +5834,7 @@ impl SceneSource for Runtime {
                                 .ok()
                                 .flatten();
                             self.widget_drag_controller = None;
+                            self.widget_drag_controller_primed = false;
                             self.widget_drag_model = None;
                             return self.finish_scene(restored);
                         } else {
@@ -5858,6 +5907,7 @@ impl SceneSource for Runtime {
                     Some(bead::core::Value::Bool(true))
                 ) {
                     self.widget_drag_controller = None;
+                    self.widget_drag_controller_primed = false;
                     self.widget_drag_model = None;
                 }
                 return Ok(scene);
@@ -8269,6 +8319,7 @@ impl SceneSource for Runtime {
         let scene = self.finish_scene(scene)?;
         if self.widget_drag_retire_cleanup && scene.is_none() {
             self.widget_drag_controller = None;
+            self.widget_drag_controller_primed = false;
             self.widget_drag_model = None;
             self.widget_drag_retire_cleanup = false;
         }
@@ -8556,6 +8607,7 @@ impl SceneSource for Runtime {
         self.publish_widget_models();
         if self.widget_drag_retire_cleanup {
             self.widget_drag_controller = None;
+            self.widget_drag_controller_primed = false;
             self.widget_drag_model = None;
             self.widget_drag_retire_cleanup = false;
         }

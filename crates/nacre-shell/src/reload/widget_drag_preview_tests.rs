@@ -1446,13 +1446,27 @@ fn bar_press_prepares_the_exact_drag_source_without_starting_the_gesture() {
             view,
             output,
             values,
-        } if view == "widgets-drag" => Some((output, values)),
+            initial_bounds,
+        } if view == "widgets-drag" => Some((output, values, initial_bounds)),
         _ => None,
     });
-    let Some((output, values)) = prepared else {
+    let Some((output, values, initial_bounds)) = prepared else {
         panic!("pressing a real widget prepares its passive drag preview before threshold");
     };
     assert_eq!(output.as_deref(), Some("right"));
+    let initial_bounds = initial_bounds.expect("prepare carries source-form geometry");
+    let number = |key: &str| match values.get(key) {
+        Some(Value::Number(value)) => *value as f32,
+        _ => panic!("{key} is present in the prepared source geometry"),
+    };
+    let source_left = bounds.x + number("widgets.drag.source_origin_x")
+        - number("widgets.drag.target_origin_x");
+    let source_top = bounds.y + number("widgets.drag.source_origin_y")
+        - number("widgets.drag.target_origin_y");
+    assert!((initial_bounds.w - (source_left + bounds.w.max(1.)).ceil() + source_left.floor()).abs() < 0.01);
+    assert!((initial_bounds.h - (source_top + bounds.h.max(1.)).ceil() + source_top.floor()).abs() < 0.01);
+    assert!((initial_bounds.x - source_left.floor()).abs() < 0.01);
+    assert!((initial_bounds.y - source_top.floor()).abs() < 0.01);
     assert_eq!(
         values.get("widgets.drag.phase"),
         Some(&Value::Text("prepare".into()))
@@ -1573,6 +1587,8 @@ fn bar_hover_prewarms_once_retires_on_leave_and_reuses_the_warm_destination() {
 
     hover(&mut runtime, x, y);
     hover(&mut runtime, x + 1., y);
+    assert!(runtime.widget_drag_controller.is_some());
+    assert!(runtime.widget_drag_controller_primed);
     assert_eq!(
         runtime.session.stores.get("widgets.layout").cloned(),
         layout_before
@@ -1597,7 +1613,8 @@ fn bar_hover_prewarms_once_retires_on_leave_and_reuses_the_warm_destination() {
                     view,
                     output,
                     values,
-                } if view == "widgets-drag" => Some((output, values)),
+                    initial_bounds,
+                } if view == "widgets-drag" => Some((output, values, initial_bounds)),
                 _ => None,
             })
             .collect::<Vec<_>>();
@@ -1607,6 +1624,7 @@ fn bar_hover_prewarms_once_retires_on_leave_and_reuses_the_warm_destination() {
             "pointer movement over a widget is deduplicated"
         );
         assert_eq!(prepares[0].0.as_deref(), Some("right"));
+        assert!(prepares[0].2.is_some());
         assert_eq!(
             prepares[0].1.get("widgets.drag.source"),
             Some(&candidate.payload)
@@ -1704,6 +1722,8 @@ fn bar_hover_prewarms_once_retires_on_leave_and_reuses_the_warm_destination() {
     );
 
     hover(&mut runtime, -1., -1.);
+    assert!(runtime.widget_drag_controller.is_none());
+    assert!(!runtime.widget_drag_controller_primed);
     assert!(events.lock().unwrap().iter().any(|event| matches!(event,
         UiEvent::CanvasOffer { view, output: Some(output), open: false, .. }
             if view == "widgets-drag" && output == "right")));
@@ -1800,6 +1820,10 @@ fn bar_drag_threshold_offers_ghost_before_root_reflow_commit() {
     runtime.wakeup = Some(std::sync::Arc::new(move |event| {
         sent.lock().unwrap().push(event);
     }));
+    if runtime.stage(UiEvent::Hover { x, y }).unwrap().is_some() {
+        runtime.commit();
+    }
+    assert!(runtime.widget_drag_controller_primed);
     if runtime.stage(UiEvent::Click { x, y }).unwrap().is_some() {
         runtime.commit();
     }
@@ -1812,6 +1836,10 @@ fn bar_drag_threshold_offers_ghost_before_root_reflow_commit() {
             .is_some()
     );
     assert!(runtime.pending.is_some(), "root bar reflow remains pending");
+    assert!(
+        !runtime.widget_drag_controller_primed,
+        "the real gesture claims and reuses the passively primed controller"
+    );
     let events = events.lock().unwrap();
     let offer = events
         .iter()
@@ -1975,12 +2003,16 @@ fn canvas_press_prepares_the_configured_bar_destination_with_global_origin() {
             view,
             output: Some(output),
             values,
-        } if view == "widgets-drag" && output == "right" => Some(values),
+            initial_bounds,
+        } if view == "widgets-drag" && output == "right" => Some((values, initial_bounds)),
         _ => None,
     });
-    let Some(values) = values else {
+    let Some((values, initial_bounds)) = values else {
         panic!("a native canvas source prepares its bar-destination ghost before threshold");
     };
+    let bounds = initial_bounds.expect("canvas source prepare carries output-local geometry");
+    assert!(bounds.x < 1000., "warm bounds are local to the output");
+    assert!(bounds.y < 1200., "warm bounds are local to the output");
     assert_eq!(
         values.get("widgets.drag.destination"),
         Some(&Value::Text("bar".into()))

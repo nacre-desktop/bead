@@ -21,6 +21,8 @@ pub(super) struct Canvas {
     pub(super) epoch: u64,
     lifecycle: CanvasLifecycle,
     retain_when_closed: bool,
+    initial_bounds: Option<Rect>,
+    buffer_attached: bool,
     pub(super) layer: Option<LayerSurface>,
     pub(super) output: wl_output::WlOutput,
     pub(super) source: Box<dyn SceneSource>,
@@ -120,6 +122,14 @@ fn crop_scene(mut scene: Scene, bounds: Rect) -> Scene {
     scene
 }
 
+fn canvas_surface_bounds(open: bool, scene_bounds: Rect, initial_bounds: Option<Rect>) -> Rect {
+    if open {
+        scene_bounds
+    } else {
+        initial_bounds.unwrap_or(scene_bounds)
+    }
+}
+
 struct CanvasLifecycle {
     open: bool,
     pending_open: bool,
@@ -158,6 +168,9 @@ impl CanvasLifecycle {
         }
         self.unmapped = true;
         true
+    }
+    fn unmap_if_buffered(&mut self, buffer_attached: bool) -> bool {
+        buffer_attached && self.unmap()
     }
     fn begin_remap(&mut self) -> bool {
         if !self.unmapped {
@@ -264,15 +277,16 @@ impl App {
             }
             return;
         }
-        self.canvas_start(view, output_name, values, true);
+        self.canvas_start(view, output_name, values, true, None);
     }
     pub(super) fn canvas_prepare(
         &mut self,
         view: &str,
         output_name: Option<&str>,
         values: std::collections::BTreeMap<String, bead_core::Value>,
+        initial_bounds: Option<Rect>,
     ) {
-        self.canvas_start(view, output_name, values, false);
+        self.canvas_start(view, output_name, values, false, initial_bounds);
     }
     fn canvas_start(
         &mut self,
@@ -280,6 +294,7 @@ impl App {
         output_name: Option<&str>,
         values: std::collections::BTreeMap<String, bead_core::Value>,
         open: bool,
+        initial_bounds: Option<Rect>,
     ) {
         if self.hidden {
             return;
@@ -322,10 +337,11 @@ impl App {
                     .get(&key)
                     .is_some_and(|canvas| !canvas.lifecycle.open);
             if let Some(canvas) = self.canvases.get_mut(&key) {
+                if initial_bounds.is_some() {
+                    canvas.initial_bounds = initial_bounds;
+                }
                 if open {
                     canvas.lifecycle.offer_open();
-                } else {
-                    canvas.lifecycle.close();
                 }
             }
             if open {
@@ -334,8 +350,8 @@ impl App {
                     self.canvas_schedule_release(&key);
                 }
             } else {
-                self.canvas_ui(&key, UiEvent::Model(values));
                 self.canvas_hide(&key);
+                self.canvas_ui(&key, UiEvent::Model(values));
                 self.canvas_schedule_release(&key);
             }
             return;
@@ -417,6 +433,8 @@ impl App {
                 epoch,
                 lifecycle: CanvasLifecycle::new(open, 0),
                 retain_when_closed: spec.retain_when_closed,
+                initial_bounds,
+                buffer_attached: false,
                 layer: None,
                 output,
                 source,
@@ -460,14 +478,32 @@ impl App {
             canvas.frame_pending = false;
             canvas.dirty = false;
             canvas.pressed = false;
-            canvas.input = None;
-            if let Some(layer) = &canvas.layer
-                && canvas.lifecycle.unmap()
+            let mut commit = false;
+            if canvas.input.as_ref().is_none_or(|regions| !regions.is_empty())
+                && let Some(layer) = &canvas.layer
             {
-                layer.wl_surface().attach(None, 0, 0);
-                layer.commit();
+                match Region::new(&self.compositor) {
+                    Ok(empty) => {
+                        layer
+                            .wl_surface()
+                            .set_input_region(Some(empty.wl_region()));
+                        canvas.input = Some(Vec::new());
+                        commit = true;
+                    }
+                    Err(error) => eprintln!("CANVAS_ERROR {error}"),
+                }
+            }
+            if canvas.lifecycle.unmap_if_buffered(canvas.buffer_attached) {
+                if let Some(layer) = &canvas.layer {
+                    layer.wl_surface().attach(None, 0, 0);
+                    commit = true;
+                }
+                canvas.buffer_attached = false;
                 canvas.configured = false;
                 canvas.mapped_bounds = None;
+            }
+            if commit && let Some(layer) = &canvas.layer {
+                layer.commit();
             }
         }
     }
@@ -597,6 +633,8 @@ impl App {
                     canvas.pressed = false;
                     return;
                 };
+                let surface_bounds =
+                    canvas_surface_bounds(canvas.lifecycle.open, bounds, canvas.initial_bounds);
                 canvas.source_offset = scene.offset;
                 canvas.scene = crop_scene(scene, bounds);
                 canvas.bounds = Some(bounds);
@@ -607,9 +645,15 @@ impl App {
                         eprintln!("CANVAS_ERROR {error}");
                         return;
                     }
+                    if canvas.initial_bounds.is_some() {
+                        if let Err(error) = self.canvas_map_bounds(key, surface_bounds) {
+                            eprintln!("CANVAS_ERROR {error}");
+                        }
+                    }
                     return;
                 }
-                if let Err(error) = self.canvas_map_bounds(key) {
+                canvas.initial_bounds = None;
+                if let Err(error) = self.canvas_map_bounds(key, surface_bounds) {
                     eprintln!("CANVAS_ERROR {error}");
                     return;
                 }
@@ -649,12 +693,16 @@ impl App {
             self.canvas_ui(&key, event);
         }
     }
-    fn canvas_map_bounds(&mut self, key: &(String, String)) -> Result<(), Box<dyn Error>> {
+    fn canvas_map_bounds(
+        &mut self,
+        key: &(String, String),
+        bounds: Rect,
+    ) -> Result<(), Box<dyn Error>> {
         let (output, bounds, previous, viewport_size, existing) = {
             let canvas = self.canvases.get(key).ok_or("canvas missing")?;
             (
                 canvas.output.clone(),
-                canvas.bounds.ok_or("empty canvas")?,
+                bounds,
                 canvas.mapped_bounds,
                 canvas.viewport_size,
                 canvas.layer.is_some(),
@@ -706,6 +754,7 @@ impl App {
             if let Some(canvas) = self.canvases.get_mut(key) {
                 canvas.fractional = fractional;
                 canvas.viewport = viewport;
+                canvas.input = Some(Vec::new());
             }
             layer
         };
@@ -721,8 +770,11 @@ impl App {
             if let Some(viewport) = &canvas.viewport {
                 viewport.set_destination(size.0 as i32, size.1 as i32);
             }
-            if previous.is_none_or(|previous| previous.w != bounds.w || previous.h != bounds.h) {
-                canvas.mapped_bounds = Some(bounds);
+            let size_changed = previous.is_none_or(|previous| {
+                previous.w != bounds.w || previous.h != bounds.h
+            });
+            canvas.mapped_bounds = Some(bounds);
+            if size_changed {
                 canvas.pool = None;
                 canvas.buffers.clear();
                 canvas.geometry = None;
@@ -752,10 +804,7 @@ impl App {
             PixelFormat::Bgra
         };
         let canvas = self.canvases.get_mut(key).ok_or("canvas closed")?;
-        if !canvas.lifecycle.open {
-            return Ok(());
-        }
-        if !canvas.configured || canvas.bounds.is_none() {
+        if !canvas.lifecycle.open || !canvas.configured || canvas.bounds.is_none() {
             return Ok(());
         }
         if canvas.frame_pending {
@@ -927,6 +976,7 @@ impl App {
             .as_ref()
             .ok_or("canvas layer missing")?
             .commit();
+        canvas.buffer_attached = true;
         Ok(())
     }
     pub(super) fn canvas_configure(&mut self, layer: &LayerSurface, size: (u32, u32)) {
@@ -1084,6 +1134,7 @@ impl App {
                 canvas.geometry = None;
                 canvas.mapped_bounds = None;
                 canvas.configured = false;
+                canvas.buffer_attached = false;
                 return;
             }
             self.canvases.remove(&key);
@@ -1152,6 +1203,7 @@ mod tests {
             view: "widgets-drag".into(),
             output: Some("fixture-output".into()),
             values: std::collections::BTreeMap::new(),
+            initial_bounds: Some(Rect::new(10., 20., 30., 40.)),
         }));
         assert!(canvas_event_belongs_to_host(&UiEvent::CanvasModel {
             view: "widgets-canvas".into(),
@@ -1173,6 +1225,19 @@ mod tests {
         assert!(!canvas_event_belongs_to_host(&UiEvent::Model(
             std::collections::BTreeMap::new()
         )));
+    }
+
+    #[test]
+    fn source_bounds_prepare_hidden_then_active_scene_takes_over() {
+        let source = Rect::new(12., 18., 69., 28.);
+        let desktop = Rect::new(300., 400., 220., 96.);
+        assert_eq!(canvas_surface_bounds(false, desktop, Some(source)), source);
+        assert_eq!(canvas_surface_bounds(true, source, Some(desktop)), source);
+        let mut lifecycle = CanvasLifecycle::new(false, 0);
+        assert!(!lifecycle.unmap_if_buffered(false));
+        assert!(!lifecycle.unmapped);
+        assert!(lifecycle.unmap_if_buffered(true));
+        assert!(lifecycle.unmapped);
     }
 
     #[test]
