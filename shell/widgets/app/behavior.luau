@@ -366,6 +366,8 @@ local function drag_clear(s)
     s["widgets.drag.original"]={}
     s["widgets.drag.layout"]={}
     s["widgets.drag.revision"]=0
+    s["widgets.drag.entry.target_width"]=0
+    s["widgets.drag.entry.target_height"]=0
 end
 local function current_canonical(s,context)
     local saved=(s["widgets.layout"] or {})[1]
@@ -594,6 +596,40 @@ local function bar_drop_placement(doc,event,context,span)
     start=math.max(0,math.min(bounds.span-span,start))
     return {host="top_bar",slot={region=region,start=start,span=span}}
 end
+-- Resize previews share the transfer transaction and never change placement form.
+local function drag_resize(s,event,context,base,commit,undo_document,source)
+    if source.app==true or source.host~="canvas" or type(source.iid)~="string" then return false end
+    local doc=type(base)=="table" and clone(base) or document(s,context)
+    if type(doc)~="table" then return false end
+    local location=locate_document_item(doc,source.iid)
+    if not location or location.host~="canvas" or location.item.widget~=source.widget then return false end
+    local item=location.item
+    local canvas=doc.hosts.canvas
+    local package=catalogue(context,source.widget)
+    local form=package and package.forms and package.forms.desktop
+    local style=form and form.styles[item.style or source.style or form.default_style]
+    if not style then return false end
+    local dx=(tonumber(event.x) or 0)-(tonumber(event.start_x) or 0)
+    local dy=(tonumber(event.y) or 0)-(tonumber(event.start_y) or 0)
+    if dx~=dx or dy~=dy or math.abs(dx)>20000 or math.abs(dy)>20000 then return false end
+    local slot=item.slot
+    local maximum_w=math.min(style.max_span,canvas.width-slot.x)
+    local maximum_h=math.min(tonumber(source.max_height) or canvas.height,canvas.height-slot.y)
+    local minimum_w=math.min(maximum_w,style.min_span)
+    local minimum_h=math.min(maximum_h,math.max(1,tonumber(source.min_height) or 1))
+    slot.w=math.clamp(slot.w+dx,minimum_w,maximum_w)
+    slot.h=math.clamp(slot.h+dy,minimum_h,maximum_h)
+    local group,state=group_for(doc,item.widget,item.group or item.iid,context)
+    item.group=group
+    local config=state.forms.desktop or {enabled=true,style=item.style or form.default_style}
+    state.forms.desktop=config
+    config.placement={host="canvas",slot=clone(slot)}
+    if commit~=false then
+        history(s,undo_document or base); finish(s,doc)
+        s["widgets.write"]={clone(doc)}
+    end
+    return true,doc,item
+end
 local function insert_into_pill(doc,item,pill,event,context,style)
     if item.iid==pill.iid or contains_identity(item,pill.iid) then return false end
     local location=item.iid and locate_document_item(doc,item.iid)
@@ -631,7 +667,7 @@ local function drag_drop(s,event,context,base,commit,undo_document)
     if type(source)~="table" or type(source.widget)~="string" then return false end
     -- Canvas resize gestures use the same generic transfer payload but have their own
     -- transaction semantics; keep them out of the placement/morph path.
-    if source.kind=="resize" then return false end
+    if source.kind=="resize" then return drag_resize(s,event,context,base,commit,undo_document,source) end
     if source.app==true and event.private_remote~=true then return false end
     local destination=event.destination
     if destination~="bar" and destination~="desktop" then return false end
@@ -996,6 +1032,57 @@ local function drag(s,args)
     local event=request(args)
     if not event then return end
     local phase=event.phase
+    if phase=="entry-seed" then
+        local source=drag_record(event.source)
+        local document=type(event.document)=="table" and clone(event.document) or current_canonical(s,event)
+        local location=type(event.target_iid)=="string" and locate_document_item(document,event.target_iid) or nil
+        if source and source.app==true and source.kind=="entry" and event.private_remote==true
+            and type(document)=="table" and location and location.item.widget==source.widget
+            and (location.item.group or location.item.iid)==source.group then
+            location.item.drag_placeholder=true
+            local epoch=(tonumber(s["widgets.drag.epoch"]) or 0)+1
+            if epoch>=4503599627370496 then epoch=1 end
+            s["widgets.drag.epoch"]=epoch
+            s["widgets.drag.active"]=true
+            s["widgets.drag.source"]={clone(source)}
+            s["widgets.drag.destination"]=event.target_form
+            s["widgets.drag.phase"]="dragging"
+            s["widgets.drag.layout"]={document}
+            s["widgets.drag.x"]=tonumber(event.x) or 0
+            s["widgets.drag.y"]=tonumber(event.y) or 0
+            s["widgets.drag.start_x"]=tonumber(event.x) or 0
+            s["widgets.drag.start_y"]=tonumber(event.y) or 0
+            s["widgets.drag.width"]=tonumber(event.width) or 0
+            s["widgets.drag.height"]=tonumber(event.height) or 0
+            s["widgets.drag.grab_x"]=tonumber(event.grab_x) or 0
+            s["widgets.drag.grab_y"]=tonumber(event.grab_y) or 0
+            s["widgets.drag.source_origin_x"]=tonumber(event.source_origin_x) or 0
+            s["widgets.drag.source_origin_y"]=tonumber(event.source_origin_y) or 0
+            s["widgets.drag.source_origin_valid"]=true
+            s["widgets.drag.app_origin_x"]=tonumber(event.app_origin_x) or 0
+            s["widgets.drag.app_origin_y"]=tonumber(event.app_origin_y) or 0
+            s["widgets.drag.app_origin_valid"]=true
+            s["widgets.drag.app_width"]=tonumber(event.app_width) or 0
+            s["widgets.drag.app_height"]=tonumber(event.app_height) or 0
+            s["widgets.drag.app_output_id"]=event.app_output_id or ""
+            s["widgets.drag.target_origin_x"]=tonumber(event.target_origin_x) or 0
+            s["widgets.drag.target_origin_y"]=tonumber(event.target_origin_y) or 0
+            s["widgets.drag.target_output_id"]=event.target_output_id or ""
+            s["widgets.drag.snap_x"]=tonumber(event.snap_x) or 0
+            s["widgets.drag.snap_y"]=tonumber(event.snap_y) or 0
+            s["widgets.drag.entry.target_width"]=tonumber(event.target_width) or 0
+            s["widgets.drag.entry.target_height"]=tonumber(event.target_height) or 0
+        end
+        return
+    elseif phase=="entry-flight" then
+        local source=drag_record(s["widgets.drag.source"])
+        if s["widgets.drag.active"]==true and s["widgets.drag.phase"]=="dragging"
+            and source and source.kind=="entry"
+            and tonumber(event.entry_epoch)==tonumber(s["widgets.drag.epoch"]) then
+            s["widgets.drag.phase"]="settle"
+        end
+        return
+    end
     if phase=="move" then
         local source=drag_record(event.source)
         if type(source)~="table" then return end
@@ -1042,7 +1129,7 @@ local function drag(s,args)
         if base then
             local context=type(event.context)=="table" and event.context or event
             local accepted,candidate,moved=drag_drop(s,event,context,base,false)
-            s["widgets.drag.layout"]={accepted and transient_layout(base,candidate,moved,source,s["widgets.drag.epoch"]) or clone(base)}
+            s["widgets.drag.layout"]={accepted and (source.kind=="resize" and candidate or transient_layout(base,candidate,moved,source,s["widgets.drag.epoch"])) or clone(base)}
         else
             s["widgets.drag.layout"]={}
         end
@@ -1143,6 +1230,7 @@ return {
         ["widgets.drag.source_origin_x"]=0,["widgets.drag.source_origin_y"]=0,["widgets.drag.source_origin_valid"]=false,
         ["widgets.drag.app_origin_x"]=0,["widgets.drag.app_origin_y"]=0,["widgets.drag.app_origin_valid"]=false,
         ["widgets.drag.app_width"]=0,["widgets.drag.app_height"]=0,
+        ["widgets.drag.entry.target_width"]=0,["widgets.drag.entry.target_height"]=0,
         ["widgets.drag.app_output_id"]="",["widgets.app.open"]=false,
         ["widgets.message"]="",["widgets.error"]="",["widgets.busy"]=false,["widgets.draft"]={},["widgets.undo"]={},
         ["widgets.history.revision"]=0,

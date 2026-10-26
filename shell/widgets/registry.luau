@@ -51,7 +51,9 @@ local function make_variant(package,placement,form)
     assert(default.min_span and default.max_span and default.preferred_span,"incomplete default style")
     return {
         min_span=minimum,max_span=maximum,preferred_span=default.preferred_span,
-        reserve_width=has_reservation and function(values)
+        reserve_width=has_reservation and function(values,style_name)
+            local selected=style_name and form.styles[style_name]
+            if selected then return selected.reserve_width and selected.reserve_width(values) or nil end
             local reserved=0
             for _,style in form.styles do
                 if style.reserve_width then reserved=math.max(reserved,style.reserve_width(values)) end
@@ -60,7 +62,11 @@ local function make_variant(package,placement,form)
         end or nil,
         render=function(props,settings,data)
             local instance=props.instance or {}
-            local name=instance.style or (form.legacy_style_setting and settings[form.legacy_style_setting]) or form.default_style
+            local name=instance.style
+            if type(name)~="string" or name=="" then
+                name=form.legacy_style_setting and settings[form.legacy_style_setting]
+            end
+            if type(name)~="string" or name=="" then name=form.default_style end
             local selected=form.styles[name]
             assert(selected,"unknown "..placement.." style "..tostring(name).." for "..package.id)
             local styled=table.clone(props)
@@ -93,7 +99,11 @@ local measured_width=require("measure").width
 local function validate_style(package,item,placement,span)
     local form=package.forms[placement]
     assert(form,"widget "..package.id.." has no "..placement.." form")
-    local name=item.style or (form.legacy_style_setting and (item.settings or {})[form.legacy_style_setting]) or form.default_style
+    local name=item.style
+    if type(name)~="string" or name=="" then
+        name=form.legacy_style_setting and (item.settings or {})[form.legacy_style_setting]
+    end
+    if type(name)~="string" or name=="" then name=form.default_style end
     local style=form.styles[name]
     assert(style,"unknown "..placement.." style "..tostring(name).." for "..package.id)
     if span then
@@ -198,6 +208,84 @@ function M.validate(document)
     end
     return document
 end
+-- Project the shared saved layout onto this output without changing its source.
+-- Starts are relative to each region; spans remain tile (about 32 dp) units.
+function M.project(document,width)
+    assert(type(width)=="number" and width==width and width>0 and width<math.huge,"invalid widget projection width")
+    M.validate(document)
+    local original=document.hosts.top_bar
+    local source_tiles=original.tiles
+    local target_tiles=math.max(6,math.min(4096,math.floor(width/32+.5)))
+    local content=original.mode=="content"
+    local required: {[string]: number}={left=0,centre=0,right=0}
+    for _,item in original.instances do
+        local region: string=item.slot.region
+        local extent: number=item.slot.span
+        if content then extent=item.slot.start+item.slot.span end
+        if content then
+            required[region]=math.max(required[region],extent)
+        else
+            required[region]+=item.slot.span
+        end
+    end
+    for _,span in required do target_tiles=math.max(target_tiles,span) end
+    local old_regions=original.regions
+    local projected=table.clone(document)
+    projected.hosts=table.clone(document.hosts)
+    local source=table.clone(original)
+    source.regions=table.clone(original.regions)
+    if #original.instances>0 then
+        source.instances={}
+    end
+    for _,item in original.instances do
+        local projected_item=table.clone(item)
+        projected_item.slot=table.clone(item.slot)
+        table.insert(source.instances,projected_item)
+    end
+    projected.hosts.top_bar=source
+    source.tiles=target_tiles
+    for name,region in source.regions do
+        local old=old_regions[name]
+        region=table.clone(region)
+        local first=math.floor(old.start*target_tiles/source_tiles+.5)
+        local last=math.floor((old.start+old.span)*target_tiles/source_tiles+.5)
+        local span=math.max(1,last-first,required[name] or 0)
+        assert(span<=target_tiles,"widget region cannot fit output projection")
+        region.start=math.max(0,math.min(first,target_tiles-span))
+        region.span=span
+        source.regions[name]=region
+    end
+    if not content then
+        for name,region in source.regions do
+            local old=old_regions[name]
+            local ordered={}
+            for index,item in source.instances do
+                if item.slot.region==name then table.insert(ordered,{item=item,index=index}) end
+            end
+            table.sort(ordered,function(a,b)
+                if a.item.slot.start==b.item.slot.start then return a.index<b.index end
+                return a.item.slot.start<b.item.slot.start
+            end)
+            local tail=0
+            for index=#ordered,1,-1 do
+                tail+=ordered[index].item.slot.span
+                ordered[index].remaining=tail
+            end
+            local cursor=0
+            for _,entry in ordered do
+                local slot=entry.item.slot
+                local desired=math.floor(slot.start*region.span/old.span+.5)
+                local maximum=region.span-entry.remaining
+                assert(maximum>=cursor,"widget spans exceed output region capacity")
+                local start=math.max(cursor,math.min(desired,maximum))
+                slot.start=start
+                cursor=start+slot.span
+            end
+        end
+    end
+    M.validate(projected)
+    return projected
+end
 function M.renderer(document)
     M.validate(document)
     local copies={}
@@ -208,8 +296,55 @@ function M.renderer(document)
         for key,value in item.settings or {} do values[key]=value end
         local editing=require("context").ui.resolve_for_check(require("context").ui.bind("widgets.editing"))
         local host=document.hosts[item.host]
-        local node=variant.render({instance=item,catalogue=registry,render=render,editing=editing,local_layout=host and host.mode=="tiles"},values,{})
+        local top_bar=document.hosts.top_bar
+        local local_layout=item.host~="canvas" and top_bar and top_bar.mode=="tiles"
+        local content_layout=item.host~="canvas" and top_bar and top_bar.mode=="content"
+        local form=package.forms[item.host=="canvas" and "desktop" or "bar"]
+        local selected=form and item.style
+        if form and (type(selected)~="string" or selected=="") then
+            selected=form.legacy_style_setting and values[form.legacy_style_setting]
+        end
+        if form and (type(selected)~="string" or selected=="") then selected=form.default_style end
+        local reserved: number?=variant.reserve_width and variant.reserve_width(values,selected)
+        local available_width: number?
+        if local_layout and item.slot and type(item.slot.span)=="number" then
+            local viewport=ui.resolve_for_check(ui.bind("bead.viewport.width")) or 0
+            if viewport>0 and top_bar.tiles>0 then available_width=viewport/top_bar.tiles*item.slot.span end
+        elseif content_layout and reserved and reserved>0 then
+            available_width=reserved
+        end
+        local node=variant.render({instance=item,catalogue=registry,render=render,editing=editing,
+            local_layout=local_layout==true,available_width=available_width},values,{})
         if not node then return nil end
+        node=require("dragging").attach(document,item,node)
+        if item.widget=="pill" and item.host=="top_bar" and host and host.mode=="content" and node.props then
+            local props=node.props
+            local natural=measured_width(node,0)
+            if natural>0 then props.width=ui.animate("pill-width:"..item.iid,natural,.18,"out-cubic") end
+            props.clip_children=true
+            node.props=props
+        end
+        local centered_title=content_layout and item.widget=="title" and item.host=="top_bar"
+            and item.slot and item.slot.region=="centre"
+        if (local_layout or content_layout and not centered_title)
+            and available_width and available_width>0 then
+            local natural: number
+            if content_layout then
+                natural=reserved and reserved>0 and reserved or measured_width(node,0)
+            elseif item.widget=="pill" and item.host=="top_bar" then
+                natural=available_width
+            else
+                natural=reserved and reserved>0 and reserved or measured_width(node,0)
+            end
+            local width=math.min(available_width,natural)
+            if width>0 then
+                local justify="center"
+                if item.slot and item.slot.region=="left" then justify="start"
+                elseif item.slot and item.slot.region=="right" then justify="end" end
+                node=ui.Row{id="flex-reservation-"..tostring(item.iid),width=width,
+                    height=require("context").t.status_height,align="center",justify=justify,clip_children=true,node}
+            end
+        end
         -- Dropdown identity follows the instance, including copies and moves out of pills.
         local function own(child)
             local p=child.props or {}
@@ -223,14 +358,6 @@ function M.renderer(document)
             for _,nested in child.children or {} do own(nested) end
         end
         if item.widget~="pill" then own(node) end
-        node=require("dragging").attach(document,item,node)
-        if item.widget=="pill" and item.host=="top_bar" and host and host.mode=="content" and node.props then
-            local props=node.props
-            local natural=measured_width(node,0)
-            if natural>0 then props.width=ui.animate("pill-width:"..item.iid,natural,.18,"out-cubic") end
-            props.clip_children=true
-            node.props=props
-        end
         if editing then node=require("editing").decorate(document,item,node) end
         if item.host=="top_bar" and host and host.mode=="tiles" and item.slot then
             local viewport=require("context").ui.resolve_for_check(require("context").ui.bind("bead.viewport.width")) or 0

@@ -51,6 +51,25 @@ local function copy_node(node)
     return copy
 end
 
+local function copy_data(value)
+    if type(value)~="table" then return value end
+    local copy={}
+    for key,item in value do copy[key]=copy_data(item) end
+    return copy
+end
+
+local function default_preview_children(widget,width)
+    local document=registry.default(width)
+    local function find(items)
+        for _,item in items or {} do
+            if item.widget==widget and item.children then return copy_data(item.children) end
+            local children=find(item.children)
+            if children then return children end
+        end
+    end
+    return find(document.hosts.top_bar.instances) or {}
+end
+
 local function render_item(package,instance,placement,settings,factor)
     local variant=package and package.variants[placement=="desktop" and "canvas" or "bar"]
     if not variant then return nil end
@@ -67,6 +86,23 @@ local function render_item(package,instance,placement,settings,factor)
     return node
 end
 
+local function group_entry_target(node)
+    local marked,interactive={},{}
+    local function scan(current)
+        if type(current)~="table" then return end
+        local props=current.props
+        if type(props)=="table" then
+            if props.drag_payload~=nil then table.insert(marked,props) end
+            if props.on_activate~=nil then table.insert(interactive,props) end
+        end
+        for _,child in current.children or {} do scan(child) end
+    end
+    scan(node)
+    if #marked==1 then return marked[1] end
+    if #marked>1 then return nil end
+    if #interactive==1 then return interactive[1] end
+end
+
 function M.render_instance(instance,placement,factor)
     local package=instance and registry.catalogue[instance.widget]
     if not package then return nil end
@@ -75,7 +111,7 @@ function M.render_instance(instance,placement,factor)
     return render_item(package,instance,placement,values,factor)
 end
 
-function M.render_bar(document,width,height,factor,selected,style,settings,selected_group)
+function M.render_bar(document,width,height,factor,selected,style,settings,selected_group,entry_candidate)
     local layout=document.hosts.top_bar
     if not layout then return nil end
     local scale=factor or 1
@@ -104,14 +140,78 @@ function M.render_bar(document,width,height,factor,selected,style,settings,selec
     for _,item in layout.instances or {} do
         table.insert(instances,copy_item(item))
     end
+    if entry_candidate then
+        local package=registry.catalogue[entry_candidate.widget]
+        local definition=package and package.forms.bar.styles[entry_candidate.style]
+        local preferred=definition and definition.preferred_span or 1
+        local placement=entry_candidate.placement or {}
+        local saved_slot=placement.slot or {}
+        local region=saved_slot.region or "left"
+        local region_def=layout.regions[region]
+        if not region_def then region="left"; region_def=layout.regions.left end
+        local span=math.floor(tonumber(saved_slot.span) or preferred)
+        if definition and (span<definition.min_span or span>definition.max_span) then span=preferred end
+        span=math.max(1,math.min(region_def and region_def.span or layout.tiles or 1,span))
+        local candidate={iid=entry_candidate.group,group=entry_candidate.group,
+            widget=entry_candidate.widget,host="top_bar",style=entry_candidate.style,
+            settings=copy_data(entry_candidate.settings or {}),slot=copy_data(saved_slot),children={}}
+        local target_host=placement.host
+        local function insert_in_container(items)
+            for _,item in items or {} do
+                if item.iid==target_host and item.widget=="pill" then
+                    item.children=item.children or {}
+                    candidate.host=item.iid
+                    table.insert(item.children,candidate)
+                    return true
+                end
+                if insert_in_container(item.children) then return true end
+            end
+        end
+        local inserted=type(target_host)=="string" and target_host~="" and target_host~="top_bar"
+            and insert_in_container(instances) or false
+        if not inserted then
+            local start=saved_slot.start
+            local occupied={}
+            for _,item in instances do
+                if item.slot and item.slot.region==region then
+                    for tile=item.slot.start,item.slot.start+item.slot.span-1 do occupied[tile]=true end
+                end
+            end
+            local function free(at)
+                if type(at)~="number" or at%1~=0 or at<0 or at+span>(region_def and region_def.span or 0) then return false end
+                for tile=at,at+span-1 do if occupied[tile] then return false end end
+                return true
+            end
+            if not free(start) then
+                local limit=math.max(0,(region_def and region_def.span or layout.tiles or 1)-span)
+                start=0
+                while start<=limit do
+                    if free(start) then break end
+                    start+=1
+                end
+            end
+            if region_def and start>=0 and start+span<=region_def.span then
+                candidate.host="top_bar"
+                candidate.slot={region=region,start=start,span=span}
+                table.insert(instances,candidate)
+            end
+        end
+    end
     local render
     render=function(item,variant)
         local package=registry.catalogue[item.widget]
         if not package then return nil end
         local values=table.clone(package.defaults)
         for key,value in item.settings or {} do values[key]=value end
-        return variant.render({instance=item,catalogue=registry.catalogue,render=render,editing=false,
+        local node=variant.render({instance=item,catalogue=registry.catalogue,render=render,editing=false,
             local_layout=layout.mode=="tiles"},values,{})
+        if node and entry_candidate and item.iid==entry_candidate.group and item.widget==entry_candidate.widget then
+            local marker=node.kind=="group" and group_entry_target(node) or node.props
+            if marker then marker.metadata={{widget_entry_source=true,group=entry_candidate.group,widget=item.widget,
+                form="bar",style=entry_candidate.style}}
+            end
+        end
+        return node
     end
     local node=ui.Host{edge="top",id="stage-top-bar",shape="strip-h",width=width,height=height,
         radius=0,fill="surface",padding_left=15,padding_right=15,align="center",justify="space-between",direction="row",
@@ -141,7 +241,8 @@ function M.render(id,placement,style,settings,width,height,actual_size)
         scale=1
     else
         local instance={iid="preview-"..id,widget=id,host="top_bar",style=style,settings=values,
-            slot={region="left",start=0,span=package.forms.bar.styles[style].preferred_span},children={}}
+            slot={region="left",start=0,span=package.forms.bar.styles[style].preferred_span},
+            children=default_preview_children(id,width)}
         local node=render_item(package,instance,placement,values,1)
         local natural=measure.width(node)
         if natural<=0 then

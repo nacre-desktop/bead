@@ -1584,11 +1584,13 @@ fn session_menu_goldens_idle_confirming_and_disabled() -> Result<()> {
 #[test]
 fn widget_preset_roundtrip_live_move_unknown_preservation_and_atomic_rejection() -> Result<()> {
     use serde_json::{Value as Json, json};
+    let mut values = super::initial_models()?;
+    values.insert("bead.desktop.clock".into(), Value::Text("11:02".into()));
     let mut h = Harness::load(
         &root(),
         Path::new("bar/main.luau"),
         &root().join("palette.json"),
-        super::initial_models()?,
+        values,
         Config {
             width: 1920,
             height: 50,
@@ -1619,11 +1621,23 @@ fn widget_preset_roundtrip_live_move_unknown_preservation_and_atomic_rejection()
     instances.push(clock);
     instances.push(json!({"iid":"future","widget":"future-package","host":"top_bar","slot":{"region":"right","start":3,"span":1},"settings":{"opaque":[1,{"x":true}]}}));
     h.update(apply(edited.clone()))?;
+    let moved_clock = h
+        .scene()
+        .layers
+        .iter()
+        .find(|layer| layer.id.starts_with("bar.left.") && layer.id.ends_with(".clock.time"))
+        .ok_or("moved clock's time content is rendered in the left region")?;
+    assert!(
+        moved_clock.bounds.x > 0.,
+        "the moved clock keeps its left-slot geometry"
+    );
     assert!(
         h.scene()
-            .layers
+            .primitives
             .iter()
-            .any(|l| l.id == "bar.left.clock.time")
+            .any(|primitive| matches!(primitive,
+            bead::render::Primitive::Text {text,..} if text=="11:02")),
+        "the moved clock keeps rendering its live text"
     );
     assert_eq!(
         h.session.stores.get("widgets.layout"),
@@ -1948,6 +1962,64 @@ fn widget_canvas_move_roundtrip_snaps_preserves_ids_and_rejects_duplicates() -> 
             .unwrap()
             .iter()
             .any(|item| item["iid"] == "clock" && item["host"] == "top_bar")
+    );
+    Ok(())
+}
+
+#[test]
+fn canvas_resize_handles_follow_the_widgets_app_open_state() -> Result<()> {
+    use serde_json::{Value as Json, json};
+    let mut document: Json = serde_json::from_str(include_str!("../tests/widgets-default.json"))?;
+    document["hosts"]["canvas"] = json!({"width":1920,"height":1080,"instances":[{
+        "iid":"desktop-clock","widget":"clock","host":"canvas",
+        "slot":{"x":96,"y":96,"w":240,"h":96},"settings":{}
+    }]});
+    let mut values = super::initial_models()?;
+    values.insert("widgets.layout".into(), Value::list(vec![document]));
+    values.insert("bead.desktop.clock".into(), Value::Text("11:02".into()));
+    values.insert("bead.hovered".into(), Value::Text("desktop-clock".into()));
+    let mut canvas = Harness::load(
+        &root(),
+        Path::new("widgets/editor/canvas.luau"),
+        &root().join("palette.json"),
+        values,
+        Config {
+            width: 1920,
+            height: 1080,
+            scale: 1.5,
+        },
+    )?;
+    assert_eq!(
+        canvas.session.stores.get("widgets.app.open"),
+        Some(&Value::Bool(false)),
+        "canvas behavior seed declares app-open state even when the app is absent"
+    );
+
+    let has_resize_handle = |h: &Harness| {
+        h.session
+            .view_nodes()
+            .iter()
+            .any(|node| node.id.contains("resize-desktop-clock"))
+    };
+    assert!(
+        !has_resize_handle(&canvas),
+        "closed app hides canvas resize handles"
+    );
+    canvas.update(BTreeMap::from([(
+        "widgets.app.open".into(),
+        Value::Bool(true),
+    )]))?;
+    assert!(
+        has_resize_handle(&canvas),
+        "open app exposes the hovered canvas handle"
+    );
+    canvas.update(BTreeMap::from([(
+        "widgets.app.open".into(),
+        Value::Bool(false),
+    )]))?;
+    assert!(
+        !has_resize_handle(&canvas),
+        "closing app removes canvas resize handles"
     );
     Ok(())
 }

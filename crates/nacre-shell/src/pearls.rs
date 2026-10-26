@@ -747,6 +747,25 @@ impl Default for Policy {
 }
 impl Policy {
     pub fn allows(&self, view: &str) -> bool {
+        // These are the concrete `forms.panel.styles[*].view` values in the built-in
+        // status-widget packages. Their dropdowns are settings/control surfaces, not pearls.
+        let widget_view = view.strip_prefix("peek-").unwrap_or(view);
+        if matches!(
+            widget_view,
+            "audio"
+                | "sound"
+                | "network"
+                | "wifi"
+                | "bluetooth"
+                | "battery"
+                | "notifications"
+                | "calendar"
+                | "power"
+                | "session"
+                | "updates"
+        ) {
+            return false;
+        }
         self.views.iter().any(|v| match v.strip_suffix('*') {
             Some(prefix) => view.starts_with(prefix),
             None => v == view,
@@ -808,6 +827,56 @@ mod tests {
         assert_eq!(cancel.len(), 1);
         assert!(!cancel[0].moving && cancel[0].rect.is_none());
         assert!(previous.is_empty());
+    }
+
+    #[test]
+    fn widget_dropdown_panels_never_become_pearls_even_when_configured() {
+        let policy = Policy {
+            enabled: true,
+            drag: true,
+            views: vec!["*".into()],
+        };
+        for view in [
+            "audio",
+            "sound",
+            "network",
+            "wifi",
+            "bluetooth",
+            "battery",
+            "notifications",
+            "calendar",
+            "power",
+            "session",
+            "updates",
+        ] {
+            assert!(!policy.allows(view), "dropdown {view} must stay attached");
+            assert!(
+                !policy.allows(&format!("peek-{view}")),
+                "peek {view} must stay attached"
+            );
+        }
+    }
+
+    #[test]
+    fn chat_control_and_existing_non_dropdown_pearl_views_remain_allowed() {
+        let policy = Policy::default();
+        for view in ["chat", "control", "launcher", "dashboard-today"] {
+            assert!(
+                policy.allows(view),
+                "existing pearl view {view} remains allowed"
+            );
+        }
+        for view in [
+            "peek-chat",
+            "peek-control",
+            "peek-launcher",
+            "peek-dashboard-today",
+        ] {
+            assert!(
+                !policy.allows(view),
+                "peek {view} still needs an explicit policy entry"
+            );
+        }
     }
 
     #[test]

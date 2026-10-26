@@ -681,6 +681,21 @@ impl App {
                         }),
                     )
                 }
+                "canvas-regions" if std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some() => {
+                    bead_services::ipc::Reply::ok(
+                        request.call.id,
+                        serde_json::json!({
+                            "canvases":self.canvases.iter().map(|((output,view),canvas)|serde_json::json!({
+                                "output":output,"view":view,"interactive":canvas.interactive,
+                                "offset":[canvas.source_offset.0,canvas.source_offset.1],
+                                "regions":canvas.source.input_regions().into_iter().map(|region|{
+                                    let rect=region.clip.map_or(region.rect,|clip|region.rect.intersect(clip));
+                                    serde_json::json!({"id":region.id,"rect":[rect.x,rect.y,rect.w,rect.h],"cursor":region.cursor})
+                                }).collect::<Vec<_>>()
+                            })).collect::<Vec<_>>()
+                        }),
+                    )
+                }
                 "panel-regions" if std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some() => {
                     bead_services::ipc::Reply::ok(
                         request.call.id,

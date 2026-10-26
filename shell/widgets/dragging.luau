@@ -128,6 +128,40 @@ local function prepare_node(node,alpha,spacer)
     for _,child in node.children or {} do prepare_node(child,alpha,spacer) end
 end
 
+local function hovered(item)
+    local id=ui.resolve_for_check(ui.bind("bead.hovered")) or ""
+    local key="widget-"..tostring(item.iid)
+    return string.find(id,key,1,true)~=nil or string.find(id,tostring(item.iid),1,true)~=nil
+end
+
+local function resize_handle(document,item)
+    local frozen=frozen_source(item.iid)
+    if item.host~="canvas" or ui.resolve_for_check(ui.bind("widgets.app.open"))~=true or not (hovered(item) or frozen and frozen.kind=="resize") then return nil end
+    local package=registry.catalogue[item.widget]
+    local form=package and package.forms.desktop
+    if not form then return nil end
+    local group,state=group_state(document,item)
+    local config,style_name=form_for(document,group,state,item,"desktop",package)
+    local style=form.styles[style_name]
+    if not style then return nil end
+    local slot=item.slot or {}
+    local canvas=document.hosts.canvas or {}
+    local source=frozen and frozen.kind=="resize" and frozen or {kind="resize",iid=item.iid,group=group,widget=item.widget,host="canvas",form="desktop",
+        style=style_name,settings=settings_for(package,state,item),slot=table.clone(slot),
+        min_width=style.min_width or style.min_span,max_width=style.max_width or style.max_span,
+        preferred_width=style.preferred_width or style.preferred_span,
+        min_height=style.min_height or kit.tokens.spacing.xl*2,
+        max_height=style.max_height or tonumber(canvas.height) or tonumber(slot.h) or 1,
+        preferred_height=style.preferred_height}
+    return ui.Button{id="resize-"..tostring(item.iid),position="absolute",right=0,bottom=0,
+        width=kit.tokens.spacing.xl,height=kit.tokens.spacing.xl,padding=0,radius=kit.tokens.radii.small,
+        fill="surfaceContainerHighest",hover_fill=ui.alpha("primary",.24),focus_on_pointer=false,
+        aria_label="Resize "..tostring(package.title),drag_payload={source},on_drag=ui.action("widgets.drag"),
+        ui.Text{id="resize-glyph",text="south_east",family="Material Symbols Rounded",
+            font_size=kit.tokens.icons.small,width=kit.tokens.spacing.xl,height=kit.tokens.spacing.xl,
+            text_align="center",color="primary"}}
+end
+
 function M.attach(document,item,node)
     if not node or type(node.props)~="table" then return node end
     local source=frozen_source(item.iid)
@@ -156,7 +190,9 @@ function M.attach(document,item,node)
     end
     local marker=node.kind=="group" and group_drag_target(node) or node.props
     if marker then marker.metadata={{widget_instance=true,iid=item.iid}} end
-    prepare_node(node,source and .3 or nil,false)
+    prepare_node(node,source and source.kind~="resize" and .3 or nil,false)
+    local handle=resize_handle(document,item)
+    if handle then table.insert(node.children,handle) end
     return node
 end
 
@@ -176,7 +212,7 @@ function M.ghost_node()
     if ui.resolve_for_check(ui.bind("widgets.drag.active"))~=true then return nil end
     local source_value=ui.resolve_for_check(ui.bind("widgets.drag.source"))
     local source=type(source_value)=="table" and (source_value[1] or source_value) or nil
-    if type(source)~="table" or type(source.widget)~="string" then return nil end
+    if type(source)~="table" or type(source.widget)~="string" or source.kind=="resize" then return nil end
     local origin_valid=ui.resolve_for_check(ui.bind("widgets.drag.source_origin_valid"))==true
     local source_is_app=source.iid==nil
     local app_origin_valid=ui.resolve_for_check(ui.bind("widgets.drag.app_origin_valid"))==true
@@ -214,7 +250,7 @@ function M.ghost_node()
     if form=="bar" then
         local bar_layout=document.hosts.top_bar
         local span=tonumber(config.placement and config.placement.slot and config.placement.slot.span) or style.preferred_span or 1
-        target_width=bar.reserve_width and bar.reserve_width(settings)
+        target_width=bar.reserve_width and bar.reserve_width(settings,style_name)
             or span*(screen_width/math.max(1,bar_layout and bar_layout.tiles or 1))
         target_height=ui.resolve_for_check(ui.bind("bar.height")) or t.status_height or 50
     else
@@ -222,7 +258,13 @@ function M.ghost_node()
         target_width=tonumber(placement.w) or tonumber(style.preferred_span)
         target_height=tonumber(placement.h) or kit.tokens.spacing.huge*3
     end
-    if phase~="settle" and source.iid~=nil and source.form==form then
+    if source.kind=="entry" and phase=="dragging" then
+        target_width,target_height=source_width,source_height
+    elseif phase=="settle" then
+        local entry_width=ui.resolve_for_check(ui.bind("widgets.drag.entry.target_width")) or 0
+        local entry_height=ui.resolve_for_check(ui.bind("widgets.drag.entry.target_height")) or 0
+        if entry_width>0 and entry_height>0 then target_width,target_height=entry_width,entry_height end
+    elseif source.iid~=nil and source.form==form then
         target_width,target_height=source_width,source_height
     end
     local pointer_x=ui.resolve_for_check(ui.bind("widgets.drag.x")) or 0

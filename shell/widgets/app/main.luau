@@ -382,7 +382,7 @@ local function detail()
     local package=registry.catalogue[selected]
     if not package then return gallery() end
     local placement=package.forms[form] and form or package.forms.bar and "bar" or "desktop"
-    local group,entry,instance,_config,enabled,style_id=form_state(selected,placement,package,selected_group)
+    local group,entry,instance,form_config,enabled,style_id=form_state(selected,placement,package,selected_group)
     local instance_groups=groups_for(selected)
     local settings=active_settings(package,entry,instance)
     local desktop_available=package.forms.desktop~=nil
@@ -392,8 +392,11 @@ local function detail()
     local mini_w,mini_h=screen_w*stage_scale,screen_h*stage_scale
     local mini_left,mini_top=(stage_w-mini_w)/2,(stage_h-mini_h)/2
     local bar_h=math.max(1,get("bar.height",50))
+    local entry_candidate=placement=="bar" and not enabled and {
+        widget=selected,group=group,style=style_id,settings=settings,placement=form_config.placement,
+    } or nil
     local bar_node=preview.render_bar(doc,screen_w,bar_h,stage_scale,
-        placement=="bar" and enabled and selected or nil,style_id,settings,group)
+        placement=="bar" and enabled and selected or nil,style_id,settings,group,entry_candidate)
     local stage_bar_height=bar_h*stage_scale
     local widget_w=math.min(mini_w*.38,320*stage_scale)
     local widget_h=math.min(widget_w*.5,mini_h*.4)
@@ -401,7 +404,7 @@ local function detail()
     local widget_top=mini_top+stage_bar_height+math.max(0,(mini_h-stage_bar_height-widget_h)/2)
     local wallpaper_image=wallpaper~="" and ui.Image{id="stage-wallpaper",position="absolute",left=mini_left,top=mini_top,width=mini_w,height=mini_h,icon=wallpaper,image_fit="cover"} or nil
     local desktop_preview
-    if placement=="desktop" and enabled then
+    if placement=="desktop" then
         desktop_preview=preview.render(selected,"desktop",style_id,settings,widget_w,widget_h,true)
     end
     local stage_source=dragging.app_payload(doc,selected,placement,style_id,settings,group)
@@ -420,6 +423,8 @@ local function detail()
     table.insert(stage_children,ui.Box{id="stage-bar",position="absolute",left=mini_left,top=mini_top,
         width=mini_w,height=stage_bar_height,clip_children=true,fill="surface",bar_node})
     if desktop_preview then
+        desktop_preview.props=desktop_preview.props or {}
+        desktop_preview.props.metadata={{widget_entry_source=true,group=group,widget=selected,form="desktop",style=style_id}}
         table.insert(stage_children,ui.Box{id="desktop-widget-preview",position="absolute",left=widget_left,top=widget_top,
             width=widget_w,height=widget_h,clip_children=true,visible=true,align="center",justify="center",desktop_preview})
     end

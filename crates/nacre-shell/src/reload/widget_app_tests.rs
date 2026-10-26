@@ -208,11 +208,13 @@ fn late_widget_write_ack_preserves_newer_canonical_edits_and_reports_errors() {
 #[test]
 fn real_widgets_gallery_starts_with_content_and_a_style_click_updates_the_preview() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+    let mut values = crate::desktop::values(&Default::default(), "");
+    values.insert("bead.desktop.audio".into(), Value::Text("volume_up".into()));
     let mut harness = Harness::load(
         &root,
         Path::new("widgets/app/main.luau"),
         &root.join("palette.json"),
-        crate::desktop::values(&Default::default(), ""),
+        values,
         Config {
             width: 1200,
             height: 800,
@@ -244,6 +246,39 @@ fn real_widgets_gallery_starts_with_content_and_a_style_click_updates_the_previe
             .collect::<Vec<_>>()
     );
     assert!(has_text(&harness, "Clock"));
+    let scene = harness.scene();
+    let pill_frame = scene
+        .layers
+        .iter()
+        .find(|layer| {
+            layer.id.contains("widget-card-pill") && layer.id.ends_with("bar-preview-frame")
+        })
+        .expect("pill gallery card must have a clipped bar preview frame");
+    let rendered = scene
+        .primitives
+        .iter()
+        .filter_map(|primitive| match primitive {
+            bead::render::Primitive::Text { text, rect, .. } => Some((text.as_str(), *rect)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    for expected in ["volume_up", "calendar_month", "power_settings_new"] {
+        assert!(
+            scene.primitives.iter().any(|primitive| match primitive {
+                bead::render::Primitive::Text { rect, text, .. } if text == expected => {
+                    let x = rect.x + rect.w / 2.;
+                    let y = rect.y + rect.h / 2.;
+                    x >= pill_frame.bounds.x
+                        && x <= pill_frame.bounds.x + pill_frame.bounds.w
+                        && y >= pill_frame.bounds.y
+                        && y <= pill_frame.bounds.y + pill_frame.bounds.h
+                }
+                _ => false,
+            }),
+            "pill gallery preview must show representative default child {expected} inside its frame; frame={:?}, text={rendered:?}",
+            pill_frame.bounds
+        );
+    }
     assert!(
         harness
             .session

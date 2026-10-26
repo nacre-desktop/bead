@@ -1,6 +1,6 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 return {stores={["widgets.undo"]={},["widgets.error"]="",["widgets.message"]="",["widgets.preview"]={},["widgets.draft"]={},["widgets.geometry"]={},["widgets.editing"]=false,["widgets.selected"]="",["widgets.canvas.width"]=0,["widgets.canvas.height"]=0,["widgets.drag.active"]=false,["widgets.drag.source"]={},["widgets.drag.phase"]="",["widgets.drag.epoch"]=0,
-    ["widgets.drag.layout"]={},["widgets.drag.base"]={},["widgets.drag.original"]={},["widgets.drag.destination"]="",
+    ["widgets.app.open"]=false,["widgets.drag.layout"]={},["widgets.drag.base"]={},["widgets.drag.original"]={},["widgets.drag.destination"]="",
     ["widgets.drag.x"]=0,["widgets.drag.y"]=0,["widgets.drag.start_x"]=0,["widgets.drag.start_y"]=0,
     ["widgets.drag.width"]=1,["widgets.drag.height"]=1,["widgets.drag.grab_x"]=0,["widgets.drag.grab_y"]=0,
     ["widgets.drag.snap_x"]=0,["widgets.drag.snap_y"]=0,

@@ -153,6 +153,7 @@ fn clock_pill_document() -> Json {
     let mut doc = document();
     doc["preset"] = json!("Custom layout");
     doc["hosts"]["top_bar"]["mode"] = json!("content");
+    doc["hosts"]["top_bar"]["instances"][1]["widget"] = json!("wifi");
     let mut clock = doc["hosts"]["top_bar"]["instances"][0].clone();
     clock["host"] = json!("status-pill");
     clock["slot"] = json!({"region":"centre","start":0,"span":2});
@@ -2983,12 +2984,16 @@ fn animated_pill_clips_child_hit_region_and_keeps_its_settled_width() {
     };
     let initial_width = pill_width(&runtime);
 
+    let mut long_clock = clock_pill_document();
+    long_clock["hosts"]["top_bar"]["instances"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|item| item["iid"] == "status-pill")
+        .unwrap()["children"][0]["slot"]["span"] = json!(4);
     runtime
         .stage(UiEvent::Model(BTreeMap::from([
-            (
-                "widgets.draft".into(),
-                Value::list(vec![clock_pill_document()]),
-            ),
+            ("widgets.draft".into(), Value::list(vec![long_clock])),
             ("bead.desktop.clock".into(), Value::Text("23:59".into())),
             ("bar.clock.twelve".into(), Value::Bool(true)),
         ])))
@@ -3018,31 +3023,52 @@ fn animated_pill_clips_child_hit_region_and_keeps_its_settled_width() {
         "the pill is growing toward its natural width (initial={initial_width}, current={})",
         pill_rect.w
     );
+    let rendered_text = animated_scene
+        .primitives
+        .iter()
+        .filter_map(|primitive| match primitive {
+            bead::render::Primitive::Text { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
     let text_index = animated_scene
         .primitives
         .iter()
         .enumerate()
         .find_map(|(index, primitive)| match primitive {
-            bead::render::Primitive::Text { text, .. } if text == "11:59 PM" => Some(index),
+            bead::render::Primitive::Text { text, .. } if text.starts_with("11:59") => Some(index),
             _ => None,
         })
-        .expect("the long 12-hour clock text is painted");
+        .unwrap_or_else(|| panic!("the long 12-hour clock text is painted; got {rendered_text:?}"));
     let status = runtime
         .session
         .view_nodes()
         .iter()
-        .find(|node| node.action.as_deref() == Some("status.pill.open"))
+        .find(|node| {
+            node.action.as_deref() == Some("status.pill.open") && node.id.contains("system-pill")
+        })
         .expect("the clock child remains an interactive status item");
-    assert_eq!(
-        status.clip,
-        Some(pill_rect),
-        "child paint and hit testing use the animated pill bounds"
+    let status_clip = status
+        .clip
+        .expect("the status hit node inherits its pill content clip");
+    assert!(
+        status_clip.x >= pill_rect.x
+            && status_clip.y >= pill_rect.y
+            && status_clip.x + status_clip.w <= pill_rect.x + pill_rect.w
+            && status_clip.y + status_clip.h <= pill_rect.y + pill_rect.h,
+        "status paint and hit testing stay inside the animated pill: child={status_clip:?}, pill={pill_rect:?}"
     );
     let pill_right = pill_rect.x + pill_rect.w;
-    assert_eq!(
-        animated_scene.clips.get(&text_index),
-        Some(&pill_rect),
-        "the clock text is clipped by the animated pill"
+    let text_clip = animated_scene
+        .clips
+        .get(&text_index)
+        .expect("clock text inherits a paint clip");
+    assert!(
+        text_clip.x >= pill_rect.x
+            && text_clip.y >= pill_rect.y
+            && text_clip.x + text_clip.w <= pill_rect.x + pill_rect.w
+            && text_clip.y + text_clip.h <= pill_rect.y + pill_rect.h,
+        "clock text paint stays inside the animated pill: text={text_clip:?}, pill={pill_rect:?}"
     );
     let outside_x = if pill_right + 4. < 1920. {
         pill_right + 4.
@@ -3071,8 +3097,35 @@ fn animated_pill_clips_child_hit_region_and_keeps_its_settled_width() {
     );
 
     thread::sleep(Duration::from_millis(220));
-    runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap();
+    let settled_scene = runtime
+        .stage(UiEvent::Model(BTreeMap::new()))
+        .unwrap()
+        .expect("the settled natural clock width publishes its final frame");
     runtime.commit();
+    let settled_clock_text = settled_scene
+        .primitives
+        .iter()
+        .filter_map(|primitive| match primitive {
+            bead::render::Primitive::Text { text, rect, .. } if text.starts_with("11:59") => {
+                Some((text.clone(), *rect))
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let clock_reservation = runtime.widget_seed().and_then(|seed| {
+        seed["reservations"]
+            .as_array()
+            .and_then(|rows| rows.iter().find(|row| row["iid"] == "clock"))
+            .cloned()
+    });
+    assert!(
+        settled_scene
+            .primitives
+            .iter()
+            .any(|primitive| matches!(primitive,
+        bead::render::Primitive::Text {text,..} if text=="11:59 PM")),
+        "the full 12-hour clock value fits once the natural-width animation settles; text={settled_clock_text:?}, reservation={clock_reservation:?}"
+    );
     assert!(runtime.session.preview_deadline().is_none());
     let settled = pill_width(&runtime);
     assert!(
@@ -3200,6 +3253,272 @@ fn widget_app_runtime() -> Runtime {
     runtime.widgets_file = None;
     runtime
 }
+
+#[test]
+fn enable_entry_source_requires_real_origin_and_uses_the_marked_form_preview() {
+    let mut runtime = widget_app_runtime();
+    runtime.stage(UiEvent::Reload).unwrap();
+    runtime.commit();
+    let mut values = BTreeMap::from([
+        ("widgets.selected".into(), Value::Text("clock".into())),
+        ("widgets.form".into(), Value::Text("desktop".into())),
+        ("widgets.screen_width".into(), Value::Number(1920.)),
+        ("widgets.screen_height".into(), Value::Number(1080.)),
+        ("widgets.drag.app_origin_valid".into(), Value::Bool(false)),
+        ("widgets.drag.app_origin_x".into(), Value::Number(40.)),
+        ("widgets.drag.app_origin_y".into(), Value::Number(60.)),
+        ("widgets.drag.app_width".into(), Value::Number(1200.)),
+        ("widgets.drag.app_height".into(), Value::Number(800.)),
+        (
+            "widgets.drag.app_output_id".into(),
+            Value::Text("DP-1".into()),
+        ),
+    ]);
+    runtime.stage(UiEvent::Model(values.clone())).unwrap();
+    runtime.commit();
+    let argument = Value::list(vec![
+        json!({"op":"toggle-form","widget":"clock","group":"clock",
+        "form":"desktop","enabled":true,"document":{"version":1,"hosts":{}}}),
+    ]);
+    assert!(
+        runtime.widget_entry_source(&argument).is_none(),
+        "an unknown app origin preserves the enable action without producing a flight source"
+    );
+
+    values.insert("widgets.drag.app_origin_valid".into(), Value::Bool(true));
+    runtime.stage(UiEvent::Model(values)).unwrap();
+    runtime.commit();
+    let source = runtime
+        .widget_entry_source(&argument)
+        .expect("the marked desktop preview has a measured source pose");
+    assert_eq!(source["form"], "desktop");
+    assert_eq!(source["widget"], "clock");
+    assert!(source["rect"]["w"].as_f64().unwrap() > 0.);
+    assert!(source["rect"]["h"].as_f64().unwrap() > 0.);
+    assert_eq!(source["app_output_id"], "DP-1");
+
+    let bar_document = json!({"version":1,"preset":"Custom","hosts":{"top_bar":{"mode":"content","tiles":60,
+        "regions":{"left":{"start":0,"span":20},"centre":{"start":20,"span":20},"right":{"start":40,"span":20}},"instances":[]}}});
+    runtime
+        .stage(UiEvent::Model(BTreeMap::from([
+            (
+                "widgets.layout".into(),
+                Value::list(vec![bar_document.clone()]),
+            ),
+            ("widgets.selected".into(), Value::Text("title".into())),
+            ("widgets.group".into(), Value::Text("title".into())),
+            ("widgets.form".into(), Value::Text("bar".into())),
+        ])))
+        .unwrap();
+    runtime.commit();
+    let bar_request = Value::list(vec![
+        json!({"op":"toggle-form","widget":"title","group":"title",
+        "form":"bar","enabled":true,"document":bar_document}),
+    ]);
+    let bar_source = runtime
+        .widget_entry_source(&bar_request)
+        .expect("the configured bar stage candidate has a measured source pose");
+    assert_eq!(bar_source["form"], "bar");
+    assert_eq!(bar_source["widget"], "title");
+    assert!(bar_source["rect"]["w"].as_f64().unwrap() > 0.);
+}
+
+#[test]
+fn enable_entry_preview_places_clock_in_its_configured_pill_slot() {
+    let mut runtime = widget_app_runtime();
+    runtime.stage(UiEvent::Reload).unwrap();
+    runtime.commit();
+    let mut document = clock_pill_document();
+    document["hosts"]["top_bar"]["instances"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|item| item["iid"] == "status-pill")
+        .unwrap()["children"] = json!([]);
+    document["widgets"] = json!({"clock-main":{"widget":"clock","settings":{},"forms":{
+        "bar":{"enabled":false,"style":"time","placement":{"host":"status-pill","slot":{"region":"centre","start":2,"span":2}}}
+    }}});
+    runtime
+        .stage(UiEvent::Model(BTreeMap::from([
+            ("widgets.layout".into(), Value::list(vec![document.clone()])),
+            ("widgets.selected".into(), Value::Text("clock".into())),
+            ("widgets.group".into(), Value::Text("clock-main".into())),
+            ("widgets.form".into(), Value::Text("bar".into())),
+            ("widgets.drag.app_origin_valid".into(), Value::Bool(true)),
+            ("widgets.drag.app_origin_x".into(), Value::Number(40.)),
+            ("widgets.drag.app_origin_y".into(), Value::Number(60.)),
+            ("widgets.drag.app_width".into(), Value::Number(1200.)),
+            ("widgets.drag.app_height".into(), Value::Number(800.)),
+            (
+                "widgets.drag.app_output_id".into(),
+                Value::Text("DP-1".into()),
+            ),
+        ])))
+        .unwrap();
+    runtime.commit();
+
+    let request = Value::list(vec![
+        json!({"op":"toggle-form","widget":"clock","group":"clock-main",
+        "form":"bar","enabled":true,"document":document}),
+    ]);
+    let source = runtime
+        .widget_entry_source(&request)
+        .expect("the configured pill child renders a measured source node");
+    assert_eq!(source["widget"], "clock");
+    assert!(source["rect"]["w"].as_f64().unwrap() > 0.);
+    assert!(source["rect"]["h"].as_f64().unwrap() > 0.);
+    let nodes = runtime.session.view_nodes();
+    let source_node = nodes
+        .iter()
+        .find(|node| {
+            node.metadata.as_ref().is_some_and(|metadata| {
+                matches!(metadata,Value::List(records)
+                    if records.iter().any(|record| record["widget_entry_source"]==true
+                        && record["group"]=="clock-main"))
+            })
+        })
+        .unwrap_or_else(|| {
+            let candidates = nodes
+                .iter()
+                .filter(|node| node.id.contains("pill"))
+                .map(|node| (node.id.as_str(), bead::ui::rect(&node.draw)))
+                .collect::<Vec<_>>();
+            panic!(
+                "the configured clock source has an actual rendered node; candidates={candidates:?}"
+            )
+        });
+    assert!(
+        source_node.id.contains("system-pill"),
+        "the measured clock source path identifies its configured pill: {}",
+        source_node.id
+    );
+    let source_node_rect = bead::ui::rect(&source_node.draw);
+    let source_rect = &source["rect"];
+    assert!((source_rect["x"].as_f64().unwrap() - f64::from(source_node_rect.x)).abs() < 0.01);
+    assert!((source_rect["y"].as_f64().unwrap() - f64::from(source_node_rect.y)).abs() < 0.01);
+    assert!((source_rect["w"].as_f64().unwrap() - f64::from(source_node_rect.w)).abs() < 0.01);
+    assert!((source_rect["h"].as_f64().unwrap() - f64::from(source_node_rect.h)).abs() < 0.01);
+}
+
+#[test]
+fn entry_ack_and_timer_guards_reject_stale_write_closed_app_and_new_gesture() {
+    let document = json!({"version":1,"hosts":{"top_bar":{"instances":[]}}});
+    let entry = super::WidgetEntryWrite {
+        event: json!({"accepted_revision":9}),
+        document: document.clone(),
+        previous_revision: 8,
+    };
+    assert!(super::widget_entry_ack_matches(
+        &entry,
+        true,
+        9,
+        Some(&document)
+    ));
+    assert!(!super::widget_entry_ack_matches(
+        &entry,
+        false,
+        9,
+        Some(&document)
+    ));
+    assert!(!super::widget_entry_ack_matches(
+        &entry,
+        true,
+        10,
+        Some(&document)
+    ));
+    assert!(!super::widget_entry_ack_matches(
+        &entry,
+        true,
+        9,
+        Some(&json!({}))
+    ));
+
+    let flight = super::WidgetEntryFlight {
+        event: json!({"entry_epoch":12}),
+        app: (41, 7),
+        token: 12,
+        phase: super::WidgetEntryTimerPhase::Seed,
+    };
+    assert!(super::widget_entry_flight_continues(
+        &flight,
+        Some((41, 7)),
+        Some(12)
+    ));
+    assert!(!super::widget_entry_flight_continues(
+        &flight,
+        None,
+        Some(12)
+    ));
+    assert!(!super::widget_entry_flight_continues(
+        &flight,
+        Some((41, 7)),
+        Some(13)
+    ));
+    assert!(super::widget_entry_outputs_match(Some("DP-1"), "DP-1"));
+    assert!(!super::widget_entry_outputs_match(Some("DP-2"), "DP-1"));
+
+    let runtime = widget_app_runtime();
+    assert!(
+        !runtime.schedule_widget_entry_timer(1, std::time::Duration::ZERO),
+        "missing wakeup rejects the animation timer so the presentation can be retired"
+    );
+}
+
+#[test]
+fn entry_seed_flight_and_retire_reuse_drag_overlay_without_writing_or_history() {
+    let canonical = document();
+    let mut controller = Controller::new().unwrap();
+    controller
+        .sync(&BTreeMap::from([
+            (
+                "widgets.layout".into(),
+                Value::list(vec![canonical.clone()]),
+            ),
+            ("widgets.rev".into(), Value::Number(4.)),
+        ]))
+        .unwrap();
+    let entry = json!({
+        "phase":"entry-seed","private_remote":true,"target_iid":"clock-main",
+        "target_form":"bar","target_output_id":"right","target_width":72,"target_height":50,
+        "app_origin_x":40,"app_origin_y":60,"app_origin_valid":true,"app_width":1200,"app_height":800,
+        "app_output_id":"right","source_origin_x":40,"source_origin_y":60,"source_origin_valid":true,
+        "x":180,"y":80,"width":48,"height":24,"grab_x":24,"grab_y":12,"snap_x":960,"snap_y":0,
+        "document":canonical,
+        "source":[{"app":true,"kind":"entry","widget":"clock","group":"clock-main","form":"bar",
+            "style":"time","settings":{"future":"kept"}}]
+    });
+    let seeded = controller.drag(Value::list(vec![entry.clone()])).unwrap();
+    assert_eq!(seeded["widgets.drag.active"], Value::Bool(true));
+    assert_eq!(seeded["widgets.drag.phase"], Value::Text("dragging".into()));
+    assert_eq!(
+        doc_from(&seeded, "widgets.drag.layout")["hosts"]["top_bar"]["instances"][0]["drag_placeholder"],
+        true
+    );
+    assert_eq!(doc_from(&seeded, "widgets.layout"), canonical);
+    assert!(matches!(&seeded["widgets.write"],Value::List(rows) if rows.is_empty()));
+    assert!(matches!(&seeded["widgets.undo"],Value::List(rows) if rows.is_empty()));
+
+    let Value::Number(epoch) = &seeded["widgets.drag.epoch"] else {
+        panic!("drag epoch is numeric")
+    };
+    let epoch = *epoch;
+    let mut flight = entry;
+    flight["phase"] = json!("entry-flight");
+    flight["entry_epoch"] = json!(epoch);
+    let settling = controller.drag(Value::list(vec![flight])).unwrap();
+    assert_eq!(settling["widgets.drag.phase"], Value::Text("settle".into()));
+    assert_eq!(
+        settling["widgets.drag.entry.target_width"],
+        Value::Number(72.)
+    );
+    assert!(matches!(&settling["widgets.write"],Value::List(rows) if rows.is_empty()));
+    let retired = controller
+        .drag(Value::list(vec![json!({"phase":"retire","epoch":epoch})]))
+        .unwrap();
+    assert_eq!(retired["widgets.drag.active"], Value::Bool(false));
+    assert!(matches!(&retired["widgets.write"],Value::List(rows) if rows.is_empty()));
+}
+
 #[test]
 fn temporary_widget_warm_runtime_is_side_effect_free_and_real_commit_announces_once() {
     let mut warm = widget_app_runtime();
@@ -3516,6 +3835,66 @@ fn invalid_real_bar_preview_never_reaches_file_persistence() {
 }
 
 #[test]
+fn desktop_resize_previews_then_commits_one_edit_and_cancel_restores_geometry() {
+    let mut initial = document();
+    initial["hosts"]["canvas"] = json!({"width":1280,"height":720,"instances":[{
+        "iid":"clock-desktop","group":"clock-main","widget":"clock","host":"canvas","style":"time",
+        "slot":{"x":100,"y":100,"w":240,"h":100},"settings":{"future":"kept"}
+    }]});
+    let mut context = context();
+    context["catalogue"][0]["forms"]["desktop"] = json!({"default_style":"time","styles":{
+        "time":{"min_span":80,"max_span":600,"preferred_span":240}
+    }});
+    let source = json!({"kind":"resize","iid":"clock-desktop","group":"clock-main","widget":"clock",
+        "host":"canvas","form":"desktop","style":"time","min_height":32,"max_height":720,
+        "slot":{"x":100,"y":100,"w":240,"h":100}});
+    let transfer = |phase: &str| {
+        Value::list(vec![json!({"phase":phase,"source":[source.clone()],
+        "destination":"desktop","x":300,"y":250,"start_x":200,"start_y":200,
+        "width":24,"height":24,"context":context.clone()})])
+    };
+    let mut controller = Controller::new().unwrap();
+    controller
+        .sync(&BTreeMap::from([(
+            "widgets.layout".into(),
+            Value::list(vec![initial.clone()]),
+        )]))
+        .unwrap();
+    let preview = controller.drag(transfer("move")).unwrap();
+    let resized = doc_from(&preview, "widgets.drag.layout");
+    assert_eq!(
+        resized["hosts"]["canvas"]["instances"][0]["slot"],
+        json!({"x":100,"y":100,"w":340,"h":150})
+    );
+    assert!(matches!(&preview["widgets.write"],Value::List(rows) if rows.is_empty()));
+    let saved = controller.drag(transfer("drop")).unwrap();
+    let written = doc_from(&saved, "widgets.write");
+    assert_eq!(
+        written["hosts"]["canvas"]["instances"][0]["slot"],
+        resized["hosts"]["canvas"]["instances"][0]["slot"]
+    );
+    assert_eq!(
+        written["hosts"]["canvas"]["instances"][0]["settings"]["future"],
+        "kept"
+    );
+    assert!(matches!(&saved["widgets.undo"],Value::List(rows) if rows.len()==1));
+    let mut cancelled = Controller::new().unwrap();
+    cancelled
+        .sync(&BTreeMap::from([(
+            "widgets.layout".into(),
+            Value::list(vec![initial]),
+        )]))
+        .unwrap();
+    cancelled.drag(transfer("move")).unwrap();
+    let returned = cancelled.drag(transfer("cancel")).unwrap();
+    assert_eq!(
+        doc_from(&returned, "widgets.drag.layout")["hosts"]["canvas"]["instances"][0]["slot"]["w"],
+        240
+    );
+    assert!(matches!(&returned["widgets.write"],Value::List(rows) if rows.is_empty()));
+}
+
+#[test]
 fn invalid_native_edit_never_reaches_file_persistence() {
     let dir = std::env::temp_dir().join(format!("widget-edit-preflight-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -3559,4 +3938,77 @@ fn native_widget_write_resolution_does_not_send_app_busy_to_bar() {
         .update(changes)
         .expect("native write completion values match the real bar schema");
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn entry_preview_projection_keeps_controller_target_size() {
+    let dir = std::env::temp_dir().join(format!("widget-entry-projection-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut bar = real_bar_runtime(dir.join("widgets.json"));
+    bar.widget_drag_model = Some(BTreeMap::from([
+        (
+            "widgets.drag.entry.target_width".into(),
+            Value::Number(320.),
+        ),
+        (
+            "widgets.drag.entry.target_height".into(),
+            Value::Number(96.),
+        ),
+        ("widgets.drag.revision".into(), Value::Number(91.)),
+        ("widgets.base_rev".into(), Value::Number(19.)),
+        (
+            "widgets.drag.app_output_id".into(),
+            Value::Text("private".into()),
+        ),
+    ]));
+    let values = bar.widget_drag_preview_values();
+    assert_eq!(
+        values["widgets.drag.entry.target_width"],
+        Value::Number(320.)
+    );
+    assert_eq!(
+        values["widgets.drag.entry.target_height"],
+        Value::Number(96.)
+    );
+    for key in [
+        "widgets.drag.revision",
+        "widgets.base_rev",
+        "widgets.drag.app_output_id",
+    ] {
+        assert!(
+            !values.contains_key(key),
+            "private controller field leaked: {key}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn resized_widget_app_gallery_launcher_accepts_a_real_pointer_click() {
+    let mut runtime = widget_app_runtime();
+    runtime.stage(UiEvent::Reload).unwrap();
+    runtime.commit();
+    runtime.viewport(926, 1108);
+    runtime.stage(UiEvent::Relayout).unwrap();
+    runtime.commit();
+    let region = runtime
+        .input_regions()
+        .into_iter()
+        .find(|region| region.id.ends_with("widget-card-launcher"))
+        .expect("launcher card is present after window configure");
+    let rect = region.clip.map_or(region.rect, |clip| region.rect.intersect(clip));
+    let x = rect.x + rect.w / 2.;
+    let y = rect.y + rect.h / 2.;
+    runtime.stage(UiEvent::Hover { x, y }).unwrap();
+    runtime.commit();
+    runtime.stage(UiEvent::Click { x, y }).unwrap();
+    runtime.commit();
+    runtime.stage(UiEvent::Release).unwrap();
+    runtime.commit();
+    assert_eq!(
+        runtime.session.stores.get("widgets.selected"),
+        Some(&Value::Text("launcher".into())),
+        "a card click must select the launcher in the real app Runtime"
+    );
 }

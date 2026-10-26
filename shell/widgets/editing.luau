@@ -43,18 +43,62 @@ function M.requires(document,placement,binding)
 end
 function M.seed(document,width,height,placement)
     local reservations={}
-    for _,item in document.hosts.top_bar.instances do
-        local package=require("registry").catalogue[item.widget]
-        local variant=package and package.variants.bar
-        if variant and variant.reserve_width then
-            local settings=table.clone(package.defaults)
-            for key,value in item.settings or {} do settings[key]=value end
-            table.insert(reservations,{iid=item.iid,width=variant.reserve_width(settings)})
+    local geometry=ui.resolve_for_check(ui.bind("widgets.geometry"))
+    local actual_widths={}
+    if type(geometry)=="table" then
+        for iid,row in geometry do
+            if type(iid)=="string" then
+                local actual=tonumber(type(row)=="table" and (row.w or row.width) or row)
+                if actual and actual>0 then actual_widths[iid]=actual end
+            end
+            if type(row)=="table" and type(row.iid)=="string" then
+                local actual=tonumber(row.w or row.width)
+                if actual and actual>0 then actual_widths[row.iid]=actual end
+            end
         end
     end
+    local tile_width=width/math.max(1,document.hosts.top_bar.tiles or 1)
+    local function reserve(items)
+        local total_extra=0
+        for _,item in items or {} do
+            local children_extra=reserve(item.children)
+            local package=require("registry").catalogue[item.widget]
+            local variant=package and package.variants.bar
+            local actual=actual_widths[item.iid]
+            if not actual and item.slot and type(item.slot.span)=="number" then
+                actual=item.slot.span*tile_width
+            end
+            actual=actual or 0
+            local selected_reserve
+            if variant and variant.reserve_width then
+                local settings=table.clone(package.defaults)
+                local state=document.widgets and document.widgets[item.group or item.iid]
+                for key,value in state and state.settings or {} do settings[key]=value end
+                for key,value in item.settings or {} do settings[key]=value end
+                local form=package.forms.bar
+                local selected=item.style
+                if type(selected)~="string" or selected=="" then selected=form.legacy_style_setting and settings[form.legacy_style_setting] end
+                if type(selected)~="string" or selected=="" then selected=form.default_style end
+                selected_reserve=variant.reserve_width(settings,selected)
+            end
+            if item.widget=="pill" and item.children and #item.children>0 then
+                local combined=actual+children_extra
+                if combined>0 then table.insert(reservations,{iid=item.iid,width=combined}) end
+                total_extra+=children_extra
+            else
+                if selected_reserve and selected_reserve>0 then
+                    table.insert(reservations,{iid=item.iid,width=math.max(actual,selected_reserve)})
+                    total_extra+=math.max(0,selected_reserve-actual)
+                end
+                total_extra+=children_extra
+            end
+        end
+        return total_extra
+    end
+    reserve(document.hosts.top_bar.instances)
     return {{widget_layout=true,document=document,initial=require("default")(width),rev=ui.resolve_for_check(ui.bind("widgets.rev")),
         widget_clock_seconds=placement~=nil and M.requires(document,placement,"bead.desktop.clock.seconds") or false,
-        geometry=ui.resolve_for_check(ui.bind("widgets.geometry")),reservations=reservations,canvas_width=width,canvas_height=height,
+        geometry=geometry,reservations=reservations,canvas_width=width,canvas_height=height,
         catalogue=descriptors(),snap_distance=sp.lg}}
 end
 function M.request(_document,extra)

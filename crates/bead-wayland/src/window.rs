@@ -295,7 +295,15 @@ impl App {
                     "drawn": self.window.as_ref().map(|w| w.drawn),
                     "first_frame_texts": self.window.as_ref().map(|w| &w.first_frame_texts),
                     "regions": self.window.as_ref().map(|w| w.source.input_regions().into_iter().map(|r|
-                        serde_json::json!({"id":r.id,"rect":[r.rect.x,r.rect.y,r.rect.w,r.rect.h]})).collect::<Vec<_>>()),
+                        serde_json::json!({"id":r.id,"rect":[r.rect.x,r.rect.y,r.rect.w,r.rect.h],
+                            "clip":r.clip.map(|clip| [clip.x,clip.y,clip.w,clip.h])})).collect::<Vec<_>>()),
+                    "scene_texts": self.window.as_ref().map(|w| w.scene.primitives.iter().filter_map(|primitive| {
+                        if let bead_render::Primitive::Text { text, rect, .. } = primitive {
+                            Some(serde_json::json!({"text":text,"rect":[rect.x,rect.y,rect.w,rect.h]}))
+                        } else {
+                            None
+                        }
+                    }).collect::<Vec<_>>()),
                     "stores": self.window.as_ref().and_then(|w| serde_json::from_str::<serde_json::Value>(&w.source.state_summary()).ok())
                 }),
             );
@@ -858,6 +866,18 @@ impl App {
                 _ => wp_cursor_shape_device_v1::Shape::Default,
             };
             device.set_shape(win.cursor_serial, shape);
+        }
+        if std::env::var_os("BEAD_PRIVATE_WINDOW_TRACE").is_some()
+            && matches!(
+                event.kind,
+                PointerEventKind::Press { button: 0x110, .. }
+                    | PointerEventKind::Release { button: 0x110, .. }
+            )
+        {
+            eprintln!(
+                "WINDOW_INPUT epoch={} kind={:?} x={} y={} size={}x{}",
+                win.epoch, event.kind, x, y, win.size.0, win.size.1
+            );
         }
         let pressed = win.pressed;
         let ev = match event.kind {

@@ -13,6 +13,7 @@ return {stores={
     ["widgets.drag.target_origin_x"]=0,["widgets.drag.target_origin_y"]=0,
     ["widgets.drag.app_origin_x"]=0,["widgets.drag.app_origin_y"]=0,["widgets.drag.app_origin_valid"]=false,
     ["widgets.drag.app_width"]=0,["widgets.drag.app_height"]=0,
+    ["widgets.drag.entry.target_width"]=0,["widgets.drag.entry.target_height"]=0,
     ["widgets.drag.target_output_id"]="",
     ["bar.height"]=50,["bar.launcher"]=false,["bar.popouts"]=false,["bar.reconnecting"]=false,
     ["bar.workspace.enabled"]=true,["bar.tray.enabled"]=true,["bar.window.focus.enabled"]=true,

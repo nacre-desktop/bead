@@ -1162,10 +1162,12 @@ pub fn private_call(call: Call) -> Reply {
             else {
                 return invalid();
             };
-            if !matches!(event["phase"].as_str(), Some("move" | "drop" | "cancel"))
-                || source_record(&event)
-                    .and_then(|source| source["widget"].as_str())
-                    .is_none()
+            if !matches!(
+                event["phase"].as_str(),
+                Some("move" | "drop" | "cancel" | "entry-seed")
+            ) || source_record(&event)
+                .and_then(|source| source["widget"].as_str())
+                .is_none()
             {
                 return invalid();
             }
