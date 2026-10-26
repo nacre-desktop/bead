@@ -238,6 +238,29 @@ struct Animations {
 }
 #[derive(Clone)]
 pub(super) struct AnimationSnapshot(Animations);
+fn animation_frame_deadline(
+    now: Instant,
+    started: Instant,
+    interval: Duration,
+    end: Instant,
+) -> Instant {
+    let interval_ns = interval.as_nanos();
+    if interval_ns == 0 {
+        return end;
+    }
+    let elapsed_ns = now.saturating_duration_since(started).as_nanos();
+    let Some(offset_ns) = (elapsed_ns / interval_ns + 1).checked_mul(interval_ns) else {
+        return end;
+    };
+    if offset_ns >= end.saturating_duration_since(started).as_nanos() {
+        return end;
+    }
+    let Ok(seconds) = u64::try_from(offset_ns / 1_000_000_000) else {
+        return end;
+    };
+    let offset = Duration::new(seconds, (offset_ns % 1_000_000_000) as u32);
+    started.checked_add(offset).unwrap_or(end).min(end)
+}
 impl Animations {
     fn frame_interval(&self) -> Duration {
         if self.frame_interval.is_zero() {
@@ -261,7 +284,14 @@ impl Animations {
             .states
             .values()
             .filter(|motion| motion.from != motion.to && now < motion.started + motion.duration)
-            .map(|motion| (now + interval).min(motion.started + motion.duration))
+            .map(|motion| {
+                animation_frame_deadline(
+                    now,
+                    motion.started,
+                    interval,
+                    motion.started + motion.duration,
+                )
+            })
             .min();
     }
     fn restore(&mut self, snapshot: AnimationSnapshot) {
@@ -343,7 +373,12 @@ impl Animations {
         let motion = self.states.get(&key).expect("inserted animation");
         let value = if reduced { target } else { motion.value(now) };
         if !reduced && now < motion.started + motion.duration && motion.from != motion.to {
-            let deadline = (now + self.frame_interval()).min(motion.started + motion.duration);
+            let deadline = animation_frame_deadline(
+                now,
+                motion.started,
+                self.frame_interval(),
+                motion.started + motion.duration,
+            );
             self.next_frame = Some(self.next_frame.map_or(deadline, |old| old.min(deadline)));
         }
         Ok(value)
@@ -1057,6 +1092,59 @@ mod animation_tests {
         );
         animations.finish_build();
         assert!(animations.next_frame.is_none());
+    }
+
+    #[test]
+    fn animation_deadlines_keep_motion_phase_and_skip_missed_slots() {
+        let start = Instant::now();
+        let end = start + Duration::from_secs(1);
+        let interval = Duration::from_nanos(16_667_000);
+        for (elapsed, expected) in [
+            (Duration::ZERO, Duration::from_nanos(16_667_000)),
+            (
+                Duration::from_micros(1_500),
+                Duration::from_nanos(16_667_000),
+            ),
+            (
+                Duration::from_millis(35),
+                Duration::from_nanos(50_001_000),
+            ),
+        ] {
+            assert_eq!(
+                animation_frame_deadline(start + elapsed, start, interval, end),
+                start + expected
+            );
+        }
+
+        let refreshed = animation_frame_deadline(
+            start + Duration::from_millis(35),
+            start,
+            Duration::from_millis(20),
+            end,
+        );
+        assert_eq!(refreshed, start + Duration::from_millis(40));
+
+        let motion_end = start + Duration::from_millis(55);
+        assert_eq!(
+            animation_frame_deadline(
+                start + Duration::from_nanos(50_001_000),
+                start,
+                interval,
+                motion_end,
+            ),
+            motion_end,
+            "the final animation frame is scheduled exactly at its end"
+        );
+        assert_eq!(
+            animation_frame_deadline(
+                start,
+                start,
+                interval,
+                start + Duration::from_millis(10),
+            ),
+            start + Duration::from_millis(10),
+            "a short motion ends before its first frame slot"
+        );
     }
 
     #[test]
