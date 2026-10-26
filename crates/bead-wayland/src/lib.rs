@@ -869,6 +869,7 @@ struct Surface {
     presented_generation: Option<u64>,
     recovered_generation: Option<(u64, u64)>,
     ui_serial: u64,
+    last_submitted_ui_serial: u64,
 }
 impl Surface {
     fn wl_surface(&self) -> &wl_surface::WlSurface {

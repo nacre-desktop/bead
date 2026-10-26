@@ -2269,6 +2269,11 @@ impl App {
                 } else {
                     self.primary_ui_serial
                 },
+                last_submitted_ui_serial: if companion {
+                    self.panel_ui_serial
+                } else {
+                    self.primary_ui_serial
+                },
             })
         })();
         match result {

@@ -1076,6 +1076,7 @@ impl App {
                     first_frame.attach_to(&wl_surface)?;
                     wl_surface.commit();
                 }
+                s.last_submitted_ui_serial = s.ui_serial;
                 #[cfg(feature = "native-gl")]
                 if handoff.first_gl_frame {
                     let transport = self.gl.as_ref().ok_or("missing prepared GL transport")?;
@@ -1101,7 +1102,25 @@ impl App {
             if !s.configured {
                 return Ok(());
             }
-            if s.callbacks.pending {
+            let scale = s.scale120 as f32 / 120.;
+            let (w, h, stride, size) = buffer_dimensions(s.width, s.height, s.scale120)?;
+            let format = if cfg!(target_endian = "little")
+                && !self.options.force_argb
+                && self.shm.formats().contains(&wl_shm::Format::Abgr8888)
+            {
+                PixelFormat::Rgba
+            } else {
+                PixelFormat::Bgra
+            };
+            let replace_pending_ui = _kind == RendererKind::Cpu
+                && s.callbacks
+                    .can_replace_pending_ui(s.ui_serial != s.last_submitted_ui_serial)
+                && s.geometry == (w, h)
+                && s.format == format
+                && s.buffers
+                    .iter()
+                    .any(|b| !b.buffer.slot().has_active_buffers());
+            if s.callbacks.pending && !replace_pending_ui {
                 s.redraw = true;
                 return Ok(());
             }
@@ -1169,8 +1188,6 @@ impl App {
                 scene.reveal(progress);
             }
 
-            let scale = s.scale120 as f32 / 120.;
-            let (w, h, stride, size) = buffer_dimensions(s.width, s.height, s.scale120)?;
             s.background_visible = scene.opacity > 0.001;
             let background_requested = self.options.background_blur && s.background_visible;
             let logical_size = (s.width, s.height);
@@ -1336,6 +1353,13 @@ impl App {
                     vec![Damage::full(w as u32, h as u32)]
                 }
             };
+            // A replacement is only useful when newer UI content changes pixels.
+            // In particular, do not turn animation ticks into extra commits while
+            // the original frame callback is outstanding.
+            if replace_pending_ui && regions.is_empty() {
+                s.redraw = true;
+                return Ok(());
+            }
             // An accepted generation can be pixel-identical (including edits to
             // filtered rows). Request actual compositor feedback for that new
             // transaction too; a callback-only commit has no presentation event.
@@ -1589,6 +1613,7 @@ impl App {
                     bead_core::profile::mark("panel_commit");
                 }
                 transport.present(surface, &regions)?;
+                s.last_submitted_ui_serial = s.ui_serial;
                 if self.started.elapsed().as_secs_f64() > 2. {
                     s.swap_ms.push(swap_started.elapsed().as_secs_f64() * 1000.);
                 }
@@ -1722,6 +1747,7 @@ impl App {
                         );
                     }
                     dev.queue.present(frame);
+                    s.last_submitted_ui_serial = s.ui_serial;
                     let _ = dev.device.poll(wgpu::PollType::Poll);
                     s.frames += 1;
                     return Ok(());
@@ -1730,14 +1756,6 @@ impl App {
                 renderer.prepare(scene, scale)?;
             }
             let repair_profile = bead_core::profile::Span::new("repair_setup");
-            let format = if cfg!(target_endian = "little")
-                && !self.options.force_argb
-                && self.shm.formats().contains(&wl_shm::Format::Abgr8888)
-            {
-                PixelFormat::Rgba
-            } else {
-                PixelFormat::Bgra
-            };
             if !cfg!(target_endian = "little") {
                 return Err("CPU renderer currently requires little endian".into());
             }
@@ -1910,16 +1928,18 @@ impl App {
                     region.h as i32,
                 );
             }
-            wl_surface.frame(
-                qh,
-                FrameData {
-                    surface: wl_surface.clone(),
-                    epoch: s.callbacks.request(),
-                    generation: scene.resource_revision,
-                    source_epoch: if s.companion { self.panel_epoch } else { 0 },
-                },
-            );
-            s.callbacks.pending = true;
+            if !replace_pending_ui {
+                wl_surface.frame(
+                    qh,
+                    FrameData {
+                        surface: wl_surface.clone(),
+                        epoch: s.callbacks.request(),
+                        generation: scene.resource_revision,
+                        source_epoch: if s.companion { self.panel_epoch } else { 0 },
+                    },
+                );
+                s.callbacks.pending = true;
+            }
             if let Some(visual) = &mut s.pointer_visual {
                 visual.stage_commit()?;
             }
@@ -1948,6 +1968,11 @@ impl App {
                 bead_core::profile::mark("panel_commit");
             }
             wl_surface.commit();
+            if replace_pending_ui {
+                let marked = s.callbacks.mark_replacement_used();
+                debug_assert!(marked, "pending callback changed during synchronous draw");
+            }
+            s.last_submitted_ui_serial = s.ui_serial;
             if s.native.is_none() && s.prepared_native.is_some() {
                 let slot = b.buffer.slot();
                 let snapshot = s

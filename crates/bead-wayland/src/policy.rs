@@ -249,25 +249,39 @@ mod tests {
 #[derive(Default)]
 pub(crate) struct Callbacks {
     pub pending: bool,
+    replacement_used: bool,
     epoch: u64,
 }
 impl Callbacks {
     pub fn request(&mut self) -> u64 {
         self.epoch = self.epoch.wrapping_add(1);
         self.pending = true;
+        self.replacement_used = false;
         self.epoch
     }
     pub fn invalidate(&mut self) {
         self.epoch = self.epoch.wrapping_add(1);
         self.pending = false;
+        self.replacement_used = false;
     }
     pub fn accept(&mut self, epoch: u64) -> bool {
         if self.pending && epoch == self.epoch {
             self.pending = false;
+            self.replacement_used = false;
             true
         } else {
             false
         }
+    }
+    pub fn can_replace_pending_ui(&self, ui_serial_changed: bool) -> bool {
+        self.pending && !self.replacement_used && ui_serial_changed
+    }
+    pub fn mark_replacement_used(&mut self) -> bool {
+        if !self.pending || self.replacement_used {
+            return false;
+        }
+        self.replacement_used = true;
+        true
     }
 }
 #[cfg(test)]
@@ -283,5 +297,25 @@ mod callback_tests {
         assert!(c.pending);
         assert!(c.accept(current));
         assert!(!c.accept(current));
+    }
+
+    #[test]
+    fn pending_callback_allows_one_new_ui_replacement_and_keeps_epoch_guards() {
+        let mut callbacks = Callbacks::default();
+        assert!(!callbacks.can_replace_pending_ui(true));
+        let first = callbacks.request();
+        assert!(!callbacks.can_replace_pending_ui(false));
+        assert!(callbacks.can_replace_pending_ui(true));
+        assert!(callbacks.mark_replacement_used());
+        assert!(!callbacks.can_replace_pending_ui(true));
+        assert!(!callbacks.accept(first.wrapping_add(1)));
+        assert!(!callbacks.can_replace_pending_ui(true));
+        assert!(callbacks.accept(first));
+
+        let second = callbacks.request();
+        assert!(callbacks.can_replace_pending_ui(true));
+        assert!(!callbacks.accept(first));
+        assert!(callbacks.can_replace_pending_ui(true));
+        assert!(callbacks.accept(second));
     }
 }
