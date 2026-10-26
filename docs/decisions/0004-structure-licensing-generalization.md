@@ -174,6 +174,7 @@ After Bead's core switch on Nacre, plan support for:
   image attach (`@icon:colors-*` rectangles decide the PNG) is Nacre-side in `nacre-shell/src/colors.rs`; the colours
   methods live only there.
 
+- B0114: `WindowSpec.command_targets` routes exact product IPC targets to the active window source; closed windows reject them.
 - B0059: a window's view can retire itself (`CompanionVisibility(false)` in the window slot, as in the panel slot), so a
   Done or Skip button ends a window and, in app mode, its process. The tour pages, tiles, help and links are Luau/catalog
   data; `nacre-shell/src/welcome.rs` only maps closed vocabularies (routes, links, settings pages) and projects the window

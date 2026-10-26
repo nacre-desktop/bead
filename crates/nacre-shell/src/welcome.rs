@@ -275,6 +275,7 @@ pub fn window_spec(
     fallback.bounds = bead::render::Rect::new(0., 0., 1100., 800.);
     let cold = fallback.clone();
     Ok(bead::wayland::WindowSpec {
+        command_targets: Vec::new(),
         app_id: "nacre-welcome".into(),
         title: crate::i18n::tr("bead.welcome.title", &[]),
         size: (1100, 800),

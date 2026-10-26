@@ -27,6 +27,8 @@ pub type WindowSizing = Arc<dyn Fn((u32, u32)) -> (u32, u32) + Send + Sync>;
 pub struct WindowSpec {
     pub app_id: String,
     pub title: String,
+    /// Exact product command targets dispatched to this window's source.
+    pub command_targets: Vec<String>,
     /// Initial logical size when the compositor does not suggest one.
     pub size: (u32, u32),
     pub min_size: (u32, u32),
@@ -245,7 +247,20 @@ impl App {
     pub(super) fn window_command(&mut self, request: std::sync::Arc<Remote>) -> bool {
         let call = &request.call;
         if call.target != "bead.window" {
-            return false;
+            let owned = self.options.window.as_ref().is_some_and(|spec| {
+                spec.command_targets.iter().any(|target| target == &call.target)
+            });
+            if !owned {
+                return false;
+            }
+            if self.window.is_some() {
+                self.window_ui(UiEvent::Remote(request));
+            } else {
+                let _ = request.reply.send(bead_services::ipc::Reply::error(
+                    call.id, "window-closed", "command window is closed",
+                ));
+            }
+            return true;
         }
         if call.method == "state" && std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some() {
             let reply = bead_services::ipc::Reply::ok(

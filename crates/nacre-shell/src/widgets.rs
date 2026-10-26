@@ -90,6 +90,7 @@ pub fn window_spec(
             .map_err(|error| error.to_string())
     });
     Ok(bead::wayland::WindowSpec {
+        command_targets: vec!["bead.widgets".into()],
         app_id: "nacre-widgets".into(),
         title: "Widgets".into(),
         size,
