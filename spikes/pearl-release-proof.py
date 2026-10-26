@@ -534,6 +534,11 @@ def drive(self, _names):
                 backend_match = re.search(
                     rf'PEARL_HANDOFF_COMMITTED id={pearl["id"]}\b[^\n]*\bbackend=(\w+)', trace)
                 handoff_backend = backend_match.group(1) if backend_match else None
+                server_warm = re.search(
+                    rf'PEARL_SERVER_PREWARM_ACTIVATE id={pearl["id"]}\b '
+                    r'attached=(true|false) callback_ready=(true|false)', trace)
+                cpu_frame_preimported = bool(
+                    server_warm and server_warm.groups() == ('true', 'true'))
                 if handoff_ns < release_ns:
                     raise RuntimeError('native handoff commit timestamp precedes pointer release')
                 if presented_ns < release_ns:
@@ -562,6 +567,7 @@ def drive(self, _names):
                       'native_surface': native_surface,
                       'native_first_presented_ns': presented_ns,
                       'handoff_backend': handoff_backend,
+                      'cpu_frame_preimported': cpu_frame_preimported if self.args.cpu else None,
                       'release_to_covered_handoff_commit_ms': release_to_handoff_ms,
                       'release_to_native_presented_ms': release_to_presented_ms,
                       'pointer_trigger_start_monotonic_ns': marks['pointer_trigger_start_monotonic_ns'],
