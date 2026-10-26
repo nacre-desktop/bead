@@ -302,7 +302,9 @@ impl GlRenderer {
                 let budget = self.image_budget.get_or_insert_with(|| {
                     bead_core::cache::Budget::new(
                         "native-gl-images",
-                        crate::tree::STEADY_RASTER_LIMIT,
+                        // A size replacement keeps its old texture until upload
+                        // succeeds. The LRU below still bounds settled pixels.
+                        2 * crate::tree::STEADY_RASTER_LIMIT,
                     )
                 });
                 let charge = loop {
@@ -320,7 +322,13 @@ impl GlRenderer {
                                     canvas.delete_image(old.image);
                                 }
                             } else {
-                                return Err(e.into());
+                                return Err(format!(
+                                    "{e}: native-gl-images used={} requested={} global={}",
+                                    budget.used(),
+                                    w as usize * h as usize * 4 + slot.0.capacity() + 192,
+                                    bead_core::cache::report().used_bytes,
+                                )
+                                .into());
                             }
                         }
                     }
