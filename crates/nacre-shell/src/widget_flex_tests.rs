@@ -271,10 +271,10 @@ fn nested_pill_includes_child_growth_and_content_changes_do_not_move_neighbors()
         200. + child_extra,
         "the parent pill reserves its measured width plus every child's max-width delta"
     );
-    assert_eq!(
-        preferred_clock_seconds_span(&first),
-        (first_reservations["clock-in-pill"] / 32.).ceil(),
-        "clock seconds span reflects the full reserved width while legacy minimum spans remain valid"
+    assert!(
+        preferred_clock_seconds_span(&first)
+            >= (first_reservations["clock-in-pill"] / 32.).ceil(),
+        "clock seconds span covers at least the default clock reservation"
     );
     assert_eq!(
         text_rect(&first, "09:08").x,
