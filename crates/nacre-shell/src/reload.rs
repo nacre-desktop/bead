@@ -7999,12 +7999,18 @@ impl SceneSource for Runtime {
                 let Some(bead::core::Value::List(records)) = &node.metadata else {
                     return None;
                 };
-                let marker = records.iter().find(|record| record["widget_layout"] == true)?;
-                Some(serde_json::json!([marker["viewport_width"], marker["viewport_height"]]))
+                let marker = records
+                    .iter()
+                    .find(|record| record["widget_layout"] == true)?;
+                Some(serde_json::json!([
+                    marker["viewport_width"],
+                    marker["viewport_height"]
+                ]))
             });
-            if let (Some(viewport), Ok(serde_json::Value::Object(mut values))) =
-                (viewport, serde_json::from_str::<serde_json::Value>(&summary))
-            {
+            if let (Some(viewport), Ok(serde_json::Value::Object(mut values))) = (
+                viewport,
+                serde_json::from_str::<serde_json::Value>(&summary),
+            ) {
                 // Proof of the accepted layout, never a store or requested viewport.
                 values.insert("__bead_committed_viewport".into(), viewport);
                 return serde_json::to_string(&values).unwrap_or(summary);
