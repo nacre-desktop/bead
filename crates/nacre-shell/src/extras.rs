@@ -491,6 +491,9 @@ impl Extras {
             }
         }
         let open = matches!(stores.get("panel.open"), Some(Value::Bool(true)));
+        if self.kind == Kind::Wallpaper {
+            crate::wallpaper_motion::set_picker_open(open);
+        }
         let mut wallpaper_revision = 0;
         let mut wallpaper_kind = "static";
         let mut wallpaper_layout = "carousel";

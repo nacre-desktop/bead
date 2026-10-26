@@ -26,6 +26,8 @@ pub struct Config {
     pub window: Duration,
     /// Grace period after `Quit` before the child is killed.
     pub quit_grace: Duration,
+    /// Time to retain a cleared renderer for quick source changes.
+    pub idle_grace: Duration,
 }
 impl Config {
     pub fn new(command: impl Fn() -> std::process::Command + Send + 'static) -> Self {
@@ -39,6 +41,7 @@ impl Config {
             max_restarts: 4,
             window: Duration::from_secs(60),
             quit_grace: Duration::from_secs(2),
+            idle_grace: Duration::from_secs(60),
         }
     }
 }
@@ -55,6 +58,7 @@ pub struct Status {
 
 enum Msg {
     Command(Command),
+    KeepWarm(bool),
     Event(u64, Event),
     Closed(u64),
     Stop,
@@ -82,6 +86,8 @@ impl Supervisor {
             generation: 0,
             restarts: Vec::new(),
             retry_at: None,
+            idle_at: None,
+            keep_warm: false,
         };
         let thread = std::thread::Builder::new()
             .name("wallpaper-supervisor".into())
@@ -95,6 +101,9 @@ impl Supervisor {
     }
     pub fn send(&self, command: Command) {
         let _ = self.sender.send(Msg::Command(command));
+    }
+    pub fn keep_warm(&self, keep_warm: bool) {
+        let _ = self.sender.send(Msg::KeepWarm(keep_warm));
     }
     pub fn status(&self) -> Status {
         self.status.lock().map(|s| s.clone()).unwrap_or_default()
@@ -126,6 +135,8 @@ struct Worker {
     generation: u64,
     restarts: Vec<Instant>,
     retry_at: Option<Instant>,
+    idle_at: Option<Instant>,
+    keep_warm: bool,
 }
 impl Worker {
     fn update(&self, change: impl FnOnce(&mut Status)) {
@@ -138,12 +149,26 @@ impl Worker {
             let wait = self.retry_at.map_or(Duration::from_secs(3600), |t| {
                 t.saturating_duration_since(Instant::now())
             });
+            let wait = self.idle_at.map_or(wait, |t| {
+                wait.min(t.saturating_duration_since(Instant::now()))
+            });
             match self.receiver.recv_timeout(wait) {
                 Ok(Msg::Stop) | Err(RecvTimeoutError::Disconnected) => {
                     self.stop_child();
                     return;
                 }
                 Ok(Msg::Command(command)) => self.command(command),
+                Ok(Msg::KeepWarm(keep_warm)) => {
+                    if self.keep_warm != keep_warm {
+                        self.keep_warm = keep_warm;
+                        if keep_warm {
+                            self.idle_at = None;
+                            self.ensure_child();
+                        } else if !self.wanted() {
+                            self.idle_at = Some(Instant::now() + self.config.idle_grace);
+                        }
+                    }
+                }
                 Ok(Msg::Event(generation, event)) => {
                     if generation == self.generation {
                         (self.on_event)(event);
@@ -158,24 +183,34 @@ impl Worker {
                     if self.retry_at.take().is_some() {
                         self.ensure_child();
                     }
+                    if self.idle_at.is_some_and(|at| Instant::now() >= at) {
+                        self.idle_at = None;
+                        if !self.keep_warm && !self.wanted() {
+                            self.stop_child();
+                        }
+                    }
                 }
             }
         }
     }
     fn wanted(&self) -> bool {
-        matches!(self.source, Some(Command::Source { source: Some(_) }))
+        self.keep_warm || matches!(self.source, Some(Command::Source { source: Some(_) }))
     }
     fn command(&mut self, command: Command) {
         match &command {
             Command::Source { source } => {
                 self.source = Some(command.clone());
                 self.state = None;
+                self.idle_at = if source.is_none() && !self.keep_warm {
+                    Some(Instant::now() + self.config.idle_grace)
+                } else {
+                    None
+                };
                 self.restarts.clear();
                 self.update(|s| s.abandoned = false);
                 if source.is_none() {
                     self.retry_at = None;
-                    // Keep the renderer warm between wallpapers. It unmaps its video
-                    // surface and stops decoding while a static layer is shown.
+                    // Retain the renderer briefly for quick wallpaper changes.
                     if self.child.is_some() {
                         self.write(&command);
                     }
@@ -185,6 +220,7 @@ impl Worker {
             Command::State { .. } => self.state = Some(command.clone()),
             Command::Quit => {
                 self.source = None;
+                self.keep_warm = false;
                 self.stop_child();
                 return;
             }
@@ -196,7 +232,10 @@ impl Worker {
         }
     }
     fn ensure_child(&mut self) {
-        if self.child.is_some() || !self.wanted() || self.status.lock().is_ok_and(|s| s.abandoned) {
+        if self.child.is_some()
+            || (!self.wanted() && !self.keep_warm)
+            || self.status.lock().is_ok_and(|s| s.abandoned)
+        {
             return;
         }
         let mut command = (self.config.command)();
@@ -408,6 +447,7 @@ mod tests {
             p
         });
         config.max_restarts = 2;
+        config.idle_grace = Duration::from_millis(20);
         let sup = Supervisor::start(config, |_| {});
         sup.send(video("/clip.mp4"));
         assert!(wait(|| sup.status().abandoned));
@@ -459,6 +499,54 @@ mod tests {
                 .unwrap()
                 .contains("spawn failed")
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn static_idle_releases_renderer_after_grace_and_video_toggle_cancels_release() {
+        let dir = std::env::temp_dir().join(format!("bead-wp-idle-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("stdin.log");
+        let mut config = fast(recorder(&log));
+        config.idle_grace = Duration::from_millis(120);
+        let sup = Supervisor::start(config, |_| {});
+        sup.send(video("/clip.mp4"));
+        assert!(wait(|| sup.status().pid.is_some()));
+        let first_pid = sup.status().pid;
+        sup.send(Command::Source { source: None });
+        std::thread::sleep(Duration::from_millis(60));
+        sup.send(video("/quick-toggle.mp4"));
+        assert!(wait(|| std::fs::read_to_string(&log)
+            .unwrap_or_default()
+            .contains("quick-toggle")));
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(
+            sup.status().pid,
+            first_pid,
+            "a quick video toggle cancels idle release"
+        );
+        sup.send(Command::Source { source: None });
+        assert!(wait(|| sup.status().pid.is_none()));
+        drop(sup);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn picker_warm_hold_starts_renderer_and_release_starts_idle_grace() {
+        let dir = std::env::temp_dir().join(format!("bead-wp-picker-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("stdin.log");
+        let mut config = fast(recorder(&log));
+        config.idle_grace = Duration::from_millis(120);
+        let sup = Supervisor::start(config, |_| {});
+        assert_eq!(sup.status().pid, None);
+        sup.keep_warm(true);
+        assert!(wait(|| sup.status().pid.is_some()));
+        sup.keep_warm(false);
+        std::thread::sleep(Duration::from_millis(60));
+        assert!(sup.status().pid.is_some());
+        assert!(wait(|| sup.status().pid.is_none()));
+        drop(sup);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

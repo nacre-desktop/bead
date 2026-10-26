@@ -18,7 +18,11 @@ use bead_wallpaper::{
 use serde_json::Value as Json;
 use std::{
     collections::BTreeMap,
-    sync::{Arc, mpsc},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
     time::{Duration, Instant},
 };
 
@@ -26,6 +30,11 @@ use std::{
 /// every output.
 const ANY: &str = "*";
 const RENDERER: &str = "bead-wallpaper-video";
+static PICKER_OPEN: AtomicBool = AtomicBool::new(false);
+
+pub(crate) fn set_picker_open(open: bool) {
+    PICKER_OPEN.store(open, Ordering::Release);
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Mode {
@@ -217,6 +226,7 @@ fn run(deps: Deps, supervisor: supervisor::Supervisor, receiver: mpsc::Receiver<
     let mut group = Group::default();
     let mut source = None;
     let mut sent: Option<(Decoder, Vec<String>)> = None;
+    let mut renderer_state = None;
     loop {
         let prefs = deps
             .picker
@@ -230,6 +240,24 @@ fn run(deps: Deps, supervisor: supervisor::Supervisor, receiver: mpsc::Receiver<
             source = wanted;
             sent = None;
             group = Group::default();
+        }
+        let status = supervisor.status();
+        let picker_open = PICKER_OPEN.load(Ordering::Acquire);
+        supervisor.keep_warm(picker_open);
+        let warm = status.pid.is_some();
+        let reason = if picker_open {
+            "picker_open"
+        } else if source.is_some() {
+            "video_active"
+        } else {
+            "static_idle"
+        };
+        if renderer_state != Some(warm) {
+            println!(
+                "WALLPAPER_VIDEO_RENDERER state={} reason={reason}",
+                if warm { "warm" } else { "released" }
+            );
+            renderer_state = Some(warm);
         }
         let mut wait = Duration::from_secs(3600);
         if source.is_some() {
@@ -260,6 +288,7 @@ fn run(deps: Deps, supervisor: supervisor::Supervisor, receiver: mpsc::Receiver<
                 wait = Duration::from_millis(deadline.saturating_sub(now) + 1);
             }
         }
+        wait = wait.min(Duration::from_millis(250));
         match receiver.recv_timeout(wait) {
             Ok(Msg::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
             Ok(Msg::Poke) | Err(mpsc::RecvTimeoutError::Timeout) => {}
