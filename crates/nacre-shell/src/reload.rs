@@ -1266,16 +1266,12 @@ impl Runtime {
                 .or_else(|| match self.session.stores.get("bead.output.name") {
                     Some(bead::core::Value::Text(name)) if !name.is_empty() => Some(name.clone()),
                     _ => None,
-        })?;
+                })?;
         let target_origin_x = number("widgets.screen_origin_x");
         let target_origin_y = number("widgets.screen_origin_y");
-        let number_or = |key: &str, fallback: f64| {
-            match self.session.stores.get(key) {
-                Some(bead::core::Value::Number(value)) if value.is_finite() && *value > 0. => {
-                    *value
-                }
-                _ => fallback,
-            }
+        let number_or = |key: &str, fallback: f64| match self.session.stores.get(key) {
+            Some(bead::core::Value::Number(value)) if value.is_finite() && *value > 0. => *value,
+            _ => fallback,
         };
         let output_width = number_or("widgets.screen_width", f64::from(self.viewport_size.0));
         let output_height = number_or("widgets.screen_height", f64::from(self.viewport_size.1));
