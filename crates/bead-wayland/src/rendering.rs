@@ -2183,7 +2183,8 @@ impl App {
             self.animations
                 .rebase_fresh(&id, drawn, self.started.elapsed().as_secs_f64());
         }
-        if busy {
+        // A pending frame callback already supplies the retry wakeup.
+        if busy && !self.surfaces[index].callbacks.pending {
             let qh = qh.clone();
             let retry = self.loop_handle.insert_source(
                 Timer::from_duration(Duration::from_millis(8)),
