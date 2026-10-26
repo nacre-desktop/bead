@@ -36,6 +36,17 @@ fn text(model: &BTreeMap<String, Value>, key: &str) -> String {
     }
 }
 
+fn colors_open_catalog_call(args: Vec<serde_json::Value>) -> bead::services::ipc::Call {
+    bead::services::ipc::Call {
+        version: 1,
+        id: 1,
+        target: "colorsApp".into(),
+        method: "open".into(),
+        args,
+        output: None,
+    }
+}
+
 #[test]
 fn registry_slots_map_to_pages_and_customize_is_reached_by_view_only() -> Result<()> {
     for (index, name) in [
@@ -1141,7 +1152,7 @@ async fn today_wallpaper_controls_follow_live_state_and_published_calls() -> Res
         (
             "colors.open",
             "ui.dispatch",
-            json!({"target":"colorsApp","method":"open","args":[]}),
+            json!({"target":"colorsApp","method":"open","args":[""]}),
         ),
         ("wallpaper.previous", "wallpaper.previous", json!({})),
         (
@@ -1378,6 +1389,13 @@ async fn today_buttons_follow_player_updates_and_call_published_routes() -> Resu
         .filter(|n| n.action_arg == Some(Value::Text("colors.open".into())))
         .collect();
     assert_eq!(colors.len(), 6, "button and five palette dots open Colors");
+    assert!(
+        crate::commands::validate(&colors_open_catalog_call(Vec::new())).is_err(),
+        "the command catalog requires the Colors image argument"
+    );
+    let colors_args = vec![json!("")];
+    crate::commands::validate(&colors_open_catalog_call(colors_args.clone()))
+        .expect("empty image is the valid no-image Colors argument");
     for node in colors {
         assert_eq!(node.action.as_deref(), Some("dashboard.do"));
         assert!(!node.label.is_empty());
@@ -1387,7 +1405,7 @@ async fn today_buttons_follow_player_updates_and_call_published_routes() -> Resu
             calls.recv().await.unwrap(),
             (
                 "ui.dispatch".into(),
-                json!({"target":"colorsApp","method":"open","args":[]})
+                json!({"target":"colorsApp","method":"open","args":colors_args})
             )
         );
         settle(&dashboard).await;

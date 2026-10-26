@@ -144,7 +144,7 @@ impl Dashboard {
         match (page, op) {
             (Page::Today, "colors.open") => c.submit(
                 "ui.dispatch",
-                json!({"target": "colorsApp", "method": "open", "args": []}),
+                json!({"target": "colorsApp", "method": "open", "args": [""]}),
                 wake,
             ),
             (Page::Focus, "focus.start") => {
