@@ -315,6 +315,18 @@ class ScrollReversalProofTests(unittest.TestCase):
         self.assertLess(contents.index("Nacre:scroll fixture 120"), contents.rindex("\n}"))
         self.assertEqual(contents.count("\n}"), 1)
 
+    def test_wheel_interval_defaults_and_accepts_rapid_retarget_override(self):
+        self.assertEqual(pacing.wheel_interval_ms(), 120)
+        old = os.environ.get("PACING_WHEEL_INTERVAL_MS")
+        os.environ["PACING_WHEEL_INTERVAL_MS"] = "20"
+        try:
+            self.assertEqual(pacing.wheel_interval_ms(), 20)
+        finally:
+            if old is None:
+                os.environ.pop("PACING_WHEEL_INTERVAL_MS", None)
+            else:
+                os.environ["PACING_WHEEL_INTERVAL_MS"] = old
+
     def test_scroll_notification_fixture_uses_long_ttl_and_closes_exact_ids(self):
         calls = []
 

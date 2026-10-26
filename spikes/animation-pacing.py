@@ -45,6 +45,15 @@ VSYNC_MS = 1000.0 / HZ
 REPEATS = int(os.environ.get('PACING_REPEATS', '3'))
 IDLE_GAP_MS = 250.0
 
+
+def wheel_interval_ms():
+    """Per-notch pacing; the private rapid-retarget case opts into 20 ms."""
+    interval = int(os.environ.get('PACING_WHEEL_INTERVAL_MS', '120'))
+    if not 1 <= interval <= 2000:
+        raise ValueError('PACING_WHEEL_INTERVAL_MS must be 1..2000')
+    return interval
+
+
 # name: (prepare, open, close, window seconds). Steps are parity-compare steps plus ('wheel', ...).
 ANIMS = {
     'launcher': ([], [('ui', 'nacre', 'launcher', '')], [('ui', 'nacre', 'close')], 1.4),
@@ -113,7 +122,7 @@ for _scene, (_prepare, _x, _y, _count, _seconds) in SCROLL_SCENES.items():
     ANIMS['scroll-' + _scene + '-touchpad'] = (
         list(_prepare), [('wheel', 'pixel-reverse', 7, _count * 2, 0.008, _x, _y)], [], _seconds)
     ANIMS['scroll-' + _scene + '-wheel'] = (
-        list(_prepare), [('wheel', 'wheel-reverse', 1, 12, 0.12, _x, _y)], [], 1.6)
+        list(_prepare), [('wheel', 'wheel-reverse', 1, 12, wheel_interval_ms() / 1000.0, _x, _y)], [], 1.6)
 SCROLL_CLEANUPS = {
     **{f'scroll-{name}-{device}': [('app_close', 'settings')]
        for name in ('settings-content', 'settings-nav') for device in ('touchpad', 'wheel')},
@@ -988,6 +997,7 @@ def pace_drive(self, names):
                                                                         if os.environ.get('PACING_OSCILLATE') == '1'
                                                                         else 'single-midpoint-reversal'),
                                                       'input_oscillation_period': int(os.environ.get('PACING_OSCILLATE_PERIOD', '3')) if os.environ.get('PACING_OSCILLATE') == '1' else None,
+                                                      'wheel_input_interval_ms': wheel_interval_ms(),
                                                       'trace_profile': trace_profile,
                                                       'presentation_discarded': presentation_discarded if discarded_trace_collected else None,
                                                       'presentation_discarded_trace_collected': discarded_trace_collected,
