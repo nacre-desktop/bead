@@ -6,7 +6,8 @@ use crate::{
 use std::{
     collections::{BTreeMap, BTreeSet},
     hash::{Hash, Hasher},
-    sync::{Arc, OnceLock},
+    path::PathBuf,
+    sync::{Arc, OnceLock, Weak},
 };
 use tiny_skia::{
     FillRule, Mask, Paint, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Stroke, Transform,
@@ -297,6 +298,99 @@ pub struct TreeCache {
     edges: Vec<(u64, Option<EdgeTemplate>)>,
     /// The last frame derived for a reveal pose (frame key, progress bits, scale bits): an unchanged pose is not rebuilt.
     revealed_pose: Option<((u64, u32, u32), Arc<Frame>)>,
+}
+
+/// Exact non-pixel content identity for a frozen CPU panel snapshot. The byte
+/// asset storage is immutable behind `Arc`; weak identities detect replacement
+/// without hashing every encoded image on each presenter prepare.
+struct SnapshotFingerprint {
+    scale_bits: u32,
+    metadata: Vec<u8>,
+    assets: Vec<(PathBuf, Weak<[u8]>)>,
+}
+impl SnapshotFingerprint {
+    fn new(scene: &Scene, scale: f32) -> Result<Self> {
+        if !scale.is_finite() || scale <= 0. {
+            return Err("invalid layer scale".into());
+        }
+        let layers = scene
+            .layers
+            .iter()
+            .map(|layer| {
+                (
+                    &layer.id,
+                    &layer.parent,
+                    layer.own.start,
+                    layer.own.end,
+                    layer.subtree_end,
+                    [
+                        layer.bounds.x.to_bits(),
+                        layer.bounds.y.to_bits(),
+                        layer.bounds.w.to_bits(),
+                        layer.bounds.h.to_bits(),
+                    ],
+                )
+            })
+            .collect::<Vec<_>>();
+        let clips = scene
+            .clips
+            .iter()
+            .map(|(index, clip)| {
+                (
+                    *index,
+                    [
+                        clip.x.to_bits(),
+                        clip.y.to_bits(),
+                        clip.w.to_bits(),
+                        clip.h.to_bits(),
+                    ],
+                )
+            })
+            .collect::<Vec<_>>();
+        let metadata = serde_json::to_vec(&(
+            scene.resource_revision,
+            scale.to_bits(),
+            scene.width.to_bits(),
+            [
+                scene.bounds.x.to_bits(),
+                scene.bounds.y.to_bits(),
+                scene.bounds.w.to_bits(),
+                scene.bounds.h.to_bits(),
+            ],
+            &scene.font_files,
+            layers,
+            clips,
+            &scene.primitives,
+        ))?;
+        let assets = scene
+            .asset_data
+            .iter()
+            .map(|(path, bytes)| (path.clone(), Arc::downgrade(bytes)))
+            .collect();
+        Ok(Self {
+            scale_bits: scale.to_bits(),
+            metadata,
+            assets,
+        })
+    }
+
+    fn matches(&self, scene: &Scene, scale: f32) -> Result<bool> {
+        // A flattened closed snapshot cannot substitute for a moving reveal
+        // edge; keep the original frame path for those scenes.
+        if scene.motion.as_ref().is_some_and(|motion| motion.reveal)
+            || self.scale_bits != scale.to_bits()
+        {
+            return Ok(false);
+        }
+        let current = Self::new(scene, scale)?;
+        Ok(self.metadata == current.metadata
+            && self.assets.len() == current.assets.len()
+            && self.assets.iter().zip(&current.assets).all(
+                |((old_path, old_bytes), (path, bytes))| {
+                    old_path == path && Weak::ptr_eq(old_bytes, bytes)
+                },
+            ))
+    }
 }
 /// The artwork's growing edge, rasterised once per size and scale and slid along the growth axis every frame.
 struct EdgeTemplate {
@@ -592,6 +686,16 @@ impl TreeCache {
             entry.previous = None;
         }
         self.nodes.retain(|_, (_, touched)| *touched == self.serial);
+    }
+    /// Retire all pixel-bearing owners after a frozen snapshot has been built.
+    fn release_pixel_storage(&mut self) {
+        self.frame = None;
+        self.entries.clear();
+        self.nodes.clear();
+        self.raster = CpuRenderer::default();
+        self.font_files.clear();
+        self.edges.clear();
+        self.revealed_pose = None;
     }
     fn evict_previous_variant(&mut self) -> bool {
         let victim = self
@@ -2422,6 +2526,8 @@ pub struct TreeCpuRenderer {
     group_charge: Option<bead_core::cache::Charge>,
     keep_hidden_group: bool,
     sparse_snapshot: bool,
+    snapshot_fingerprint: Option<SnapshotFingerprint>,
+    snapshot_layers: usize,
 }
 enum FlattenedPixels {
     Dense(Pixmap),
@@ -2452,6 +2558,16 @@ impl TreeCpuRenderer {
         renderer.sparse_snapshot = true;
         renderer.prepare(&content, scale)?;
         renderer.cache_content(&content)?;
+        if !scene.motion.as_ref().is_some_and(|motion| motion.reveal) {
+            let fingerprint = SnapshotFingerprint::new(&content, scale)?;
+            renderer.snapshot_layers = renderer
+                .cache
+                .frame
+                .as_ref()
+                .map_or(0, |frame| frame.layer_count);
+            renderer.cache.release_pixel_storage();
+            renderer.snapshot_fingerprint = Some(fingerprint);
+        }
         Ok(renderer)
     }
     fn cache_content(&mut self, scene: &Scene) -> Result<()> {
@@ -2537,9 +2653,44 @@ impl Renderer for TreeCpuRenderer {
         self.cache.frame.clone()
     }
     fn resource_counts(&self) -> (usize, usize) {
-        (self.cache.frame.as_ref().map_or(0, |f| f.layer_count), 0)
+        (
+            self.cache
+                .frame
+                .as_ref()
+                .map_or(self.snapshot_layers, |frame| frame.layer_count),
+            0,
+        )
     }
     fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
+        if let Some(snapshot) = &self.snapshot_fingerprint {
+            if snapshot.matches(scene, scale)? {
+                return Ok(());
+            }
+
+            // Build replacement content off to the side. A failed reprepare
+            // keeps the last accepted sparse snapshot available for paint.
+            let fingerprint = (!scene.motion.as_ref().is_some_and(|motion| motion.reveal))
+                .then(|| SnapshotFingerprint::new(scene, scale))
+                .transpose()?;
+            let mut replacement = Self::with_opaque_composition(OpaqueComposition::Cached);
+            replacement.keep_hidden_group = self.keep_hidden_group;
+            replacement.sparse_snapshot = self.sparse_snapshot;
+            replacement.opacity_builds = self.opacity_builds;
+            replacement.direct_composites = self.direct_composites;
+            replacement.cache.prepare(scene, scale)?;
+            replacement.cache_content(scene)?;
+            if let Some(fingerprint) = fingerprint {
+                replacement.snapshot_layers = replacement
+                    .cache
+                    .frame
+                    .as_ref()
+                    .map_or(0, |frame| frame.layer_count);
+                replacement.cache.release_pixel_storage();
+                replacement.snapshot_fingerprint = Some(fingerprint);
+            }
+            *self = replacement;
+            return Ok(());
+        }
         self.cache.prepare(scene, scale)
     }
     fn render(&mut self, scene: &Scene, target: ShmTarget<'_>, damage: Damage) -> Result<()> {
@@ -2554,18 +2705,23 @@ impl Renderer for TreeCpuRenderer {
         {
             return Err("damage outside SHM".into());
         }
-        let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
+        let frozen_snapshot = self.snapshot_fingerprint.is_some();
+        let frame = if frozen_snapshot {
+            None
+        } else {
+            Some(self.cache.frame.as_ref().ok_or("unprepared layer tree")?)
+        };
         let cached_opaque = match self.opaque_composition {
             OpaqueComposition::Auto => false,
             OpaqueComposition::Direct => false,
             OpaqueComposition::Cached => true,
         };
-        if scene.opacity >= 1. && !cached_opaque {
+        if !frozen_snapshot && scene.opacity >= 1. && !cached_opaque {
             self.direct_composites += 1;
             self.flattened = None;
             self.group_charge = None;
             return paint_with_scratch(
-                frame,
+                frame.expect("non-snapshot frame checked"),
                 scene.offset,
                 target,
                 damage,
@@ -2586,7 +2742,9 @@ impl Renderer for TreeCpuRenderer {
         }
         // Group opacity preserves previous semantics; compose cached local rasters,
         // never reload fonts or re-bake glyphs for an animated pose.
-        self.cache_content(scene)?;
+        if !frozen_snapshot {
+            self.cache_content(scene)?;
+        }
         let (_, _, pixels) = self.flattened.as_ref().ok_or("opacity group missing")?;
         let ShmTarget {
             bytes,
@@ -4045,6 +4203,50 @@ mod tests {
         bytes
     }
 
+    fn render_cpu_frame(
+        renderer: &mut TreeCpuRenderer,
+        scene: &Scene,
+        scale: f32,
+        format: PixelFormat,
+    ) -> Vec<u8> {
+        let width = (scene.bounds.w * scale).ceil() as u32;
+        let height = (scene.bounds.h * scale).ceil() as u32;
+        let mut bytes = vec![0; width as usize * height as usize * 4];
+        renderer
+            .prepare(scene, scale)
+            .and_then(|()| {
+                renderer.render(
+                    scene,
+                    ShmTarget {
+                        bytes: &mut bytes,
+                        width,
+                        height,
+                        scale,
+                        format,
+                    },
+                    Damage::full(width, height),
+                )
+            })
+            .unwrap();
+        bytes
+    }
+
+    fn assert_snapshot_pixels_match_reference(
+        snapshot: &mut TreeCpuRenderer,
+        scene: &Scene,
+        scale: f32,
+    ) {
+        for format in [PixelFormat::Rgba, PixelFormat::Bgra] {
+            let actual = render_cpu_frame(snapshot, scene, scale, format);
+            let mut reference = TreeCpuRenderer::with_opaque_composition(OpaqueComposition::Cached);
+            let expected = render_cpu_frame(&mut reference, scene, scale, format);
+            assert_eq!(
+                actual, expected,
+                "snapshot pixels at scale={scale} format={format:?}"
+            );
+        }
+    }
+
     fn scrolling_wallpaper_window(total: usize, first: usize) -> Scene {
         let mut scene = scene();
         scene.width = 32.;
@@ -4495,6 +4697,144 @@ mod tests {
             frozen.opacity_builds, 1,
             "hidden and reopened poses reuse the frozen pixels"
         );
+        assert!(frozen.cache.frame.is_none());
+        assert!(frozen.prepared_frame().is_none());
+        assert!(frozen.snapshot_fingerprint.is_some());
+    }
+
+    #[test]
+    fn closed_snapshot_drops_full_rasters_and_keeps_the_first_frame_pixels() {
+        let mut scene = scene();
+        let mut source_cache = TreeCache::default();
+        source_cache.prepare(&scene, 1.).unwrap();
+        let source_frame = source_cache.frame.as_ref().unwrap().clone();
+        let weak_pixels = Arc::downgrade(&source_frame.items[0].raster.as_ref().unwrap().pixels);
+        let expected = frame_pixels(&source_frame, &scene, 1.);
+        scene.prepared.insert(1_f32.to_bits(), source_frame);
+
+        let mut snapshot = TreeCpuRenderer::snapshot(&scene, 1.).unwrap();
+        assert!(snapshot.snapshot_fingerprint.is_some());
+        assert!(snapshot.cache.frame.is_none());
+        assert!(snapshot.cache.entries.is_empty());
+        assert!(snapshot.cache.nodes.is_empty());
+        assert!(snapshot.prepared_frame().is_none());
+
+        // The caller adopts the snapshot and drops its prepared-scene owner.
+        scene.prepared.clear();
+        drop(source_cache);
+        assert!(
+            weak_pixels.upgrade().is_none(),
+            "no full image raster owner remains"
+        );
+
+        let mut actual = vec![0; 24 * 20 * 4];
+        snapshot.prepare(&scene, 1.).unwrap();
+        snapshot
+            .render(
+                &scene,
+                ShmTarget {
+                    bytes: &mut actual,
+                    width: 24,
+                    height: 20,
+                    scale: 1.,
+                    format: PixelFormat::Rgba,
+                },
+                Damage::full(24, 20),
+            )
+            .unwrap();
+        assert_eq!(
+            actual, expected,
+            "flattened pixels preserve the accepted UI"
+        );
+    }
+
+    #[test]
+    fn closed_snapshot_fingerprint_ignores_pose_but_rebuilds_changed_content_and_scale() {
+        let mut scene = scene();
+        let mut snapshot = TreeCpuRenderer::snapshot(&scene, 1.).unwrap();
+        let initial_builds = snapshot.opacity_builds;
+
+        scene.opacity = 0.4;
+        scene.offset = (2.25, -1.5);
+        snapshot.prepare(&scene, 1.).unwrap();
+        assert_eq!(snapshot.opacity_builds, initial_builds);
+        assert!(
+            snapshot.cache.frame.is_none(),
+            "pose alone keeps the sparse snapshot"
+        );
+        assert_snapshot_pixels_match_reference(&mut snapshot, &scene, 1.);
+
+        let mut changed_asset = scene.clone();
+        let mut image =
+            Pixmap::decode_png(&changed_asset.asset_data[std::path::Path::new("proof.png")])
+                .unwrap();
+        image.pixels_mut()[0] =
+            tiny_skia::PremultipliedColorU8::from_rgba(200, 10, 20, 255).unwrap();
+        changed_asset
+            .asset_data
+            .insert("proof.png".into(), Arc::from(image.encode_png().unwrap()));
+        changed_asset.resource_revision += 1;
+        snapshot.prepare(&changed_asset, 1.).unwrap();
+        assert!(snapshot.snapshot_fingerprint.is_some());
+        assert!(snapshot.cache.frame.is_none());
+        assert_eq!(snapshot.opacity_builds, initial_builds + 1);
+        let changed_key = snapshot.flattened.as_ref().unwrap().0;
+        assert_snapshot_pixels_match_reference(&mut snapshot, &changed_asset, 1.);
+
+        let mut changed_clip = changed_asset.clone();
+        changed_clip.clips.insert(0, Rect::new(4., 4., 3., 3.));
+        snapshot.prepare(&changed_clip, 1.).unwrap();
+        assert!(snapshot.snapshot_fingerprint.is_some());
+        assert!(snapshot.cache.frame.is_none());
+        assert_eq!(snapshot.opacity_builds, initial_builds + 2);
+        let clip_key = snapshot.flattened.as_ref().unwrap().0;
+        assert_ne!(changed_key, clip_key, "clip edits rebuild snapshot pixels");
+        assert_snapshot_pixels_match_reference(&mut snapshot, &changed_clip, 1.);
+
+        snapshot.prepare(&changed_clip, 1.5).unwrap();
+        assert_eq!(snapshot.flattened.as_ref().unwrap().1, 1.5);
+        assert_eq!(snapshot.opacity_builds, initial_builds + 3);
+        assert!(
+            snapshot.cache.frame.is_none(),
+            "the new scale is snapshotted then trimmed"
+        );
+        let scaled_key = snapshot.flattened.as_ref().unwrap().0;
+        assert_snapshot_pixels_match_reference(&mut snapshot, &changed_clip, 1.5);
+
+        let mut broken = changed_clip.clone();
+        broken.asset_data.remove(std::path::Path::new("proof.png"));
+        assert!(snapshot.prepare(&broken, 1.5).is_err());
+        assert!(snapshot.snapshot_fingerprint.is_some());
+        assert!(snapshot.cache.frame.is_none());
+        assert_eq!(snapshot.opacity_builds, initial_builds + 3);
+        assert_eq!(snapshot.flattened.as_ref().unwrap().1, 1.5);
+        assert_eq!(snapshot.flattened.as_ref().unwrap().0, scaled_key);
+        assert_snapshot_pixels_match_reference(&mut snapshot, &changed_clip, 1.5);
+    }
+
+    #[test]
+    fn closed_snapshot_keeps_reveal_frames_on_the_existing_path() {
+        let mut scene = scene();
+        scene.motion = Some(crate::Motion {
+            id: "test-reveal".into(),
+            open: false,
+            duration: 0.2,
+            return_duration: None,
+            return_curve: None,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Bottom,
+            slide_distance: Some(20.),
+            fade: false,
+            reveal: true,
+            progress: 0.,
+            parts: Vec::new(),
+            art: None,
+        });
+        let snapshot = TreeCpuRenderer::snapshot(&scene, 1.).unwrap();
+        assert!(snapshot.snapshot_fingerprint.is_none());
+        assert!(snapshot.cache.frame.is_some());
+        assert!(!snapshot.cache.entries.is_empty());
     }
     #[test]
     fn rle_snapshot_matches_dense_opacity_blits_and_saves_uniform_margins() {

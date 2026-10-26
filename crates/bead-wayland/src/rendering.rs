@@ -470,10 +470,14 @@ impl App {
         #[cfg(feature = "native-gl")]
         if self.options.companion.as_ref().map(|(_, kind)| *kind) == Some(RendererKind::FemtovgGl) {
             self.release_companion_gpu_resources()?;
-            if let Some((_, renderer, kind)) = &mut self.companion {
+            if let Some((scene, renderer, kind)) = &mut self.companion {
                 *renderer = Box::new(snapshot);
                 *kind = RendererKind::Cpu;
                 self.panel_cpu_cached = true;
+                // The CPU renderer retains a flattened first-frame snapshot.
+                // Do not keep the accepted worker-prepared raster frame alive
+                // through the companion scene after the snapshot is adopted.
+                scene.prepared.clear();
             }
             for surface in self.surfaces.iter_mut().filter(|s| s.companion) {
                 // Replace the transparent GL buffer too: otherwise the compositor
