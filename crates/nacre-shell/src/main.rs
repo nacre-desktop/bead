@@ -866,7 +866,11 @@ fn start(
                 views.insert(name.into(), spec);
             }
         }
-        for page in dashboard::Page::every() {
+        for page in dashboard::Page::ALL
+            .into_iter()
+            .chain(dashboard::Page::EXTRAS)
+            .chain([dashboard::Page::Clipboard])
+        {
             views.insert(
                 format!("dashboard-{}", page.name()),
                 dashboard::spec(
