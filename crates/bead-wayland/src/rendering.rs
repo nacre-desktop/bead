@@ -1488,8 +1488,9 @@ impl App {
                         .panel_runtime
                         .as_ref()
                         .is_some_and(|source| source.surrounding_text().is_some());
-                let keyboard_focus =
-                    text_focus || !s.companion || spec.is_some_and(|spec| spec.keyboard_focus && !spec.text_focus_only);
+                let keyboard_focus = text_focus
+                    || !s.companion
+                    || spec.is_some_and(|spec| spec.keyboard_focus && !spec.text_focus_only);
                 let visible = scene.opacity > 0.001
                     && if s.companion && self.options.panel_spec.is_some() {
                         self.panel_target
