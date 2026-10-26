@@ -1482,6 +1482,155 @@ fn bar_press_prepares_the_exact_drag_source_without_starting_the_gesture() {
 }
 
 #[test]
+fn bar_drag_threshold_offers_ghost_before_root_reflow_commit() {
+    let dir = std::env::temp_dir().join(format!(
+        "widget-drag-threshold-offer-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("widgets.json");
+    let mut runtime = real_bar_runtime(file.clone());
+    let canonical = runtime
+        .session
+        .stores
+        .get("widgets.layout")
+        .cloned()
+        .expect("bar has canonical widget layout");
+    let draft = runtime
+        .session
+        .stores
+        .get("widgets.draft")
+        .cloned()
+        .expect("bar has draft state");
+    let source = runtime
+        .session
+        .view_nodes()
+        .into_iter()
+        .find(|node| {
+            node.drag_action.as_deref() == Some("widgets.drag") && node.id.contains("clock")
+        })
+        .expect("the real bar exposes a draggable clock inside its status pill");
+    let bounds = bead::ui::rect(&source.draw);
+    let (x, y) = (bounds.x + bounds.w / 2., bounds.y + bounds.h / 2.);
+    let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sent = events.clone();
+    runtime.wakeup = Some(std::sync::Arc::new(move |event| {
+        sent.lock().unwrap().push(event);
+    }));
+    if runtime.stage(UiEvent::Click { x, y }).unwrap().is_some() {
+        runtime.commit();
+    }
+    events.lock().unwrap().clear();
+
+    assert!(runtime.stage(UiEvent::Drag { x: x + 8., y }).unwrap().is_some());
+    assert!(runtime.pending.is_some(), "root bar reflow remains pending");
+    let events = events.lock().unwrap();
+    let offer = events
+        .iter()
+        .find_map(|event| match event {
+            UiEvent::CanvasOffer {
+                view,
+                output,
+                open: true,
+                values,
+            } if view == "widgets-drag" => Some((output, values)),
+            _ => None,
+        })
+        .expect("threshold immediately offers the passive ghost");
+    assert_eq!(offer.0.as_deref(), Some("right"));
+    assert_eq!(
+        offer.1.get("widgets.drag.phase"),
+        Some(&Value::Text("dragging".into()))
+    );
+    assert!(matches!(offer.1.get("widgets.drag.layout"),Some(Value::List(rows)) if !rows.is_empty()));
+    assert_eq!(offer.1.get("widgets.layout"), Some(&canonical));
+    assert_eq!(offer.1.get("widgets.draft"), Some(&draft));
+    assert!(
+        !events.iter().any(|event| matches!(event,
+            UiEvent::CanvasOffer { view, .. } | UiEvent::CanvasModel { view, .. }
+                if view == "widgets-canvas")),
+        "the early path publishes only the passive ghost; canonical canvas reflow stays on its existing commit path"
+    );
+    assert!(
+        matches!(runtime.widget_drag_model.as_ref().and_then(|model| model.get("widgets.write")),
+            Some(Value::List(rows)) if rows.is_empty()),
+        "threshold preview never writes or persists the candidate layout"
+    );
+    assert!(!file.exists(), "drag motion does not create the layout file");
+    assert_eq!(runtime.session.stores.get("widgets.layout"), Some(&canonical));
+    drop(events);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn rejected_threshold_transaction_returns_and_retires_ghost() {
+    let dir = std::env::temp_dir().join(format!(
+        "widget-drag-threshold-reject-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("widgets.json");
+    let mut runtime = real_bar_runtime(file.clone());
+    let source = runtime
+        .session
+        .view_nodes()
+        .into_iter()
+        .find(|node| {
+            node.drag_action.as_deref() == Some("widgets.drag") && node.id.contains("clock")
+        })
+        .expect("the real bar exposes a draggable clock inside its status pill");
+    let bounds = bead::ui::rect(&source.draw);
+    let (x, y) = (bounds.x + bounds.w / 2., bounds.y + bounds.h / 2.);
+    let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sent = events.clone();
+    runtime.wakeup = Some(std::sync::Arc::new(move |event| {
+        sent.lock().unwrap().push(event);
+    }));
+    if runtime.stage(UiEvent::Click { x, y }).unwrap().is_some() {
+        runtime.commit();
+    }
+    events.lock().unwrap().clear();
+
+    let declared = runtime.session.stores.values().clone();
+    let mut invalid = declared.clone();
+    invalid.insert("widgets.drag.layout".into(), Value::Text("wrong type".into()));
+    runtime.session.stores = bead::core::Stores::default().reconcile(&invalid).unwrap();
+    let _ = runtime.stage(UiEvent::Drag { x: x + 8., y }).unwrap();
+    let token = runtime.widget_drag_epoch;
+    {
+        let events = events.lock().unwrap();
+        assert!(events.iter().any(|event| matches!(event,
+            UiEvent::CanvasOffer { view, open: true, values, .. }
+                if view == "widgets-drag"
+                    && values.get("widgets.drag.phase")==Some(&Value::Text("dragging".into())))),
+            "the threshold starts a speculative ghost before root preflight"
+        );
+        assert!(events.iter().any(|event| matches!(event,
+            UiEvent::CanvasModel { view, values, .. }
+                if view == "widgets-drag"
+                    && values.get("widgets.drag.phase")==Some(&Value::Text("return".into())))),
+            "rejected root preflight returns the speculative ghost"
+        );
+    }
+
+    runtime.session.stores = bead::core::Stores::default().reconcile(&declared).unwrap();
+    let _ = runtime.stage(UiEvent::Timer { token }).unwrap();
+    if runtime.pending.is_some() {
+        runtime.commit();
+    }
+    assert!(
+        events.lock().unwrap().iter().any(|event| matches!(event,
+            UiEvent::CanvasOffer { view, open: false, .. } if view == "widgets-drag")),
+        "the rejected candidate's returned ghost is eventually retired"
+    );
+    assert!(!file.exists(), "rejected drag does not persist layout");
+    drop(events);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn canvas_press_prepares_the_configured_bar_destination_with_global_origin() {
     let mut runtime = real_widget_canvas_publisher();
     let layout = canvas_transfer_document();

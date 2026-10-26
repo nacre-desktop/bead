@@ -1086,6 +1086,68 @@ impl Runtime {
         );
         values
     }
+    fn widget_drag_projection(
+        &self,
+        model: &BTreeMap<String, bead::core::Value>,
+    ) -> BTreeMap<String, bead::core::Value> {
+        let mut projection = self.widget_drag_preview_values();
+        for (key, value) in model {
+            if key.starts_with("widgets.drag.") && projection.contains_key(key.as_str()) {
+                projection.insert(key.clone(), value.clone());
+            }
+        }
+        projection
+    }
+    fn publish_widget_drag_projection(
+        &mut self,
+        drag_values: BTreeMap<String, bead::core::Value>,
+    ) {
+        let active = drag_values.get("widgets.drag.active")
+            == Some(&bead::core::Value::Bool(true));
+        let output = drag_values
+            .get("widgets.drag.target_output_id")
+            .and_then(|value| {
+                if let bead::core::Value::Text(name) = value {
+                    (!name.is_empty()).then(|| name.clone())
+                } else {
+                    None
+                }
+            })
+            .or_else(|| self.output.clone());
+        if let Some(wakeup) = &self.wakeup {
+            if self.widget_drag_wanted && (!active || self.widget_drag_output != output) {
+                wakeup(UiEvent::CanvasOffer {
+                    view: "widgets-drag".into(),
+                    output: self.widget_drag_output.clone(),
+                    open: false,
+                    values: drag_values.clone(),
+                });
+                self.widget_drag_wanted = false;
+                self.widget_drag_output = None;
+                self.widget_drag_projection = None;
+            }
+            if active && (!self.widget_drag_wanted || self.widget_drag_output != output) {
+                wakeup(UiEvent::CanvasOffer {
+                    view: "widgets-drag".into(),
+                    output: output.clone(),
+                    open: true,
+                    values: drag_values.clone(),
+                });
+                self.widget_drag_wanted = true;
+                self.widget_drag_output = output.clone();
+                self.widget_drag_projection = Some(drag_values.clone());
+            }
+            if self.widget_drag_wanted && self.widget_drag_projection.as_ref() != Some(&drag_values)
+            {
+                self.widget_drag_projection = Some(drag_values.clone());
+                wakeup(UiEvent::CanvasModel {
+                    view: "widgets-drag".into(),
+                    output: self.widget_drag_output.clone(),
+                    values: drag_values,
+                });
+            }
+        }
+    }
     fn prepare_widget_drag_preview(&self, x: f32, y: f32) {
         if self.widget_app || !(self.bar || self.widget_canvas) {
             return;
@@ -1575,12 +1637,7 @@ impl Runtime {
                 canvas_values.insert(key.clone(), value.clone());
             }
         }
-        let mut drag_values = self.widget_drag_preview_values();
-        for (key, value) in &values {
-            if key.starts_with("widgets.drag.") && drag_values.contains_key(key.as_str()) {
-                drag_values.insert(key.clone(), value.clone());
-            }
-        }
+        let drag_values = self.widget_drag_projection(&values);
         if self.bar || self.widget_canvas {
             let active = values.get("widgets.drag.active") == Some(&bead::core::Value::Bool(true));
             let previewing = active
@@ -1652,50 +1709,7 @@ impl Runtime {
                 self.widget_canvas_projection = None;
             }
         }
-        let active = values.get("widgets.drag.active") == Some(&bead::core::Value::Bool(true));
-        let output = values
-            .get("widgets.drag.target_output_id")
-            .and_then(|value| {
-                if let bead::core::Value::Text(name) = value {
-                    (!name.is_empty()).then(|| name.clone())
-                } else {
-                    None
-                }
-            })
-            .or_else(|| self.output.clone());
-        if let Some(wakeup) = &self.wakeup {
-            if self.widget_drag_wanted && (!active || self.widget_drag_output != output) {
-                wakeup(UiEvent::CanvasOffer {
-                    view: "widgets-drag".into(),
-                    output: self.widget_drag_output.clone(),
-                    open: false,
-                    values: drag_values.clone(),
-                });
-                self.widget_drag_wanted = false;
-                self.widget_drag_output = None;
-                self.widget_drag_projection = None;
-            }
-            if active && (!self.widget_drag_wanted || self.widget_drag_output != output) {
-                wakeup(UiEvent::CanvasOffer {
-                    view: "widgets-drag".into(),
-                    output: output.clone(),
-                    open: true,
-                    values: drag_values.clone(),
-                });
-                self.widget_drag_wanted = true;
-                self.widget_drag_output = output.clone();
-                self.widget_drag_projection = Some(drag_values.clone());
-            }
-            if self.widget_drag_wanted && self.widget_drag_projection.as_ref() != Some(&drag_values)
-            {
-                self.widget_drag_projection = Some(drag_values.clone());
-                wakeup(UiEvent::CanvasModel {
-                    view: "widgets-drag".into(),
-                    output: self.widget_drag_output.clone(),
-                    values: drag_values,
-                });
-            }
-        }
+        self.publish_widget_drag_projection(drag_values);
     }
     fn retire_widget_drag_after_feedback(&mut self) {
         self.widget_drag_epoch = self.widget_drag_epoch.wrapping_add(1).max(1u64 << 63);
@@ -5315,6 +5329,20 @@ impl SceneSource for Runtime {
                     controller.drag(argument)?
                 };
                 let missing_preview = self.session.stores.get("widgets.drag.layout").is_none();
+                let dragging = values.get("widgets.drag.active")
+                    == Some(&bead::core::Value::Bool(true))
+                    && matches!(values.get("widgets.drag.phase"),
+                        Some(bead::core::Value::Text(phase)) if phase == "dragging");
+                let was_dragging = self.widget_drag_model.as_ref().is_some_and(|model| {
+                    model.get("widgets.drag.active") == Some(&bead::core::Value::Bool(true))
+                        && matches!(model.get("widgets.drag.phase"),
+                            Some(bead::core::Value::Text(phase)) if phase == "dragging")
+                });
+                let entered_dragging = dragging && !was_dragging;
+                if entered_dragging && !missing_preview {
+                    let projection = self.widget_drag_projection(&values);
+                    self.publish_widget_drag_projection(projection);
+                }
                 let preflight: Result<Option<Scene>, Box<dyn Error>> =
                     if missing_preview && values.contains_key("widgets.drag.layout") {
                         Err(Box::new(std::io::Error::other(
@@ -5348,6 +5376,15 @@ impl SceneSource for Runtime {
                             bead::core::Value::Text(error_text.clone()),
                         );
                         self.widget_drag_model = Some(rollback.clone());
+                        if self.widget_drag_wanted {
+                            let projection = self.widget_drag_projection(&rollback);
+                            self.publish_widget_drag_projection(projection);
+                        }
+                        if matches!(rollback.get("widgets.drag.phase"),
+                            Some(bead::core::Value::Text(phase)) if phase == "settle" || phase == "return")
+                        {
+                            self.retire_widget_drag_after_feedback();
+                        }
                         let staged = self.stage_widget_drag_values(&rollback);
                         let restored = self.session.update(staged).ok().flatten();
                         if let Some((pid, generation, epoch)) = feedback_target {
@@ -7640,9 +7677,14 @@ impl SceneSource for Runtime {
                         self.widget_drag_model = Some(values.clone());
                         self.widget_drag_retire_cleanup = true;
                         let staged = self.stage_widget_drag_state(&values);
-                        self.session
+                        let scene = self.session
                             .update(staged)
-                            .map_err(|error| -> Box<dyn Error> { Box::new(error) })?
+                            .map_err(|error| -> Box<dyn Error> { Box::new(error) })?;
+                        if scene.is_none() {
+                            let projection = self.widget_drag_projection(&values);
+                            self.publish_widget_drag_projection(projection);
+                        }
+                        scene
                     } else {
                         None
                     }
