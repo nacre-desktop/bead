@@ -691,6 +691,15 @@ pub struct Runtime {
     state_file: Option<crate::state::File>,
     actions: bead::core::capabilities::Registry,
     wakeup: Option<std::sync::Arc<dyn Fn(UiEvent) + Send + Sync>>,
+    smooth_open_started: Option<std::time::Instant>,
+    smooth_key_starts: std::collections::VecDeque<std::time::Instant>,
+    smooth_scroll_started: Option<std::time::Instant>,
+    smooth_scroll_last: Option<std::time::Instant>,
+    smooth_scroll_dropped: u64,
+    smooth_scroll_reported: Option<std::time::Instant>,
+    smooth_animation_dropped: Option<u64>,
+    smooth_last_presented: Option<std::time::Instant>,
+    smooth_frame_interval: std::time::Duration,
 }
 #[derive(Clone)]
 struct DashboardPearlAnimation {
@@ -732,6 +741,24 @@ impl Drop for Runtime {
     }
 }
 impl Runtime {
+    fn smooth_surface(&self) -> &'static str {
+        if self.launcher.is_some() {
+            "launcher"
+        } else if self.settings.is_some() {
+            "settings"
+        } else if self.dashboard.is_some() || self.pending_dashboard.is_some() {
+            "dashboard"
+        } else if self.control.is_some() {
+            "control"
+        } else if self.chat.is_some() {
+            "ai"
+        } else if self.bar {
+            "bar"
+        } else {
+            "panel"
+        }
+    }
+
     /// Compile and decorate the first app frame before its window is mapped.
     pub(crate) fn warm_frame(&mut self) -> Result<Scene, Box<dyn Error>> {
         let scene = self.session.reload()?;
@@ -2337,6 +2364,15 @@ impl Runtime {
             state_file,
             actions: Default::default(),
             wakeup: None,
+            smooth_open_started: None,
+            smooth_key_starts: std::collections::VecDeque::new(),
+            smooth_scroll_started: None,
+            smooth_scroll_last: None,
+            smooth_scroll_dropped: 0,
+            smooth_scroll_reported: None,
+            smooth_animation_dropped: None,
+            smooth_last_presented: None,
+            smooth_frame_interval: std::time::Duration::from_millis(16),
         }
     }
     pub fn with_connection_status(
@@ -4468,6 +4504,7 @@ impl SceneSource for Runtime {
 
     fn frame_interval(&mut self, interval: std::time::Duration) {
         self.session.set_frame_interval(interval);
+        self.smooth_frame_interval = interval.max(std::time::Duration::from_millis(1));
     }
 
     fn initial_model(
@@ -5047,6 +5084,29 @@ impl SceneSource for Runtime {
         self.session.watch(wakeup)
     }
     fn stage(&mut self, mut event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+        let now = std::time::Instant::now();
+        match &event {
+            UiEvent::PanelVisibility(true) if self.smooth_open_started.is_none() => {
+                self.smooth_open_started = Some(now);
+            }
+            UiEvent::Key { .. } if self.launcher.is_some() => {
+                if self.smooth_key_starts.len() == 32 {
+                    self.smooth_key_starts.pop_front();
+                }
+                self.smooth_key_starts.push_back(now);
+            }
+            UiEvent::Scroll { .. } => {
+                if self.smooth_scroll_last.is_none_or(|last| {
+                    now.duration_since(last) > std::time::Duration::from_millis(120)
+                }) {
+                    self.smooth_scroll_started = Some(now);
+                    self.smooth_scroll_dropped = 0;
+                    self.smooth_scroll_reported = None;
+                }
+                self.smooth_scroll_last = Some(now);
+            }
+            _ => {}
+        }
         self.host_release_pending = false;
         // Service completion stays live even when the view keeps its accepted layout.
         if matches!(&event, UiEvent::LocalDrag { .. } | UiEvent::Model(_))
@@ -8472,6 +8532,49 @@ impl SceneSource for Runtime {
                 .is_some_and(|(_, name, _)| name == "close")
     }
     fn presented(&mut self, revision: u64) {
+        let now = std::time::Instant::now();
+        let name = self.smooth_surface();
+        if let Some(started) = self.smooth_open_started.take() {
+            eprintln!(
+                "PANEL_OPEN_LATENCY name={name} ms_to_first_content_frame={:.3}",
+                now.duration_since(started).as_secs_f64() * 1000.
+            );
+        }
+        while let Some(started) = self.smooth_key_starts.pop_front() {
+            eprintln!(
+                "INPUT_ECHO_LATENCY surface=launcher ms={:.3}",
+                now.duration_since(started).as_secs_f64() * 1000.
+            );
+        }
+        let missed = self
+            .smooth_last_presented
+            .map(|last| {
+                let frames = now.duration_since(last).as_nanos()
+                    / self.smooth_frame_interval.as_nanos().max(1);
+                frames.saturating_sub(1) as u64
+            })
+            .unwrap_or_default();
+        let animation_active = self.session.preview_deadline().is_some();
+        if animation_active {
+            *self.smooth_animation_dropped.get_or_insert(0) += missed;
+        } else if let Some(dropped) = self.smooth_animation_dropped.take() {
+            eprintln!("FRAME_JANK surface={name} dropped={}", dropped + missed);
+        }
+        if self.smooth_scroll_started.is_some() {
+            self.smooth_scroll_dropped += missed;
+            if self
+                .smooth_scroll_reported
+                .is_none_or(|last| now.duration_since(last) >= std::time::Duration::from_millis(80))
+            {
+                eprintln!(
+                    "SCROLL_JANK surface={name} dropped={}",
+                    self.smooth_scroll_dropped
+                );
+                self.smooth_scroll_reported = Some(now);
+                self.smooth_scroll_dropped = 0;
+            }
+        }
+        self.smooth_last_presented = Some(now);
         if let Some(warmer) = &mut self.icon_warmer {
             warmer.start();
         }
