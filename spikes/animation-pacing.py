@@ -8,9 +8,10 @@ so the client-side protocol trace gives, for QML and Bead alike, each wl_surface
 frame callback and (Bead only) wp_presentation `presented` stamp. Bead additionally logs one
 `UI_FRAME ... render_ms=` line per rendered frame (BEAD_FRAME_TRACE=1): its per-frame CPU/GL time.
 
-Per animation window: commit-interval p50/p95/p99, dropped frames (interval > 1.5 vsync, counted as
-missed vsyncs), longest gap, first-frame latency (trigger -> first commit; includes the IPC hop) and
-Bead render_ms p50/p99. Gaps longer than 250 ms are idle, not drops.
+Per animation window: commit-interval p50/p95/p99, legacy commit dropped-frame estimates, longest
+gap, first-frame latency (trigger -> first commit; includes the IPC hop) and Bead render_ms p50/p99.
+Legacy commit metrics filter intervals longer than 250 ms; presented cadence retains every gap and
+labels missed-vsync counts as upper bounds when edge-clamp/idle spans cannot be excluded.
 
   animation-pacing.py report label=DIR[:ARM] ...   comparison table (medians over repeats, zero-drop windows included)
   animation-pacing.py rescore DIR ARM               recompute an earlier run's commit metrics from its shell.log
