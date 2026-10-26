@@ -727,7 +727,7 @@ impl App {
         win.drawn += 1;
         if bead_core::profile::frame_trace() {
             println!(
-                "WINDOW_FRAME monotonic_ns={} epoch={} update={} generation={} frame={} render_ms={:.3} damage={},{},{},{}",
+                "WINDOW_FRAME monotonic_ns={} epoch={} update={} generation={} frame={} render_ms={:.3} damage={},{},{},{} slot={slot} repair={},{},{},{}",
                 super::monotonic_ns(),
                 win.epoch,
                 win.ui_serial,
@@ -737,7 +737,11 @@ impl App {
                 surface_damage.x,
                 surface_damage.y,
                 surface_damage.w,
-                surface_damage.h
+                surface_damage.h,
+                damage.x,
+                damage.y,
+                damage.w,
+                damage.h
             );
             println!(
                 "WINDOW_COMMIT monotonic_ns={} epoch={} update={} generation={} frame={}",

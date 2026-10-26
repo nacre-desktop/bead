@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <math.h>
+#include <errno.h>
 #include <linux/input-event-codes.h>
 #include <wayland-client.h>
 #include "wlr-vp.h"
@@ -52,6 +53,16 @@ static void trace_motion(unsigned x, unsigned y) {
     fprintf(stdout, "POINTER_SENT monotonic_ns=%llu x=%u y=%u\n",
             (unsigned long long)now.tv_sec * 1000000000ULL + now.tv_nsec, x, y);
     fflush(stdout);
+}
+
+static int flush_stream_event(struct wl_display *display, unsigned index) {
+    if (wl_display_flush(display) >= 0) return 0;
+    int error = errno;
+    if (!error) error = wl_display_get_error(display);
+    if (!error) error = EIO;
+    fprintf(stderr, "stream flush failed at event %u: %s%s\n", index,
+            strerror(error), error == EAGAIN ? " (Wayland socket backpressure)" : "");
+    return 1;
 }
 
 int main(int argc, char **argv) {
@@ -89,19 +100,21 @@ int main(int argc, char **argv) {
             clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &deadline, NULL);
             double event_delta = reverse && i >= count / 2 ? -delta :
                                  oscillate && (i / period) % 2 ? -delta : delta;
-            struct timespec sent;
-            clock_gettime(CLOCK_MONOTONIC, &sent);
-            fprintf(stdout, "AXIS_SENT monotonic_ns=%llu source=%s direction=%s index=%u delta=%.3f\n",
-                    (unsigned long long)sent.tv_sec * 1000000000ULL + sent.tv_nsec,
-                    wheel ? "wheel" : "finger", event_delta < 0 ? "up" : "down", i, event_delta);
-            fflush(stdout);
             zwlr_virtual_pointer_v1_axis_source(pointer, wheel ? WL_POINTER_AXIS_SOURCE_WHEEL : WL_POINTER_AXIS_SOURCE_FINGER);
             if (wheel)
                 zwlr_virtual_pointer_v1_axis_discrete(pointer, now_ms(), WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_double(event_delta * 15), (int)event_delta);
             else
                 zwlr_virtual_pointer_v1_axis(pointer, now_ms(), WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_double(event_delta));
             zwlr_virtual_pointer_v1_frame(pointer);
-            wl_display_roundtrip(display);
+            // Deadlines govern injection cadence; flush queues immediately without
+            // waiting for a compositor roundtrip on every sample.
+            if (flush_stream_event(display, i)) return 1;
+            struct timespec sent;
+            clock_gettime(CLOCK_MONOTONIC, &sent);
+            fprintf(stdout, "AXIS_SENT monotonic_ns=%llu source=%s direction=%s index=%u delta=%.3f\n",
+                    (unsigned long long)sent.tv_sec * 1000000000ULL + sent.tv_nsec,
+                    wheel ? "wheel" : "finger", event_delta < 0 ? "up" : "down", i, event_delta);
+            fflush(stdout);
         }
         if (!wheel) {  // a finger lifting ends the gesture, which is what starts a fling
             struct timespec stopped;
