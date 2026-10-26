@@ -1237,11 +1237,51 @@ impl TreeCache {
                     .get(&slot)
                     .is_none_or(|entry| entry.raster.key != key)
                 {
+                    let previous_frame_item = self
+                        .frame
+                        .as_ref()
+                        .filter(|frame| frame.scale == scale)
+                        .and_then(|frame| frame.items.get(index))
+                        .filter(|item| {
+                            let before = rect(&item.primitive);
+                            let after = rect(primitive);
+                            before.x == after.x && before.y == after.y
+                        })
+                        .map(|item| (item.id.clone(), item.raster.clone()));
+                    let previous_frame_slot = previous_frame_item
+                        .as_ref()
+                        .map(|(id, _)| (id.clone(), scale.to_bits()));
+                    let previous_frame_raster = previous_frame_item
+                        .as_ref()
+                        .and_then(|(_, raster)| raster.clone());
+                    let previous_raster = previous_frame_raster
+                        .clone()
+                        .or_else(|| self.entries.get(&slot).map(|entry| entry.raster.clone()));
+                    let cached_variant = (kind == "image")
+                        .then(|| {
+                            previous_frame_slot
+                                .as_ref()
+                                .and_then(|previous_slot| self.entries.get(previous_slot))
+                                .and_then(|entry| {
+                                    if entry.raster.key == key {
+                                        Some(entry.raster.clone())
+                                    } else {
+                                        entry
+                                            .previous
+                                            .as_ref()
+                                            .filter(|raster| raster.key == key)
+                                            .cloned()
+                                    }
+                                })
+                        })
+                        .flatten();
                     let started = std::time::Instant::now();
                     let existing = fresh_rasters.get(&key).cloned();
-                    let reused = existing.is_some();
+                    let reused = existing.is_some() || cached_variant.is_some();
                     let (pixels, origin) = if let Some(raster) = existing {
                         raster
+                    } else if let Some(raster) = cached_variant {
+                        (raster.pixels.clone(), raster.origin)
                     } else {
                         // A cache miss bakes one primitive, not the rest of its
                         // scene. Reuse its immutable context across missing rasters.
@@ -1277,24 +1317,15 @@ impl TreeCache {
                         fresh_rasters.insert(key, raster.clone());
                         raster
                     };
+                    fresh_rasters
+                        .entry(key)
+                        .or_insert_with(|| (pixels.clone(), origin));
                     // Prefer the last ordered paint slot: a replacement row can
                     // have a new state ID while most of its raster is unchanged.
                     // The presenter uses this delta only when its exact previous
                     // raster key, geometry, clip and opacity match.
-                    let previous = self
-                        .frame
-                        .as_ref()
-                        .filter(|frame| frame.scale == scale)
-                        .and_then(|frame| frame.items.get(index))
-                        .filter(|item| {
-                            let before = rect(&item.primitive);
-                            let after = rect(primitive);
-                            before.x == after.x && before.y == after.y
-                        })
-                        .and_then(|item| item.raster.as_deref())
-                        .or_else(|| self.entries.get(&slot).map(|old| old.raster.as_ref()));
-                    let base_key = previous.map(|old| old.key);
-                    let changed = previous.map_or_else(
+                    let base_key = previous_raster.as_deref().map(|old| old.key);
+                    let changed = previous_raster.as_deref().map_or_else(
                         || Damage::full(pixels.width(), pixels.height()),
                         |old| pixel_difference(&old.pixels, &pixels),
                     );
@@ -1342,7 +1373,10 @@ impl TreeCache {
                         changed,
                     });
                     let previous = if kind == "image" {
-                        self.entries.remove(&slot).map(|entry| entry.raster)
+                        self.entries
+                            .remove(&slot)
+                            .map(|entry| entry.raster)
+                            .or(previous_frame_raster)
                     } else {
                         self.entries.remove(&slot);
                         None
@@ -1512,8 +1546,9 @@ impl TreeCache {
             .sum::<usize>()
             + layers.capacity() * std::mem::size_of::<LayerPose>();
         validate_frame_rasters(&items)?;
-        // Keep offscreen rows for scrolling, but cap cache residency and entry count
-        // before replacing the last successfully prepared frame.
+        // Validate the complete candidate while the previous frame remains
+        // available. Old entries may be needed for the current paint and are
+        // retired only after every fallible prepare step succeeds.
         loop {
             let retained_bytes = self
                 .entries
@@ -1553,7 +1588,7 @@ impl TreeCache {
                 })
                 .reserve(bytes)?,
         );
-        self.frame = Some(Arc::new(Frame {
+        let frame = Arc::new(Frame {
             _accounting: accounting,
             items,
             scale,
@@ -1564,7 +1599,18 @@ impl TreeCache {
                 scene.layers.len()
             },
             layers,
-        }));
+        });
+        self.frame = Some(frame);
+        // A scroll source already materializes its visible rows and a small
+        // neighbour window. Keeping every previously visited row here defeats
+        // that bound: raster and node identities survive until the much larger
+        // byte/entry LRU limits are reached. Keep the current frame's entries,
+        // including its one exact prior image extent, and release stale rows.
+        let scale_bits = scale.to_bits();
+        self.entries
+            .retain(|(_, bits), entry| *bits != scale_bits || entry.touched == self.serial);
+        self.nodes
+            .retain(|(_, bits), (_, touched)| *bits != scale_bits || *touched == self.serial);
         Ok(())
     }
 }
@@ -3609,8 +3655,10 @@ mod tests {
     #[test]
     fn entry_cap_failure_keeps_the_previous_frame() {
         let mut cache = TreeCache::default();
-        cache.prepare(&scene(), 1.).unwrap();
+        let previous_scene = scene();
+        cache.prepare(&previous_scene, 1.).unwrap();
         let previous = cache.frame.as_ref().unwrap().clone();
+        let previous_pixels = frame_pixels(&previous, &previous_scene, 1.);
 
         let mut replacement = scene();
         let Primitive::Image { rect, .. } = &replacement.primitives[0] else {
@@ -3644,6 +3692,11 @@ mod tests {
 
         assert!(cache.prepare(&replacement, 1.).is_err());
         assert!(Arc::ptr_eq(cache.frame.as_ref().unwrap(), &previous));
+        assert_eq!(
+            frame_pixels(cache.frame.as_ref().unwrap(), &previous_scene, 1.),
+            previous_pixels,
+            "failed replacement keeps the last accepted pixels"
+        );
     }
     #[test]
     fn oversized_imported_replacement_keeps_previous_frame() {
@@ -3947,6 +4000,31 @@ mod tests {
             .sum()
     }
 
+    fn frame_raster_charge(frame: &Frame) -> usize {
+        frame
+            .items
+            .iter()
+            .filter_map(|item| item.raster.as_ref())
+            .map(|raster| raster._charge.bytes())
+            .sum()
+    }
+
+    fn cache_frame_raster_charge(cache: &TreeCache, frame: &Frame) -> usize {
+        let mut seen = std::collections::BTreeSet::new();
+        let mut bytes = 0;
+        for raster in cache
+            .entries
+            .values()
+            .flat_map(|entry| std::iter::once(&entry.raster).chain(entry.previous.iter()))
+            .chain(frame.items.iter().filter_map(|item| item.raster.as_ref()))
+        {
+            if seen.insert(Arc::as_ptr(raster) as usize) {
+                bytes += raster._charge.bytes();
+            }
+        }
+        bytes
+    }
+
     fn frame_pixels(frame: &Frame, scene: &Scene, scale: f32) -> Vec<u8> {
         let width = (scene.bounds.w * scale).ceil() as u32;
         let height = (scene.bounds.h * scale).ceil() as u32;
@@ -3967,72 +4045,217 @@ mod tests {
         bytes
     }
 
+    fn scrolling_wallpaper_window(total: usize, first: usize) -> Scene {
+        let mut scene = scene();
+        scene.width = 32.;
+        scene.bounds = Rect::new(0., 0., 32., 24.);
+        scene.primitives.clear();
+        scene.clips.clear();
+        scene.layers.clear();
+        scene.prepared.clear();
+        for row in first..(first + 3).min(total) {
+            let index = scene.primitives.len();
+            let y = (row - first) as f32 * 8.;
+            scene.primitives.push(Primitive::Image {
+                blur: 0.,
+                fit: crate::ImageFit::Fill,
+                clip_polygon: None,
+                rect: Rect::new(2., y, 12., 6.),
+                path: "proof.png".into(),
+            });
+            scene.clips.insert(index, Rect::new(0., 0., 32., 24.));
+            scene.layers.push(crate::SceneLayer {
+                id: format!("wallpaper-{row}"),
+                parent: None,
+                own: index..index + 1,
+                subtree_end: index + 1,
+                bounds: Rect::new(0., y, 24., 8.),
+            });
+        }
+        scene
+    }
+
+    #[test]
+    fn scrolling_retention_tracks_only_the_accepted_visible_window_and_reverses_pixels() {
+        for scale in [1., 1.5] {
+            for total in [80, 800] {
+                let mut cache = TreeCache::default();
+                let mut windows: Vec<_> = (0..total).step_by(3).collect();
+                let mut reverse: Vec<_> = windows.iter().rev().skip(1).copied().collect();
+                windows.append(&mut reverse);
+                for first in windows {
+                    let scene = scrolling_wallpaper_window(total, first);
+                    let previous = cache.frame.clone();
+                    cache.prepare(&scene, scale).unwrap();
+                    let frame = cache.frame.as_ref().unwrap();
+                    let raster_count = frame
+                        .items
+                        .iter()
+                        .filter(|item| item.raster.is_some())
+                        .count();
+                    assert_eq!(raster_count, scene.primitives.len());
+                    assert_eq!(cache.entries.len(), raster_count);
+                    assert_eq!(cache.nodes.len(), scene.layers.len());
+                    assert!(cache.entries.keys().all(|(id, bits)| {
+                        *bits == scale.to_bits()
+                            && scene.layers.iter().any(|layer| id.starts_with(&layer.id))
+                    }));
+                    if let Some(previous) = previous {
+                        let current_frame_charge = frame._accounting.as_ref().unwrap().bytes();
+                        let previous_frame_charge = previous._accounting.as_ref().unwrap().bytes();
+                        let current_node_charge: usize = cache
+                            .nodes
+                            .values()
+                            .map(|(layer, _)| layer._charge.bytes())
+                            .sum();
+                        let previous_node_charge: usize = previous
+                            .layers
+                            .iter()
+                            .map(|pose| pose.layer._charge.bytes())
+                            .sum();
+                        assert_eq!(
+                            cache.raster_budget.as_ref().unwrap().used(),
+                            cache_frame_raster_charge(&cache, &previous),
+                            "external prior frame charges remain accounted until released"
+                        );
+                        assert_eq!(
+                            cache.frame_budget.as_ref().unwrap().used(),
+                            current_frame_charge + previous_frame_charge
+                        );
+                        assert_eq!(
+                            cache.node_budget.as_ref().unwrap().used(),
+                            current_node_charge + previous_node_charge
+                        );
+                        drop(previous);
+                        let current = cache.frame.as_ref().unwrap();
+                        assert_eq!(
+                            cache.raster_budget.as_ref().unwrap().used(),
+                            cache_frame_raster_charge(&cache, current),
+                            "only current entries and image variants remain charged"
+                        );
+                        assert_eq!(
+                            cache.frame_budget.as_ref().unwrap().used(),
+                            current_frame_charge,
+                            "retiring the prior frame releases its frame metadata charge"
+                        );
+                        assert_eq!(
+                            cache.node_budget.as_ref().unwrap().used(),
+                            current_node_charge,
+                            "retiring the prior frame releases its retained node charges"
+                        );
+                    }
+
+                    let expected_scene = scrolling_wallpaper_window(total, first);
+                    let mut expected = TreeCache::default();
+                    expected.prepare(&expected_scene, scale).unwrap();
+                    assert_eq!(
+                        frame_pixels(frame, &scene, scale),
+                        frame_pixels(expected.frame.as_ref().unwrap(), &expected_scene, scale),
+                        "window first={first}, total={total}, scale={scale}"
+                    );
+                }
+                let previous = cache.frame.as_ref().unwrap().clone();
+                let previous_raster_charge = frame_raster_charge(&previous);
+                let previous_frame_charge = previous._accounting.as_ref().unwrap().bytes();
+                let previous_node_charge: usize = previous
+                    .layers
+                    .iter()
+                    .map(|pose| pose.layer._charge.bytes())
+                    .sum();
+                let empty = scrolling_wallpaper_window(total, total);
+                cache.prepare(&empty, scale).unwrap();
+                let current = cache.frame.as_ref().unwrap();
+                assert!(cache.entries.is_empty());
+                assert!(cache.nodes.is_empty());
+                assert_eq!(
+                    cache.raster_budget.as_ref().unwrap().used(),
+                    previous_raster_charge,
+                    "the external frame keeps its raster charges after lookup retirement"
+                );
+                assert_eq!(
+                    cache.frame_budget.as_ref().unwrap().used(),
+                    previous_frame_charge + current._accounting.as_ref().unwrap().bytes()
+                );
+                assert_eq!(
+                    cache.node_budget.as_ref().unwrap().used(),
+                    previous_node_charge
+                );
+                drop(previous);
+                assert_eq!(cache.raster_budget.as_ref().unwrap().used(), 0);
+                assert_eq!(cache.frame_budget.as_ref().unwrap().used(), 0);
+                assert_eq!(cache.node_budget.as_ref().unwrap().used(), 0);
+            }
+        }
+    }
+
     #[test]
     fn clipped_wallpaper_rows_keep_descriptions_but_rasterize_only_visible_image_and_text() {
         for scale in [1., 1.5] {
-            let mut scene = clipped_wallpaper_scene(80, 100.);
-            const { assert!(80 * 512 * 512 * 4 > STEADY_RASTER_LIMIT) };
-            let mut cache = TreeCache::default();
-            cache.prepare(&scene, scale).unwrap();
-            let hidden = cache.frame.as_ref().unwrap().clone();
-            assert_eq!(hidden.items.len(), 81);
-            assert_eq!(hidden.layers.len(), 1);
-            assert!(hidden.items.iter().all(|item| item.raster.is_none()));
-            assert_eq!(frame_raster_bytes(&hidden), 0);
+            for count in [80, 800] {
+                let mut scene = clipped_wallpaper_scene(count, 100.);
+                const { assert!(80 * 512 * 512 * 4 > STEADY_RASTER_LIMIT) };
+                let mut cache = TreeCache::default();
+                cache.prepare(&scene, scale).unwrap();
+                let hidden = cache.frame.as_ref().unwrap().clone();
+                assert_eq!(hidden.items.len(), count + 1);
+                assert_eq!(hidden.layers.len(), 1);
+                assert!(hidden.items.iter().all(|item| item.raster.is_none()));
+                assert_eq!(frame_raster_bytes(&hidden), 0);
 
-            // A supplied prepared frame from the old pose must not hide the
-            // raster when this row enters the clip.
-            scene.prepared.insert(scale.to_bits(), hidden.clone());
-            set_primitive_x(&mut scene.primitives[0], 2.);
-            set_primitive_x(&mut scene.primitives[80], 2.);
-            cache.prepare(&scene, scale).unwrap();
-            let visible = cache.frame.as_ref().unwrap().clone();
-            assert_eq!(visible.items.len(), 81);
-            assert_eq!(visible.layers.len(), 1);
-            assert!(visible.items[0].raster.is_some());
-            assert!(
-                visible.items[1..80]
-                    .iter()
-                    .all(|item| item.raster.is_none()),
-                "only the overscan row now inside the clip needs pixels"
-            );
-            assert!(visible.items[80].raster.is_some());
-            assert!(frame_raster_bytes(&visible) < 64 * bead_core::cache::MIB);
+                // A supplied prepared frame from the old pose must not hide the
+                // raster when this row enters the clip.
+                scene.prepared.insert(scale.to_bits(), hidden.clone());
+                set_primitive_x(&mut scene.primitives[0], 2.);
+                set_primitive_x(&mut scene.primitives[count], 2.);
+                cache.prepare(&scene, scale).unwrap();
+                let visible = cache.frame.as_ref().unwrap().clone();
+                assert_eq!(visible.items.len(), count + 1);
+                assert_eq!(visible.layers.len(), 1);
+                assert!(visible.items[0].raster.is_some());
+                assert!(
+                    visible.items[1..count]
+                        .iter()
+                        .all(|item| item.raster.is_none()),
+                    "only the overscan row now inside the clip needs pixels"
+                );
+                assert!(visible.items[count].raster.is_some());
+                assert!(frame_raster_bytes(&visible) < 64 * bead_core::cache::MIB);
 
-            let expected_scene = clipped_wallpaper_scene(1, 2.);
-            let mut expected_cache = TreeCache::default();
-            expected_cache.prepare(&expected_scene, scale).unwrap();
-            assert_eq!(
-                frame_pixels(&visible, &scene, scale),
-                frame_pixels(
-                    expected_cache.frame.as_ref().unwrap(),
-                    &expected_scene,
-                    scale
-                ),
-                "visible row pixels at scale {scale}"
-            );
+                let expected_scene = clipped_wallpaper_scene(1, 2.);
+                let mut expected_cache = TreeCache::default();
+                expected_cache.prepare(&expected_scene, scale).unwrap();
+                assert_eq!(
+                    frame_pixels(&visible, &scene, scale),
+                    frame_pixels(
+                        expected_cache.frame.as_ref().unwrap(),
+                        &expected_scene,
+                        scale
+                    ),
+                    "visible row pixels at scale {scale}"
+                );
 
-            // A stale prepared visible pose must not keep its raster attached
-            // after the row returns outside the persistent scroll clip.
-            scene.prepared.insert(scale.to_bits(), visible.clone());
-            set_primitive_x(&mut scene.primitives[0], 100.);
-            set_primitive_x(&mut scene.primitives[80], 100.);
-            cache.prepare(&scene, scale).unwrap();
-            let hidden_again = cache.frame.as_ref().unwrap();
-            assert_eq!(hidden_again.items.len(), 81);
-            assert_eq!(hidden_again.layers.len(), 1);
-            assert!(hidden_again.items.iter().all(|item| item.raster.is_none()));
-            assert_eq!(frame_raster_bytes(hidden_again), 0);
-            assert_eq!(
-                frame_pixels(hidden_again, &scene, scale),
-                vec![
-                    0;
-                    (scene.bounds.w * scale).ceil() as usize
-                        * (scene.bounds.h * scale).ceil() as usize
-                        * 4
-                ],
-                "hidden rows paint no pixels at scale {scale}"
-            );
+                // A stale prepared visible pose must not keep its raster attached
+                // after the row returns outside the persistent scroll clip.
+                scene.prepared.insert(scale.to_bits(), visible.clone());
+                set_primitive_x(&mut scene.primitives[0], 100.);
+                set_primitive_x(&mut scene.primitives[count], 100.);
+                cache.prepare(&scene, scale).unwrap();
+                let hidden_again = cache.frame.as_ref().unwrap();
+                assert_eq!(hidden_again.items.len(), count + 1);
+                assert_eq!(hidden_again.layers.len(), 1);
+                assert!(hidden_again.items.iter().all(|item| item.raster.is_none()));
+                assert_eq!(frame_raster_bytes(hidden_again), 0);
+                assert_eq!(
+                    frame_pixels(hidden_again, &scene, scale),
+                    vec![
+                        0;
+                        (scene.bounds.w * scale).ceil() as usize
+                            * (scene.bounds.h * scale).ceil() as usize
+                            * 4
+                    ],
+                    "hidden rows paint no pixels at scale {scale}"
+                );
+            }
         }
     }
 

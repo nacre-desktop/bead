@@ -442,6 +442,12 @@ impl GlRenderer {
         let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
         let canvas = self.canvas.as_mut().ok_or("GL canvas missing")?;
         self.serial += 1;
+        let active: std::collections::BTreeSet<_> = frame
+            .items
+            .iter()
+            .filter(|item| item.raster.is_some())
+            .map(|item| (item.id.clone(), frame.scale.to_bits()))
+            .collect();
         for item in &frame.items {
             let Some(raster) = &item.raster else {
                 continue;
@@ -564,6 +570,21 @@ impl GlRenderer {
                     old.source_charge = raster._charge.clone();
                 }
                 old.touched = self.serial;
+            }
+        }
+        // Retire absent slots only after every current image upload succeeds;
+        // an upload error does not additionally discard old off-frame slots.
+        // The size-based LRU otherwise retains visited scroll rows up to its
+        // much larger cap.
+        let stale: Vec<_> = self
+            .images
+            .keys()
+            .filter(|slot| !active.contains(*slot))
+            .cloned()
+            .collect();
+        for slot in stale {
+            if let Some(texture) = self.images.remove(&slot) {
+                canvas.delete_image(texture.image);
             }
         }
         while self.images.len() > 1024
@@ -735,6 +756,7 @@ impl GlRenderer {
         Ok(())
     }
 }
+
 impl Renderer for GlRenderer {
     /// Release GL image and canvas allocations while the renderer's EGL context
     /// is current. `TreeCache` is deliberately retained so the CPU rasterized
