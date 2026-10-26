@@ -127,6 +127,10 @@ impl App {
                             .unwrap_or_default()
                     );
                     value["prepare_views"] = serde_json::json!(self.runtime.as_ref().map(|r| r.input_regions().into_iter().filter(|r| r.prepare_panel).map(|r| serde_json::json!({"id":r.id,"view":r.prepare_view,"center":r.prepare_center,"rect":[r.rect.x,r.rect.y,r.rect.w,r.rect.h]})).collect::<Vec<_>>()).unwrap_or_default());
+                }
+                if self.options.trace_state
+                    || std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some()
+                {
                     value["regions"] = serde_json::json!(
                         self.panel_runtime
                             .as_ref()
