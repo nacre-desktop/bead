@@ -38,6 +38,34 @@ return ui.Box{id="root",width=160,height=80,
     (f, s)
 }
 
+fn activation_transfer_fixture(kind: &str) -> (Fixture, Session) {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        r#"return {
+ stores={count=0,last="",text="initial"},
+ actions={activate=function(s,value) s.count=s.count+1;s.last=value end},computed={}
+}"#,
+    )
+    .unwrap();
+    let button_flags = if kind == "Button" {
+        ",activate_on_release=true,focus_on_pointer=false"
+    } else {
+        ""
+    };
+    let text = if kind == "TextInput" {
+        "ui.bind(\"text\")"
+    } else {
+        "\"Move\""
+    };
+    fs::write(f.0.join("ui/main.luau"),format!(r#"local ui=require("bead.ui")
+return ui.Box{{id="root",width=160,height=80,
+ ui.{kind}{{id="source",width=80,height=50,text={text},drag_payload="source",on_drag=ui.action("activate","drag"),on_activate=ui.action("activate","click"){button_flags}}}
+}}"#)).unwrap();
+    let s = session(&f);
+    (f, s)
+}
+
 #[test]
 fn transfer_capture_is_focus_independent_thresholded_and_carries_drop_payload() {
     let (_f, mut s) = transfer_fixture();
@@ -47,7 +75,11 @@ fn transfer_capture_is_focus_independent_thresholded_and_carries_drop_payload() 
     assert_eq!(s.stores.get("bead.focused").cloned(), focused);
     assert!(s.transfer_action(x + 3.99, y, "move").is_none());
     assert!(s.transfer_source().is_none());
-    assert!(s.transfer_action(x + 4., y, "move").is_some());
+    let (_, _, move_event) = s.transfer_action(x + 4., y, "move").unwrap();
+    let Value::List(move_items) = move_event else {
+        panic!("move transfer event must be a list")
+    };
+    assert_eq!(move_items[0]["phase"], serde_json::json!("move"));
     assert!(s.transfer_source().is_some());
     let (target_x, target_y) = node_center(&s, "zone");
     let (source, action, event) = s.transfer_action(target_x, target_y, "drop").unwrap();
@@ -60,6 +92,8 @@ fn transfer_capture_is_focus_independent_thresholded_and_carries_drop_payload() 
     assert_eq!(items[0]["target"], serde_json::json!("drop-zone"));
     assert_eq!(items[0]["target_action"], serde_json::json!("select"));
     assert_eq!(items[0]["phase"], serde_json::json!("drop"));
+    assert_eq!(items[0]["start_x"], serde_json::json!(x));
+    assert_eq!(items[0]["start_y"], serde_json::json!(y));
     assert_eq!(
         s.drop_targets()
             .iter()
@@ -69,6 +103,256 @@ fn transfer_capture_is_focus_independent_thresholded_and_carries_drop_payload() 
     );
     s.finish_transfer();
     assert!(s.transfer_source().is_none());
+}
+
+#[test]
+fn transfer_drop_without_target_keeps_pointer_origin_for_source_handlers() {
+    let (_f, mut s) = transfer_fixture();
+    let (x, y) = node_center(&s, "source");
+    s.capture_pointer(x, y);
+    assert!(s.transfer_action(x + 4., y, "move").is_some());
+    let (source, action, event) = s.transfer_action(x + 250., y + 250., "drop").unwrap();
+    assert_eq!(source, "root.source");
+    assert_eq!(action, "select");
+    let Value::List(items) = event else {
+        panic!("targetless transfer event must be a list")
+    };
+    assert_eq!(items[0]["target"], serde_json::Value::Null);
+    assert_eq!(items[0]["target_action"], serde_json::Value::Null);
+    assert_eq!(items[0]["start_x"], serde_json::json!(x));
+    assert_eq!(items[0]["start_y"], serde_json::json!(y));
+    s.finish_transfer();
+}
+
+#[test]
+fn transfer_capture_follows_unique_semantic_source_and_freezes_initial_geometry() {
+    let f = fixture();
+    let markup = |parent: &str, left: u32, width: u32, payload: &str| {
+        format!(
+            r#"local ui=require("bead.ui")
+return ui.Box{{id="root",width=240,height=120,
+ ui.Box{{id="{parent}",width=220,height=100,
+  ui.Button{{id="source",position="absolute",left={left},top=10,width={width},height=30,text="Move",
+   drag_payload="{payload}",on_drag=ui.action("select","move")}}}}
+}}"#
+        )
+    };
+    fs::write(f.0.join("ui/main.luau"), markup("before", 8, 20, "opaque")).unwrap();
+    let mut s = session(&f);
+    let (x, y) = node_center(&s, "source");
+    s.capture_pointer(x, y);
+    let (_, _, move_event) = s.transfer_action(x + 4., y, "move").unwrap();
+    let Value::List(records) = move_event else {
+        panic!("move event list")
+    };
+    assert_eq!(records[0]["width"], serde_json::json!(20.));
+    assert_eq!(records[0]["height"], serde_json::json!(30.));
+    assert_eq!(records[0]["grab_x"], serde_json::json!(10.));
+    assert_eq!(records[0]["grab_y"], serde_json::json!(15.));
+
+    fs::write(f.0.join("ui/main.luau"), markup("after", 80, 80, "opaque")).unwrap();
+    let scene = s.reload().unwrap();
+    s.commit(scene);
+    let (source, action, event) = s.transfer_action(x + 10., y + 10., "drop").unwrap();
+    assert_eq!(
+        source, "root.after.source",
+        "semantic fallback follows a unique source whose parent changed"
+    );
+    assert_eq!(action, "select");
+    let Value::List(records) = event else {
+        panic!("drop event list")
+    };
+    assert_eq!(
+        records[0]["width"],
+        serde_json::json!(20.),
+        "source extent remains frozen at pointer capture"
+    );
+    assert_eq!(records[0]["height"], serde_json::json!(30.));
+    assert_eq!(records[0]["grab_x"], serde_json::json!(10.));
+    assert_eq!(records[0]["grab_y"], serde_json::json!(15.));
+}
+
+#[test]
+fn transfer_capture_rejects_changed_or_ambiguous_semantic_sources() {
+    let source = |id: &str, payload: &str| {
+        format!(
+            r#"local ui=require("bead.ui")
+return ui.Box{{id="root",width=240,height=120,
+ ui.Box{{id="{id}",width=220,height=100,
+  ui.Button{{id="first",position="absolute",left=8,top=10,width=20,height=30,text="Move",
+   drag_payload="{payload}",on_drag=ui.action("select","move")}}}}
+}}"#
+        )
+    };
+    let make = || {
+        let f = fixture();
+        fs::write(f.0.join("ui/main.luau"), source("before", "opaque")).unwrap();
+        let s = session(&f);
+        (f, s)
+    };
+    let (f, mut changed) = make();
+    let (x, y) = node_center(&changed, "first");
+    changed.capture_pointer(x, y);
+    assert!(changed.transfer_action(x + 4., y, "move").is_some());
+    fs::write(f.0.join("ui/main.luau"), source("after", "changed")).unwrap();
+    let scene = changed.reload().unwrap();
+    changed.commit(scene);
+    assert!(
+        changed.transfer_action(x + 8., y, "drop").is_none(),
+        "payload replacement cancels capture"
+    );
+
+    let (f, mut ambiguous) = make();
+    let (x, y) = node_center(&ambiguous, "first");
+    ambiguous.capture_pointer(x, y);
+    assert!(ambiguous.transfer_action(x + 4., y, "move").is_some());
+    fs::write(f.0.join("ui/main.luau"),r#"local ui=require("bead.ui")
+return ui.Box{id="root",width=240,height=120,
+ ui.Box{id="after",width=220,height=100,
+  ui.Button{id="one",position="absolute",left=8,top=10,width=20,height=30,text="One",drag_payload="opaque",on_drag=ui.action("select","move")},
+  ui.Button{id="two",position="absolute",left=48,top=10,width=20,height=30,text="Two",drag_payload="opaque",on_drag=ui.action("select","move")}}}
+"#).unwrap();
+    let scene = ambiguous.reload().unwrap();
+    ambiguous.commit(scene);
+    assert!(
+        ambiguous.transfer_action(x + 8., y, "drop").is_none(),
+        "ambiguous semantic fallback cancels capture"
+    );
+}
+
+#[test]
+fn draggable_box_click_below_threshold_activates_once_on_release() {
+    let (_f, mut s) = activation_transfer_fixture("Box");
+    let (x, y) = node_center(&s, "source");
+    let focus = s.stores.get("bead.focused").cloned();
+    assert!(
+        s.press_action_at(x, y).is_none(),
+        "host routing defers a draggable action until release"
+    );
+    let scene = s.click(x, y).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(
+        s.stores.get("bead.focused").cloned(),
+        focus,
+        "draggable controls do not take keyboard focus"
+    );
+    assert_eq!(s.stores.get("count"), Some(&Value::Number(0.)));
+    assert!(s.transfer_action(x + 3.99, y, "move").is_none());
+    let scene = s.release().unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("count"), Some(&Value::Number(1.)));
+    assert_eq!(s.stores.get("last"), Some(&Value::Text("click".into())));
+}
+
+#[test]
+fn draggable_row_click_below_threshold_activates_once_on_release() {
+    let (_f, mut s) = activation_transfer_fixture("Row");
+    let (x, y) = node_center(&s, "source");
+    let scene = s.click(x, y).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("count"), Some(&Value::Number(0.)));
+    let scene = s.release().unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("count"), Some(&Value::Number(1.)));
+    assert_eq!(s.stores.get("last"), Some(&Value::Text("click".into())));
+}
+
+#[test]
+fn host_owned_release_clears_press_without_replaying_deferred_action() {
+    let (_f, mut s) = activation_transfer_fixture("Box");
+    let (x, y) = node_center(&s, "source");
+    let scene = s.click(x, y).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("count"), Some(&Value::Number(0.)));
+    let _scene = s
+        .update(BTreeMap::from([(
+            "last".into(),
+            Value::Text("host-side-effect".into()),
+        )]))
+        .unwrap()
+        .unwrap();
+    let scene = s.release_without_activation().unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("count"), Some(&Value::Number(0.)));
+    assert_eq!(
+        s.stores.get("last"),
+        Some(&Value::Text("host-side-effect".into()))
+    );
+    assert_eq!(s.stores.get("bead.pressed"), Some(&Value::Bool(false)));
+}
+
+#[test]
+fn draggable_text_field_keeps_its_normal_pointer_focus() {
+    let (_f, mut s) = activation_transfer_fixture("TextInput");
+    let (x, y) = node_center(&s, "source");
+    let scene = s.click(x, y).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(
+        s.stores.get("bead.focused"),
+        Some(&Value::Text("root.source".into()))
+    );
+}
+
+#[test]
+fn draggable_box_threshold_cancels_click_activation() {
+    let (_f, mut s) = activation_transfer_fixture("Box");
+    let (x, y) = node_center(&s, "source");
+    let scene = s.click(x, y).unwrap().unwrap();
+    s.commit(scene);
+    assert!(s.transfer_action(x + 4., y, "move").is_some());
+    assert!(s.transfer_action(x + 8., y, "drop").is_some());
+    let scene = s.release().unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(
+        s.stores.get("count"),
+        Some(&Value::Number(0.)),
+        "dragging the Box must not run its click action"
+    );
+}
+
+#[test]
+fn draggable_button_threshold_cancels_its_deferred_click() {
+    let (_f, mut s) = activation_transfer_fixture("Button");
+    let (x, y) = node_center(&s, "source");
+    let scene = s.click(x, y).unwrap().unwrap();
+    s.commit(scene);
+    assert!(s.transfer_action(x + 4., y, "move").is_some());
+    assert!(s.transfer_action(x + 8., y, "drop").is_some());
+    let scene = s.release().unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(
+        s.stores.get("count"),
+        Some(&Value::Number(0.)),
+        "transfer cancels deferred Button activation"
+    );
+}
+
+#[test]
+fn source_disappearing_after_threshold_cannot_fall_back_to_click() {
+    let (f, mut s) = activation_transfer_fixture("Box");
+    let (x, y) = node_center(&s, "source");
+    let scene = s.click(x, y).unwrap().unwrap();
+    s.commit(scene);
+    fs::write(f.0.join("ui/main.luau"),r#"local ui=require("bead.ui")
+return ui.Box{id="root",width=160,height=80,
+ ui.Box{id="source",width=80,height=50,text="Move",drag_payload="changed",on_drag=ui.action("activate","drag"),on_activate=ui.action("activate","click")}}
+"#).unwrap();
+    let scene = s.reload().unwrap();
+    s.commit(scene);
+    assert!(s.transfer_action(x + 4., y, "move").is_none());
+    if let Some(scene) = s.release().unwrap() {
+        s.commit(scene);
+    }
+    assert_eq!(
+        s.stores.get("count"),
+        Some(&Value::Number(0.)),
+        "crossing the threshold permanently suppresses the press action even if source validation fails"
+    );
+    assert_eq!(
+        s.stores.get("bead.pressed"),
+        Some(&Value::Bool(false)),
+        "reload may already have settled the invalidated press"
+    );
 }
 
 #[test]
@@ -1044,7 +1328,7 @@ fn scalar_animation_wakeup_moves_painted_and_hit_node_geometry_together() {
         f.0.join("ui/main.luau"),
         r#"local ui=require("bead.ui")
 return ui.Panel{id="panel",width=300,height=80,
- ui.Button{id="moving",text="Move",position="absolute",left=ui.animate("moving-x",ui.resolve_for_check(ui.bind("position")),.3,"out-cubic"),top=0,width=30,height=30,on_activate=ui.action("select","moving")}}"#,
+ ui.Button{id="moving",text="Move",position="absolute",left=ui.animate("moving-x",ui.resolve_for_check(ui.bind("position")),.3,"out-cubic"),top=0,width=30,height=30,text="Moving",on_activate=ui.action("select","moving")}}"#,
     )
     .unwrap();
     let mut s = session(&f);
@@ -1094,6 +1378,11 @@ return ui.Panel{id="panel",width=300,height=80,
     let settled = s.update_model(BTreeMap::new()).unwrap().unwrap();
     s.commit(settled);
     assert!(s.preview_deadline().is_none());
+    assert_eq!(
+        node_x(&s),
+        start + 160.,
+        "scalar layout animation reaches its target"
+    );
     s.update(BTreeMap::from([("position".into(), Value::Number(260.))]))
         .unwrap()
         .unwrap();
@@ -3287,4 +3576,32 @@ return ui.Box{id="root",width=120,height=120,
             .values()
             .any(|clip| *clip == Rect::new(20., 20., 40., 40.))
     );
+}
+
+#[test]
+fn translation_moves_descendant_paint_and_hit_regions_without_moving_siblings() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Row{id="root",width=200,height=100,
+ ui.Box{id="moving",width=40,height=40,translate_x=20,translate_y=10,
+  ui.Button{id="child",width=30,height=30,text="Moving",on_activate=ui.action("select","moving")}},
+ ui.Button{id="fixed",width=30,height=30,text="Fixed",on_activate=ui.action("select","fixed")}}"#,
+    )
+    .unwrap();
+    let s = session(&f);
+    let child = s
+        .current_nodes
+        .iter()
+        .find(|n| n.id.ends_with("child"))
+        .unwrap();
+    assert!(child.contains(25., 15.));
+    assert!(!child.contains(5., 5.));
+    let fixed = s
+        .current_nodes
+        .iter()
+        .find(|n| n.id.ends_with("fixed"))
+        .unwrap();
+    assert_eq!(rect(&fixed.draw).x, 40.);
 }

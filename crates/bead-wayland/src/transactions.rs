@@ -10,6 +10,7 @@ fn panel_event_belongs_to_host(event: &UiEvent) -> bool {
             | UiEvent::CompanionOffer { .. }
             | UiEvent::HostModel(_)
             | UiEvent::CompanionAction { .. }
+            | UiEvent::CompanionMotionAction { .. }
             | UiEvent::CanvasOffer { .. }
             | UiEvent::CanvasModel { .. }
             | UiEvent::CompanionVisibility(true)
@@ -323,6 +324,10 @@ impl App {
         }
         if let UiEvent::CompanionAction { name, argument } = event {
             self.panel_ui(UiEvent::Action { name, argument });
+            return;
+        }
+        if let UiEvent::CompanionMotionAction { name, argument } = event {
+            self.panel_ui(UiEvent::MotionAction { name, argument });
             return;
         }
         if let UiEvent::CompanionModel(values) = event {
@@ -679,6 +684,46 @@ impl App {
                 "overlay-regions" if std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some() => {
                     bead_services::ipc::Reply::ok(request.call.id, self.overlay_regions())
                 }
+                "canvas-state" if std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some() => {
+                    bead_services::ipc::Reply::ok(
+                        request.call.id,
+                        serde_json::json!({
+                            "canvases": self.canvases.iter().map(|((output, view), canvas)| {
+                                serde_json::json!({
+                                    "output": output,
+                                    "view": view,
+                                    "epoch": canvas.epoch,
+                                    "interactive": canvas.interactive,
+                                    "configured": canvas.configured,
+                                    "layer": canvas.layer.is_some(),
+                                    "buffer_count": canvas.buffers.len(),
+                                    "frame_pending": canvas.frame_pending,
+                                    "dirty": canvas.dirty,
+                                    "bounds": canvas.bounds.map(|r| [r.x, r.y, r.w, r.h]),
+                                    "mapped_bounds": canvas.mapped_bounds.map(|r| [r.x, r.y, r.w, r.h]),
+                                    "render_size": canvas.render_size,
+                                    "viewport_size": canvas.viewport_size,
+                                    "source_offset": canvas.source_offset,
+                                    "scene_offset": canvas.scene.offset,
+                                    "scene_bounds": [canvas.scene.bounds.x, canvas.scene.bounds.y, canvas.scene.bounds.w, canvas.scene.bounds.h],
+                                    "opacity": canvas.scene.opacity,
+                                    "primitive_count": canvas.scene.primitives.len(),
+                                    "texts": canvas.scene.primitives.iter().filter_map(|primitive| match primitive {
+                                        bead_render::Primitive::Text { text, .. } if !text.is_empty() => Some(text.clone()),
+                                        _ => None,
+                                    }).take(32).collect::<Vec<_>>(),
+                                    "input": canvas.input,
+                                    "regions": canvas.source.input_regions().iter().map(|region| serde_json::json!({
+                                        "id": region.id,
+                                        "rect": [region.rect.x, region.rect.y, region.rect.w, region.rect.h],
+                                        "include_in_bounds": region.include_in_bounds,
+                                    })).collect::<Vec<_>>(),
+                                    "state": canvas.source.state_summary(),
+                                })
+                            }).collect::<Vec<_>>(),
+                        }),
+                    )
+                }
                 "state" => bead_services::ipc::Reply::ok(
                     request.call.id,
                     serde_json::json!({
@@ -925,10 +970,11 @@ impl App {
                             && output_scope_matches(active_output.as_deref(), &s.output_name)
                     }) {
                         let placement_changed = if self.processing_panel {
-                            self.position_panel_surface(
+                            self.position_panel_surface_with_origin(
                                 &surface.layer,
                                 &surface.output,
                                 &self.scene,
+                                runtime.tracks_origin(),
                             )
                         } else {
                             if let Some(anchor) = anchor {

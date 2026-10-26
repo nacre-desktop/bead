@@ -4,6 +4,8 @@ use bead::core::{Value, source::Snapshot};
 use std::collections::BTreeMap;
 
 pub const TOPIC: &str = "settings.store.widgets";
+#[path = "widget_drag.rs"]
+pub mod widget_drag;
 
 /// The catalogue and the user's canonical layout share the standalone app's warm first frame.
 pub fn window_spec(
@@ -183,22 +185,30 @@ mod tests {
 
 /// Standalone shells persist the same document as JSON; atomic file replacement is watched.
 pub fn file_values(path: &std::path::Path) -> BTreeMap<String, Value> {
-    use std::io::Read;
-    let read = || -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-        let file = std::fs::File::open(path)?;
-        let mut bytes = Vec::new();
-        file.take(65537).read_to_end(&mut bytes)?;
-        if bytes.len() > 65536 {
-            return Err("widget layout exceeds64KiB".into());
+    let read = match lock_layout(path) {
+        Ok(_lock) => read_layout(path).map(|(doc, bytes)| {
+            let revision = current_revision_locked(path, &bytes).unwrap_or_else(|error| {
+                eprintln!(
+                    "WIDGET_LAYOUT_REVISION_ERROR file={} message={error}",
+                    path.display()
+                );
+                stamp_revision(path).unwrap_or(0)
+            });
+            (doc, revision)
+        }),
+        Err(lock_error) => {
+            eprintln!(
+                "WIDGET_LAYOUT_REVISION_ERROR file={} message={lock_error}",
+                path.display()
+            );
+            read_layout(path).map(|(doc, _)| (doc, stamp_revision(path).unwrap_or(0)))
         }
-        let doc: serde_json::Value = serde_json::from_slice(&bytes)?;
-        if !doc.is_object() {
-            return Err("widget layout must be an object".into());
-        }
-        Ok(doc)
     };
-    match read() {
-        Ok(doc) => BTreeMap::from([("widgets.layout".into(), Value::list(vec![doc]))]),
+    match read {
+        Ok((doc, revision)) => BTreeMap::from([
+            ("widgets.layout".into(), Value::list(vec![doc])),
+            ("widgets.rev".into(), Value::Number(revision as f64)),
+        ]),
         Err(error) => {
             if path.exists() {
                 eprintln!(
@@ -225,20 +235,59 @@ pub fn file_path() -> Option<std::path::PathBuf> {
         .filter(|path| path.is_absolute())
 }
 
-/// Replace a standalone layout without exposing a partially written document to watchers.
-pub fn save_file(path: &std::path::Path, document: &serde_json::Value) -> std::io::Result<()> {
-    use std::io::Write;
-    let bytes = serde_json::to_vec(document)?;
-    if !document.is_object() || bytes.len() > 65536 {
-        return Err(std::io::Error::other(
-            "widget layout must be an object under64KiB",
-        ));
+struct LayoutLock(std::fs::File);
+impl Drop for LayoutLock {
+    fn drop(&mut self) {
+        use std::os::fd::AsRawFd;
+        unsafe {
+            libc::flock(self.0.as_raw_fd(), libc::LOCK_UN);
+        }
     }
+}
+fn sibling_path(path: &std::path::Path, suffix: &str) -> std::io::Result<std::path::PathBuf> {
+    let name = path
+        .file_name()
+        .ok_or_else(|| std::io::Error::other("layout needs a file name"))?;
+    Ok(path.with_file_name(format!("{}{}", name.to_string_lossy(), suffix)))
+}
+fn lock_layout(path: &std::path::Path) -> std::io::Result<LayoutLock> {
+    use std::os::fd::AsRawFd;
     let parent = path
         .parent()
         .ok_or_else(|| std::io::Error::other("layout needs a parent"))?;
     std::fs::create_dir_all(parent)?;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(sibling_path(path, ".lock")?)?;
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(LayoutLock(file))
+}
+fn layout_hash(bytes: &[u8]) -> String {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
+}
+fn stamp_revision(path: &std::path::Path) -> std::io::Result<u64> {
+    let stamp: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(sibling_path(path, ".rev")?)?)?;
+    stamp["rev"]
+        .as_u64()
+        .ok_or_else(|| std::io::Error::other("invalid widget revision stamp"))
+}
+fn atomic_replace(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let parent = path
+        .parent()
+        .ok_or_else(|| std::io::Error::other("layout needs a parent"))?;
     let next = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let temporary = path.with_file_name(format!(".widgets-{}-{next}.tmp", std::process::id()));
     let mut file = std::fs::OpenOptions::new()
@@ -246,7 +295,7 @@ pub fn save_file(path: &std::path::Path, document: &serde_json::Value) -> std::i
         .create_new(true)
         .open(&temporary)?;
     let result = (|| {
-        file.write_all(&bytes)?;
+        file.write_all(bytes)?;
         file.sync_all()?;
         std::fs::rename(&temporary, path)?;
         std::fs::File::open(parent)?.sync_all()
@@ -255,6 +304,109 @@ pub fn save_file(path: &std::path::Path, document: &serde_json::Value) -> std::i
         let _ = std::fs::remove_file(&temporary);
     }
     result
+}
+fn read_layout(path: &std::path::Path) -> std::io::Result<(serde_json::Value, Vec<u8>)> {
+    use std::io::Read;
+    let file = std::fs::File::open(path)?;
+    let mut bytes = Vec::new();
+    file.take(65537).read_to_end(&mut bytes)?;
+    if bytes.len() > 65536 {
+        return Err(std::io::Error::other("widget layout exceeds64KiB"));
+    }
+    let doc: serde_json::Value = serde_json::from_slice(&bytes)?;
+    if !doc.is_object() {
+        return Err(std::io::Error::other("widget layout must be an object"));
+    }
+    Ok((doc, bytes))
+}
+fn current_revision_locked(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<u64> {
+    let stamp_path = sibling_path(path, ".rev")?;
+    let hash = layout_hash(bytes);
+    let (revision, next) = match std::fs::read(&stamp_path) {
+        Ok(raw) => {
+            let stamp: serde_json::Value = serde_json::from_slice(&raw)?;
+            let revision = stamp["rev"]
+                .as_u64()
+                .ok_or_else(|| std::io::Error::other("invalid widget revision stamp"))?;
+            if stamp["hash"].as_str() == Some(hash.as_str()) {
+                (revision, None)
+            } else {
+                (revision.saturating_add(1), Some(revision.saturating_add(1)))
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (0, Some(0)),
+        Err(error) => return Err(error),
+    };
+    if let Some(revision) = next {
+        let stamp = serde_json::to_vec(&serde_json::json!({"hash":hash,"rev":revision}))?;
+        atomic_replace(&stamp_path, &stamp)?;
+    }
+    Ok(revision)
+}
+fn write_file_locked(
+    path: &std::path::Path,
+    document: &serde_json::Value,
+    expected: Option<u64>,
+) -> std::io::Result<u64> {
+    let bytes = serde_json::to_vec(document)?;
+    if !document.is_object() || bytes.len() > 65536 {
+        return Err(std::io::Error::other(
+            "widget layout must be an object under64KiB",
+        ));
+    }
+    let old = match read_layout(path) {
+        Ok((_, bytes)) => Some(bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error),
+    };
+    let current = if let Some(bytes) = old.as_ref() {
+        current_revision_locked(path, bytes)?
+    } else {
+        match stamp_revision(path) {
+            Ok(revision) => {
+                let revision = revision.saturating_add(1);
+                let stamp = serde_json::to_vec(&serde_json::json!({"hash":"","rev":revision}))?;
+                atomic_replace(&sibling_path(path, ".rev")?, &stamp)?;
+                revision
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0,
+            Err(error) => return Err(error),
+        }
+    };
+    if let Some(expected) = expected.filter(|expected| *expected != current) {
+        return Err(std::io::Error::other(format!(
+            "widget layout revision conflict: expected {expected}, found {current}"
+        )));
+    }
+    let revision = current.saturating_add(1);
+    atomic_replace(path, &bytes)?;
+    let stamp_path = sibling_path(path, ".rev")?;
+    let stamp =
+        serde_json::to_vec(&serde_json::json!({"hash":layout_hash(&bytes),"rev":revision}))?;
+    if let Err(error) = atomic_replace(&stamp_path, &stamp) {
+        if let Some(old) = old {
+            let _ = atomic_replace(path, &old);
+        } else {
+            let _ = std::fs::remove_file(path);
+        }
+        return Err(error);
+    }
+    Ok(revision)
+}
+/// Expected-revision compare-and-swap for standalone layouts; JSON remains the raw document.
+pub fn save_file_revisioned(
+    path: &std::path::Path,
+    document: &serde_json::Value,
+    expected: u64,
+) -> std::io::Result<u64> {
+    let _lock = lock_layout(path)?;
+    write_file_locked(path, document, Some(expected))
+}
+/// Compatibility writer for tests and legacy callers that intentionally replace unconditionally.
+#[cfg(test)]
+pub fn save_file(path: &std::path::Path, document: &serde_json::Value) -> std::io::Result<()> {
+    let _lock = lock_layout(path)?;
+    write_file_locked(path, document, None).map(|_| ())
 }
 
 #[derive(Clone)]
@@ -271,6 +423,60 @@ pub fn canvas(
     colors: bead::render::Palette,
     inputs: Inputs,
     trace: bool,
+) -> Result<bead::wayland::PanelSpec, Box<dyn std::error::Error>> {
+    canvas_spec(
+        palette,
+        colors,
+        inputs,
+        trace,
+        "widgets/editor/canvas.luau",
+        false,
+    )
+}
+
+pub fn drag_preview(
+    palette: std::path::PathBuf,
+    colors: bead::render::Palette,
+    inputs: Inputs,
+    trace: bool,
+) -> Result<bead::wayland::PanelSpec, Box<dyn std::error::Error>> {
+    canvas_spec(
+        palette,
+        colors,
+        inputs,
+        trace,
+        "widgets/drag/ghost.luau",
+        true,
+    )
+}
+
+fn canvas_spec(
+    palette: std::path::PathBuf,
+    colors: bead::render::Palette,
+    inputs: Inputs,
+    trace: bool,
+    entry: &'static str,
+    passive: bool,
+) -> Result<bead::wayland::PanelSpec, Box<dyn std::error::Error>> {
+    canvas_spec_with_root(
+        "shell".into(),
+        palette,
+        colors,
+        inputs,
+        trace,
+        entry,
+        passive,
+    )
+}
+
+pub(crate) fn canvas_spec_with_root(
+    shell_root: std::path::PathBuf,
+    palette: std::path::PathBuf,
+    colors: bead::render::Palette,
+    inputs: Inputs,
+    trace: bool,
+    entry: &'static str,
+    passive: bool,
 ) -> Result<bead::wayland::PanelSpec, Box<dyn std::error::Error>> {
     use bead::{
         render::{Rect, RendererKind},
@@ -289,37 +495,45 @@ pub fn canvas(
         engages_decorations: false,
         overlay: false,
         retain_when_closed: false,
-        passive: false,
+        passive,
         keyboard_focus: false,
         initial_open: false,
         fallback,
         renderer: RendererKind::Cpu,
         factory: std::sync::Arc::new(move |open| {
             let session = bead::ui::Session::new(
-                "shell".into(),
-                "widgets/editor/canvas.luau".into(),
+                shell_root.clone(),
+                entry.into(),
                 palette.clone(),
                 colors.clone(),
                 cold.clone(),
             );
-            let result = (|| -> Result<_, Box<dyn std::error::Error>> {
-                let mut runtime =
-                    crate::reload::Runtime::panel_session(session, open).with_trace(trace);
-                if let Some(backend) = inputs.backend.get() {
-                    runtime = runtime.with_backend(backend.clone())?;
-                }
-                if let Some(desktop) = inputs.desktop.get() {
-                    runtime = runtime.with_shared_desktop(desktop.clone(), false)?;
-                }
-                runtime = runtime.with_widget_editor(inputs.client.as_ref(), true)?;
-                if let Some(prefs) = &inputs.prefs {
-                    runtime = runtime.with_prefs(prefs.clone())?;
-                }
-                Ok(runtime)
-            })();
+            let result = if passive {
+                Ok(crate::reload::Runtime::new(session)
+                    .with_trace(trace)
+                    .with_widget_drag_preview())
+            } else {
+                (|| -> Result<_, Box<dyn std::error::Error>> {
+                    let mut runtime =
+                        crate::reload::Runtime::panel_session(session, open).with_trace(trace);
+                    if let Some(backend) = inputs.backend.get() {
+                        runtime = runtime.with_backend(backend.clone())?;
+                    }
+                    if let Some(desktop) = inputs.desktop.get() {
+                        runtime = runtime.with_shared_desktop(desktop.clone(), false)?;
+                    }
+                    runtime = runtime.with_widget_editor(inputs.client.as_ref(), true)?;
+                    if let Some(prefs) = &inputs.prefs {
+                        runtime = runtime.with_prefs(prefs.clone())?;
+                    }
+                    Ok(runtime)
+                })()
+            };
             let mut runtime = result.map_err(|error| error.to_string())?;
-            let restore = BTreeMap::from([("panel.open".into(), Value::Bool(open))]);
-            runtime.session.restore_on_start(restore);
+            if !passive {
+                let restore = BTreeMap::from([("panel.open".into(), Value::Bool(open))]);
+                runtime.session.restore_on_start(restore);
+            }
             Ok(Box::new(runtime) as Box<dyn bead::wayland::SceneSource>)
         }),
     })
@@ -357,6 +571,92 @@ mod file_tests {
         save_file(&path, &doc).unwrap();
         assert!(save_file(&path, &json!([])).is_err());
         assert_eq!(file_values(&path)["widgets.layout"], Value::list(vec![doc]));
+        std::fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
+    fn standalone_revision_stamp_serializes_writers_and_detects_raw_edits() {
+        let parent =
+            std::env::temp_dir().join(format!("bead-widget-revisions-{}", std::process::id()));
+        let path = parent.join("widgets.json");
+        let _ = std::fs::remove_dir_all(&parent);
+        let first = json!({"version":1,"layout":"first","opaque":{"x":1}});
+        let second = json!({"version":1,"layout":"second","opaque":{"x":1}});
+        let alternate = json!({"version":1,"layout":"alternate","opaque":{"x":1}});
+        let third = json!({"version":1,"layout":"third","opaque":{"x":1}});
+        assert_eq!(save_file_revisioned(&path, &first, 0).unwrap(), 1);
+        let reader_a = file_values(&path);
+        let reader_b = file_values(&path);
+        assert_eq!(reader_a["widgets.rev"], Value::Number(1.));
+        assert_eq!(reader_b["widgets.rev"], reader_a["widgets.rev"]);
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            serde_json::to_vec(&first).unwrap(),
+            "revision metadata remains outside the canonical JSON document"
+        );
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
+        let writer = |document: serde_json::Value, barrier: std::sync::Arc<std::sync::Barrier>| {
+            let path = path.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                save_file_revisioned(&path, &document, 1)
+            })
+        };
+        let writer_a = writer(second.clone(), barrier.clone());
+        let writer_b = writer(alternate.clone(), barrier.clone());
+        barrier.wait();
+        let result_a = writer_a.join().unwrap();
+        let result_b = writer_b.join().unwrap();
+        assert_ne!(
+            result_a.is_ok(),
+            result_b.is_ok(),
+            "the lock and revision check admit only one concurrent writer"
+        );
+        assert!(
+            save_file_revisioned(&path, &third, 1)
+                .unwrap_err()
+                .to_string()
+                .contains("revision conflict"),
+            "a second reader cannot overwrite a newer save using its stale revision"
+        );
+        assert_eq!(file_values(&path)["widgets.rev"], Value::Number(2.));
+        let winner = file_values(&path)["widgets.layout"].clone();
+        assert!(winner == Value::list(vec![second]) || winner == Value::list(vec![alternate]));
+
+        std::fs::write(&path, serde_json::to_vec(&third).unwrap()).unwrap();
+        let reopened = file_values(&path);
+        assert_eq!(
+            reopened["widgets.rev"],
+            Value::Number(3.),
+            "an external raw JSON edit advances the stamp"
+        );
+        assert_eq!(reopened["widgets.layout"], Value::list(vec![third]));
+        std::fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
+    fn unreadable_revision_sidecar_does_not_hide_a_valid_layout_or_allow_write() {
+        let parent =
+            std::env::temp_dir().join(format!("bead-widget-bad-stamp-{}", std::process::id()));
+        let path = parent.join("widgets.json");
+        let doc = json!({"version":1,"widget":"known"});
+        let _ = std::fs::remove_dir_all(&parent);
+        std::fs::create_dir_all(parent.join("widgets.json.rev")).unwrap();
+        std::fs::write(&path, serde_json::to_vec(&doc).unwrap()).unwrap();
+        let values = file_values(&path);
+        assert_eq!(
+            values["widgets.layout"],
+            Value::list(vec![doc.clone()]),
+            "stamp errors do not make a valid readable document disappear"
+        );
+        assert!(
+            save_file_revisioned(&path, &json!({"version":1}), 0).is_err(),
+            "a writer fails closed when it cannot establish the shared revision"
+        );
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&std::fs::read(&path).unwrap()).unwrap(),
+            doc
+        );
         std::fs::remove_dir_all(parent).unwrap();
     }
 }

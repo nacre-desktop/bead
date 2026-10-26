@@ -950,11 +950,30 @@ fn start(
         };
         options.canvases = Some(bead::wayland::Panels::new(
             "widgets-canvas".into(),
-            std::collections::BTreeMap::from([(
-                "widgets-canvas".into(),
-                widgets::canvas(palette.clone(), colors.clone(), widget_inputs, panel_trace)?,
-            )]),
+            std::collections::BTreeMap::from([
+                (
+                    "widgets-canvas".into(),
+                    widgets::canvas(
+                        palette.clone(),
+                        colors.clone(),
+                        widget_inputs.clone(),
+                        panel_trace,
+                    )?,
+                ),
+                (
+                    "widgets-drag".into(),
+                    widgets::drag_preview(
+                        palette.clone(),
+                        colors.clone(),
+                        widget_inputs,
+                        panel_trace,
+                    )?,
+                ),
+            ]),
         )?);
+        options
+            .canvas_layers
+            .insert("widgets-drag".into(), bead::wayland::CanvasLayer::Overlay);
         frame_gate.configure_frame(frame_config, views.keys().cloned());
         // B0048: detachable panels, remembered beside the other durable panel state.
         options.pearls = Some(pearls::options(

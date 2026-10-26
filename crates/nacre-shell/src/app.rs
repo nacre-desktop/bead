@@ -161,9 +161,7 @@ fn apply_widget_runtime_defaults(
     if name != "widgets" {
         return false;
     }
-    let Some(paths) = paths else {
-        return false;
-    };
+    let Some(paths) = paths else { return false };
     if daemon.is_none() && is_socket(&paths.daemon) {
         *daemon = Some(paths.daemon.clone());
     }
@@ -200,6 +198,27 @@ fn open_existing_widget(socket: &Path) -> Result<bool, String> {
         Err(_) => Ok(false),
     }
 }
+/// Let the running shell supply its current palette and single-instance launch arguments.
+fn open_parent_widget(socket: &Path) -> Result<bool, String> {
+    if !is_socket(socket) {
+        return Ok(false);
+    }
+    let call = Call {
+        version: 1,
+        id: 1,
+        target: "widgets".into(),
+        method: "open".into(),
+        args: Vec::new(),
+        output: None,
+    };
+    match ipc::call(socket, &call, Duration::from_millis(300)) {
+        Ok(reply) => match reply.error {
+            Some(error) => Err(error.message),
+            None => Ok(true),
+        },
+        Err(_) => Ok(false),
+    }
+}
 /// Runs a no-argument `nacre <method>` command through the shell's own socket (a tile that opens the launcher).
 pub fn command(method: &str) -> bool {
     let Some(host) = HOST.get() else {
@@ -215,6 +234,116 @@ pub fn command(method: &str) -> bool {
     };
     ipc::call(&host.command, &call, Duration::from_millis(800))
         .is_ok_and(|reply| reply.error.is_none())
+}
+/// Widgets app children use the owner-only parent command socket for the private drag bridge.
+pub(crate) fn widget_private_call_timeout(
+    method: &str,
+    payload: Value,
+    timeout: Duration,
+) -> Result<(), String> {
+    let host = HOST.get().ok_or("app host unavailable")?;
+    if !is_widgets_child(host.app_name.as_deref()) {
+        return Err("private Widgets relay is available only to the Widgets app".into());
+    }
+    let parent = host
+        .parent
+        .as_ref()
+        .ok_or("Widgets app has no parent host")?;
+    let call = Call {
+        version: 1,
+        id: 1,
+        target: "bead.widgets".into(),
+        method: method.into(),
+        args: vec![payload],
+        output: None,
+    };
+    let reply = ipc::call(parent, &call, timeout)?;
+    if let Some(error) = reply.error {
+        return Err(error.message);
+    }
+    Ok(())
+}
+fn is_widgets_child(app_name: Option<&str>) -> bool {
+    app_name == Some("widgets")
+}
+/// Send a terminal Widgets drag outcome to the already-running app's private window socket.
+fn widget_feedback_at(
+    socket: &Path,
+    pid: u32,
+    generation: u64,
+    epoch: u64,
+    success: bool,
+    error: &str,
+) -> Result<(), String> {
+    let call = Call {
+        version: 1,
+        id: 1,
+        target: "bead.widgets".into(),
+        method: "drag-feedback".into(),
+        args: vec![
+            json!({"app":"nacre-widgets","pid":pid,"generation":generation,"epoch":epoch,
+            "success":success,"error":error}),
+        ],
+        output: None,
+    };
+    let reply = ipc::call(socket, &call, Duration::from_millis(150))?;
+    if let Some(error) = reply.error {
+        return Err(error.message);
+    }
+    Ok(())
+}
+pub(crate) fn widget_feedback(
+    pid: u32,
+    generation: u64,
+    epoch: u64,
+    success: bool,
+    error: &str,
+) -> Result<(), String> {
+    let host = HOST.get().ok_or("app host unavailable")?;
+    if host.app_name.is_some() {
+        return Err("Widgets feedback is parent-only".into());
+    }
+    widget_feedback_at(
+        &host.socket("widgets"),
+        pid,
+        generation,
+        epoch,
+        success,
+        error,
+    )
+}
+pub(crate) fn widget_history_feedback(
+    pid: u32,
+    generation: u64,
+    epoch: Option<u64>,
+    previous_document: Value,
+    previous_revision: u64,
+    document: Value,
+    revision: u64,
+) -> Result<(), String> {
+    let host = HOST.get().ok_or("app host unavailable")?;
+    if host.app_name.is_some() {
+        return Err("Widgets feedback is parent-only".into());
+    }
+    let mut payload = json!({"app":"nacre-widgets","pid":pid,"generation":generation,
+        "kind":"history","success":true,"error":"","previous_document":previous_document,
+        "previous_revision":previous_revision,"document":document,"revision":revision});
+    if let Some(epoch) = epoch {
+        payload["epoch"] = json!(epoch)
+    }
+    let call = Call {
+        version: 1,
+        id: 1,
+        target: "bead.widgets".into(),
+        method: "drag-feedback".into(),
+        args: vec![payload],
+        output: None,
+    };
+    let reply = ipc::call(&host.socket("widgets"), &call, Duration::from_millis(150))?;
+    if let Some(error) = reply.error {
+        return Err(error.message);
+    }
+    Ok(())
 }
 /// Open, deep-link or toggle an app for a routed command. Never blocks on the app's startup.
 pub fn route(id: u64, name: &str, method: &str, args: &[Value]) -> Reply {
@@ -608,6 +737,13 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
                 Err(error) => return Err(error.into()),
             }
         }
+        if let Some(socket) = parent_socket.as_deref() {
+            match open_parent_widget(socket) {
+                Ok(true) => return Ok(()),
+                Ok(false) => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
     }
     let colors = Palette::read(&palette)
         .or_else(|_| Palette::parse(include_bytes!("../../../shell/palette.json")))?;
@@ -638,6 +774,7 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
             if name == "widgets" {
                 topics.push(crate::widgets::TOPIC.to_owned());
                 topics.push("displays".to_owned());
+                topics.push("compositor".to_owned());
             }
             let mut config = nacre_source::Config::new(socket, topics);
             config.client = format!("nacre-app-{name}");
@@ -809,6 +946,13 @@ mod tests {
     use super::*;
     use std::os::unix::{fs::PermissionsExt, net::UnixListener};
 
+    #[test]
+    fn widgets_private_relay_uses_the_app_mode_name() {
+        assert!(is_widgets_child(Some("widgets")));
+        assert!(!is_widgets_child(Some("nacre-widgets")));
+        assert!(!is_widgets_child(Some("settings")));
+    }
+
     fn host(dir: &Path, exe: &Path) -> Host {
         Host {
             exe: exe.into(),
@@ -826,6 +970,20 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
         dir
+    }
+    #[test]
+    fn bare_widgets_uses_the_parent_launch_route() {
+        let dir = private_dir("widget-parent-route");
+        let socket = dir.join("bead-command.sock");
+        let _server = ipc::Server::bind(socket.clone(), move |call| {
+            assert_eq!(call.target, "widgets");
+            assert_eq!(call.method, "open");
+            Reply::ok(call.id, Value::Null)
+        })
+        .unwrap();
+        assert!(open_parent_widget(&socket).unwrap());
+        drop(_server);
+        let _ = std::fs::remove_dir_all(dir);
     }
     #[test]
     fn bare_widgets_defaults_follow_packaged_runtime_sockets() {
@@ -930,6 +1088,29 @@ mod tests {
         assert_eq!(reply.error.unwrap().code, "unavailable");
         let _ = std::fs::remove_dir_all(dir);
     }
+    #[test]
+    fn widget_feedback_uses_the_private_window_socket_and_keeps_gesture_identity() {
+        let dir = private_dir("widgets-feedback");
+        let socket = dir.join("app-widgets.sock");
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _server = ipc::Server::bind(socket.clone(), move |call| {
+            tx.send(call.clone()).unwrap();
+            Reply::ok(call.id, serde_json::Value::Null)
+        })
+        .unwrap();
+        widget_feedback_at(&socket, 23, 7, 11, false, "validation rejected").unwrap();
+        let call = rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert_eq!(call.target, "bead.widgets");
+        assert_eq!(call.method, "drag-feedback");
+        assert_eq!(call.args[0]["pid"], json!(23));
+        assert_eq!(call.args[0]["generation"], json!(7));
+        assert_eq!(call.args[0]["epoch"], json!(11));
+        assert_eq!(call.args[0]["success"], json!(false));
+        assert_eq!(call.args[0]["error"], json!("validation rejected"));
+        drop(_server);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn a_missing_app_is_started_with_its_page_socket_and_daemon() {
         let dir = private_dir("spawn");

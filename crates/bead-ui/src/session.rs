@@ -69,6 +69,7 @@ pub(super) struct TransferCapture {
     pub(super) action: String,
     pub(super) payload: Value,
     pub(super) origin: (f32, f32),
+    pub(super) source_rect: (f32, f32, f32, f32),
     pub(super) active: bool,
 }
 pub(super) struct DeferredAction {

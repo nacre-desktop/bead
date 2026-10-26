@@ -80,6 +80,8 @@ pub(crate) fn raw_bytes(raw: &RawNode) -> usize {
 pub const PROPERTIES: &[&str] = &[
     "id",
     "metadata",
+    "translate_x",
+    "translate_y",
     "width",
     "height",
     "min_width",
@@ -183,6 +185,8 @@ pub fn allowed_property(name: &str) -> bool {
 pub struct ViewSpec {
     pub id: String,
     pub metadata: Option<Value>,
+    pub translate_x: f32,
+    pub translate_y: f32,
     pub kind: Widget,
     pub style: Style,
     pub text: String,
@@ -774,6 +778,8 @@ impl ViewSpec {
                 visible,
                 action: action.as_ref().map(|a| a.0.clone()),
                 argument: action.and_then(|a| a.1),
+                translate_x: number(p, "translate_x", 0., source)?,
+                translate_y: number(p, "translate_y", 0., source)?,
                 metadata: p
                     .get("metadata")
                     .cloned()
@@ -1100,8 +1106,8 @@ pub fn layout(
             .layout(ids[&view.id])
             .map_err(|e| view.source.error(e))?;
         let r = Rect::new(
-            parent.0 + l.location.x,
-            parent.1 + l.location.y,
+            parent.0 + l.location.x + view.translate_x,
+            parent.1 + l.location.y + view.translate_y,
             l.size.width,
             l.size.height,
         );

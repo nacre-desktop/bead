@@ -4,6 +4,8 @@ export type Props = {
     [number]:Node,
     id:any?,
     metadata:any?,
+    translate_x:any?,
+    translate_y:any?,
     width:any?,
     height:any?,
     min_width:any?,

@@ -1,7 +1,9 @@
 {
   "modules": [
     "widgets/app/main.luau",
+    "widgets/app/controller.luau",
     "widgets/app/preview.luau",
+    "widgets/dragging.luau",
     "widgets/measure.luau",
     "widgets/battery/widget.luau",
     "widgets/bluetooth/widget.luau",

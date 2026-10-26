@@ -30,6 +30,225 @@ fn panel_visibility_changes(open: bool, launcher: bool) -> BTreeMap<String, bead
     }
     changes
 }
+fn widget_drag_feedback_matches(
+    app_pid: u32,
+    pending_epoch: Option<u64>,
+    pid: u32,
+    epoch: u64,
+) -> bool {
+    pid == app_pid && pending_epoch == Some(epoch)
+}
+fn widget_history_feedback_matches(
+    current_revision: u64,
+    last_history_revision: u64,
+    previous_revision: u64,
+    revision: u64,
+    current_document: Option<&serde_json::Value>,
+    previous_document: &serde_json::Value,
+    document: &serde_json::Value,
+) -> bool {
+    if revision <= last_history_revision
+        || revision <= previous_revision
+        || current_revision > revision
+    {
+        return false;
+    }
+    if current_revision == previous_revision {
+        current_document == Some(previous_document)
+    } else {
+        current_revision == revision && current_document == Some(document)
+    }
+}
+#[derive(Clone)]
+struct WidgetWriteFeedback {
+    pid: u32,
+    generation: u64,
+    epoch: Option<u64>,
+    previous_document: serde_json::Value,
+    previous_revision: u64,
+    document: serde_json::Value,
+}
+enum WidgetWriteResult {
+    Pending(crate::nacre_source::CallTicket),
+    Saved(u64),
+}
+fn widget_revision(values: &BTreeMap<String, bead::core::Value>) -> u64 {
+    match values.get("widgets.rev") {
+        Some(bead::core::Value::Number(value)) if value.is_finite() && *value >= 0. => {
+            *value as u64
+        }
+        _ => 0,
+    }
+}
+fn widget_document(
+    values: &BTreeMap<String, bead::core::Value>,
+    key: &str,
+) -> Option<serde_json::Value> {
+    match values.get(key) {
+        Some(bead::core::Value::List(records)) => records.first().cloned(),
+        _ => None,
+    }
+}
+fn widget_seed_document(seed: &serde_json::Value) -> Option<serde_json::Value> {
+    ["document", "initial"].into_iter().find_map(|key| {
+        seed.get(key)
+            .filter(|document| document.is_object())
+            .cloned()
+    })
+}
+fn widget_previous_document(
+    values: &BTreeMap<String, bead::core::Value>,
+    seed: Option<&serde_json::Value>,
+) -> Option<serde_json::Value> {
+    widget_document(values, "widgets.layout")
+        .or_else(|| widget_document(values, "widgets.drag.original"))
+        .or_else(|| {
+            (widget_revision(values) == 0)
+                .then(|| widget_document(values, "widgets.initial"))
+                .flatten()
+        })
+        .or_else(|| {
+            (widget_revision(values) == 0)
+                .then(|| seed.and_then(widget_seed_document))
+                .flatten()
+        })
+}
+fn widget_history_current_document(
+    layout: Option<serde_json::Value>,
+    initial: Option<serde_json::Value>,
+    seed: Option<&serde_json::Value>,
+    current_revision: u64,
+    previous_revision: u64,
+) -> Option<serde_json::Value> {
+    layout.or_else(|| {
+        if current_revision != 0 || current_revision != previous_revision {
+            return None;
+        }
+        initial.or_else(|| seed.and_then(widget_seed_document))
+    })
+}
+fn send_widget_write_feedback(
+    feedback: WidgetWriteFeedback,
+    success: bool,
+    error: &str,
+    revision: u64,
+) {
+    if success && revision > feedback.previous_revision {
+        let _ = crate::widgets::widget_drag::send_app_history_feedback(
+            feedback.pid,
+            feedback.generation,
+            feedback.epoch,
+            feedback.previous_document,
+            feedback.previous_revision,
+            feedback.document,
+            revision,
+        );
+    } else if let Some(epoch) = feedback.epoch {
+        let message = if error.is_empty() {
+            "A newer widget layout superseded this change."
+        } else {
+            error
+        };
+        let _ = crate::widgets::widget_drag::send_app_feedback(
+            feedback.pid,
+            feedback.generation,
+            epoch,
+            false,
+            message,
+        );
+    }
+}
+#[derive(Clone, Copy)]
+struct WidgetFloatingRequest {
+    pid: u32,
+    generation: u64,
+    enabled: bool,
+    attempted: bool,
+}
+fn widget_floating_action(
+    request: &mut Option<WidgetFloatingRequest>,
+    active: Option<(u32, u64)>,
+    backend: &bead::backends::Snapshot,
+    compositor: &bead::core::source::Snapshot,
+) -> Option<bead::backends::Action> {
+    let policy = request.as_mut()?;
+    if !policy.enabled
+        || policy.attempted
+        || active != Some((policy.pid, policy.generation))
+        || !backend.connected
+    {
+        return None;
+    }
+    if !backend.capabilities.supports("floatingPlacement") {
+        policy.attempted = true;
+        return None;
+    }
+    if !compositor.connected || compositor.data["available"] == false {
+        return None;
+    }
+    let windows = compositor.data["windows"].as_object()?;
+    let mut owned = windows.iter().filter(|(_, window)| {
+        window["pid"].as_u64() == Some(policy.pid as u64)
+            && (window["appId"].as_str() == Some("nacre-widgets")
+                || window["app_id"].as_str() == Some("nacre-widgets"))
+    });
+    let (native_key, raw_window) = owned.next()?;
+    if owned.next().is_some() {
+        return None;
+    }
+    let raw_id = raw_window["id"]
+        .as_u64()
+        .map(|id| id.to_string())
+        .or_else(|| raw_window["address"].as_str().map(str::to_owned))
+        .unwrap_or_else(|| native_key.to_owned());
+    let mut candidates = backend
+        .windows
+        .iter()
+        .filter(|window| window.app_id == "nacre-widgets");
+    let window = candidates.next()?;
+    if candidates.next().is_some() || window.id.0.rsplit(':').next() != Some(raw_id.as_str()) {
+        return None;
+    }
+    policy.attempted = true;
+    if window.floating {
+        return None;
+    }
+    Some(bead::backends::Action::SetFloating {
+        window: window.id.clone(),
+        floating: true,
+    })
+}
+#[cfg(test)]
+fn apply_widget_floating(
+    request: &mut Option<WidgetFloatingRequest>,
+    active: Option<(u32, u64)>,
+    backend: &bead::backends::Snapshot,
+    compositor: &bead::core::source::Snapshot,
+    mut action: impl FnMut(bead::backends::Action) -> Result<(), bead::backends::Error>,
+) -> bool {
+    let Some(action_to_apply) = widget_floating_action(request, active, backend, compositor) else {
+        return false;
+    };
+    action(action_to_apply).is_ok()
+}
+fn widget_drag_targets_output(argument: &bead::core::Value, output: Option<&str>) -> bool {
+    let bead::core::Value::List(records) = argument else {
+        return false;
+    };
+    let Some(event) = records.first() else {
+        return false;
+    };
+    if event["private_remote"] != true {
+        return true;
+    }
+    let Some(target) = event["target_output_id"]
+        .as_str()
+        .filter(|name| !name.is_empty())
+    else {
+        return false;
+    };
+    output == Some(target)
+}
 fn widget_screen_values(
     snapshot: &bead::core::source::Snapshot,
 ) -> BTreeMap<String, bead::core::Value> {
@@ -50,18 +269,25 @@ fn widget_screen_values(
     let Some(output) = output else {
         return BTreeMap::new();
     };
-    let scale = output["scale"]
-        .as_f64()
-        .filter(|scale| scale.is_finite() && *scale > 0.)
-        .unwrap_or(1.);
-    let dimension = |key: &str| {
-        let raw = output[key].as_f64()?;
-        let logical = (raw / scale).round();
-        (logical.is_finite() && (1.0..=20_000.0).contains(&logical)).then_some(logical)
-    };
-    let (Some(width), Some(height)) = (dimension("width"), dimension("height")) else {
+    let Some((width, height)) =
+        crate::widgets::widget_drag::logical_dimensions(output).filter(|(width, height)| {
+            (1.0..=20_000.0).contains(width) && (1.0..=20_000.0).contains(height)
+        })
+    else {
         return BTreeMap::new();
     };
+    let records=outputs.into_iter().flatten().filter_map(|row| {
+        let (logical_width, logical_height)=crate::widgets::widget_drag::logical_dimensions(row)?;
+        let raw_width=row["width"].as_f64().unwrap_or(logical_width);
+        let raw_height=row["height"].as_f64().unwrap_or(logical_height);
+        let mut record=serde_json::json!({"name":row["name"].as_str()? ,"x":row["x"].as_f64().unwrap_or(0.),
+            "y":row["y"].as_f64().unwrap_or(0.),"width":raw_width,
+            "height":raw_height,"scale":row["scale"].as_f64().unwrap_or(1.),
+            "logical_width":logical_width,"logical_height":logical_height});
+        if let Some(transform)=row.get("transform") {record["transform"]=transform.clone();}
+        if let Some(logical)=row.get("logical") {record["logical"]=logical.clone();}
+        Some(record)
+    }).collect::<Vec<_>>();
     BTreeMap::from([
         (
             "widgets.screen_width".into(),
@@ -70,6 +296,133 @@ fn widget_screen_values(
         (
             "widgets.screen_height".into(),
             bead::core::Value::Number(height),
+        ),
+        (
+            "widgets.screen_origin_x".into(),
+            bead::core::Value::Number(output["x"].as_f64().unwrap_or(0.)),
+        ),
+        (
+            "widgets.screen_origin_y".into(),
+            bead::core::Value::Number(output["y"].as_f64().unwrap_or(0.)),
+        ),
+        (
+            "widgets.screen_id".into(),
+            bead::core::Value::Text(output["name"].as_str().unwrap_or_default().into()),
+        ),
+        ("widgets.outputs".into(), bead::core::Value::list(records)),
+    ])
+}
+fn widget_app_origin_values(
+    snapshot: &bead::core::source::Snapshot,
+) -> BTreeMap<String, bead::core::Value> {
+    let invalid = || {
+        BTreeMap::from([
+            (
+                "widgets.drag.app_origin_valid".into(),
+                bead::core::Value::Bool(false),
+            ),
+            (
+                "widgets.drag.app_origin_x".into(),
+                bead::core::Value::Number(0.),
+            ),
+            (
+                "widgets.drag.app_origin_y".into(),
+                bead::core::Value::Number(0.),
+            ),
+            (
+                "widgets.drag.app_width".into(),
+                bead::core::Value::Number(0.),
+            ),
+            (
+                "widgets.drag.app_height".into(),
+                bead::core::Value::Number(0.),
+            ),
+            (
+                "widgets.drag.app_output_id".into(),
+                bead::core::Value::Text(String::new()),
+            ),
+        ])
+    };
+    if !snapshot.connected || snapshot.data["available"] == false {
+        return invalid();
+    }
+    let windows = snapshot.data["windows"].as_object();
+    let Some(window) = windows.and_then(|windows| {
+        windows.values().find(|window| {
+            window["pid"].as_u64() == Some(std::process::id() as u64)
+                && (window["appId"].as_str() == Some("nacre-widgets")
+                    || window["app_id"].as_str() == Some("nacre-widgets"))
+        })
+    }) else {
+        return invalid();
+    };
+    let backend = snapshot.data["backend"]
+        .as_str()
+        .or_else(|| window["backend"].as_str())
+        .unwrap_or("");
+    let geometry_ready = match backend {
+        "niri" => window["geometryKnown"] == true,
+        "hyprland" => true,
+        _ => window["geometryKnown"] == true,
+    };
+    if !geometry_ready {
+        return invalid();
+    }
+    let geometry = &window["geometry"];
+    let Some(x) = geometry["x"]
+        .as_f64()
+        .filter(|x| x.is_finite() && x.abs() <= 20_000.)
+    else {
+        return invalid();
+    };
+    let Some(y) = geometry["y"]
+        .as_f64()
+        .filter(|y| y.is_finite() && y.abs() <= 20_000.)
+    else {
+        return invalid();
+    };
+    let Some(width) = geometry["width"]
+        .as_f64()
+        .filter(|v| v.is_finite() && *v > 0. && *v <= 20_000.)
+    else {
+        return invalid();
+    };
+    let Some(height) = geometry["height"]
+        .as_f64()
+        .filter(|v| v.is_finite() && *v > 0. && *v <= 20_000.)
+    else {
+        return invalid();
+    };
+    BTreeMap::from([
+        (
+            "widgets.drag.app_origin_valid".into(),
+            bead::core::Value::Bool(true),
+        ),
+        (
+            "widgets.drag.app_origin_x".into(),
+            bead::core::Value::Number(x),
+        ),
+        (
+            "widgets.drag.app_origin_y".into(),
+            bead::core::Value::Number(y),
+        ),
+        (
+            "widgets.drag.app_width".into(),
+            bead::core::Value::Number(width),
+        ),
+        (
+            "widgets.drag.app_height".into(),
+            bead::core::Value::Number(height),
+        ),
+        (
+            "widgets.drag.app_output_id".into(),
+            bead::core::Value::Text(
+                window["outputId"]
+                    .as_str()
+                    .or_else(|| window["output"].as_str())
+                    .unwrap_or_default()
+                    .into(),
+            ),
         ),
     ])
 }
@@ -199,6 +552,7 @@ pub struct Runtime {
     widgets_canvas_layout: Option<bead::core::Value>,
     widgets_canvas_editing: bool,
     widgets_canvas_wanted: bool,
+    widget_canvas_projection: Option<BTreeMap<String, bead::core::Value>>,
     widgets_client: Option<crate::nacre_source::Client>,
     widget_editor: bool,
     widgets_close_on_commit: bool,
@@ -208,8 +562,27 @@ pub struct Runtime {
     widgets_write_document: Option<bead::core::Value>,
     widget_app: bool,
     widgets_write_previous: Option<(bead::core::Value, bead::core::Value, u64)>,
+    widget_write_feedback: Option<WidgetWriteFeedback>,
+    widget_drag_pending_epoch: Option<u64>,
+    widget_drag_latest_epoch: Option<u64>,
+    widgets_drag_write: bool,
+    widget_drag_controller: Option<crate::widgets::widget_drag::Controller>,
+    widget_drag_subscription: Option<crate::widgets::widget_drag::Subscription>,
+    widget_drag_app_announced: bool,
+    widget_active_app: Option<(u32, u64)>,
+    widget_floating_request: Option<WidgetFloatingRequest>,
+    widget_drag_model: Option<BTreeMap<String, bead::core::Value>>,
+    widget_drag_wanted: bool,
+    widget_drag_output: Option<String>,
+    widget_drag_projection: Option<BTreeMap<String, bead::core::Value>>,
+    widget_drag_epoch: u64,
+    widget_drag_retire_cleanup: bool,
+    widget_drag_action_registered: bool,
     widget_displays_topic: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     widget_displays_subscription: Option<bead::core::source::Subscription>,
+    widget_compositor_topic: Option<std::sync::Arc<dyn bead::core::source::Source>>,
+    widget_compositor_subscription: Option<bead::core::source::Subscription>,
+    widget_compositor_policy_only: bool,
     pointer_at: (f32, f32),
     origins_topic: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     origins_subscription: Option<bead::core::source::Subscription>,
@@ -247,6 +620,7 @@ pub struct Runtime {
     viewport_size: (u32, u32),
     popup_anchor: Option<bead::wayland::PanelAnchor>,
     popup_anchor_changed: bool,
+    host_release_pending: bool,
     tray_menu: Option<crate::tray::Menu>,
     pending_focus: Option<String>,
     bar: bool,
@@ -270,6 +644,13 @@ struct PendingDashboard {
 }
 impl Drop for Runtime {
     fn drop(&mut self) {
+        if self.widget_app && self.widget_drag_app_announced {
+            let delivered =
+                crate::widgets::widget_drag::app_state_close(std::time::Duration::from_millis(145));
+            if !delivered {
+                eprintln!("WIDGET_DRAG_CLOSE_TIMEOUT");
+            }
+        }
         // Keep only the bounded scalar search/navigation state after idle close;
         // rows and engine tickets remain owned by the dropped Menu projection.
         if self.launcher.is_some()
@@ -297,49 +678,210 @@ impl Runtime {
         self.session.commit(scene.clone());
         Ok(scene)
     }
+    fn announce_widget_app(&mut self) {
+        if self.widget_app && !self.widget_drag_app_announced {
+            let floating =
+                self.session.stores.get("window.floating") == Some(&bead::core::Value::Bool(true));
+            crate::widgets::widget_drag::app_state(true, floating);
+            self.widget_drag_app_announced = true;
+        }
+    }
     fn widget_seed(&self) -> Option<serde_json::Value> {
-        self.session
-            .view_nodes()
+        let nodes = self.session.view_nodes();
+        let mut seed = nodes.iter().find_map(|node| match &node.metadata {
+            Some(bead::core::Value::List(records)) => records
+                .first()
+                .filter(|record| record["widget_layout"] == true)
+                .cloned(),
+            _ => None,
+        })?;
+        let geometry = nodes
             .iter()
-            .find_map(|node| match &node.metadata {
-                Some(bead::core::Value::List(records)) => records
-                    .first()
-                    .filter(|record| record["widget_layout"] == true)
-                    .cloned(),
-                _ => None,
+            .filter_map(|node| {
+                let Some(bead::core::Value::List(records)) = &node.metadata else {
+                    return None;
+                };
+                let marker = records
+                    .iter()
+                    .find(|record| record["widget_instance"] == true)?;
+                let iid = marker["iid"].as_str()?;
+                let rect = bead::render::tree::rect(&node.draw);
+                Some(serde_json::json!({"iid":iid,"x":rect.x,"y":rect.y,"w":rect.w,"h":rect.h}))
             })
+            .collect::<Vec<_>>();
+        if !geometry.is_empty() {
+            seed["geometry"] = serde_json::json!(geometry);
+        }
+        Some(seed)
     }
     fn widget_argument(&self, name: &str, argument: bead::core::Value) -> bead::core::Value {
+        let argument = if name == "widgets.drag" {
+            crate::widgets::widget_drag::prepare_event(
+                &argument,
+                &self.session.stores,
+                self.widget_app,
+                self.output.as_deref().unwrap_or(""),
+            )
+        } else {
+            argument
+        };
         let bead::core::Value::List(records) = &argument else {
             return argument;
         };
-        let Some(seed) = self.widget_seed() else {
-            return argument;
-        };
-        let Some(seed) = seed.as_object() else {
-            return argument;
-        };
         let mut records = (**records).clone();
-        let target = if name == "widgets.drag" {
-            if records
-                .first()
-                .is_none_or(|record| record["phase"] != "drop")
-            {
-                return argument;
-            }
-            records
+        if let Some(seed) = self
+            .widget_seed()
+            .and_then(|seed| seed.as_object().cloned())
+        {
+            if name == "widgets.drag" {
+                if let Some(event) = records
+                    .first_mut()
+                    .and_then(serde_json::Value::as_object_mut)
+                {
+                    let authoritative = event
+                        .get("private_remote")
+                        .and_then(serde_json::Value::as_bool)
+                        == Some(true);
+                    let context = event
+                        .entry("context")
+                        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+                    if let Some(context) = context.as_object_mut() {
+                        for (key, value) in &seed {
+                            if authoritative {
+                                context.insert(key.clone(), value.clone());
+                            } else {
+                                context.entry(key.clone()).or_insert_with(|| value.clone());
+                            }
+                        }
+                    }
+                    if let Some(target) = event
+                        .get_mut("target")
+                        .and_then(serde_json::Value::as_array_mut)
+                        .and_then(|targets| targets.first_mut())
+                        .and_then(serde_json::Value::as_object_mut)
+                    {
+                        for (key, value) in &seed {
+                            target.entry(key.clone()).or_insert_with(|| value.clone());
+                        }
+                    }
+                }
+            } else if let Some(target) = records
                 .first_mut()
-                .and_then(|record| record["target"].as_array_mut())
-                .and_then(|targets| targets.first_mut())
-        } else {
-            records.first_mut()
-        };
-        if let Some(target) = target.and_then(serde_json::Value::as_object_mut) {
-            for (key, value) in seed {
-                target.entry(key.clone()).or_insert_with(|| value.clone());
+                .and_then(serde_json::Value::as_object_mut)
+            {
+                for (key, value) in &seed {
+                    target.entry(key.clone()).or_insert_with(|| value.clone());
+                }
             }
         }
         bead::core::Value::list(records)
+    }
+    fn widget_app_state(&mut self, pid: u32, generation: u64, open: bool, floating: bool) -> bool {
+        if open {
+            if self
+                .widget_active_app
+                .is_some_and(|(active_pid, active_generation)| {
+                    generation < active_generation
+                        || (generation == active_generation && pid != active_pid)
+                })
+            {
+                return false;
+            }
+            let same = self.widget_floating_request.is_some_and(|request| {
+                request.pid == pid && request.generation == generation && request.enabled
+            });
+            self.widget_active_app = Some((pid, generation));
+            if floating {
+                if !same {
+                    self.widget_floating_request = Some(WidgetFloatingRequest {
+                        pid,
+                        generation,
+                        enabled: true,
+                        attempted: false,
+                    });
+                }
+            } else {
+                self.widget_floating_request = None;
+                crate::widgets::widget_drag::release_app_floating(pid, generation);
+                self.release_widget_compositor_policy_topic();
+            }
+        } else if self.widget_active_app == Some((pid, generation)) {
+            self.widget_active_app = None;
+            self.widget_floating_request = None;
+            crate::widgets::widget_drag::release_app_floating(pid, generation);
+            self.release_widget_compositor_policy_topic();
+        } else {
+            return false;
+        }
+        if open
+            && floating
+            && self.widget_app
+            && crate::widgets::widget_drag::active_app_identity() == Some((pid, generation))
+            && self.backend.is_none()
+            && let Ok(backend) = crate::backends::Native::from_env()
+            && let Err(error) = self.attach_backend(backend)
+        {
+            eprintln!("WIDGET_FLOAT_BACKEND_ERROR {error}");
+        }
+        if open && floating && self.widget_floating_request.is_some() && self.backend.is_some() {
+            self.ensure_widget_compositor_subscription();
+        }
+        true
+    }
+    fn release_widget_compositor_policy_topic(&mut self) {
+        self.widget_compositor_subscription = None;
+        if self.widget_compositor_policy_only {
+            self.widget_compositor_topic = None;
+            self.widget_compositor_policy_only = false;
+        }
+    }
+    fn ensure_widget_compositor_subscription(&mut self) {
+        if self.widget_compositor_topic.is_none()
+            && let Some(client) = &self.widgets_client
+            && let Ok(topic) = client.view_topic("compositor")
+        {
+            self.widget_compositor_topic = Some(topic);
+            self.widget_compositor_policy_only = true;
+        }
+        if self.widget_compositor_subscription.is_none()
+            && let (Some(source), Some(wakeup)) =
+                (&self.widget_compositor_topic, self.wakeup.clone())
+        {
+            match source.subscribe(std::sync::Arc::new(move |snapshot| {
+                wakeup(UiEvent::Model(widget_app_origin_values(&snapshot)));
+            })) {
+                Ok(subscription) => self.widget_compositor_subscription = Some(subscription),
+                Err(_) => eprintln!("SOURCE_ERROR code=widgets_policy_compositor_subscription"),
+            }
+        }
+    }
+    fn try_float_widgets_window(&mut self, snapshot: &bead::backends::Snapshot) {
+        if self.widget_floating_request.is_some() {
+            self.ensure_widget_compositor_subscription();
+        }
+        let (Some(backend), Some(compositor)) =
+            (self.backend.clone(), self.widget_compositor_topic.as_ref())
+        else {
+            return;
+        };
+        let compositor = compositor.snapshot();
+        let active = crate::widgets::widget_drag::active_app_identity();
+        let Some(action) = widget_floating_action(
+            &mut self.widget_floating_request,
+            active,
+            snapshot,
+            &compositor,
+        ) else {
+            return;
+        };
+        let Some(request) = self.widget_floating_request else {
+            return;
+        };
+        if !crate::widgets::widget_drag::claim_active_app_floating(request.pid, request.generation)
+        {
+            return;
+        }
+        let _ = backend.action(action);
     }
     fn widget_host_values(&self) -> BTreeMap<String, bead::core::Value> {
         self.session
@@ -352,11 +894,691 @@ impl Runtime {
                     || key.starts_with("bead.desktop.")
                     || matches!(
                         key.as_str(),
-                        "bead.workspaces" | "bead.windows" | "bead.focused_title"
+                        "bead.workspaces"
+                            | "bead.windows"
+                            | "bead.focused_title"
+                            | "bead.viewport.width"
+                            | "bead.viewport.height"
                     )
             })
             .map(|(key, value)| (key.clone(), value.clone()))
             .collect()
+    }
+    /// Common display data shared by the desktop canvas and the passive drag preview.
+    fn widget_surface_values(&self, include_status: bool) -> BTreeMap<String, bead::core::Value> {
+        let public_bar_keys = [
+            "bar.clock.text",
+            "bar.clock.twelve",
+            "bar.dashboard.enabled",
+            "bar.height",
+            "bar.launcher",
+            "bar.notifications.count",
+            "bar.notifications.text",
+            "bar.popouts",
+            "bar.reconnecting",
+            "bar.title",
+            "bar.title.cue.body",
+            "bar.title.cue.border",
+            "bar.title.cue.fade",
+            "bar.title.cue.halo",
+            "bar.title.cue.visible",
+            "bar.tray.enabled",
+            "bar.tray.visible",
+            "bar.updates.count",
+            "bar.updates.enabled",
+            "bar.updates.text",
+            "bar.window.focus.enabled",
+            "bar.workspace.count",
+            "bar.workspace.enabled",
+            "bar.workspace.icons",
+            "bar.workspace.hints",
+            "bar.workspace.origins",
+        ];
+        let public_context_keys = ["bead.edge.dwell", "bead.edge.fade"];
+        let public_desktop_keys = [
+            "bead.desktop.audio.percent",
+            "bead.desktop.audio.device",
+            "bead.desktop.audio.label",
+            "bead.desktop.titlevisible",
+            "bead.desktop.clock",
+            "bead.desktop.clock.seconds",
+            "bead.desktop.clock.date",
+            "bead.desktop.audio",
+            "bead.desktop.audio.available",
+            "bead.desktop.battery",
+            "bead.desktop.battery.value",
+            "bead.desktop.battery.value.width",
+            "bead.desktop.network",
+            "bead.desktop.bluetooth",
+            "bead.desktop.tray",
+            "bead.desktop.menu",
+            "bead.desktop.tray.tooltip",
+            "bead.desktop.tray.tooltip.visible",
+        ];
+        self.session
+            .stores
+            .values()
+            .iter()
+            .filter(|(key, _)| {
+                public_bar_keys.contains(&key.as_str())
+                    || public_desktop_keys.contains(&key.as_str())
+                    || public_context_keys.contains(&key.as_str())
+                    || (include_status
+                        && matches!(
+                            key.as_str(),
+                            "status.hovered"
+                                | "status.peek.visible"
+                                | "status.peek.kind"
+                                | "status.panel.kind"
+                        ))
+                    || matches!(
+                        key.as_str(),
+                        "bead.workspaces"
+                            | "bead.windows"
+                            | "bead.focused_title"
+                            | "bead.viewport.width"
+                            | "bead.viewport.height"
+                    )
+            })
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect()
+    }
+    /// Values that the desktop canvas is allowed to receive from its host.
+    /// Keep this projection aligned with the canvas behavior stores; controller
+    /// bookkeeping never crosses the view boundary.
+    fn widget_canvas_values(&self) -> BTreeMap<String, bead::core::Value> {
+        let public_widget_keys = [
+            "widgets.layout",
+            "widgets.rev",
+            "widgets.draft",
+            "widgets.undo",
+            "widgets.error",
+            "widgets.message",
+            "widgets.preview",
+            "widgets.geometry",
+            "widgets.editing",
+            "widgets.selected",
+            "widgets.canvas.width",
+            "widgets.canvas.height",
+            "widgets.drag.active",
+            "widgets.drag.source",
+            "widgets.drag.phase",
+            "widgets.drag.layout",
+            "widgets.drag.destination",
+            "widgets.drag.x",
+            "widgets.drag.y",
+            "widgets.drag.width",
+            "widgets.drag.height",
+            "widgets.drag.grab_x",
+            "widgets.drag.grab_y",
+            "widgets.drag.snap_x",
+            "widgets.drag.snap_y",
+            "widgets.drag.source_origin_valid",
+            "widgets.drag.app_origin_valid",
+            "widgets.drag.target_output_id",
+            "widgets.app.open",
+            "widgets.screen_width",
+            "widgets.screen_height",
+            "widgets.screen_origin_x",
+            "widgets.screen_origin_y",
+            "widgets.screen_id",
+            "widgets.outputs",
+        ];
+        let mut values = self.widget_surface_values(true);
+        values.extend(
+            self.session
+                .stores
+                .values()
+                .iter()
+                .filter(|(key, _)| public_widget_keys.contains(&key.as_str()))
+                .map(|(key, value)| (key.clone(), value.clone())),
+        );
+        values
+    }
+    /// The drag ghost has its own narrower behavior contract than the canvas.
+    fn widget_drag_preview_values(&self) -> BTreeMap<String, bead::core::Value> {
+        let public_widget_keys = [
+            "widgets.layout",
+            "widgets.draft",
+            "widgets.preview",
+            "widgets.editing",
+            "widgets.drag.layout",
+            "widgets.drag.base",
+            "widgets.drag.original",
+            "widgets.drag.active",
+            "widgets.drag.source",
+            "widgets.drag.destination",
+            "widgets.drag.phase",
+            "widgets.drag.epoch",
+            "widgets.drag.snap_x",
+            "widgets.drag.snap_y",
+            "widgets.drag.x",
+            "widgets.drag.y",
+            "widgets.drag.start_x",
+            "widgets.drag.start_y",
+            "widgets.drag.width",
+            "widgets.drag.height",
+            "widgets.drag.grab_x",
+            "widgets.drag.grab_y",
+            "widgets.drag.source_origin_x",
+            "widgets.drag.source_origin_y",
+            "widgets.drag.source_origin_valid",
+            "widgets.drag.target_origin_x",
+            "widgets.drag.target_origin_y",
+            "widgets.drag.app_origin_x",
+            "widgets.drag.app_origin_y",
+            "widgets.drag.app_origin_valid",
+            "widgets.drag.app_width",
+            "widgets.drag.app_height",
+            "widgets.drag.target_output_id",
+        ];
+        let mut values = self.widget_surface_values(false);
+        values.extend(
+            self.session
+                .stores
+                .values()
+                .iter()
+                .filter(|(key, _)| public_widget_keys.contains(&key.as_str()))
+                .map(|(key, value)| (key.clone(), value.clone())),
+        );
+        values
+    }
+    fn stage_widget_drag_values(
+        &self,
+        values: &BTreeMap<String, bead::core::Value>,
+    ) -> BTreeMap<String, bead::core::Value> {
+        values
+            .iter()
+            .filter(|(name, _)| {
+                (name.starts_with("widgets.drag.")
+                    || matches!(
+                        name.as_str(),
+                        "widgets.draft"
+                            | "widgets.undo"
+                            | "widgets.error"
+                            | "widgets.message"
+                            | "widgets.editing"
+                            | "widgets.app.open"
+                    ))
+                    && self.session.stores.get(name).is_some()
+            })
+            .map(|(name, value)| (name.clone(), value.clone()))
+            .collect()
+    }
+    fn stage_widget_drag_state(
+        &self,
+        values: &BTreeMap<String, bead::core::Value>,
+    ) -> BTreeMap<String, bead::core::Value> {
+        values
+            .iter()
+            .filter(|(name, _)| {
+                name.starts_with("widgets.drag.") && self.session.stores.get(name).is_some()
+            })
+            .map(|(name, value)| (name.clone(), value.clone()))
+            .collect()
+    }
+    fn retire_widget_drag_on_other_output(&mut self) -> Result<Option<Scene>, Box<dyn Error>> {
+        let Some(controller) = self.widget_drag_controller.as_mut() else {
+            return self.finish_scene(None);
+        };
+        let epoch = controller.drag_epoch();
+        let values = controller.drag(bead::core::Value::list(vec![
+            serde_json::json!({"phase":"retire","epoch":epoch}),
+        ]))?;
+        self.widget_drag_model = Some(values.clone());
+        self.widget_drag_retire_cleanup = true;
+        let projection = self.stage_widget_drag_state(&values);
+        let scene = self
+            .session
+            .update(projection)
+            .map_err(|error| -> Box<dyn Error> { Box::new(error) })?;
+        let scene = self.finish_scene(scene)?;
+        if scene.is_none() {
+            self.widget_drag_controller = None;
+            self.widget_drag_model = None;
+            self.widget_drag_retire_cleanup = false;
+        }
+        Ok(scene)
+    }
+    fn register_widget_drag_action(&mut self) -> Result<(), Box<dyn Error>> {
+        if !self.widget_drag_action_registered {
+            let defaults = BTreeMap::from([
+                ("widgets.editing".into(), bead::core::Value::Bool(false)),
+                ("widgets.app.open".into(), bead::core::Value::Bool(false)),
+                ("widgets.drag.active".into(), bead::core::Value::Bool(false)),
+                (
+                    "widgets.drag.source".into(),
+                    bead::core::Value::list(Vec::new()),
+                ),
+                (
+                    "widgets.drag.destination".into(),
+                    bead::core::Value::Text(String::new()),
+                ),
+                (
+                    "widgets.drag.phase".into(),
+                    bead::core::Value::Text(String::new()),
+                ),
+                ("widgets.drag.epoch".into(), bead::core::Value::Number(0.)),
+                (
+                    "widgets.drag.base".into(),
+                    bead::core::Value::list(Vec::new()),
+                ),
+                (
+                    "widgets.drag.original".into(),
+                    bead::core::Value::list(Vec::new()),
+                ),
+                (
+                    "widgets.drag.layout".into(),
+                    bead::core::Value::list(Vec::new()),
+                ),
+                ("widgets.drag.x".into(), bead::core::Value::Number(0.)),
+                ("widgets.drag.y".into(), bead::core::Value::Number(0.)),
+                ("widgets.drag.start_x".into(), bead::core::Value::Number(0.)),
+                ("widgets.drag.start_y".into(), bead::core::Value::Number(0.)),
+                ("widgets.drag.width".into(), bead::core::Value::Number(0.)),
+                ("widgets.drag.height".into(), bead::core::Value::Number(0.)),
+                ("widgets.drag.grab_x".into(), bead::core::Value::Number(0.)),
+                ("widgets.drag.grab_y".into(), bead::core::Value::Number(0.)),
+                ("widgets.drag.snap_x".into(), bead::core::Value::Number(0.)),
+                ("widgets.drag.snap_y".into(), bead::core::Value::Number(0.)),
+                (
+                    "widgets.drag.target_origin_x".into(),
+                    bead::core::Value::Number(0.),
+                ),
+                (
+                    "widgets.drag.target_origin_y".into(),
+                    bead::core::Value::Number(0.),
+                ),
+                (
+                    "widgets.drag.target_output_id".into(),
+                    bead::core::Value::Text(String::new()),
+                ),
+                (
+                    "widgets.drag.source_origin_x".into(),
+                    bead::core::Value::Number(0.),
+                ),
+                (
+                    "widgets.drag.source_origin_y".into(),
+                    bead::core::Value::Number(0.),
+                ),
+                (
+                    "widgets.drag.source_origin_valid".into(),
+                    bead::core::Value::Bool(false),
+                ),
+                (
+                    "widgets.drag.app_origin_x".into(),
+                    bead::core::Value::Number(0.),
+                ),
+                (
+                    "widgets.drag.app_origin_y".into(),
+                    bead::core::Value::Number(0.),
+                ),
+                (
+                    "widgets.drag.app_origin_valid".into(),
+                    bead::core::Value::Bool(false),
+                ),
+                (
+                    "widgets.drag.app_width".into(),
+                    bead::core::Value::Number(0.),
+                ),
+                (
+                    "widgets.drag.app_height".into(),
+                    bead::core::Value::Number(0.),
+                ),
+                (
+                    "widgets.drag.app_output_id".into(),
+                    bead::core::Value::Text(String::new()),
+                ),
+            ]);
+            self.session.stores = self.session.stores.reconcile(&defaults)?;
+            self.actions.register("widgets.drag", "ui.widgets")?;
+            let _ = self.actions.register("widgets.edit", "ui.widgets");
+            self.actions.grant("ui.widgets");
+            self.widget_drag_action_registered = true;
+        }
+        Ok(())
+    }
+    fn widget_drag_motion(argument: &bead::core::Value) -> bool {
+        matches!(argument, bead::core::Value::List(records)
+            if records.first().and_then(|record|record["phase"].as_str())==Some("move"))
+    }
+    fn widget_drag_origin_argument(
+        argument: &bead::core::Value,
+        origin_x: f64,
+        origin_y: f64,
+    ) -> bead::core::Value {
+        let bead::core::Value::List(records) = argument else {
+            return argument.clone();
+        };
+        let mut records = (**records).clone();
+        if let Some(event) = records
+            .first_mut()
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            event
+                .entry("source_origin_x")
+                .or_insert(serde_json::json!(origin_x));
+            event
+                .entry("source_origin_y")
+                .or_insert(serde_json::json!(origin_y));
+        }
+        bead::core::Value::list(records)
+    }
+    fn begin_widget_drag_write(
+        &mut self,
+        document: serde_json::Value,
+        model: &BTreeMap<String, bead::core::Value>,
+        previous_undo: Option<bead::core::Value>,
+    ) -> Result<(), Box<dyn Error>> {
+        if self.widgets_write.is_some() {
+            return Ok(());
+        }
+        let old_layout = model
+            .get("widgets.layout")
+            .cloned()
+            .unwrap_or_else(|| bead::core::Value::list(Vec::new()));
+        let old_undo = previous_undo.unwrap_or_else(|| bead::core::Value::list(Vec::new()));
+        let old_revision = match model.get("widgets.rev") {
+            Some(bead::core::Value::Number(rev)) if rev.is_finite() && *rev >= 0. => *rev as u64,
+            _ => 0,
+        };
+        let document_value = bead::core::Value::list(vec![document.clone()]);
+        self.widgets_write_previous = Some((old_layout.clone(), old_undo.clone(), old_revision));
+        self.widgets_write_document = Some(document_value.clone());
+        self.widgets_drag_write = true;
+        let result: Result<WidgetWriteResult, String> = if let Some(client) = &self.widgets_client {
+            let status = client.status();
+            (|| -> Result<_, String> {
+                let method = status
+                    .methods
+                    .get("settings.set")
+                    .filter(|method| method.v == 1)
+                    .ok_or("Widget settings are unavailable")?;
+                let boot = status.boot.ok_or("Widget settings are disconnected")?;
+                let wakeup = self
+                    .wakeup
+                    .clone()
+                    .ok_or("Widget event channel unavailable")?;
+                client.begin_call("settings.set".into(),serde_json::json!({"store":"widgets","key":["layout"],"value":document,"rev":old_revision}),
+                    std::time::Duration::from_millis(u64::from(method.timeout).clamp(1,30_000)),
+                    crate::nacre_source::CallGuard{boot,version:1},Some(std::sync::Arc::new(move||wakeup(UiEvent::Model(BTreeMap::new())))))
+                    .map(WidgetWriteResult::Pending).map_err(|error|error.message)
+            })()
+        } else {
+            self.widgets_file
+                .as_deref()
+                .ok_or("Widget layout path unavailable".to_owned())
+                .and_then(|path| {
+                    crate::widgets::save_file_revisioned(path, &document, old_revision)
+                        .map_err(|error| error.to_string())
+                })
+                .map(WidgetWriteResult::Saved)
+        };
+        match result {
+            Ok(WidgetWriteResult::Pending(ticket)) => {
+                self.widgets_write = Some(ticket);
+            }
+            Ok(WidgetWriteResult::Saved(rev)) => {
+                self.widgets_drag_write = false;
+                self.widgets_write_previous = None;
+                self.widgets_write_document = None;
+                let mut values = model.clone();
+                values.insert("widgets.layout".into(), document_value);
+                values.insert("widgets.draft".into(), bead::core::Value::list(Vec::new()));
+                values.insert("widgets.rev".into(), bead::core::Value::Number(rev as f64));
+                values.insert("widgets.write".into(), bead::core::Value::list(Vec::new()));
+                values.insert(
+                    "widgets.error".into(),
+                    bead::core::Value::Text(String::new()),
+                );
+                values.insert(
+                    "widgets.message".into(),
+                    bead::core::Value::Text("Changes saved".into()),
+                );
+                self.widget_drag_model = Some(values);
+            }
+            Err(error) => {
+                let was_drag_write = matches!(
+                    model.get("widgets.drag.active"),
+                    Some(bead::core::Value::Bool(true))
+                );
+                self.widgets_drag_write = false;
+                self.widgets_write_document = None;
+                let previous = self.widgets_write_previous.take();
+                let mut values = model.clone();
+                if let Some((layout, undo, revision)) = previous {
+                    values.insert("widgets.layout".into(), layout.clone());
+                    values.insert("widgets.undo".into(), undo.clone());
+                    values.insert(
+                        "widgets.rev".into(),
+                        bead::core::Value::Number(revision as f64),
+                    );
+                } else {
+                    values.insert("widgets.layout".into(), old_layout.clone());
+                    values.insert("widgets.undo".into(), old_undo.clone());
+                    values.insert(
+                        "widgets.rev".into(),
+                        bead::core::Value::Number(old_revision as f64),
+                    );
+                }
+                values.insert("widgets.draft".into(), bead::core::Value::list(Vec::new()));
+                values.insert("widgets.write".into(), bead::core::Value::list(Vec::new()));
+                values.insert("widgets.error".into(), bead::core::Value::Text(error));
+                if was_drag_write && let Some(controller) = self.widget_drag_controller.as_mut() {
+                    let epoch = controller.drag_epoch();
+                    if let Ok(returning) = controller.drag(bead::core::Value::list(vec![
+                        serde_json::json!({"phase":"cancel","epoch":epoch}),
+                    ])) {
+                        for (key, value) in returning {
+                            if key.starts_with("widgets.drag.") {
+                                values.insert(key, value);
+                            }
+                        }
+                    }
+                }
+                self.widget_drag_model = Some(values);
+            }
+        }
+        Ok(())
+    }
+    fn refresh_widget_write_scene(&mut self) -> Result<Option<Scene>, Box<dyn Error>> {
+        let Some(values) = self.widget_drag_model.as_ref().cloned() else {
+            return self.finish_scene(None);
+        };
+        let mut changes = self.stage_widget_drag_values(&values);
+        for key in ["widgets.layout", "widgets.rev"] {
+            if let Some(value) = values.get(key) {
+                changes.insert(key.to_owned(), value.clone());
+            }
+        }
+        let scene = self
+            .session
+            .update(changes)
+            .map_err(|error| -> Box<dyn Error> { Box::new(error) })?;
+        self.finish_scene(scene)
+    }
+    fn publish_widget_models(&mut self) {
+        if self.widget_editor && !self.widget_app {
+            let keys = [
+                "widgets.layout",
+                "widgets.draft",
+                "widgets.editing",
+                "widgets.selected",
+                "widgets.geometry",
+                "widgets.canvas.width",
+                "widgets.canvas.height",
+                "widgets.drag.active",
+                "widgets.drag.source",
+                "widgets.drag.x",
+                "widgets.drag.y",
+            ];
+            let projection: BTreeMap<_, _> = keys
+                .into_iter()
+                .filter_map(|key| {
+                    self.session
+                        .stores
+                        .get(key)
+                        .map(|value| (key.to_owned(), value.clone()))
+                })
+                .collect();
+            if self.widgets_projection.as_ref() != Some(&projection) {
+                self.widgets_projection = Some(projection.clone());
+                if let Some(wakeup) = &self.wakeup {
+                    wakeup(UiEvent::HostModel(projection));
+                }
+            }
+        }
+        if !(self.bar || self.widget_canvas) {
+            return;
+        }
+        let mut values = self.widget_host_values();
+        if let Some(model) = &self.widget_drag_model {
+            for (key, value) in model {
+                if key.starts_with("widgets.drag.") {
+                    values.insert(key.clone(), value.clone());
+                }
+            }
+        }
+        let mut canvas_values = self.widget_canvas_values();
+        for (key, value) in &values {
+            if key.starts_with("widgets.drag.") && canvas_values.contains_key(key.as_str()) {
+                canvas_values.insert(key.clone(), value.clone());
+            }
+        }
+        let mut drag_values = self.widget_drag_preview_values();
+        for (key, value) in &values {
+            if key.starts_with("widgets.drag.") && drag_values.contains_key(key.as_str()) {
+                drag_values.insert(key.clone(), value.clone());
+            }
+        }
+        if self.bar || self.widget_canvas {
+            let active = values.get("widgets.drag.active") == Some(&bead::core::Value::Bool(true));
+            let previewing = active
+                && matches!(values.get("widgets.drag.phase"),
+                Some(bead::core::Value::Text(phase)) if phase=="dragging"||phase=="settle");
+            let transient_first = previewing
+                && matches!(values.get("widgets.drag.layout"),Some(bead::core::Value::List(documents)) if !documents.is_empty());
+            let draft_first = values.get("widgets.editing") == Some(&bead::core::Value::Bool(true))
+                && matches!(values.get("widgets.draft"),Some(bead::core::Value::List(documents)) if !documents.is_empty());
+            let layout_key = if transient_first {
+                "widgets.drag.layout"
+            } else if draft_first {
+                "widgets.draft"
+            } else {
+                "widgets.layout"
+            };
+            let layout = values
+                .get(layout_key)
+                .cloned()
+                .unwrap_or_else(|| bead::core::Value::list(Vec::new()));
+            let has_canvas = match &layout {
+                bead::core::Value::List(documents) => documents
+                    .first()
+                    .and_then(|doc| doc["hosts"]["canvas"]["instances"].as_array())
+                    .is_some_and(|instances| !instances.is_empty()),
+                _ => false,
+            };
+            let wanted = has_canvas;
+            let canvas_output = if active {
+                values
+                    .get("widgets.drag.target_output_id")
+                    .and_then(|value| {
+                        if let bead::core::Value::Text(name) = value {
+                            (!name.is_empty()).then(|| name.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .or_else(|| self.output.clone())
+            } else {
+                self.output.clone()
+            };
+            if self.bar && wanted != self.widgets_canvas_wanted {
+                self.widgets_canvas_wanted = wanted;
+                self.widgets_canvas_layout = Some(layout.clone());
+                self.widget_canvas_projection = None;
+                if let Some(wakeup) = &self.wakeup {
+                    wakeup(UiEvent::CanvasOffer {
+                        view: "widgets-canvas".into(),
+                        output: canvas_output.clone(),
+                        open: wanted,
+                        values: canvas_values.clone(),
+                    });
+                }
+            }
+            if wanted {
+                let projection = canvas_values.clone();
+                if self.widget_canvas_projection.as_ref() != Some(&projection) {
+                    self.widget_canvas_projection = Some(projection.clone());
+                    if let Some(wakeup) = &self.wakeup {
+                        wakeup(UiEvent::CanvasModel {
+                            view: "widgets-canvas".into(),
+                            output: canvas_output,
+                            values: projection,
+                        });
+                    }
+                }
+            } else {
+                self.widget_canvas_projection = None;
+            }
+        }
+        let active = values.get("widgets.drag.active") == Some(&bead::core::Value::Bool(true));
+        let output = values
+            .get("widgets.drag.target_output_id")
+            .and_then(|value| {
+                if let bead::core::Value::Text(name) = value {
+                    (!name.is_empty()).then(|| name.clone())
+                } else {
+                    None
+                }
+            })
+            .or_else(|| self.output.clone());
+        if let Some(wakeup) = &self.wakeup {
+            if self.widget_drag_wanted && (!active || self.widget_drag_output != output) {
+                wakeup(UiEvent::CanvasOffer {
+                    view: "widgets-drag".into(),
+                    output: self.widget_drag_output.clone(),
+                    open: false,
+                    values: drag_values.clone(),
+                });
+                self.widget_drag_wanted = false;
+                self.widget_drag_output = None;
+                self.widget_drag_projection = None;
+            }
+            if active && (!self.widget_drag_wanted || self.widget_drag_output != output) {
+                wakeup(UiEvent::CanvasOffer {
+                    view: "widgets-drag".into(),
+                    output: output.clone(),
+                    open: true,
+                    values: drag_values.clone(),
+                });
+                self.widget_drag_wanted = true;
+                self.widget_drag_output = output.clone();
+                self.widget_drag_projection = Some(drag_values.clone());
+            }
+            if self.widget_drag_wanted && self.widget_drag_projection.as_ref() != Some(&drag_values)
+            {
+                self.widget_drag_projection = Some(drag_values.clone());
+                wakeup(UiEvent::CanvasModel {
+                    view: "widgets-drag".into(),
+                    output: self.widget_drag_output.clone(),
+                    values: drag_values,
+                });
+            }
+        }
+    }
+    fn retire_widget_drag_after_feedback(&mut self) {
+        self.widget_drag_epoch = self.widget_drag_epoch.wrapping_add(1).max(1u64 << 63);
+        let token = self.widget_drag_epoch;
+        if let Some(wakeup) = self.wakeup.clone() {
+            let _ = std::thread::Builder::new()
+                .name("widgets-drag-retire".into())
+                .stack_size(64 * 1024)
+                .spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(205));
+                    wakeup(UiEvent::Timer { token });
+                });
+        }
     }
     /// A freshly opened prompt or form takes keyboard focus on its first field, so the
     /// user can type (and press Enter) at once.
@@ -675,6 +1897,7 @@ impl Runtime {
             widgets_canvas_layout: None,
             widgets_canvas_editing: false,
             widgets_canvas_wanted: false,
+            widget_canvas_projection: None,
             widgets_client: None,
             widget_editor: false,
             widgets_close_on_commit: false,
@@ -684,8 +1907,27 @@ impl Runtime {
             widgets_write_document: None,
             widget_app: false,
             widgets_write_previous: None,
+            widget_write_feedback: None,
+            widget_drag_pending_epoch: None,
+            widget_drag_latest_epoch: None,
+            widgets_drag_write: false,
+            widget_drag_controller: None,
+            widget_drag_subscription: None,
+            widget_drag_app_announced: false,
+            widget_active_app: None,
+            widget_floating_request: None,
+            widget_drag_model: None,
+            widget_drag_wanted: false,
+            widget_drag_output: None,
+            widget_drag_projection: None,
+            widget_drag_epoch: 1u64 << 63,
+            widget_drag_retire_cleanup: false,
+            widget_drag_action_registered: false,
             widget_displays_topic: None,
             widget_displays_subscription: None,
+            widget_compositor_topic: None,
+            widget_compositor_subscription: None,
+            widget_compositor_policy_only: false,
             pointer_at: (0., 0.),
             widgets_topic: None,
             widgets_subscription: None,
@@ -732,6 +1974,7 @@ impl Runtime {
             viewport_size: (1200, 800),
             popup_anchor: None,
             popup_anchor_changed: false,
+            host_release_pending: false,
             tray_menu: None,
             pending_focus: None,
             bar: false,
@@ -807,6 +2050,7 @@ impl Runtime {
         self.widget_editor = !canvas;
         self.widget_canvas = canvas;
         self.actions.register("widgets.edit", "ui.widgets")?;
+        self.register_widget_drag_action()?;
         self.actions.grant("ui.widgets");
         if canvas {
             self.actions.register("view.open", "ui.widgets")?;
@@ -839,6 +2083,14 @@ impl Runtime {
         if let Some(client) = client {
             self.widgets_client = Some(client.clone());
             self = self.with_bar_daemon(client)?;
+            if let Ok(topic) = client.view_topic("displays") {
+                let topic: std::sync::Arc<dyn bead::core::source::Source> = topic;
+                let values = widget_screen_values(&topic.snapshot());
+                if !values.is_empty() {
+                    self.session.stores = self.session.stores.reconcile(&values)?;
+                }
+                self.widget_displays_topic = Some(topic);
+            }
             let routes = crate::bar_routes::Routes::new(client.clone());
             self.session.stores = self.session.stores.reconcile(&routes.stores())?;
             self.actions.register("bar.title", "ui.widgets")?;
@@ -847,6 +2099,25 @@ impl Runtime {
         } else {
             Ok(self.with_widget_file())
         }
+    }
+    /// Marks this scene as a passive drag preview, not a host.
+    /// The bar/canvas supplies its models; the ghost has no direct subscriptions,
+    /// panel state, or host-event publisher of its own.
+    pub fn with_widget_drag_preview(mut self) -> Self {
+        self.widget_canvas = false;
+        self.widget_editor = false;
+        self.launcher_trigger = false;
+        self.state_file = None;
+        self.session.restore_on_start(BTreeMap::new());
+        self.session.stores = self
+            .session
+            .stores
+            .reconcile(&BTreeMap::from([(
+                "bead.output.name".into(),
+                bead::core::Value::Text(String::new()),
+            )]))
+            .expect("the passive drag behavior declares its output name");
+        self
     }
     /// The standalone Widgets app shares the editor's preview services and persistence topic,
     /// but commits each model change without closing its window.
@@ -883,13 +2154,22 @@ impl Runtime {
                     bead::core::Value::Text(String::new()),
                 ),
             ]))?;
-            if let Ok(topic) = client.view_topic("displays") {
+            if self.widget_displays_topic.is_none()
+                && let Ok(topic) = client.view_topic("displays")
+            {
                 let topic: std::sync::Arc<dyn bead::core::source::Source> = topic;
                 let values = widget_screen_values(&topic.snapshot());
                 if !values.is_empty() {
                     self.session.stores = self.session.stores.reconcile(&values)?;
                 }
                 self.widget_displays_topic = Some(topic);
+            }
+            if let Ok(topic) = client.topic("compositor") {
+                let topic: std::sync::Arc<dyn bead::core::source::Source> =
+                    std::sync::Arc::new(topic);
+                let values = widget_app_origin_values(&topic.snapshot());
+                self.session.stores = self.session.stores.reconcile(&values)?;
+                self.widget_compositor_topic = Some(topic);
             }
         }
         Ok(self)
@@ -899,11 +2179,23 @@ impl Runtime {
         mut self,
         client: &crate::nacre_source::Client,
     ) -> Result<Self, Box<dyn Error>> {
+        self.register_widget_drag_action()?;
+        if self.widget_displays_topic.is_none()
+            && let Ok(topic) = client.view_topic("displays")
+        {
+            let topic: std::sync::Arc<dyn bead::core::source::Source> = topic;
+            let values = widget_screen_values(&topic.snapshot());
+            if !values.is_empty() {
+                self.session.stores = self.session.stores.reconcile(&values)?;
+            }
+            self.widget_displays_topic = Some(topic);
+        }
         // An explicit standalone layout override remains independent of service transport.
         if std::env::var_os("BEAD_WIDGET_LAYOUT").is_some() {
             self.widgets_client = None;
             return Ok(self.with_widget_file());
         }
+        self.widgets_client = Some(client.clone());
         let topic = match client.lease_topic(crate::widgets::TOPIC) {
             Ok(topic) => std::sync::Arc::new(topic),
             Err(_) => {
@@ -978,6 +2270,9 @@ impl Runtime {
         self.session.stores = self.session.stores.reconcile(&stores)?;
         if self.workspaces.view.follow(&stores) {
             self.refresh_workspaces()?;
+        }
+        if self.widget_compositor_topic.is_none() {
+            self.widget_compositor_topic = Some(topic.clone());
         }
         self.origins_topic = Some(topic);
         Ok(self)
@@ -1814,7 +3109,7 @@ impl Runtime {
             bead::core::Value::Text(text) => text.as_str(),
             _ => "",
         };
-        let press = matches!(event, UiEvent::Click { .. })
+        let press = matches!(event, UiEvent::Click { .. } | UiEvent::Release)
             || matches!(event, UiEvent::Command { command, .. } if command == "enter");
         let wheel_up = |delta: f64| delta > 0.;
         let tray = |method| {
@@ -2244,6 +3539,13 @@ impl Runtime {
         mut self,
         backend: std::sync::Arc<crate::backends::Native>,
     ) -> Result<Self, Box<dyn Error>> {
+        self.attach_backend(backend)?;
+        Ok(self)
+    }
+    fn attach_backend(
+        &mut self,
+        backend: std::sync::Arc<crate::backends::Native>,
+    ) -> Result<(), Box<dyn Error>> {
         let snapshot = backend.snapshot();
         let mut values = backend_values(&snapshot, self.output.as_deref(), &self.workspaces)?;
         let (title, focused_window) = focused_title(&snapshot, self.output.as_deref(), None);
@@ -2262,7 +3564,21 @@ impl Runtime {
         }
         self.actions.grant("desktop.compositor");
         self.backend = Some(backend);
-        Ok(self)
+        self.subscribe_backend();
+        Ok(())
+    }
+    fn subscribe_backend(&mut self) {
+        if self.subscription.is_some() {
+            return;
+        }
+        let (Some(backend), Some(wakeup)) = (self.backend.as_ref(), self.wakeup.clone()) else {
+            return;
+        };
+        self.subscription = Some(backend.subscribe(Box::new(move |event| {
+            if let bead::backends::Event::Snapshot(snapshot) = event {
+                wakeup(UiEvent::Backend(snapshot));
+            }
+        })));
     }
     fn backend_action(&self, name: &str, arg: bead::core::Value) -> Result<(), Box<dyn Error>> {
         self.actions.authorize(name)?;
@@ -2344,6 +3660,12 @@ impl Runtime {
         Ok(self)
     }
     fn finish_scene(&mut self, mut scene: Option<Scene>) -> Result<Option<Scene>, Box<dyn Error>> {
+        if std::mem::take(&mut self.host_release_pending) {
+            // Native host handlers own this release. Re-stage from their
+            // latest candidate so the final scene includes both the side
+            // effect and cleared pressed feedback, without replaying Luau.
+            scene = self.session.release_without_activation()?.or(scene);
+        }
         if self.popup_anchor_changed && scene.is_none() {
             scene = self.session.relayout()?;
         }
@@ -2458,6 +3780,10 @@ impl Runtime {
             wakeup(UiEvent::CompanionVisibility(false));
         }
         self.pending = scene.clone();
+        if scene.is_none() {
+            // A transfer can change only model data; its ghost still needs the newest point.
+            self.publish_widget_models();
+        }
         Ok(scene)
     }
 }
@@ -2816,6 +4142,91 @@ impl SceneSource for Runtime {
                 Err(_) => eprintln!("SOURCE_ERROR code=widgets_displays_subscription"),
             }
         }
+        if (self.widget_app || self.widget_floating_request.is_some())
+            && let Some(source) = &self.widget_compositor_topic
+        {
+            let wakeup = wakeup.clone();
+            match source.subscribe(std::sync::Arc::new(move |snapshot| {
+                wakeup(UiEvent::Model(widget_app_origin_values(&snapshot)));
+            })) {
+                Ok(subscription) => self.widget_compositor_subscription = Some(subscription),
+                Err(_) => eprintln!("SOURCE_ERROR code=widgets_compositor_subscription"),
+            }
+        }
+        if self.bar || self.widget_app {
+            let state_wakeup = wakeup.clone();
+            let wakeup = wakeup.clone();
+            let bar = self.bar;
+            self.widget_drag_subscription = Some(crate::widgets::widget_drag::subscribe(
+                std::sync::Arc::new(move |message| match message {
+                    crate::widgets::widget_drag::PrivateEvent::AppState {
+                        pid,
+                        generation,
+                        open,
+                        floating,
+                    } => wakeup(UiEvent::Model(BTreeMap::from([
+                        ("widgets.app.open".into(), bead::core::Value::Bool(open)),
+                        ("widgets.editing".into(), bead::core::Value::Bool(open)),
+                        (
+                            "widgets.policy.pid".into(),
+                            bead::core::Value::Number(f64::from(pid)),
+                        ),
+                        (
+                            "widgets.policy.generation".into(),
+                            bead::core::Value::Number(generation as f64),
+                        ),
+                        ("widgets.policy.open".into(), bead::core::Value::Bool(open)),
+                        (
+                            "widgets.policy.floating".into(),
+                            bead::core::Value::Bool(floating),
+                        ),
+                    ]))),
+                    crate::widgets::widget_drag::PrivateEvent::Motion {
+                        pid,
+                        epoch,
+                        mut event,
+                    } => {
+                        if !bar {
+                            return;
+                        }
+                        if let Some(object) = event.as_object_mut() {
+                            object.insert("private_remote".into(), serde_json::Value::Bool(true));
+                            object.insert("source_pid".into(), serde_json::json!(pid));
+                            object.insert("gesture_epoch".into(), serde_json::json!(epoch));
+                        }
+                        let is_move = event["phase"].as_str() == Some("move");
+                        let name = "widgets.drag".to_owned();
+                        let argument = bead::core::Value::list(vec![event]);
+                        if is_move {
+                            wakeup(UiEvent::MotionAction { name, argument });
+                        } else {
+                            wakeup(UiEvent::Action { name, argument });
+                        }
+                    }
+                }),
+            ));
+            if let Some((pid, generation, floating)) =
+                crate::widgets::widget_drag::active_app_policy()
+            {
+                state_wakeup(UiEvent::Model(BTreeMap::from([
+                    ("widgets.app.open".into(), bead::core::Value::Bool(true)),
+                    ("widgets.editing".into(), bead::core::Value::Bool(true)),
+                    (
+                        "widgets.policy.pid".into(),
+                        bead::core::Value::Number(f64::from(pid)),
+                    ),
+                    (
+                        "widgets.policy.generation".into(),
+                        bead::core::Value::Number(generation as f64),
+                    ),
+                    ("widgets.policy.open".into(), bead::core::Value::Bool(true)),
+                    (
+                        "widgets.policy.floating".into(),
+                        bead::core::Value::Bool(floating),
+                    ),
+                ])));
+            }
+        }
         if let Some(source) = &self.connection_status {
             let wakeup = wakeup.clone();
             match source.subscribe(std::sync::Arc::new(move |snapshot| {
@@ -3088,13 +4499,7 @@ impl SceneSource for Runtime {
             self.desktop_subscription =
                 Some(desktop.subscribe(move |snapshot| wakeup(UiEvent::Desktop(snapshot))));
         }
-        if let Some(backend) = &self.backend {
-            self.subscription = Some(backend.subscribe(Box::new(move |event| {
-                if let bead::backends::Event::Snapshot(snapshot) = event {
-                    wakeup(UiEvent::Backend(snapshot));
-                }
-            })));
-        }
+        self.subscribe_backend();
     }
     fn input_regions(&self) -> Vec<bead::wayland::InputRegion> {
         self.session
@@ -3274,6 +4679,7 @@ impl SceneSource for Runtime {
         self.session.watch(wakeup)
     }
     fn stage(&mut self, mut event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+        self.host_release_pending = false;
         // Service completion stays live even when the view keeps its accepted layout.
         if matches!(&event, UiEvent::LocalDrag { .. } | UiEvent::Model(_))
             && let Some(control) = &self.control
@@ -3329,7 +4735,26 @@ impl SceneSource for Runtime {
             let document = self.widgets_write_document.take();
             let previous = self.widgets_write_previous.take();
             let success = reply.is_ok();
-            let changes = if self.widget_app {
+            let reply_error = reply
+                .as_ref()
+                .err()
+                .map(|error| error.message.clone())
+                .unwrap_or_default();
+            let feedback = if self.widgets_drag_write {
+                self.widget_write_feedback.take()
+            } else {
+                None
+            };
+            let drag_write = self.widgets_drag_write;
+            self.widgets_drag_write = false;
+            if drag_write {
+                self.widget_drag_model = None;
+            }
+            let mut history_revision = feedback
+                .as_ref()
+                .map(|item| item.previous_revision.saturating_add(1));
+            let mut history_accepted = success;
+            let changes = if self.widget_app || drag_write {
                 let canonical = self
                     .widgets_topic
                     .as_ref()
@@ -3338,6 +4763,14 @@ impl SceneSource for Runtime {
                     })
                     .unwrap_or_default();
                 let accepted_revision = reply.as_ref().ok().and_then(|reply| reply["rev"].as_u64());
+                if let Some(feedback) = &feedback {
+                    let revision = accepted_revision
+                        .unwrap_or_else(|| feedback.previous_revision.saturating_add(1));
+                    history_revision = Some(revision);
+                    history_accepted = success
+                        && revision > feedback.previous_revision
+                        && widget_revision(&canonical) <= revision;
+                }
                 let error = reply.as_ref().err().map(|error| error.message.clone());
                 widget_write_resolution(document, previous, accepted_revision, error, canonical)
             } else {
@@ -3362,6 +4795,14 @@ impl SceneSource for Runtime {
                 changes
             };
             let scene = self.session.update(changes)?;
+            if let Some(feedback) = feedback {
+                send_widget_write_feedback(
+                    feedback,
+                    history_accepted,
+                    &reply_error,
+                    history_revision.unwrap_or(0),
+                );
+            }
             return self.finish_scene(scene);
         }
         if let UiEvent::Click { x, y } = &event {
@@ -3546,8 +4987,15 @@ impl SceneSource for Runtime {
                 bead::core::Value::Text(crate::welcome::NEXT.into()),
             )]))?;
         }
+        if let UiEvent::Action { name, argument } | UiEvent::MotionAction { name, argument } =
+            &event
+            && name == "widgets.drag"
+            && !widget_drag_targets_output(argument, self.output.as_deref())
+        {
+            return self.retire_widget_drag_on_other_output();
+        }
         let mut host_action = match &event {
-            UiEvent::Action { name, argument } => {
+            UiEvent::Action { name, argument } | UiEvent::MotionAction { name, argument } => {
                 Some((String::new(), name.clone(), argument.clone()))
             }
             UiEvent::Click { x, y } => self.session.press_action_at(*x, *y),
@@ -3589,15 +5037,307 @@ impl SceneSource for Runtime {
             *argument = bead::core::Value::Text(view.to_owned());
         }
         let mut pointer_scene = None;
+        if matches!(&event, UiEvent::Release) {
+            self.host_release_pending = host_action.as_ref().is_some_and(|(_, name, _)| {
+                name == "view.open"
+                    || name == "status.pill.open"
+                    || name == "launcher.open"
+                    || name == "launcher.quick"
+                    || name == "select_app"
+                    || name == "toggle_favorite"
+                    || name == "bar.title"
+                    || name == "dashboard.select"
+                    || name == "dashboard.do"
+                    || name == "cc.do"
+                    || name == "chat.do"
+                    || name == "settings.do"
+                    || name == "colors.do"
+                    || name == "welcome.do"
+                    || name == "prompt.do"
+                    || name == "extras.do"
+                    || name.starts_with("backend.")
+                    || name.starts_with("services.")
+                    || name.starts_with("notifications.")
+                    || name.starts_with("updates.")
+                    || name.starts_with("network.")
+                    || name.starts_with("bluetooth.")
+                    || name.starts_with("session.")
+            });
+        }
         if let Some((_, name, argument)) = &host_action
             && name == "widgets.drag"
         {
-            self.actions.authorize("widgets.edit")?;
+            self.actions.authorize("widgets.drag")?;
+            if self.widget_app {
+                let argument = self.widget_argument(name, argument.clone());
+                let event_value = match &argument {
+                    bead::core::Value::List(records) => records.first().cloned(),
+                    _ => None,
+                };
+                let mut changes = self.session.action_values(name, argument)?;
+                let terminal_drop = event_value.as_ref().is_some_and(|value| {
+                    value["phase"] == "drop"
+                        && value["source_origin_valid"] == true
+                        && !value["target_output_id"].as_str().unwrap_or("").is_empty()
+                        && matches!(value["destination"].as_str(), Some("bar" | "desktop"))
+                });
+                if terminal_drop {
+                    changes.insert("widgets.busy".into(), bead::core::Value::Bool(true));
+                    changes.insert(
+                        "widgets.error".into(),
+                        bead::core::Value::Text(String::new()),
+                    );
+                    changes.insert(
+                        "widgets.message".into(),
+                        bead::core::Value::Text(String::new()),
+                    );
+                }
+                match changes.get("widgets.drag.phase") {
+                    Some(bead::core::Value::Text(phase)) if phase == "dragging" => {
+                        self.widget_drag_epoch =
+                            self.widget_drag_epoch.wrapping_add(1).max(1u64 << 63)
+                    }
+                    Some(bead::core::Value::Text(phase))
+                        if phase == "settle" || phase == "return" =>
+                    {
+                        self.retire_widget_drag_after_feedback()
+                    }
+                    _ => {}
+                }
+                let scene = self.session.update(changes)?;
+                if let Some(event_value) = event_value {
+                    let event_json: serde_json::Value = event_value;
+                    if matches!(
+                        event_json["phase"].as_str(),
+                        Some("move" | "drop" | "cancel")
+                    ) && event_json["source_origin_valid"] == true
+                    {
+                        let epoch = crate::widgets::widget_drag::app_drag(event_json.clone());
+                        match event_json["phase"].as_str() {
+                            Some("drop") if terminal_drop => {
+                                self.widget_drag_pending_epoch = Some(epoch);
+                                self.widget_drag_latest_epoch = Some(epoch);
+                            }
+                            Some("move" | "cancel") => self.widget_drag_latest_epoch = Some(epoch),
+                            _ => {}
+                        }
+                    }
+                }
+                if matches!(&event, UiEvent::Release) {
+                    self.session.release()?;
+                }
+                return self.finish_scene(scene);
+            }
+            if !self.widget_editor && (self.bar || self.widget_canvas) {
+                let feedback_target = crate::widgets::widget_drag::terminal_feedback(argument);
+                if self.widgets_write.is_some() {
+                    if let Some((pid, generation, epoch)) = feedback_target {
+                        let _ = crate::widgets::widget_drag::send_app_feedback(
+                            pid,
+                            generation,
+                            epoch,
+                            false,
+                            "Another widget save is still pending.",
+                        );
+                    }
+                    if matches!(&event, UiEvent::Release) {
+                        self.session.release()?;
+                    }
+                    return self.finish_scene(None);
+                }
+                let origin_x = match self.session.stores.get("bead.surface.x") {
+                    Some(bead::core::Value::Number(value)) => *value,
+                    _ => 0.,
+                };
+                let origin_y = match self.session.stores.get("bead.surface.y") {
+                    Some(bead::core::Value::Number(value)) => *value,
+                    _ => 0.,
+                };
+                let argument = if matches!(
+                    &event,
+                    UiEvent::Click { .. } | UiEvent::Drag { .. } | UiEvent::Release
+                ) {
+                    Self::widget_drag_origin_argument(argument, origin_x, origin_y)
+                } else {
+                    argument.clone()
+                };
+                let argument = self.widget_argument(name, argument);
+                let feedback_target = crate::widgets::widget_drag::terminal_feedback(&argument);
+                if self.widget_drag_controller.is_none() {
+                    self.widget_drag_controller =
+                        Some(crate::widgets::widget_drag::Controller::new()?);
+                }
+                let current = self.widget_host_values();
+                let values = {
+                    let controller = self
+                        .widget_drag_controller
+                        .as_mut()
+                        .expect("controller initialized");
+                    controller.sync(&current)?;
+                    controller.drag(argument)?
+                };
+                let missing_preview = self.session.stores.get("widgets.drag.layout").is_none();
+                let preflight: Result<Option<Scene>, Box<dyn Error>> =
+                    if missing_preview && values.contains_key("widgets.drag.layout") {
+                        Err(Box::new(std::io::Error::other(
+                            "host does not declare widgets.drag.layout",
+                        )))
+                    } else {
+                        let staged = self.stage_widget_drag_values(&values);
+                        self.session
+                            .update(staged)
+                            .map_err(|error| -> Box<dyn Error> { Box::new(error) })
+                            .and_then(|scene| self.finish_scene(scene))
+                    };
+                let mut accepted = true;
+                let mut scene = match preflight {
+                    Ok(scene) => scene,
+                    Err(error) => {
+                        accepted = false;
+                        // The real bar/canvas renderer is the validation authority. Restore the
+                        // last accepted gesture base and show return feedback without persisting.
+                        let controller = self
+                            .widget_drag_controller
+                            .as_mut()
+                            .expect("controller initialized");
+                        let epoch = controller.drag_epoch();
+                        let error_text = error.to_string();
+                        let mut rollback = controller.drag(bead::core::Value::list(vec![
+                            serde_json::json!({"phase":"cancel","epoch":epoch}),
+                        ]))?;
+                        rollback.insert(
+                            "widgets.error".into(),
+                            bead::core::Value::Text(error_text.clone()),
+                        );
+                        self.widget_drag_model = Some(rollback.clone());
+                        let staged = self.stage_widget_drag_values(&rollback);
+                        let restored = self.session.update(staged).ok().flatten();
+                        if let Some((pid, generation, epoch)) = feedback_target {
+                            let _ = crate::widgets::widget_drag::send_app_feedback(
+                                pid,
+                                generation,
+                                epoch,
+                                false,
+                                &error_text,
+                            );
+                        }
+                        self.finish_scene(restored)?
+                    }
+                };
+                if accepted {
+                    self.widget_drag_model = Some(values.clone());
+                    match values.get("widgets.drag.phase") {
+                        Some(bead::core::Value::Text(phase)) if phase == "dragging" => {
+                            self.widget_drag_epoch =
+                                self.widget_drag_epoch.wrapping_add(1).max(1u64 << 63)
+                        }
+                        Some(bead::core::Value::Text(phase))
+                            if phase == "settle" || phase == "return" =>
+                        {
+                            self.retire_widget_drag_after_feedback()
+                        }
+                        _ => {}
+                    }
+                    if scene.is_none() {
+                        self.publish_widget_models();
+                    }
+                    let write = values.get("widgets.write").and_then(|value| match value {
+                        bead::core::Value::List(records) => records.first().cloned(),
+                        _ => None,
+                    });
+                    if let Some(document) = write {
+                        let identity = feedback_target
+                            .map(|(pid, generation, epoch)| (pid, generation, Some(epoch)))
+                            .or_else(|| {
+                                crate::widgets::widget_drag::active_app_identity()
+                                    .map(|(pid, generation)| (pid, generation, None))
+                            });
+                        self.widget_write_feedback =
+                            identity.and_then(|(pid, generation, epoch)| {
+                                Some(WidgetWriteFeedback {
+                                    pid,
+                                    generation,
+                                    epoch,
+                                    previous_document: widget_previous_document(
+                                        &values,
+                                        self.widget_seed().as_ref(),
+                                    )?,
+                                    previous_revision: widget_revision(&values),
+                                    document: document.clone(),
+                                })
+                            });
+                        self.begin_widget_drag_write(
+                            document,
+                            &values,
+                            current.get("widgets.undo").cloned(),
+                        )?;
+                        if self.widgets_write.is_none() {
+                            scene = self.refresh_widget_write_scene()?;
+                            let message = self
+                                .widget_drag_model
+                                .as_ref()
+                                .and_then(|model| model.get("widgets.error"))
+                                .and_then(|value| {
+                                    if let bead::core::Value::Text(error) = value {
+                                        Some(error.as_str())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .unwrap_or("");
+                            let feedback_revision = self
+                                .widget_drag_model
+                                .as_ref()
+                                .map(widget_revision)
+                                .unwrap_or_else(|| {
+                                    self.widget_write_feedback
+                                        .as_ref()
+                                        .map_or(0, |item| item.previous_revision.saturating_add(1))
+                                });
+                            if let Some(feedback) = self.widget_write_feedback.take() {
+                                send_widget_write_feedback(
+                                    feedback,
+                                    message.is_empty(),
+                                    message,
+                                    feedback_revision,
+                                );
+                            }
+                        }
+                    } else if let Some((pid, generation, epoch)) = feedback_target {
+                        let message = values
+                            .get("widgets.error")
+                            .and_then(|value| {
+                                if let bead::core::Value::Text(error) = value {
+                                    (!error.is_empty()).then_some(error.as_str())
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or("Widget drop was not accepted.");
+                        let _ = crate::widgets::widget_drag::send_app_feedback(
+                            pid, generation, epoch, false, message,
+                        );
+                    }
+                } else {
+                    self.retire_widget_drag_after_feedback();
+                }
+                if matches!(&event, UiEvent::Release) {
+                    self.session.release()?;
+                }
+                return Ok(scene);
+            }
             if !self.widget_editor {
                 if let Some(wakeup) = &self.wakeup {
-                    wakeup(UiEvent::CompanionAction {
-                        name: name.clone(),
-                        argument: argument.clone(),
+                    wakeup(if Self::widget_drag_motion(argument) {
+                        UiEvent::CompanionMotionAction {
+                            name: name.clone(),
+                            argument: argument.clone(),
+                        }
+                    } else {
+                        UiEvent::CompanionAction {
+                            name: name.clone(),
+                            argument: argument.clone(),
+                        }
                     });
                 }
                 let released = if matches!(&event, UiEvent::Release) {
@@ -3607,9 +5347,25 @@ impl SceneSource for Runtime {
                 };
                 return self.finish_scene(released);
             }
+            let argument = if matches!(
+                &event,
+                UiEvent::Click { .. } | UiEvent::Drag { .. } | UiEvent::Release
+            ) {
+                let origin_x = match self.session.stores.get("bead.surface.x") {
+                    Some(bead::core::Value::Number(value)) => *value,
+                    _ => 0.,
+                };
+                let origin_y = match self.session.stores.get("bead.surface.y") {
+                    Some(bead::core::Value::Number(value)) => *value,
+                    _ => 0.,
+                };
+                Self::widget_drag_origin_argument(argument, origin_x, origin_y)
+            } else {
+                argument.clone()
+            };
             let changes = self
                 .session
-                .action_values(name, self.widget_argument(name, argument.clone()))?;
+                .action_values(name, self.widget_argument(name, argument))?;
             if matches!(&event, UiEvent::Release) {
                 self.session.release()?;
             }
@@ -3646,6 +5402,140 @@ impl SceneSource for Runtime {
             ) || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
             self.actions.authorize(name)?;
+            if !self.widget_editor && (self.bar || self.widget_canvas) {
+                if self.widgets_write.is_some() {
+                    return Ok(None);
+                }
+                let argument = self.widget_argument(name, argument.clone());
+                let operation = match &argument {
+                    bead::core::Value::List(records) => records
+                        .first()
+                        .and_then(|record| record["op"].as_str())
+                        .unwrap_or_default(),
+                    _ => "",
+                };
+                let persistent = matches!(
+                    operation,
+                    "toggle-form" | "style" | "setting" | "undo" | "reset"
+                );
+                if self.widget_drag_controller.is_none() {
+                    self.widget_drag_controller =
+                        Some(crate::widgets::widget_drag::Controller::new()?);
+                }
+                let current = self.widget_host_values();
+                let values = {
+                    let controller = self
+                        .widget_drag_controller
+                        .as_mut()
+                        .expect("widget model initialized");
+                    controller.sync(&current)?;
+                    controller.edit(argument)?
+                };
+                let document = values.get("widgets.draft").and_then(|value| match value {
+                    bead::core::Value::List(records) => records.first().cloned(),
+                    _ => None,
+                });
+                let before = values.get("widgets.layout").and_then(|value| match value {
+                    bead::core::Value::List(records) => records.first(),
+                    _ => None,
+                });
+                let write_document =
+                    document.filter(|document| persistent && before != Some(document));
+                let staged = self.stage_widget_drag_values(&values);
+                let preflight = self
+                    .session
+                    .update(staged)
+                    .map_err(|error| -> Box<dyn Error> { Box::new(error) })
+                    .and_then(|scene| self.finish_scene(scene));
+                let mut scene = match preflight {
+                    Ok(scene) => scene,
+                    Err(error) => {
+                        if self.session.stores.get("widgets.error").is_some() {
+                            let restored = self
+                                .session
+                                .update(BTreeMap::from([(
+                                    "widgets.error".into(),
+                                    bead::core::Value::Text(error.to_string()),
+                                )]))
+                                .ok()
+                                .flatten();
+                            self.widget_drag_controller = None;
+                            self.widget_drag_model = None;
+                            return self.finish_scene(restored);
+                        } else {
+                            return Err(error);
+                        }
+                    }
+                };
+                self.widget_drag_model = Some(values.clone());
+                if scene.is_none() {
+                    self.publish_widget_models();
+                }
+                if let Some(document) = write_document {
+                    self.widget_write_feedback = crate::widgets::widget_drag::active_app_identity()
+                        .and_then(|(pid, generation)| {
+                            Some(WidgetWriteFeedback {
+                                pid,
+                                generation,
+                                epoch: None,
+                                previous_document: widget_previous_document(
+                                    &values,
+                                    self.widget_seed().as_ref(),
+                                )?,
+                                previous_revision: widget_revision(&values),
+                                document: document.clone(),
+                            })
+                        });
+                    self.begin_widget_drag_write(
+                        document,
+                        &values,
+                        current.get("widgets.undo").cloned(),
+                    )?;
+                    if self.widgets_write.is_none() {
+                        scene = self.refresh_widget_write_scene()?;
+                        let message = self
+                            .widget_drag_model
+                            .as_ref()
+                            .and_then(|model| model.get("widgets.error"))
+                            .and_then(|value| {
+                                if let bead::core::Value::Text(error) = value {
+                                    Some(error.as_str())
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or("");
+                        let revision = self
+                            .widget_drag_model
+                            .as_ref()
+                            .map(widget_revision)
+                            .unwrap_or_else(|| {
+                                self.widget_write_feedback
+                                    .as_ref()
+                                    .map_or(0, |item| item.previous_revision.saturating_add(1))
+                            });
+                        if let Some(feedback) = self.widget_write_feedback.take() {
+                            send_widget_write_feedback(
+                                feedback,
+                                message.is_empty(),
+                                message,
+                                revision,
+                            );
+                        }
+                    }
+                }
+                if matches!(&event, UiEvent::Release) {
+                    self.session.release()?;
+                }
+                if !matches!(
+                    values.get("widgets.drag.active"),
+                    Some(bead::core::Value::Bool(true))
+                ) {
+                    self.widget_drag_controller = None;
+                    self.widget_drag_model = None;
+                }
+                return Ok(scene);
+            }
             if !self.widget_editor {
                 if let Some(wakeup) = &self.wakeup {
                     wakeup(UiEvent::CompanionAction {
@@ -3727,9 +5617,7 @@ impl SceneSource for Runtime {
                     bead::core::Value::Text(String::new()),
                 );
                 let scene = self.session.update(changes)?;
-                let result: Result<Option<crate::nacre_source::CallTicket>, String> = if let Some(
-                    client,
-                ) =
+                let result: Result<WidgetWriteResult, String> = if let Some(client) =
                     &self.widgets_client
                 {
                     let status = client.status();
@@ -3754,7 +5642,7 @@ impl SceneSource for Runtime {
                                 std::time::Duration::from_millis(u64::from(method.timeout).clamp(1, 30_000)),
                                 crate::nacre_source::CallGuard { boot, version: 1 },
                                 Some(std::sync::Arc::new(move || wakeup(UiEvent::Model(BTreeMap::new())))),
-                            ).map(Some).map_err(|error| error.message)
+                            ).map(WidgetWriteResult::Pending).map_err(|error| error.message)
                     })()
                 } else {
                     self.widgets_file
@@ -3763,22 +5651,18 @@ impl SceneSource for Runtime {
                         .and_then(|path| {
                             let json = serde_json::to_value(&document)
                                 .map_err(|error| error.to_string())?;
-                            crate::widgets::save_file(path, &json)
+                            crate::widgets::save_file_revisioned(path, &json, old_revision)
                                 .map_err(|error| error.to_string())
                         })
-                        .map(|()| None)
+                        .map(WidgetWriteResult::Saved)
                 };
                 let final_scene = match result {
-                    Ok(Some(ticket)) => {
+                    Ok(WidgetWriteResult::Pending(ticket)) => {
                         self.widgets_write = Some(ticket);
                         self.widgets_write_document = Some(bead::core::Value::list(vec![document]));
                         scene
                     }
-                    Ok(None) => {
-                        let rev = match self.session.stores.get("widgets.rev") {
-                            Some(bead::core::Value::Number(rev)) => *rev + 1.,
-                            _ => 1.,
-                        };
+                    Ok(WidgetWriteResult::Saved(rev)) => {
                         self.widgets_write_previous = None;
                         self.session
                             .update(BTreeMap::from([
@@ -3788,7 +5672,7 @@ impl SceneSource for Runtime {
                                 ),
                                 ("widgets.draft".into(), bead::core::Value::list(Vec::new())),
                                 ("widgets.busy".into(), bead::core::Value::Bool(false)),
-                                ("widgets.rev".into(), bead::core::Value::Number(rev)),
+                                ("widgets.rev".into(), bead::core::Value::Number(rev as f64)),
                             ]))?
                             .or(scene)
                     }
@@ -3821,7 +5705,8 @@ impl SceneSource for Runtime {
             // The markup registry validates the draft before any external write.
             let scene = self.session.update(changes.clone())?;
             if let Some(document) = write {
-                let result = if let Some(client) = &self.widgets_client {
+                let result: Result<Option<u64>, String> = if let Some(client) = &self.widgets_client
+                {
                     let status = client.status();
                     let result = (|| -> Result<_, String> {
                         let method = status
@@ -3851,7 +5736,7 @@ impl SceneSource for Runtime {
                             self.widgets_write = Some(ticket);
                             self.widgets_write_document =
                                 Some(bead::core::Value::list(vec![document.clone()]));
-                            Ok(())
+                            Ok(None)
                         }
                         Err(error) => Err(error),
                     }
@@ -3860,14 +5745,26 @@ impl SceneSource for Runtime {
                         .as_deref()
                         .ok_or("Widget layout path unavailable".to_owned())
                         .and_then(|path| {
-                            crate::widgets::save_file(path, &document)
+                            let expected = match changes.get("widgets.base_rev") {
+                                Some(bead::core::Value::Number(rev)) => *rev as u64,
+                                _ => match self.session.stores.get("widgets.rev") {
+                                    Some(bead::core::Value::Number(rev)) => *rev as u64,
+                                    _ => 0,
+                                },
+                            };
+                            crate::widgets::save_file_revisioned(path, &document, expected)
+                                .map(Some)
                                 .map_err(|error| error.to_string())
                         })
                 };
-                if result.is_ok() && self.widgets_client.is_none() {
+                if let Ok(Some(revision)) = result.as_ref() {
                     changes.insert(
                         "widgets.layout".into(),
                         bead::core::Value::list(vec![document]),
+                    );
+                    changes.insert(
+                        "widgets.rev".into(),
+                        bead::core::Value::Number(*revision as f64),
                     );
                     changes.insert("widgets.editing".into(), bead::core::Value::Bool(false));
                 }
@@ -3983,7 +5880,7 @@ impl SceneSource for Runtime {
             && name.starts_with("notifications.")
         {
             match &event {
-                UiEvent::Click { .. } | UiEvent::Command { .. } => {}
+                UiEvent::Click { .. } | UiEvent::Release | UiEvent::Command { .. } => {}
                 UiEvent::ContextMenu { .. } if name == "notifications.card" => {
                     *name = "notifications.dismiss".into();
                 }
@@ -4034,7 +5931,7 @@ impl SceneSource for Runtime {
             && name == "dashboard.select"
             && let Some(page) = crate::dashboard::Page::from_view(&format!("dashboard-{view}"))
             && self.dashboard.is_some()
-            && (matches!(&event, UiEvent::Click { .. })
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
             self.actions.authorize(name)?;
@@ -4047,7 +5944,7 @@ impl SceneSource for Runtime {
         }
         if let Some((id, name, bead::core::Value::Text(view))) = &host_action
             && name == "status.pill.open"
-            && (matches!(&event, UiEvent::Click { .. })
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
             self.status_pill.click_icon(if id.is_empty() {
@@ -4063,7 +5960,7 @@ impl SceneSource for Runtime {
         }
         if let Some((_, name, _)) = &host_action
             && matches!(name.as_str(), "updates.refresh" | "updates.open")
-            && (matches!(&event, UiEvent::Click { .. })
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
             self.actions.authorize(name)?;
@@ -4082,7 +5979,7 @@ impl SceneSource for Runtime {
         }
         if let Some((id, name, bead::core::Value::Text(view))) = &host_action
             && name == "view.open"
-            && (matches!(&event, UiEvent::Click { .. })
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
                 || matches!(&event, UiEvent::Command {command,..} if command == "enter"))
         {
             self.status_pill.escape();
@@ -4102,7 +5999,7 @@ impl SceneSource for Runtime {
         }
         if let Some((_, name, _)) = &host_action
             && matches!(name.as_str(), "network.toggle_wifi" | "network.scan")
-            && (matches!(&event, UiEvent::Click { .. })
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
             self.actions.authorize(name)?;
@@ -4132,7 +6029,8 @@ impl SceneSource for Runtime {
                     | "network.forget_ask"
                     | "network.forget"
             )
-            && ((matches!(&event, UiEvent::Click { .. }) && !node.ends_with("field"))
+            && ((matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
+                && !node.ends_with("field"))
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
             self.actions.authorize(name)?;
@@ -4175,7 +6073,7 @@ impl SceneSource for Runtime {
         }
         if let Some((_, name, bead::core::Value::Text(key))) = &host_action
             && (name == "network.connect" || name == "network.disconnect")
-            && (matches!(&event, UiEvent::Click { .. })
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
             self.actions.authorize(name)?;
@@ -4219,8 +6117,10 @@ impl SceneSource for Runtime {
         if let (Some(control), Some((id, name, bead::core::Value::Text(arg)))) =
             (&self.control, &host_action)
             && name == "cc.do"
-            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
-                || matches!(&event, UiEvent::Command { command, .. } if command == "enter" || command == "left" || command == "right"))
+            && (matches!(
+                &event,
+                UiEvent::Click { .. } | UiEvent::Drag { .. } | UiEvent::Release
+            ) || matches!(&event, UiEvent::Command { command, .. } if command == "enter" || command == "left" || command == "right"))
         {
             self.actions.authorize(name)?;
             control.act(arg);
@@ -4258,7 +6158,6 @@ impl SceneSource for Runtime {
             self.actions.authorize(name)?;
             let mut outcome = chat.act(arg, &self.session.stores);
             if matches!(&event, UiEvent::Release) {
-                self.session.release()?;
                 outcome
                     .stores
                     .insert("bead.pressed".into(), bead::core::Value::Bool(false));
@@ -4311,8 +6210,7 @@ impl SceneSource for Runtime {
             }
             // A slider step keeps the focus so the drag continues over the next step.
             let scene = if matches!(&event, UiEvent::Release) {
-                let updated = self.session.update(changes)?;
-                self.session.release()?.or(updated)
+                self.session.update(changes)?
             } else {
                 match arg.starts_with("do:vol|").then(|| {
                     pointer_scene.take().map_or_else(
@@ -4329,8 +6227,10 @@ impl SceneSource for Runtime {
         if let (Some(colors), Some((id, name, bead::core::Value::Text(arg)))) =
             (&self.colors, &host_action)
             && name == "colors.do"
-            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
-                || matches!(&event, UiEvent::Command { command, .. } if command == "enter" || command == "left" || command == "right"))
+            && (matches!(
+                &event,
+                UiEvent::Click { .. } | UiEvent::Drag { .. } | UiEvent::Release
+            ) || matches!(&event, UiEvent::Command { command, .. } if command == "enter" || command == "left" || command == "right"))
         {
             self.actions.authorize(name)?;
             let changes = colors.act(arg, &self.session.stores);
@@ -4345,7 +6245,7 @@ impl SceneSource for Runtime {
         if let (Some(welcome), Some((_, name, bead::core::Value::Text(arg)))) =
             (&self.welcome, &host_action)
             && name == "welcome.do"
-            && (matches!(&event, UiEvent::Click { .. })
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
             self.actions.authorize(name)?;
@@ -4369,12 +6269,7 @@ impl SceneSource for Runtime {
         {
             self.actions.authorize(name)?;
             let changes = prompt.act(request, &self.session.stores);
-            let released = if matches!(&event, UiEvent::Release) {
-                self.session.release()?
-            } else {
-                None
-            };
-            let scene = self.session.update(changes)?.or(released);
+            let scene = self.session.update(changes)?;
             return self.finish_scene(scene);
         }
         if let (Some(extras), Some((_, name, bead::core::Value::Text(request)))) =
@@ -4407,17 +6302,12 @@ impl SceneSource for Runtime {
                 "extras.request".into(),
                 bead::core::Value::Text(String::new()),
             );
-            let scene = if matches!(&event, UiEvent::Release) {
-                let updated = self.session.update(changes)?;
-                self.session.release()?.or(updated)
-            } else {
-                self.session.update(changes)?
-            };
+            let scene = self.session.update(changes)?;
             return self.finish_scene(scene);
         }
         if let (Some(menu), Some((_, name, arg))) = (&self.session_menu, &host_action)
             && name.starts_with("session.")
-            && (matches!(&event, UiEvent::Click { .. })
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
             self.actions.authorize(name)?;
@@ -4446,7 +6336,7 @@ impl SceneSource for Runtime {
         }
         if let Some((_, name, _)) = &host_action
             && name == "bluetooth.toggle_power"
-            && (matches!(&event, UiEvent::Click { .. })
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
             self.actions.authorize(name)?;
@@ -4473,7 +6363,8 @@ impl SceneSource for Runtime {
                     | "bluetooth.pair_cancel"
                     | "bluetooth.pair_retry"
             )
-            && ((matches!(&event, UiEvent::Click { .. }) && !node.ends_with("field"))
+            && ((matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
+                && !node.ends_with("field"))
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
             self.actions.authorize(name)?;
@@ -4528,7 +6419,7 @@ impl SceneSource for Runtime {
                 .ok_or("launcher event channel unavailable")?(
                 UiEvent::CompanionVisibility(true)
             );
-            return Ok(None);
+            return self.finish_scene(None);
         }
         if let (Some(quick), Some((_, name, bead::core::Value::Text(id)))) =
             (&self.launcher_quick, &host_action)
@@ -4539,7 +6430,7 @@ impl SceneSource for Runtime {
             self.actions.authorize(name)?;
             quick.act(id);
             let scene = if matches!(&event, UiEvent::Release) {
-                self.session.release()?
+                None
             } else {
                 self.session.update(BTreeMap::new())?
             };
@@ -4641,7 +6532,7 @@ impl SceneSource for Runtime {
                 .as_ref()
                 .ok_or("notification server unavailable")?
                 .action(name, arg)?;
-            return Ok(None);
+            return self.finish_scene(None);
         }
         if let Some(routes) = &self.routes
             && let Some((id, name, arg)) = host_action.as_ref()
@@ -4677,7 +6568,7 @@ impl SceneSource for Runtime {
                 )?;
                 return self.finish_scene(scene);
             }
-            return Ok(None);
+            return self.finish_scene(None);
         }
         if let Some((id, name, arg)) = host_action.as_ref()
             && name.starts_with("services.")
@@ -4757,6 +6648,33 @@ impl SceneSource for Runtime {
                     )))?
             }
             UiEvent::Model(mut values) => {
+                let policy = match (
+                    values.remove("widgets.policy.pid"),
+                    values.remove("widgets.policy.generation"),
+                    values.remove("widgets.policy.open"),
+                    values.remove("widgets.policy.floating"),
+                ) {
+                    (
+                        Some(bead::core::Value::Number(pid)),
+                        Some(bead::core::Value::Number(generation)),
+                        Some(bead::core::Value::Bool(open)),
+                        Some(bead::core::Value::Bool(floating)),
+                    ) if pid.is_finite()
+                        && pid > 0.
+                        && pid <= u32::MAX as f64
+                        && generation.is_finite()
+                        && generation > 0. =>
+                    {
+                        Some((pid as u32, generation as u64, open, floating))
+                    }
+                    _ => None,
+                };
+                if let Some((pid, generation, open, floating)) = policy
+                    && !self.widget_app_state(pid, generation, open, floating)
+                {
+                    values.remove("widgets.app.open");
+                    values.remove("widgets.editing");
+                }
                 if let Some((x, done)) = self.advance_dashboard_pearl() {
                     values.insert("dashboard.pearl.x".into(), bead::core::Value::Number(x));
                     if done {
@@ -4788,7 +6706,7 @@ impl SceneSource for Runtime {
                         ),
                     );
                 }
-                if let Some(menu) = &mut self.tray_menu {
+                let scene = if let Some(menu) = &mut self.tray_menu {
                     let snapshot = self
                         .desktop
                         .as_ref()
@@ -4799,7 +6717,11 @@ impl SceneSource for Runtime {
                     self.session.update(values)?
                 } else {
                     self.session.update_model(values)?
+                };
+                if let Some(snapshot) = self.backend.as_ref().map(|backend| backend.snapshot()) {
+                    self.try_float_widgets_window(&snapshot);
                 }
+                scene
             }
             UiEvent::Desktop(snapshot) => {
                 // Audio and bus callbacks can arrive on different threads.
@@ -4893,7 +6815,9 @@ impl SceneSource for Runtime {
                 values.insert("bead.focused_title".into(), bead::core::Value::Text(title));
                 // Keep the complete backend model current (including window titles); the
                 // view-read filter in update_model prevents unrelated bar work.
-                self.session.update_model(values)?
+                let scene = self.session.update_model(values)?;
+                self.try_float_widgets_window(&snapshot);
+                scene
             }
             UiEvent::CompanionModel(_) => {
                 return Err("companion model reached primary script".into());
@@ -4908,6 +6832,7 @@ impl SceneSource for Runtime {
             | UiEvent::CanvasOffer { .. }
             | UiEvent::CanvasModel { .. }
             | UiEvent::CompanionAction { .. }
+            | UiEvent::CompanionMotionAction { .. }
             | UiEvent::HostModel(_)
             | UiEvent::ShellHidden(_)
             | UiEvent::LivePalette(_)
@@ -5010,7 +6935,11 @@ impl SceneSource for Runtime {
             }
             UiEvent::Remote(request) => {
                 let call = &request.call;
-                let validation = if call.target == "bead.osd" {
+                let private_widget_feedback = self.widget_app
+                    && call.target == "bead.widgets"
+                    && call.method == "drag-feedback";
+                let mut feedback_scene = None;
+                let validation = if private_widget_feedback || call.target == "bead.osd" {
                     call.validate()
                         .map_err(|e| bead::services::ipc::Reply::error(call.id, "invalid-call", e))
                 } else {
@@ -5019,6 +6948,199 @@ impl SceneSource for Runtime {
                 let reply = match validation {
                     Err(reply) => reply,
                     Ok(()) => match (call.target.as_str(), call.method.as_str()) {
+                        ("bead.widgets", "drag-feedback") if self.widget_app => {
+                            let payload = call.args.first();
+                            let valid = payload.is_some_and(|payload| {
+                                payload["app"] == "nacre-widgets"
+                                    && payload["pid"].as_u64() == Some(std::process::id() as u64)
+                                    && payload["generation"].as_u64().is_some()
+                                    && payload["success"].as_bool().is_some()
+                                    && payload["error"].as_str().is_some()
+                            });
+                            if !valid {
+                                bead::services::ipc::Reply::error(
+                                    call.id,
+                                    "invalid-feedback",
+                                    "invalid Widgets feedback payload",
+                                )
+                            } else {
+                                let payload = payload.expect("validated");
+                                let history = payload["kind"] == "history";
+                                let epoch = payload["epoch"].as_u64();
+                                let pid = payload["pid"]
+                                    .as_u64()
+                                    .and_then(|pid| u32::try_from(pid).ok())
+                                    .unwrap_or_default();
+                                let generation = payload["generation"].as_u64().unwrap_or_default();
+                                let identity_matches = pid == std::process::id() && generation > 0;
+                                let drag_matches = epoch.is_some_and(|epoch| {
+                                    widget_drag_feedback_matches(
+                                        std::process::id(),
+                                        self.widget_drag_pending_epoch,
+                                        pid,
+                                        epoch,
+                                    )
+                                });
+                                if history {
+                                    if !identity_matches || (epoch.is_some() && !drag_matches) {
+                                        bead::services::ipc::Reply::ok(
+                                            call.id,
+                                            serde_json::Value::Null,
+                                        )
+                                    } else {
+                                        let previous = payload["previous_document"]
+                                            .as_object()
+                                            .map(|_| payload["previous_document"].clone());
+                                        let document = payload["document"]
+                                            .as_object()
+                                            .map(|_| payload["document"].clone());
+                                        let previous_revision =
+                                            payload["previous_revision"].as_u64();
+                                        let revision = payload["revision"].as_u64();
+                                        let history_valid = payload["success"] == true
+                                            && previous.is_some()
+                                            && document.is_some()
+                                            && previous_revision.is_some()
+                                            && revision.is_some();
+                                        if !history_valid {
+                                            bead::services::ipc::Reply::error(
+                                                call.id,
+                                                "invalid-feedback",
+                                                "invalid widget history feedback",
+                                            )
+                                        } else {
+                                            let previous = previous.expect("validated");
+                                            let document = document.expect("validated");
+                                            let previous_revision =
+                                                previous_revision.expect("validated");
+                                            let revision = revision.expect("validated");
+                                            let current_revision = self
+                                                .session
+                                                .stores
+                                                .get("widgets.rev")
+                                                .and_then(|value| {
+                                                    if let bead::core::Value::Number(value) = value
+                                                    {
+                                                        Some(*value as u64)
+                                                    } else {
+                                                        None
+                                                    }
+                                                })
+                                                .unwrap_or(0);
+                                            let last_history_revision = self
+                                                .session
+                                                .stores
+                                                .get("widgets.history.revision")
+                                                .and_then(|value| {
+                                                    if let bead::core::Value::Number(value) = value
+                                                    {
+                                                        Some(*value as u64)
+                                                    } else {
+                                                        None
+                                                    }
+                                                })
+                                                .unwrap_or(0);
+                                            let layout =
+                                                match self.session.stores.get("widgets.layout") {
+                                                    Some(bead::core::Value::List(records)) => {
+                                                        records.first().cloned()
+                                                    }
+                                                    _ => None,
+                                                };
+                                            let initial =
+                                                match self.session.stores.get("widgets.initial") {
+                                                    Some(bead::core::Value::List(records)) => {
+                                                        records.first().cloned()
+                                                    }
+                                                    _ => None,
+                                                };
+                                            let seed = self.widget_seed();
+                                            let current_document = widget_history_current_document(
+                                                layout,
+                                                initial,
+                                                seed.as_ref(),
+                                                current_revision,
+                                                previous_revision,
+                                            );
+                                            let current_draft_empty = matches!(self.session.stores.get("widgets.draft"),
+                                            Some(bead::core::Value::List(records)) if records.is_empty());
+                                            let native_busy = epoch.is_none()
+                                                && self.session.stores.get("widgets.busy")
+                                                    == Some(&bead::core::Value::Bool(true));
+                                            let accepted = !native_busy
+                                                && current_draft_empty
+                                                && widget_history_feedback_matches(
+                                                    current_revision,
+                                                    last_history_revision,
+                                                    previous_revision,
+                                                    revision,
+                                                    current_document.as_ref(),
+                                                    &previous,
+                                                    &document,
+                                                );
+                                            if epoch.is_some() {
+                                                self.widget_drag_pending_epoch = None;
+                                            }
+                                            if accepted {
+                                                let changes = self.session.action_values(
+                                                    "widgets.history.parent",
+                                                    bead::core::Value::list(vec![payload.clone()]),
+                                                )?;
+                                                feedback_scene = self.session.update(changes)?;
+                                            } else if epoch.is_some()
+                                                && current_draft_empty
+                                                && current_revision <= revision
+                                            {
+                                                feedback_scene =
+                                                    self.session.update(BTreeMap::from([(
+                                                        "widgets.busy".into(),
+                                                        bead::core::Value::Bool(false),
+                                                    )]))?;
+                                            }
+                                            bead::services::ipc::Reply::ok(
+                                                call.id,
+                                                serde_json::Value::Null,
+                                            )
+                                        }
+                                    }
+                                } else if !identity_matches || !drag_matches {
+                                    bead::services::ipc::Reply::ok(call.id, serde_json::Value::Null)
+                                } else {
+                                    self.widget_drag_pending_epoch = None;
+                                    let mut changes = BTreeMap::from([(
+                                        "widgets.busy".into(),
+                                        bead::core::Value::Bool(false),
+                                    )]);
+                                    if epoch.is_some() && self.widget_drag_latest_epoch == epoch {
+                                        let success = payload["success"].as_bool().unwrap_or(false);
+                                        let error = if success {
+                                            String::new()
+                                        } else {
+                                            payload["error"]
+                                                .as_str()
+                                                .unwrap_or("Widget layout could not be saved.")
+                                                .chars()
+                                                .take(512)
+                                                .collect()
+                                        };
+                                        changes.insert(
+                                            "widgets.error".into(),
+                                            bead::core::Value::Text(error),
+                                        );
+                                        changes.insert(
+                                            "widgets.message".into(),
+                                            bead::core::Value::Text(if success {
+                                                "Changes saved".into()
+                                            } else {
+                                                String::new()
+                                            }),
+                                        );
+                                    }
+                                    feedback_scene = self.session.update(changes)?;
+                                    bead::services::ipc::Reply::ok(call.id, serde_json::Value::Null)
+                                }
+                            }
+                        }
                         ("bead.osd", "show" | "preview") => match self
                             .actions
                             .authorize("notifications.feedback")
@@ -5355,10 +7477,37 @@ impl SceneSource for Runtime {
                     },
                 };
                 let _ = request.reply.send(reply);
-                None
+                feedback_scene
             }
             UiEvent::Timer { token } => {
-                if token == self.status_pill_epoch {
+                if token == self.widget_drag_epoch {
+                    if self.widget_app {
+                        let epoch = match self.session.stores.get("widgets.drag.epoch") {
+                            Some(bead::core::Value::Number(epoch)) => *epoch,
+                            _ => 0.,
+                        };
+                        let changes = self.session.action_values(
+                            "widgets.drag",
+                            bead::core::Value::list(vec![
+                                serde_json::json!({"phase":"retire","epoch":epoch}),
+                            ]),
+                        )?;
+                        self.session.update(changes)?
+                    } else if let Some(controller) = self.widget_drag_controller.as_mut() {
+                        let epoch = controller.drag_epoch();
+                        let values = controller.drag(bead::core::Value::list(vec![
+                            serde_json::json!({"phase":"retire","epoch":epoch}),
+                        ]))?;
+                        self.widget_drag_model = Some(values.clone());
+                        self.widget_drag_retire_cleanup = true;
+                        let staged = self.stage_widget_drag_state(&values);
+                        self.session
+                            .update(staged)
+                            .map_err(|error| -> Box<dyn Error> { Box::new(error) })?
+                    } else {
+                        None
+                    }
+                } else if token == self.status_pill_epoch {
                     let before = self.status_pill.clone();
                     self.status_pill.advance(std::time::Instant::now());
                     self.schedule_status_pill();
@@ -5526,6 +7675,10 @@ impl SceneSource for Runtime {
                 }
             }
             UiEvent::Drag { x, y } | UiEvent::LocalDrag { x, y } => self.session.drag(x, y)?,
+            UiEvent::Release if self.host_release_pending => {
+                self.host_release_pending = false;
+                self.session.release_without_activation()?
+            }
             UiEvent::Release => self.session.release()?,
             UiEvent::Ime {
                 preedit,
@@ -5748,7 +7901,7 @@ impl SceneSource for Runtime {
             | UiEvent::HorizontalScroll { .. } => None,
             UiEvent::Click { x, y } => self.session.click(x, y)?,
             UiEvent::Scroll { x, y, delta } => self.session.scroll(x, y, delta)?,
-            UiEvent::Action { name, argument } => {
+            UiEvent::Action { name, argument } | UiEvent::MotionAction { name, argument } => {
                 let changes = self.session.action_values(&name, argument)?;
                 self.session.update(changes)?
             }
@@ -5779,7 +7932,13 @@ impl SceneSource for Runtime {
                 )]))?
                 .or(scene);
         }
-        self.finish_scene(scene)
+        let scene = self.finish_scene(scene)?;
+        if self.widget_drag_retire_cleanup && scene.is_none() {
+            self.widget_drag_controller = None;
+            self.widget_drag_model = None;
+            self.widget_drag_retire_cleanup = false;
+        }
+        Ok(scene)
     }
     fn validate(&self) -> Result<(), Box<dyn Error>> {
         self.session.check_sources()?;
@@ -5876,6 +8035,7 @@ impl SceneSource for Runtime {
     fn commit(&mut self) -> bool {
         if let Some(scene) = self.pending.take() {
             self.session.commit(scene);
+            self.announce_widget_app();
             let wants_seconds = self.session.view_nodes().iter().any(|node| {
                 matches!(&node.metadata, Some(bead::core::Value::List(records))
                     if records.first().is_some_and(|seed|
@@ -5933,15 +8093,24 @@ impl SceneSource for Runtime {
             if self.bar {
                 let editing = self.session.stores.get("widgets.editing")
                     == Some(&bead::core::Value::Bool(true));
-                let layout = self
-                    .session
-                    .stores
-                    .get(if editing {
-                        "widgets.draft"
-                    } else {
-                        "widgets.layout"
-                    })
-                    .cloned();
+                let draft = self.session.stores.get("widgets.draft").cloned();
+                let saved = self.session.stores.get("widgets.layout").cloned();
+                let dragging = self.session.stores.get("widgets.drag.active")
+                    == Some(&bead::core::Value::Bool(true))
+                    && matches!(self.session.stores.get("widgets.drag.phase"),
+                        Some(bead::core::Value::Text(phase)) if phase=="dragging"||phase=="settle");
+                let transient = self.session.stores.get("widgets.drag.layout").cloned();
+                let layout = if dragging
+                    && matches!(&transient,Some(bead::core::Value::List(documents)) if !documents.is_empty())
+                {
+                    transient
+                } else if editing
+                    && matches!(&draft,Some(bead::core::Value::List(documents)) if !documents.is_empty())
+                {
+                    draft
+                } else {
+                    saved
+                };
                 if layout != self.widgets_canvas_layout || editing != self.widgets_canvas_editing {
                     self.widgets_canvas_editing = editing;
                     self.widgets_canvas_layout = layout.clone();
@@ -5952,7 +8121,7 @@ impl SceneSource for Runtime {
                             .is_some_and(|instances| !instances.is_empty()),
                         _ => false,
                     };
-                    let wanted = open || editing;
+                    let wanted = open;
                     if wanted != self.widgets_canvas_wanted {
                         self.widgets_canvas_wanted = wanted;
                         if let Some(wakeup) = &self.wakeup {
@@ -6025,6 +8194,12 @@ impl SceneSource for Runtime {
                     wakeup(UiEvent::PanelNavigated(view));
                 }
             }
+        }
+        self.publish_widget_models();
+        if self.widget_drag_retire_cleanup {
+            self.widget_drag_controller = None;
+            self.widget_drag_model = None;
+            self.widget_drag_retire_cleanup = false;
         }
         true
     }
@@ -6416,6 +8591,8 @@ mod scroll_runtime_tests;
 mod session_menu_runtime_tests;
 #[cfg(test)]
 mod widget_app_tests;
+#[cfg(test)]
+mod widget_drag_preview_tests;
 #[cfg(test)]
 mod widget_startup_tests;
 #[cfg(test)]

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // B0067 parity harness: move (and optionally press) a virtual pointer on a PRIVATE parent compositor.
-//   virtual-pointer X Y W H [hover|press|click|click-clock|drag X2 Y2 MS|relative-drag X2 Y2 MS [SCALE]]
-//     positions are in the parent output's pixels, W H its size; drag holds left while moving
-//     relative-drag sends relative deltas while holding left; optional SCALE divides physical travel
+//   virtual-pointer X Y W H [hover|press|click|click-clock]  positions are in the parent output's pixels, W H its size
+//   virtual-pointer X Y W H drag|drag-stream X2 Y2 MS
+//   virtual-pointer X Y W H relative-drag X2 Y2 MS [SCALE]
+//     drags hold left while moving; relative-drag sends relative deltas and optional SCALE divides travel
 //   virtual-pointer X Y W H stream wheel|pixel DELTA COUNT MS   COUNT axis events, one every MS ms (B0110)
 //   virtual-pointer X Y W H stream-reverse wheel|pixel DELTA COUNT MS
 //     sends DELTA through the first half of the stream, then -DELTA without lifting (B0135)
@@ -66,7 +67,7 @@ static int flush_stream_event(struct wl_display *display, unsigned index) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 5) { fprintf(stderr, "usage: %s X Y W H [hover|press|click|click-clock|drag X2 Y2 MS|relative-drag X2 Y2 MS [SCALE]]\n", argv[0]); return 2; }
+    if (argc < 5) { fprintf(stderr, "usage: %s X Y W H [hover|press|click|click-clock|drag|drag-stream X2 Y2 MS|relative-drag X2 Y2 MS [SCALE]]\n", argv[0]); return 2; }
     struct wl_display *display = wl_display_connect(NULL);
     if (!display) { fprintf(stderr, "no wayland display\n"); return 1; }
     struct wl_registry *registry = wl_display_get_registry(display);
@@ -151,7 +152,7 @@ int main(int argc, char **argv) {
         zwlr_virtual_pointer_v1_button(pointer, now_ms(), BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
         zwlr_virtual_pointer_v1_frame(pointer);
         wl_display_roundtrip(display);
-        if (!strcmp(argv[5], "drag") || !strcmp(argv[5], "relative-drag")) {
+        if (!strcmp(argv[5], "drag") || !strcmp(argv[5], "drag-stream") || !strcmp(argv[5], "relative-drag")) {
             int relative = !strcmp(argv[5], "relative-drag");
             if (argc != 9 && !(relative && argc == 10)) {
                 fprintf(stderr, "%s requires X2 Y2 MS%s\n", argv[5], relative ? " [SCALE]" : ""); return 2;
@@ -191,7 +192,7 @@ int main(int argc, char **argv) {
                 zwlr_virtual_pointer_v1_frame(pointer);
                 // Relative input is scheduled by the monotonic deadlines above;
                 // a compositor roundtrip per step stretches it under capture load.
-                if (relative) wl_display_flush(display);
+                if (relative || !strcmp(argv[5], "drag-stream")) wl_display_flush(display);
                 else wl_display_roundtrip(display);
             }
             if (relative) {

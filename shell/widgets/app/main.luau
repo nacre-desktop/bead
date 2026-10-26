@@ -6,6 +6,7 @@ local spacing,text=kit.tokens.spacing,kit.tokens.text
 local registry=require("../registry")
 local preview=require("preview")
 local settings_form=require("../settings-form")
+local dragging=require("../dragging")
 
 local function catalogue_descriptors()
     local packages_out={}
@@ -48,7 +49,11 @@ local width=get("bead.viewport.width",1280)
 local height=get("bead.viewport.height",800)
 local screen_w=math.max(1,get("widgets.screen_width",1920))
 local screen_h=math.max(1,get("widgets.screen_height",1080))
-local doc=document_value(get("widgets.draft")) or document_value(get("widgets.layout"))
+local drag_active=get("widgets.drag.active",false)==true
+local drag_phase=get("widgets.drag.phase","")
+local transient=document_value(get("widgets.drag.layout"))
+local doc=(drag_active and drag_phase=="dragging" and transient)
+    or document_value(get("widgets.draft")) or document_value(get("widgets.layout"))
     or document_value(get("widgets.initial")) or registry.default(screen_w)
 local initial=document_value(get("widgets.initial")) or registry.default(screen_w)
 registry.validate(doc)
@@ -56,6 +61,7 @@ local rev=get("widgets.rev",0)
 local catalogue=get("widgets.catalogue",{})
 if #catalogue==0 then catalogue=catalogue_descriptors() end
 local selected=get("widgets.selected","")
+local selected_group=get("widgets.group","")
 local category=get("widgets.category","all")
 local searching=get("widgets.search","")
 local form=get("widgets.form","bar")
@@ -70,7 +76,71 @@ if wallpaper=="" then wallpaper=wallpaper_preview(get("settings.items",{})) end
 local function navigate(op,value)
     return ui.action("widgets.navigate",{{op=op,value=value,document=doc,initial=initial,rev=rev,catalogue=catalogue}})
 end
+local function find_item(widget,group)
+    local found
+    local function scan(items)
+        for _,item in items or {} do
+            if item.widget==widget and (group==nil or (item.group or item.iid)==group) then found=item; return end
+            scan(item.children)
+            if found then return end
+        end
+    end
+    for _,host in doc.hosts or {} do scan(host.instances) end
+    return found
+end
+local function groups_for(widget)
+    local rows,by_id={},{}
+    for group,entry in doc.widgets or {} do
+        if entry.widget==widget then
+            by_id[group]={id=group,entry=entry,instance=find_item(widget,group)}
+        end
+    end
+    local function scan(items)
+        for _,item in items or {} do
+            if item.widget==widget then
+                local group=item.group or item.iid
+                by_id[group]=by_id[group] or {id=group,entry={widget=widget,settings=item.settings or {},forms={}},instance=item}
+                if not by_id[group].instance then by_id[group].instance=item end
+            end
+            scan(item.children)
+        end
+    end
+    for _,host in doc.hosts or {} do scan(host.instances) end
+    local ids={}
+    for group in by_id do table.insert(ids,group) end
+    table.sort(ids)
+    local labels={}
+    for _,group in ids do
+        local row=by_id[group]
+        local item=row.instance
+        local title="Desktop"
+        if item and item.host~="canvas" then
+            local region=item.slot and item.slot.region or "left"
+            local region_title=({left="Left",centre="Center",right="Right"})[region] or "Left"
+            title="Bar · "..region_title
+        end
+        labels[title]=(labels[title] or 0)+1
+        row.title=title
+        table.insert(rows,row)
+    end
+    local totals=table.clone(labels)
+    for _,row in rows do
+        labels[row.title]=labels[row.title]-1
+        if totals[row.title]>1 then row.label=row.title.." · "..tostring(totals[row.title]-labels[row.title])
+        else row.label=row.title end
+    end
+    return rows
+end
+local function active_group(widget,requested)
+    local rows=groups_for(widget)
+    for _,row in rows do if row.id==requested then return row.id end end
+    return rows[1] and rows[1].id or widget
+end
+local function widget_group(widget)
+    return active_group(widget,widget==selected and selected_group or nil)
+end
 local function edit(request)
+    if type(request.widget)=="string" and request.group==nil then request.group=widget_group(request.widget) end
     request.document=doc
     request.initial=initial
     request.rev=rev
@@ -239,47 +309,28 @@ local function gallery()
     }
 end
 
-local function find_item(widget)
-    local found
-    local function scan(items)
-        for _,item in items or {} do
-            if item.widget==widget then found=item; return end
-            scan(item.children)
-            if found then return end
+local function config_for(widget,requested_group)
+    local group=active_group(widget,requested_group)
+    local rows=groups_for(widget)
+    for _,row in rows do
+        if row.id==group then
+            return group,row.entry,row.instance
         end
     end
-    for _,host in doc.hosts or {} do scan(host.instances) end
-    return found
+    return group,{widget=widget,settings={},forms={}},nil
 end
-local function config_for(widget)
-    local instance=find_item(widget)
-    for group,entry in doc.widgets or {} do
-        if entry.widget==widget then return group,entry,instance end
-    end
-    local group=instance and (instance.group or instance.iid) or widget
-    return group,{widget=widget,settings=instance and instance.settings or {},forms={}},instance
-end
-local function form_state(widget,placement,package)
-    local group,entry,instance=config_for(widget)
+local function form_state(widget,placement,package,requested_group)
+    local group,entry,instance=config_for(widget,requested_group)
     local config=entry.forms and entry.forms[placement] or {}
-    local exists=false
-    local function scan(items)
-        for _,item in items or {} do
-            if item.widget==widget then exists=true; return end
-            scan(item.children)
-            if exists then return end
-        end
-    end
-    local host=placement=="bar" and doc.hosts.top_bar or doc.hosts.canvas
-    scan(host and host.instances)
-    local active=exists
+    local active=instance~=nil and ((instance.host=="canvas" and "desktop" or "bar")==placement)
     if config.enabled~=nil then active=config.enabled end
+    local host=placement=="bar" and doc.hosts.top_bar or doc.hosts.canvas
     local configured=config.style
     if configured==nil or configured=="" then
         configured=nil
         local function matching(items)
             for _,item in items or {} do
-                if item.widget==widget then configured=item.style or (package.forms[placement].legacy_style_setting and (item.settings or {})[package.forms[placement].legacy_style_setting]); return true end
+                if item.widget==widget and (item.group or item.iid)==group then configured=item.style or (package.forms[placement].legacy_style_setting and (item.settings or {})[package.forms[placement].legacy_style_setting]); return true end
                 if matching(item.children) then return true end
             end
             return false
@@ -293,9 +344,9 @@ local function active_settings(package,entry,instance)
     for key,value in entry.settings or instance and instance.settings or {} do values[key]=value end
     return values
 end
-local function form_action(widget,placement)
+local function form_action(widget,placement,group)
     return function(op,fields)
-        local request={op=op,widget=widget,form=placement}
+        local request={op=op,widget=widget,group=group,form=placement}
         for key,value in fields or {} do
             if key~="iid" then request[key]=value end
         end
@@ -331,7 +382,8 @@ local function detail()
     local package=registry.catalogue[selected]
     if not package then return gallery() end
     local placement=package.forms[form] and form or package.forms.bar and "bar" or "desktop"
-    local group,entry,instance,_config,enabled,style_id=form_state(selected,placement,package)
+    local group,entry,instance,_config,enabled,style_id=form_state(selected,placement,package,selected_group)
+    local instance_groups=groups_for(selected)
     local settings=active_settings(package,entry,instance)
     local desktop_available=package.forms.desktop~=nil
     local stage_w=math.max(1,width-2*spacing.lg)
@@ -341,7 +393,7 @@ local function detail()
     local mini_left,mini_top=(stage_w-mini_w)/2,(stage_h-mini_h)/2
     local bar_h=math.max(1,get("bar.height",50))
     local bar_node=preview.render_bar(doc,screen_w,bar_h,stage_scale,
-        placement=="bar" and enabled and selected or nil,style_id,settings)
+        placement=="bar" and enabled and selected or nil,style_id,settings,group)
     local stage_bar_height=bar_h*stage_scale
     local widget_w=math.min(mini_w*.38,320*stage_scale)
     local widget_h=math.min(widget_w*.5,mini_h*.4)
@@ -350,15 +402,16 @@ local function detail()
     local wallpaper_image=wallpaper~="" and ui.Image{id="stage-wallpaper",position="absolute",left=mini_left,top=mini_top,width=mini_w,height=mini_h,icon=wallpaper,image_fit="cover"} or nil
     local desktop_preview
     if placement=="desktop" and enabled then
-        desktop_preview=preview.render(selected,"desktop",style_id,settings,widget_w,widget_h)
+        desktop_preview=preview.render(selected,"desktop",style_id,settings,widget_w,widget_h,true)
     end
+    local stage_source=dragging.app_payload(doc,selected,placement,style_id,settings,group)
     local settings_package=table.clone(package)
     settings_package.settings={}
     for key,schema in package.settings do
         if not schema.style_alias and not schema.hidden then settings_package.settings[key]=schema end
     end
     local item={iid=group,widget=selected,settings=settings}
-    local fields=settings_form.rows(item,settings_package,form_action(selected,placement))
+    local fields=settings_form.rows(item,settings_package,form_action(selected,placement,group))
     local stage_children={ui.Box{id="stage-background",position="absolute",left=mini_left,top=mini_top,
         width=mini_w,height=mini_h,fill="surfaceContainerHighest"}}
     if wallpaper_image then table.insert(stage_children,wallpaper_image) end
@@ -369,6 +422,10 @@ local function detail()
     if desktop_preview then
         table.insert(stage_children,ui.Box{id="desktop-widget-preview",position="absolute",left=widget_left,top=widget_top,
             width=widget_w,height=widget_h,clip_children=true,visible=true,align="center",justify="center",desktop_preview})
+    end
+    if stage_source then
+        table.insert(stage_children,ui.Box{id="stage-drag-source",position="absolute",left=mini_left,top=mini_top,
+            width=mini_w,height=mini_h,drag_payload={stage_source},on_drag=ui.action("widgets.drag")})
     end
     table.insert(stage_children,ui.Column{id="stage-caption",position="absolute",left=spacing.md,bottom=spacing.md,gap=spacing.xs,
         label("stage-title","Your screen",text.caption*4/3,"onSurface",{height=18}),
@@ -389,6 +446,15 @@ local function detail()
             checked=enabled,enabled=not busy,on_activate=edit({op="toggle-form",widget=selected,form=placement,enabled=not enabled})},
         label("style-heading","Style",text.body*4/3,"onSurface",{height=22}),
         style_tiles(selected,placement,package,style_id,settings)}
+    if #instance_groups>1 then
+        local options={id="instance-options",width="fill",gap=spacing.sm}
+        for _,copy in instance_groups do
+            table.insert(options,button("instance-"..copy.id,copy.label,navigate("instance",copy.id),{
+                selected=copy.id==group,fill=copy.id==group and ui.alpha("primary",.15) or "surfaceContainer"}))
+        end
+        table.insert(content_props,1,ui.Column{id="instance-picker",width="fill",gap=spacing.xs,
+            label("instance-heading","Choose a copy",text.caption*4/3,"onSurfaceVariant",{height=18}),ui.Row(options)})
+    end
     if next(settings_package.settings)~=nil then
         table.insert(content_props,ui.Column{id="settings-section",width="fill",gap=spacing.md,padding=spacing.md,
             radius=kit.tokens.radii.medium,fill="surfaceContainer",
@@ -411,7 +477,7 @@ end
 
 local function metadata()
     return {{widget_layout=true,widget_clock_preview_seconds=selected=="clock",document=doc,initial=initial,rev=rev,catalogue=catalogue,
-        screen_width=screen_w,screen_height=screen_h}}
+        screen_width=screen_w,screen_height=screen_h,snap_distance=spacing.lg}}
 end
 
 local app_content=ui.Column{id="widgets-app",width="100%",height="100%",fill="surface",

@@ -8,10 +8,27 @@ pub(super) fn deferred_matches(nodes: &[Node], pending: &super::session::Deferre
         .rev()
         .find(|node| node.focusable && node.contains(x, y))
         .is_some_and(|node| {
-            node.activate_on_release
+            (node.activate_on_release || defers_for_transfer(node, nodes, x, y))
                 && node.id == pending.id
                 && node.action.as_deref() == Some(pending.action.as_str())
                 && node.action_arg.clone().unwrap_or(Value::Bool(true)) == pending.argument
+        })
+}
+fn defers_for_transfer(node: &Node, nodes: &[Node], x: f32, y: f32) -> bool {
+    node.action.is_some()
+        && nodes.iter().any(|source| {
+            source.contains(x, y)
+                && source.drag_payload.is_some()
+                && source.drag_action.is_some()
+                && (source.id == node.id
+                    || source
+                        .id
+                        .strip_prefix(&node.id)
+                        .is_some_and(|suffix| suffix.starts_with('.'))
+                    || node
+                        .id
+                        .strip_prefix(&source.id)
+                        .is_some_and(|suffix| suffix.starts_with('.')))
         })
 }
 impl Session {
@@ -153,6 +170,14 @@ impl Session {
         }
         self.stage_state(stores)
     }
+    /// Finish a pointer release whose action is owned by the host. This clears
+    /// press/gesture state without replaying the deferred Luau action; callers
+    /// dispatch that captured action through their native route instead.
+    pub fn release_without_activation(&mut self) -> Result<Option<Scene>, Diagnostic> {
+        self.deferred_action = None;
+        self.deferred_gesture = false;
+        self.release()
+    }
     fn click_at(
         &mut self,
         x: f32,
@@ -175,8 +200,18 @@ impl Session {
             return Ok(None);
         };
         let hit = self.hit(x, y, false);
-        let deferred = hit.is_some_and(|node| node.activate_on_release && node.action.is_some());
-        let preserve_focus = press && hit.is_some_and(|node| !node.focus_on_pointer);
+        let deferred = hit.is_some_and(|node| {
+            node.action.is_some()
+                && (node.activate_on_release
+                    || defers_for_transfer(node, &self.current_nodes, x, y))
+        });
+        let input_hit = hit.is_some_and(|node| node.input.is_some());
+        let preserve_focus = press
+            && hit.is_some_and(|node| {
+                !node.focus_on_pointer
+                    || (node.input.is_none()
+                        && defers_for_transfer(node, &self.current_nodes, x, y))
+            });
         let pointer_id = if continuous {
             hit.filter(|node| node.pointer_arg.is_some())
                 .map(|node| node.id.clone())
@@ -187,7 +222,9 @@ impl Session {
             hit.map_or((None, String::new(), None, Value::Bool(true)), |node| {
                 (
                     if deferred { None } else { node.action.clone() },
-                    if !deferred && (node.input.is_some() || node.focusable) {
+                    if (!deferred || node.input.is_some())
+                        && (node.input.is_some() || node.focusable)
+                    {
                         node.id.clone()
                     } else {
                         String::new()
@@ -226,7 +263,7 @@ impl Session {
                 )]))
                 .map_err(|e| generation.script.error(e))?;
         }
-        if !deferred && !preserve_focus {
+        if (!deferred || input_hit) && !preserve_focus {
             stores
                 .commit(BTreeMap::from([(
                     "bead.focused".into(),
@@ -595,7 +632,7 @@ impl Session {
     /// Host action at a press; opted-in buttons defer host routing until release.
     pub fn press_action_at(&self, x: f32, y: f32) -> Option<(String, String, Value)> {
         let node = self.hit(x, y, false)?;
-        if node.activate_on_release {
+        if node.activate_on_release || defers_for_transfer(node, &self.current_nodes, x, y) {
             None
         } else {
             self.action_at(x, y)
@@ -662,6 +699,10 @@ impl Session {
                     action: node.drag_action.clone()?,
                     payload: node.drag_payload.clone()?,
                     origin: (x, y),
+                    source_rect: {
+                        let rect = rect(&node.draw);
+                        (rect.x, rect.y, rect.w, rect.h)
+                    },
                     active: false,
                 })
             });
@@ -669,13 +710,10 @@ impl Session {
     /// The active transfer source and original pointer position, for cross-surface routing.
     pub fn transfer_source(&self) -> Option<(String, Value, (f32, f32))> {
         let capture = self.transfer_capture.as_ref()?;
-        (capture.active && self.transfer_source_is_current(capture)).then(|| {
-            (
-                capture.source.clone(),
-                capture.payload.clone(),
-                capture.origin,
-            )
-        })
+        let source = self.transfer_source_node(capture)?;
+        capture
+            .active
+            .then(|| (source.id.clone(), capture.payload.clone(), capture.origin))
     }
     /// Drop-capable nodes in the current materialized view.
     pub fn drop_targets(&self) -> Vec<Node> {
@@ -685,12 +723,25 @@ impl Session {
             .cloned()
             .collect()
     }
-    fn transfer_source_is_current(&self, capture: &super::session::TransferCapture) -> bool {
-        self.current_nodes.iter().any(|node| {
-            node.id == capture.source
-                && node.drag_action.as_deref() == Some(capture.action.as_str())
+    fn transfer_source_node<'a>(
+        &'a self,
+        capture: &super::session::TransferCapture,
+    ) -> Option<&'a Node> {
+        let matches = |node: &Node| {
+            node.drag_action.as_deref() == Some(capture.action.as_str())
                 && node.drag_payload.as_ref() == Some(&capture.payload)
-        })
+        };
+        self.current_nodes
+            .iter()
+            .find(|node| node.id == capture.source && matches(node))
+            .or_else(|| {
+                let mut candidates = self.current_nodes.iter().filter(|node| matches(node));
+                let only = candidates.next()?;
+                candidates.next().is_none().then_some(only)
+            })
+    }
+    fn transfer_source_is_current(&self, capture: &super::session::TransferCapture) -> bool {
+        self.transfer_source_node(capture).is_some()
     }
     /// Produce the generic transfer event after a 4 dp pointer threshold.
     pub fn transfer_action(
@@ -702,6 +753,15 @@ impl Session {
         if !matches!(phase, "move" | "drop" | "cancel") || !x.is_finite() || !y.is_finite() {
             return None;
         }
+        let capture = self.transfer_capture.as_ref()?;
+        let dx = x - capture.origin.0;
+        let dy = y - capture.origin.1;
+        if !capture.active && dx * dx + dy * dy < 16. {
+            return None;
+        }
+        self.transfer_capture.as_mut()?.active = true;
+        self.deferred_action = None;
+        self.deferred_gesture = false;
         let valid = self
             .transfer_capture
             .as_ref()
@@ -710,26 +770,19 @@ impl Session {
             self.transfer_capture = None;
             return None;
         }
+        let source_id = self
+            .transfer_capture
+            .as_ref()
+            .and_then(|capture| self.transfer_source_node(capture))?
+            .id
+            .clone();
         let capture = self.transfer_capture.as_mut()?;
-        let dx = x - capture.origin.0;
-        let dy = y - capture.origin.1;
-        if !capture.active && dx * dx + dy * dy < 16. {
-            return None;
-        }
-        capture.active = true;
         let target = self
             .current_nodes
             .iter()
             .rev()
             .find(|node| node.drop_action.is_some() && node.contains(x, y));
-        if phase == "drop" && target.is_none() {
-            return None;
-        }
-        let source_rect = self
-            .current_nodes
-            .iter()
-            .find(|node| node.id == capture.source)
-            .map(|node| rect(&node.draw))?;
+        let (source_x, source_y, source_width, source_height) = capture.source_rect;
         let source = serde_json::to_value(&capture.payload).ok()?;
         let target_value = target
             .and_then(|node| node.drop_argument.as_ref())
@@ -738,13 +791,11 @@ impl Session {
         let target_action = target.and_then(|node| node.drop_action.as_deref());
         let event = serde_json::json!({
             "source":source,"target":target_value,"target_action":target_action,
-            "x":x,"y":y,"phase":phase,"width":source_rect.w,"height":source_rect.h,"grab_x":capture.origin.0-source_rect.x,"grab_y":capture.origin.1-source_rect.y,
+            "x":x,"y":y,"start_x":capture.origin.0,"start_y":capture.origin.1,"phase":phase,
+            "width":source_width,"height":source_height,
+            "grab_x":capture.origin.0-source_x,"grab_y":capture.origin.1-source_y,
         });
-        Some((
-            capture.source.clone(),
-            capture.action.clone(),
-            Value::list(vec![event]),
-        ))
+        Some((source_id, capture.action.clone(), Value::list(vec![event])))
     }
     /// End a pointer transfer. Hosts call this on release, cancellation, or surface teardown.
     pub fn finish_transfer(&mut self) {

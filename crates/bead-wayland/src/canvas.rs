@@ -2,6 +2,20 @@
 //! Lazy output canvases. Each mapped surface is only the visible content bounds.
 use super::*;
 
+fn canvas_event_belongs_to_host(event: &UiEvent) -> bool {
+    matches!(
+        event,
+        UiEvent::CompanionVisibility(_)
+            | UiEvent::CompanionSelectAt { .. }
+            | UiEvent::CompanionSelect { .. }
+            | UiEvent::CompanionAction { .. }
+            | UiEvent::CompanionMotionAction { .. }
+            | UiEvent::HostModel(_)
+            | UiEvent::CanvasOffer { .. }
+            | UiEvent::CanvasModel { .. }
+    )
+}
+
 pub(super) struct Canvas {
     pub(super) epoch: u64,
     pub(super) layer: Option<LayerSurface>,
@@ -408,14 +422,7 @@ impl App {
             }
             _ => {}
         }
-        if matches!(
-            &event,
-            UiEvent::CompanionSelectAt { .. }
-                | UiEvent::CompanionSelect { .. }
-                | UiEvent::CompanionAction { .. }
-                | UiEvent::HostModel(_)
-                | UiEvent::CanvasOffer { .. }
-        ) {
+        if canvas_event_belongs_to_host(&event) {
             self.ui(event);
         } else {
             self.canvas_ui(&key, event);
@@ -467,7 +474,10 @@ impl App {
             let layer = self.layers.create_layer_surface(
                 &qh,
                 surface,
-                Layer::Bottom,
+                match self.options.canvas_layers.get(&key.1) {
+                    Some(CanvasLayer::Overlay) => Layer::Overlay,
+                    _ => Layer::Bottom,
+                },
                 Some(&self.options.namespace),
                 Some(&output),
             );
@@ -866,6 +876,31 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn host_canvas_envelopes_are_routed_out_of_the_canvas_runtime() {
+        assert!(canvas_event_belongs_to_host(&UiEvent::CanvasModel {
+            view: "widgets-canvas".into(),
+            output: Some("fixture-output".into()),
+            values: std::collections::BTreeMap::new(),
+        }));
+        assert!(canvas_event_belongs_to_host(&UiEvent::CanvasOffer {
+            view: "widgets-canvas".into(),
+            output: Some("fixture-output".into()),
+            open: true,
+            values: std::collections::BTreeMap::new(),
+        }));
+        assert!(canvas_event_belongs_to_host(&UiEvent::CompanionVisibility(
+            true
+        )));
+        assert!(canvas_event_belongs_to_host(&UiEvent::CompanionVisibility(
+            false
+        )));
+        assert!(!canvas_event_belongs_to_host(&UiEvent::Model(
+            std::collections::BTreeMap::new()
+        )));
+    }
+
     fn scene(offset: (f32, f32)) -> Scene {
         Scene {
             opacity: 1.,

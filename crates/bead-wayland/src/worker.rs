@@ -160,19 +160,19 @@ fn enqueue(queue: &mut VecDeque<Job>, mut job: Job) {
             queue.pop_back();
         }
     }
-    let replace = matches!(
-        (queue.back(), &job),
-        (
-            Some(Job::Stage(UiEvent::Hover { .. }, _)),
-            Job::Stage(UiEvent::Hover { .. }, _)
-        ) | (
-            Some(Job::Stage(UiEvent::Drag { .. }, _)),
-            Job::Stage(UiEvent::Drag { .. }, _)
-        ) | (
+    let replace = match (queue.back(), &job) {
+        (Some(Job::Stage(UiEvent::Hover { .. }, _)), Job::Stage(UiEvent::Hover { .. }, _))
+        | (Some(Job::Stage(UiEvent::Drag { .. }, _)), Job::Stage(UiEvent::Drag { .. }, _))
+        | (
             Some(Job::Stage(UiEvent::LocalDrag { .. }, _)),
-            Job::Stage(UiEvent::LocalDrag { .. }, _)
-        )
-    );
+            Job::Stage(UiEvent::LocalDrag { .. }, _),
+        ) => true,
+        (
+            Some(Job::Stage(UiEvent::MotionAction { name: previous, .. }, _)),
+            Job::Stage(UiEvent::MotionAction { name, .. }, _),
+        ) => previous == name,
+        _ => false,
+    };
     if replace {
         queue.pop_back();
     }
@@ -1253,6 +1253,77 @@ mod tests {
             receiver.try_recv().is_err(),
             "duplicate payload produces one hydration job"
         );
+    }
+    #[test]
+    fn motion_actions_keep_latest_same_name_and_preserve_action_barriers() {
+        let mut queue = VecDeque::new();
+        let motion = |name: &str, x| {
+            Job::Stage(
+                UiEvent::MotionAction {
+                    name: name.into(),
+                    argument: bead_core::Value::list(vec![serde_json::json!({
+                        "phase":"move", "x":x
+                    })]),
+                },
+                vec![1.5],
+            )
+        };
+        let action = |phase: &str| {
+            Job::Stage(
+                UiEvent::Action {
+                    name: "test.drag".into(),
+                    argument: bead_core::Value::list(vec![serde_json::json!({
+                        "phase":phase
+                    })]),
+                },
+                vec![1.5],
+            )
+        };
+        for x in 0..100 {
+            enqueue(&mut queue, motion("test.drag", x));
+        }
+        enqueue(&mut queue, action("start"));
+        enqueue(&mut queue, motion("test.other", 100));
+        enqueue(&mut queue, motion("test.drag", 101));
+        enqueue(&mut queue, action("drop"));
+        enqueue(&mut queue, motion("test.drag", 102));
+
+        assert_eq!(queue.len(), 6);
+        let Some(Job::Stage(UiEvent::MotionAction { name, argument }, _)) = queue.pop_front()
+        else {
+            panic!("latest matching motion was not retained")
+        };
+        assert_eq!(name, "test.drag");
+        assert_eq!(
+            argument,
+            bead_core::Value::list(vec![serde_json::json!({
+                "phase":"move", "x":99
+            })])
+        );
+        assert!(matches!(
+            queue.pop_front(),
+            Some(Job::Stage(UiEvent::Action { argument, .. }, _))
+                if argument == bead_core::Value::list(vec![serde_json::json!({"phase":"start"})])
+        ));
+        assert!(matches!(
+            queue.pop_front(),
+            Some(Job::Stage(UiEvent::MotionAction { name, .. }, _)) if name == "test.other"
+        ));
+        assert!(matches!(
+            queue.pop_front(),
+            Some(Job::Stage(UiEvent::MotionAction { name, argument, .. }, _))
+                if name == "test.drag" && argument == bead_core::Value::list(vec![serde_json::json!({"phase":"move","x":101})])
+        ));
+        assert!(matches!(
+            queue.pop_front(),
+            Some(Job::Stage(UiEvent::Action { argument, .. }, _))
+                if argument == bead_core::Value::list(vec![serde_json::json!({"phase":"drop"})])
+        ));
+        assert!(matches!(
+            queue.pop_front(),
+            Some(Job::Stage(UiEvent::MotionAction { argument, .. }, _))
+                if argument == bead_core::Value::list(vec![serde_json::json!({"phase":"move","x":102})])
+        ));
     }
     #[test]
     fn worker_requires_gpu_ack_before_store_commit_and_supplies_prebaked_pixels() {

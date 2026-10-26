@@ -344,6 +344,16 @@ pub enum UiEvent {
         name: String,
         argument: bead_core::Value,
     },
+    /// Latest-only authored action motion; ordered Action events remain barriers.
+    MotionAction {
+        name: String,
+        argument: bead_core::Value,
+    },
+    /// Companion-host motion forwarded to the host's serialized action worker.
+    CompanionMotionAction {
+        name: String,
+        argument: bead_core::Value,
+    },
     ClipboardSet(String),
     ClipboardRead,
     ClipboardText(String),
@@ -692,6 +702,13 @@ pub struct PanelSpec {
     pub renderer: RendererKind,
     pub position: Option<PanelPositioner>,
 }
+/// Stacking policy for a named, input-empty or selectively interactive canvas.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CanvasLayer {
+    #[default]
+    Desktop,
+    Overlay,
+}
 #[derive(Clone)]
 pub struct Options {
     /// Optional per-output primary UI source. When absent the legacy shared UI is used.
@@ -709,6 +726,8 @@ pub struct Options {
     pub overlays: Option<Overlays>,
     /// Optional output-sized canvas views, created on first offer per output and name.
     pub canvases: Option<Panels>,
+    /// Unlisted canvases stay below windows; transient drag previews can use Overlay.
+    pub canvas_layers: std::collections::BTreeMap<String, CanvasLayer>,
     pub command_map: Option<CommandMap>,
     pub report: Option<std::path::PathBuf>,
     pub command_socket: Option<std::path::PathBuf>,
@@ -772,6 +791,7 @@ impl Default for Options {
             panels: None,
             overlays: None,
             canvases: None,
+            canvas_layers: Default::default(),
             command_map: None,
             command_socket: None,
             report: None,

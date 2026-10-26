@@ -244,8 +244,14 @@ fn node(runtime: &Runtime, action: &str, arg: Option<&str>) -> Option<(f32, f32)
 }
 fn at(runtime: &mut Runtime, action: &str, arg: Option<&str>, make: impl Fn(f32, f32) -> UiEvent) {
     let (x, y) = node(runtime, action, arg).unwrap_or_else(|| panic!("{action} {arg:?} missing"));
-    runtime.stage(make(x, y)).unwrap();
+    let event = make(x, y);
+    let release = matches!(&event, UiEvent::Click { .. });
+    runtime.stage(event).unwrap();
     runtime.commit();
+    if release {
+        runtime.stage(UiEvent::Release).unwrap();
+        runtime.commit();
+    }
 }
 async fn call(calls: &mut Calls, what: &str) -> (String, serde_json::Value) {
     tokio::time::timeout(Duration::from_secs(5), calls.recv())

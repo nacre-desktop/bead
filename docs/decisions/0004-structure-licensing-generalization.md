@@ -85,6 +85,7 @@ After Bead's core switch on Nacre, plan support for:
 - B0126: `SceneSource::drag_visuals` carries authored pointer/travel bounds and stable visual identity; the toolkit slider supplies metadata, with no service IDs in the compositor primitive. Optional fill metadata uses one shared pose and bounded regional SHM paint. `kit.SliderValue` supplies an authored fixed label that `Session::local_range_feedback_with_label` patches into the existing Text primitive without Luau/layout work; service completion remains outside projection.
 
 - B0114: `clip_children` crops descendant painting and pointer regions to a view rectangle without scroll state.
+- B0114: numeric `translate_x/y` moves painting and pointer regions together without changing sibling layout; named canvas layers support transient overlays.
 - B0114: canvas hosts resolve canvas/card/bar variants; opaque pointer transfers carry source/drop metadata without keyboard focus.
   Lazy output canvases use content-sized bottom-layer surfaces and reusable buffers. Anchored panels, app-to-pearl startup,
   child/host model and action delivery, inert metadata, source-origin opt-in, explicit shared image snapshots

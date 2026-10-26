@@ -469,23 +469,21 @@ impl App {
             eprintln!("PANEL_PREPARE_ERROR {error}");
         }
     }
-    fn notify_panel_origin(&self, scene: &Scene, x: i32, y: i32) {
-        if self
-            .panel_runtime
-            .as_ref()
-            .is_some_and(|source| source.tracks_origin())
-            && let Some(sender) = &self.event_sender
-        {
-            let _ = sender.send(UiEvent::CompanionModel(std::collections::BTreeMap::from([
-                (
-                    "bead.surface.x".into(),
-                    bead_core::Value::Number(x as f64 + scene.offset.0 as f64),
-                ),
-                (
-                    "bead.surface.y".into(),
-                    bead_core::Value::Number(y as f64 + scene.offset.1 as f64),
-                ),
-            ])));
+    fn notify_panel_origin(&self, scene: &Scene, x: i32, y: i32, tracks_origin: bool) {
+        if tracks_origin && let Some(sender) = &self.event_sender {
+            let _ = sender.send(UiEvent::Panel(
+                self.panel_epoch,
+                Box::new(UiEvent::Model(std::collections::BTreeMap::from([
+                    (
+                        "bead.surface.x".into(),
+                        bead_core::Value::Number(x as f64 + scene.offset.0 as f64),
+                    ),
+                    (
+                        "bead.surface.y".into(),
+                        bead_core::Value::Number(y as f64 + scene.offset.1 as f64),
+                    ),
+                ]))),
+            ));
         }
     }
     pub(super) fn position_panel_surface(
@@ -493,6 +491,21 @@ impl App {
         layer: &LayerSurface,
         output: &wl_output::WlOutput,
         scene: &Scene,
+    ) -> bool {
+        let source = if self.processing_panel {
+            self.runtime.as_ref()
+        } else {
+            self.panel_runtime.as_ref()
+        };
+        let tracks_origin = source.is_some_and(|source| source.tracks_origin());
+        self.position_panel_surface_with_origin(layer, output, scene, tracks_origin)
+    }
+    pub(super) fn position_panel_surface_with_origin(
+        &self,
+        layer: &LayerSurface,
+        output: &wl_output::WlOutput,
+        scene: &Scene,
+        tracks_origin: bool,
     ) -> bool {
         let placement = if let Some(progress) =
             self.dock_transition_progress(self.started.elapsed().as_secs_f64())
@@ -524,18 +537,18 @@ impl App {
                 layer.set_size(extent.0, extent.1);
             }
             if !transition.started {
-                self.notify_panel_origin(scene, x, y);
+                self.notify_panel_origin(scene, x, y, tracks_origin);
             }
             (Anchor::TOP | Anchor::LEFT, [y, 0, 0, x])
         } else if let Some(info) = self.pearl.filter(|i| i.kind == pearls::Kind::Pearl) {
             let (x, y) = self.pearl_margins(output, scene, info.rect);
-            self.notify_panel_origin(scene, x, y);
+            self.notify_panel_origin(scene, x, y, tracks_origin);
             (Anchor::TOP | Anchor::LEFT, [y, 0, 0, x])
         } else if let Some(anchor) = self.panel_anchor
             && let Some(size) = self.output.info(output).and_then(|info| info.logical_size)
         {
             let (x, y) = panels::anchored_position(scene, anchor, size);
-            self.notify_panel_origin(scene, x, y);
+            self.notify_panel_origin(scene, x, y, tracks_origin);
             (Anchor::TOP | Anchor::LEFT, [y, 0, 0, x])
         } else if let Some(position) = self
             .options
@@ -545,7 +558,7 @@ impl App {
             && let Some(size) = self.output.info(output).and_then(|i| i.logical_size)
         {
             let (x, y) = position(scene, self.panel_center, size);
-            self.notify_panel_origin(scene, x, y);
+            self.notify_panel_origin(scene, x, y, tracks_origin);
             (Anchor::TOP | Anchor::LEFT, [y, 0, 0, x])
         } else {
             let width = scene.bounds.w.ceil().max(1.) as u32;

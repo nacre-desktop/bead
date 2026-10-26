@@ -62,6 +62,22 @@ fn idle_bar_minute_model_changes_damage_the_real_clock_widget() -> Result<()> {
     }
     Ok(())
 }
+
+fn settle_harness_animations(harness: &mut Harness) -> Result<usize> {
+    let mut frames = 0;
+    while let Some(deadline) = harness.session.preview_deadline() {
+        if frames >= 64 {
+            return Err("harness animations did not settle within 64 frames".into());
+        }
+        let now = std::time::Instant::now();
+        if deadline > now {
+            std::thread::sleep(deadline.duration_since(now));
+        }
+        harness.update(BTreeMap::new())?;
+        frames += 1;
+    }
+    Ok(frames)
+}
 fn calendar(year: u16, month: u8, first: u8, scale: f32) -> Result<Harness> {
     Harness::load(
         &root(),
@@ -424,6 +440,13 @@ fn real_bar_calendar_action_enqueues_a_view_and_audio_scroll_does_not_toggle_it(
         x: calendar.0,
         y: calendar.1,
     })?;
+    runtime.commit();
+    assert!(
+        events.lock().unwrap().is_empty(),
+        "the draggable click waits for release"
+    );
+    runtime.stage(UiEvent::Release)?;
+    runtime.commit();
     assert!(
         matches!(events.lock().unwrap().as_slice(),[UiEvent::CompanionSelect{view,toggle:false,center:Some(x),..}]if view=="calendar" && *x==calendar.0)
     );
@@ -446,6 +469,13 @@ fn real_bar_calendar_action_enqueues_a_view_and_audio_scroll_does_not_toggle_it(
         x: notifications.0,
         y: notifications.1,
     })?;
+    runtime.commit();
+    assert!(
+        events.lock().unwrap().is_empty(),
+        "the draggable click waits for release"
+    );
+    runtime.stage(UiEvent::Release)?;
+    runtime.commit();
     let received = events.lock().unwrap();
     assert!(matches!(received.as_slice(),
         [UiEvent::CompanionSelect { view, toggle:false, center:Some(center), .. }]
@@ -568,6 +598,11 @@ fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
                 scale,
             },
         )?;
+        settle_harness_animations(&mut h)?;
+        assert!(
+            h.session.preview_deadline().is_none(),
+            "bar geometry must be at its authored animation endpoint before golden capture"
+        );
         // A pill is a visual container. Its children are the only hit targets,
         // including each icon/count pair; clicks between them must hit nothing.
         let mut targets: Vec<_> = h
@@ -731,6 +766,13 @@ fn status_pill_click_routes_switch_escape_and_reopen() -> Result<()> {
         x: network.0,
         y: network.1,
     })?;
+    runtime.commit();
+    assert!(
+        events.lock().unwrap().is_empty(),
+        "the draggable click waits for release"
+    );
+    runtime.stage(UiEvent::Release)?;
+    runtime.commit();
     assert!(matches!(events.lock().unwrap().as_slice(),
         [UiEvent::CompanionSelect { view, toggle:false, center:Some(center), .. }]
             if view == "network" && *center == network.0));
@@ -739,6 +781,13 @@ fn status_pill_click_routes_switch_escape_and_reopen() -> Result<()> {
         x: bluetooth.0,
         y: bluetooth.1,
     })?;
+    runtime.commit();
+    assert!(
+        events.lock().unwrap().is_empty(),
+        "the draggable click waits for release"
+    );
+    runtime.stage(UiEvent::Release)?;
+    runtime.commit();
     assert!(matches!(events.lock().unwrap().as_slice(),
         [UiEvent::CompanionSelect { view, toggle:false, center:Some(center), .. }]
             if view == "bluetooth" && *center == bluetooth.0));
@@ -756,6 +805,13 @@ fn status_pill_click_routes_switch_escape_and_reopen() -> Result<()> {
         x: network.0,
         y: network.1,
     })?;
+    runtime.commit();
+    assert!(
+        events.lock().unwrap().is_empty(),
+        "the draggable click waits for release"
+    );
+    runtime.stage(UiEvent::Release)?;
+    runtime.commit();
     assert!(matches!(events.lock().unwrap().as_slice(),
         [UiEvent::CompanionSelect { view, toggle:false, .. }] if view == "network"));
     host.stop();
@@ -1317,11 +1373,13 @@ fn widget_preset_roundtrip_live_move_unknown_preservation_and_atomic_rejection()
             scale: 1.5,
         },
     )?;
+    settle_harness_animations(&mut h)?;
     let baseline = serde_json::to_value(&h.scene().primitives)?;
     let preset: Json = serde_json::from_str(include_str!("../tests/widgets-default.json"))?;
     let roundtrip: Json = serde_json::from_str(&serde_json::to_string(&preset)?)?;
     let apply = |doc: Json| BTreeMap::from([("widgets.layout".into(), Value::list(vec![doc]))]);
     h.update(apply(roundtrip))?;
+    settle_harness_animations(&mut h)?;
     assert_eq!(
         serde_json::to_value(&h.scene().primitives)?,
         baseline,
@@ -1349,7 +1407,17 @@ fn widget_preset_roundtrip_live_move_unknown_preservation_and_atomic_rejection()
         h.session.stores.get("widgets.layout"),
         Some(&Value::list(vec![edited.clone()]))
     );
+    let transition_frame = serde_json::to_value(&h.scene().primitives)?;
+    let settling = h.session.preview_deadline().is_some();
+    settle_harness_animations(&mut h)?;
+    assert!(h.session.preview_deadline().is_none());
     let accepted = serde_json::to_value(&h.scene().primitives)?;
+    if settling {
+        assert_ne!(
+            transition_frame, accepted,
+            "the accepted widget move should reach its animated layout endpoint"
+        );
+    }
     for invalid in [
         {
             let mut d = edited.clone();
@@ -1380,9 +1448,19 @@ fn widget_preset_roundtrip_live_move_unknown_preservation_and_atomic_rejection()
         );
     }
     h.update(apply(preset))?;
+    let returning_frame = serde_json::to_value(&h.scene().primitives)?;
+    let returning = h.session.preview_deadline().is_some();
+    settle_harness_animations(&mut h)?;
+    assert!(h.session.preview_deadline().is_none());
+    let restored = serde_json::to_value(&h.scene().primitives)?;
+    if returning {
+        assert_ne!(
+            returning_frame, restored,
+            "returning the widget must settle its animated layout endpoint"
+        );
+    }
     assert_eq!(
-        serde_json::to_value(&h.scene().primitives)?,
-        baseline,
+        restored, baseline,
         "moving the clock back must restore the bar"
     );
     Ok(())

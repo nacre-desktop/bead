@@ -185,6 +185,10 @@ pub fn helper_client(args: &[String]) -> Result<(), Box<dyn std::error::Error>> 
 }
 
 pub fn map_views(mut call: Call) -> Result<Call, Reply> {
+    // Owner-only child/app bridge for the Widgets drag lifecycle; never exposed through the daemon.
+    if call.target == "bead.widgets" {
+        return Err(crate::widgets::widget_drag::private_call(call));
+    }
     // App children report live panel visibility over their private parent socket. Keep this
     // handler in the GPL shell and reply immediately; geometry refresh runs on the panel lane.
     if call.target == "bead.apps" && call.method == "panel-visibility" {

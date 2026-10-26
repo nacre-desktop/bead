@@ -1,6 +1,8 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 -- Shell-owned catalogue and versioned layout. Validation never rewrites the document.
 local registry={}
+local context=require("context")
+local ui,kit=context.ui,context.kit
 local ids={"launcher","workspaces","title","pill","updates","sound","wifi","bluetooth","battery","notifications","clock","power"}
 local function integer(n,lo,hi)
     return type(n)=="number" and n%1==0 and n>=lo and n<=hi
@@ -87,6 +89,7 @@ local function install_variants(package)
     package.variants={bar=make_variant(package,"bar",package.forms.bar)}
     if package.forms.desktop then package.variants.canvas=make_variant(package,"desktop",package.forms.desktop) end
 end
+local measured_width=require("measure").width
 local function validate_style(package,item,placement,span)
     local form=package.forms[placement]
     assert(form,"widget "..package.id.." has no "..placement.." form")
@@ -206,7 +209,7 @@ function M.renderer(document)
         local editing=require("context").ui.resolve_for_check(require("context").ui.bind("widgets.editing"))
         local host=document.hosts[item.host]
         local node=variant.render({instance=item,catalogue=registry,render=render,editing=editing,local_layout=host and host.mode=="tiles"},values,{})
-        if node.kind~="group" then node.props.drag_payload=item.iid end
+        if not node then return nil end
         -- Dropdown identity follows the instance, including copies and moves out of pills.
         local function own(child)
             local p=child.props or {}
@@ -220,10 +223,31 @@ function M.renderer(document)
             for _,nested in child.children or {} do own(nested) end
         end
         if item.widget~="pill" then own(node) end
+        node=require("dragging").attach(document,item,node)
+        if item.widget=="pill" and item.host=="top_bar" and host and host.mode=="content" and node.props then
+            local props=node.props
+            local natural=measured_width(node,0)
+            if natural>0 then props.width=ui.animate("pill-width:"..item.iid,natural,.18,"out-cubic") end
+            props.clip_children=true
+            node.props=props
+        end
         if editing then node=require("editing").decorate(document,item,node) end
+        if item.host=="top_bar" and host and host.mode=="tiles" and item.slot then
+            local viewport=require("context").ui.resolve_for_check(require("context").ui.bind("bead.viewport.width")) or 0
+            local pitch=viewport/math.max(1,host.tiles)
+            local target=(item.slot.start or 0)*pitch
+            if item.slot.region=="right" then target=-target end
+            local props=node.props or {}
+            props.translate_x=require("context").ui.animate("widget-slot:"..item.iid,target,.18,"out-cubic")-target
+            node.props=props
+        end
         -- Preserve historic IDs for the first copy; additional copies get stable scopes.
-        if copies[item.widget] then node.scope="widget."..item.iid.."." end
-        copies[item.widget]=true
+        if item.drag_placeholder==true then
+            node.scope="drag-preview."..item.iid.."."
+        else
+            if copies[item.widget] then node.scope="widget."..item.iid.."." end
+            copies[item.widget]=true
+        end
         return node
     end
     return render

@@ -75,7 +75,7 @@ function M.render_instance(instance,placement,factor)
     return render_item(package,instance,placement,values,factor)
 end
 
-function M.render_bar(document,width,height,factor,selected,style,settings)
+function M.render_bar(document,width,height,factor,selected,style,settings,selected_group)
     local layout=document.hosts.top_bar
     if not layout then return nil end
     local scale=factor or 1
@@ -90,7 +90,7 @@ function M.render_bar(document,width,height,factor,selected,style,settings)
     end
     local function copy_item(item)
         local copy=table.clone(item)
-        if item.widget==selected then
+        if item.widget==selected and (selected_group==nil or (item.group or item.iid)==selected_group) then
             copy.style=style
             copy.settings=settings
         end
