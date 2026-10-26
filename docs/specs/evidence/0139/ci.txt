@@ -1,0 +1,22 @@
+B0139 private Arch CI, 2026-10-26 — complete job passed
+Command: nice -n 10 bash /work/build-ci.sh (release build, then bash /work/full-ci.sh).
+Rust 1.99.1 (Arch), Cargo -j2, RUST_TEST_THREADS=1, fresh root-owned TMPDIR mode0700.
+Product source bf089ec4 on base588d9506; complete source-file checksum check passed.
+Source manifest SHA256: 1bc9c00e01acd7e884cf5516585282566d9fa6ea26c5373cfba3778221b5d308
+nacre-shell release binary SHA256: bc925f3069c0fadf436ac80d1d3d410be4cab84d8ba74738c17c7ac1f5252350
+Current-source virtual-pointer built with cc -Wall -Wextra -Werror, Wayland scanner,
+-lwayland-client -lm; SHA256 408de9059eeb7723d16e498f6758ef43de0fa2067f2ee8f06bda6748358d4ec2.
+The first harness attempt sent numeric tab0 instead of string0 and stopped before
+dashboard checks; fixed and rerun. An old copied pointer timed out before trial1;
+the complete detach cohorts use the rebuilt current-source tool. No product
+threshold or capture-safety gate was relaxed. Failed attempts remain distinct.
+No builds, tests or captures ran on the laptop; no live shell/config/install changes.
+
+Complete result: every workflow command passed across build-ci.sh and the
+resumed Python/packaging/wallpaper/service/tray/cargo-deny portion; resume exit0,
+FULL_CI_OK. The first Python run rejected the dirty private build checkout;
+committing the identical validated sources fixed the harness condition. All
+Python suites and remaining steps then passed. No product source was changed.
+The no-drag callback regression passed, along with workspace/trace tests,
+formatting, clippy-Dwarnings, renderer feature configurations and Luau checks.
+Exact pushed GitHub CI is checked separately after safe-push.

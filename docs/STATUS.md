@@ -1,5 +1,14 @@
 # Status
 
+## 2026-10-26 — B0139 dropdown-open native-window regression
+
+Native pearl admission no longer runs on dropdown open. It starts only with an
+accepted docked drag press; no-detach release, panel close and reset cancel it.
+CPU/GL each pass 20 control + 20 top-dashboard open/close cycles with zero
+native requests/windows, and 20 detach image trials with no blanks/reversals.
+Full remote CI passes. Capture-loaded handoff timing still misses 33 ms; no new
+latency claim. [Evidence](specs/0139-prewarm-toplevel.md). No live deployment.
+
 ## 2026-10-26 — B0131 warm covered release
 
 Niri admits the detached target before drag and reuses cached content and the GL

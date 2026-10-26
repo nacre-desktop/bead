@@ -1,5 +1,9 @@
 # B0131 — Warm covered pearl release
 
+**Superseded admission policy:** [B0139](0139-prewarm-toplevel.md) fixes a live
+regression from admitting mapped native targets on dropdown open. Native
+admission now starts only with a drag; the B0131 measurements below are historical.
+
 The native target is admitted transparently after the panel opens, before drag.
 It keeps the same content size, renderer, GL context and caches. CPU also imports
 its existing SHM alias into the compositor under a verified transparent crop;

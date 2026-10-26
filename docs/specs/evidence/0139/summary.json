@@ -1,0 +1,93 @@
+{
+  "source": "bf089ec4",
+  "base": "588d9506",
+  "method": "Private nested niri2880x1800 scale1.5; synthetic120Hz parent, software60Hz child. No live changes. Open/close sends no drag input; detach cohorts use relative held-button drags.",
+  "backends": {
+    "cpu": {
+      "control_open_close_cycles": 20,
+      "dashboard_open_close_cycles": 20,
+      "native_toplevel_requests_without_drag": 0,
+      "mapped_pearl_windows_without_drag": 0,
+      "detach_trials": 20,
+      "blank_frames": 0,
+      "reversals": 0,
+      "unstable_body_trials": 0,
+      "timing": {
+        "release_to_native_presented": {
+          "sample_count": 20,
+          "p50_ms": 37.167775,
+          "p95_ms": 37.999223,
+          "p99_ms": 38.086613,
+          "max_ms": 38.086613
+        },
+        "release_to_covered_handoff_commit": {
+          "sample_count": 20,
+          "p50_ms": 15.979395,
+          "p95_ms": 16.944954,
+          "p99_ms": 16.953694,
+          "max_ms": 16.953694
+        },
+        "drag_release_ui_frame": {
+          "sample_count": 859,
+          "p50_ms": 0.025,
+          "p95_ms": 2.035,
+          "p99_ms": 12.655,
+          "max_ms": 13.539
+        },
+        "percentile_method": "nearest-rank",
+        "limits_ms": {
+          "release_to_native_presented_p95": 33.0,
+          "drag_release_ui_frame_p99": 16.0
+        },
+        "passed": false,
+        "failures": [
+          "release-to-native-presentation p95 37.999 ms exceeds 33.0 ms"
+        ]
+      }
+    },
+    "gl": {
+      "control_open_close_cycles": 20,
+      "dashboard_open_close_cycles": 20,
+      "native_toplevel_requests_without_drag": 0,
+      "mapped_pearl_windows_without_drag": 0,
+      "detach_trials": 20,
+      "blank_frames": 0,
+      "reversals": 0,
+      "unstable_body_trials": 0,
+      "timing": {
+        "release_to_native_presented": {
+          "sample_count": 20,
+          "p50_ms": 30.746887,
+          "p95_ms": 34.341815,
+          "p99_ms": 36.701302,
+          "max_ms": 36.701302
+        },
+        "release_to_covered_handoff_commit": {
+          "sample_count": 20,
+          "p50_ms": 16.959702,
+          "p95_ms": 18.704031,
+          "p99_ms": 21.975227,
+          "max_ms": 21.975227
+        },
+        "drag_release_ui_frame": {
+          "sample_count": 913,
+          "p50_ms": 0.025,
+          "p95_ms": 2.337,
+          "p99_ms": 3.288,
+          "max_ms": 3.442
+        },
+        "percentile_method": "nearest-rank",
+        "limits_ms": {
+          "release_to_native_presented_p95": 33.0,
+          "drag_release_ui_frame_p99": 16.0
+        },
+        "passed": false,
+        "failures": [
+          "release-to-native-presentation p95 34.342 ms exceeds 33.0 ms"
+        ]
+      }
+    }
+  },
+  "source_manifest_sha256": "1bc9c00e01acd7e884cf5516585282566d9fa6ea26c5373cfba3778221b5d308",
+  "binary_sha256": "bc925f3069c0fadf436ac80d1d3d410be4cab84d8ba74738c17c7ac1f5252350"
+}
