@@ -10,5 +10,9 @@
   "source_verification": "sha256sum --check --quiet against complete source-file manifests passed in the build container",
   "qml_source": "5024d19fa73b47b0d75e17c20cb792805718a167",
   "helper_binary_sha256": "6300a8d42548205aed2c18e1050d12eed3b23124a4b9d11da92fdc946b1d4615",
-  "relative_pointer_binary_sha256": "aa7d73b7068c50f37f745cdb8f36cae3cecff84e5955d438ac7edd6e7301012d"
+  "relative_pointer_binary_sha256": "aa7d73b7068c50f37f745cdb8f36cae3cecff84e5955d438ac7edd6e7301012d",
+  "final_ci_checked_snapshot": "d32564cb6f650165e90e66f1b84837340e93c845",
+  "final_integrated_base": "fb0e3c8ff4f094b343dbb9f57a091b9f9f386d29",
+  "final_source_manifest_sha256": "1944a015a89ec8a003227f2362c340549640ae7cf7a1e9bd25117b2346414cf2",
+  "runtime_to_integration_delta": "runtime-to-integration.patch"
 }

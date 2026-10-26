@@ -23,3 +23,13 @@ return fields; that fixture was fixed before this complete pass. Switching the
 shared target back from control required invalidating stale build artifacts;
 all workspace sources were touched and rebuilt before this final run.
 No local build/test/capture and no live installation or desktop config change.
+
+Final integration check: snapshot d32564cb on origin/main fb0e3c8f.
+Command: bash /work/full-ci.sh; result exit 0, FULL_CI_OK, complete job again.
+Final integrated source-file manifest SHA256 (verified against container):
+1944a015a89ec8a003227f2362c340549640ae7cf7a1e9bd25117b2346414cf2
+The captured binary remains source29649df3 / manifest87940111 above. The only
+later product delta is six upstream slider idle-clock lines, retained separately
+as runtime-to-integration.patch; no new runtime numbers are attributed to it.
+Later receipt-only documentation does not change the checked product sources.
+GitHub CI for the exact pushed commit is checked separately after safe-push.

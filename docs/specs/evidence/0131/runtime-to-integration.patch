@@ -1,0 +1,31 @@
+diff --git a/crates/bead-wayland/src/pointer_motion.rs b/crates/bead-wayland/src/pointer_motion.rs
+index d4932a35..6aebdca4 100644
+--- a/crates/bead-wayland/src/pointer_motion.rs
++++ b/crates/bead-wayland/src/pointer_motion.rs
+@@ -530,6 +530,8 @@ impl App {
+             position: None,
+             pixels: (width, height),
+         });
++        self.companion_policy
++            .touch(self.started.elapsed().as_secs_f64());
+         // Removing the parent copy and mapping the child happen on the same parent commit.
+         let qh = self.qh.clone();
+         self.draw(index, &qh);
+@@ -543,6 +545,8 @@ impl App {
+         if visual.released || visual.retiring {
+             return false;
+         }
++        self.companion_policy
++            .touch(self.started.elapsed().as_secs_f64());
+         visual.x = pose(&visual.spec, x);
+         visual.received = monotonic_ns();
+         visual.dirty = true;
+@@ -592,6 +596,8 @@ impl App {
+         }
+     }
+     pub(super) fn pointer_visual_release(&mut self, index: usize) {
++        self.companion_policy
++            .touch(self.started.elapsed().as_secs_f64());
+         // A release is an ordering barrier, not another replaceable motion.
+         self.pointer_visual_commit_now(index);
+         self.pointer_visual_flush(index);

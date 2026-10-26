@@ -7,7 +7,9 @@ GL paints an unswapped backbuffer at the full natural extent. Release commits
 final offset and content, then unmaps the source in one connection flush.
 Generation, UI serial, size and scale guards reject stale frames. Early/cold or
 unsupported admission retains the covered fallback; its latency is not gated.
-The measured fast path is niri; no Hyprland latency claim is made.
+The measured fast path is niri; no Hyprland latency claim is made. Private proofs
+import `shell/niri-pearls.kdl` for unfocused, border/shadow-free targets; live
+compositor integration remains a separate deployment step.
 
 GL must allocate the natural 1746×981 target before binding its first backbuffer;
 resizing an unswapped 1746×948 buffer kept the wrong first frame. Host Luau now
@@ -58,4 +60,4 @@ Paired QML/Bead returns are monotonic and blank-free; sampled 2 px settling is
 control/AI API detach–dock checks pass; complete pixel-style parity is unclaimed.
 Full remote Arch CI passes, including 22 proof tests and handoff-ordering tests.
 No replacement duplicates remain. Follow-up source: +2153/−122 lines, including
-tests, versus `bb054fa2`. [Methods, identities, raw data and limits](evidence/0131/README.md).
+tests, versus integrated main `fb0e3c8f`. [Methods, identities, raw data and limits](evidence/0131/README.md).

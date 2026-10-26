@@ -1,6 +1,8 @@
 # B0131 evidence
 
 [Build identities](build-identity.json) distinguish source manifests and binaries.
+[Runtime-to-integration delta](runtime-to-integration.patch) records the later
+upstream slider idle-clock addition; reverse it to recover the captured sources.
 The release build prewarms a separate native target before release, sharing the
 renderer and GL context. CPU prewarm imports the existing SHM alias while a
 verified transparent corner hides it. GL paints an unswapped backbuffer at the
@@ -51,14 +53,13 @@ budget pass.
 No laptop-cap claim.
 
 [Paired contours and API outcomes](pairs/README.md) and [raw return trajectories](return-trials.json.gz)
-use pinned QML and Bead
-states independently of the final release cohorts. Return captures have no
+use pinned QML and Bead states independently of the final release cohorts. Return captures have no
 blanks and are monotonic; both configure 180 ms OutCubic. Their 2 px settling
 threshold is not exact animation completion. Control and AI cold API detach
 commit native content and restore docked state. Different gesture input regions
-and content prevent a full pixel-style parity claim. Full-output images remain
-private because provider content includes a package update inventory; published
-48×48 logical contour crops omit it and the top bar.
+and content prevent a full pixel-style parity claim. Full-output images were held
+privately because provider content includes a package update inventory, then
+removed after export; published 48×48 logical contour crops omit it and the top bar.
 
 [Complete CI replica](full-ci.sh) and [receipt](ci.txt) cover the remote Arch
 container. Tests use one thread to respect the existing 50 ms Luau budget;

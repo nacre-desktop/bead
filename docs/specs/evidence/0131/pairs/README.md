@@ -7,7 +7,7 @@ detached and redocked states, omitting text, provider inventory and the top bar.
 
 QML is pinned to the public source recorded in the summary; the Bead state and
 return captures use source `2d6cb5c7`. Both private sessions use the same output,
-scale, palette and wallpaper. Full screenshots remain private. These crops
+scale, palette and wallpaper. Full screenshots were not published and temporary captures were removed after export. These crops
 compare contour placement, not complete pixel-style parity: gesture input
 regions and hover/focus content differ.
 
