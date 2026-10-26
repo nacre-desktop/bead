@@ -1049,11 +1049,7 @@ impl App {
                             }?);
                             prepared.gl_size = Some((native_w, native_h));
                         }
-                        transport.activate(
-                            prepared.gl.as_ref().unwrap(),
-                            native_w,
-                            native_h,
-                        )?;
+                        transport.activate(prepared.gl.as_ref().unwrap(), native_w, native_h)?;
                         renderer.draw(
                             scene,
                             RenderTarget::Gl(bead_render::gl::GlTarget {
