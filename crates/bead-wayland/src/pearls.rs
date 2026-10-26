@@ -1825,6 +1825,8 @@ impl App {
         if retire {
             s.layer.wl_surface().attach(None, 0, 0);
             s.layer.commit();
+            // Submit the covered swap before allocator/driver retirement work.
+            let _ = self.conn.flush();
             let mut handoff = s.handoff.take().unwrap();
             let backend = if handoff.first_frame.is_some() {
                 "shm"
@@ -1846,7 +1848,6 @@ impl App {
                     painted: true,
                 });
             }
-            drop(handoff);
             bead_core::vprintln!(
                 "PEARL_HANDOFF_COMMITTED id={} rect={:?} monotonic_ns={} backend={}",
                 self.pearl.map_or(0, |info| info.id),
@@ -1854,6 +1855,7 @@ impl App {
                 bead_core::profile::monotonic_ns(),
                 backend
             );
+            drop(handoff);
         }
     }
     pub(super) fn native_pearl_motion(&mut self, motion: NativePearlMotion) {
@@ -2430,7 +2432,17 @@ impl App {
         let Some(gesture) = self.gesture.take() else {
             return;
         };
-        self.end_guides();
+        // Hide guides in the same transaction, but retire their workers and
+        // allocator pages only after the released panel has been submitted.
+        let guide_ids: Vec<_> = self.guide_ids.values().copied().collect();
+        for id in guide_ids {
+            self.in_slot(id, |app| {
+                for surface in app.surfaces.iter().filter(|surface| surface.companion) {
+                    surface.layer.wl_surface().attach(None, 0, 0);
+                    surface.layer.commit();
+                }
+            });
+        }
         let outcome = gesture.drag.release();
         match (outcome, gesture.lifted) {
             (Outcome::Return, Some(id)) => {
@@ -2469,6 +2481,7 @@ impl App {
             // Never pulled: the press was only a press.
             (_, None) => {}
         }
+        self.end_guides();
     }
 
     // ---- guides --------------------------------------------------------------
