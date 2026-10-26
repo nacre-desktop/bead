@@ -986,6 +986,17 @@ mod ready_pointer_tests {
     }
 }
 
+// axis_source applies to the entire wl_pointer.frame. SCTK merges adjacent axis
+// events only, so a motion/button between source and delta can split them.
+fn frame_axis_source<'a>(
+    mut kinds: impl Iterator<Item = &'a PointerEventKind>,
+) -> Option<wl_pointer::AxisSource> {
+    kinds.find_map(|kind| match kind {
+        PointerEventKind::Axis { source, .. } => *source,
+        _ => None,
+    })
+}
+
 impl PointerHandler for App {
     fn pointer_frame(
         &mut self,
@@ -997,7 +1008,20 @@ impl PointerHandler for App {
         let mut early = pointer.data::<ReadyPointer>().map_or(0, |data| {
             std::mem::take(&mut data.batch.lock().unwrap().fast_motions)
         });
+        let source = frame_axis_source(events.iter().map(|event| &event.kind));
         for (index, event) in events.iter().enumerate() {
+            let mut sourced;
+            let event = if source.is_some()
+                && matches!(event.kind, PointerEventKind::Axis { source: None, .. })
+            {
+                sourced = event.clone();
+                if let PointerEventKind::Axis { source: own, .. } = &mut sourced.kind {
+                    *own = source;
+                }
+                &sourced
+            } else {
+                event
+            };
             if early > 0 && matches!(event.kind, PointerEventKind::Motion { .. }) {
                 early -= 1;
                 continue;
@@ -1297,6 +1321,31 @@ impl App {
 #[cfg(test)]
 mod input_coordinate_tests {
     use super::*;
+
+    #[test]
+    fn axis_source_applies_across_interleaved_events_but_not_later_frames() {
+        let axis = |source| PointerEventKind::Axis {
+            time: 1,
+            horizontal: Default::default(),
+            vertical: Default::default(),
+            source,
+        };
+        let frame = [
+            axis(Some(wl_pointer::AxisSource::Finger)),
+            PointerEventKind::Motion { time: 1 },
+            axis(None),
+        ];
+        assert_eq!(
+            frame_axis_source(frame.iter()),
+            Some(wl_pointer::AxisSource::Finger)
+        );
+        assert_eq!(frame_axis_source([axis(None)].iter()), None);
+        let reordered = [axis(None), axis(Some(wl_pointer::AxisSource::Wheel))];
+        assert_eq!(
+            frame_axis_source(reordered.iter()),
+            Some(wl_pointer::AxisSource::Wheel)
+        );
+    }
 
     #[test]
     fn pointer_events_follow_revealed_sliding_content() {
