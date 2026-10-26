@@ -1096,13 +1096,13 @@ impl Runtime {
         let Some(item) = items.first() else {
             return;
         };
-        let host = item["host"].as_str().unwrap_or_default();
-        let source_form = item["form"].as_str().unwrap_or_default();
-        let bar_source = self.bar && matches!(host, "top_bar" | "status-pill");
+        let host = item["host"].as_str().unwrap_or_default().to_owned();
+        let source_form = item["form"].as_str().unwrap_or_default().to_owned();
+        let bar_source = self.bar && matches!(host.as_str(), "top_bar" | "status-pill");
         let canvas_source = self.widget_canvas && host == "canvas";
         if item["widget"].as_str().is_none()
             || (!bar_source && !canvas_source)
-            || !matches!(source_form, "bar" | "desktop")
+            || !matches!(source_form.as_str(), "bar" | "desktop")
         {
             return;
         }

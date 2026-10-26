@@ -1467,14 +1467,12 @@ fn bar_press_prepares_the_exact_drag_source_without_starting_the_gesture() {
         values.get("widgets.drag.source_origin_valid"),
         Some(&Value::Bool(true))
     );
-    assert!(matches!(
-        values.get("widgets.drag.source"),
-        Some(
-            Value::List(items) if items.first().is_some_and(|item| {
-            item["widget"] == "clock" && item["host"] == "status-pill"
-        }),
-        )
-    ));
+    let Some(Value::List(items)) = values.get("widgets.drag.source") else {
+        panic!("prepared source preserves the captured widget payload");
+    };
+    assert!(items.first().is_some_and(|item| {
+        item["widget"] == "clock" && item["host"] == "status-pill"
+    }));
     assert_ne!(
         runtime.session.stores.get("widgets.drag.active"),
         Some(&Value::Bool(true)),
@@ -2031,7 +2029,7 @@ fn passive_prepare_bakes_desktop_clock_without_input_and_seeds_bar_sized_morph()
         "iid":"clock-main","group":"clock-main","widget":"clock",
         "host":"top_bar","form":"bar","style":"time","settings":{}
     });
-    let mut prepare = BTreeMap::from([
+    let prepare = BTreeMap::from([
         ("widgets.layout".into(), Value::list(vec![layout.clone()])),
         ("widgets.drag.active".into(), Value::Bool(true)),
         (
