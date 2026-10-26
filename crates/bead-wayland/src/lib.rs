@@ -751,6 +751,14 @@ struct FrameData {
     epoch: u64,
     generation: u64,
     source_epoch: u64,
+    prepared_frame: Option<PreparedFrameData>,
+}
+#[derive(Clone, Copy)]
+struct PreparedFrameData {
+    epoch: u64,
+    prepared_epoch: u64,
+    size_generation: u64,
+    ui_serial: u64,
 }
 struct PresentationData {
     source_epoch: u64,

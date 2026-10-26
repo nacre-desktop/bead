@@ -592,6 +592,7 @@ impl App {
                     epoch: canvas.callbacks.request(),
                     generation: canvas.scene.resource_revision,
                     source_epoch: canvas.epoch,
+                    prepared_frame: None,
                 },
             );
             canvas.frame_pending = true;
@@ -647,6 +648,7 @@ impl App {
                 epoch: canvas.callbacks.request(),
                 generation: canvas.scene.resource_revision,
                 source_epoch: canvas.epoch,
+                prepared_frame: None,
             },
         );
         canvas.frame_pending = true;

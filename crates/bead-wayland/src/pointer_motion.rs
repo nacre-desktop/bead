@@ -682,6 +682,7 @@ impl App {
                 epoch: s.callbacks.request(),
                 generation,
                 source_epoch: self.panel_epoch,
+                prepared_frame: None,
             },
         );
         if let Some(presentation) = &self.presentation {
