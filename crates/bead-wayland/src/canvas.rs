@@ -129,7 +129,7 @@ fn reserve_canvas_size(source: Option<Rect>, prepared: Option<Rect>) -> Option<(
 
 fn canvas_bounds_with_reserve(bounds: Rect, reserved_size: Option<(f32, f32)>) -> Rect {
     reserved_size.map_or(bounds, |(width, height)| {
-        Rect::new(bounds.x, bounds.y, width, height)
+        Rect::new(bounds.x, bounds.y, width.max(bounds.w), height.max(bounds.h))
     })
 }
 
@@ -1309,6 +1309,10 @@ mod tests {
                 "active content moves naturally inside the fixed reservation"
             );
         }
+
+        let larger = Rect::new(40., 30., 300., 120.);
+        assert_eq!(canvas_bounds_with_reserve(larger, reserved), larger,
+            "a reservation cannot crop content that legitimately grows beyond its hint");
 
         let next_source = Rect::new(12., 18., 42., 24.);
         let next_prepared = Rect::new(80., 90., 55., 33.);
