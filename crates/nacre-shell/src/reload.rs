@@ -1228,8 +1228,7 @@ impl Runtime {
         let top = source_top - target_origin_y;
         let right = left + f64::from(candidate.source_rect.2.max(1.));
         let bottom = top + f64::from(candidate.source_rect.3.max(1.));
-        let (left, top, right, bottom) =
-            (left.floor(), top.floor(), right.ceil(), bottom.ceil());
+        let (left, top, right, bottom) = (left.floor(), top.floor(), right.ceil(), bottom.ceil());
         let initial_bounds = bead::render::Rect::new(
             left as f32,
             top as f32,

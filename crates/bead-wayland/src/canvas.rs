@@ -479,14 +479,15 @@ impl App {
             canvas.dirty = false;
             canvas.pressed = false;
             let mut commit = false;
-            if canvas.input.as_ref().is_none_or(|regions| !regions.is_empty())
+            if canvas
+                .input
+                .as_ref()
+                .is_none_or(|regions| !regions.is_empty())
                 && let Some(layer) = &canvas.layer
             {
                 match Region::new(&self.compositor) {
                     Ok(empty) => {
-                        layer
-                            .wl_surface()
-                            .set_input_region(Some(empty.wl_region()));
+                        layer.wl_surface().set_input_region(Some(empty.wl_region()));
                         canvas.input = Some(Vec::new());
                         commit = true;
                     }
@@ -770,9 +771,8 @@ impl App {
             if let Some(viewport) = &canvas.viewport {
                 viewport.set_destination(size.0 as i32, size.1 as i32);
             }
-            let size_changed = previous.is_none_or(|previous| {
-                previous.w != bounds.w || previous.h != bounds.h
-            });
+            let size_changed =
+                previous.is_none_or(|previous| previous.w != bounds.w || previous.h != bounds.h);
             canvas.mapped_bounds = Some(bounds);
             if size_changed {
                 canvas.pool = None;
