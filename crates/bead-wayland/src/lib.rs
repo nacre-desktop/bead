@@ -71,6 +71,7 @@ use smithay_client_toolkit::{
     },
 };
 use std::{
+    cell::Cell,
     error::Error,
     time::{Duration, Instant},
 };
@@ -763,6 +764,8 @@ struct Surface {
     output: wl_output::WlOutput,
     output_name: String,
     layer: LayerSurface,
+    /// Last requested companion placement; text-only frames often keep it unchanged.
+    panel_position: Cell<Option<(Anchor, [i32; 4])>>,
     /// Fresh xdg role used while detached. The layer role remains available for
     /// docking because Wayland surfaces cannot change roles.
     native: Option<smithay_client_toolkit::shell::xdg::window::Window>,

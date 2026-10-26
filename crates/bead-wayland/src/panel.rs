@@ -3,6 +3,13 @@
 use super::*;
 /// A closed panel stays built for this long, so reopening it shows prepared content on its first frame.
 const PANEL_KEEP_ALIVE: Duration = Duration::from_secs(120);
+fn update_panel_placement(
+    cached: &Cell<Option<(Anchor, [i32; 4])>>,
+    placement: (Anchor, [i32; 4]),
+) -> bool {
+    cached.replace(Some(placement)) != Some(placement)
+}
+
 impl App {
     pub(super) fn notify_panel_owner(&self, event: UiEvent) {
         let Some(sender) = &self.event_sender else {
@@ -483,38 +490,30 @@ impl App {
         layer: &LayerSurface,
         output: &wl_output::WlOutput,
         scene: &Scene,
-    ) {
-        if let Some(progress) = self.dock_transition_progress(self.started.elapsed().as_secs_f64())
+    ) -> bool {
+        let placement = if let Some(progress) =
+            self.dock_transition_progress(self.started.elapsed().as_secs_f64())
             && progress < 1.
             && let Some(transition) = self.panel_dock_transition.as_ref()
         {
             let target = self.dock_target_body(output, scene);
             let rect = pearls::interpolate_dock_rect(transition.from, target, progress);
             let (x, y) = self.pearl_margins(output, scene, rect);
-            layer.set_anchor(Anchor::TOP | Anchor::LEFT);
-            layer.set_margin(y, 0, 0, x);
             if !transition.started {
                 self.notify_panel_origin(scene, x, y);
             }
-            return;
-        }
-        if let Some(info) = self.pearl.filter(|i| i.kind == pearls::Kind::Pearl) {
+            (Anchor::TOP | Anchor::LEFT, [y, 0, 0, x])
+        } else if let Some(info) = self.pearl.filter(|i| i.kind == pearls::Kind::Pearl) {
             let (x, y) = self.pearl_margins(output, scene, info.rect);
-            layer.set_anchor(Anchor::TOP | Anchor::LEFT);
-            layer.set_margin(y, 0, 0, x);
             self.notify_panel_origin(scene, x, y);
-            return;
-        }
-        if let Some(anchor) = self.panel_anchor
+            (Anchor::TOP | Anchor::LEFT, [y, 0, 0, x])
+        } else if let Some(anchor) = self.panel_anchor
             && let Some(size) = self.output.info(output).and_then(|info| info.logical_size)
         {
             let (x, y) = panels::anchored_position(scene, anchor, size);
-            layer.set_anchor(Anchor::TOP | Anchor::LEFT);
-            layer.set_margin(y, 0, 0, x);
             self.notify_panel_origin(scene, x, y);
-            return;
-        }
-        if let Some(position) = self
+            (Anchor::TOP | Anchor::LEFT, [y, 0, 0, x])
+        } else if let Some(position) = self
             .options
             .panel_spec
             .as_ref()
@@ -522,24 +521,37 @@ impl App {
             && let Some(size) = self.output.info(output).and_then(|i| i.logical_size)
         {
             let (x, y) = position(scene, self.panel_center, size);
-            layer.set_anchor(Anchor::TOP | Anchor::LEFT);
-            layer.set_margin(y, 0, 0, x);
             self.notify_panel_origin(scene, x, y);
-            return;
+            (Anchor::TOP | Anchor::LEFT, [y, 0, 0, x])
+        } else {
+            let width = scene.bounds.w.ceil().max(1.) as u32;
+            let height = (scene.bounds.y
+                + scene.bounds.h
+                + scene.slide.map_or(scene.offset.1, |s| s.open_y))
+            .ceil()
+            .max(1.) as u32;
+            panels::placement(
+                scene.motion.as_ref().map_or(self.options.edge, |m| m.edge),
+                self.panel_center,
+                (width, height),
+                self.output.info(output).and_then(|i| i.logical_size),
+            )
+        };
+        let changed = self
+            .surfaces
+            .iter()
+            .find(|surface| surface.layer.wl_surface() == layer.wl_surface())
+            .is_none_or(|surface| update_panel_placement(&surface.panel_position, placement));
+        if changed {
+            layer.set_anchor(placement.0);
+            layer.set_margin(
+                placement.1[0],
+                placement.1[1],
+                placement.1[2],
+                placement.1[3],
+            );
         }
-        let width = scene.bounds.w.ceil().max(1.) as u32;
-        let height =
-            (scene.bounds.y + scene.bounds.h + scene.slide.map_or(scene.offset.1, |s| s.open_y))
-                .ceil()
-                .max(1.) as u32;
-        let (anchor, [top, right, bottom, left]) = panels::placement(
-            scene.motion.as_ref().map_or(self.options.edge, |m| m.edge),
-            self.panel_center,
-            (width, height),
-            self.output.info(output).and_then(|i| i.logical_size),
-        );
-        layer.set_anchor(anchor);
-        layer.set_margin(top, right, bottom, left);
+        changed
     }
 
     fn dock_target_body(
@@ -1282,5 +1294,30 @@ impl App {
         });
         self.set_dismiss_enabled(true)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod placement_tests {
+    use super::*;
+
+    #[test]
+    fn only_actual_placement_changes_are_committed() {
+        let cached = Cell::new(None);
+        let initial = (Anchor::TOP | Anchor::LEFT, [8, 0, 0, 12]);
+        assert!(update_panel_placement(&cached, initial));
+        assert!(!update_panel_placement(&cached, initial));
+        assert!(update_panel_placement(
+            &cached,
+            (Anchor::TOP | Anchor::LEFT, [9, 0, 0, 12]),
+        ));
+        assert!(update_panel_placement(
+            &cached,
+            (Anchor::TOP | Anchor::RIGHT, [9, 0, 0, 12]),
+        ));
+        assert!(!update_panel_placement(
+            &cached,
+            (Anchor::TOP | Anchor::RIGHT, [9, 0, 0, 12]),
+        ));
     }
 }

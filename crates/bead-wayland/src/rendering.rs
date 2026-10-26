@@ -508,6 +508,17 @@ impl App {
                     }
                 }
             }
+            if self.surfaces.get(index).is_some_and(|surface| {
+                surface.frames > previous_frames
+                    && surface
+                        .pointer_visual
+                        .as_ref()
+                        .is_some_and(pointer_motion::Visual::has_painted_feedback)
+            }) {
+                // A label repaint can submit the latest child pose too. Flush
+                // its matching local value just as the pose-only path does.
+                self.pointer_visual_flush(index);
+            }
             for event in pending.into_iter().flatten() {
                 self.view_event(true, event);
             }

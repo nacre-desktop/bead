@@ -831,16 +831,21 @@ impl App {
                             && s.companion == self.processing_panel
                             && output_scope_matches(active_output.as_deref(), &s.output_name)
                     }) {
-                        if self.processing_panel {
+                        let placement_changed = if self.processing_panel {
                             self.position_panel_surface(
                                 &surface.layer,
                                 &surface.output,
                                 &self.scene,
-                            );
-                        } else if let Some(anchor) = anchor {
-                            surface.layer.set_anchor(anchor);
+                            )
+                        } else {
+                            if let Some(anchor) = anchor {
+                                surface.layer.set_anchor(anchor);
+                            }
+                            true
+                        };
+                        if placement_changed {
+                            surface.layer.commit();
                         }
-                        surface.layer.commit();
                     }
                 }
                 if self.options.content_size {

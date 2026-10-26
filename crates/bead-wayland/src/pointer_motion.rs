@@ -25,6 +25,7 @@ pub(super) struct Visual {
     scale120: u32,
     generation: u64,
     mapped: bool,
+    position: Option<(i32, i32)>,
     pixels: (u32, u32),
 }
 impl Drop for Visual {
@@ -35,6 +36,13 @@ impl Drop for Visual {
     }
 }
 impl Visual {
+    pub(super) fn has_painted_feedback(&self) -> bool {
+        self.spec.local_feedback
+            && self.mapped
+            && !self.dirty
+            && !self.retiring
+            && self.pending.is_some()
+    }
     pub(super) fn accepts_motion(&self) -> bool {
         !self.released && !self.retiring
     }
@@ -135,6 +143,14 @@ impl Dispatch<WpPresentationFeedback, Feedback> for App {
                 + u64::from(tv_nsec);
             println!(
                 "POINTER_VISUAL_PRESENTED x={} received_ns={} commit_ns={} presented_ns={presented} observed_ns={}",
+                data.x,
+                data.received,
+                data.committed,
+                monotonic_ns()
+            );
+        } else if let wp_presentation_feedback::Event::Discarded = event {
+            println!(
+                "POINTER_VISUAL_DISCARDED x={} received_ns={} commit_ns={} observed_ns={}",
                 data.x,
                 data.received,
                 data.committed,
@@ -511,6 +527,7 @@ impl App {
             scale120: self.surfaces[index].scale120,
             generation: original.resource_revision,
             mapped: false,
+            position: None,
             pixels: (width, height),
         });
         // Removing the parent copy and mapping the child happen on the same parent commit.
@@ -595,9 +612,11 @@ impl App {
             } else {
                 (visual.x, rect.y)
             };
-            visual
-                .role
-                .set_position((x + offset.0).round() as i32, (y + offset.1).round() as i32);
+            let position = ((x + offset.0).round() as i32, (y + offset.1).round() as i32);
+            if visual.position != Some(position) {
+                visual.role.set_position(position.0, position.1);
+                visual.position = Some(position);
+            }
             if visual.spec.fill.is_none() {
                 visual.dirty = false;
             }
@@ -670,7 +689,7 @@ impl App {
         if self.surfaces[index]
             .pointer_visual
             .as_ref()
-            .is_some_and(|v| v.spec.local_feedback && !v.dirty)
+            .is_some_and(Visual::has_painted_feedback)
         {
             self.pointer_visual_flush(index);
         }
