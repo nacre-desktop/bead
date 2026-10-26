@@ -73,9 +73,15 @@ fn transfer_capture_is_focus_independent_thresholded_and_carries_drop_payload() 
     let focused = s.stores.get("bead.focused").cloned();
     s.capture_pointer(x, y);
     assert_eq!(s.stores.get("bead.focused").cloned(), focused);
+    let (candidate, candidate_origin, candidate_rect) = s.transfer_candidate().unwrap();
+    assert_eq!(candidate, Value::Text("source".into()));
+    assert_eq!(candidate_origin, (x, y));
+    assert!(candidate_rect.2 > 0. && candidate_rect.3 > 0.);
     assert!(s.transfer_action(x + 3.99, y, "move").is_none());
+    assert!(s.transfer_candidate().is_some());
     assert!(s.transfer_source().is_none());
     let (_, _, move_event) = s.transfer_action(x + 4., y, "move").unwrap();
+    assert!(s.transfer_candidate().is_none());
     let Value::List(move_items) = move_event else {
         panic!("move transfer event must be a list")
     };

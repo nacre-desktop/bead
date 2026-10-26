@@ -327,6 +327,12 @@ pub enum UiEvent {
         open: bool,
         values: std::collections::BTreeMap<String, bead_core::Value>,
     },
+    /// Prepare a canvas scene and renderer without creating or mapping its layer surface.
+    CanvasPrepare {
+        view: String,
+        output: Option<String>,
+        values: std::collections::BTreeMap<String, bead_core::Value>,
+    },
     CanvasModel {
         view: String,
         output: Option<String>,

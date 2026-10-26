@@ -229,10 +229,17 @@ function M.ghost_node()
     local pointer_y=ui.resolve_for_check(ui.bind("widgets.drag.y")) or 0
     local grab_x=ui.resolve_for_check(ui.bind("widgets.drag.grab_x")) or source_width/2
     local grab_y=ui.resolve_for_check(ui.bind("widgets.drag.grab_y")) or source_height/2
-    local width=ui.animate("widgets.drag.ghost.width",target_width,.18,"out-cubic")
-    local height=ui.animate("widgets.drag.ghost.height",target_height,.18,"out-cubic")
-    local scale_x=width/source_width
-    local scale_y=height/source_height
+    local preparing=phase=="prepare"
+    local animated_width=ui.animate("widgets.drag.ghost.width",preparing and source_width or target_width,
+        preparing and 0 or .18,"out-cubic")
+    local animated_height=ui.animate("widgets.drag.ghost.height",preparing and source_height or target_height,
+        preparing and 0 or .18,"out-cubic")
+    -- Bake the real destination-sized content while the canvas is unmapped, but
+    -- leave the visible animation at the bar-sized source for the first frame.
+    local width=preparing and target_width or animated_width
+    local height=preparing and target_height or animated_height
+    local scale_x=animated_width/source_width
+    local scale_y=animated_height/source_height
     local pointer_left,pointer_top=pointer_x-grab_x*scale_x,pointer_y-grab_y*scale_y
     local left_target,top_target=pointer_left,pointer_top
     if phase=="dragging" and destination=="desktop" then
@@ -251,7 +258,7 @@ function M.ghost_node()
         local snap_y=ui.resolve_for_check(ui.bind("widgets.drag.snap_y")) or pointer_top
         left_target,top_target=snap_x,snap_y
     end
-    local position_duration=(phase=="settle" or phase=="return") and .18 or .06
+    local position_duration=preparing and 0 or (phase=="settle" or phase=="return") and .18 or .06
     local left=ui.animate("widgets.drag.ghost.left",left_target,position_duration,"out-cubic")
     local top=ui.animate("widgets.drag.ghost.top",top_target,position_duration,"out-cubic")
     local node=preview.render(source.widget,form,style_name,settings,width,height,true)
@@ -261,7 +268,8 @@ function M.ghost_node()
     return ui.Box{id="widgets-drag-ghost",position="absolute",
         left=left,top=top,width=width,height=height,clip_children=true,
         radius=kit.tokens.radii.medium,fill=ui.alpha("surfaceContainerHighest",.96),
-        border_width=ui.animate("widgets.drag.ghost.border",phase=="settle" and 2.5 or 1.5,.14,"out-cubic"),border_color="primary",
+        border_width=ui.animate("widgets.drag.ghost.border",phase=="settle" and 2.5 or 1.5,
+            preparing and 0 or .14,"out-cubic"),border_color="primary",
         node,marker}
 end
 

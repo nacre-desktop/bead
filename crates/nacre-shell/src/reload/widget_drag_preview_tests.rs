@@ -1416,6 +1416,140 @@ fn real_bar_runtime_configured(file: std::path::PathBuf, popouts: bool) -> Runti
 }
 
 #[test]
+fn bar_press_prepares_the_exact_drag_source_without_starting_the_gesture() {
+    let dir = std::env::temp_dir().join(format!("widget-drag-prepare-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut runtime = real_bar_runtime(dir.join("widgets.json"));
+    let nodes = runtime.session.view_nodes();
+    let source = nodes
+        .iter()
+        .find(|node| {
+            node.drag_action.as_deref() == Some("widgets.drag") && node.id.contains("clock")
+        })
+        .expect("the real bar exposes a draggable clock inside its status pill");
+    let bounds = bead::ui::rect(&source.draw);
+    let (x, y) = (bounds.x + bounds.w / 2., bounds.y + bounds.h / 2.);
+    drop(nodes);
+    let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sent = events.clone();
+    runtime.wakeup = Some(std::sync::Arc::new(move |event| {
+        sent.lock().unwrap().push(event);
+    }));
+
+    if let Some(scene) = runtime.stage(UiEvent::Click { x, y }).unwrap() {
+        runtime.commit();
+        let _ = scene;
+    }
+    let events = events.lock().unwrap();
+    let prepared = events.iter().find_map(|event| match event {
+        UiEvent::CanvasPrepare {
+            view,
+            output,
+            values,
+        } if view == "widgets-drag" => Some((output, values)),
+        _ => None,
+    });
+    let Some((output, values)) = prepared else {
+        panic!("pressing a real widget prepares its passive drag preview before threshold");
+    };
+    assert_eq!(output.as_deref(), Some("right"));
+    assert_eq!(values.get("widgets.drag.phase"), Some(&Value::Text("prepare".into())));
+    assert_eq!(
+        values.get("widgets.drag.destination"),
+        Some(&Value::Text("desktop".into()))
+    );
+    assert_eq!(values.get("widgets.drag.active"), Some(&Value::Bool(true)));
+    assert_eq!(values.get("widgets.drag.source_origin_valid"), Some(&Value::Bool(true)));
+    assert!(matches!(
+        values.get("widgets.drag.source"),
+        Some(Value::List(items) if items.first().is_some_and(|item| {
+            item["widget"] == "clock" && item["host"] == "status-pill"
+        }))
+    ));
+    assert_ne!(
+        runtime.session.stores.get("widgets.drag.active"),
+        Some(&Value::Bool(true)),
+        "the prewarm must not start the transfer before its existing movement threshold"
+    );
+    drop(events);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn canvas_press_prepares_the_configured_bar_destination_with_global_origin() {
+    let mut runtime = real_widget_canvas_publisher();
+    let layout = canvas_transfer_document();
+    let host_values = BTreeMap::from([
+        ("widgets.layout".into(), Value::list(vec![layout])),
+        ("widgets.rev".into(), Value::Number(4.)),
+        ("widgets.editing".into(), Value::Bool(true)),
+        ("widgets.draft".into(), Value::list(Vec::new())),
+        ("widgets.screen_origin_x".into(), Value::Number(1000.)),
+        ("widgets.screen_origin_y".into(), Value::Number(40.)),
+        ("bead.desktop.clock".into(), Value::Text("12:34".into())),
+    ]);
+    if runtime.stage(UiEvent::Model(host_values)).unwrap().is_some() {
+        runtime.commit();
+    }
+    let nodes = runtime.session.view_nodes();
+    let source = nodes
+        .iter()
+        .find(|node| {
+            node.drag_action.as_deref() == Some("widgets.drag")
+                && node.id.contains("canvas-clock")
+        })
+        .expect("the desktop clock exposes a native drag source");
+    let bounds = bead::ui::rect(&source.draw);
+    let (x, y) = (bounds.x + bounds.w / 2., bounds.y + bounds.h / 2.);
+    drop(nodes);
+    let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sent = events.clone();
+    runtime.wakeup = Some(std::sync::Arc::new(move |event| {
+        sent.lock().unwrap().push(event);
+    }));
+
+    if runtime.stage(UiEvent::Click { x, y }).unwrap().is_some() {
+        runtime.commit();
+    }
+    let events = events.lock().unwrap();
+    let values = events.iter().find_map(|event| match event {
+        UiEvent::CanvasPrepare {
+            view,
+            output: Some(output),
+            values,
+        } if view == "widgets-drag" && output == "right" => Some(values),
+        _ => None,
+    });
+    let Some(values) = values else {
+        panic!("a native canvas source prepares its bar-destination ghost before threshold");
+    };
+    assert_eq!(
+        values.get("widgets.drag.destination"),
+        Some(&Value::Text("bar".into()))
+    );
+    assert_eq!(
+        values.get("widgets.drag.source_origin_x"),
+        Some(&Value::Number(1000.))
+    );
+    assert_eq!(
+        values.get("widgets.drag.source_origin_y"),
+        Some(&Value::Number(40.))
+    );
+    assert!(matches!(
+        values.get("widgets.drag.source"),
+        Some(Value::List(items)) if items.first().is_some_and(|item| {
+            item["widget"] == "clock" && item["host"] == "canvas" && item["form"] == "desktop"
+        })
+    ));
+    assert_ne!(
+        runtime.session.stores.get("widgets.drag.active"),
+        Some(&Value::Bool(true)),
+        "preparing the return preview does not activate a drag before threshold"
+    );
+}
+
+#[test]
 fn canvas_public_projection_renders_clock_and_routes_launcher_visibility_to_host() {
     let dir = std::env::temp_dir().join(format!("widget-canvas-runtime-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -1811,7 +1945,8 @@ fn deliver_widget_surface_models<'a>(
 fn widget_host_effect(event: &UiEvent) -> bool {
     matches!(
         event,
-        UiEvent::CanvasOffer { .. }
+        UiEvent::CanvasPrepare { .. }
+            | UiEvent::CanvasOffer { .. }
             | UiEvent::CanvasModel { .. }
             | UiEvent::CompanionOffer { .. }
             | UiEvent::CompanionVisibility(_)
@@ -1831,6 +1966,178 @@ fn widget_host_effect(event: &UiEvent) -> bool {
             | UiEvent::LivePalette(_)
             | UiEvent::ControlChanged
     )
+}
+
+fn largest_rounded_size(scene: &bead::render::Scene) -> (f32, f32) {
+    scene
+        .primitives
+        .iter()
+        .filter_map(|primitive| match primitive {
+            bead::render::Primitive::Rounded { rect, .. } if rect.w > 0. && rect.h > 0. => {
+                Some((rect.w, rect.h))
+            }
+            _ => None,
+        })
+        .max_by(|left, right| (left.0 * left.1).total_cmp(&(right.0 * right.1)))
+        .expect("the passive clock ghost paints a rounded card")
+}
+
+#[test]
+fn passive_prepare_bakes_desktop_clock_without_input_and_seeds_bar_sized_morph() {
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+    let palette = root.join("palette.json");
+    let colors = bead::render::Palette::read(&palette).unwrap();
+    let inputs = crate::widgets::Inputs {
+        client: None,
+        desktop: std::sync::Arc::new(std::sync::OnceLock::new()),
+        backend: std::sync::Arc::new(std::sync::OnceLock::new()),
+        prefs: None,
+    };
+    let spec = crate::widgets::canvas_spec_with_root(
+        root,
+        palette,
+        colors,
+        inputs,
+        false,
+        "widgets/drag/ghost.luau",
+        true,
+    )
+    .unwrap();
+    assert!(spec.passive);
+    assert!(spec.retain_when_closed);
+    let mut ghost = (spec.factory)(true).unwrap();
+    ghost.viewport(1920, 1200);
+    let mut layout = document();
+    layout["widgets"] = json!({
+        "clock-main":{"widget":"clock","settings":{},"forms":{
+            "bar":{"enabled":true,"style":"time","placement":{"host":"top_bar",
+                "slot":{"region":"left","start":0,"span":1}}},
+            "desktop":{"enabled":false,"style":"seconds","placement":{"host":"canvas",
+                "slot":{"x":480,"y":240,"w":240,"h":120}}}
+        }}
+    });
+    let source = json!({
+        "iid":"clock-main","group":"clock-main","widget":"clock",
+        "host":"top_bar","form":"bar","style":"time","settings":{}
+    });
+    let mut prepare = BTreeMap::from([
+        ("widgets.layout".into(), Value::list(vec![layout.clone()])),
+        ("widgets.drag.active".into(), Value::Bool(true)),
+        ("widgets.drag.source".into(), Value::list(vec![source.clone()])),
+        (
+            "widgets.drag.phase".into(),
+            Value::Text("prepare".into()),
+        ),
+        (
+            "widgets.drag.destination".into(),
+            Value::Text("desktop".into()),
+        ),
+        ("widgets.drag.x".into(), Value::Number(120.)),
+        ("widgets.drag.y".into(), Value::Number(64.)),
+        ("widgets.drag.width".into(), Value::Number(64.)),
+        ("widgets.drag.height".into(), Value::Number(40.)),
+        ("widgets.drag.grab_x".into(), Value::Number(16.)),
+        ("widgets.drag.grab_y".into(), Value::Number(8.)),
+        (
+            "widgets.drag.source_origin_valid".into(),
+            Value::Bool(true),
+        ),
+        (
+            "widgets.drag.source_origin_x".into(),
+            Value::Number(0.),
+        ),
+        (
+            "widgets.drag.source_origin_y".into(),
+            Value::Number(0.),
+        ),
+        (
+            "widgets.drag.target_output_id".into(),
+            Value::Text("right".into()),
+        ),
+        ("bead.desktop.clock".into(), Value::Text("12:34".into())),
+        (
+            "bead.desktop.clock.seconds".into(),
+            Value::Text("12:34:56".into()),
+        ),
+    ]);
+    let host_events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sent = host_events.clone();
+    ghost.services(Box::new(move |event| {
+        sent.lock().unwrap().push(event);
+    }));
+    ghost.watch(Box::new(|_| {})).unwrap();
+    ghost.initial_model(prepare.clone()).unwrap();
+    if ghost
+        .stage(UiEvent::OutputName("right".into()))
+        .unwrap()
+        .is_some()
+    {
+        ghost.validate().unwrap();
+        assert!(ghost.commit());
+    }
+    let prepared = ghost
+        .stage(UiEvent::Reload)
+        .unwrap()
+        .expect("the passive ghost prepares its target scene");
+    ghost.validate().unwrap();
+    assert!(ghost.commit());
+    assert!(ghost.input_regions().is_empty());
+    assert!(prepared.primitives.iter().any(|primitive| matches!(
+        primitive,
+        bead::render::Primitive::Text { text, .. } if text == "12:34:56"
+    )));
+    let prepared_size = largest_rounded_size(&prepared);
+    assert!(prepared_size.0 > 64. && prepared_size.1 > 40.);
+    assert!(host_events.lock().unwrap().iter().all(|event| !widget_host_effect(event)));
+
+    let mut visible_model = prepare.clone();
+    visible_model.insert(
+        "widgets.drag.phase".into(),
+        Value::Text("dragging".into()),
+    );
+    visible_model.insert(
+        "widgets.drag.destination".into(),
+        Value::Text("bar".into()),
+    );
+    visible_model.insert(
+        "widgets.drag.layout".into(),
+        Value::list(vec![layout]),
+    );
+    visible_model.insert("widgets.drag.x".into(), Value::Number(124.));
+    visible_model.insert("widgets.drag.y".into(), Value::Number(68.));
+    let source_frame = ghost
+        .stage(UiEvent::Model(visible_model.clone()))
+        .unwrap()
+        .expect("the first active Model renders the source before destination entry");
+    ghost.validate().unwrap();
+    assert!(ghost.commit());
+    assert!(ghost.input_regions().is_empty());
+    assert!(source_frame.primitives.iter().any(|primitive| matches!(
+        primitive,
+        bead::render::Primitive::Text { text, .. } if text == "12:34"
+    )));
+    let source_size = largest_rounded_size(&source_frame);
+    assert!(
+        source_size.0 < prepared_size.0 * 0.75 && source_size.1 < prepared_size.1 * 0.75,
+        "the prepared target scene remains larger than the visible bar source: target={prepared_size:?}, source={source_size:?}"
+    );
+
+    visible_model.insert(
+        "widgets.drag.destination".into(),
+        Value::Text("desktop".into()),
+    );
+    let desktop_frame = ghost
+        .stage(UiEvent::Model(visible_model))
+        .unwrap()
+        .expect("the live destination update begins the same-size desktop morph");
+    ghost.validate().unwrap();
+    assert!(ghost.commit());
+    assert!(ghost.input_regions().is_empty());
+    assert!(desktop_frame.primitives.iter().any(|primitive| matches!(
+        primitive,
+        bead::render::Primitive::Text { text, .. } if text == "12:34:56"
+    )));
+    assert!(host_events.lock().unwrap().iter().all(|event| !widget_host_effect(event)));
 }
 
 fn initial_canvas_offer_values(events: &[UiEvent], view: &str) -> BTreeMap<String, Value> {

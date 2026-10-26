@@ -494,7 +494,9 @@ pub(crate) fn canvas_spec_with_root(
         ),
         engages_decorations: false,
         overlay: false,
-        retain_when_closed: false,
+        // The passive preview retains its hidden, prepared scene briefly between
+        // gestures; the host canvas remains lazy when it is empty.
+        retain_when_closed: passive,
         passive,
         keyboard_focus: false,
         initial_open: false,

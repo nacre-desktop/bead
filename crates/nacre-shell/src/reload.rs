@@ -1083,6 +1083,127 @@ impl Runtime {
         );
         values
     }
+    fn prepare_widget_drag_preview(&self, x: f32, y: f32) {
+        if self.widget_app || !(self.bar || self.widget_canvas) {
+            return;
+        }
+        let Some((source, origin, rect)) = self.session.transfer_candidate() else {
+            return;
+        };
+        let bead::core::Value::List(items) = &source else {
+            return;
+        };
+        let Some(item) = items.first() else {
+            return;
+        };
+        let host = item["host"].as_str().unwrap_or_default();
+        let source_form = item["form"].as_str().unwrap_or_default();
+        let bar_source = self.bar && matches!(host, "top_bar" | "status-pill");
+        let canvas_source = self.widget_canvas && host == "canvas";
+        if item["widget"].as_str().is_none()
+            || (!bar_source && !canvas_source)
+            || !matches!(source_form, "bar" | "desktop")
+        {
+            return;
+        }
+        let Some(wakeup) = &self.wakeup else {
+            return;
+        };
+        let number = |key: &str| match self.session.stores.get(key) {
+            Some(bead::core::Value::Number(value)) if value.is_finite() => *value,
+            _ => 0.,
+        };
+        let (surface_x, surface_y) = if canvas_source {
+            (
+                number("widgets.screen_origin_x"),
+                number("widgets.screen_origin_y"),
+            )
+        } else {
+            (number("bead.surface.x"), number("bead.surface.y"))
+        };
+        let pointer_x = f64::from(origin.0) + surface_x;
+        let pointer_y = f64::from(origin.1) + surface_y;
+        let source_left = f64::from(rect.0) + surface_x;
+        let source_top = f64::from(rect.1) + surface_y;
+        let Some(output) = self
+            .output
+            .clone()
+            .or_else(|| match self.session.stores.get("bead.output.name") {
+                Some(bead::core::Value::Text(name)) if !name.is_empty() => Some(name.clone()),
+                _ => None,
+            })
+        else {
+            return;
+        };
+        let mut values = self.widget_drag_preview_values();
+        let mut set = |key: &str, value| values.insert(key.into(), value);
+        set("bead.output.name", bead::core::Value::Text(output.clone()));
+        set("widgets.drag.active", bead::core::Value::Bool(true));
+        set("widgets.drag.source", source);
+        set("widgets.drag.phase", bead::core::Value::Text("prepare".into()));
+        set(
+            "widgets.drag.destination",
+            bead::core::Value::Text(
+                if source_form == "desktop" {
+                    "bar"
+                } else {
+                    "desktop"
+                }
+                .into(),
+            ),
+        );
+        set("widgets.drag.x", bead::core::Value::Number(pointer_x));
+        set("widgets.drag.y", bead::core::Value::Number(pointer_y));
+        set("widgets.drag.start_x", bead::core::Value::Number(pointer_x));
+        set("widgets.drag.start_y", bead::core::Value::Number(pointer_y));
+        set(
+            "widgets.drag.width",
+            bead::core::Value::Number(f64::from(rect.2.max(1.))),
+        );
+        set(
+            "widgets.drag.height",
+            bead::core::Value::Number(f64::from(rect.3.max(1.))),
+        );
+        set(
+            "widgets.drag.grab_x",
+            bead::core::Value::Number(f64::from(x - rect.0)),
+        );
+        set(
+            "widgets.drag.grab_y",
+            bead::core::Value::Number(f64::from(y - rect.1)),
+        );
+        set("widgets.drag.snap_x", bead::core::Value::Number(source_left));
+        set("widgets.drag.snap_y", bead::core::Value::Number(source_top));
+        set(
+            "widgets.drag.source_origin_x",
+            bead::core::Value::Number(surface_x),
+        );
+        set(
+            "widgets.drag.source_origin_y",
+            bead::core::Value::Number(surface_y),
+        );
+        set(
+            "widgets.drag.source_origin_valid",
+            bead::core::Value::Bool(true),
+        );
+        set(
+            "widgets.drag.target_origin_x",
+            bead::core::Value::Number(number("widgets.screen_origin_x")),
+        );
+        set(
+            "widgets.drag.target_origin_y",
+            bead::core::Value::Number(number("widgets.screen_origin_y")),
+        );
+        set(
+            "widgets.drag.target_output_id",
+            bead::core::Value::Text(output.clone()),
+        );
+        wakeup(UiEvent::CanvasPrepare {
+            view: "widgets-drag".into(),
+            output: Some(output),
+            values,
+        });
+    }
     fn stage_widget_drag_values(
         &self,
         values: &BTreeMap<String, bead::core::Value>,
@@ -4807,6 +4928,7 @@ impl SceneSource for Runtime {
         }
         if let UiEvent::Click { x, y } = &event {
             self.session.capture_pointer(*x, *y);
+            self.prepare_widget_drag_preview(*x, *y);
         }
         let _pointer_input = matches!(&event, UiEvent::Click { .. } | UiEvent::Drag { .. })
             .then(|| self.session.pointer_input());
@@ -6829,6 +6951,7 @@ impl SceneSource for Runtime {
             | UiEvent::CompanionSelect { .. }
             | UiEvent::CompanionSelectAt { .. }
             | UiEvent::CompanionOffer { .. }
+            | UiEvent::CanvasPrepare { .. }
             | UiEvent::CanvasOffer { .. }
             | UiEvent::CanvasModel { .. }
             | UiEvent::CompanionAction { .. }

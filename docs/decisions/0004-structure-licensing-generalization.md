@@ -91,6 +91,7 @@ After Bead's core switch on Nacre, plan support for:
   child/host model and action delivery, inert metadata, source-origin opt-in, explicit shared image snapshots
   and JSON-preserving `copy_value` are general APIs;
   widget identities, edit history, settings pages and composition remain in Luau.
+- B0114: `CanvasPrepare` prepares a retained passive canvas scene without mapping its surface; `Session::transfer_candidate` exposes a captured drag source before its threshold.
 
 - B0123: `PanelSpec.overlay` selects layer-shell overlay; `retain_when_closed` keeps the single resident prepared view until replacement. Product layout stays in Luau; `Session::resolve` exposes staged/computed host policy, including `view.frame` to opt out of joined artwork.
 

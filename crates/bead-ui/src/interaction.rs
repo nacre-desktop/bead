@@ -715,6 +715,21 @@ impl Session {
             .active
             .then(|| (source.id.clone(), capture.payload.clone(), capture.origin))
     }
+    /// The captured drag source before its movement threshold is crossed.
+    /// Hosts may use it to prepare an off-screen drag preview without starting a gesture.
+    pub fn transfer_candidate(
+        &self,
+    ) -> Option<(Value, (f32, f32), (f32, f32, f32, f32))> {
+        let capture = self.transfer_capture.as_ref()?;
+        if capture.active || !self.transfer_source_is_current(capture) {
+            return None;
+        }
+        Some((
+            capture.payload.clone(),
+            capture.origin,
+            capture.source_rect,
+        ))
+    }
     /// Drop-capable nodes in the current materialized view.
     pub fn drop_targets(&self) -> Vec<Node> {
         self.current_nodes

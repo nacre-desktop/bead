@@ -11,6 +11,7 @@ fn panel_event_belongs_to_host(event: &UiEvent) -> bool {
             | UiEvent::HostModel(_)
             | UiEvent::CompanionAction { .. }
             | UiEvent::CompanionMotionAction { .. }
+            | UiEvent::CanvasPrepare { .. }
             | UiEvent::CanvasOffer { .. }
             | UiEvent::CanvasModel { .. }
             | UiEvent::CompanionVisibility(true)
@@ -296,6 +297,15 @@ impl App {
         } = event
         {
             self.canvas_offer(&view, output.as_deref(), open, values);
+            return;
+        }
+        if let UiEvent::CanvasPrepare {
+            view,
+            output,
+            values,
+        } = event
+        {
+            self.canvas_prepare(&view, output.as_deref(), values);
             return;
         }
         if let UiEvent::CompanionOffer { view, output, open } = event {
@@ -1176,6 +1186,11 @@ mod panel_event_routing_tests {
             center: None,
         };
         assert!(panel_event_belongs_to_host(&event));
+        assert!(panel_event_belongs_to_host(&UiEvent::CanvasPrepare {
+            view: "widgets-drag".into(),
+            output: Some("fixture-output".into()),
+            values: BTreeMap::new(),
+        }));
         assert!(panel_event_belongs_to_host(&UiEvent::PanelNavigated(
             "dashboard-weather".into()
         )));

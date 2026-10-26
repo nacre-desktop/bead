@@ -11,6 +11,7 @@ fn canvas_event_belongs_to_host(event: &UiEvent) -> bool {
             | UiEvent::CompanionAction { .. }
             | UiEvent::CompanionMotionAction { .. }
             | UiEvent::HostModel(_)
+            | UiEvent::CanvasPrepare { .. }
             | UiEvent::CanvasOffer { .. }
             | UiEvent::CanvasModel { .. }
     )
@@ -18,6 +19,8 @@ fn canvas_event_belongs_to_host(event: &UiEvent) -> bool {
 
 pub(super) struct Canvas {
     pub(super) epoch: u64,
+    lifecycle: CanvasLifecycle,
+    retain_when_closed: bool,
     pub(super) layer: Option<LayerSurface>,
     pub(super) output: wl_output::WlOutput,
     pub(super) source: Box<dyn SceneSource>,
@@ -116,6 +119,55 @@ fn crop_scene(mut scene: Scene, bounds: Rect) -> Scene {
     scene
 }
 
+struct CanvasLifecycle {
+    open: bool,
+    pending_open: bool,
+    warmup_packets_pending: usize,
+    retention_generation: u64,
+}
+impl CanvasLifecycle {
+    fn new(open: bool, warmup_packets_pending: usize) -> Self {
+        Self {
+            open,
+            pending_open: false,
+            warmup_packets_pending,
+            retention_generation: 0,
+        }
+    }
+    fn set_open(&mut self, open: bool) -> u64 {
+        self.open = open;
+        self.retention_generation = self.retention_generation.wrapping_add(1);
+        self.retention_generation
+    }
+    fn offer_open(&mut self) {
+        self.pending_open = !self.open;
+        if self.pending_open {
+            self.retention_generation = self.retention_generation.wrapping_add(1);
+        }
+    }
+    fn close(&mut self) {
+        self.set_open(false);
+        self.pending_open = false;
+    }
+    fn warmup_response(&mut self) -> bool {
+        if self.warmup_packets_pending == 0 {
+            return false;
+        }
+        self.warmup_packets_pending -= 1;
+        true
+    }
+    fn accept_scene(&mut self, warmup_response: bool) -> bool {
+        if self.pending_open && !warmup_response {
+            self.set_open(true);
+            self.pending_open = false;
+        }
+        self.open
+    }
+    fn expires(&self, generation: u64) -> bool {
+        !self.open && self.retention_generation == generation
+    }
+}
+
 impl App {
     pub(super) fn canvas_surface(&self, surface: &wl_surface::WlSurface) -> bool {
         self.canvases.values().any(|canvas| {
@@ -158,10 +210,36 @@ impl App {
                 .cloned()
                 .collect::<Vec<_>>();
             for key in stale {
-                self.release_canvas(&key);
+                if self
+                    .canvases
+                    .get(&key)
+                    .is_some_and(|canvas| canvas.retain_when_closed)
+                {
+                    self.canvas_hide(&key);
+                    self.canvas_schedule_release(&key);
+                } else {
+                    self.release_canvas(&key);
+                }
             }
             return;
         }
+        self.canvas_start(view, output_name, values, true);
+    }
+    pub(super) fn canvas_prepare(
+        &mut self,
+        view: &str,
+        output_name: Option<&str>,
+        values: std::collections::BTreeMap<String, bead_core::Value>,
+    ) {
+        self.canvas_start(view, output_name, values, false);
+    }
+    fn canvas_start(
+        &mut self,
+        view: &str,
+        output_name: Option<&str>,
+        values: std::collections::BTreeMap<String, bead_core::Value>,
+        open: bool,
+    ) {
         if self.hidden {
             return;
         }
@@ -197,6 +275,28 @@ impl App {
             .unwrap_or_else(|| "default".into());
         let key = (name.clone(), view.to_owned());
         if self.canvases.contains_key(&key) {
+            let pending_open = open
+                && self
+                    .canvases
+                    .get(&key)
+                    .is_some_and(|canvas| !canvas.lifecycle.open);
+            if let Some(canvas) = self.canvases.get_mut(&key) {
+                if open {
+                    canvas.lifecycle.offer_open();
+                } else {
+                    canvas.lifecycle.close();
+                }
+            }
+            if open {
+                self.canvas_ui(&key, UiEvent::Model(values));
+                if pending_open {
+                    self.canvas_schedule_release(&key);
+                }
+            } else {
+                self.canvas_ui(&key, UiEvent::Model(values));
+                self.canvas_hide(&key);
+                self.canvas_schedule_release(&key);
+            }
             return;
         }
         let Some(catalog) = self.options.canvases.as_ref() else {
@@ -209,6 +309,9 @@ impl App {
                 return;
             }
         };
+        if !open && !spec.retain_when_closed {
+            return;
+        }
         let Some((width, height)) = self
             .output
             .info(&output)
@@ -263,6 +366,8 @@ impl App {
             key.clone(),
             Canvas {
                 epoch,
+                lifecycle: CanvasLifecycle::new(open, 0),
+                retain_when_closed: spec.retain_when_closed,
                 layer: None,
                 output,
                 source,
@@ -294,6 +399,45 @@ impl App {
         }
         self.canvas_ui(&key, UiEvent::OutputName(key.0.clone()));
         self.canvas_ui(&key, UiEvent::Reload);
+        if !open {
+            self.canvas_schedule_release(&key);
+        }
+    }
+    fn canvas_hide(&mut self, key: &(String, String)) {
+        if let Some(canvas) = self.canvases.get_mut(key) {
+            canvas.lifecycle.close();
+            canvas.callbacks.invalidate();
+            canvas.frame_pending = false;
+            canvas.dirty = false;
+            canvas.pressed = false;
+            canvas.input = None;
+            if let Some(layer) = &canvas.layer {
+                layer.wl_surface().attach(None, 0, 0);
+                layer.commit();
+            }
+        }
+    }
+    fn canvas_schedule_release(&mut self, key: &(String, String)) {
+        let Some(canvas) = self.canvases.get(key) else {
+            return;
+        };
+        let epoch = canvas.epoch;
+        let generation = canvas.lifecycle.retention_generation;
+        let key = key.clone();
+        if let Err(error) = self.loop_handle.insert_source(
+            Timer::from_duration(Duration::from_secs(2)),
+            move |_, _, app| {
+                let retained = app.canvases.get(&key).is_some_and(|canvas| {
+                    canvas.epoch == epoch && canvas.lifecycle.expires(generation)
+                });
+                if retained {
+                    app.release_canvas(&key);
+                }
+                TimeoutAction::Drop
+            },
+        ) {
+            eprintln!("CANVAS_ERROR {error}");
+        }
     }
     pub(super) fn canvas_ui(&mut self, key: &(String, String), event: UiEvent) {
         if let UiEvent::ResourcesPrepared(result) = event {
@@ -313,6 +457,21 @@ impl App {
         let Some(canvas) = self.canvases.get_mut(key) else {
             return;
         };
+        if !canvas.lifecycle.open
+            && !canvas.lifecycle.pending_open
+            && !matches!(&event, UiEvent::Worker(_))
+        {
+            canvas.lifecycle.warmup_packets_pending += 1;
+        }
+        let warmup_response = matches!(
+            &event,
+            UiEvent::Worker(packet)
+                if (packet.is_accepted() || packet.is_settled() || packet.is_failed())
+                    && canvas.lifecycle.warmup_packets_pending > 0
+        );
+        if warmup_response {
+            canvas.lifecycle.warmup_response();
+        }
         canvas.source.scales(vec![canvas.scale120 as f32 / 120.]);
         let scale = canvas.scale120 as f32 / 120.;
         let staged = canvas.source.stage(event).and_then(|scene| {
@@ -327,6 +486,7 @@ impl App {
                 if !canvas.source.commit() {
                     return;
                 }
+                canvas.lifecycle.accept_scene(warmup_response);
                 let mut bounds = visible_bounds(&scene, canvas.viewport_size);
                 if canvas.interactive {
                     for region in canvas
@@ -388,6 +548,13 @@ impl App {
                 canvas.bounds = Some(bounds);
                 canvas.render_size = (bounds.w as u32, bounds.h as u32);
                 canvas.dirty = true;
+                if !canvas.lifecycle.open {
+                    if let Err(error) = canvas.renderer.prepare(&canvas.scene, scale) {
+                        eprintln!("CANVAS_ERROR {error}");
+                        return;
+                    }
+                    return;
+                }
                 if let Err(error) = self.canvas_map_bounds(key) {
                     eprintln!("CANVAS_ERROR {error}");
                     return;
@@ -528,6 +695,9 @@ impl App {
             PixelFormat::Bgra
         };
         let canvas = self.canvases.get_mut(key).ok_or("canvas closed")?;
+        if !canvas.lifecycle.open {
+            return Ok(());
+        }
         if !canvas.configured || canvas.bounds.is_none() {
             return Ok(());
         }
@@ -827,6 +997,25 @@ impl App {
             .find(|(_, canvas)| canvas.layer.as_ref() == Some(layer))
             .map(|(key, _)| key.clone())
         {
+            if let Some(canvas) = self.canvases.get_mut(&key)
+                && canvas.retain_when_closed
+                && !canvas.lifecycle.open
+            {
+                canvas.layer = None;
+                if let Some(fractional) = canvas.fractional.take() {
+                    fractional.destroy();
+                }
+                if let Some(viewport) = canvas.viewport.take() {
+                    viewport.destroy();
+                }
+                canvas.pool = None;
+                canvas.buffers.clear();
+                canvas.damage_history.clear();
+                canvas.geometry = None;
+                canvas.mapped_bounds = None;
+                canvas.configured = false;
+                return;
+            }
             self.canvases.remove(&key);
         }
     }
@@ -879,6 +1068,11 @@ mod tests {
 
     #[test]
     fn host_canvas_envelopes_are_routed_out_of_the_canvas_runtime() {
+        assert!(canvas_event_belongs_to_host(&UiEvent::CanvasPrepare {
+            view: "widgets-drag".into(),
+            output: Some("fixture-output".into()),
+            values: std::collections::BTreeMap::new(),
+        }));
         assert!(canvas_event_belongs_to_host(&UiEvent::CanvasModel {
             view: "widgets-canvas".into(),
             output: Some("fixture-output".into()),
@@ -899,6 +1093,37 @@ mod tests {
         assert!(!canvas_event_belongs_to_host(&UiEvent::Model(
             std::collections::BTreeMap::new()
         )));
+    }
+
+    #[test]
+    fn prepared_canvas_reuses_on_offer_and_expires_after_the_last_close() {
+        let mut lifecycle = CanvasLifecycle::new(false, 0);
+        let first_prepare = lifecycle.retention_generation;
+        assert!(lifecycle.expires(first_prepare));
+
+        // Palette/reload and any model wakeups that arrive while still hidden
+        // are drained before the active Model is allowed to map the layer.
+        lifecycle.warmup_packets_pending += 3;
+        lifecycle.offer_open();
+        for _ in 0..3 {
+            let stale_warmup = lifecycle.warmup_response();
+            assert!(!lifecycle.accept_scene(stale_warmup));
+        }
+        assert!(!lifecycle.expires(first_prepare));
+        assert!(lifecycle.accept_scene(false));
+        let opened = lifecycle.retention_generation;
+        assert!(!lifecycle.expires(opened));
+
+        lifecycle.close();
+        let closed = lifecycle.retention_generation;
+        assert!(!lifecycle.expires(opened));
+        assert!(lifecycle.expires(closed));
+
+        lifecycle.offer_open();
+        assert!(lifecycle.accept_scene(false));
+        let reopened = lifecycle.retention_generation;
+        assert!(!lifecycle.expires(closed));
+        assert!(!lifecycle.expires(reopened));
     }
 
     fn scene(offset: (f32, f32)) -> Scene {
