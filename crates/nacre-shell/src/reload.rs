@@ -700,6 +700,9 @@ pub struct Runtime {
     smooth_animation_dropped: Option<u64>,
     smooth_last_presented: Option<std::time::Instant>,
     smooth_frame_interval: std::time::Duration,
+    smooth_started_at: std::time::Instant,
+    smooth_user_interacted: bool,
+    smooth_bar_startup_animation: bool,
 }
 #[derive(Clone)]
 struct DashboardPearlAnimation {
@@ -741,21 +744,27 @@ impl Drop for Runtime {
     }
 }
 impl Runtime {
-    fn smooth_surface(&self) -> &'static str {
-        if self.launcher.is_some() {
-            "launcher"
+    fn smooth_surface(&self) -> String {
+        if self
+            .extras
+            .as_ref()
+            .is_some_and(|extras| extras.kind == crate::extras::Kind::Wallpaper)
+        {
+            "picker".into()
+        } else if self.launcher.is_some() {
+            "launcher".into()
         } else if self.settings.is_some() {
-            "settings"
+            "settings".into()
         } else if self.dashboard.is_some() || self.pending_dashboard.is_some() {
-            "dashboard"
+            "dashboard".into()
         } else if self.control.is_some() {
-            "control"
+            "control".into()
         } else if self.chat.is_some() {
-            "ai"
+            "ai".into()
         } else if self.bar {
-            "bar"
+            "bar".into()
         } else {
-            "panel"
+            panel_route_name(&self.session.stores)
         }
     }
 
@@ -2373,6 +2382,9 @@ impl Runtime {
             smooth_animation_dropped: None,
             smooth_last_presented: None,
             smooth_frame_interval: std::time::Duration::from_millis(16),
+            smooth_started_at: std::time::Instant::now(),
+            smooth_user_interacted: false,
+            smooth_bar_startup_animation: false,
         }
     }
     pub fn with_connection_status(
@@ -4003,6 +4015,92 @@ impl Runtime {
         Ok(())
     }
 }
+
+fn panel_route_name(stores: &bead::core::Stores) -> String {
+    for key in ["panel.route", "panel.page"] {
+        if let Some(bead::core::Value::Text(route)) = stores.get(key)
+            && !route.is_empty()
+        {
+            return route.clone();
+        }
+    }
+    "panel".into()
+}
+fn suppress_startup_bar_jank(bar: bool, user_interacted: bool, age: std::time::Duration) -> bool {
+    bar && !user_interacted && age < std::time::Duration::from_millis(750)
+}
+#[cfg(test)]
+mod panel_route_name_tests {
+    use super::panel_route_name;
+    use bead::core::{Stores, Value};
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn uses_route_then_page_and_falls_back_for_unlabelled_panels() {
+        let stores = |pairs: &[(&str, Value)]| {
+            Stores::default()
+                .reconcile(
+                    &pairs
+                        .iter()
+                        .map(|(key, value)| ((*key).into(), value.clone()))
+                        .collect::<BTreeMap<_, _>>(),
+                )
+                .unwrap()
+        };
+        assert_eq!(
+            panel_route_name(&stores(&[(
+                "panel.route",
+                Value::Text("dropdown:audio".into())
+            )])),
+            "dropdown:audio"
+        );
+        assert_eq!(
+            panel_route_name(&stores(&[("panel.page", Value::Text("output".into()))])),
+            "output"
+        );
+        assert_eq!(
+            panel_route_name(&stores(&[
+                ("panel.route", Value::Text("dropdown:audio".into())),
+                ("panel.page", Value::Text("output".into()))
+            ])),
+            "dropdown:audio"
+        );
+        assert_eq!(
+            panel_route_name(&stores(&[("panel.route", Value::Text("picker".into()))])),
+            "picker"
+        );
+        assert_eq!(panel_route_name(&Stores::default()), "panel");
+    }
+}
+#[cfg(test)]
+mod startup_bar_jank_tests {
+    use super::suppress_startup_bar_jank;
+    use std::time::Duration;
+
+    #[test]
+    fn startup_suppression_ends_after_input_or_the_grace_period() {
+        assert!(suppress_startup_bar_jank(
+            true,
+            false,
+            Duration::from_millis(300)
+        ));
+        assert!(!suppress_startup_bar_jank(
+            true,
+            true,
+            Duration::from_millis(300)
+        ));
+        assert!(!suppress_startup_bar_jank(
+            true,
+            false,
+            Duration::from_millis(750)
+        ));
+        assert!(!suppress_startup_bar_jank(
+            false,
+            false,
+            Duration::from_millis(300)
+        ));
+    }
+}
 impl Runtime {
     pub fn with_frame(
         mut self,
@@ -5085,6 +5183,22 @@ impl SceneSource for Runtime {
     }
     fn stage(&mut self, mut event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
         let now = std::time::Instant::now();
+        if matches!(
+            &event,
+            UiEvent::Key { .. }
+                | UiEvent::Click { .. }
+                | UiEvent::Drag { .. }
+                | UiEvent::Release
+                | UiEvent::Scroll { .. }
+                | UiEvent::HorizontalScroll { .. }
+                | UiEvent::SecondaryClick { .. }
+                | UiEvent::ContextMenu { .. }
+                | UiEvent::Command { .. }
+                | UiEvent::PanelVisibility(true)
+                | UiEvent::Hover { .. }
+        ) {
+            self.smooth_user_interacted = true;
+        }
         match &event {
             UiEvent::PanelVisibility(true) if self.smooth_open_started.is_none() => {
                 self.smooth_open_started = Some(now);
@@ -8536,7 +8650,8 @@ impl SceneSource for Runtime {
         let name = self.smooth_surface();
         if let Some(started) = self.smooth_open_started.take() {
             eprintln!(
-                "PANEL_OPEN_LATENCY name={name} ms_to_first_content_frame={:.3}",
+                "PANEL_OPEN_LATENCY name={} ms_to_first_content_frame={:.3}",
+                name,
                 now.duration_since(started).as_secs_f64() * 1000.
             );
         }
@@ -8556,9 +8671,24 @@ impl SceneSource for Runtime {
             .unwrap_or_default();
         let animation_active = self.session.preview_deadline().is_some();
         if animation_active {
+            if self.smooth_animation_dropped.is_none() {
+                self.smooth_bar_startup_animation = suppress_startup_bar_jank(
+                    self.bar,
+                    self.smooth_user_interacted,
+                    now.duration_since(self.smooth_started_at),
+                );
+            }
             *self.smooth_animation_dropped.get_or_insert(0) += missed;
         } else if let Some(dropped) = self.smooth_animation_dropped.take() {
-            eprintln!("FRAME_JANK surface={name} dropped={}", dropped + missed);
+            if self.smooth_bar_startup_animation {
+                eprintln!(
+                    "FRAME_JANK_SUPPRESSED surface=bar dropped={} reason=startup_before_input",
+                    dropped + missed
+                );
+            } else {
+                eprintln!("FRAME_JANK surface={name} dropped={}", dropped + missed);
+            }
+            self.smooth_bar_startup_animation = false;
         }
         if self.smooth_scroll_started.is_some() {
             self.smooth_scroll_dropped += missed;

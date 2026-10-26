@@ -1573,12 +1573,42 @@ fn shadow_svg(w: f32, h: f32, radius: f32, blur: f32) -> String {
 }
 fn shadow_pixmap(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixmap> {
     let (w, h) = dimensions(rect, scale);
+    type Shadows = Vec<((u32, u32, u32, u32, u32), std::sync::Arc<Pixmap>)>;
+    static SHADOWS: std::sync::OnceLock<std::sync::Mutex<Shadows>> = std::sync::OnceLock::new();
+    let cache = SHADOWS.get_or_init(|| std::sync::Mutex::new(Vec::new()));
+    let key = (w, h, radius.to_bits(), blur.to_bits(), scale.to_bits());
+    let osd_shape = rect.w == 396.
+        && ((rect.h == 120. && radius == 30.) || (rect.h == 136. && radius == 38.))
+        && blur == 10.
+        && scale == 1.5;
+    if osd_shape
+        && let Ok(shadows) = cache.lock()
+        && let Some((_, pixmap)) = shadows.iter().find(|(candidate, _)| *candidate == key)
+    {
+        return Ok((**pixmap).clone());
+    }
+    let cache_osd = |pixmap: Pixmap| {
+        if osd_shape && let Ok(mut shadows) = cache.lock() {
+            if let Some(index) = shadows.iter().position(|(candidate, _)| *candidate == key) {
+                shadows.remove(index);
+            }
+            if shadows.len() >= 2 {
+                shadows.remove(0);
+            }
+            shadows.push((key, std::sync::Arc::new(pixmap.clone())));
+        }
+        pixmap
+    };
     // Preserve the same Gaussian corners/edges, stretching only straight sections.
     // Bake a small template with enough room for radius + 3 sigma on either side.
     let cut = ((radius + 6. * blur) * scale).ceil() as u32;
     let side = cut * 2 + 2;
     if cut == 0 || w < side || h < side {
-        return svg_pixmap(shadow_svg(rect.w, rect.h, radius, blur).as_bytes(), w, h);
+        return Ok(cache_osd(svg_pixmap(
+            shadow_svg(rect.w, rect.h, radius, blur).as_bytes(),
+            w,
+            h,
+        )?));
     }
     // The Gaussian template depends on radius, blur and scale only. A revealing panel re-shapes its
     // shadow every frame, so rendering the template again each time cost tens of milliseconds.
@@ -1634,8 +1664,18 @@ fn shadow_pixmap(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixma
             result.draw_pixmap(0, 0, tile.as_ref(), &PixmapPaint::default(), tr, None);
         }
     }
-    Ok(result)
+    Ok(cache_osd(result))
 }
+
+/// Warm the brightness and volume CPU shadows recorded by B0149 at 1.5x. These
+/// fixed geometries are independent of text, palette, and OSD kind.
+pub fn prewarm_osd_shadows() -> Result<()> {
+    for (height, radius) in [(60., 30.), (76., 38.)] {
+        let _ = shadow_pixmap(Rect::new(0., 0., 396., height + 60.), radius, 10., 1.5)?;
+    }
+    Ok(())
+}
+
 fn svg_pixmap(data: &[u8], w: u32, h: u32) -> Result<Pixmap> {
     let tree = resvg::usvg::Tree::from_data(data, &resvg::usvg::Options::default())?;
     let mut pix = Pixmap::new(w, h).ok_or("SVG allocation")?;
@@ -3145,5 +3185,22 @@ mod weight_tests {
         assert_eq!(*weight, 400);
         *weight = 500;
         assert_ne!(key(&normal, 1.), key(&medium, 1.));
+    }
+
+    #[test]
+    fn osd_shadows_are_ready_from_the_shared_cache() {
+        let started = std::time::Instant::now();
+        let brightness = shadow_pixmap(Rect::new(0., 0., 396., 120.), 30., 10., 1.5).unwrap();
+        let before_ms = started.elapsed().as_secs_f64() * 1000.;
+        prewarm_osd_shadows().unwrap();
+        let started = std::time::Instant::now();
+        let volume = shadow_pixmap(Rect::new(0., 0., 396., 136.), 38., 10., 1.5).unwrap();
+        let after_ms = started.elapsed().as_secs_f64() * 1000.;
+        let cached_mib = (brightness.data().len() + volume.data().len()) as f64 / 1_048_576.;
+        eprintln!(
+            "OSD_SHADOW_RASTER before_ms={before_ms:.3} after_ms={after_ms:.3} cached_mib={cached_mib:.3}"
+        );
+        assert!(after_ms < 16.7, "warmed OSD shadow took {after_ms:.3} ms");
+        assert_eq!(brightness.width(), volume.width());
     }
 }

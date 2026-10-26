@@ -508,6 +508,21 @@ fn start(
     if audio_panel && !options.bar {
         return Err("--audio-panel requires --bar".into());
     }
+    let _ = std::thread::Builder::new()
+        .name("bead-osd-shadow-warm".into())
+        .spawn(|| {
+            unsafe {
+                libc::setpriority(libc::PRIO_PROCESS, libc::gettid() as u32, 10);
+            }
+            let started = std::time::Instant::now();
+            match bead::render::prewarm_osd_shadows() {
+                Ok(()) => eprintln!(
+                    "OSD_SHADOW_PREWARM ms={:.3}",
+                    started.elapsed().as_secs_f64() * 1000.
+                ),
+                Err(_) => eprintln!("OSD_SHADOW_PREWARM failed"),
+            }
+        });
     *ui_started = true;
     let mut forced_safe_mode = false;
     if let Ok(path) = state::File::path()
