@@ -13,8 +13,9 @@ local time_max=math.max(t.clock_min_width,ui.text_width("23:59",clock_font,t.clo
 local seconds_max=math.max(ui.text_width("23:59:59",clock_font,t.clock_font),ui.text_width("12:59:59 PM",clock_font,t.clock_font))
 local date_max=math.max(ui.text_width("9999-12-31",clock_font,t.detail_font),ui.text_width("8888-88-88",clock_font,t.detail_font),ui.text_width("0000-00-00",clock_font,t.detail_font))+kit.tokens.spacing.hairline
 local date_content_max=time_max+t.item_gap+date_max
+local calendar_ink=t.status_symbol_ink.calendar_month or t.status_ink.calendar
 local function reserve_clock(content_width)
-    return t.status_padding+t.status_count_padding+t.status_ink.calendar+t.item_gap+content_width
+    return t.status_padding+t.status_count_padding+calendar_ink+t.item_gap+content_width
 end
 local function clock_with_seconds(time,seconds)
     local suffix=string.match(seconds,"^%d%d:%d%d:(%d%d)$")
@@ -76,7 +77,7 @@ end
 local function bar(props,settings,_data)
     local style=props.form_style
     local inner_capacity=props.available_width and math.max(0,props.available_width-t.status_padding-t.status_count_padding
-        -t.status_ink.calendar-t.item_gap) or nil
+        -calendar_ink-t.item_gap) or nil
     local content=clock_content(style,props.instance and props.instance.iid,inner_capacity)
     return (popouts and kit.Button or ui.Row){id="clock",height=t.status_height,direction=popouts and "row" or nil,gap=t.item_gap,padding=0,padding_left=t.status_padding,padding_right=t.status_count_padding,align="center",fill=popouts and "transparent" or nil,aria_label=popouts and ui.tr("bead.bar.open-calendar") or nil,on_activate=popouts and ui.action("view.open","calendar") or nil,
         status_glyph("calendar","calendar_month","calendar","tertiary"),content,
