@@ -8,6 +8,13 @@ widget damage, six-minute nested idle captures, retained GL suspend/reopen and
 short process-stop/private-resume proofs pass. Full remote CI passes. The old
 live journal cannot conclusively identify the reported occurrence. No live
 deployment. [Evidence](specs/0144-clock-frozen.md).
+## 2026-10-26 — B0142 warm video wallpaper switching
+
+One long-lived video renderer is reused through `loadfile replace`; poster shows
+at once and fades into motion; `WALLPAPER_SWITCH_LATENCY` journal marker added.
+Nested p95 click-to-feedback 142-153 ms (medians 123-147 ms), was 0.5-1.1 s.
+Warm renderer costs about 7.7 MiB while video is active and stays resident
+after switching to static. [Evidence](specs/0142-video-switch.md). No live deployment.
 
 ## 2026-10-26 — B0139 dropdown-open native-window regression
 

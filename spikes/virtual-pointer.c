@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // B0067 parity harness: move (and optionally press) a virtual pointer on a PRIVATE parent compositor.
-//   virtual-pointer X Y W H [hover|press|click|drag X2 Y2 MS|relative-drag X2 Y2 MS [SCALE]]
+//   virtual-pointer X Y W H [hover|press|click|click-clock|drag X2 Y2 MS|relative-drag X2 Y2 MS [SCALE]]
 //     positions are in the parent output's pixels, W H its size; drag holds left while moving
 //     relative-drag sends relative deltas while holding left; optional SCALE divides physical travel
 //   virtual-pointer X Y W H stream wheel|pixel DELTA COUNT MS   COUNT axis events, one every MS ms (B0110)
@@ -66,7 +66,7 @@ static int flush_stream_event(struct wl_display *display, unsigned index) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 5) { fprintf(stderr, "usage: %s X Y W H [hover|press|click|drag X2 Y2 MS|relative-drag X2 Y2 MS [SCALE]]\n", argv[0]); return 2; }
+    if (argc < 5) { fprintf(stderr, "usage: %s X Y W H [hover|press|click|click-clock|drag X2 Y2 MS|relative-drag X2 Y2 MS [SCALE]]\n", argv[0]); return 2; }
     struct wl_display *display = wl_display_connect(NULL);
     if (!display) { fprintf(stderr, "no wayland display\n"); return 1; }
     struct wl_registry *registry = wl_display_get_registry(display);
@@ -204,10 +204,18 @@ int main(int argc, char **argv) {
             zwlr_virtual_pointer_v1_button(pointer, now_ms(), BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
             zwlr_virtual_pointer_v1_frame(pointer);
             wl_display_roundtrip(display);
-        } else if (!strcmp(argv[5], "click")) {
+        } else if (!strcmp(argv[5], "click") || !strcmp(argv[5], "click-clock")) {
             usleep(120000);
+            int report_release = !strcmp(argv[5], "click-clock");
+            struct timespec released;
+            if (report_release) clock_gettime(CLOCK_MONOTONIC, &released);
             zwlr_virtual_pointer_v1_button(pointer, now_ms(), BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
             zwlr_virtual_pointer_v1_frame(pointer);
+            if (report_release) {
+                fprintf(stdout, "POINTER_RELEASED monotonic_ns=%llu\n",
+                        (unsigned long long)released.tv_sec * 1000000000ULL + released.tv_nsec);
+                fflush(stdout);
+            }
             wl_display_roundtrip(display);
             usleep(300000); // Keep the device alive until the release has been dispatched.
         } else {

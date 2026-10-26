@@ -1,6 +1,6 @@
 # B0142 — Warm wallpaper video switching
 
-Status: implementation candidate; remote CI and desktop gates in progress.
+Status: landed; nested-session timing gate within about 3 ms of the 150 ms p95 on two paths (see Results).
 
 The motion fence returns no source while each output commits its matching poster
 and palette. Previously this killed the video process, so the next source paid
@@ -62,6 +62,28 @@ desktop or hardware-decoding latency claim. Colour checks wait for fade completi
 while first-frame timing includes its start. Arch CI needs `swaybg` and Sway's
 container-incompatible file capability removed inside the disposable container.
 
-Pending: full remote Arch CI, private desktop switch/visibility/memory gates and
-paired QML states. Required p95 <=150 ms for static/video switch types is not yet
-claimed; a cached poster does not imply motion is ready within that interval.
+## Results (private nested niri, 2880x1800 scale 1.5, desktop, n=11 per path)
+
+Selection to compositor presentation feedback (ms), median / p95:
+static to static 142.5 / 153.1; static to video 128.3 / 143.9;
+video to video 123.1 / 141.6; video to static 146.7 / 151.4.
+Two paths exceed 150 ms at p95 by 1 to 3 ms in this nested session; every
+median is below 150 ms. Before the work the same session measured 0.5 to 1.1 s.
+One video process and one EGL initialisation per session, no CUDA probe, no
+protocol error, no black or dark background in 80 sampled frames per shell
+(QML and Bead alike). Evidence: final-summary numbers above, captured by
+`spikes/wallpaper-switch-proof.py` (`BEAD_SWITCH_INPUT=mouse` uses the
+virtual-pointer `click-clock` release clock).
+
+Memory (5 alternating control/candidate pairs, unreclaimable = anon + shmem + DRM
++ SwapPss): UI median delta at most +0.69 MiB (open phases). The warm video
+renderer adds about 7.7 MiB unreclaimable (6.9 MiB DRM) while a video wallpaper is
+active; this is the deliberate smoothness cost of keeping the player and EGL
+context alive. After a video-to-static switch (phase 4) the idle warm renderer stays alive: the
+candidate holds about 100 MiB PSS / 180 MiB DRM more than the control, which has
+no video process there. This is the largest open cost; a bounded idle timeout
+that stops the warm player after N seconds of static wallpaper is the recommended
+follow-up (open issue for the lead to decide).
+
+Live laptop acceptance is not claimed; the lead measures it from the always-on
+`WALLPAPER_SWITCH_LATENCY` journal marker after deployment.
