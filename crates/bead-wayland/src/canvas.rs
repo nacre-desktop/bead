@@ -1128,7 +1128,17 @@ impl App {
             self.close_panel();
             self.panel_canvas_owner = None;
         }
-        self.canvases.remove(key);
+        if let Some(canvas) = self.canvases.remove(key) {
+            // Source teardown joins the worker; return its freed scratch/arena pages
+            // after the scene and renderer owners have also been dropped.
+            drop(canvas);
+            #[cfg(all(target_os = "linux", target_env = "gnu"))]
+            {
+                // SAFETY: process-local allocator trim after canvas worker retirement.
+                unsafe { libc::malloc_trim(0) };
+                bead_core::profile::mark("canvas_retired_trimmed");
+            }
+        }
     }
 }
 
