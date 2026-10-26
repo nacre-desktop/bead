@@ -1252,7 +1252,7 @@ impl App {
                 && s.buffers
                     .iter()
                     .any(|b| !b.buffer.slot().has_active_buffers());
-            if s.callbacks.pending && !replace_pending_ui {
+            if s.callbacks.pending && _kind != RendererKind::Cpu {
                 s.redraw = true;
                 return Ok(());
             }
@@ -2065,12 +2065,12 @@ impl App {
                     region.h as i32,
                 );
             }
-            if !replace_pending_ui {
+            if let Some(epoch) = s.callbacks.request_if_idle() {
                 wl_surface.frame(
                     qh,
                     FrameData {
                         surface: wl_surface.clone(),
-                        epoch: s.callbacks.request(),
+                        epoch,
                         generation: scene.resource_revision,
                         source_epoch: if s.companion { self.panel_epoch } else { 0 },
                     },

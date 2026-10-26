@@ -807,10 +807,6 @@ impl App {
         if !canvas.lifecycle.open || !canvas.configured || canvas.bounds.is_none() {
             return Ok(());
         }
-        if canvas.frame_pending {
-            canvas.dirty = true;
-            return Ok(());
-        }
         let layer = canvas.layer.as_ref().ok_or("canvas layer missing")?;
         let surface = layer.wl_surface().clone();
         let scale = canvas.scale120 as f32 / 120.;
@@ -885,16 +881,18 @@ impl App {
             .position(|buffer| !buffer.slot().has_active_buffers())
         else {
             canvas.dirty = true;
-            surface.frame(
-                &self.qh,
-                FrameData {
-                    surface: surface.clone(),
-                    epoch: canvas.callbacks.request(),
-                    generation: canvas.scene.resource_revision,
-                    source_epoch: canvas.epoch,
-                },
-            );
-            canvas.frame_pending = true;
+            if let Some(epoch) = canvas.callbacks.request_if_idle() {
+                surface.frame(
+                    &self.qh,
+                    FrameData {
+                        surface: surface.clone(),
+                        epoch,
+                        generation: canvas.scene.resource_revision,
+                        source_epoch: canvas.epoch,
+                    },
+                );
+                canvas.frame_pending = true;
+            }
             canvas
                 .layer
                 .as_ref()
@@ -946,16 +944,18 @@ impl App {
             damage.w as i32,
             damage.h as i32,
         );
-        surface.frame(
-            &self.qh,
-            FrameData {
-                surface: surface.clone(),
-                epoch: canvas.callbacks.request(),
-                generation: canvas.scene.resource_revision,
-                source_epoch: canvas.epoch,
-            },
-        );
-        canvas.frame_pending = true;
+        if let Some(epoch) = canvas.callbacks.request_if_idle() {
+            surface.frame(
+                &self.qh,
+                FrameData {
+                    surface: surface.clone(),
+                    epoch,
+                    generation: canvas.scene.resource_revision,
+                    source_epoch: canvas.epoch,
+                },
+            );
+            canvas.frame_pending = true;
+        }
         canvas.dirty = false;
         canvas.buffers[slot].attach_to(&surface)?;
         if let Some(presentation) = &self.presentation {

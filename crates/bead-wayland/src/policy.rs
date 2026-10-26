@@ -259,6 +259,11 @@ impl Callbacks {
         self.replacement_used = false;
         self.epoch
     }
+    /// Buffer ownership and callback credit are independent: fresh SHM buffers
+    /// may commit while the existing callback remains the sole wakeup request.
+    pub fn request_if_idle(&mut self) -> Option<u64> {
+        if self.pending { None } else { Some(self.request()) }
+    }
     pub fn invalidate(&mut self) {
         self.epoch = self.epoch.wrapping_add(1);
         self.pending = false;
@@ -287,6 +292,18 @@ impl Callbacks {
 #[cfg(test)]
 mod callback_tests {
     use super::*;
+    #[test]
+    fn pipelined_commits_keep_the_original_callback_valid() {
+        let mut callbacks = Callbacks::default();
+        let first = callbacks.request_if_idle().unwrap();
+        assert_eq!(callbacks.request_if_idle(), None);
+        assert!(callbacks.accept(first));
+        assert!(!callbacks.accept(first));
+        let next = callbacks.request_if_idle().unwrap();
+        assert_ne!(first, next);
+        assert!(!callbacks.accept(first));
+        assert!(callbacks.accept(next));
+    }
     #[test]
     fn reopening_discards_parked_callback_and_never_grants_a_duplicate_frame() {
         let mut c = Callbacks::default();
