@@ -102,19 +102,24 @@ async fn connect(
     refresh_lock(shared, &system).await;
     refresh_tray(shared, &tray);
     shared.change(update_clock);
+    let mut clock_sample = None;
     loop {
         if shared.stop.load(Ordering::SeqCst) {
             return Ok(());
         }
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default();
+        let wall_now = SystemTime::now();
+        let monotonic_now = tokio::time::Instant::now();
+        if let Some((previous_wall, previous_monotonic)) = clock_sample
+            && clock_drifted(
+                wall_now.duration_since(previous_wall).unwrap_or_default(),
+                monotonic_now.duration_since(previous_monotonic),
+            )
+        {
+            shared.change(update_clock);
+        }
+        clock_sample = Some((wall_now, monotonic_now));
         let seconds_enabled = shared.clock_seconds_leases.load(Ordering::Acquire) > 0;
-        let delay = if seconds_enabled {
-            Duration::from_millis(1000 - u64::from(now.subsec_millis()))
-        } else {
-            Duration::from_secs(60 - now.as_secs() % 60)
-        };
+        let delay = next_clock_delay(wall_now, seconds_enabled);
         tokio::select! {
             _=tokio::time::sleep(delay)=>shared.change(update_clock),
             command=receiver.recv()=>match command {
@@ -141,8 +146,22 @@ async fn connect(
                         && let Ok(sleeping) = message.body().deserialize::<bool>()
                     {
                         shared.change(|s| s.session.sleeping = sleeping);
+                        if !sleeping {
+                            // Tokio deadlines use a monotonic clock, which may have
+                            // stopped while the machine was suspended.
+                            shared.change(update_clock);
+                        }
                     }
                     refresh_lock(shared, &system).await;
+                }
+                if path == "/org/freedesktop/timedate1"
+                    || (interface == "org.freedesktop.DBus"
+                        && header.member().is_some_and(|s| s.as_str() == "NameOwnerChanged")
+                        && message.body().deserialize::<(String, String, String)>().is_ok_and(
+                            |(name, _, _)| name == "org.freedesktop.timedate1",
+                        ))
+                {
+                    shared.change(update_clock);
                 }
                 if owner_change || path.starts_with("/org/freedesktop/UPower") || path.starts_with("/org/freedesktop/NetworkManager") || path.starts_with("/org/bluez") || interface=="org.freedesktop.DBus.ObjectManager" {refresh_sensors(shared,&system).await;}
             }
@@ -182,7 +201,10 @@ fn update_clock(snapshot: &mut crate::Snapshot) {
     snapshot.date = date;
 }
 fn clock() -> (String, String, Option<crate::LocalDate>) {
-    let seconds = SystemTime::now()
+    clock_at(SystemTime::now())
+}
+fn clock_at(now: SystemTime) -> (String, String, Option<crate::LocalDate>) {
+    let seconds = now
         .duration_since(UNIX_EPOCH)
         .ok()
         .and_then(|value| libc::time_t::try_from(value.as_secs()).ok());
@@ -202,6 +224,17 @@ fn clock() -> (String, String, Option<crate::LocalDate>) {
             civil_date(&tm),
         )
     }
+}
+fn next_clock_delay(now: SystemTime, seconds_enabled: bool) -> Duration {
+    let millis = now
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let period = if seconds_enabled { 1_000 } else { 60_000 };
+    Duration::from_millis(period - millis % period)
+}
+fn clock_drifted(wall_elapsed: Duration, monotonic_elapsed: Duration) -> bool {
+    wall_elapsed.abs_diff(monotonic_elapsed) > Duration::from_secs(2)
 }
 fn civil_date(tm: &libc::tm) -> Option<crate::LocalDate> {
     let year = tm.tm_year.checked_add(1900)?;
@@ -671,6 +704,17 @@ async fn tray_action(
 #[cfg(test)]
 mod clock_tests {
     use super::*;
+    use std::sync::Mutex;
+
+    unsafe extern "C" {
+        fn tzset();
+    }
+
+    static TIMEZONE_LOCK: Mutex<()> = Mutex::new(());
+
+    fn epoch(seconds: u64) -> SystemTime {
+        UNIX_EPOCH + Duration::from_secs(seconds)
+    }
     #[test]
     fn civil_date_preserves_calendar_fields_without_changing_process_timezone() {
         // SAFETY: libc::tm has integer fields and a nullable timezone pointer.
@@ -717,6 +761,51 @@ mod clock_tests {
         assert!(seconds[3..5].parse::<u8>().is_ok_and(|minute| minute < 60));
         assert!(seconds[6..].parse::<u8>().is_ok_and(|second| second < 60));
         assert!(date.is_some_and(|date| date.is_valid()));
+    }
+
+    #[test]
+    fn wall_aligned_ticks_and_suspend_drift_rearm_from_realtime() {
+        let now = epoch(1_700_000_000) + Duration::from_millis(250);
+        assert_eq!(next_clock_delay(now, true), Duration::from_millis(750));
+        assert_eq!(next_clock_delay(now, false), Duration::from_millis(39_750));
+        assert!(!clock_drifted(
+            Duration::from_secs(3),
+            Duration::from_secs(2)
+        ));
+        assert!(clock_drifted(Duration::from_secs(2_400), Duration::ZERO));
+        assert!(clock_drifted(Duration::ZERO, Duration::from_secs(3)));
+    }
+
+    #[test]
+    fn local_clock_refresh_tracks_dst_and_timezone_changes() {
+        let _guard = TIMEZONE_LOCK.lock().unwrap();
+        // SAFETY: this test serializes its own TZ changes and restores the previous
+        // process setting before returning.
+        let previous = std::env::var_os("TZ");
+        unsafe {
+            std::env::set_var("TZ", "EST5EDT,M3.2.0/2,M11.1.0/2");
+            tzset();
+        }
+        // 2024-03-10 06:59:59 UTC jumps from 01:59:59 to 03:00:00 local.
+        let before = clock_at(epoch(1_710_053_999));
+        let after = clock_at(epoch(1_710_054_000));
+        assert_eq!(before.1, "01:59:59");
+        assert_eq!(after.1, "03:00:00");
+        assert_eq!(before.2.unwrap().day, after.2.unwrap().day);
+
+        unsafe {
+            std::env::set_var("TZ", "PST8PDT,M3.2.0/2,M11.1.0/2");
+            tzset();
+        }
+        assert_ne!(clock_at(epoch(1_710_054_400)).1, after.1);
+        unsafe {
+            if let Some(previous) = previous {
+                std::env::set_var("TZ", previous);
+            } else {
+                std::env::remove_var("TZ");
+            }
+            tzset();
+        }
     }
 
     #[test]
