@@ -59,7 +59,7 @@ impl Page {
         Self::Screenshots,
         Self::Brain,
     ];
-    fn every() -> impl Iterator<Item = Self> {
+    pub(crate) fn every() -> impl Iterator<Item = Self> {
         Self::ALL
             .into_iter()
             .chain(Self::EXTRAS)
