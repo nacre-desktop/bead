@@ -248,7 +248,9 @@ impl App {
         let call = &request.call;
         if call.target != "bead.window" {
             let owned = self.options.window.as_ref().is_some_and(|spec| {
-                spec.command_targets.iter().any(|target| target == &call.target)
+                spec.command_targets
+                    .iter()
+                    .any(|target| target == &call.target)
             });
             if !owned {
                 return false;
@@ -257,7 +259,9 @@ impl App {
                 self.window_ui(UiEvent::Remote(request));
             } else {
                 let _ = request.reply.send(bead_services::ipc::Reply::error(
-                    call.id, "window-closed", "command window is closed",
+                    call.id,
+                    "window-closed",
+                    "command window is closed",
                 ));
             }
             return true;
