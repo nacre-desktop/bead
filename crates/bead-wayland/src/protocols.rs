@@ -140,10 +140,27 @@ impl CompositorHandler for App {
                 .is_some_and(|secs| self.started.elapsed().as_secs_f64() >= secs)
             {
                 self.signal.stop();
+            } else if self.prewarm_native_pearl_on_idle_frame(i, animation_active) {
+                let dirty: Vec<_> = self
+                    .surfaces
+                    .iter_mut()
+                    .enumerate()
+                    .filter_map(|(index, surface)| {
+                        (surface.companion && !surface.callbacks.pending).then(|| {
+                            surface.redraw = true;
+                            index
+                        })
+                    })
+                    .collect();
+                for index in dirty {
+                    self.draw(index, qh);
+                }
             } else if self.options.animate
                 || self.options.debug_continuous
-                || s.redraw
-                || (s.companion && self.options.lazy_gl && self.companion_policy.needs_warmup())
+                || self.surfaces[i].redraw
+                || (self.surfaces[i].companion
+                    && self.options.lazy_gl
+                    && self.companion_policy.needs_warmup())
                 || animation_active
             {
                 self.draw(i, qh);

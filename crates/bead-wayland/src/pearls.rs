@@ -1194,6 +1194,38 @@ impl App {
         }
         changed
     }
+
+    /// Use an accepted idle panel frame to absorb a prepared native target's
+    /// natural-size update before the next user input arrives.
+    pub(super) fn prewarm_native_pearl_on_idle_frame(
+        &mut self,
+        index: usize,
+        animation_active: bool,
+    ) -> bool {
+        if animation_active
+            || self.options.animate
+            || self.options.debug_continuous
+            || self.pearl.is_some()
+            || !self.panel_target
+            || !self.panel_ready
+            || self.panel_runtime.is_none()
+            || !self
+                .surfaces
+                .get(index)
+                .is_some_and(|surface| surface.companion && surface.ready)
+            || !self
+                .surfaces
+                .iter()
+                .any(|surface| surface.companion && surface.prepared_native.is_some())
+            || self.surfaces.iter().any(|surface| {
+                surface.companion && (surface.callbacks.pending || surface.pointer_visual.is_some())
+            })
+        {
+            return false;
+        }
+        self.sync_native_pearl_scene()
+    }
+
     pub(super) fn place_native_pearl(&mut self, first: bool) {
         let (Some(info), Some(name), Some(native)) = (
             self.pearl,
