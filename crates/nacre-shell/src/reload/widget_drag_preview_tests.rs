@@ -1565,11 +1565,15 @@ fn canvas_public_projection_renders_clock_and_routes_launcher_visibility_to_host
         "live desktop model changes update the painted clock text"
     );
     assert!(
-        canvas_host_events.lock().unwrap().iter().all(|event| !matches!(
-            event,
-            UiEvent::CanvasOffer { view, .. } | UiEvent::CanvasModel { view, .. }
-                if view == "widgets-canvas"
-        )),
+        canvas_host_events
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|event| !matches!(
+                event,
+                UiEvent::CanvasOffer { view, .. } | UiEvent::CanvasModel { view, .. }
+                    if view == "widgets-canvas"
+            )),
         "the canvas consumes its host's document and live models without echoing them back as host events"
     );
     let launcher_region = canvas
