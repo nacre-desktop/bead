@@ -26,6 +26,24 @@ fn validate_frame_rasters(items: &[Item]) -> Result<()> {
             total.checked_add(raster.pixels.data().len())
         })
         .ok_or("candidate retained rasters overflow")?;
+    let mut seen = BTreeSet::new();
+    let upload_bytes = items
+        .iter()
+        .filter_map(|item| item.image.as_ref())
+        .filter(|image| seen.insert(Arc::as_ptr(image) as usize))
+        .try_fold(0usize, |total, image| {
+            let upload = image.upload.lock().map_err(|_| "image upload poisoned")?;
+            total
+                .checked_add(
+                    upload
+                        .as_ref()
+                        .map_or(0, |upload| upload.pixels.data().len()),
+                )
+                .ok_or("image upload bytes overflow")
+        })?;
+    let bytes = bytes
+        .checked_add(upload_bytes)
+        .ok_or("image frame bytes overflow")?;
     if bytes > STEADY_RASTER_LIMIT {
         let mut kind_bytes = [0usize; 4];
         let mut largest = Vec::new();
@@ -98,7 +116,8 @@ fn prepared_rasters_match_visibility(scene: &Scene, frame: &Frame) -> bool {
             .all(|(index, primitive)| {
                 if matches!(primitive, Primitive::Image { .. } | Primitive::Text { .. }) {
                     let should_have_raster = !raster_hidden_by_own_clip(scene, index, primitive);
-                    frame.items[index].raster.is_some() == should_have_raster
+                    (frame.items[index].raster.is_some() || frame.items[index].image.is_some())
+                        == should_have_raster
                 } else {
                     true
                 }
@@ -116,18 +135,196 @@ pub struct Raster {
     pub changed: Damage,
     pub(crate) _charge: bead_core::cache::Charge,
 }
+/// Worker-prepared image pixels are consumed after upload; the immutable recipe
+/// survives context recreation without retaining a second decoded copy.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub enum ImagePolicy {
+    #[default]
+    Dense,
+    UploadOnly,
+    /// Presentation may create recipes, but only the resource worker decodes.
+    DeferredUpload,
+}
+pub(crate) struct AssetLease {
+    bytes: Arc<[u8]>,
+    _charge: bead_core::cache::Charge,
+}
+pub struct ImagePayload {
+    pub key: u64,
+    pub width: u32,
+    pub height: u32,
+    pub native_cover: bool,
+    primitive: Primitive,
+    encoded: Arc<AssetLease>,
+    scale: f32,
+    pub(crate) upload: std::sync::Mutex<Option<UploadPixels>>,
+    budget: bead_core::cache::Budget,
+    scratch_budget: bead_core::cache::Budget,
+    _recipe_charge: bead_core::cache::Charge,
+    requested: std::sync::atomic::AtomicBool,
+    failure: std::sync::Mutex<Option<String>>,
+    pub(crate) compact: std::sync::Mutex<Option<Arc<ImageLayout>>>,
+}
+#[cfg_attr(not(feature = "native-gl"), allow(dead_code))]
+pub(crate) struct ImageLayout {
+    pub regions: Vec<crate::compact::CompactRegion>,
+    pub fills: Vec<crate::compact::CompactFill>,
+    _charge: bead_core::cache::Charge,
+}
+pub(crate) struct UploadPixels {
+    pub pixels: Pixmap,
+    _charge: bead_core::cache::Charge,
+}
+impl ImagePayload {
+    /// Call on the resource worker only, never from presentation.
+    pub fn prepare(&self) -> Result<()> {
+        if self
+            .upload
+            .lock()
+            .map_err(|_| "image upload poisoned")?
+            .is_some()
+        {
+            return Ok(());
+        }
+        let Primitive::Image {
+            rect,
+            path,
+            fit,
+            clip_polygon,
+            ..
+        } = &self.primitive
+        else {
+            return Err("invalid upload recipe".into());
+        };
+        let decoded_bytes = (self.width as usize)
+            .checked_mul(self.height as usize)
+            .and_then(|pixels| pixels.checked_mul(4))
+            .ok_or("image upload dimensions overflow")?;
+        let source_bytes = if path.extension().is_some_and(|e| e == "svg") {
+            0
+        } else {
+            let (w, h) = image::ImageReader::new(std::io::Cursor::new(self.encoded.bytes.as_ref()))
+                .with_guessed_format()?
+                .into_dimensions()?;
+            (w as usize)
+                .checked_mul(h as usize)
+                .and_then(|pixels| pixels.checked_mul(4))
+                .ok_or("image source dimensions overflow")?
+        };
+        // Resvg's full target and decoder/source intermediates are temporary;
+        // retain only the final upload representation against the view ceiling.
+        let scratch_bytes = if self.native_cover { decoded_bytes.checked_mul(2) } else {
+            decoded_bytes.checked_add(source_bytes).and_then(|bytes| bytes.checked_mul(2))
+        }.ok_or("image scratch dimensions overflow")?;
+        let _scratch = self.scratch_budget.reserve(scratch_bytes)?;
+        let mut pixels = if self.native_cover {
+            crate::decode_native_image(&self.encoded.bytes)?
+        } else {
+            crate::load_image(path, *rect, self.scale, Some(&self.encoded.bytes), *fit)?
+        };
+        if let Some(points) = clip_polygon {
+            crate::apply_polygon_clip(&mut pixels, points)?;
+        }
+        let compact = if path.extension().is_some_and(|e| e == "svg") {
+            crate::compact::CompactRaster::from_pixmap(&pixels)
+        } else {
+            None
+        };
+        let layout = if let Some(compact) = compact {
+            debug_assert_eq!((compact.width, compact.height), (self.width, self.height));
+            let charge = self
+                .budget
+                .reserve(compact.retained_bytes() - compact.atlas.data().len())?;
+            pixels = compact.atlas;
+            Some(Arc::new(ImageLayout {
+                regions: compact.regions,
+                fills: compact.fills,
+                _charge: charge,
+            }))
+        } else {
+            None
+        };
+        let pixel_charge = self.budget.reserve(pixels.data().len())?;
+        bead_core::vprintln!(
+            "PROFILE stage=image_bake_scratch reserved_bytes={scratch_bytes} retained_pixel_bytes={} key={}",
+            pixels.data().len(),
+            self.key
+        );
+        *self.compact.lock().map_err(|_| "image layout poisoned")? = layout;
+        *self.upload.lock().map_err(|_| "image upload poisoned")? = Some(UploadPixels {
+            pixels,
+            _charge: pixel_charge,
+        });
+        Ok(())
+    }
+    #[cfg(any(feature = "native-gl", test))]
+    pub(crate) fn reserve_texture(&self, bytes: usize) -> Result<bead_core::cache::Charge> {
+        Ok(self.budget.reserve(bytes)?)
+    }
+    pub fn mark_requested(&self) -> bool {
+        self.requested
+            .compare_exchange(
+                false,
+                true,
+                std::sync::atomic::Ordering::AcqRel,
+                std::sync::atomic::Ordering::Acquire,
+            )
+            .is_ok()
+    }
+    pub fn finish_request(&self, error: Option<String>) {
+        if let Ok(mut failure) = self.failure.lock() {
+            *failure = error;
+        }
+        self.requested
+            .store(false, std::sync::atomic::Ordering::Release);
+    }
+    pub fn failure(&self) -> Option<String> {
+        self.failure.lock().ok().and_then(|failure| failure.clone())
+    }
+    pub fn pending(&self) -> bool {
+        self.upload.lock().map_or(true, |upload| upload.is_none())
+    }
+    #[cfg(test)]
+    pub(crate) fn take_upload(&self) -> Result<UploadPixels> {
+        self.upload
+            .lock()
+            .map_err(|_| "image upload poisoned")?
+            .take()
+            .ok_or_else(|| "image upload not prepared".into())
+    }
+}
+/// Presentation must ask the source's worker to hydrate these recipes and retry.
+pub struct ResourcesPending {
+    pub images: Vec<Arc<ImagePayload>>,
+}
+impl std::fmt::Debug for ResourcesPending {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ResourcesPending")
+            .field("count", &self.images.len())
+            .finish()
+    }
+}
+impl std::fmt::Display for ResourcesPending {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} image resources pending", self.images.len())
+    }
+}
+impl std::error::Error for ResourcesPending {}
 #[derive(Clone)]
 pub struct Item {
     pub id: String,
     pub primitive: Primitive,
     pub clip: Option<Rect>,
     pub raster: Option<Arc<Raster>>,
+    pub image: Option<Arc<ImagePayload>>,
 }
 // Prepared frames are shared through Arc; metadata has one allocation owner.
 pub struct Frame {
     pub items: Vec<Item>,
     pub scale: f32,
     pub key: u64,
+    pub(crate) native_resource_budget: Option<bead_core::cache::Budget>,
+    pub(crate) _assets: Vec<Arc<AssetLease>>,
     pub layer_count: usize,
     pub layers: Vec<LayerPose>,
     pub(crate) _accounting: Option<bead_core::cache::Charge>,
@@ -206,10 +403,22 @@ impl Frame {
                 .checked_add(own_bytes)?;
             bytes = bytes.checked_add(layer_bytes)?;
         }
+        bytes = bytes.checked_add(
+            self._assets
+                .capacity()
+                .checked_mul(std::mem::size_of::<Arc<AssetLease>>())?,
+        )?;
         static FILTERED_FRAME_BUDGET: OnceLock<bead_core::cache::Budget> = OnceLock::new();
-        let accounting = FILTERED_FRAME_BUDGET
-            .get_or_init(|| {
-                bead_core::cache::Budget::new("filtered-frame-metadata", 8 * bead_core::cache::MIB)
+        let accounting = self
+            .native_resource_budget
+            .as_ref()
+            .unwrap_or_else(|| {
+                FILTERED_FRAME_BUDGET.get_or_init(|| {
+                    bead_core::cache::Budget::new(
+                        "filtered-frame-metadata",
+                        8 * bead_core::cache::MIB,
+                    )
+                })
             })
             .reserve(bytes)
             .ok()?;
@@ -247,6 +456,8 @@ impl Frame {
         self.key.hash(&mut key);
         kept_indices.hash(&mut key);
         Some(Self {
+            native_resource_budget: self.native_resource_budget.clone(),
+            _assets: self._assets.clone(),
             layer_count: if self.layers.is_empty() {
                 items.len()
             } else {
@@ -285,6 +496,12 @@ struct Entry {
 pub struct TreeCache {
     pub frame: Option<Arc<Frame>>,
     pub builds: usize,
+    image_policy: ImagePolicy,
+    image_payloads: BTreeMap<u64, Weak<ImagePayload>>,
+    asset_leases: BTreeMap<(usize, usize), Weak<AssetLease>>,
+    upload_budget: Option<bead_core::cache::Budget>,
+    resource_budget: Option<bead_core::cache::Budget>,
+    bake_scratch_budget: Option<bead_core::cache::Budget>,
     entries: BTreeMap<(String, u32), Entry>,
     raster: CpuRenderer,
     font_files: Vec<std::path::PathBuf>,
@@ -555,6 +772,9 @@ fn signature(
         scene.font_files.hash(&mut hash);
     }
     if let Primitive::Image { path, .. } = primitive {
+        if !scene.asset_data.contains_key(path) {
+            scene.resource_revision.hash(&mut hash);
+        }
         // Icons repeat across tiles; hash each asset's bytes once per prepare.
         if !assets.contains_key(path) {
             let mut bytes = std::collections::hash_map::DefaultHasher::new();
@@ -641,6 +861,31 @@ fn trim_text(pixels: Pixmap) -> Result<(Pixmap, (u32, u32))> {
     ))
 }
 impl TreeCache {
+    fn asset_lease(&mut self, bytes: Arc<[u8]>) -> Result<Arc<AssetLease>> {
+        let key = (Arc::as_ptr(&bytes) as *const u8 as usize, bytes.len());
+        if let Some(lease) = self.asset_leases.get(&key).and_then(Weak::upgrade) {
+            return Ok(lease);
+        }
+        let charge = self
+            .resource_budget
+            .as_ref()
+            .ok_or("native asset budget missing")?
+            .reserve(bytes.len() + std::mem::size_of::<AssetLease>())?;
+        let lease = Arc::new(AssetLease {
+            bytes,
+            _charge: charge,
+        });
+        self.asset_leases.insert(key, Arc::downgrade(&lease));
+        Ok(lease)
+    }
+
+    pub fn set_image_policy(&mut self, policy: ImagePolicy) {
+        self.image_policy = policy;
+    }
+    pub fn with_image_policy(mut self, policy: ImagePolicy) -> Self {
+        self.image_policy = policy;
+        self
+    }
     /// Retire raster/glyph storage for scales no longer used by this view.
     /// Presented frames retain their own resources until the caller drops them.
     pub fn retain_scales(&mut self, scales: &[f32]) {
@@ -827,6 +1072,7 @@ impl TreeCache {
         (template.key, start).hash(&mut hasher);
         let (w, h) = (template.pixels.width(), template.pixels.height());
         let piece = Item {
+            image: None,
             id: format!("{}/edge", item.id),
             primitive: item.primitive.clone(),
             clip: None,
@@ -1172,6 +1418,7 @@ impl TreeCache {
                             bead_core::cache::Budget::new("retained-cpu-rasters", LIVE_RASTER_LIMIT)
                         })
                         .reserve(bytes)?;
+                    item.image = None;
                     item.raster = Some(Arc::new(Raster {
                         changed: Damage::full(pixels.width(), pixels.height()),
                         pixels: Arc::new(pixels),
@@ -1195,6 +1442,8 @@ impl TreeCache {
         frame.key.hash(&mut key);
         motion.progress.to_bits().hash(&mut key);
         Ok(Some(Frame {
+            native_resource_budget: frame.native_resource_budget.clone(),
+            _assets: frame._assets.clone(),
             items,
             scale: frame.scale,
             key: key.finish(),
@@ -1204,10 +1453,29 @@ impl TreeCache {
         }))
     }
     pub fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
+        if self.image_policy != ImagePolicy::Dense && self.resource_budget.is_none() {
+            let budget = bead_core::cache::Budget::new(
+                "retained-view-resources",
+                40 * bead_core::cache::MIB,
+            );
+            self.raster_budget = Some(budget.clone());
+            self.upload_budget = Some(budget.clone());
+            self.node_budget = Some(budget.clone());
+            self.frame_budget = Some(budget.clone());
+            self.resource_budget = Some(budget);
+            self.bake_scratch_budget = Some(bead_core::cache::Budget::new(
+                "image-bake-scratch",
+                128 * bead_core::cache::MIB,
+            ));
+        }
         if let Some(frame) = scene
             .prepared
             .get(&scale.to_bits())
             .filter(|frame| prepared_rasters_match_visibility(scene, frame))
+            .filter(|frame| {
+                self.image_policy != ImagePolicy::Dense
+                    || frame.items.iter().all(|item| item.image.is_none())
+            })
         {
             if let Some(motion) = scene.motion.as_ref().filter(|m| m.reveal) {
                 // Build the growing-edge templates as the prepared frame arrives, not in the first reveal frame.
@@ -1266,6 +1534,20 @@ impl TreeCache {
         if !scale.is_finite() || scale <= 0. {
             return Err("invalid layer scale".into());
         }
+        self.asset_leases
+            .retain(|_, lease| lease.strong_count() > 0);
+        let assets = if self.resource_budget.is_some() {
+            scene
+                .asset_data
+                .values()
+                .cloned()
+                .map(|bytes| self.asset_lease(bytes))
+                .collect::<Result<Vec<_>>>()?
+        } else {
+            Vec::new()
+        };
+        self.image_payloads
+            .retain(|_, payload| payload.strong_count() > 0);
         self.serial += 1;
         if self.font_files != scene.font_files {
             self.raster = CpuRenderer::default();
@@ -1320,7 +1602,101 @@ impl TreeCache {
                 }
             }
             let raster_hidden = raster_hidden_by_own_clip(scene, index, primitive);
-            let raster = if kind == "fill" || kind == "arc" || kind == "polyline" || raster_hidden {
+            // Reshaped reveal artwork uses the existing exact growing-edge path.
+            let reshaped_reveal = scene.motion.as_ref().is_some_and(|motion| {
+                motion.reveal && motion.parts.iter().any(|(part, _)| *part == index)
+            });
+            let image = if self.image_policy != ImagePolicy::Dense
+                && !raster_hidden
+                && !reshaped_reveal
+            {
+                if let Primitive::Image {
+                    path,
+                    blur,
+                    fit,
+                    clip_polygon,
+                    ..
+                } = primitive
+                    && *blur == 0.
+                {
+                    if let Some(payload) = self.image_payloads.get(&key).and_then(Weak::upgrade) {
+                        Some(payload)
+                    } else {
+                        let encoded = scene
+                            .asset_data
+                            .get(path)
+                            .cloned()
+                            .map(Ok)
+                            .unwrap_or_else(|| std::fs::read(path).map(Arc::from))?;
+                        let native_cover = *fit == crate::ImageFit::Cover
+                            && clip_polygon.is_none()
+                            && !path.extension().is_some_and(|e| e == "svg");
+                        let (width, height) = if native_cover {
+                            image::ImageReader::new(std::io::Cursor::new(encoded.as_ref()))
+                                .with_guessed_format()?
+                                .into_dimensions()?
+                        } else {
+                            crate::dimensions(rect(primitive), scale)
+                        };
+                        let target = crate::dimensions(rect(primitive), scale);
+                        let native_cover = native_cover && u64::from(width) * u64::from(height) <= u64::from(target.0) * u64::from(target.1);
+                        let (width, height) = if native_cover { (width, height) } else { target };
+                        let encoded = self.asset_lease(encoded)?;
+                        let budget = self
+                            .upload_budget
+                            .get_or_insert_with(|| {
+                                bead_core::cache::Budget::new(
+                                    "image-upload-pixels",
+                                    LIVE_RASTER_LIMIT,
+                                )
+                            })
+                            .clone();
+                        let recipe_charge = budget.reserve(
+                            std::mem::size_of::<ImagePayload>() + crate::primitive_bytes(primitive),
+                        )?;
+                        let payload = Arc::new(ImagePayload {
+                            key: {
+                                let mut hash = std::collections::hash_map::DefaultHasher::new();
+                                key.hash(&mut hash);
+                                "upload-image".hash(&mut hash);
+                                hash.finish()
+                            },
+                            width,
+                            height,
+                            native_cover,
+                            primitive: local(primitive),
+                            encoded,
+                            scale,
+                            requested: Default::default(),
+                            failure: Default::default(),
+                            compact: Default::default(),
+                            upload: Default::default(),
+                            budget,
+                            scratch_budget: self
+                                .bake_scratch_budget
+                                .as_ref()
+                                .ok_or("image bake scratch budget missing")?
+                                .clone(),
+                            _recipe_charge: recipe_charge,
+                        });
+                        if self.image_policy == ImagePolicy::UploadOnly {
+                            payload.prepare()?;
+                        }
+                        self.image_payloads.insert(key, Arc::downgrade(&payload));
+                        Some(payload)
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            let raster = if kind == "fill"
+                || kind == "arc"
+                || kind == "polyline"
+                || raster_hidden
+                || image.is_some()
+            {
                 None
             } else {
                 let slot = (id.clone(), scale.to_bits());
@@ -1533,6 +1909,7 @@ impl TreeCache {
                 )
             };
             items.push(Item {
+                image,
                 id,
                 primitive: {
                     let (dx, dy) = scene.content_offset(index);
@@ -1648,7 +2025,8 @@ impl TreeCache {
                     + i.raster.as_ref().map_or(0, |_| std::mem::size_of::<Raster>())
             })
             .sum::<usize>()
-            + layers.capacity() * std::mem::size_of::<LayerPose>();
+            + layers.capacity() * std::mem::size_of::<LayerPose>()
+            + assets.capacity() * std::mem::size_of::<Arc<AssetLease>>();
         validate_frame_rasters(&items)?;
         // Validate the complete candidate while the previous frame remains
         // available. Old entries may be needed for the current paint and are
@@ -1693,6 +2071,8 @@ impl TreeCache {
                 .reserve(bytes)?,
         );
         let frame = Arc::new(Frame {
+            native_resource_budget: self.resource_budget.clone(),
+            _assets: assets,
             _accounting: accounting,
             items,
             scale,
@@ -2009,6 +2389,9 @@ fn paint_with_scratch(
     damage: Damage,
     repair_scratch: &mut RepairScratch,
 ) -> Result<()> {
+    if frame.items.iter().any(|item| item.image.is_some()) {
+        return Err("CPU paint requires worker-materialized dense images".into());
+    }
     let ShmTarget {
         bytes,
         width,
@@ -2512,6 +2895,52 @@ pub enum OpaqueComposition {
     Direct,
     Cached,
 }
+/// Immutable CPU fallback work, run only by the resource actor.
+pub struct CpuPreparation {
+    scene: Scene,
+    scale: f32,
+    fingerprint: SnapshotFingerprint,
+    queued: std::sync::atomic::AtomicBool,
+    result: std::sync::Mutex<Option<std::result::Result<PreparedCpuSnapshot, String>>>,
+}
+impl CpuPreparation {
+    pub fn mark_requested(&self) -> bool { !self.queued.swap(true, std::sync::atomic::Ordering::AcqRel) }
+    pub fn prepare(&self) -> std::result::Result<(), String> {
+        let result = TreeCpuRenderer::prepare_snapshot(&self.scene, self.scale).map_err(|error| error.to_string());
+        let status = result.as_ref().map(|_| ()).map_err(Clone::clone);
+        *self.result.lock().map_err(|_| "CPU preparation poisoned")? = Some(result);
+        status
+    }
+}
+#[derive(Debug)]
+pub struct ResourcePreparationFailed(pub String);
+impl std::fmt::Display for ResourcePreparationFailed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(&self.0) }
+}
+impl std::error::Error for ResourcePreparationFailed {}
+/// Worker-only intermediate: it cannot paint before retained-cache admission.
+pub struct PreparedCpuSnapshot {
+    renderer: TreeCpuRenderer,
+    native_budget: Option<bead_core::cache::Budget>,
+}
+impl PreparedCpuSnapshot {
+    pub fn accept(mut self) -> Result<TreeCpuRenderer> {
+        if let Some(budget) = self.native_budget {
+            let bytes = self.renderer.flattened.as_ref().map_or(0, |(_, _, pixels)| pixels.bytes());
+            self.renderer.group_charge = Some(budget.reserve(bytes + 64)?);
+            self.renderer.group_budget = Some(budget);
+        }
+        Ok(self.renderer)
+    }
+}
+pub struct CpuResourcesPending { pub request: Arc<CpuPreparation> }
+impl std::fmt::Debug for CpuResourcesPending {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("CpuResourcesPending") }
+}
+impl std::fmt::Display for CpuResourcesPending {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("CPU worker preparation pending") }
+}
+impl std::error::Error for CpuResourcesPending {}
 #[derive(Default)]
 pub struct TreeCpuRenderer {
     pub opaque_composition: OpaqueComposition,
@@ -2528,6 +2957,8 @@ pub struct TreeCpuRenderer {
     sparse_snapshot: bool,
     snapshot_fingerprint: Option<SnapshotFingerprint>,
     snapshot_layers: usize,
+    cpu_preparation: Option<Arc<CpuPreparation>>,
+    worker_fingerprint: Option<SnapshotFingerprint>,
 }
 enum FlattenedPixels {
     Dense(Pixmap),
@@ -2551,11 +2982,25 @@ impl TreeCpuRenderer {
     /// Freeze prepared CPU content for immediate painting after retiring a GPU backend.
     /// Position and opacity remain live; the cached group also survives the hidden pose.
     pub fn snapshot(scene: &Scene, scale: f32) -> Result<Self> {
+        Self::prepare_snapshot(scene, scale)?.accept()
+    }
+    pub fn prepare_snapshot(scene: &Scene, scale: f32) -> Result<PreparedCpuSnapshot> {
         let mut content = scene.clone();
         content.motion = None;
         let mut renderer = Self::with_opaque_composition(OpaqueComposition::Cached);
         renderer.keep_hidden_group = true;
         renderer.sparse_snapshot = true;
+        // Dense intermediates live only on this worker until the flat snapshot
+        // is complete; the finished allocation rejoins the native view ceiling.
+        let native_budget = scene.prepared.get(&scale.to_bits()).and_then(|frame| frame.native_resource_budget.clone());
+        if native_budget.is_some() {
+            let scratch = bead_core::cache::Budget::new("cpu-snapshot-scratch", 128 * bead_core::cache::MIB);
+            renderer.cache.raster_budget = Some(scratch.clone());
+            renderer.cache.node_budget = Some(scratch.clone());
+            renderer.cache.frame_budget = Some(scratch.clone());
+            renderer.group_budget = Some(scratch);
+        }
+
         renderer.prepare(&content, scale)?;
         renderer.cache_content(&content)?;
         if !scene.motion.as_ref().is_some_and(|motion| motion.reveal) {
@@ -2568,8 +3013,9 @@ impl TreeCpuRenderer {
             renderer.cache.release_pixel_storage();
             renderer.snapshot_fingerprint = Some(fingerprint);
         }
-        Ok(renderer)
+        Ok(PreparedCpuSnapshot { renderer, native_budget })
     }
+
     fn cache_content(&mut self, scene: &Scene) -> Result<()> {
         let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
         if self
@@ -2660,6 +3106,45 @@ impl Renderer for TreeCpuRenderer {
                 .map_or(self.snapshot_layers, |frame| frame.layer_count),
             0,
         )
+    }
+    fn reusable_scene(&self, scene: &Scene, scale: f32) -> Result<bool> {
+        if let Some(fingerprint) = self.worker_fingerprint.as_ref().or(self.snapshot_fingerprint.as_ref()) {
+            return fingerprint.matches(scene, scale);
+        }
+        Ok(false)
+    }
+    fn prepare_on_ui(&mut self, scene: &Scene, scale: f32) -> Result<()> {
+        if self.reusable_scene(scene, scale)? { return Ok(()); }
+        let dense = scene.prepared.get(&scale.to_bits()).is_some_and(|frame| prepared_rasters_match_visibility(scene, frame) && frame.items.iter().all(|item| item.image.is_none()))
+            && !scene.motion.as_ref().is_some_and(|motion| motion.reveal && motion.progress < 1. && motion.parts.iter().any(|(_, primitive)| matches!(primitive, Primitive::Image { .. })));
+        if dense {
+            return self.prepare(scene, scale);
+        }
+        if self.snapshot_fingerprint.is_none() && self.worker_fingerprint.is_none() && !scene.primitives.iter().any(|p| matches!(p, Primitive::Image { .. })) {
+            return self.prepare(scene, scale);
+        }
+        if self.cpu_preparation.as_ref().is_none_or(|request| !request.fingerprint.matches(scene, scale).unwrap_or(false)) {
+            self.cpu_preparation = Some(Arc::new(CpuPreparation {
+                scene: scene.clone(), scale, fingerprint: SnapshotFingerprint::new(scene, scale)?,
+                queued: Default::default(), result: Default::default(),
+            }));
+        }
+        let request = self.cpu_preparation.as_ref().unwrap().clone();
+        let ready = {
+            let mut result = request.result.lock().map_err(|_| "CPU preparation poisoned")?;
+            match result.as_ref() {
+                Some(Err(error)) => return Err(Box::new(ResourcePreparationFailed(error.clone()))),
+                Some(Ok(_)) => result.take(),
+                None => None,
+            }
+        };
+        if let Some(Ok(prepared)) = ready {
+            let mut renderer = prepared.accept()?;
+            renderer.worker_fingerprint = Some(SnapshotFingerprint::new(scene, scale)?);
+            *self = renderer;
+            return Ok(());
+        }
+        Err(Box::new(CpuResourcesPending { request }))
     }
     fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
         if let Some(snapshot) = &self.snapshot_fingerprint {
@@ -3302,6 +3787,7 @@ mod tests {
                         let mut items = Vec::new();
                         if background {
                             items.push(Item {
+                                image: None,
                                 id: "background".into(),
                                 primitive: Primitive::Rounded {
                                     rect: Rect::new(0., 0., 48., 40.),
@@ -3314,6 +3800,7 @@ mod tests {
                             });
                         }
                         items.push(Item {
+                            image: None,
                             id: "text".into(),
                             primitive: Primitive::Text {
                                 rect: Rect::new(2.25, 3.75, 30., 18.),
@@ -3335,6 +3822,8 @@ mod tests {
                             })),
                         });
                         Frame {
+                            native_resource_budget: None,
+                            _assets: Vec::new(),
                             items,
                             scale,
                             key: 1,
@@ -3563,6 +4052,7 @@ mod tests {
         frame.items.insert(
             0,
             Item {
+                image: None,
                 id: "seed".into(),
                 primitive: Primitive::Rounded {
                     rect: Rect::new(0., 0., 10., 6.),
@@ -3629,6 +4119,380 @@ mod tests {
                 }
             }
         }
+    }
+    #[test]
+    fn whole_frame_masked_replacement_fits_after_superseded_gpu_retirement() {
+        let _serial = LARGE_RASTER_TESTS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut scene = scene();
+        let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+        worker.prepare(&scene, 1.).unwrap();
+        let old = worker.frame.clone().unwrap();
+        let payload = old.items[0].image.as_ref().unwrap();
+        drop(payload.take_upload().unwrap());
+        let budget = payload.budget.clone();
+        let gpu = payload.reserve_texture(28 * bead_core::cache::MIB).unwrap();
+        scene.primitives.clear(); scene.layers.clear(); scene.asset_data.clear();
+        for index in 0..25 {
+            let path = PathBuf::from(format!("thumb-{index}.png"));
+            let mut pixels = Pixmap::new(8, 8).unwrap();
+            pixels.fill(tiny_skia::Color::from_rgba8(index * 9, 50, 100, 255));
+            scene.asset_data.insert(path.clone(), Arc::from(pixels.encode_png().unwrap()));
+            scene.primitives.push(Primitive::Image {
+                rect: Rect::new((index % 5) as f32 * 512., (index / 5) as f32 * 432., 512., 432.),
+                path, fit: crate::ImageFit::Cover, blur: 0.,
+                clip_polygon: Some(vec![[0., 0.], [1., 0.], [1., 1.], [0., 1.]]),
+            });
+        }
+        assert!(worker.prepare(&scene, 1.).is_err());
+        assert!(Arc::ptr_eq(&old, worker.frame.as_ref().unwrap()));
+        drop(gpu); // The accepted compositor buffer is independent of these textures.
+        worker.prepare(&scene, 1.).unwrap();
+        let frame = worker.frame.as_ref().unwrap();
+        let cpu_bytes = frame.items.iter().map(|item| item.image.as_ref().unwrap().upload.lock().unwrap().as_ref().unwrap().pixels.data().len()).sum::<usize>();
+        assert!(cpu_bytes > 21 * bead_core::cache::MIB);
+        let mut textures = Vec::new();
+        for item in &frame.items {
+            let payload = item.image.as_ref().unwrap();
+            let upload = payload.take_upload().unwrap();
+            textures.push(payload.reserve_texture(upload.pixels.data().len() + 192).unwrap());
+            assert!(budget.used() <= 40 * bead_core::cache::MIB);
+            drop(upload);
+        }
+        assert!(budget.used() <= 40 * bead_core::cache::MIB);
+    }
+    #[test]
+    fn uhd_cover_uses_smaller_exact_target_and_bounded_decode_scratch() {
+        let _serial = LARGE_RASTER_TESTS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut scene = scene();
+        let mut source = Pixmap::new(3840, 2160).unwrap();
+        source.fill(tiny_skia::Color::from_rgba8(20, 40, 80, 255));
+        scene.asset_data.insert("proof.png".into(), Arc::from(source.encode_png().unwrap()));
+        drop(source);
+        if let Primitive::Image { rect, fit, .. } = &mut scene.primitives[0] {
+            *rect = Rect::new(0., 0., 1920., 1080.); *fit = crate::ImageFit::Cover;
+        }
+        let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+        worker.prepare(&scene, 1.).unwrap();
+        let payload = worker.frame.as_ref().unwrap().items[0].image.as_ref().unwrap();
+        assert!(!payload.native_cover);
+        assert_eq!((payload.width, payload.height), (1920, 1080));
+        assert_eq!(payload.scratch_budget.used(), 0);
+        assert!(payload.budget.used() < 40 * bead_core::cache::MIB);
+    }
+    #[test]
+    fn ui_cpu_prepare_reuses_exact_snapshot_and_defers_native_or_changed_images() {
+        let mut scene = scene();
+        let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+        worker.prepare(&scene, 1.).unwrap();
+        scene.prepared.insert(1.0f32.to_bits(), worker.frame.clone().unwrap());
+        let mut renderer = TreeCpuRenderer::default();
+        let error = renderer.prepare_on_ui(&scene, 1.).unwrap_err();
+        assert!(renderer.cache.frame.is_none(), "UI never materializes native pixels");
+        let request = error.downcast_ref::<CpuResourcesPending>().unwrap().request.clone();
+        assert!(request.mark_requested());
+        assert!(!request.mark_requested());
+        std::thread::scope(|scope| scope.spawn(|| request.prepare().unwrap()).join().unwrap());
+        renderer.prepare_on_ui(&scene, 1.).unwrap();
+        let builds = renderer.opacity_builds;
+        renderer.prepare_on_ui(&scene, 1.).unwrap();
+        assert_eq!(renderer.opacity_builds, builds, "warm exact fingerprint is reused");
+        scene.prepared.clear();
+        let mut dense_worker = TreeCache::default();
+        dense_worker.prepare(&scene, 1.).unwrap();
+        scene.prepared.insert(1.0f32.to_bits(), dense_worker.frame.clone().unwrap());
+        renderer.prepare_on_ui(&scene, 1.).unwrap();
+        assert!(renderer.cpu_preparation.is_none(), "normal Dense import never queues another snapshot");
+        let accepted = renderer.flattened.as_ref().unwrap().0;
+        scene.prepared.clear();
+        scene.asset_data.insert("proof.png".into(), Arc::from(&b"invalid replacement"[..]));
+        let error = renderer.prepare_on_ui(&scene, 1.).unwrap_err();
+        let request = error.downcast_ref::<CpuResourcesPending>().unwrap().request.clone();
+        assert!(request.prepare().is_err());
+        assert!(renderer.prepare_on_ui(&scene, 1.).is_err());
+        assert_eq!(renderer.flattened.as_ref().unwrap().0, accepted, "failed worker replacement keeps accepted pixels");
+    }
+    #[test]
+    fn compact_svg_upload_reconstructs_exact_dense_pixels() {
+        let mut scene = scene();
+        scene.asset_data.clear();
+        scene.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="512" height="256"><defs><linearGradient id="rim"><stop stop-color="#123456"/><stop offset="1" stop-color="#abcdef"/></linearGradient></defs><path fill="url(#rim)" fill-rule="evenodd" d="M0 0H512V256H0Z M32 32V224H480V32Z"/></svg>"##[..]));
+        scene.primitives[0] = Primitive::Image {
+            rect: Rect::new(2., 2., 512., 256.),
+            path: "proof.svg".into(),
+            blur: 0.,
+            fit: crate::ImageFit::Fill,
+            clip_polygon: None,
+        };
+        let mut dense = TreeCache::default();
+        dense.prepare(&scene, 1.5).unwrap();
+        let expected = &dense.frame.as_ref().unwrap().items[0]
+            .raster
+            .as_ref()
+            .unwrap()
+            .pixels;
+        let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+        worker.prepare(&scene, 1.5).unwrap();
+        let payload = worker.frame.as_ref().unwrap().items[0]
+            .image
+            .as_ref()
+            .unwrap();
+        let upload = payload.take_upload().unwrap();
+        let compact = payload.compact.lock().unwrap();
+        let layout = compact.as_ref().expect("large uniform SVG compacts");
+        let mut rebuilt = Pixmap::new(payload.width, payload.height).unwrap();
+        for fill in &layout.fills {
+            for y in fill.rect.y..fill.rect.y + fill.rect.h {
+                for x in fill.rect.x..fill.rect.x + fill.rect.w {
+                    let at = ((y * payload.width + x) * 4) as usize;
+                    rebuilt.data_mut()[at..at + 4].copy_from_slice(&fill.color);
+                }
+            }
+        }
+        for region in &layout.regions {
+            for y in 0..region.source.h {
+                let source =
+                    (((region.atlas.y + y) * upload.pixels.width() + region.atlas.x) * 4) as usize;
+                let dest = (((region.source.y + y) * payload.width + region.source.x) * 4) as usize;
+                let len = region.source.w as usize * 4;
+                rebuilt.data_mut()[dest..dest + len]
+                    .copy_from_slice(&upload.pixels.data()[source..source + len]);
+            }
+        }
+        assert_eq!(rebuilt.data(), expected.data());
+        assert!(upload.pixels.data().len() < expected.data().len());
+    }
+    #[test]
+    fn upload_policy_keeps_reshaped_reveal_art_on_the_exact_dense_path() {
+        let mut scene = scene();
+        scene.motion = Some(crate::Motion {
+            id: "test".into(),
+            open: true,
+            duration: 0.2,
+            return_duration: None,
+            return_curve: None,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            fade: false,
+            reveal: true,
+            progress: 1.,
+            parts: vec![(0, scene.primitives[0].clone())],
+            art: None,
+        });
+        let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+        worker.prepare(&scene, 1.).unwrap();
+        let item = &worker.frame.as_ref().unwrap().items[0];
+        assert!(item.raster.is_some());
+        assert!(item.image.is_none());
+    }
+    #[test]
+    fn deferred_upload_prepares_recipes_without_decoded_pixels() {
+        let mut cache = TreeCache::default().with_image_policy(ImagePolicy::DeferredUpload);
+        cache.prepare(&scene(), 1.).unwrap();
+        let frame = cache.frame.as_ref().unwrap();
+        let payload = frame.items[0].image.as_ref().unwrap();
+        assert!(payload.pending());
+        assert!(frame.items[0].raster.is_none());
+        assert!(payload.upload.lock().unwrap().is_none());
+        payload.prepare().unwrap();
+        assert!(!payload.pending());
+    }
+    #[test]
+    fn compact_replacement_uses_bounded_scratch_while_active_gpu_is_held() {
+        let _serial = LARGE_RASTER_TESTS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut scene = scene();
+        scene.asset_data.clear();
+        scene.primitives[0] = Primitive::Image {
+            rect: Rect::new(0., 0., 2300., 2200.),
+            path: "proof.svg".into(),
+            blur: 0.,
+            fit: crate::ImageFit::Fill,
+            clip_polygon: None,
+        };
+        scene.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="2300" height="2200"><rect width="2300" height="2200" fill="#123456"/></svg>"##[..]));
+        let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+        worker.prepare(&scene, 1.).unwrap();
+        let old = worker.frame.clone().unwrap();
+        let payload = old.items[0].image.as_ref().unwrap();
+        drop(payload.take_upload().unwrap());
+        let gpu = payload.reserve_texture(28 * bead_core::cache::MIB).unwrap();
+        let scratch = payload.scratch_budget.clone();
+        let retained = payload.budget.clone();
+        scene.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="2300" height="2200"><rect width="2300" height="2200" fill="#654321"/></svg>"##[..]));
+        worker
+            .prepare(&scene, 1.)
+            .expect("large SVG target scratch must not consume retained headroom");
+        let accepted = worker.frame.clone().unwrap();
+        let upload = accepted.items[0]
+            .image
+            .as_ref()
+            .unwrap()
+            .upload
+            .lock()
+            .unwrap();
+        assert!(upload.as_ref().unwrap().pixels.data().len() < 2 * bead_core::cache::MIB);
+        drop(upload);
+        assert_eq!(scratch.used(), 0);
+        assert!(retained.used() <= 40 * bead_core::cache::MIB);
+        // Every tile of this gradient is nonuniform, so retaining the dense
+        // candidate would exceed the view ceiling beside the active textures.
+        scene.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="2300" height="2200"><defs><linearGradient id="g"><stop stop-color="#123456"/><stop offset="1" stop-color="#abcdef"/></linearGradient></defs><rect width="2300" height="2200" fill="url(#g)"/></svg>"##[..]));
+        assert!(worker.prepare(&scene, 1.).is_err());
+        assert!(Arc::ptr_eq(&accepted, worker.frame.as_ref().unwrap()));
+        assert_eq!(scratch.used(), 0);
+        assert!(retained.used() <= 40 * bead_core::cache::MIB);
+        drop(gpu);
+    }
+    #[test]
+    fn encoded_assets_are_charged_once_and_follow_held_frames_including_unused_assets() {
+        let mut scene = scene();
+        let encoded = scene.asset_data.values().next().unwrap().clone();
+        scene
+            .asset_data
+            .insert("unused-alias.png".into(), encoded.clone());
+        let mut worker = TreeCache::default().with_image_policy(ImagePolicy::DeferredUpload);
+        worker.prepare(&scene, 1.).unwrap();
+        let first = worker.frame.clone().unwrap();
+        assert_eq!(first._assets.len(), 2);
+        assert!(Arc::ptr_eq(&first._assets[0], &first._assets[1]));
+        assert!(Arc::ptr_eq(
+            &first._assets[0],
+            &first.items[0].image.as_ref().unwrap().encoded
+        ));
+        assert_eq!(
+            first._assets[0]._charge.bytes(),
+            encoded.len() + std::mem::size_of::<AssetLease>()
+        );
+        worker.prepare(&scene, 1.).unwrap();
+        let second = worker.frame.clone().unwrap();
+        assert!(Arc::ptr_eq(&first._assets[0], &second._assets[0]));
+        let retained = worker.resource_budget.as_ref().unwrap().clone();
+        let before = retained.used();
+        scene.asset_data.insert(
+            "unused-alias.png".into(),
+            Arc::from(vec![0u8; bead_core::cache::MIB]),
+        );
+        worker.prepare(&scene, 1.).unwrap();
+        let third = worker.frame.clone().unwrap();
+        assert!(retained.used() >= before + bead_core::cache::MIB);
+        let previous = worker.frame.clone().unwrap();
+        scene.asset_data.insert(
+            "unused-alias.png".into(),
+            Arc::from(vec![0u8; 40 * bead_core::cache::MIB]),
+        );
+        assert!(worker.prepare(&scene, 1.).is_err());
+        assert!(Arc::ptr_eq(&previous, worker.frame.as_ref().unwrap()));
+        drop(previous);
+        drop(worker);
+        assert!(
+            retained.used() >= bead_core::cache::MIB,
+            "unused encoded asset remains charged through its held frame"
+        );
+        drop(first);
+        drop(second);
+        drop(third);
+        assert_eq!(retained.used(), 0);
+    }
+    #[test]
+    fn native_view_budget_is_shared_with_gpu_and_held_frames() {
+        let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+        worker.prepare(&scene(), 1.).unwrap();
+        let frame = worker.frame.clone().unwrap();
+        let payload = frame.items[0].image.clone().unwrap();
+        let budget = payload.budget.clone();
+        let available = 40 * bead_core::cache::MIB - budget.used();
+        let gpu = payload.reserve_texture(available).unwrap();
+        assert!(payload.reserve_texture(1).is_err());
+        assert!(
+            frame
+                ._accounting
+                .as_ref()
+                .unwrap()
+                .reserve_related(1)
+                .is_err()
+        );
+        drop(worker);
+        assert!(budget.used() > gpu.bytes(), "held frame remains admitted");
+        drop(payload);
+        drop(frame);
+        assert_eq!(budget.used(), gpu.bytes());
+        drop(gpu);
+        assert_eq!(budget.used(), 0);
+    }
+    #[test]
+    fn upload_payload_consumption_reuse_and_worker_rehydration() {
+        let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+        let scene = scene();
+        worker.prepare(&scene, 1.5).unwrap();
+        let frame = worker.frame.clone().unwrap();
+        assert!(frame.items[0].raster.is_none());
+        let payload = frame.items[0].image.clone().unwrap();
+        let pixels = payload.take_upload().unwrap();
+        let expected = pixels.pixels.data().to_vec();
+        let budget = payload.budget.clone();
+        let nonpixel_bytes = budget.used() - expected.len();
+        drop(pixels);
+        assert_eq!(budget.used(), nonpixel_bytes);
+        assert!(payload.pending());
+        worker.prepare(&scene, 1.5).unwrap();
+        assert!(Arc::ptr_eq(
+            &payload,
+            worker.frame.as_ref().unwrap().items[0]
+                .image
+                .as_ref()
+                .unwrap()
+        ));
+        assert!(
+            payload.pending(),
+            "normal prepare must not decode a consumed GPU hit"
+        );
+        let nonpixel_bytes = budget.used();
+        std::thread::scope(|scope| {
+            scope.spawn(|| payload.prepare().unwrap()).join().unwrap();
+        });
+        assert_eq!(payload.take_upload().unwrap().pixels.data(), expected);
+        assert_eq!(budget.used(), nonpixel_bytes);
+        payload.prepare().unwrap();
+        drop(worker);
+        assert!(
+            budget.used() > expected.len(),
+            "held frame owns upload pixels and metadata"
+        );
+        drop(payload);
+        drop(frame);
+        assert_eq!(budget.used(), 0);
+    }
+    #[test]
+    fn upload_frames_materialize_for_cpu_and_invalid_assets_keep_previous_frame() {
+        let mut scene = scene();
+        if let Primitive::Image { clip_polygon, .. } = &mut scene.primitives[0] {
+            *clip_polygon = Some(vec![[0., 0.], [1., 0.], [0.5, 1.]]);
+        }
+        let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+        worker.prepare(&scene, 1.5).unwrap();
+        let previous = worker.frame.clone().unwrap();
+        let expected = previous.items[0]
+            .image
+            .as_ref()
+            .unwrap()
+            .take_upload()
+            .unwrap()
+            .pixels;
+        scene.prepared.insert(1.5_f32.to_bits(), previous.clone());
+        let mut cpu = TreeCache::default();
+        cpu.prepare(&scene, 1.5).unwrap();
+        let dense = cpu.frame.as_ref().unwrap().items[0]
+            .raster
+            .as_ref()
+            .unwrap();
+        assert_eq!(dense.pixels.data(), expected.data());
+        scene.prepared.clear();
+        scene
+            .asset_data
+            .insert("proof.png".into(), Arc::from(&b"invalid image"[..]));
+        assert!(worker.prepare(&scene, 1.5).is_err());
+        assert!(Arc::ptr_eq(&previous, worker.frame.as_ref().unwrap()));
     }
     #[test]
     fn prepared_frame_keeps_raster_charge_after_lookup_drop() {
@@ -3706,6 +4570,7 @@ mod tests {
                 let pixels = Arc::new(Pixmap::new(3000, 3000).unwrap());
                 let charge = budget.reserve(pixels.data().len()).unwrap();
                 Item {
+                    image: None,
                     id: format!("large-{index}"),
                     primitive: Primitive::Rounded {
                         rect: Rect::new(0., 0., 3000., 3000.),
@@ -3726,6 +4591,8 @@ mod tests {
             })
             .collect();
         Arc::new(Frame {
+            native_resource_budget: None,
+            _assets: Vec::new(),
             items,
             scale: 1.5,
             key: count as u64,

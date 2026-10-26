@@ -185,6 +185,8 @@ impl FrameDamage {
             }
             let key = if let Some(raster) = &item.raster {
                 raster.key
+            } else if let Some(image) = &item.image {
+                image.key
             } else {
                 let mut h = std::collections::hash_map::DefaultHasher::new();
                 hash_primitive(&item.primitive, false, &mut h);
@@ -303,6 +305,7 @@ mod tests {
             tree::{Item, paint},
         };
         let item = |id: &str, rect: Rect, fill| Item {
+            image: None,
             id: id.into(),
             primitive: Primitive::Rounded {
                 rect,
@@ -316,6 +319,8 @@ mod tests {
         for scale in [1., 1.25, 1.5] {
             for offset in [(0., 0.), (0.3333, -0.5)] {
                 let frame = |items| Frame {
+                    native_resource_budget: None,
+                    _assets: Vec::new(),
                     items,
                     scale,
                     key: 0,
@@ -450,6 +455,7 @@ mod tests {
     #[test]
     fn an_insert_does_not_dirty_identical_items_that_only_changed_paint_slot() {
         let item = |id: &str, rect: Rect| crate::tree::Item {
+            image: None,
             id: id.into(),
             primitive: crate::Primitive::Rounded {
                 rect,
@@ -461,6 +467,8 @@ mod tests {
             raster: None,
         };
         let frame = |items| Frame {
+            native_resource_budget: None,
+            _assets: Vec::new(),
             _accounting: None,
             items,
             scale: 1.,
@@ -516,8 +524,11 @@ mod tests {
             border: None,
         };
         let mut frame = Frame {
+            native_resource_budget: None,
+            _assets: Vec::new(),
             _accounting: None,
             items: vec![crate::tree::Item {
+                image: None,
                 id: "button".into(),
                 primitive,
                 clip: None,
@@ -560,6 +571,7 @@ mod tests {
         };
         let clip = Rect::new(40., 25., 10., 12.);
         let arc = |sweep_angle, round_caps| Item {
+            image: None,
             id: "progress".into(),
             primitive: Primitive::Arc {
                 rect: Rect::new(10., 10., 40., 40.),
@@ -573,6 +585,8 @@ mod tests {
             raster: None,
         };
         let frame = |item| Frame {
+            native_resource_budget: None,
+            _assets: Vec::new(),
             items: vec![item],
             scale: 1.5,
             key: 0,

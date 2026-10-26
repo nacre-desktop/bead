@@ -282,6 +282,16 @@ impl App {
         self.canvas_ui(&key, UiEvent::Reload);
     }
     pub(super) fn canvas_ui(&mut self, key: &(String, String), event: UiEvent) {
+        if let UiEvent::ResourcesPrepared(result) = event {
+            match result {
+                Ok(()) => {
+                    if let Some(canvas) = self.canvases.get_mut(key) { canvas.dirty = true; }
+                    if let Err(error) = self.canvas_draw(key) { eprintln!("CANVAS_ERROR {error}"); }
+                }
+                Err(error) => eprintln!("CANVAS_ERROR {error}"),
+            }
+            return;
+        }
         let Some(canvas) = self.canvases.get_mut(key) else {
             return;
         };
@@ -618,7 +628,7 @@ impl App {
         let bytes = canvas.buffers[slot]
             .canvas(pool)
             .ok_or("compositor owns canvas buffer")?;
-        canvas.renderer.draw(
+        if let Err(error) = canvas.renderer.draw(
             &canvas.scene,
             RenderTarget::Shm(ShmTarget {
                 bytes: &mut *bytes,
@@ -628,7 +638,13 @@ impl App {
                 format,
             }),
             damage,
-        )?;
+        ) {
+            if super::rendering::prepare_pending_images(error.as_ref(), canvas.source.as_mut())? {
+                canvas.dirty = true;
+                return Ok(());
+            }
+            return Err(error);
+        }
         surface.set_buffer_scale(if canvas.viewport.is_some() {
             1
         } else {

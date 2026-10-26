@@ -15,6 +15,7 @@ use tiny_skia::{
     FillRule, FilterQuality, Mask, Paint, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Stroke,
     Transform,
 };
+mod compact;
 pub mod damage;
 #[cfg(feature = "native-gl")]
 pub mod gl;
@@ -812,6 +813,9 @@ pub trait Renderer {
             _ => Err("GPU target unsupported by CPU renderer".into()),
         }
     }
+    /// Presentation may import worker pixels or reuse an exact frozen frame.
+    fn prepare_on_ui(&mut self, scene: &Scene, scale: f32) -> Result<()> { self.prepare(scene, scale) }
+    fn reusable_scene(&self, _scene: &Scene, _scale: f32) -> Result<bool> { Ok(false) }
     fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()>;
     fn render(&mut self, scene: &Scene, target: ShmTarget<'_>, damage: Damage) -> Result<()>;
 }
@@ -1804,6 +1808,18 @@ fn decode_image(path: &Path, bytes: &[u8], w: u32, h: u32, fit: ImageFit) -> Res
         None,
     );
     Ok(target)
+}
+
+fn decode_native_image(bytes: &[u8]) -> Result<Pixmap> {
+    let mut raw = image::load_from_memory(bytes)?.into_rgba8();
+    for pixel in raw.as_mut().as_chunks_mut::<4>().0 {
+        let alpha = u16::from(pixel[3]);
+        for channel in pixel.iter_mut().take(3) {
+            *channel = ((u16::from(*channel) * alpha + 127) / 255) as u8;
+        }
+    }
+    let size = tiny_skia::IntSize::from_wh(raw.width(), raw.height()).ok_or("image allocation")?;
+    Pixmap::from_vec(raw.into_raw(), size).ok_or_else(|| "image allocation".into())
 }
 
 const IMAGE_CACHE_LIMIT: usize = 1536 * 1024;

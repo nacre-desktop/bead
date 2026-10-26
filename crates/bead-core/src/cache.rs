@@ -81,6 +81,10 @@ impl Budget {
 #[derive(Clone)]
 pub struct Charge(Arc<Allocation>);
 impl Charge {
+    /// Related CPU/GPU allocations share the original owner's byte ceiling.
+    pub fn reserve_related(&self, bytes: usize) -> Result<Charge, &'static str> {
+        self.0.budget.reserve(bytes)
+    }
     pub fn bytes(&self) -> usize {
         self.0.bytes
     }

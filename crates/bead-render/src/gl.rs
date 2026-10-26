@@ -424,10 +424,10 @@ impl Transport {
 struct Texture {
     key: u64,
     image: femtovg::ImageId,
-    pixels: std::sync::Arc<tiny_skia::Pixmap>,
+    width: u32,
+    height: u32,
     touched: u64,
     _charge: bead_core::cache::Charge,
-    source_charge: bead_core::cache::Charge,
 }
 #[derive(Default)]
 pub struct GlRenderer {
@@ -435,13 +435,57 @@ pub struct GlRenderer {
     canvas: Option<femtovg::Canvas<femtovg::renderer::OpenGl>>,
     images: std::collections::BTreeMap<(String, u32), Texture>,
     serial: u64,
-    image_budget: Option<bead_core::cache::Budget>,
     group_budget: Option<bead_core::cache::Budget>,
     group_charge: Option<bead_core::cache::Charge>,
     group: Option<(femtovg::ImageId, u32, u32, u64)>,
 }
 impl GlRenderer {
+    fn finish_image_upload(
+        payload: &crate::tree::ImagePayload,
+        uses: &mut std::collections::BTreeMap<u64, usize>,
+    ) -> Result<()> {
+        let remaining = uses
+            .get_mut(&payload.key)
+            .ok_or("image upload use missing")?;
+        *remaining -= 1;
+        if *remaining == 0 {
+            drop(
+                payload
+                    .upload
+                    .lock()
+                    .map_err(|_| "image upload poisoned")?
+                    .take(),
+            );
+        }
+        Ok(())
+    }
     fn upload(&mut self, display: &Display) -> Result<()> {
+        let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
+        for payload in frame.items.iter().filter_map(|item| item.image.as_ref()) {
+            if let Some(error) = payload.failure() {
+                return Err(Box::new(crate::tree::ResourcePreparationFailed(error)));
+            }
+        }
+        let mut pending_keys = std::collections::BTreeSet::new();
+        let pending = frame
+            .items
+            .iter()
+            .filter_map(|item| {
+                let payload = item.image.as_ref()?;
+                let slot = (item.id.clone(), frame.scale.to_bits());
+                (self
+                    .images
+                    .get(&slot)
+                    .is_none_or(|image| image.key != payload.key)
+                    && payload.pending()
+                    && pending_keys.insert(payload.key))
+                .then(|| payload.clone())
+            })
+            .collect::<Vec<_>>();
+        if !pending.is_empty() {
+            return Err(Box::new(crate::tree::ResourcesPending { images: pending }));
+        }
+
         if self.canvas.is_none() {
             // SAFETY: Transport made its retained context current on this thread.
             let renderer = unsafe {
@@ -457,10 +501,59 @@ impl GlRenderer {
         let active: std::collections::BTreeSet<_> = frame
             .items
             .iter()
-            .filter(|item| item.raster.is_some())
+            .filter(|item| item.raster.is_some() || item.image.is_some())
             .map(|item| (item.id.clone(), frame.scale.to_bits()))
             .collect();
+        let mut upload_uses = std::collections::BTreeMap::new();
+        for payload in frame.items.iter().filter_map(|item| item.image.as_ref()) {
+            *upload_uses.entry(payload.key).or_insert(0usize) += 1;
+        }
         for item in &frame.items {
+            if let Some(payload) = &item.image {
+                let slot = (item.id.clone(), frame.scale.to_bits());
+                if let Some(old) = self.images.get_mut(&slot)
+                    && old.key == payload.key
+                {
+                    old.touched = self.serial;
+                    Self::finish_image_upload(payload, &mut upload_uses)?;
+                    continue;
+                }
+                let upload = payload.upload.lock().map_err(|_| "image upload poisoned")?;
+                let pixels = &upload.as_ref().ok_or("image upload not prepared")?.pixels;
+                let (width, height) = (pixels.width(), pixels.height());
+                let charge =
+                    payload.reserve_texture(pixels.data().len() + slot.0.capacity() + 192)?;
+                let result = canvas.create_image(
+                    femtovg::ImageSource::Rgba(imgref::Img::new(
+                        pixels.data().as_rgba(),
+                        width as usize,
+                        height as usize,
+                    )),
+                    femtovg::ImageFlags::PREMULTIPLIED,
+                );
+                let image = match result {
+                    Ok(image) => image,
+                    Err(error) => {
+                        return Err(error.into());
+                    }
+                };
+                drop(upload);
+                if let Some(old) = self.images.insert(
+                    slot,
+                    Texture {
+                        key: payload.key,
+                        image,
+                        width,
+                        height,
+                        touched: self.serial,
+                        _charge: charge,
+                    },
+                ) {
+                    canvas.delete_image(old.image);
+                }
+                Self::finish_image_upload(payload, &mut upload_uses)?;
+                continue;
+            }
             let Some(raster) = &item.raster else {
                 continue;
             };
@@ -469,18 +562,13 @@ impl GlRenderer {
             if self
                 .images
                 .get(&slot)
-                .is_none_or(|old| old.pixels.width() != w || old.pixels.height() != h)
+                .is_none_or(|old| old.width != w || old.height != h)
             {
-                let budget = self.image_budget.get_or_insert_with(|| {
-                    bead_core::cache::Budget::new(
-                        "native-gl-images",
-                        // A size replacement keeps its old texture until upload
-                        // succeeds. The LRU below still bounds settled pixels.
-                        2 * crate::tree::STEADY_RASTER_LIMIT,
-                    )
-                });
                 let charge = loop {
-                    match budget.reserve(w as usize * h as usize * 4 + slot.0.capacity() + 192) {
+                    match raster
+                        ._charge
+                        .reserve_related(w as usize * h as usize * 4 + slot.0.capacity() + 192)
+                    {
                         Ok(c) => break c,
                         Err(e) => {
                             let victim = self
@@ -495,8 +583,7 @@ impl GlRenderer {
                                 }
                             } else {
                                 return Err(format!(
-                                    "{e}: native-gl-images used={} requested={} global={}",
-                                    budget.used(),
+                                    "{e}: native-gl-images requested={} global={}",
                                     w as usize * h as usize * 4 + slot.0.capacity() + 192,
                                     bead_core::cache::report().used_bytes,
                                 )
@@ -520,10 +607,10 @@ impl GlRenderer {
                     slot.clone(),
                     Texture {
                         _charge: charge,
-                        source_charge: raster._charge.clone(),
                         key: raster.key,
                         image,
-                        pixels: raster.pixels.clone(),
+                        width: w,
+                        height: h,
                         touched: self.serial,
                     },
                 );
@@ -578,8 +665,6 @@ impl GlRenderer {
                         );
                     }
                     old.key = raster.key;
-                    old.pixels = raster.pixels.clone();
-                    old.source_charge = raster._charge.clone();
                 }
                 old.touched = self.serial;
             }
@@ -603,7 +688,7 @@ impl GlRenderer {
             || self
                 .images
                 .values()
-                .map(|t| t.pixels.data().len())
+                .map(|t| t.width as usize * t.height as usize * 4)
                 .sum::<usize>()
                 > crate::tree::STEADY_RASTER_LIMIT
         {
@@ -643,7 +728,68 @@ impl GlRenderer {
                 (r.x + offset.0) * frame.scale,
                 (r.y + offset.1) * frame.scale,
             );
-            if let Some(raster) = &item.raster {
+            if let Some(payload) = &item.image {
+                let texture = images
+                    .get(&(item.id.clone(), frame.scale.to_bits()))
+                    .ok_or("GL image missing")?;
+                let (w, h) = crate::dimensions(r, frame.scale);
+                let (x, y) = (x.round(), y.round());
+                let (w, h) = (w as f32, h as f32);
+                let compact = payload
+                    .compact
+                    .lock()
+                    .map_err(|_| "image layout poisoned")?;
+                if let Some(layout) = compact.as_ref() {
+                    for fill in &layout.fills {
+                        let r = fill.rect;
+                        let a = fill.atlas;
+                        let mut path = femtovg::Path::new();
+                        path.rect(x + r.x as f32, y + r.y as f32, r.w as f32, r.h as f32);
+                        let mut paint = femtovg::Paint::image(
+                            texture.image,
+                            x + r.x as f32 - a.x as f32 * r.w as f32,
+                            y + r.y as f32 - a.y as f32 * r.h as f32,
+                            texture.width as f32 * r.w as f32,
+                            texture.height as f32 * r.h as f32,
+                            0.,
+                            1.,
+                        );
+                        paint.set_anti_alias(false);
+                        canvas.fill_path(&path, &paint);
+                    }
+                    for region in &layout.regions {
+                        let r = region.source;
+                        let a = region.atlas;
+                        let mut path = femtovg::Path::new();
+                        path.rect(x + r.x as f32, y + r.y as f32, r.w as f32, r.h as f32);
+                        let mut paint = femtovg::Paint::image(
+                            texture.image,
+                            x + r.x as f32 - a.x as f32,
+                            y + r.y as f32 - a.y as f32,
+                            texture.width as f32,
+                            texture.height as f32,
+                            0.,
+                            1.,
+                        );
+                        paint.set_anti_alias(false);
+                        canvas.fill_path(&path, &paint);
+                    }
+                    continue;
+                }
+                let mut path = femtovg::Path::new();
+                path.rect(x, y, w, h);
+                let (px, py, pw, ph) = if payload.native_cover {
+                    let zoom = (w / payload.width as f32).max(h / payload.height as f32);
+                    let (pw, ph) = (payload.width as f32 * zoom, payload.height as f32 * zoom);
+                    (x + (w - pw) * 0.5, y + (h - ph) * 0.5, pw, ph)
+                } else {
+                    (x, y, w, h)
+                };
+                canvas.fill_path(
+                    &path,
+                    &femtovg::Paint::image(texture.image, px, py, pw, ph, 0., 1.),
+                );
+            } else if let Some(raster) = &item.raster {
                 let (x, y) = (
                     x.round() + raster.origin.0 as f32,
                     y.round() + raster.origin.1 as f32,
@@ -774,7 +920,11 @@ impl Renderer for GlRenderer {
     /// is current. `TreeCache` is deliberately retained so the CPU rasterized
     /// layers can be uploaded again without rerasterizing them.
     fn release_gpu_resources(&mut self) {
-        let image_bytes: usize = self.images.values().map(|t| t.pixels.data().len()).sum();
+        let image_bytes: usize = self
+            .images
+            .values()
+            .map(|t| t.width as usize * t.height as usize * 4)
+            .sum();
         let group_bytes = self
             .group
             .map_or(0, |(_, w, h, _)| u64::from(w) * u64::from(h) * 4);
@@ -833,6 +983,8 @@ impl Renderer for GlRenderer {
         true
     }
     fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
+        self.cache
+            .set_image_policy(crate::tree::ImagePolicy::DeferredUpload);
         self.cache.prepare(scene, scale)
     }
     fn render(&mut self, _: &Scene, _: ShmTarget<'_>, _: Damage) -> Result<()> {
@@ -869,16 +1021,15 @@ impl Renderer for GlRenderer {
                     canvas.delete_image(old);
                 }
                 self.group_charge = None;
-                self.group_charge = Some(
-                    self.group_budget
-                        .get_or_insert_with(|| {
-                            bead_core::cache::Budget::new(
-                                "native-gl-composite",
-                                64 * bead_core::cache::MIB,
-                            )
-                        })
-                        .reserve(w as usize * h as usize * 4 + 64)?,
-                );
+                let budget = frame.native_resource_budget.as_ref().unwrap_or_else(|| {
+                    self.group_budget.get_or_insert_with(|| {
+                        bead_core::cache::Budget::new(
+                            "native-gl-composite",
+                            64 * bead_core::cache::MIB,
+                        )
+                    })
+                });
+                self.group_charge = Some(budget.reserve(w as usize * h as usize * 4 + 64)?);
                 self.group = Some((
                     canvas.create_image_empty(
                         w as usize,
@@ -916,6 +1067,14 @@ impl Renderer for GlRenderer {
             );
         }
         canvas.flush();
+        // A non-fading motion never samples an opacity group. A renderer reused
+        // from a fading view must not keep that view's full-size target alive.
+        if scene.opacity >= 1. && scene.motion.as_ref().is_some_and(|motion| !motion.fade) {
+            if let Some((image, _, _, _)) = self.group.take() {
+                canvas.delete_image(image);
+            }
+            self.group_charge = None;
+        }
         Ok(())
     }
 }

@@ -93,7 +93,16 @@ impl Packet {
         matches!(self.phase, Phase::Failed)
     }
 }
+#[derive(Debug)]
+pub struct ResourceRetirement(std::sync::Mutex<Option<mpsc::Sender<Result<(), String>>>>);
+impl ResourceRetirement {
+    pub fn finish(&self, result: Result<(), String>) {
+        if let Ok(mut response) = self.0.lock() && let Some(response) = response.take() { let _ = response.send(result); }
+    }
+}
 enum Job {
+    PrepareImages(Vec<Arc<bead_render::tree::ImagePayload>>),
+    PrepareCpu(Arc<bead_render::tree::CpuPreparation>),
     PanelCenter(Option<f32>),
     InitialModel(std::collections::BTreeMap<String, bead_core::Value>),
     PanelAnchor(Option<PanelAnchor>),
@@ -172,6 +181,9 @@ pub struct Source {
     thread: Option<JoinHandle<()>>,
     mirror: Arc<Mirror>,
     scales: Vec<f32>,
+    image_policy: bead_render::tree::ImagePolicy,
+    preparation_retry: bool,
+    retired: Arc<std::sync::atomic::AtomicBool>,
     token: u64,
     accepted: bool,
     current: Scene,
@@ -185,6 +197,9 @@ impl Source {
             sender: None,
             thread: None,
             mirror: Arc::new(Mirror::default()),
+            image_policy: bead_render::tree::ImagePolicy::Dense,
+            preparation_retry: false,
+            retired: Default::default(),
             scales: vec![1.],
             token: 0,
             accepted: false,
@@ -192,6 +207,10 @@ impl Source {
             candidate: None,
             viewport: None,
         }
+    }
+    pub fn with_image_policy(mut self, policy: bead_render::tree::ImagePolicy) -> Self {
+        self.image_policy = policy;
+        self
     }
     fn send(&self, job: Job) -> Result<(), Box<dyn Error>> {
         self.sender
@@ -242,7 +261,9 @@ fn bake(
                         })
                     });
                 let image_count = images.clone().count();
-                let missing_images = images.filter(|item| item.raster.is_none()).count();
+                let missing_images = images
+                    .filter(|item| item.raster.is_none() && item.image.is_none())
+                    .count();
                 bead_core::vprintln!(
                     "UI_IMAGE_BYTES scale={scale} raster_bytes={image_bytes} encoded_bytes={encoded_bytes} images={image_count} missing={missing_images} thread={:?}",
                     std::thread::current().id()
@@ -253,7 +274,55 @@ fn bake(
     }
     Ok(())
 }
+fn prepare_resource_job(job: Job, cache: &mut bead_render::tree::TreeCache) -> Result<Result<(), String>, Job> {
+    match job {
+        Job::PrepareImages(images) => {
+            let mut result = Ok(());
+            for image in images {
+                let error = image.prepare().err().map(|error| error.to_string());
+                image.finish_request(error.clone());
+                if let Some(error) = error { result = Err(error); }
+            }
+            Ok(result)
+        }
+        Job::PrepareCpu(request) => {
+            *cache = bead_render::tree::TreeCache::default();
+            let result = request.prepare();
+            Ok(result)
+        }
+        job => Err(job),
+    }
+}
 impl SceneSource for Source {
+    fn resources_retired(&self) -> bool { self.retired.load(std::sync::atomic::Ordering::Acquire) }
+    fn preparation_retry_pending(&self) -> bool { self.preparation_retry }
+    fn prepare_cpu(&mut self, request: Arc<bead_render::tree::CpuPreparation>) -> Result<(), Box<dyn Error>> {
+        self.preparation_retry |= self.candidate.is_some();
+        if request.mark_requested() { self.send(Job::PrepareCpu(request))?; }
+        Ok(())
+    }
+
+    fn prepare_images(
+        &mut self,
+        images: Vec<Arc<bead_render::tree::ImagePayload>>,
+    ) -> Result<(), Box<dyn Error>> {
+        self.preparation_retry |= self.candidate.is_some();
+        let images = images
+            .into_iter()
+            .filter(|image| image.pending() && image.mark_requested())
+            .collect::<Vec<_>>();
+        if images.is_empty() {
+            return Ok(());
+        }
+        if let Err(error) = self.send(Job::PrepareImages(images.clone())) {
+            for image in images {
+                image.finish_request(None);
+            }
+            return Err(error);
+        }
+        Ok(())
+    }
+
     fn deferred_updates(&self) -> bool {
         true
     }
@@ -267,6 +336,8 @@ impl SceneSource for Source {
         let (sender, receiver) = mpsc::channel();
         self.sender = Some(sender);
         bead_core::profile::mark("worker_spawn");
+        let image_policy = self.image_policy;
+        let retired = self.retired.clone();
         self.thread = Some(std::thread::spawn(move || {
             bead_core::profile::mark("worker_started");
             let wakeup: Arc<dyn Fn(UiEvent) + Send + Sync> = Arc::from(wakeup);
@@ -290,7 +361,8 @@ impl SceneSource for Source {
                 bead_core::profile::mark("runtime_ready");
                 let service_wakeup = wakeup.clone();
                 source.services(Box::new(move |event| service_wakeup(event)));
-                let mut cache = bead_render::tree::TreeCache::default();
+                let mut cache =
+                    bead_render::tree::TreeCache::default().with_image_policy(image_policy);
                 let mut queue = VecDeque::new();
                 let mut token = 0;
                 let mut idle = false;
@@ -339,7 +411,12 @@ impl SceneSource for Source {
                             }
                         }
                     };
+                    let job = match prepare_resource_job(job, &mut cache) {
+                        Ok(result) => { wakeup(UiEvent::ResourcesPrepared(result)); continue; }
+                        Err(job) => job,
+                    };
                     match job {
+                        Job::PrepareImages(_) | Job::PrepareCpu(_) => unreachable!("resource jobs handled above"),
                         Job::PanelCenter(center) => source.panel_center(center),
                         Job::InitialModel(values) => {
                             if let Err(error) = source.initial_model(values) {
@@ -431,7 +508,26 @@ impl SceneSource for Source {
                             bead_core::profile::mark("worker_layout_ready");
                             needs_trim = true;
                             let bake_profile = bead_core::profile::Span::new("bake");
-                            if let Err(error) = bake(&mut cache, &mut scene, &scales) {
+                            let mut baked = bake(&mut cache, &mut scene, &scales);
+                            if baked.as_ref().err().is_some_and(|error| error.contains("cache byte budget exceeded"))
+                                && image_policy != bead_render::tree::ImagePolicy::Dense
+                            {
+                                // Retire textures, never the last presented compositor buffer.
+                                retired.store(true, std::sync::atomic::Ordering::Release);
+                                let (response, released) = mpsc::channel();
+                                wakeup(UiEvent::RetireResources(Arc::new(ResourceRetirement(std::sync::Mutex::new(Some(response))))));
+                                let release = loop {
+                                    match released.recv_timeout(std::time::Duration::from_millis(8)) {
+                                        Ok(result) => break result,
+                                        Err(mpsc::RecvTimeoutError::Disconnected) => break Err("resource retirement disconnected".into()),
+                                        Err(mpsc::RecvTimeoutError::Timeout) => {
+                                            for job in receiver.try_iter() { match job { Job::Stop => break 'actor, job => enqueue(&mut queue, job) } }
+                                        }
+                                    }
+                                };
+                                baked = release.and_then(|()| bake(&mut cache, &mut scene, &scales));
+                            }
+                            if let Err(error) = baked {
                                 wakeup(UiEvent::Worker(Arc::new(Packet {
                                     phase: Phase::Failed,
                                     token,
@@ -463,6 +559,9 @@ impl SceneSource for Source {
                             loop {
                                 match receiver.recv() {
                                     Ok(Job::Stop) | Err(_) => break 'actor,
+                                    Ok(job @ (Job::PrepareImages(_) | Job::PrepareCpu(_))) => {
+                                        wakeup(UiEvent::ResourcesPrepared(prepare_resource_job(job, &mut cache).unwrap_or_else(|_| unreachable!())));
+                                    }
                                     Ok(Job::Ack(id, result)) if id == token => {
                                         let validated = result.and_then(|()| {
                                             if fault.is_some() {
@@ -567,6 +666,11 @@ impl SceneSource for Source {
         self.send(Job::Watch(callback))
     }
     fn stage(&mut self, event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+        if let UiEvent::ResourcesPrepared(result) = event {
+            result.map_err(|error| -> Box<dyn Error> { error.into() })?;
+            self.preparation_retry = false;
+            return Ok(self.candidate.clone());
+        }
         if let UiEvent::Worker(packet) = event {
             self.token = packet.token;
             if let Some(mirror) = &packet.mirror {
@@ -577,6 +681,7 @@ impl SceneSource for Source {
             }
             match packet.phase {
                 Phase::Failed => {
+                    self.retired.store(false, std::sync::atomic::Ordering::Release);
                     return Err(packet
                         .error
                         .clone()
@@ -613,6 +718,7 @@ impl SceneSource for Source {
     }
     fn commit(&mut self) -> bool {
         if self.accepted {
+            self.retired.store(false, std::sync::atomic::Ordering::Release);
             self.accepted = false;
             if let Some(scene) = self.candidate.take() {
                 self.current = scene;
@@ -920,6 +1026,137 @@ mod tests {
             queue.pop_front(),
             Some(Job::Stage(UiEvent::Release, _))
         ));
+    }
+    #[test]
+    fn budget_retirement_retries_once_and_shutdown_never_waits_for_ui_ack() {
+        struct Large(Scene);
+        impl SceneSource for Large {
+            fn watch(&mut self, _: Box<dyn Fn(Result<(), String>) + Send>) -> Result<(), Box<dyn Error>> { Ok(()) }
+            fn stage(&mut self, _: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> { Ok(Some(self.0.clone())) }
+            fn validate(&self) -> Result<(), Box<dyn Error>> { Ok(()) }
+            fn state_summary(&self) -> String { String::new() }
+            fn commit(&mut self) -> bool { panic!("failed resources must never commit") }
+            fn error_scene(&mut self, _: String) -> Scene { scene() }
+        }
+        let mut fixture = scene();
+        fixture.asset_data.insert("too-large-unused".into(), Arc::from(vec![0u8; 40 * bead_core::cache::MIB]));
+        for acknowledge in [true, false] {
+            let fixture = fixture.clone();
+            let mut source = Source::new(Box::new(move || Ok(Box::new(Large(fixture)))), scene()).with_image_policy(bead_render::tree::ImagePolicy::UploadOnly);
+            let (sender, receiver) = mpsc::channel();
+            source.services(Box::new(move |event| { let _ = sender.send(event); }));
+            source.stage(UiEvent::Reload).unwrap();
+            let event = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+            let UiEvent::RetireResources(request) = event else { panic!("retirement request expected") };
+            assert!(source.resources_retired());
+            if acknowledge {
+                request.finish(Ok(()));
+                let failed = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+                assert!(matches!(&failed, UiEvent::Worker(packet) if packet.is_failed()));
+                assert!(source.stage(failed).is_err());
+                assert!(!source.resources_retired());
+                assert!(receiver.try_recv().is_err(), "one retirement/retry, no busy loop");
+            }
+            let (done, completed) = mpsc::channel();
+            let dropper = std::thread::spawn(move || { drop(source); let _ = done.send(()); });
+            completed.recv_timeout(Duration::from_secs(2)).expect("shutdown must service Stop while retirement Ack is missing");
+            dropper.join().unwrap();
+        }
+    }
+    #[test]
+    fn cpu_resource_job_completes_while_worker_waits_for_gpu_ack() {
+        let mut fixture = scene();
+        fixture.primitives[0] = bead_render::Primitive::Image {
+            rect: bead_render::Rect::new(0., 0., 16., 16.), path: "proof.svg".into(),
+            blur: 0., fit: bead_render::ImageFit::Fill, clip_polygon: None,
+        };
+        fixture.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));
+        let mut renderer = bead_render::renderer(bead_render::RendererKind::Cpu).unwrap();
+        let error = renderer.prepare_on_ui(&fixture, 1.).unwrap_err();
+        let request = error.downcast_ref::<bead_render::tree::CpuResourcesPending>().unwrap().request.clone();
+        let commits = Arc::new(AtomicUsize::new(0));
+        let count = commits.clone();
+        let mut source = Source::new(Box::new(move || Ok(Box::new(Mock {
+            commits: count, panic: false, scales: vec![], expected_scales: None,
+        }))), scene());
+        let (sender, receiver) = mpsc::channel();
+        source.services(Box::new(move |event| { let _ = sender.send((event, std::thread::current().id())); }));
+        source.stage(UiEvent::Reload).unwrap();
+        let (ready, _) = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        let staged = source.stage(ready).unwrap().unwrap();
+        source.prepare_cpu(request.clone()).unwrap();
+        assert!(source.preparation_retry_pending());
+        let (event, worker) = receiver.recv_timeout(Duration::from_secs(2)).expect("resource job must not wait for Ack");
+        assert_ne!(worker, std::thread::current().id());
+        assert!(matches!(event, UiEvent::ResourcesPrepared(Ok(()))));
+        let retry = source.stage(event).unwrap().unwrap();
+        assert_eq!(retry.resource_revision, staged.resource_revision);
+        assert!(!source.preparation_retry_pending());
+        renderer.prepare_on_ui(&fixture, 1.).unwrap();
+        assert!(!source.commit());
+        let (accepted, _) = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        source.stage(accepted).unwrap();
+        assert!(source.commit());
+        assert_eq!(commits.load(Ordering::SeqCst), 1, "hydration never duplicates source commit");
+    }
+    #[test]
+    fn image_hydration_is_deduplicated_and_runs_on_the_source_worker() {
+        let mut fixture = scene();
+        fixture.primitives[0] = bead_render::Primitive::Image {
+            rect: bead_render::Rect::new(0., 0., 16., 16.),
+            path: "proof.svg".into(),
+            blur: 0.,
+            fit: bead_render::ImageFit::Fill,
+            clip_polygon: None,
+        };
+        fixture.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));
+        let mut cache = bead_render::tree::TreeCache::default()
+            .with_image_policy(bead_render::tree::ImagePolicy::DeferredUpload);
+        cache.prepare(&fixture, 1.).unwrap();
+        let payload = cache.frame.as_ref().unwrap().items[0]
+            .image
+            .clone()
+            .unwrap();
+        assert!(payload.pending());
+        let commits = Arc::new(AtomicUsize::new(0));
+        let count = commits.clone();
+        let mut source = Source::new(
+            Box::new(move || {
+                Ok(Box::new(Mock {
+                    commits: count,
+                    panic: false,
+                    scales: vec![],
+                    expected_scales: None,
+                }))
+            }),
+            scene(),
+        );
+        let (sender, receiver) = mpsc::channel();
+        source.services(Box::new(move |event| {
+            let _ = sender.send((event, std::thread::current().id()));
+        }));
+        let caller = std::thread::current().id();
+        source
+            .prepare_images(vec![payload.clone(), payload.clone()])
+            .unwrap();
+        let (event, worker) = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(matches!(event, UiEvent::ResourcesPrepared(Ok(()))));
+        assert_ne!(caller, worker);
+        assert!(!payload.pending());
+        assert!(
+            payload.mark_requested(),
+            "worker completes the in-flight flag"
+        );
+        payload.finish_request(None);
+        assert_eq!(
+            commits.load(Ordering::SeqCst),
+            0,
+            "hydration never commits source state"
+        );
+        assert!(
+            receiver.try_recv().is_err(),
+            "duplicate payload produces one hydration job"
+        );
     }
     #[test]
     fn worker_requires_gpu_ack_before_store_commit_and_supplies_prebaked_pixels() {

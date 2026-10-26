@@ -243,22 +243,36 @@ impl Dispatch<WpFractionalScaleV1, wl_surface::WlSurface> for App {
                 .iter()
                 .position(|s| s.wl_surface() == surface)
         {
+            let changed = state.surfaces[i].scale120 != scale;
             state.surfaces[i].scale120 = scale;
-            if state.options.primary_factory.is_some() && !state.surfaces[i].companion {
+            let relayout = if state.surfaces[i].companion {
+                state.panel_runtime.as_ref().map(|source| {
+                    (
+                        UiEvent::Panel(state.panel_epoch, Box::new(UiEvent::Relayout)),
+                        source.deferred_updates(),
+                    )
+                })
+            } else if state.options.primary_factory.is_some() {
                 let id = state.surfaces[i].output_name.clone();
-                if let Some(session) = state.output_sessions.get(&id) {
-                    let deferred = session
-                        .source
-                        .as_ref()
-                        .is_some_and(|s| s.deferred_updates());
-                    state.ui(UiEvent::Output(
-                        session.epoch,
-                        id,
-                        Box::new(UiEvent::Relayout),
-                    ));
-                    if deferred {
-                        return;
-                    }
+                state.output_sessions.get(&id).and_then(|session| {
+                    session.source.as_ref().map(|source| {
+                        (
+                            UiEvent::Output(session.epoch, id, Box::new(UiEvent::Relayout)),
+                            source.deferred_updates(),
+                        )
+                    })
+                })
+            } else {
+                state
+                    .runtime
+                    .as_ref()
+                    .map(|source| (UiEvent::Relayout, source.deferred_updates()))
+            };
+            if let Some((event, deferred)) = relayout {
+                state.surfaces[i].scale_relayout_pending |= changed && deferred;
+                state.ui(event);
+                if deferred {
+                    return;
                 }
             }
             state.draw(i, qh);

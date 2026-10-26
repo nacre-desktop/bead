@@ -1,80 +1,68 @@
 # B0141 — scrolling follow-up
 
-Status: investigation. B0135 is on main and remains uninstalled live.
+Status: implementation and validation in progress. B0135 is on main; no live installation.
 
 ## Scope and gates
 
-Bound picker scroll/raster resources to visible rows plus a small margin. The
-picker shares B0134's 40 MiB unreclaimable budget in total across its resources,
-measured above its own never-opened shell idle. Report absolute process totals
-as well as that picker cost, including active, reopened and closed phases; do not
-assign separate40 MiB allowances to cache owners or exclude DRM. Capacity counters
-alone do not establish a physical-memory pass. Rebase onto B0134 rather than duplicate its
-resource retirement, thumbnail decoding or wallpaper activation paths.
-Reproduce the allocator abort with remote sanitizer/debug-allocator evidence,
-identify and fix its cause. A passing retry alone does not close this blocker.
-AI reversal must reach one frame (8.33 ms at synthetic 120 Hz), using actual
-input → store → matching commit → changed presentation joins.
-History, popup and Clipboard must meet their previous gates or carry a measured,
-explained budget of at most 2 MiB each under this unit's owner authorization.
+Picker scroll/raster resources share one40 MiB ceiling across encoded assets,
+CPU rasters, GL textures, retained metadata and composites. B0134's40 MiB
+physical retention allowance applies after close, above the same shell's
+never-opened idle. Report full active and closed unreclaimable memory, including
+DRM; payload counters alone cannot establish the physical retention pass.
+B0134 source is integrated; rebase onto current main before final artifact freeze.
 
-Full remote Arch CI, source-pinned native timing, appropriate goldens and QML
-pairs, and five alternating same-host memory pairs remain required. Unreclaimable
-is Pss_Anon + Pss_Shmem + DRM + SwapPss; file PSS is informational. Missing
-measurements are unavailable. Require zero aborts through a continuous 30-minute
-instrumented remote scroll soak covering every reachable scroll container.
-Desktop proof commands retain the shared lock for less than 15 minutes each;
-remote headless sanitizer soak and native transport timing are distinct gates.
-No live desktop, installation or release is authorized.
+Reproduce and fix the historical allocator abort using remote instrumentation.
+AI reversal must reach one frame at synthetic120 Hz (8.33 ms), joining actual
+input, store, matching commit and changed presentation. History, popup and
+Clipboard need measured justification at≤2 MiB each or a fix.
+Require full remote Arch CI, exact pushed-head CI, source-pinned native timing,
+QML pairs, five alternating same-host memory pairs and a continuous30-minute
+instrumented scroll soak with zero aborts across every reachable scroll container.
+Headless soak and native presentation are separate evidence. Private desktop
+commands hold the shared lock for less than15 minutes and retain swap/source/
+geometry/containment gates. No live desktop, install or release authorization.
 
-## Integration and ownership
+## Changes
 
-Starting main is588d9506, including B0134 commits85f72cc2/588d9506. B0134's
-source is integrated while its final five-pair report remains in flight. Preserve
-its measured source pins; rebase changes without overwriting its worktree.
-General cache/input primitives belong in framework crates; shell policy remains
-in Luau and edge adapters. No duplicate renderer/provider or alternate scroller.
+Active prepare/upload retires absent cache entries only after replacement succeeds.
+GL panels use worker-prepared upload resources, original bitmap cover textures and
+lossless tiled SVG atlases; exact dense CPU rendering remains the fallback.
+A shared budget charges encoded assets, rasters, textures and opacity groups.
+Bounded decode scratch is separate from retained cache residency and must be
+reported. Resource completion wakes the renderer without rerunning shell logic.
+Generic image preparation and compaction belong in framework crates; picker policy
+and presentation remain in Luau. No provider or wallpaper activation replacement.
 
-Allocator investigation owns remote sanitizer/CI setup; picker work owns render
-cache bounds; latency work owns shared scheduling diagnosis. The coordinator
-reviews changes, owns memory/soak planning, integration and final evidence.
+Fresh CPU UI updates may replace a pending callback's obsolete commit using the
+existing buffer set. This needs final memory and presentation verification.
+Wheel movement is100 logical pixels per notch, scaled once by the output.
+Finger movement remains1:1 without contact damping. Release motion follows
+Chromium's Linux-default PhysicsBasedFlingCurve:96 DIP/inch,2645.664 DIP/s²,
+duration=min(abs(v)/2300,2 s), endpoint=min(v²/(2a),3 client viewports), with
+the release-speed-preserving cubic Bézier. This is an independent per-axis,
+unboosted implementation; diagonal coupling and repeated-fling boost are excluded.
+[Chromium default](https://chromium.googlesource.com/chromium/src/+/c11ad0021df3ea0608b099ad8b52ad1c0665d47e/ui/base/ui_base_features.cc),
+[physics source](https://chromium.googlesource.com/chromium/src/+/3e1a26c44c024d97dc9a4c09bbc6a2365398ca2c/ui/events/gestures/physics_based_fling_curve.cc).
 
-## Initial evidence and design review
+## Evidence and remaining work
 
-B0135 history/popup/Clipboard open medians were +1.4844/+1.2578/+2.1758 MiB
-against its matched old control. The new owner allowance can justify the first
-two only with measured explanation; Clipboard still exceeds2 MiB. Those frozen
-measurements are not relabelled as current-main results. Five new pairs must
-keep source, backend, geometry and fixture state matched.
+The allocator failure is reproduced in standalone Luau0.740 after successful
+Bead CHECK_OK: run12 produces the original tcache/SIGABRT failure; explicit
+glibc debug-allocator preload crashes on run28. Upstream identifies a shared
+parallel error-reporter race, fixed in analyzer0.742. The fixed tool passes
+100/100 original-environment checks and100/100 with verified debug preload.
+CI pins its official release digest; signal failures are labelled explicitly.
+Embedded runtime Luau remains unchanged. [Attribution and limits](evidence/0141/allocator.md).
 
-Current B0134 already gives thumbnails stable IDs, so B0135's generation-suffixed
-thumbnail accumulation is historical. The remaining generic cache design retains
-untouched rows until large CPU/GL LRU thresholds. The candidate retires absent
-lookup entries only after successful prepare/upload, preserves active image
-previous-size reuse and leaves the last accepted frame valid on failure. Tests
-cover bounded retention, held old-frame charges, fresh-render pixel equality and
-reverse traversal. No new picker-specific framework policy or extra margin is
-introduced before measured need.
+Remote renderer/native/default checks pass for the current pipeline; final
+lifecycle review, exact-source release, native memory/parity, CI and soak remain.
+An earlier callback-only AI diagnostic measures reversal11.09/12.89/13.03 ms
+before and12.04/7.53/4.69 ms after: median7.53 ms, maximum12.04 ms. Thus it
+passes a median-one-frame criterion but does not establish every-reversal≤8.33 ms.
+Its direct-parent route is different from B0135's49.22 ms nested-niri result.
 
-The original AI trace is9.22 ms input→delivery and40.00 ms delivery→visible,
-with callback/presentation intervals near16 ms. The first inverse logical step
-repeats an already displayed offset; it is not yet a visible reversal. A private
-direct-parent120 Hz proof will separate transport cadence from client scheduling.
-No inverse-delta summing or violation of finger1:1 is used to improve a metric.
-
-Forty fresh B0135 debug checks, including glibc checking/perturbation, have not
-yet reproduced the allocator abort. Rust ASan and Luau C++ ASan are compiling
-into a dedicated target; passing checks alone do not resolve the blocker.
-
-## Allocator attribution under investigation
-
-The historical workflow exit250 is consistent with Python propagating an
-analyzer subprocess SIGABRT(-6), rather than a shell-process --check abort.
-`tools/check-luau.py` starts type generation and the analyzer after CHECK_OK and
-captures their output; the earlier standalone --check retry omitted that step.
-Upstream [issue3020](https://github.com/luau-lang/luau/issues/3020) reports the
-exact allocator message from parallel checks racing on the shared error reporter.
-[Luau0.742](https://github.com/luau-lang/luau/releases/tag/0.742) lists the
-upstream fix. Reproduction and sanitizer attribution are still required before
-this unit calls the historical blocker resolved; the runtime Luau dependency is
-not assumed faulty merely because the standalone analyzer has a race.
+Old B0135 history/popup/Clipboard medians (+1.484/+1.258/+2.176 MiB) are
+historical, not current-source passes. An initial GL80 active-cache retirement
+candidate still consumed147.4 MB in reported caches; this failed the40 MiB gate
+and motivated native uploads/compaction. Final-source measurements are pending.
+No temporary alternative product implementation is retained.

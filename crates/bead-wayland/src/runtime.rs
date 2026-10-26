@@ -2274,6 +2274,8 @@ impl App {
                 } else {
                     self.primary_ui_serial
                 },
+                scale_relayout_pending: false,
+                resources_retry_pending: false,
             })
         })();
         match result {

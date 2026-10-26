@@ -22,12 +22,10 @@ pub(super) fn tick() -> Duration {
         8_333_333
     })
 }
-/// Scalar constants from Chromium's default desktop FlingCurve
-/// (ui/events/gestures/fling_curve.cc, BSD-3-Clause), expressed independently.
-const FLING_ALPHA: f64 = -5707.62;
-const FLING_BETA: f64 = 172.;
-const FLING_GAMMA: f64 = 3.7;
-const FLING_MAX_VELOCITY: f64 = -FLING_ALPHA * FLING_GAMMA - FLING_BETA;
+/// Chromium's Linux-default physics uses 96 logical pixels per inch and
+/// physical deceleration 2.7559e-5 inch/ms².
+const FLING_DECELERATION: f64 = 96. * 2.7559e-5 * 1_000_000.;
+const FLING_DURATION_DECELERATION: f64 = 2300.;
 const FLING_MIN_VELOCITY: f64 = 100.;
 const WHEEL_DURATION: f64 = 0.125;
 const WHEEL_STEP: f64 = 100.;
@@ -139,20 +137,38 @@ mod tests {
 
     #[test]
     fn fling_decelerates_to_rest_in_the_direction_of_release() {
-        let (first, done) = fling_position(-1500., 0.1);
+        let (first, done) = fling_position(-1500., 0.1, 1080.);
         assert!(first < 0. && !done);
-        let (end, done) = fling_position(-1500., 5.);
+        let (end, done) = fling_position(-1500., 5., 1080.);
         assert!(done);
-        assert!((first + 122.55464842549827).abs() < 1e-6);
-        assert!((end + 299.6820577040635).abs() < 1e-6);
-        assert!((fling_position(5000., 0.02).0 - 96.2654052575308).abs() < 1e-6);
-        assert!((fling_position(5000., 0.25).0 - 800.5512163632811).abs() < 1e-6);
-        assert!((fling_position(5000., 10.).0 - 1193.1336526352798).abs() < 1e-6);
-        assert_eq!(
-            fling_position(50_000., 0.1),
-            fling_position(FLING_MAX_VELOCITY, 0.1)
-        );
-        assert!(fling_position(900., 0.2).0 > 0.);
+        assert_eq!(fling_position(1500., 0.1, 1080.).0, -first);
+        assert!((end + 1500_f64.powi(2) / (2. * FLING_DECELERATION)).abs() < 1e-6);
+        // Chromium's default PhysicsBasedFlingCurve reference sequence. The
+        // 1080-DIP vertical viewport caps the endpoint at three viewports.
+        let first = fling_position(5000., 0.02, 1080.).0;
+        let second = fling_position(5000., 0.25, 1080.).0;
+        let end = fling_position(5000., 10., 1080.);
+        assert!((first - 98.).abs() < 1.);
+        assert!((second - first - 923.).abs() < 1.);
+        assert!((end.0 - second - 2218.).abs() < 1.);
+        assert_eq!(end, (3240., true));
+        // Its wider horizontal viewport reaches the unbounded physics endpoint.
+        let first = fling_position(5000., 0.02, 1920.).0;
+        let second = fling_position(5000., 0.25, 1920.).0;
+        let end = fling_position(5000., 10., 1920.).0;
+        assert!((first - 99.).abs() < 1.);
+        assert!((second - first - 1054.).abs() < 1.);
+        assert!((end - second - 3571.).abs() < 1.);
+    }
+
+    #[test]
+    fn physics_fling_matches_release_speed_and_finishes_within_two_seconds() {
+        assert_eq!(fling_position(0., 0., 1080.), (0., true));
+        assert_eq!(fling_position(5000., -0.02, 1080.), (0., false));
+        assert_eq!(fling_position(5000., 0., 1080.), (0., false));
+        assert!((fling_position(5000., 0.00001, 1080.).0 / 0.00001 - 5000.).abs() < 1.);
+        assert_eq!(fling_position(100_000., 2., 1080.), (3240., true));
+        assert_eq!(fling_position(-100_000., 2., 1080.), (-3240., true));
     }
 
     #[test]
@@ -229,6 +245,7 @@ struct Fling {
     serial: u64,
     started: Instant,
     velocity: f64,
+    viewport: f64,
     delivered: f64,
     point: (f32, f32),
 }
@@ -253,6 +270,38 @@ fn remaining_distance(previous: Option<&Motion>, point: (f32, f32), delta: f64) 
         .map_or(0., |p| p.distance - p.delivered)
 }
 impl App {
+    fn fling_viewport(&self, target: &Target, horizontal: bool) -> f64 {
+        let size = match target {
+            Target::Window(epoch) => self
+                .window
+                .as_ref()
+                .filter(|w| w.epoch() == *epoch)
+                .map(|w| w.viewport_size()),
+            Target::Overlay(epoch) => self
+                .overlay
+                .as_ref()
+                .filter(|o| o.epoch() == *epoch)
+                .map(|o| o.viewport_size()),
+            Target::Panel(epoch) => self
+                .surfaces
+                .iter()
+                .find(|s| s.companion && *epoch == self.panel_epoch)
+                .map(|s| (s.width, s.height)),
+            Target::Primary(output) => self
+                .surfaces
+                .iter()
+                .find(|s| {
+                    !s.companion
+                        && output
+                            .as_ref()
+                            .is_none_or(|(_, name)| &s.output_name == name)
+                })
+                .map(|s| (s.width, s.height)),
+        };
+        size.map_or(0., |(width, height)| {
+            f64::from(if horizontal { width } else { height })
+        })
+    }
     pub(super) fn scroll_target(&self, panel: bool) -> Target {
         if panel {
             Target::Panel(self.panel_epoch)
@@ -444,9 +493,11 @@ impl App {
         {
             return;
         }
-        let velocity = pixels
-            .velocity
-            .clamp(-FLING_MAX_VELOCITY, FLING_MAX_VELOCITY);
+        let velocity = pixels.velocity;
+        let viewport = self.fling_viewport(&key.0, key.1);
+        if !velocity.is_finite() || viewport <= 0. {
+            return;
+        }
         self.scrolls.serial = self.scrolls.serial.wrapping_add(1);
         let serial = self.scrolls.serial;
         let key = key.clone();
@@ -456,6 +507,7 @@ impl App {
                 serial,
                 started: Instant::now(),
                 velocity,
+                viewport,
                 delivered: 0.,
                 point: pixels.point,
             },
@@ -471,8 +523,11 @@ impl App {
                     else {
                         return TimeoutAction::Drop;
                     };
-                    let (next, done) =
-                        fling_position(fling.velocity, fling.started.elapsed().as_secs_f64());
+                    let (next, done) = fling_position(
+                        fling.velocity,
+                        fling.started.elapsed().as_secs_f64(),
+                        fling.viewport,
+                    );
                     let delta = next - fling.delivered;
                     fling.delivered = next;
                     let point = fling.point;
@@ -490,20 +545,43 @@ impl App {
     }
 }
 
-/// Chromium desktop fling position after `t` seconds; `true` once its curve rests.
-fn fling_position(velocity: f64, t: f64) -> (f64, bool) {
-    let curve_position =
-        |time: f64| FLING_ALPHA * (-FLING_GAMMA * time).exp() - FLING_BETA * time - FLING_ALPHA;
-    let curve_velocity =
-        |time: f64| -FLING_ALPHA * FLING_GAMMA * (-FLING_GAMMA * time).exp() - FLING_BETA;
-    let inverse_velocity =
-        |speed: f64| -((speed + FLING_BETA) / (-FLING_ALPHA * FLING_GAMMA)).ln() / FLING_GAMMA;
-    let initial_speed = velocity.abs().min(curve_velocity(0.));
-    let start = inverse_velocity(initial_speed);
-    let stop = inverse_velocity(0.);
-    let elapsed = t.max(0.);
-    let at_rest = elapsed + start >= stop;
-    let position_time = (elapsed + start).min(stop);
-    let travelled = curve_position(position_time) - curve_position(start);
-    (travelled.copysign(velocity), at_rest)
+/// Unboosted Chromium Linux physics, evaluated independently per scroll axis.
+fn fling_position(velocity: f64, t: f64, viewport: f64) -> (f64, bool) {
+    let speed = velocity.abs();
+    if !speed.is_finite() || speed == 0. || !viewport.is_finite() || viewport <= 0. {
+        return (0., true);
+    }
+    if t <= 0. {
+        return (0., false);
+    }
+    let distance = (speed * speed / (2. * FLING_DECELERATION)).min(3. * viewport);
+    let duration = (speed / FLING_DURATION_DECELERATION).min(2.);
+    if t >= duration {
+        return (distance.copysign(velocity), true);
+    }
+    let slope = speed * duration / distance;
+    let (p1x, p1y) = if slope * 0.2 < 1. {
+        (0.2, 0.2 * slope)
+    } else {
+        (1. / slope, 1.)
+    };
+    let cubic = |u: f64, first: f64, second: f64| {
+        3. * (1. - u).powi(2) * u * first + 3. * (1. - u) * u * u * second + u * u * u
+    };
+    let x = (t / duration).clamp(0., 1.);
+    let (mut low, mut high) = (0., 1.);
+    // Bounded monotonic inversion remains stable at the steep initial tangent
+    // of fast, viewport-limited flings.
+    for _ in 0..40 {
+        let mid = (low + high) * 0.5;
+        if cubic(mid, p1x, 0.55) < x {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    (
+        distance.copysign(velocity) * cubic((low + high) * 0.5, p1y, 1.),
+        false,
+    )
 }

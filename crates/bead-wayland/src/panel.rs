@@ -766,10 +766,14 @@ impl App {
         }
         self.sync_all_decorations()?;
         let factory = spec.factory.clone();
-        let mut source: Box<dyn SceneSource> = Box::new(worker::Source::new(
-            Box::new(move || factory(open)),
-            spec.fallback.clone(),
-        ));
+        let mut source: Box<dyn SceneSource> = Box::new(
+            worker::Source::new(Box::new(move || factory(open)), spec.fallback.clone())
+                .with_image_policy(if spec.renderer == bead_render::RendererKind::FemtovgGl {
+                    bead_render::tree::ImagePolicy::UploadOnly
+                } else {
+                    bead_render::tree::ImagePolicy::Dense
+                }),
+        );
         let sender = self
             .event_sender
             .clone()
@@ -892,7 +896,10 @@ impl App {
             std::mem::swap(&mut self.renderer, renderer);
             self.options.renderer = *effective;
         }
-        let force_draw = matches!(&event, UiEvent::Relayout | UiEvent::PanelVisibility(_));
+        let force_draw = matches!(
+            &event,
+            UiEvent::Relayout | UiEvent::PanelVisibility(_) | UiEvent::ResourcesPrepared(Ok(()))
+        );
         self.processing_panel = true;
         self.options.bar = false;
         self.options.panel = true;

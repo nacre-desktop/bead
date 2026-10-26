@@ -361,6 +361,9 @@ pub enum UiEvent {
     WallpaperTick(String),
     WallpaperPalette(std::collections::BTreeMap<String, [u8; 4]>),
     Worker(std::sync::Arc<worker::Packet>),
+    /// Background image upload preparation completed; redraw accepted content.
+    ResourcesPrepared(Result<(), String>),
+    RetireResources(std::sync::Arc<worker::ResourceRetirement>),
     Desktop(std::sync::Arc<bead_services::Snapshot>),
     Model(std::collections::BTreeMap<String, bead_core::Value>),
     Backend(std::sync::Arc<bead_backends::Snapshot>),
@@ -523,6 +526,18 @@ pub trait SceneSource {
     fn deferred_updates(&self) -> bool {
         false
     }
+    /// Refill consumed GPU upload payloads outside the presentation thread.
+    fn prepare_images(
+        &mut self,
+        _images: Vec<std::sync::Arc<bead_render::tree::ImagePayload>>,
+    ) -> Result<(), Box<dyn Error>> {
+        Err("asynchronous image preparation is unavailable".into())
+    }
+    fn prepare_cpu(&mut self, _request: std::sync::Arc<bead_render::tree::CpuPreparation>) -> Result<(), Box<dyn Error>> {
+        Err("asynchronous CPU preparation is unavailable".into())
+    }
+    fn resources_retired(&self) -> bool { false }
+    fn preparation_retry_pending(&self) -> bool { false }
     /// Stage a product-provided presentation palette through the normal scene transaction.
     fn wallpaper_palette(
         &mut self,
@@ -870,6 +885,8 @@ struct Surface {
     recovered_generation: Option<(u64, u64)>,
     ui_serial: u64,
     last_submitted_ui_serial: u64,
+    scale_relayout_pending: bool,
+    resources_retry_pending: bool,
 }
 impl Surface {
     fn wl_surface(&self) -> &wl_surface::WlSurface {

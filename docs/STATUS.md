@@ -26,14 +26,14 @@ Full remote CI passes. Capture-loaded handoff timing still misses 33 ms; no new
 latency claim. [Evidence](specs/0139-prewarm-toplevel.md). No live deployment.
 ## 2026-10-26 — B0141 scrolling follow-up
 
-The uninstalled B0135 candidate remains blocked by active picker memory, an
-unexplained allocator abort, reversal latency and open-view memory increases.
-B0134 resource-retirement changes are integrated at588d9506; its final evidence
-is still in flight. Remote allocator reproduction/sanitizer work and shared
-cache/latency investigations are running. Picker must fit the shared40 MiB
-budget, AI reversal one frame, and history/popup/Clipboard at most2 MiB each
-with measured justification. Require full CI and a30-minute zero-abort scroll
-soak; no live change. [Scope and gates](specs/0141-scrolling-followup.md).
+The old allocator abort is reproduced in Luau0.740's standalone parallel analyzer,
+not the Bead --check process. Upstream0.742 fixes the shared error-reporter race;
+100 project checks pass with the real glibc debug allocator, and CI now pins that
+release. Runtime Luau is unchanged. The30-minute runtime scroll soak remains open.
+Cache retirement passes70 renderer tests; native GL80 memory and direct120Hz AI
+proofs are in progress. Picker shares B0134's40MiB budget, and open history/popup/
+Clipboard require measured justification at≤2MiB each. No live change.
+[Scope, sources and gates](specs/0141-scrolling-followup.md).
 
 ## 2026-10-26 — B0131 warm covered release
 

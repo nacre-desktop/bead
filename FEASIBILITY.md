@@ -1,5 +1,21 @@
 # Feasibility
 
+## B0141 — scrolling follow-up (2026-10-26, in progress)
+
+The historical allocator abort comes from the standalone Luau analyzer's parallel reporter race.
+The UI check exits successfully; updating the pinned analyzer fixes the reproduced tool fault.
+Active-frame cache retirement passes renderer tests while preserving pixels and scale reuse.
+Picker40MiB, AI one-frame, open-view budgets and the30-minute runtime soak still need native validation.
+
+| Remote exact analyzer checks | Old0.740 | Fixed0.742 |
+| --- | ---: | ---: |
+| Original tcache-message reproduction | run12 abort | 100/100 pass |
+| Explicit glibc debug allocator preload | run28 SIGSEGV | 100/100 pass |
+| Renderer active-window tests | — | 70/70 pass |
+
+The analyzer/runtime attribution corrects B0135's earlier assumption. No runtime Luau upgrade.
+[Failure evidence and remaining gates](docs/specs/0141-scrolling-followup.md).
+
 ## B0135 — shared scrolling (2026-10-26)
 
 One source-aware policy replaces amplified finger input and queued wheel reversal.

@@ -2,6 +2,21 @@
 //! Per-surface rendering, GPU staging and idle release.
 use super::*;
 
+pub(super) fn prepare_pending_images(
+    error: &(dyn Error + 'static),
+    source: &mut dyn SceneSource,
+) -> Result<bool, Box<dyn Error>> {
+    if let Some(pending) = error.downcast_ref::<bead_render::tree::CpuResourcesPending>() {
+        source.prepare_cpu(pending.request.clone())?;
+        return Ok(true);
+    }
+    let Some(pending) = error.downcast_ref::<bead_render::tree::ResourcesPending>() else {
+        return Ok(false);
+    };
+    source.prepare_images(pending.images.clone())?;
+    Ok(true)
+}
+
 /// Hidden content never requests a keyboard, including retained warm panels.
 fn panel_keyboard_mode(visible: bool, click_focus: bool, exclusive: bool) -> KeyboardInteractivity {
     if !visible {
@@ -247,6 +262,48 @@ fn shm_compact_idle(surface: &Surface) -> Duration {
     }
 }
 impl App {
+    fn prepare_surface_images(&mut self, index: usize, error: &(dyn Error + 'static)) -> bool {
+        if error.is::<bead_render::tree::ResourcePreparationFailed>() {
+            eprintln!("UI_ERROR resource preparation: {error}");
+            self.surfaces[index].redraw = false;
+            return true;
+        }
+        let source = if self.surfaces[index].companion {
+            self.panel_runtime.as_mut()
+        } else {
+            self.runtime.as_mut()
+        };
+        let Some(source) = source else { return false };
+        match prepare_pending_images(error, source.as_mut()) {
+            Ok(true) => {
+                self.surfaces[index].redraw = true;
+                if !self.surfaces[index].resources_retry_pending {
+                    self.surfaces[index].resources_retry_pending = true;
+                    let identity = self.surfaces[index].wl_surface().clone();
+                    let qh = self.qh.clone();
+                    if let Err(error) = self.loop_handle.insert_source(
+                        Timer::from_duration(Duration::from_millis(8)),
+                        move |_, _, app| {
+                            if let Some(index) = app.surfaces.iter().position(|s| s.wl_surface() == &identity) {
+                                app.surfaces[index].resources_retry_pending = false;
+                                app.draw(index, &qh);
+                            }
+                            TimeoutAction::Drop
+                        },
+                    ) {
+                        self.surfaces[index].resources_retry_pending = false;
+                        self.fail(error);
+                    }
+                }
+                true
+            }
+            Ok(false) => false,
+            Err(error) => {
+                self.fail(error);
+                true
+            }
+        }
+    }
     #[cfg(feature = "native-gl")]
     pub(super) fn prepare_panel_gl(&mut self) -> Result<(), Box<dyn Error>> {
         if self.gl.is_some()
@@ -379,7 +436,7 @@ impl App {
             .name("bead-panel-cpu-snapshot".into())
             .spawn(move || {
                 let _span = bead_core::profile::Span::new("panel_cpu_snapshot");
-                let result = bead_render::tree::TreeCpuRenderer::snapshot(&scene, scale)
+                let result = bead_render::tree::TreeCpuRenderer::prepare_snapshot(&scene, scale)
                     .map_err(|error| error.to_string());
                 let _ = sender.send(result);
             })?;
@@ -414,11 +471,16 @@ impl App {
                         {
                             Ok(snapshot) => {
                                 if let Err(error) = app.suspend_panel_gpu(snapshot) {
-                                    app.fail(error);
+                                    eprintln!("UI_ERROR CPU snapshot admission: {error}");
                                 }
                             }
-                            Err(error) => app.fail(error),
+                            Err(error) => eprintln!("UI_ERROR CPU snapshot: {error}"),
                         }
+                    } else if app.panel_target {
+                        drop(result);
+                        let qh = app.qh.clone();
+                        let indices = app.surfaces.iter().enumerate().filter(|(_, surface)| surface.companion).map(|(index, _)| index).collect::<Vec<_>>();
+                        for index in indices { app.draw(index, &qh); }
                     } else if !app.panel_target
                         && app.panel_runtime.is_some()
                         && let Err(error) = app.start_panel_snapshot()
@@ -464,12 +526,13 @@ impl App {
     #[cfg(feature = "native-gl")]
     pub(super) fn suspend_panel_gpu(
         &mut self,
-        snapshot: bead_render::tree::TreeCpuRenderer,
+        snapshot: bead_render::tree::PreparedCpuSnapshot,
     ) -> Result<(), Box<dyn Error>> {
         let _span = bead_core::profile::Span::new("panel_gpu_retire");
         #[cfg(feature = "native-gl")]
         if self.options.companion.as_ref().map(|(_, kind)| *kind) == Some(RendererKind::FemtovgGl) {
             self.release_companion_gpu_resources()?;
+            let snapshot = snapshot.accept()?;
             if let Some((scene, renderer, kind)) = &mut self.companion {
                 *renderer = Box::new(snapshot);
                 *kind = RendererKind::Cpu;
@@ -642,6 +705,7 @@ impl App {
             || !self.surfaces[index].companion
             || !self.surfaces[index].configured
             || self.surfaces[index].callbacks.pending
+            || self.surfaces[index].scale_relayout_pending
         {
             return Ok(());
         }
@@ -844,6 +908,7 @@ impl App {
         Ok(())
     }
     pub(super) fn draw(&mut self, index: usize, qh: &QueueHandle<Self>) {
+
         if self.hidden {
             return;
         }
@@ -876,6 +941,24 @@ impl App {
                     .as_ref()
                     .is_some_and(|(_, _, kind)| *kind == RendererKind::FemtovgGl)
                     || !self.panel_cpu_cached)
+            {
+                self.surfaces[index].redraw = true;
+                return;
+            }
+            #[cfg(feature = "native-gl")]
+            if self.options.companion.as_ref().map(|(_, kind)| *kind) == Some(RendererKind::FemtovgGl)
+                && self.companion.as_ref().is_some_and(|(_, _, kind)| *kind == RendererKind::Cpu)
+                && let Err(error) = self.update_companion_policy(index, qh)
+            {
+                if !self.prepare_surface_images(index, error.as_ref()) { self.fail(error); }
+                return;
+            }
+            #[cfg(feature = "native-gl")]
+            if self.options.companion.as_ref().map(|(_, kind)| *kind) == Some(RendererKind::FemtovgGl)
+                && let Some((scene, renderer, kind)) = self.companion.as_ref()
+                && *kind == RendererKind::Cpu
+                && !renderer.reusable_scene(scene, self.surfaces[index].scale120 as f32 / 120.).unwrap_or(false)
+
             {
                 self.surfaces[index].redraw = true;
                 return;
@@ -977,6 +1060,11 @@ impl App {
         self.draw_current(index, qh);
     }
     fn draw_current(&mut self, index: usize, qh: &QueueHandle<Self>) {
+        if (if self.surfaces[index].companion { self.panel_runtime.as_ref() } else { self.runtime.as_ref() }).is_some_and(|source| source.resources_retired()) {
+            self.surfaces[index].redraw = true;
+            return;
+        }
+
         if self.surfaces[index].companion
             && self
                 .panel_cover
@@ -1010,7 +1098,9 @@ impl App {
         }
         let frame_started = Instant::now();
         if let Err(error) = self.update_companion_policy(index, qh) {
-            self.fail(error);
+            if !self.prepare_surface_images(index, error.as_ref()) {
+                self.fail(error);
+            }
             return;
         }
         let previous_frames = self.surfaces[index].frames;
@@ -1028,6 +1118,7 @@ impl App {
             let wl_surface = s.wl_surface().clone();
             if s.configured
                 && !s.callbacks.pending
+                && !s.scale_relayout_pending
                 && let Some(handoff) = s
                     .handoff
                     .as_ref()
@@ -1102,6 +1193,22 @@ impl App {
             if !s.configured {
                 return Ok(());
             }
+            if s.scale_relayout_pending {
+                let deferred = if s.companion {
+                    self.panel_runtime.as_ref()
+                } else {
+                    self.runtime.as_ref()
+                }
+                .is_some_and(|source| source.deferred_updates());
+                let scale = s.scale120 as f32 / 120.;
+                if deferred && !scene.prepared.contains_key(&scale.to_bits()) {
+                    // Keep the last accepted buffer until the preparation actor
+                    // supplies content validated for the new output scale.
+                    s.redraw = true;
+                    return Ok(());
+                }
+                s.scale_relayout_pending = false;
+            }
             let scale = s.scale120 as f32 / 120.;
             let (w, h, stride, size) = buffer_dimensions(s.width, s.height, s.scale120)?;
             let format = if cfg!(target_endian = "little")
@@ -1113,13 +1220,12 @@ impl App {
                 PixelFormat::Bgra
             };
             let replace_pending_ui = _kind == RendererKind::Cpu
-                && s.callbacks
-                    .can_replace_pending_ui(s.ui_serial != s.last_submitted_ui_serial)
+                && s.callbacks.can_replace_pending_ui(
+                    s.ui_serial != s.last_submitted_ui_serial,
+                )
                 && s.geometry == (w, h)
                 && s.format == format
-                && s.buffers
-                    .iter()
-                    .any(|b| !b.buffer.slot().has_active_buffers());
+                && s.buffers.iter().any(|b| !b.buffer.slot().has_active_buffers());
             if s.callbacks.pending && !replace_pending_ui {
                 s.redraw = true;
                 return Ok(());
@@ -1333,7 +1439,7 @@ impl App {
             renderer.presentation_motion(opaque_motion);
             {
                 let _prepare = bead_core::profile::Span::new("present_prepare");
-                renderer.prepare(scene, scale)?;
+                renderer.prepare_on_ui(scene, scale)?;
             }
             let mut regions = {
                 let _damage = bead_core::profile::Span::new("visual_damage");
@@ -1527,9 +1633,14 @@ impl App {
                 let compose_profile = bead_core::profile::Span::new("compose");
                 if retained_gl_prepare {
                     let opacity = scene.opacity;
-                    // This private backbuffer is never presented. A partial alpha
-                    // forces the retained opacity group to be built and uploaded.
-                    scene.opacity = 0.5;
+                    // Warm a fade group only for motions that actually fade.
+                    // Non-fading views need their image uploads, without a
+                    // second full-window composite target.
+                    scene.opacity = if scene.motion.as_ref().is_some_and(|motion| !motion.fade) {
+                        1.
+                    } else {
+                        0.5
+                    };
                     let prepared = renderer.draw(
                         scene,
                         RenderTarget::Gl(bead_render::gl::GlTarget {
@@ -1753,7 +1864,7 @@ impl App {
                     return Ok(());
                 }
                 // An explicitly permitted automatic fallback uses the same retained Scene.
-                renderer.prepare(scene, scale)?;
+                renderer.prepare_on_ui(scene, scale)?;
             }
             let repair_profile = bead_core::profile::Span::new("repair_setup");
             if !cfg!(target_endian = "little") {
@@ -2160,6 +2271,9 @@ impl App {
             }
         }
         if let Err(e) = result {
+            if self.prepare_surface_images(index, e.as_ref()) {
+                return;
+            }
             #[cfg(any(feature = "native-gl", feature = "wgpu"))]
             if self.options.auto_fallback
                 && self.surfaces[index].companion

@@ -4994,6 +4994,9 @@ impl SceneSource for Runtime {
             }
             UiEvent::Fatal(error) => return Err(error.into()),
             UiEvent::Worker(_) => return Err("worker packet cannot reach script executor".into()),
+            UiEvent::ResourcesPrepared(_) | UiEvent::RetireResources(_) => {
+                return Err("resource wake cannot reach script executor".into());
+            }
             UiEvent::DebugScriptStall(ms) => {
                 let clock = || crate::backends::clock_ns(nix::libc::CLOCK_MONOTONIC);
                 println!("DEBUG_SCRIPT_STALL begin_ns={} duration_ms={ms}", clock());

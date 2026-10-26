@@ -63,6 +63,9 @@ pub(super) struct Win {
     presented_update: Option<u64>,
 }
 impl Win {
+    pub(super) fn viewport_size(&self) -> (u32, u32) {
+        self.size
+    }
     pub(super) fn scroll_regions(&self) -> Vec<Rect> {
         self.source.scroll_regions()
     }
@@ -501,6 +504,13 @@ impl App {
     }
     /// Service wakeups and input for the window; the product source stages them.
     pub(super) fn window_ui(&mut self, event: UiEvent) {
+        if let UiEvent::ResourcesPrepared(result) = event {
+            match result {
+                Ok(()) => self.window_draw(),
+                Err(error) => eprintln!("WINDOW_DRAW_ERROR {error}"),
+            }
+            return;
+        }
         let Some(win) = self.window.as_mut() else {
             return;
         };
@@ -576,6 +586,16 @@ impl App {
             }
         }
         if let Err(e) = self.window_render() {
+            if let Some(window) = self.window.as_mut() {
+                match super::rendering::prepare_pending_images(e.as_ref(), window.source.as_mut()) {
+                    Ok(true) => return,
+                    Ok(false) => (),
+                    Err(error) => {
+                        eprintln!("WINDOW_DRAW_ERROR {error}");
+                        return;
+                    }
+                }
+            }
             eprintln!("WINDOW_DRAW_ERROR {e}");
         }
     }
