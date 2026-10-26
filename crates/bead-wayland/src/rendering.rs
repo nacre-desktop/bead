@@ -789,6 +789,10 @@ impl App {
                 .as_ref()
                 .is_some_and(|(_, _, kind)| *kind != RendererKind::FemtovgGl)
             && (!self.options.lazy_gl || self.gl.is_some())
+            && !self.animations.active(self.started.elapsed().as_secs_f64())
+            && !self
+                .panel_animations
+                .active(self.started.elapsed().as_secs_f64())
         {
             // The warm CPU snapshot is the fallback while a lazy GL context is
             // being prepared. Once GL is ready, promote before relayout/buffer
@@ -825,7 +829,8 @@ impl App {
         // existing GL renderer warm during prewarm, but let an idle CPU panel
         // hand off and return using its already rendered pixels.
         let animated = self.options.animate
-            || (self.panel_dock_transition.is_none() && self.animations.active(now));
+            || (self.panel_dock_transition.is_none()
+                && (self.animations.active(now) || self.panel_animations.active(now)));
         let promote = self.companion_policy.frame(now, animated);
         #[cfg(feature = "native-gl")]
         let promote = if self.panel_dock_transition.is_none()
@@ -841,6 +846,7 @@ impl App {
             self.companion
                 .as_ref()
                 .is_some_and(|(_, _, kind)| *kind != RendererKind::FemtovgGl)
+                && !animated
         } else {
             promote
         };
@@ -1023,7 +1029,7 @@ impl App {
         if self.surfaces[index].companion {
             // A worker failure publishes an error scene. A loading worker must never
             // expose the fallback buffer, even when hydration takes longer than a frame.
-            if !self.panel_ready {
+            if !self.panel_ready && !self.panel_fallback_ready {
                 self.surfaces[index].redraw = true;
                 return;
             }
@@ -1059,6 +1065,11 @@ impl App {
                 == Some(RendererKind::FemtovgGl)
                 && let Some((scene, renderer, kind)) = self.companion.as_ref()
                 && *kind == RendererKind::Cpu
+                && !self
+                    .options
+                    .panel_spec
+                    .as_ref()
+                    .is_some_and(|spec| spec.fallback_factory.is_some())
                 && !renderer
                     .reusable_scene(scene, self.surfaces[index].scale120 as f32 / 120.)
                     .unwrap_or(false)

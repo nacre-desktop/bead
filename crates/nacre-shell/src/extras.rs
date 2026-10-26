@@ -63,6 +63,7 @@ struct State {
     catalogue_boot: Option<String>,
     catalogue_request_boot: Option<String>,
     catalogue_result: Vec<Json>,
+    catalogue_preloaded: bool,
     catalogue_request_ids: Vec<String>,
     catalogue_request_handles: Vec<String>,
     catalogue_pending_handles: std::collections::BTreeSet<String>,
@@ -317,6 +318,47 @@ pub struct Extras {
     wallpaper_settings: Option<Arc<dyn Source>>,
     wallpaper_actions: Option<Arc<std::sync::Mutex<WallpaperActivationQueue>>>,
 }
+fn preload_wallpaper_catalogue(
+    state: &mut State,
+    boot: &str,
+    active_path: &str,
+    kind: &str,
+    layout: &str,
+) -> bool {
+    if state.catalogue_preloaded || !state.catalogue_result.is_empty() {
+        return false;
+    }
+    let Some(prepared) = crate::wallpaper_warm::prepared_catalogue() else {
+        return false;
+    };
+    if prepared.boot != boot
+        || prepared.active_path != active_path
+        || prepared.kind != kind
+        || prepared.layout != layout
+    {
+        return false;
+    }
+    let entry_count = prepared.entries.len();
+    let thumbnail_count = prepared
+        .entries
+        .iter()
+        .filter(|entry| {
+            entry["thumbnail"]
+                .as_str()
+                .is_some_and(|path| !path.is_empty())
+        })
+        .count();
+    state.catalogue_result = prepared.entries.to_vec();
+    state.catalogue_boot = Some(boot.to_owned());
+    state.catalogue_preloaded = true;
+    state.image_revision = state.image_revision.wrapping_add(1);
+    bead::core::vprintln!(
+        "WALLPAPER_PRELOAD entries={} thumbnails={}",
+        entry_count,
+        thumbnail_count
+    );
+    true
+}
 /// B0090 live previews: the leased capture exists only while the view is open and the
 /// Nacre setting `livePreviews` is on; dropping `Extras` (or closing) releases it.
 struct Previews {
@@ -352,6 +394,41 @@ impl Extras {
         } else {
             None
         };
+        let mut state = State::default();
+        if kind == Kind::Wallpaper
+            && let (Some(topic), Some(settings), Some(boot)) = (
+                topic.as_ref(),
+                wallpaper_settings.as_ref(),
+                client.status().boot.filter(|_| client.snapshot().connected),
+            )
+        {
+            let active = topic.snapshot();
+            let active_path = active.data["current"]["motion"]["path"]
+                .as_str()
+                .or_else(|| active.data["current"]["path"].as_str())
+                .unwrap_or_default();
+            let preferences = settings.snapshot();
+            let data = &preferences.data["data"];
+            let wallpaper_kind = if data["kind"] == "dynamic" {
+                "dynamic"
+            } else {
+                "static"
+            };
+            let wallpaper_layout = match data["layout"].as_str() {
+                Some("spotlight") => "spotlight",
+                Some("hexagons") => "hexagons",
+                _ => "carousel",
+            };
+            if preload_wallpaper_catalogue(
+                &mut state,
+                &boot,
+                active_path,
+                wallpaper_kind,
+                wallpaper_layout,
+            ) {
+                state.wallpaper_boot = Some(boot);
+            }
+        }
         let wallpaper_actions = (kind == Kind::Wallpaper).then(|| {
             Arc::new(std::sync::Mutex::new(WallpaperActivationQueue::new(
                 client.clone(),
@@ -361,7 +438,7 @@ impl Extras {
             kind,
             client,
             topic,
-            state: Default::default(),
+            state: RefCell::new(state),
             glyphs: Default::default(),
             previews: None,
             wallpaper_settings,
@@ -472,6 +549,7 @@ impl Extras {
         let mut workspaces = Vec::new();
         let mut available = false;
         let mut per_output = false;
+        let mut wallpaper_active_path = String::new();
         if let Some(topic) = &self.topic {
             let snapshot = topic.snapshot();
             let data = &snapshot.data;
@@ -496,6 +574,12 @@ impl Extras {
                 } else if self.kind == Kind::Keybindings {
                     rows = ordered(&data["items"]["items"], &data["items"]["order"])
                         .map(|(id, row)| json!({"id":id,"key":row["key"].as_str().unwrap_or_default(),"description":row["description"].as_str().unwrap_or_default()})).collect();
+                } else if self.kind == Kind::Wallpaper {
+                    wallpaper_active_path = data["current"]["motion"]["path"]
+                        .as_str()
+                        .or_else(|| data["current"]["path"].as_str())
+                        .unwrap_or_default()
+                        .to_owned();
                 }
             }
         }
@@ -522,6 +606,7 @@ impl Extras {
                 state.catalogue_boot = None;
                 state.catalogue_request_boot = None;
                 state.catalogue_result.clear();
+                state.catalogue_preloaded = false;
                 state.catalogue_request_ids.clear();
                 state.catalogue_request_handles.clear();
                 state.catalogue_pending_handles.clear();
@@ -556,9 +641,19 @@ impl Extras {
                     _ => "carousel",
                 };
             }
+            if open && let Some(boot) = boot.as_ref() {
+                preload_wallpaper_catalogue(
+                    &mut state,
+                    boot,
+                    &wallpaper_active_path,
+                    wallpaper_kind,
+                    wallpaper_layout,
+                );
+            }
             if open
                 && boot.is_some()
                 && state.catalogue.is_none()
+                && !state.catalogue_preloaded
                 && (wallpaper_opened || state.catalogue_request_boot != boot)
             {
                 if state.catalogue_boot != boot {
@@ -589,6 +684,7 @@ impl Extras {
                 state.catalogue_pending_handles.clear();
                 state.catalogue_visible_handles.clear();
                 state.catalogue_settled_handles.clear();
+                state.catalogue_preloaded = false;
             }
             if let Some(ticket) = &mut state.catalogue
                 && let Some(reply) = ticket.try_take()
@@ -1248,7 +1344,7 @@ fn ordered<'a>(items: &'a Json, order: &'a Json) -> impl Iterator<Item = (&'a st
         .take(2048)
         .filter_map(move |id| Some((id.as_str()?, items.get(id.as_str()?)?)))
 }
-fn parse_wallpaper_handle(handle: &str) -> Option<(&str, &str)> {
+pub(crate) fn parse_wallpaper_handle(handle: &str) -> Option<(&str, &str)> {
     let (field, rest) = handle.split_once(':')?;
     if !matches!(field, "thumbnail" | "preview") {
         return None;
@@ -1271,6 +1367,18 @@ fn cached_wallpaper_image(
     if let Some(bytes) = state.images.get(file) {
         return Some(bytes.clone());
     }
+    let bytes = read_wallpaper_image(file)?;
+    let cost = bytes.len() + file.capacity() + 128;
+    if state.image_bytes + cost > limit {
+        state.images.clear();
+        state.image_bytes = 0;
+    }
+    let bytes: Arc<[u8]> = Arc::from(bytes);
+    state.image_bytes += cost;
+    state.images.insert(file.clone(), bytes.clone());
+    Some(bytes)
+}
+pub(crate) fn read_wallpaper_image(file: &std::path::Path) -> Option<Vec<u8>> {
     let bytes = crate::desktop::read_icon_file(file, 2 * bead::core::cache::MIB as u64).ok()?;
     let dimensions = image::ImageReader::new(std::io::Cursor::new(&bytes))
         .with_guessed_format()
@@ -1280,14 +1388,6 @@ fn cached_wallpaper_image(
     if dimensions.0 == 0 || dimensions.1 == 0 || dimensions.0 > 1600 || dimensions.1 > 1000 {
         return None;
     }
-    let cost = bytes.len() + file.capacity() + 128;
-    if state.image_bytes + cost > limit {
-        state.images.clear();
-        state.image_bytes = 0;
-    }
-    let bytes: Arc<[u8]> = Arc::from(bytes);
-    state.image_bytes += cost;
-    state.images.insert(file.clone(), bytes.clone());
     Some(bytes)
 }
 fn compositor_rows(data: &Json) -> (Vec<Json>, Vec<Json>) {
@@ -1333,6 +1433,13 @@ pub fn panel(
         keyboard_focus: true,
         initial_open: false,
         fallback: cold.clone(),
+        fallback_factory: if kind == Kind::Wallpaper {
+            Some(Arc::new(|viewport| {
+                crate::wallpaper_warm::prepared_fallback_scene(viewport)
+            }))
+        } else {
+            None
+        },
         renderer: if kind == Kind::Wallpaper && cfg!(feature = "native-gl") {
             bead::render::RendererKind::FemtovgGl
         } else {

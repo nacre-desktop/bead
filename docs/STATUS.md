@@ -1,5 +1,9 @@
 # Status
 
+## 2026-10-27 — B0147 Spotlight overlay (implementation review; smoothness gates fail)
+
+Spotlight is a transparent full-output overlay with idle raster warming and an output-sized CPU fallback scene. The fallback is ready before `PANEL_OPEN`; the first traced real-4K content frame arrived 92.1 / 93.0 ms after trigger at synthetic 60 / 120 Hz. QML/Bead idle, open, hover, pressed and slide pairs were visually inspected; removing QML's full-screen selected-wallpaper backdrop is intentional. Two expired-closed memory samples are 37.05 / 36.36 MiB above idle, within B0134's 40 MiB cap. Synthetic nested 60/120 Hz open intervals and Spotlight slide cadence fail the no-drop gate; this is not a physical scanout measurement. Bead slide probes exceeded the 50 ms markup limit in `extras/main.luau` and `widgets/registry.luau`; real 4K Enter also produced `retained cache byte budget exceeded` in the separate activation path. None of these paths was changed. Full remote Bead CI and regenerated goldens pass. No live deployment. [Scope and measurements](specs/0147-spotlight-overlay.md).
+
 ## 2026-10-26 — B0153 launcher memory investigation
 
 The reported ~500 MiB post-expiry anon growth has not reproduced on the desktop.

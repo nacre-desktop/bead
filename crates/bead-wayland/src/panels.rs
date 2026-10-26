@@ -253,6 +253,7 @@ mod tests {
                 offset: (0., 0.),
                 bounds: bead_render::Rect::new(0., 0., 1., 1.),
             },
+            fallback_factory: None,
             renderer: bead_render::RendererKind::Cpu,
         }
     }

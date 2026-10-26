@@ -714,6 +714,7 @@ pub fn guide_spec(colors: &Palette) -> Result<PanelSpec, Box<dyn Error>> {
         keyboard_focus: false,
         initial_open: false,
         fallback: blank(1., 1.),
+        fallback_factory: None,
         renderer: bead::render::RendererKind::Cpu,
         factory: Arc::new(move |_| {
             Ok(Box::new(GuideSource {

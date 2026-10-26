@@ -79,6 +79,7 @@ After Bead's core switch on Nacre, plan support for:
 ## Generalization list (framework pieces added by feature work)
 
 - B0146: `WallpaperProvider::uploaded` reports that a wallpaper buffer has been attached immediately before surface commit, giving host adapters a neutral upload phase hook.
+- B0147: `bead-render::prewarm_image` caches explicitly warmed large raster variants in a separate 22 MiB LRU, keyed by path, content, size and fit; `PanelSpec.fallback_factory` provides an output-sized prepared first scene for lazy panels. Luau remains responsible for layout geometry.
 
 - B0131: optional native-target prewarming and generation-checked covered commits preserve authored content and geometry; `Motion.return_duration`/`return_curve` let hosts choose dock easing. Backend admission stays behind the neutral pearl interface.
 

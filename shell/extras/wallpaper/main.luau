@@ -10,8 +10,8 @@ local kind=ui.resolve_for_check(ui.bind("extras.wallpaper.kind")) or "static"
 local carousel=layout=="carousel"
 local spotlight=layout=="spotlight"
 local search_focused=ui.resolve_for_check(ui.bind("bead.focused"))=="extras.search"
-local width=carousel and math.max(T.wallpaper.carousel_min_width,math.min(T.wallpaper.carousel_width,viewport_w-T.wallpaper.carousel_viewport_inset*2)) or spotlight and math.min(T.wallpaper.spotlight_width,viewport_w-T.wallpaper.spotlight_inset*2) or viewport_w
-local height=carousel and T.wallpaper.carousel_height or spotlight and math.min(T.wallpaper.spotlight_height,viewport_h-T.wallpaper.spotlight_inset*2) or viewport_h
+local width=carousel and math.max(T.wallpaper.carousel_min_width,math.min(T.wallpaper.carousel_width,viewport_w-T.wallpaper.carousel_viewport_inset*2)) or viewport_w
+local height=carousel and T.wallpaper.carousel_height or viewport_h
 local rows=ui.resolve_for_check(ui.bind("extras.filtered")) or {}
 local count=#rows
 local selected
@@ -23,11 +23,11 @@ if position_index~=selection_index then carousel_position=selection_index end
 local animation_query=tostring(ui.resolve_for_check(ui.bind("extras.query")) or "")
 local animation_key=2166136261
 for index=1,#animation_query do animation_key=(animation_key*33+string.byte(animation_query,index))%2147483647 end
-local animated_selection=carousel and ui.animate("wallpaper-carousel:"..kind..":"..tostring(count)..":"..tostring(animation_key),
+local animated_selection=(carousel or spotlight) and ui.animate("wallpaper-carousel:"..kind..":"..tostring(count)..":"..tostring(animation_key),
   carousel_position,.3,"out-cubic") or selection_index
 local function circular_rows(limit)
   local visible={}
-  local selection=carousel and animated_selection or selection_index
+  local selection=(carousel or spotlight) and animated_selection or selection_index
   for index,item in ipairs(rows) do
     local offset=((index-selection+count/2)%count)-count/2
     if math.abs(offset)<=limit then
@@ -73,15 +73,18 @@ local hex_outline_points={
 
 local function button(id,label,active,request)
   local line_h=math.ceil(T.palette.description_font*1.4)
+  local fill=active and "primary" or "surfaceContainerHigh"
+  if spotlight then fill=ui.alpha(fill,T.wallpaper.spotlight_pill_opacity) end
   return kit.Button{id=id,aria_label=label,width=T.wallpaper.choice_widths[id],shrink=0,height=toolbar_h,padding=0,
-    radius=T.panel.close_radius,fill=active and "primary" or "surfaceContainerHigh",
-    hover_fill=active and "primary" or "surfaceContainerHigh",activate_on_release=true,focus_on_pointer=false,on_activate=ui.action("extras.do",request),
+    radius=T.panel.close_radius,fill=fill,
+    hover_fill=fill,activate_on_release=true,focus_on_pointer=false,on_activate=ui.action("extras.do",request),
     ui.Text{position="absolute",left=0,top=(toolbar_h-line_h)/2,width="fill",height=line_h,
       text=label,font_size=T.palette.description_font,text_align="center",color=active and "onPrimary" or "onSurface"}}
 end
 local function nav_button(id,label,glyph,action)
   local fill=count>0 and "surfaceContainerHigh" or ui.alpha("surfaceContainerHigh",T.wallpaper.disabled_opacity)
   local ink=count>0 and "onSurface" or ui.alpha("onSurface",T.wallpaper.disabled_opacity)
+  if spotlight then fill=ui.alpha("surfaceContainerHigh",T.wallpaper.spotlight_pill_opacity) end
   return kit.Button{id=id,aria_label=label,width=T.wallpaper.nav_width,height=T.wallpaper.nav_height,padding=0,
     radius=T.panel.close_radius,fill=fill,hover_fill=fill,
     activate_on_release=true,focus_on_pointer=false,on_activate=count>0 and ui.action(action) or nil,
@@ -103,6 +106,12 @@ local function card(item, card_w, card_h, x, y, selected_card, clip)
       text=item.kind=="video" and "movie" or "image",family="Material Symbols Rounded",font_size=T.wallpaper.thumbnail_fallback_icon,
       color="onSurfaceVariant",text_align="center"}
   end
+  if spotlight and not selected_card then
+    local distance=math.abs(item.carousel_offset or 0)
+    kids[#kids+1]=ui.Box{id="spotlight-neighbor-dim",position="absolute",left=0,top=0,width=card_w,height=card_h,
+      radius=T.wallpaper.card_radius,fill=ui.alpha("shadow",math.min(T.wallpaper.spotlight_neighbor_dim_max,
+        math.max(T.wallpaper.spotlight_neighbor_dim_min,distance*T.wallpaper.spotlight_neighbor_dim_per_slot)))}
+  end
   if clip==hex_clip then
     kids[#kids+1]=ui.Polyline{id="hex-outline",position="absolute",left=0,top=0,width=card_w,height=card_h,
       points=hex_outline_points,closed=true,
@@ -114,7 +123,7 @@ local function card(item, card_w, card_h, x, y, selected_card, clip)
   end
   return ui.Button{id="wallpaper-"..tostring(item.selection_index),position="absolute",left=x,top=y,
     width=card_w,height=card_h,padding=0,radius=T.wallpaper.card_radius,
-    fill=hex and "transparent" or "surfaceContainer",
+    fill=(hex or spotlight) and "transparent" or "surfaceContainer",
     border_width=hex and 0 or selected_card and T.wallpaper.selected_border_width or 0,border_color=selected_card and "primary" or "outlineVariant",
     hover_fill=hex and "transparent" or "surfaceContainer",clip_polygon=hex and hex_clip or nil,activate_on_release=true,
     focus_on_pointer=false,on_activate=ui.action("extras.do","wallpaper:select:"..tostring(item.id)),
@@ -151,8 +160,9 @@ elseif layout=="spotlight" then
   for _,item in ipairs(visible) do
     local offset=item.carousel_offset or 0
     local distance=math.abs(offset)
-    local weight=math.max(0,1-distance)
-    local card_w=side_width*math.max(T.wallpaper.spotlight_side_min_scale,1-math.max(0,distance-1)*T.wallpaper.spotlight_side_falloff)+(hero_width-side_width)*weight
+    local slot=math.floor(distance+.5)
+    local card_w=slot==0 and hero_width or side_width*math.max(T.wallpaper.spotlight_side_min_scale,
+      1-math.max(0,slot-1)*T.wallpaper.spotlight_side_falloff)
     local card_h=card_w*T.wallpaper.spotlight_card_height_ratio
     local center_distance=hero_width*T.wallpaper.spotlight_center_offset
     local x=body_w/2+math.sign(offset)*(math.min(1,distance)*center_distance+math.max(0,distance-1)*hero_width*T.wallpaper.spotlight_travel_offset)-card_w/2
@@ -217,8 +227,9 @@ local search_w=math.max(T.wallpaper.search_min_width,math.min(T.wallpaper.search
 local children={
   kit.TextInput{id="search",position="absolute",left=(width-search_w)/2,top=query_y,width=search_w,height=search_h,
     focus_ring=false,text=ui.bind("extras.query"),placeholder="Search wallpapers",padding_left=T.wallpaper.search_left_padding,padding_right=T.wallpaper.search_right_padding,
-    padding_top=T.wallpaper.search_vertical,padding_bottom=T.wallpaper.search_vertical,radius=T.wallpaper.search_radius,font_size=kit.tokens.text.body*4/3,
-    fill="surfaceContainer",border_width=search_focused and T.wallpaper.search_focus_border or 0,border_color="outline"},
+    padding_top=T.wallpaper.search_vertical,padding_bottom=T.wallpaper.search_vertical,radius=spotlight and T.wallpaper.spotlight_pill_radius or T.wallpaper.search_radius,font_size=kit.tokens.text.body*4/3,
+    fill=spotlight and ui.alpha("surfaceContainer",T.wallpaper.spotlight_search_opacity) or "surfaceContainer",
+    border_width=search_focused and T.wallpaper.search_focus_border or 0,border_color="outline"},
   controls,body,nav,
   ui.Text{id="empty",position="absolute",left=T.wallpaper.content_inset,top=height/2-T.wallpaper.empty_center_offset,width=width-T.wallpaper.content_inset*2,height=T.wallpaper.empty_height,
     text=ui.bind("extras.empty_message"),visible=#rows==0 and not ui.resolve_for_check(ui.bind("extras.status_visible")),font_size=T.panel.empty_font,
@@ -229,12 +240,10 @@ local children={
 if backdrop then table.insert(children,1,scrim);table.insert(children,1,backdrop) end
 if spotlight then
   return kit.Panel{id="extras",edge="bottom",open=ui.bind("panel.open"),width=viewport_w,height=viewport_h,shadow=false,
-    duration=T.panel.duration,transition=T.panel.transition,reveal=false,slide_distance=0,fade=true,radius=0,
-    fill=ui.alpha("shadow",T.wallpaper.scrim_alpha),padding=0,gap=0,
+    duration=T.panel.duration,transition=T.panel.transition,reveal=false,slide_distance=T.wallpaper.spotlight_open_slide_distance,fade=false,radius=0,
+    fill=ui.alpha("shadow",T.wallpaper.spotlight_scrim_alpha),padding=0,gap=0,
     on_activate=ui.action("close"),aria_label="Close wallpaper picker",
-    ui.Box{id="spotlight-card",position="absolute",left=(viewport_w-width)/2,top=(viewport_h-height)/2,
-      width=width,height=height,radius=T.panel.radius,fill="surface",border_width=T.panel.border,
-      border_color="outlineVariant",table.unpack(children)}}
+    table.unpack(children)}
 end
 return kit.Panel{id="extras",edge="bottom",open=ui.bind("panel.open"),width=width,height=height,
   duration=T.panel.duration,transition=T.panel.transition,reveal=false,slide_distance=height,fade=false,radius=T.panel.radius,

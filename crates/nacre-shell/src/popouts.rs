@@ -44,6 +44,7 @@ pub fn calendar(
         keyboard_focus: true,
         initial_open: false,
         fallback,
+        fallback_factory: None,
         renderer: RendererKind::Cpu,
         factory: Arc::new(move |open| {
             let session = bead::ui::Session::new(
@@ -135,6 +136,7 @@ pub(crate) fn core_sound_with_root(
         keyboard_focus: true,
         initial_open: false,
         fallback,
+        fallback_factory: None,
         renderer: RendererKind::Cpu,
         factory: Arc::new(move |open| {
             let source: Arc<dyn bead::core::source::Source> = match client.as_ref() {
@@ -202,6 +204,7 @@ pub fn session(
         keyboard_focus: true,
         initial_open: false,
         fallback,
+        fallback_factory: None,
         renderer: RendererKind::Cpu,
         factory: Arc::new(move |open| {
             let session = bead::ui::Session::new(
@@ -335,6 +338,7 @@ fn status_at_root_mode(
         keyboard_focus: !peek,
         initial_open: false,
         fallback,
+        fallback_factory: None,
         renderer: RendererKind::Cpu,
         factory: Arc::new(move |open| {
             let controlled_network =
@@ -479,6 +483,7 @@ pub fn chat(
         keyboard_focus: true,
         initial_open: false,
         fallback,
+        fallback_factory: None,
         renderer: RendererKind::Cpu,
         factory: Arc::new(move |open| {
             let topic = client.lease_topic("ai.chat").map_err(|e| e.to_string())?;
@@ -550,6 +555,7 @@ pub fn control_center(
         keyboard_focus: true,
         initial_open: false,
         fallback,
+        fallback_factory: None,
         renderer: RendererKind::Cpu,
         factory: Arc::new(move |open| {
             let topics = crate::control_center::TOPICS
@@ -643,6 +649,7 @@ fn notification_panel(
         keyboard_focus: !peek,
         initial_open: false,
         fallback,
+        fallback_factory: None,
         renderer: RendererKind::Cpu,
         factory: Arc::new(move |open| {
             let topics = ["notifications", "controls"]

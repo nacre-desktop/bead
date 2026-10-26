@@ -29,6 +29,8 @@ pub(super) struct App {
     pub(super) panel_dock_transition: Option<pearls::DockTransition>,
     /// The panel's own scene has been committed at least once (no dark/empty first frame before).
     pub(super) panel_ready: bool,
+    /// A validated app snapshot can be shown while its live panel worker starts.
+    pub(super) panel_fallback_ready: bool,
     pub(super) panel_reload_pending: bool,
     pub(super) panel_target: bool,
     pub(super) panel_gpu_suspended: bool,
@@ -348,6 +350,7 @@ pub fn run_runtime(
         panel_cover: None,
         panel_dock_transition: None,
         panel_ready: true,
+        panel_fallback_ready: false,
         panel_reload_pending: false,
         panel_target: false,
         panel_gpu_suspended: false,

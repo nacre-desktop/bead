@@ -589,6 +589,7 @@ pub struct Runtime {
     slider_local_active: bool,
     launcher_memory: Option<crate::launcher::Memory>,
     icon_warmer: Option<crate::icon_warm::IconWarmer>,
+    wallpaper_warmer: Option<std::sync::Arc<crate::wallpaper_warm::Warmer>>,
     connection_status: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     connection_subscription: Option<bead::core::source::Subscription>,
     prefs: Option<std::sync::Arc<dyn bead::core::source::Source>>,
@@ -2269,6 +2270,7 @@ impl Runtime {
             slider_local_active: false,
             launcher_memory: None,
             icon_warmer: None,
+            wallpaper_warmer: None,
             connection_status: None,
             connection_subscription: None,
             prefs: None,
@@ -3436,6 +3438,13 @@ impl Runtime {
         palette: std::path::PathBuf,
     ) -> Self {
         self.icon_warmer = Some(crate::icon_warm::IconWarmer::new(source, palette));
+        self
+    }
+    pub fn with_wallpaper_warmer(
+        mut self,
+        warmer: std::sync::Arc<crate::wallpaper_warm::Warmer>,
+    ) -> Self {
+        self.wallpaper_warmer = Some(warmer);
         self
     }
     pub fn with_launcher_trigger(
@@ -5130,6 +5139,11 @@ impl SceneSource for Runtime {
         {
             dashboard.borrow().set_raster_scale(scale);
         }
+        if let Some(warmer) = &self.wallpaper_warmer
+            && let Some(scale) = scale
+        {
+            warmer.set_scale(scale);
+        }
     }
     fn tracks_origin(&self) -> bool {
         self.widget_editor
@@ -5156,6 +5170,17 @@ impl SceneSource for Runtime {
         }
         if let Some(extras) = &self.extras {
             extras.set_viewport(width, height);
+        }
+        if let Some(warmer) = &self.wallpaper_warmer {
+            let frame = crate::placement::Frame::current();
+            let output_width = width as f32;
+            let output_height = height as f32;
+            warmer.set_viewport(
+                output_width,
+                output_height,
+                (output_width - frame.left - frame.right).max(1.),
+                (output_height - frame.top - frame.bottom).max(1.),
+            );
         }
         if self.widget_editor {
             let values = BTreeMap::from([

@@ -54,6 +54,7 @@ mod wallpaper_cache;
 #[cfg(test)]
 mod wallpaper_decode;
 mod wallpaper_motion;
+mod wallpaper_warm;
 mod welcome;
 #[cfg(test)]
 mod welcome_tests;
@@ -595,6 +596,7 @@ fn start(
                 }),
             fallback,
             // This modest transient view does not amortize the native driver residency.
+            fallback_factory: None,
             renderer: panel_renderer.unwrap_or(bead::render::RendererKind::Cpu),
             factory: std::sync::Arc::new(move |open| {
                 let session = bead::ui::Session::new(
@@ -726,6 +728,21 @@ fn start(
     let connection_status = _ui_provider.as_ref().map(|client| {
         std::sync::Arc::new(client.connection()) as std::sync::Arc<dyn bead::core::source::Source>
     });
+    let wallpaper_warmer = if core_views && options.bar {
+        _ui_provider.as_ref().and_then(|client| {
+            let source = client.view_topic("wallpaper.active").ok()?;
+            let settings = client.view_topic(prefs::WALLPAPER_PICKER).ok()?;
+            Some(std::sync::Arc::new(wallpaper_warm::Warmer::new(
+                client.clone(),
+                source,
+                settings,
+                PathBuf::from("shell"),
+                colors.clone(),
+            )))
+        })
+    } else {
+        None
+    };
     let shared_menu_source = _ui_provider
         .as_ref()
         .map(|client| {
@@ -1111,6 +1128,7 @@ fn start(
             let colors = colors.clone();
             let fallback = fallback.clone();
             let connection_status = connection_status.clone();
+            let wallpaper_warmer = wallpaper_warmer.clone();
             let icon_warm_source = icon_warm_source.clone();
             let launcher_memory = launcher_memory.clone();
             let tray_selection = tray_selection.clone();
@@ -1130,6 +1148,11 @@ fn start(
                     let session =
                         bead::ui::Session::new("shell".into(), entry, palette.clone(), colors, fallback);
                     let runtime = reload::Runtime::for_output(session, output).with_trace(trace);
+                    let runtime = if let Some(warmer) = wallpaper_warmer {
+                        runtime.with_wallpaper_warmer(warmer)
+                    } else {
+                        runtime
+                    };
                     let runtime = if bar {
                         if let Some(source) = icon_warm_source {
                             runtime.with_icon_warmer(source, palette.clone())

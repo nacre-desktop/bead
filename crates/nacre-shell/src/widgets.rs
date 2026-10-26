@@ -502,6 +502,7 @@ pub(crate) fn canvas_spec_with_root(
         keyboard_focus: false,
         initial_open: false,
         fallback,
+        fallback_factory: None,
         renderer: RendererKind::Cpu,
         factory: std::sync::Arc::new(move |open| {
             let session = bead::ui::Session::new(

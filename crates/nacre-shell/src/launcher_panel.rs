@@ -46,6 +46,7 @@ pub fn spec(
         keyboard_focus: true,
         initial_open: false,
         fallback,
+        fallback_factory: None,
         renderer: bead::render::RendererKind::Cpu,
         factory: std::sync::Arc::new(move |open| {
             let session = bead::ui::Session::new(

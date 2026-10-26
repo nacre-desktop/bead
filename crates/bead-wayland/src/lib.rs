@@ -688,6 +688,9 @@ pub type DecorationFactory = std::sync::Arc<
 /// does not know a shell's frame, bar, shadow insets or attachment policy.
 pub type PanelPositioner =
     std::sync::Arc<dyn Fn(&Scene, Option<f32>, (i32, i32)) -> (i32, i32) + Send + Sync>;
+/// Optional output-sized snapshot used while a lazy panel builds its first live scene.
+pub type PanelFallbackFactory =
+    std::sync::Arc<dyn Fn((u32, u32)) -> Option<bead_render::Scene> + Send + Sync>;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PanelAnchor {
     pub rect: Rect,
@@ -708,6 +711,7 @@ pub struct PanelSpec {
     pub initial_open: bool,
     pub factory: PanelFactory,
     pub fallback: Scene,
+    pub fallback_factory: Option<PanelFallbackFactory>,
     pub renderer: RendererKind,
     pub position: Option<PanelPositioner>,
 }

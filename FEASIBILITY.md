@@ -1,5 +1,24 @@
 # Feasibility
 
+## B0147 — Spotlight overlay (2026-10-27; smoothness gates fail)
+
+Spotlight now floats directly over the desktop; Luau owns layout and the carousel motion.
+An idle worker warms the real thumbnails and passes a prepared CPU scene to the lazy panel while GL initializes.
+Two real-wallpaper closed-retention arms stay within B0134's 40 MiB budget.
+The paired QML/Bead difference is the requested removal of QML's full-screen selected-wallpaper backdrop.
+Opening and slide cadence miss synthetic 60/120 Hz frame limits (not physical scanout), and a slide probe exceeds Luau's 50 ms markup limit. 4K Enter hits the separate cache-admission path.
+
+| 2880×1800, scale 1.5 | 60 Hz | 120 Hz | Gate |
+| --- | ---: | ---: | --- |
+| First real-4K panel frame after trigger | 92.1 ms | 93.0 ms | fallback content shown |
+| Expired-closed unreclaimable delta | 37.05 MiB | 36.36 MiB | ≤40 MiB, 2 samples pass |
+| Cold-open p99 interval / gaps >1.5× vsync | 56.79 ms / 2 | 5.69 ms / 1 | no dropped frames, fail |
+| Expired-open p99 interval / gaps >1.5× vsync | 53.09 ms / 4 | 62.11 ms / 3 | no dropped frames, fail |
+| Spotlight slide p99 interval / gaps >12.5 ms | — | 22.73 ms / 2 | frame-rate motion, fail (3 frames / 400 ms) |
+| Large raster LRU charge / limit | 14.64 / 22 MiB | 14.64 / 22 MiB | bounded |
+
+The 4K activation error is recorded without changing B0146/B0148 switch code. Full Bead CI and regenerated goldens pass; no live deployment. [Scope, paired images and run evidence](docs/specs/0147-spotlight-overlay.md).
+
 ## B0149 — smooth held-key OSD (2026-10-26, shipped)
 
 Nacre publishes optimistic volume and brightness steps; Bead retargets the pill fill without queuing animation steps.

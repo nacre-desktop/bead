@@ -62,6 +62,7 @@ fn spec(owner: Owner, style: Style, geometry: Geometry, interactive: bool) -> Pa
         keyboard_focus: false,
         initial_open: false,
         fallback,
+        fallback_factory: None,
         renderer: bead::render::RendererKind::Cpu,
         factory: Arc::new(move |open| {
             let session = bead::ui::Session::new(

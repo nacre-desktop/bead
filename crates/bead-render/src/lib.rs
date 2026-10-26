@@ -1777,6 +1777,17 @@ fn load_image(
     if w <= 128 && h <= 128 {
         return load_cached_image(image_cache(), path, bytes, w, h, fit);
     }
+    let mut cache = large_image_cache()
+        .lock()
+        .expect("large image cache poisoned");
+    if cache.entries.keys().any(|key| key.path == path) {
+        let key = ImageCacheKey::new(path, bytes, w, h, fit);
+        if let Some(pixels) = cache.get(&key) {
+            return Ok(pixels.as_ref().clone());
+        }
+        cache.misses += 1;
+    }
+    drop(cache);
     decode_image(path, bytes, w, h, fit)
 }
 
@@ -1867,6 +1878,8 @@ fn decode_native_image(bytes: &[u8]) -> Result<Pixmap> {
 }
 
 const IMAGE_CACHE_LIMIT: usize = 1536 * 1024;
+/// A bounded shared cache for large rasters explicitly warmed off the UI path.
+pub const LARGE_IMAGE_CACHE_LIMIT: usize = 22 * 1024 * 1024;
 const IMAGE_CACHE_MAX_ENTRIES: usize = 256;
 const IMAGE_CACHE_MAX_PATH_BYTES: usize = 1024;
 
@@ -1969,6 +1982,24 @@ fn image_cache() -> &'static Mutex<ImageCache> {
         })
     })
 }
+fn large_image_cache() -> &'static Mutex<ImageCache> {
+    static CACHE: OnceLock<Mutex<ImageCache>> = OnceLock::new();
+    CACHE.get_or_init(|| {
+        Mutex::new(ImageCache {
+            entries: HashMap::new(),
+            lru: VecDeque::new(),
+            limit_bytes: LARGE_IMAGE_CACHE_LIMIT,
+            bytes: 0,
+            raster_bytes: 0,
+            hits: 0,
+            misses: 0,
+            budget: bead_core::cache::Budget::new(
+                "large-image-warm-cache",
+                LARGE_IMAGE_CACHE_LIMIT,
+            ),
+        })
+    })
+}
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ImageCacheStats {
     pub entries: usize,
@@ -1990,7 +2021,21 @@ pub fn image_cache_stats() -> ImageCacheStats {
         misses: cache.misses,
     }
 }
-/// Rasterise a small image into the shared cache so later renderer workers can reuse it.
+/// Return process-wide explicitly warmed large-image raster counters.
+pub fn large_image_cache_stats() -> ImageCacheStats {
+    let cache = large_image_cache()
+        .lock()
+        .expect("large image cache poisoned");
+    ImageCacheStats {
+        entries: cache.entries.len(),
+        raster_bytes: cache.raster_bytes,
+        charged_bytes: cache.bytes,
+        limit_bytes: LARGE_IMAGE_CACHE_LIMIT,
+        hits: cache.hits,
+        misses: cache.misses,
+    }
+}
+/// Rasterise an image into a shared bounded cache so renderer workers can reuse it.
 pub fn prewarm_image(
     path: &Path,
     bytes: &[u8],
@@ -1998,7 +2043,35 @@ pub fn prewarm_image(
     scale: f32,
     fit: ImageFit,
 ) -> Result<()> {
-    load_image(path, rect, scale, Some(bytes), fit).map(|_| ())
+    let (w, h) = dimensions(rect, scale);
+    if w <= 128 && h <= 128 {
+        return load_image(path, rect, scale, Some(bytes), fit).map(|_| ());
+    }
+    let raster_bytes = (w as usize)
+        .checked_mul(h as usize)
+        .and_then(|pixels| pixels.checked_mul(4))
+        .ok_or("image warm target size overflow")?;
+    if raster_bytes > LARGE_IMAGE_CACHE_LIMIT {
+        return Err("image warm target exceeds the large image cache budget".into());
+    }
+    let key = ImageCacheKey::new(path, bytes, w, h, fit);
+    let mut cache = large_image_cache()
+        .lock()
+        .expect("large image cache poisoned");
+    if cache.get(&key).is_some() {
+        return Ok(());
+    }
+    cache.misses += 1;
+    drop(cache);
+    let pixels = Arc::new(decode_image(path, bytes, w, h, fit)?);
+    let mut cache = large_image_cache()
+        .lock()
+        .expect("large image cache poisoned");
+    cache.insert(key.clone(), pixels);
+    if !cache.entries.contains_key(&key) {
+        return Err("large image warm cache is full".into());
+    }
+    Ok(())
 }
 /// Reads Orient format 1 only. Unknown metadata is intentionally ignored.
 #[derive(Clone)]
@@ -3168,6 +3241,38 @@ mod tests {
         assert!(cache.entries.len() <= IMAGE_CACHE_MAX_ENTRIES);
         assert!(cache.raster_bytes <= IMAGE_CACHE_LIMIT);
         assert!(cache.budget.used() <= 8 * 1024);
+    }
+
+    #[test]
+    fn explicitly_warmed_large_rasters_are_reused_inside_their_budget() {
+        use image::ImageEncoder;
+        let path = std::env::temp_dir().join(format!("large-warm-{}.png", std::process::id()));
+        let source = image::RgbaImage::from_pixel(320, 240, image::Rgba([40, 90, 180, 255]));
+        let mut bytes = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut bytes)
+            .write_image(source.as_raw(), 320, 240, image::ExtendedColorType::Rgba8)
+            .unwrap();
+        let rect = Rect::new(0., 0., 320., 240.);
+        prewarm_image(&path, &bytes, rect, 1., ImageFit::Cover).unwrap();
+        let before = large_image_cache_stats();
+        let pixels = load_image(&path, rect, 1., Some(&bytes), ImageFit::Cover).unwrap();
+        let after = large_image_cache_stats();
+        assert_eq!(pixels.width(), 320);
+        assert_eq!(pixels.height(), 240);
+        assert_eq!(after.hits, before.hits + 1);
+        assert!(after.raster_bytes <= LARGE_IMAGE_CACHE_LIMIT);
+        assert!(after.charged_bytes <= LARGE_IMAGE_CACHE_LIMIT);
+        assert!(large_image_cache().lock().unwrap().budget.used() <= LARGE_IMAGE_CACHE_LIMIT);
+        assert!(
+            prewarm_image(
+                &path,
+                &bytes,
+                Rect::new(0., 0., 10_000., 10_000.),
+                1.,
+                ImageFit::Cover,
+            )
+            .is_err()
+        );
     }
 }
 

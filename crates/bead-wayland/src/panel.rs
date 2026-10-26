@@ -657,7 +657,7 @@ impl App {
     }
     pub(super) fn start_panel(&mut self, output: Option<&str>, open: bool) -> Result<(), String> {
         bead_core::profile::mark("panel_admission");
-        let spec = self
+        let mut spec = self
             .options
             .panel_spec
             .clone()
@@ -675,6 +675,30 @@ impl App {
                 )
             })
             .ok_or("panel output not available")?;
+        let mut fallback_ready = false;
+        if let Some(factory) = &spec.fallback_factory {
+            let viewport = self
+                .output
+                .info(&output)
+                .and_then(|info| info.logical_size)
+                .filter(|(width, height)| *width > 0 && *height > 0)
+                .map(|(width, height)| (width as u32, height as u32))
+                .unwrap_or((
+                    spec.fallback.bounds.w.ceil() as u32,
+                    spec.fallback.bounds.h.ceil() as u32,
+                ));
+            if let Some(fallback) = factory(viewport) {
+                spec.fallback = fallback;
+                fallback_ready = true;
+                self.options.panel_spec = Some(spec.clone());
+            }
+            bead_core::vprintln!(
+                "PANEL_FALLBACK ready={} viewport={}x{}",
+                fallback_ready,
+                viewport.0,
+                viewport.1
+            );
+        }
         self.panel_close_epoch = self.panel_close_epoch.wrapping_add(1);
         self.panel_target = open;
         if open {
@@ -756,6 +780,7 @@ impl App {
         let epoch = self.panel_epoch;
         self.panel_reload_pending = false;
         self.panel_ready = false;
+        self.panel_fallback_ready = fallback_ready;
         #[cfg(feature = "native-gl")]
         {
             self.panel_cpu_cached = false;
@@ -1099,6 +1124,7 @@ impl App {
         self.reserved_pearl_id = None;
         self.prewarm_attempted = false;
         self.panel_gpu_suspended = false;
+        self.panel_fallback_ready = false;
         #[cfg(feature = "native-gl")]
         {
             self.panel_gl_prewarm_error = None;
