@@ -1,0 +1,39 @@
+diff --git a/crates/bead-wayland/src/runtime.rs b/crates/bead-wayland/src/runtime.rs
+index d669b725..f844c4bb 100644
+--- a/crates/bead-wayland/src/runtime.rs
++++ b/crates/bead-wayland/src/runtime.rs
+@@ -1083,14 +1083,6 @@ impl App {
+     pub(super) fn set_wallpaper_palette(
+         &mut self,
+         palette: std::collections::BTreeMap<String, [u8; 4]>,
+-    ) {
+-        self.apply_wallpaper_palette(palette, true);
+-    }
+-
+-    fn apply_wallpaper_palette(
+-        &mut self,
+-        palette: std::collections::BTreeMap<String, [u8; 4]>,
+-        notify_panel: bool,
+     ) {
+         if self.wallpaper_palette.as_ref() == Some(&palette) {
+             return;
+@@ -1099,7 +1091,7 @@ impl App {
+         if let Some(control) = &self.options.control {
+             control.palette_changed(&palette);
+         }
+-        if notify_panel && self.panel_runtime.is_some() {
++        if self.panel_runtime.is_some() {
+             self.panel_ui(UiEvent::WallpaperPalette(palette.clone()));
+         }
+         if self.overlay.is_some() {
+@@ -1155,9 +1147,7 @@ impl App {
+         });
+         if accepted && has_current {
+             bead_core::profile::mark("wallpaper_palette_accepted");
+-            // The grouped primary flow already committed the current panel epoch.
+-            // Do not queue a second palette job after that fence has settled.
+-            self.apply_wallpaper_palette(palette.clone(), self.options.primary_factory.is_none());
++            self.set_wallpaper_palette(palette.clone());
+             self.commit_pending_wallpapers(palette);
+             // The new scenes were prepared while their previous buffers stayed
+             // visible. Submit the ready group in this turn, ignoring callbacks

@@ -37,6 +37,19 @@ All 13 final Today states and the matched static Colors pointer pair pass.
 Opening smoothness remains unproven; [the spec](specs/0136-small-parity.md) records
 source-pinned pairs and remaining visual gaps. No live change.
 
+## 2026-10-26 — B0134 picker retention and confirmed handoff
+
+Five alternating private CPU-bar/GL-picker pairs bound static closed retention to
+28.868 MiB above idle; all relative phase medians pass +0.5 MiB. Static wallpaper/bar
+and picker palette present at 124.341/127.925 ms median. Video wallpaper/bar is
+147.363 ms, but picker palette is 150.743 ms and fails 150 ms in three pairs.
+Warm drawing passes 16 ms; expired first-presentation feedback is 17.956 ms and
+fails. Cold presentation is 107.430 ms. Compressed CPU snapshots retire exclusive
+GL pools while confirmed palette/pixel staging overlaps the unchanged activation RPC.
+Full remote Arch and official Bead/Nacre CI pass. Frozen measured source `c63acedf`
+and integrated `588d9506` are distinct. [Evidence and limits](specs/0134-picker-retention.md).
+No live deployment, physical scanout or laptop-cap acceptance.
+
 ## 2026-10-26 — B0137 shared edge-panel hover
 
 AI and control panels share lip/body/focus exit grace. Backdrops preserve stable

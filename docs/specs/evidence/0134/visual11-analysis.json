@@ -1,0 +1,300 @@
+{
+  "schema": 1,
+  "backend": "cpu-bar-gl-panel",
+  "memory_method": "Pss_Anon + Pss_Shmem + SwapPss + DRM from parity driver RSS sidecars; MiB; paired candidate-minus-control median",
+  "memory": {
+    "minimum_pairs": 5,
+    "phases": {
+      "idle": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "control_pss_median_mib": null,
+        "candidate_pss_median_mib": null,
+        "control_clean_file_pss_median_mib": null,
+        "candidate_clean_file_pss_median_mib": null,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "swap_pss_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "drm_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          }
+        },
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      },
+      "expired": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "control_pss_median_mib": null,
+        "candidate_pss_median_mib": null,
+        "control_clean_file_pss_median_mib": null,
+        "candidate_clean_file_pss_median_mib": null,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "swap_pss_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "drm_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          }
+        },
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      },
+      "open": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "control_pss_median_mib": null,
+        "candidate_pss_median_mib": null,
+        "control_clean_file_pss_median_mib": null,
+        "candidate_clean_file_pss_median_mib": null,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "swap_pss_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "drm_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          }
+        },
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      },
+      "closed": {
+        "n": 0,
+        "control_median_mib": null,
+        "candidate_median_mib": null,
+        "paired_delta_median_mib": null,
+        "paired_deltas_mib": [],
+        "control_pss_median_mib": null,
+        "candidate_pss_median_mib": null,
+        "control_clean_file_pss_median_mib": null,
+        "candidate_clean_file_pss_median_mib": null,
+        "unreclaimable_components": {
+          "pss_anon_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "pss_shmem_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "swap_pss_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          },
+          "drm_mib": {
+            "control_median_mib": null,
+            "candidate_median_mib": null,
+            "paired_delta_median_mib": null
+          }
+        },
+        "status": "INSUFFICIENT (0/5 paired samples)"
+      }
+    },
+    "pairs": []
+  },
+  "content_timing": [
+    {
+      "capture": "visual",
+      "states": {
+        "spotlight-cold": {
+          "panel_prepared_before_open": false,
+          "first_scene_commit_ms": 95.47,
+          "first_scene_update": "1",
+          "first_scene_image_bytes": 159572,
+          "first_scene_frame_ms": 142.668,
+          "content_method": "first companion UI_COMMIT with extras_images_bytes>0 (content proxy)",
+          "content_scene_commit_ms": 95.47,
+          "content_scene_update": "1",
+          "content_scene_image_bytes": 159572,
+          "content_scene_frame_ms": 142.668,
+          "content_presented_ms": 147.546,
+          "content_presented_update": "3",
+          "status": "first positive extras_images_bytes scene commit; UI_FRAME marks surface submission and UI_PRESENTED its nested presentation feedback"
+        },
+        "spotlight-repeat": {
+          "content_method": "retained prepared scene; first companion UI_FRAME",
+          "panel_prepared_before_open": true,
+          "content_frame_ms": 11.254,
+          "refresh_commit_ms": 14.019,
+          "commit_update": "12",
+          "refresh_presented_ms": 35.392,
+          "status": "warm retained frame; refresh commit reported separately"
+        },
+        "spotlight-expired": {
+          "status": "sequence clock unavailable"
+        }
+      }
+    }
+  ],
+  "palette_timing": [
+    {
+      "capture": "visual",
+      "selection_send_ns": 847560096063751,
+      "active_topic_patch_ns": 847560242570007,
+      "wallpaper_palette_accepted_ns": 847560295282868,
+      "wallpaper_attached_ns": 847560299318386,
+      "wallpaper_presented_ns": 847560324340977,
+      "wallpaper_presented_refresh_ns": 0.0,
+      "main_palette_commit_update": "25",
+      "main_palette_commit_ns": 847560280024823,
+      "main_palette_presented_ns": 847560324340977,
+      "main_palette_presented_refresh_ns": 0.0,
+      "panel_palette_commit_update": "44",
+      "panel_palette_commit_ns": 847560292861868,
+      "panel_palette_presented_ns": 847560324340977,
+      "panel_palette_presented_refresh_ns": 0.0,
+      "selection_to_active_topic_ms": 146.506,
+      "selection_to_palette_accept_ms": 199.219,
+      "selection_to_wallpaper_attach_ms": 203.255,
+      "selection_to_wallpaper_present_ms": 228.277,
+      "palette_accept_to_main_palette_present_ms": 29.058,
+      "palette_accept_to_panel_palette_present_ms": 29.058,
+      "palette_accept_to_wallpaper_present_ms": 29.058,
+      "palette_accept_to_wallpaper_attach_ms": 4.036,
+      "main_palette_minus_wallpaper_present_ms": 0.0,
+      "panel_palette_minus_wallpaper_present_ms": 0.0,
+      "presentation_method": "UI_COMMIT wallpaper_palette=true update matched to same-update UI_PRESENTED; wallpaper WALLPAPER_PRESENTED matched by output/revision after successful attach",
+      "presentation_limit": "refresh_ns=0 or absent supplies no refresh interval; protocol timestamps are nested presentation feedback, not physical scanout"
+    }
+  ],
+  "palette_image_proxy": [
+    {
+      "status": "palette endpoint screenshots or image sequence unavailable",
+      "capture": "visual"
+    }
+  ],
+  "pacing": [],
+  "frame_pacing": [
+    {
+      "capture": "visual",
+      "states": {
+        "spotlight-cold": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 18,
+            "p50": 0.356,
+            "p99": 2.292
+          },
+          "ui_frame_intervals": {
+            "sample_count": 18,
+            "interval_count": 17,
+            "interval_ms_p50": 21.857,
+            "interval_ms_p99": 31.99,
+            "interval_ms_max": 31.99
+          },
+          "ui_callback_intervals": {
+            "sample_count": 18,
+            "interval_count": 17,
+            "interval_ms_p50": 23.498,
+            "interval_ms_p99": 42.781,
+            "interval_ms_max": 42.781
+          },
+          "panel_gpu_prepared": [
+            {
+              "after_open_ms": 140.525,
+              "prepare_ms": 30.913
+            }
+          ],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        },
+        "spotlight-repeat": {
+          "window_ms": 2000.0,
+          "ui_frame_render_wall_ms": {
+            "sample_count": 23,
+            "p50": 0.2,
+            "p99": 0.717
+          },
+          "ui_frame_intervals": {
+            "sample_count": 23,
+            "interval_count": 22,
+            "interval_ms_p50": 18.974,
+            "interval_ms_p99": 22.253,
+            "interval_ms_max": 22.253
+          },
+          "ui_callback_intervals": {
+            "sample_count": 22,
+            "interval_count": 21,
+            "interval_ms_p50": 19.145,
+            "interval_ms_p99": 23.871,
+            "interval_ms_max": 23.871
+          },
+          "panel_gpu_prepared": [],
+          "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+        },
+        "spotlight-expired": {
+          "status": "sequence clock unavailable"
+        }
+      }
+    }
+  ],
+  "renderer_fallbacks": [
+    {
+      "capture": "visual",
+      "companion_gpu_unavailable": 0,
+      "companion_gpu_to_cpu": 0,
+      "companion_cpu_to_gl": 7,
+      "panel_gpu_prepared": 7
+    }
+  ],
+  "limitations": [
+    "Pair order is supplied by the caller; the artifacts do not prove that capture arms alternated.",
+    "A missing/unknown DRM value is not treated as zero; it leaves that memory sample unavailable.",
+    "Cold content uses the first companion UI_COMMIT with positive extras_images_bytes; that cache-byte proxy may precede all visible thumbnails settling. Prepared warm panels use the first companion UI_FRAME. Warm UI_PRESENTED callbacks are not paired with that frame because callback logging deduplicates by UI update id.",
+    "UI_FRAME render_ms and UI_CALLBACK intervals are bounded to each sequence clock's open window. They describe client draw/callback clocks, not physical refresh. PANEL_GPU_PREPARED reports hidden first-context upload time separately when frame tracing is enabled.",
+    "Direct palette presentation links require a wallpaper_palette=true UI_COMMIT matched by companion/update to same-update UI_PRESENTED, plus WALLPAPER_PRESENTED matched to the attached output/revision. Missing tags remain unavailable; refresh_ns=0 and zero sequence fields do not prove a physical frame interval.",
+    "Palette image-progress t10/t50/t90 uses normalized L1 crops between before/settled screenshots and sampled JPEGs; capture stamps are scheduling proxies, not scanout clocks.",
+    "Exact palette and wallpaper presentation clocks require BEAD_PROFILE_INPUT=clocks and the opt-in presentation feedback capture."
+  ]
+}

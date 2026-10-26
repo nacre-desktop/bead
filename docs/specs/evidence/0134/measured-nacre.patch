@@ -1,0 +1,438 @@
+diff --git a/crates/nacre-helper/src/wallpaper_media.rs b/crates/nacre-helper/src/wallpaper_media.rs
+index cc3151a6..2d9e9fa0 100644
+--- a/crates/nacre-helper/src/wallpaper_media.rs
++++ b/crates/nacre-helper/src/wallpaper_media.rs
+@@ -4,6 +4,7 @@ use serde_json::{json, Value};
+ use sha2::{Digest, Sha256};
+ use std::{
+     fs,
++    io::Read,
+     os::unix::fs::MetadataExt,
+     path::{Path, PathBuf},
+     time::Duration,
+@@ -14,18 +15,115 @@ pub const VIDEOS: [&str; 6] = ["mp4", "webm", "mkv", "mov", "avi", "m4v"];
+ const THUMBNAIL_LIMIT_BYTES: u64 = 256 * 1024;
+ const PREVIEW_LIMIT_BYTES: u64 = 2 * 1024 * 1024;
+ const THUMBNAIL_CACHE_COUNT: usize = 128;
+-fn native_engine_identity() -> Result<&'static str> {
++const ENGINE_IDENTITY_CACHE_LIMIT: u64 = 4096;
++
++type ExecutableIdentity = nacre_protocol::wallpaper::WallpaperFileIdentity;
++
++#[derive(serde::Serialize, serde::Deserialize)]
++struct EngineIdentityCache {
++    engine: String,
++    identity: ExecutableIdentity,
++    sha256: String,
++}
++
++fn read_engine_identity_cache(
++    path: &Path,
++    engine: &str,
++    identity: &ExecutableIdentity,
++) -> Option<String> {
++    use std::os::unix::fs::OpenOptionsExt;
++    let file = fs::OpenOptions::new()
++        .read(true)
++        .custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK)
++        .open(path)
++        .ok()?;
++    let meta = file.metadata().ok()?;
++    if !meta.is_file()
++        || meta.len() > ENGINE_IDENTITY_CACHE_LIMIT
++        || meta.uid() != nix::unistd::getuid().as_raw()
++        || meta.mode() & 0o022 != 0
++    {
++        return None;
++    }
++    let mut bytes = Vec::new();
++    (&file)
++        .take(ENGINE_IDENTITY_CACHE_LIMIT + 1)
++        .read_to_end(&mut bytes)
++        .ok()?;
++    if bytes.len() as u64 > ENGINE_IDENTITY_CACHE_LIMIT {
++        return None;
++    }
++    let cached: EngineIdentityCache = serde_json::from_slice(&bytes).ok()?;
++    if cached.engine != engine || cached.identity != *identity {
++        return None;
++    }
++    (cached.sha256.len() == 64
++        && cached
++            .sha256
++            .bytes()
++            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)))
++    .then_some(cached.sha256)
++}
++
++fn write_engine_identity_cache(
++    path: &Path,
++    engine: &str,
++    identity: &ExecutableIdentity,
++    hash: &str,
++) {
++    let cached = EngineIdentityCache {
++        engine: engine.to_owned(),
++        identity: identity.clone(),
++        sha256: hash.to_owned(),
++    };
++    let Ok(bytes) = serde_json::to_vec(&cached) else {
++        return;
++    };
++    if bytes.len() as u64 > ENGINE_IDENTITY_CACHE_LIMIT {
++        return;
++    }
++    let _ = crate::files::atomic(path, &bytes);
++}
++
++fn engine_identity_for(executable: &Path, cache: &Path) -> Result<String> {
++    let mut file = fs::File::open(executable)?;
++    let before = ExecutableIdentity::from_metadata(&file.metadata()?);
++    let engine = crate::orient::engine_id();
++    let (digest, cache_miss) =
++        if let Some(cached) = read_engine_identity_cache(cache, engine, &before) {
++            (cached, false)
++        } else {
++            let mut hasher = Sha256::new();
++            let mut buffer = [0u8; 64 * 1024];
++            loop {
++                let count = file.read(&mut buffer)?;
++                if count == 0 {
++                    break;
++                }
++                hasher.update(&buffer[..count]);
++            }
++            (format!("{:x}", hasher.finalize()), true)
++        };
++    let after = ExecutableIdentity::from_metadata(&file.metadata()?);
++    if before != after {
++        return Err("Executable changed while hashing".into());
++    }
++    if cache_miss {
++        write_engine_identity_cache(cache, engine, &before, &digest);
++    }
++    Ok(format!("{engine}:{digest}"))
++}
++
++fn native_engine_identity(paths: &Paths) -> Result<&'static str> {
+     static ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+     if let Some(value) = ID.get() {
+         return Ok(value);
+     }
+     // /proc/self/exe remains readable if an upgrade unlinks the running binary.
+-    let binary = fs::read("/proc/self/exe")?;
+-    let identity = format!(
+-        "{}:{:x}",
+-        crate::orient::engine_id(),
+-        Sha256::digest(binary)
+-    );
++    let identity = engine_identity_for(
++        Path::new("/proc/self/exe"),
++        &paths.cache.join("native-engine-identity.json"),
++    )?;
+     Ok(ID.get_or_init(|| identity))
+ }
+ pub fn atomic(path: &Path, data: &Value) -> Result<()> {
+@@ -1312,6 +1410,9 @@ impl Media {
+             else {
+                 continue;
+             };
++            if !ids.iter().any(|requested| requested.as_str() == source) {
++                continue;
++            }
+             let poster_path = Path::new(poster);
+             if !poster_path.is_file() {
+                 continue;
+@@ -1825,7 +1926,7 @@ impl Media {
+         } else {
+             "uninstalled".into()
+         };
+-        let engine = format!("{}:{legacy}", native_engine_identity()?);
++        let engine = format!("{}:{legacy}", native_engine_identity(&self.paths)?);
+         let scheme = state::read(&self.paths.state.join("scheme.json"), json!({}))?;
+         let config = state::read(&self.paths.config.join("cli.json"), json!({}))?;
+         let settings = self.settings()?;
+@@ -2083,6 +2184,121 @@ pub fn run(args: &[String]) -> Result<i32> {
+ mod thumbnail_cache_tests {
+     use super::*;
+ 
++    #[test]
++    fn native_identity_cache_reuses_matching_digest() -> Result<()> {
++        let root = tempfile::tempdir()?;
++        let executable = root.path().join("fake-executable");
++        let cache = root.path().join("cache/engine.json");
++        fs::write(&executable, b"fake executable bytes")?;
++        let identity = ExecutableIdentity::from_metadata(&fs::metadata(&executable)?);
++        let digest = "a".repeat(64);
++        write_engine_identity_cache(&cache, crate::orient::engine_id(), &identity, &digest);
++        assert_eq!(
++            engine_identity_for(&executable, &cache)?,
++            format!("{}:{digest}", crate::orient::engine_id())
++        );
++        assert_eq!(
++            read_engine_identity_cache(&cache, crate::orient::engine_id(), &identity),
++            Some(digest)
++        );
++        Ok(())
++    }
++
++    #[test]
++    fn native_identity_cache_invalidates_changed_same_size_executable() -> Result<()> {
++        let root = tempfile::tempdir()?;
++        let executable = root.path().join("fake-executable");
++        let cache = root.path().join("cache/engine.json");
++        fs::write(&executable, b"first executable bytes")?;
++        let initial = ExecutableIdentity::from_metadata(&fs::metadata(&executable)?);
++        let digest = "a".repeat(64);
++        write_engine_identity_cache(&cache, crate::orient::engine_id(), &initial, &digest);
++        fs::write(&executable, b"other executable bytes")?;
++        let changed = ExecutableIdentity::from_metadata(&fs::metadata(&executable)?);
++        assert_eq!(initial.size, changed.size);
++        assert_ne!(initial, changed);
++        assert_eq!(
++            read_engine_identity_cache(&cache, crate::orient::engine_id(), &changed),
++            None
++        );
++        let identity = engine_identity_for(&executable, &cache)?;
++        assert_eq!(
++            identity,
++            format!(
++                "{}:{:x}",
++                crate::orient::engine_id(),
++                Sha256::digest(b"other executable bytes")
++            )
++        );
++        Ok(())
++    }
++
++    #[test]
++    fn native_identity_cache_rebuilds_corrupt_data_and_rejects_unsafe_files() -> Result<()> {
++        use std::os::unix::fs::PermissionsExt;
++        let root = tempfile::tempdir()?;
++        let executable = root.path().join("fake-executable");
++        let cache = root.path().join("cache/engine.json");
++        fs::write(&executable, b"fake executable bytes")?;
++        fs::create_dir_all(cache.parent().ok_or("missing cache parent")?)?;
++        fs::write(&cache, b"{")?;
++        let identity = engine_identity_for(&executable, &cache)?;
++        let hash = identity.rsplit(':').next().ok_or("missing hash")?;
++        assert_eq!(
++            hash,
++            format!("{:x}", Sha256::digest(b"fake executable bytes"))
++        );
++        assert_eq!(
++            read_engine_identity_cache(
++                &cache,
++                crate::orient::engine_id(),
++                &ExecutableIdentity::from_metadata(&fs::metadata(&executable)?)
++            ),
++            Some(hash.to_owned())
++        );
++        fs::set_permissions(&cache, fs::Permissions::from_mode(0o666))?;
++        assert_eq!(
++            read_engine_identity_cache(
++                &cache,
++                crate::orient::engine_id(),
++                &ExecutableIdentity::from_metadata(&fs::metadata(&executable)?)
++            ),
++            None
++        );
++        fs::remove_file(&cache)?;
++        let target = root.path().join("foreign-cache");
++        fs::write(&target, b"{}")?;
++        std::os::unix::fs::symlink(&target, &cache)?;
++        assert_eq!(
++            read_engine_identity_cache(
++                &cache,
++                crate::orient::engine_id(),
++                &ExecutableIdentity::from_metadata(&fs::metadata(&executable)?)
++            ),
++            None
++        );
++        Ok(())
++    }
++
++    #[test]
++    fn native_identity_cache_write_failure_does_not_break_hashing() -> Result<()> {
++        let root = tempfile::tempdir()?;
++        let executable = root.path().join("fake-executable");
++        let cache_parent = root.path().join("not-a-directory");
++        fs::write(&executable, b"fake executable bytes")?;
++        fs::write(&cache_parent, b"occupied")?;
++        let identity = engine_identity_for(&executable, &cache_parent.join("engine.json"))?;
++        assert_eq!(
++            identity,
++            format!(
++                "{}:{:x}",
++                crate::orient::engine_id(),
++                Sha256::digest(b"fake executable bytes")
++            )
++        );
++        Ok(())
++    }
++
+     #[test]
+     fn thumbnail_cache_keeps_current_and_caps_entries_and_bytes() -> Result<()> {
+         let directory = tempfile::tempdir()?;
+@@ -2277,7 +2493,9 @@ mod thumbnail_cache_tests {
+     fn catalogue_prewarm_extracts_once_then_reuses_the_keyed_marker() -> Result<()> {
+         let (_home, mut media) = media_fixture()?;
+         let image = media.library.join("prewarm.png");
++        let unrequested = media.library.join("unrequested.png");
+         image::DynamicImage::new_rgb8(16, 16).save(&image)?;
++        image::DynamicImage::new_rgb8(16, 16).save(&unrequested)?;
+         let id = image.canonicalize()?.to_string_lossy().into_owned();
+         let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+         let calls_for_query = calls.clone();
+@@ -2299,6 +2517,9 @@ mod thumbnail_cache_tests {
+ 
+         let mut cli = test_palette_cli(&media)?;
+         let first = media.prewarm_catalogue(&mut cli, std::slice::from_ref(&id))?;
++        assert_eq!(first["prepared"], 1);
++        assert_eq!(first["computed"], 1);
++        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+         let second = media.prewarm_catalogue(&mut cli, std::slice::from_ref(&id))?;
+         media.select(&mut cli, &image)?;
+         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+@@ -2307,7 +2528,6 @@ mod thumbnail_cache_tests {
+         media.preference(&json!({"palettePersonality":"vivid"}))?;
+         let changed_settings = media.prewarm_catalogue(&mut cli, std::slice::from_ref(&id))?;
+ 
+-        assert_eq!(first["computed"], 1);
+         assert_eq!(second["computed"], 0);
+         assert_eq!(changed_file["computed"], 1);
+         assert_eq!(changed_settings["computed"], 1);
+diff --git a/docs/development/performance.md b/docs/development/performance.md
+index ae6e15fc..71a159e3 100644
+--- a/docs/development/performance.md
++++ b/docs/development/performance.md
+@@ -1392,6 +1392,14 @@ as shell descendants. See [presentation witnesses](../../tools/performance-probe
+ The selected palette is precomputed: this is a warm-cache functional scenario.
+ Its five-second observation and two-second lock wait are not latency estimates.
+ 
++Short-lived native wallpaper commands cache the executable SHA-256 in
++`cache/nacre/native-engine-identity.json` (at most 4 KiB). The cache is accepted
++only for an owned, regular, non-writable-by-others file matching the executable’s
++full device/inode/size/mode/owner/mtime/ctime identity; invalid or unavailable
++cache data falls back to hashing the pinned executable. The palette key is
++unchanged. Catalogue prewarming processes only requested IDs, even though the
++metadata catalogue includes other rows. Neither cache contains decoded frames.
++
+ A busy-host smoke recorded 274 host swap-in pages at 4,096 bytes/page
+ (1,122,304 bytes), exceeding the owner's 1 MiB gate, while sampled processes
+ had SwapPss zero. It supplies functional evidence only. The required desktop-PC
+diff --git a/tests/parity/helpers/colors_reference_files.py b/tests/parity/helpers/colors_reference_files.py
+index 4ac9f594..b33f94af 100644
+--- a/tests/parity/helpers/colors_reference_files.py
++++ b/tests/parity/helpers/colors_reference_files.py
+@@ -7,6 +7,7 @@ Current JSON spacing/newlines are checked before canonicalizing volatile fields.
+ import base64
+ import hashlib
+ import json
++import os
+ from pathlib import Path
+ import stat
+ 
+@@ -139,10 +140,88 @@ class Files:
+                     "@PNG_" + hashlib.sha256(path.read_bytes()).hexdigest() + "@"
+                 )
+ 
++    def validate_native_engine_identity_cache(self, path):
++        """Validate the one expected runtime cache before omitting it from parity."""
++        metadata = path.lstat()
++        if (
++            not stat.S_ISREG(metadata.st_mode)
++            or metadata.st_uid != os.getuid()
++            or metadata.st_mode & 0o022
++            or metadata.st_size > 4096
++        ):
++            raise ValueError("Unsafe native engine identity cache")
++        raw = path.read_bytes()
++        if len(raw) > 4096:
++            raise ValueError("Oversized native engine identity cache")
++        record = json.loads(raw)
++        if json.dumps(record, separators=(",", ":")) != raw.decode():
++            raise ValueError("Native engine identity cache serialization changed")
++        if not isinstance(record, dict) or set(record) != {
++            "engine",
++            "identity",
++            "sha256",
++        }:
++            raise ValueError("Invalid native engine identity cache fields")
++        pin_path = (
++            Path(__file__).resolve().parents[3]
++            / "nacre/shell-cli/src/nacre_shell/engine-pin.json"
++        )
++        pin = json.loads(pin_path.read_text())
++        if record["engine"] != pin.get("engine"):
++            raise ValueError("Native engine identity cache has the wrong engine ID")
++        identity = record["identity"]
++        fields = {
++            "device",
++            "inode",
++            "size",
++            "mtime_sec",
++            "mtime_nsec",
++            "ctime_sec",
++            "ctime_nsec",
++        }
++        if not isinstance(identity, dict) or set(identity) != fields:
++            raise ValueError("Invalid native executable identity fields")
++        for key in ("device", "inode"):
++            value = identity[key]
++            if (
++                not isinstance(value, str)
++                or not value.isascii()
++                or not value.isdecimal()
++                or len(value) > 20
++                or (len(value) > 1 and value.startswith("0"))
++                or int(value) > 2**64 - 1
++            ):
++                raise ValueError("Invalid native executable device/inode")
++        safe_integer = 2**53 - 1
++        if (
++            type(identity["size"]) is not int
++            or not 0 <= identity["size"] <= safe_integer
++            or any(
++                type(identity[key]) is not int
++                or not -safe_integer <= identity[key] <= safe_integer
++                for key in ("mtime_sec", "ctime_sec")
++            )
++            or any(
++                type(identity[key]) is not int or not 0 <= identity[key] <= 999_999_999
++                for key in ("mtime_nsec", "ctime_nsec")
++            )
++        ):
++            raise ValueError("Invalid native executable timestamps/size")
++        digest = record["sha256"]
++        if (
++            not isinstance(digest, str)
++            or len(digest) != 64
++            or any(character not in "0123456789abcdef" for character in digest)
++        ):
++            raise ValueError("Invalid native engine identity SHA-256")
++
+     def snapshot(self):
+         result = {}
+         for path in sorted(self.home.rglob("*")):
+             name = self.normalize(str(path.relative_to(self.home)))
++            if path == self.home / ".cache/nacre/native-engine-identity.json":
++                self.validate_native_engine_identity_cache(path)
++                continue
+             if path.is_symlink():
+                 result[name] = dict(link=self.normalize(str(path.readlink())))
+             elif path.is_file():
+diff --git a/tests/parity/helpers/freeze_wallpaper_warm.py b/tests/parity/helpers/freeze_wallpaper_warm.py
+index d99058ca..b5c2fe9e 100644
+--- a/tests/parity/helpers/freeze_wallpaper_warm.py
++++ b/tests/parity/helpers/freeze_wallpaper_warm.py
+@@ -33,6 +33,9 @@ results.append(media.warm(include_demo=False));print(json.dumps(results))
+ def file_list(home, files):
+     rows = []
+     for path in home.rglob("*"):
++        if path == home / ".cache/nacre/native-engine-identity.json":
++            files.validate_native_engine_identity_cache(path)
++            continue
+         name = files.normalize(str(path.relative_to(home)))
+         if path.is_symlink():
+             record = dict(link=files.normalize(str(path.readlink())))

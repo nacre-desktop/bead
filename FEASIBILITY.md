@@ -26,6 +26,25 @@ control artifacts have ambiguous provenance and do not supply final gates.
 No physical scanout or zero-drop acceptance. Long clamped gaps remain reported.
 [Source-pinned results, failures and parity gaps](docs/specs/0135-scrolling.md).
 
+## 2026-10-26 — B0134 bounded picker and video handoff
+
+A compressed CPU first frame keeps reopened content populated while GL prepares.
+Closed textures, surfaces and exclusively owned driver pools retire after two seconds.
+Five alternating pairs pass retention, relative memory, cold and static-selection gates.
+Video-picker palette and expired warm-presentation feedback still miss their targets.
+
+| CPU bar / GL picker, five-pair median | Result |
+| --- | ---: |
+| Largest static closed retention above idle | 28.868 MiB ≤ 40 |
+| Static wallpaper/bar; picker palette | 124.341; 127.925 ms |
+| Video wallpaper/bar; picker palette | 147.363; **150.743 ms** |
+| Expired warm draw; presentation feedback | 12.401; **17.956 ms** |
+| GL carousel render p99, separate proof | 1.141 ms |
+
+Full remote and official Bead/Nacre CI pass. Three video-picker samples fail 150 ms.
+Clean file PSS is informational; no physical scanout or laptop-cap acceptance.
+[Source pins, all samples and remaining limits](docs/specs/0134-picker-retention.md).
+
 ## 2026-10-26 — B0129 launcher first-frame icons
 
 The launcher retains a bounded shared SVG/PNG raster set after its panel closes.

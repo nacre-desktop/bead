@@ -1,0 +1,58 @@
+{
+  "capture": "bead",
+  "states": {
+    "wallpaper-carousel": {
+      "window_ms": 1000.0,
+      "ui_frame_render_wall_ms": {
+        "sample_count": 40,
+        "p50": 0.279,
+        "p99": 1.141
+      },
+      "ui_frame_intervals": {
+        "sample_count": 40,
+        "interval_count": 39,
+        "interval_ms_p50": 8.01,
+        "interval_ms_p99": 8.077,
+        "interval_ms_max": 8.077
+      },
+      "ui_callback_intervals": {
+        "sample_count": 40,
+        "interval_count": 39,
+        "interval_ms_p50": 8.011,
+        "interval_ms_p99": 8.031,
+        "interval_ms_max": 8.031
+      },
+      "panel_gpu_prepared": [
+        {
+          "after_open_ms": 118.352,
+          "prepare_ms": 25.135
+        }
+      ],
+      "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+    },
+    "wallpaper-travel": {
+      "window_ms": 2000.0,
+      "ui_frame_render_wall_ms": {
+        "sample_count": 18,
+        "p50": 0.299,
+        "p99": 0.419
+      },
+      "ui_frame_intervals": {
+        "sample_count": 18,
+        "interval_count": 17,
+        "interval_ms_p50": 17.372,
+        "interval_ms_p99": 32.286,
+        "interval_ms_max": 32.286
+      },
+      "ui_callback_intervals": {
+        "sample_count": 18,
+        "interval_count": 17,
+        "interval_ms_p50": 16.021,
+        "interval_ms_p99": 37.059,
+        "interval_ms_max": 37.059
+      },
+      "panel_gpu_prepared": [],
+      "limits": "client render/frame-callback clocks, not compositor refresh or physical scanout"
+    }
+  }
+}

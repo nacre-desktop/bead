@@ -1,0 +1,3716 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 2e4e3ba0..8ed7d4d4 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -874,6 +874,18 @@ dependencies = [
+  "pin-project-lite",
+ ]
+ 
++[[package]]
++name = "fast_image_resize"
++version = "6.1.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e9c50201dc184ba6553da1695aac20a042efffbe2d84542cee31917c86c3ab1e"
++dependencies = [
++ "cfg-if",
++ "document-features",
++ "num-traits",
++ "thiserror 2.0.21",
++]
++
+ [[package]]
+ name = "fastrand"
+ version = "2.5.0"
+@@ -1773,6 +1785,7 @@ dependencies = [
+  "bead-test",
+  "bead-wallpaper",
+  "calloop",
++ "fast_image_resize",
+  "fontconfig",
+  "fontdb",
+  "freedesktop-icons",
+@@ -3573,7 +3586,7 @@ version = "0.1.11"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
+ dependencies = [
+- "windows-sys 0.48.0",
++ "windows-sys 0.61.2",
+ ]
+ 
+ [[package]]
+diff --git a/Cargo.toml b/Cargo.toml
+index 27b07772..e73cfd05 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -46,6 +46,22 @@ opt-level = 3
+ [profile.release.package.cosmic-text]
+ opt-level = 3
+ 
++# Wallpaper decoding is an interactive hot path, like raster/text work.
++[profile.release.package.zune-jpeg]
++opt-level = 3
++
++[profile.release.package.zune-core]
++opt-level = 3
++
++[profile.release.package.png]
++opt-level = 3
++
++[profile.release.package.fdeflate]
++opt-level = 3
++
++[profile.release.package.fast_image_resize]
++opt-level = 3
++
+ # Upstream 0.8.9 leaves DBusMenu signal tasks alive after an item exits.
+ [patch.crates-io]
+ system-tray = { path = "vendor/system-tray" }
+diff --git a/crates/bead-render/src/gl.rs b/crates/bead-render/src/gl.rs
+index a47594fc..3cb0b056 100644
+--- a/crates/bead-render/src/gl.rs
++++ b/crates/bead-render/src/gl.rs
+@@ -3,7 +3,10 @@
+ use crate::{Damage, RenderTarget, Renderer, Result, Scene, ShmTarget};
+ use glutin::{
+     config::{Config, ConfigTemplateBuilder},
+-    context::{ContextApi, ContextAttributesBuilder, PossiblyCurrentContext, Version},
++    context::{
++        ContextApi, ContextAttributesBuilder, NotCurrentContext, NotCurrentGlContext,
++        PossiblyCurrentContext, Version,
++    },
+     display::{AsRawDisplay, Display, DisplayApiPreference},
+     prelude::*,
+     surface::{
+@@ -30,6 +33,24 @@ pub struct Transport {
+         i32,
+     ) -> u32,
+ }
++/// EGL display/config/context setup that can be created on a worker thread and
++/// handed to the render thread before any window surface exists.
++///
++/// The context is not current, so this type can move between threads without
++/// an unsafe `Send` implementation. Keep the native connection alive until this
++/// value is converted or shut down. Serialize initialization against other
++/// setup for the same native display; EGL driver initialization is not performed
++/// concurrently by this API.
++pub struct PreparedTransport {
++    // Keep context/config before display so normal field drop order releases
++    // EGL children before the display handle.
++    context: Option<NotCurrentContext>,
++    config: Config,
++    pub display: Display,
++    swap_damage: DamageSwap,
++}
++fn assert_send<T: Send>() {}
++const _: fn() = assert_send::<PreparedTransport>;
+ pub struct Surface {
+     surface: EglSurface<WindowSurface>,
+     height: std::cell::Cell<u32>,
+@@ -46,6 +67,197 @@ impl Drop for Transport {
+         }
+     }
+ }
++impl PreparedTransport {
++    /// Prepare the EGL display, config, extension function, and non-current
++    /// OpenGL 3.3 context without requiring a window handle.
++    ///
++    /// # Safety
++    /// The native display/connection must remain alive until this value and all
++    /// surfaces created from it are destroyed. Do not initialize another
++    /// transport concurrently for the same native display; the caller must
++    /// serialize setup and later convert this value into the sole `Transport`.
++    pub unsafe fn new(display: RawDisplayHandle) -> Result<Self> {
++        let (display, config, swap_damage, supports_surfaceless) =
++            unsafe { initialize_display(display) }?;
++        let attrs = ContextAttributesBuilder::new()
++            .with_context_api(ContextApi::OpenGl(Some(Version::new(3, 3))))
++            .build(None);
++        // SAFETY: config belongs to this retained EGL display; no native window is needed.
++        let context = match unsafe { display.create_context(&config, &attrs) } {
++            Ok(context) => context,
++            Err(error) => {
++                drop(config);
++                if let Err(cleanup_error) = unsafe { terminate_exclusive(&display) } {
++                    eprintln!(
++                        "GL_PREPARE_CLEANUP_ERROR context_error={error} cleanup_error={cleanup_error}"
++                    );
++                }
++                return Err(Box::new(error));
++            }
++        };
++        let context = if supports_surfaceless {
++            match warm_surfaceless(context, &display) {
++                Ok(context) => context,
++                Err(error) => {
++                    drop(config);
++                    if let Err(cleanup_error) = unsafe { terminate_exclusive(&display) } {
++                        eprintln!(
++                            "GL_PREPARE_CLEANUP_ERROR context_error={error} cleanup_error={cleanup_error}"
++                        );
++                    }
++                    return Err(error);
++                }
++            }
++        } else {
++            context
++        };
++        Ok(Self {
++            context: Some(context),
++            config,
++            display,
++            swap_damage,
++        })
++    }
++
++    /// Convert setup into the render-thread transport. The context remains
++    /// non-current until `create_surface` binds it to the first window.
++    pub fn into_transport(mut self) -> Transport {
++        let context = self
++            .context
++            .take()
++            .expect("prepared EGL context already consumed")
++            .treat_as_possibly_current();
++        Transport {
++            display: self.display,
++            config: self.config,
++            context: Some(context),
++            swap_damage: self.swap_damage,
++        }
++    }
++
++    /// Release an unused prepared context and the EGL display pool.
++    ///
++    /// # Safety
++    /// No other transport, surface, renderer, or library may use this native
++    /// display. The prepared context is destroyed before `eglTerminate` runs.
++    pub unsafe fn shutdown_exclusive(self) -> Result<()> {
++        let Self {
++            context,
++            config,
++            display,
++            ..
++        } = self;
++        drop(context);
++        drop(config);
++        unsafe { terminate_exclusive(&display) }
++    }
++}
++/// # Safety
++/// The caller must retain the native display for the returned EGL objects.
++unsafe fn initialize_display(
++    raw_display: RawDisplayHandle,
++) -> Result<(Display, Config, DamageSwap, bool)> {
++    // SAFETY: the public caller guarantees the native display remains alive.
++    let display = unsafe { Display::new(raw_display, DisplayApiPreference::Egl) }?;
++    let template = ConfigTemplateBuilder::new()
++        .with_alpha_size(8)
++        .with_stencil_size(8)
++        .with_transparency(true)
++        .build();
++    // SAFETY: config enumeration does not access a native window.
++    let config = unsafe { display.find_configs(template) }?
++        .next()
++        .ok_or("no transparent EGL config")?;
++    let query = display.get_proc_address(c"eglQueryString");
++    if query.is_null() {
++        return Err("missing EGL extension query".into());
++    }
++    let raw_display = match display.raw_display() {
++        glutin::display::RawDisplay::Egl(display) => display,
++        #[allow(unreachable_patterns)]
++        _ => return Err("native EGL required".into()),
++    };
++    // SAFETY: initialized EGL display; EGL_EXTENSIONS returns a driver-owned string.
++    let query: unsafe extern "system" fn(*const std::ffi::c_void, i32) -> *const std::ffi::c_char =
++        unsafe { std::mem::transmute(query) };
++    // SAFETY: raw_display belongs to this live Display, and 0x3055 is EGL_EXTENSIONS.
++    let extensions = unsafe { query(raw_display, 0x3055) };
++    if extensions.is_null() {
++        return Err("missing EGL extension string".into());
++    }
++    // SAFETY: validated non-null driver-owned extension string.
++    let extensions = unsafe { std::ffi::CStr::from_ptr(extensions) }.to_string_lossy();
++    let supports_surfaceless = extensions
++        .split_whitespace()
++        .any(|extension| extension == "EGL_KHR_surfaceless_context");
++    let name = if extensions
++        .split_whitespace()
++        .any(|e| e == "EGL_KHR_swap_buffers_with_damage")
++    {
++        c"eglSwapBuffersWithDamageKHR"
++    } else if extensions
++        .split_whitespace()
++        .any(|e| e == "EGL_EXT_swap_buffers_with_damage")
++    {
++        c"eglSwapBuffersWithDamageEXT"
++    } else {
++        return Err("EGL damage swaps unavailable; use CPU fallback".into());
++    };
++    let address = display.get_proc_address(name);
++    if address.is_null() {
++        return Err("missing EGL damage swap function".into());
++    }
++    // SAFETY: both advertised extensions use the standard EGL damage-swap signature.
++    let swap_damage: DamageSwap = unsafe { std::mem::transmute(address) };
++    Ok((display, config, swap_damage, supports_surfaceless))
++}
++
++fn warm_surfaceless(context: NotCurrentContext, display: &Display) -> Result<NotCurrentContext> {
++    match context {
++        NotCurrentContext::Egl(context) => {
++            let current = context.make_current_surfaceless()?;
++            let warmed = (|| -> Result<()> {
++                let _span = bead_core::profile::Span::new("panel_shader_prewarm");
++                // SAFETY: this worker owns the current context. These temporary
++                // resources are dropped here; no !Send Canvas crosses threads.
++                let renderer = unsafe {
++                    femtovg::renderer::OpenGl::new_from_function_cstr(|name| {
++                        display.get_proc_address(name).cast()
++                    })
++                }?;
++                let _canvas = femtovg::Canvas::new(renderer)?;
++                Ok(())
++            })();
++            // Unbind even if shader setup failed, before the caller retires EGL.
++            let context = current.make_not_current()?;
++            warmed?;
++            Ok(NotCurrentContext::Egl(context))
++        }
++        #[allow(unreachable_patterns)]
++        _ => Err("surfaceless warmup requires EGL".into()),
++    }
++}
++
++/// # Safety
++/// The caller must have exclusive ownership of the EGL display.
++unsafe fn terminate_exclusive(display: &Display) -> Result<()> {
++    #[allow(unreachable_patterns)]
++    let raw = match display.raw_display() {
++        glutin::display::RawDisplay::Egl(raw) => raw,
++        _ => return Err("exclusive shutdown requires EGL".into()),
++    };
++    let address = display.get_proc_address(c"eglTerminate");
++    if address.is_null() {
++        return Err("missing eglTerminate".into());
++    }
++    // SAFETY: EGL exports this signature; the caller guarantees exclusive ownership.
++    let terminate: unsafe extern "system" fn(*const std::ffi::c_void) -> u32 =
++        unsafe { std::mem::transmute(address) };
++    if unsafe { terminate(raw) } == 0 {
++        return Err("eglTerminate failed".into());
++    }
++    Ok(())
++}
+ pub struct GlTarget<'a> {
+     pub display: &'a Display,
+     pub width: u32,
+@@ -62,77 +274,12 @@ impl Transport {
+             context.make_not_current_in_place()?;
+             drop(context);
+         }
+-        #[allow(unreachable_patterns)]
+-        let raw = match self.display.raw_display() {
+-            glutin::display::RawDisplay::Egl(raw) => raw,
+-            _ => return Err("exclusive shutdown requires EGL".into()),
+-        };
+-        let address = self.display.get_proc_address(c"eglTerminate");
+-        if address.is_null() {
+-            return Err("missing eglTerminate".into());
+-        }
+-        // SAFETY: EGL exports this signature; exclusive ownership is the caller's contract.
+-        let terminate: unsafe extern "system" fn(*const std::ffi::c_void) -> u32 =
+-            unsafe { std::mem::transmute(address) };
+-        if unsafe { terminate(raw) } == 0 {
+-            return Err("eglTerminate failed".into());
+-        }
+-        Ok(())
++        unsafe { terminate_exclusive(&self.display) }
+     }
+     /// # Safety
+     /// Display must remain alive until the context and all surfaces are destroyed.
+     pub unsafe fn new(display: RawDisplayHandle) -> Result<Self> {
+-        // SAFETY: the caller retains the native Wayland connection.
+-        let display = unsafe { Display::new(display, DisplayApiPreference::Egl) }?;
+-        let template = ConfigTemplateBuilder::new()
+-            .with_alpha_size(8)
+-            .with_stencil_size(8)
+-            .with_transparency(true)
+-            .build();
+-        // SAFETY: configuration enumeration does not access a native window.
+-        let config = unsafe { display.find_configs(template) }?
+-            .next()
+-            .ok_or("no transparent EGL config")?;
+-        let query = display.get_proc_address(c"eglQueryString");
+-        if query.is_null() {
+-            return Err("missing EGL extension query".into());
+-        }
+-        let raw_display = match display.raw_display() {
+-            glutin::display::RawDisplay::Egl(display) => display,
+-            #[allow(unreachable_patterns)] // Other consumers may enable additional glutin APIs.
+-            _ => return Err("native EGL required".into()),
+-        };
+-        // SAFETY: initialized retained EGL display; EGL_EXTENSIONS returns a driver-owned C string.
+-        let query: unsafe extern "system" fn(
+-            *const std::ffi::c_void,
+-            i32,
+-        ) -> *const std::ffi::c_char = unsafe { std::mem::transmute(query) };
+-        // SAFETY: raw_display belongs to this live Display, and 0x3055 is EGL_EXTENSIONS.
+-        let extensions = unsafe { query(raw_display, 0x3055) };
+-        if extensions.is_null() {
+-            return Err("missing EGL extension string".into());
+-        }
+-        // SAFETY: validated non-null driver-owned extension string.
+-        let extensions = unsafe { std::ffi::CStr::from_ptr(extensions) }.to_string_lossy();
+-        let name = if extensions
+-            .split_whitespace()
+-            .any(|e| e == "EGL_KHR_swap_buffers_with_damage")
+-        {
+-            c"eglSwapBuffersWithDamageKHR"
+-        } else if extensions
+-            .split_whitespace()
+-            .any(|e| e == "EGL_EXT_swap_buffers_with_damage")
+-        {
+-            c"eglSwapBuffersWithDamageEXT"
+-        } else {
+-            return Err("EGL damage swaps unavailable; use CPU fallback".into());
+-        };
+-        let address = display.get_proc_address(name);
+-        if address.is_null() {
+-            return Err("missing EGL damage swap function".into());
+-        }
+-        // SAFETY: both advertised extensions use the standard EGL damage-swap signature.
+-        let swap_damage: DamageSwap = unsafe { std::mem::transmute(address) };
++        let (display, config, swap_damage, _) = unsafe { initialize_display(display) }?;
+         Ok(Self {
+             display,
+             config,
+@@ -209,6 +356,13 @@ impl Transport {
+         );
+         Ok(())
+     }
++    /// Unbind before destroying window surfaces so EGL can release their buffers.
++    pub fn unbind(&self) -> Result<()> {
++        if let Some(context) = &self.context {
++            context.make_not_current_in_place()?;
++        }
++        Ok(())
++    }
+     pub fn present(&self, surface: &Surface, damage: &[Damage]) -> Result<()> {
+         if damage.is_empty() {
+             return Err("empty EGL damage must use a callback-only commit".into());
+@@ -570,6 +724,37 @@ impl GlRenderer {
+     }
+ }
+ impl Renderer for GlRenderer {
++    /// Release GL image and canvas allocations while the renderer's EGL context
++    /// is current. `TreeCache` is deliberately retained so the CPU rasterized
++    /// layers can be uploaded again without rerasterizing them.
++    fn release_gpu_resources(&mut self) {
++        let image_bytes: usize = self.images.values().map(|t| t.pixels.data().len()).sum();
++        let group_bytes = self
++            .group
++            .map_or(0, |(_, w, h, _)| u64::from(w) * u64::from(h) * 4);
++        println!(
++            "GL_CACHE_RELEASE images={} image_bytes={image_bytes} composite_bytes={group_bytes}",
++            self.images.len()
++        );
++        if let Some(canvas) = self.canvas.as_mut() {
++            for (_, texture) in std::mem::take(&mut self.images) {
++                canvas.delete_image(texture.image);
++            }
++            if let Some((image, _, _, _)) = self.group.take() {
++                canvas.delete_image(image);
++            }
++        } else {
++            self.images.clear();
++            self.group = None;
++        }
++        self.group_charge = None;
++        // Dropping femtovg's canvas also releases renderer-owned GL state.
++        // Keep both budgets so a later upload remains accounted against the
++        // same process-wide cache accounting.
++        self.canvas = None;
++        self.cache.trim_idle();
++    }
++
+     fn prepared_frame(&self) -> Option<std::sync::Arc<crate::tree::Frame>> {
+         self.cache.frame.clone()
+     }
+diff --git a/crates/bead-render/src/lib.rs b/crates/bead-render/src/lib.rs
+index b428f595..7ef29a63 100644
+--- a/crates/bead-render/src/lib.rs
++++ b/crates/bead-render/src/lib.rs
+@@ -755,6 +755,12 @@ pub trait Renderer {
+         None
+     }
+ 
++    /// Release backend-owned GPU resources while preserving prepared CPU-side
++    /// data (including retained tree rasters). Backends without GPU caches do
++    /// nothing. A backend that requires a current graphics context documents
++    /// that requirement on its implementation.
++    fn release_gpu_resources(&mut self) {}
++
+     /// Per-surface presentation hint, not global activity on another surface.
+     fn presentation_motion(&mut self, _active: bool) {}
+     fn prepared_frame(&self) -> Option<std::sync::Arc<tree::Frame>> {
+diff --git a/crates/bead-render/src/tree.rs b/crates/bead-render/src/tree.rs
+index 604662d2..11eeb200 100644
+--- a/crates/bead-render/src/tree.rs
++++ b/crates/bead-render/src/tree.rs
+@@ -2103,11 +2103,104 @@ pub struct TreeCpuRenderer {
+     /// Opaque frames compose primitives directly rather than reuse an opacity group.
+     pub direct_composites: usize,
+     repair_scratch: RepairScratch,
+-    flattened: Option<(u64, f32, Pixmap)>,
++    flattened: Option<(u64, f32, FlattenedPixels)>,
+     group_budget: Option<bead_core::cache::Budget>,
+     group_charge: Option<bead_core::cache::Charge>,
++    keep_hidden_group: bool,
++    sparse_snapshot: bool,
++}
++enum FlattenedPixels {
++    Dense(Pixmap),
++    Sparse(SparsePixels),
++}
++struct SparsePixels {
++    width: u32,
++    height: u32,
++    rows: Vec<usize>,
++    words: Vec<u32>,
++}
++impl FlattenedPixels {
++    fn bytes(&self) -> usize {
++        match self {
++            Self::Dense(pixels) => pixels.data().len(),
++            Self::Sparse(sparse) => sparse.bytes(),
++        }
++    }
+ }
+ impl TreeCpuRenderer {
++    /// Freeze prepared CPU content for immediate painting after retiring a GPU backend.
++    /// Position and opacity remain live; the cached group also survives the hidden pose.
++    pub fn snapshot(scene: &Scene, scale: f32) -> Result<Self> {
++        let mut content = scene.clone();
++        content.motion = None;
++        let mut renderer = Self::with_opaque_composition(OpaqueComposition::Cached);
++        renderer.keep_hidden_group = true;
++        renderer.sparse_snapshot = true;
++        renderer.prepare(&content, scale)?;
++        renderer.cache_content(&content)?;
++        Ok(renderer)
++    }
++    fn cache_content(&mut self, scene: &Scene) -> Result<()> {
++        let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
++        if self
++            .flattened
++            .as_ref()
++            .is_some_and(|(key, scale, _)| *key == frame.key && *scale == frame.scale)
++        {
++            return Ok(());
++        }
++        let (w, h) = (
++            (scene.bounds.w * frame.scale).ceil() as u32,
++            (scene.bounds.h * frame.scale).ceil() as u32,
++        );
++        let full_bytes = u64::from(w) * u64::from(h) * 4;
++        if full_bytes > 64 * 1024 * 1024 {
++            return Err("opacity group exceeds budget".into());
++        }
++        self.flattened = None;
++        self.group_charge = None;
++        let full_charge = self
++            .group_budget
++            .get_or_insert_with(|| {
++                bead_core::cache::Budget::new("cpu-composite", 64 * bead_core::cache::MIB)
++            })
++            .reserve(w as usize * h as usize * 4 + 64)?;
++        let mut pixels = Pixmap::new(w, h).ok_or("opacity group")?;
++        paint(
++            frame,
++            (-scene.bounds.x, -scene.bounds.y),
++            ShmTarget {
++                bytes: pixels.data_mut(),
++                width: w,
++                height: h,
++                scale: frame.scale,
++                format: PixelFormat::Rgba,
++            },
++            Damage::full(w, h),
++        )?;
++        let pixels = if self.sparse_snapshot {
++            compress_rows(pixels)
++        } else {
++            FlattenedPixels::Dense(pixels)
++        };
++        if self.sparse_snapshot {
++            bead_core::vprintln!(
++                "CPU_SNAPSHOT full_bytes={full_bytes} retained_bytes={}",
++                pixels.bytes()
++            );
++        }
++        drop(full_charge);
++        self.group_charge = Some(
++            self.group_budget
++                .get_or_insert_with(|| {
++                    bead_core::cache::Budget::new("cpu-composite", 64 * bead_core::cache::MIB)
++                })
++                .reserve(pixels.bytes() + 64)?,
++        );
++        self.opacity_builds += 1;
++        self.flattened = Some((frame.key, frame.scale, pixels));
++        Ok(())
++    }
+     pub fn with_opaque_composition(mode: OpaqueComposition) -> Self {
+         Self {
+             opaque_composition: mode,
+@@ -2166,8 +2259,10 @@ impl Renderer for TreeCpuRenderer {
+             );
+         }
+         if scene.opacity <= 0. {
+-            self.flattened = None;
+-            self.group_charge = None;
++            if !self.keep_hidden_group {
++                self.flattened = None;
++                self.group_charge = None;
++            }
+             let ShmTarget { bytes, width, .. } = target;
+             for y in damage.y..damage.y + damage.h {
+                 let i = (y * width + damage.x) as usize * 4;
+@@ -2177,43 +2272,7 @@ impl Renderer for TreeCpuRenderer {
+         }
+         // Group opacity preserves previous semantics; compose cached local rasters,
+         // never reload fonts or re-bake glyphs for an animated pose.
+-        if self
+-            .flattened
+-            .as_ref()
+-            .is_none_or(|(key, scale, _)| *key != frame.key || *scale != frame.scale)
+-        {
+-            let (w, h) = (
+-                (scene.bounds.w * frame.scale).ceil() as u32,
+-                (scene.bounds.h * frame.scale).ceil() as u32,
+-            );
+-            if u64::from(w) * u64::from(h) * 4 > 64 * 1024 * 1024 {
+-                return Err("opacity group exceeds budget".into());
+-            }
+-            self.flattened = None;
+-            self.group_charge = None;
+-            self.group_charge = Some(
+-                self.group_budget
+-                    .get_or_insert_with(|| {
+-                        bead_core::cache::Budget::new("cpu-composite", 64 * bead_core::cache::MIB)
+-                    })
+-                    .reserve(w as usize * h as usize * 4 + 64)?,
+-            );
+-            let mut pixels = Pixmap::new(w, h).ok_or("opacity group")?;
+-            paint(
+-                frame,
+-                (-scene.bounds.x, -scene.bounds.y),
+-                ShmTarget {
+-                    bytes: pixels.data_mut(),
+-                    width: w,
+-                    height: h,
+-                    scale: frame.scale,
+-                    format: PixelFormat::Rgba,
+-                },
+-                Damage::full(w, h),
+-            )?;
+-            self.opacity_builds += 1;
+-            self.flattened = Some((frame.key, frame.scale, pixels));
+-        }
++        self.cache_content(scene)?;
+         let (_, _, pixels) = self.flattened.as_ref().ok_or("opacity group missing")?;
+         let ShmTarget {
+             bytes,
+@@ -2222,25 +2281,165 @@ impl Renderer for TreeCpuRenderer {
+             scale,
+             format,
+         } = target;
+-        blit_with_opacity(
+-            bytes,
+-            (width, height),
+-            damage,
+-            pixels.as_ref(),
+-            (
+-                ((scene.offset.0 + scene.bounds.x) * scale).round() as i32,
+-                ((scene.offset.1 + scene.bounds.y) * scale).round() as i32,
+-            ),
+-            scene.opacity.clamp(0., 1.),
+-            format == PixelFormat::Bgra,
++        let origin = (
++            ((scene.offset.0 + scene.bounds.x) * scale).round() as i32,
++            ((scene.offset.1 + scene.bounds.y) * scale).round() as i32,
+         );
++        match pixels {
++            FlattenedPixels::Dense(pixels) => blit_with_opacity(
++                bytes,
++                (width, height),
++                damage,
++                pixels.as_ref(),
++                origin,
++                scene.opacity.clamp(0., 1.),
++                format == PixelFormat::Bgra,
++            ),
++            FlattenedPixels::Sparse(pixels) => pixels.blit(
++                bytes,
++                (width, height),
++                damage,
++                origin,
++                scene.opacity.clamp(0., 1.),
++                format == PixelFormat::Bgra,
++            ),
++        }
+         Ok(())
+     }
+ }
+ 
+-/// Writes `pixels * opacity` at `origin` into the cleared `damage` rectangle of a `size` target.
+-/// The target is transparent there, so source-over reduces to a premultiplied scale: no mask, no
+-/// per-frame allocation, and the BGRA swap rides along (this is the per-frame cost of every fade).
++/// Store exact repeated pixels compactly, including transparent and dimmer borders.
++fn compress_rows(pixels: Pixmap) -> FlattenedPixels {
++    let (width, height) = (pixels.width(), pixels.height());
++    let mut rows = Vec::with_capacity(height as usize + 1);
++    let mut words = Vec::new();
++    for y in 0..height as usize {
++        rows.push(words.len());
++        let row = &pixels.data()[y * width as usize * 4..(y + 1) * width as usize * 4];
++        let pixel = |x: usize| u32::from_ne_bytes(row[x * 4..x * 4 + 4].try_into().unwrap());
++        let mut x = 0;
++        while x < width as usize {
++            let mut run = 1;
++            while x + run < width as usize && pixel(x + run) == pixel(x) {
++                run += 1;
++            }
++            if run >= 3 {
++                words.extend([0x8000_0000 | run as u32, pixel(x)]);
++                x += run;
++            } else {
++                let start = x;
++                x += run;
++                while x < width as usize {
++                    let mut next = 1;
++                    while x + next < width as usize && pixel(x + next) == pixel(x) {
++                        next += 1;
++                    }
++                    if next >= 3 {
++                        break;
++                    }
++                    x += next;
++                }
++                words.push((x - start) as u32);
++                words.extend((start..x).map(pixel));
++            }
++        }
++    }
++    rows.push(words.len());
++    rows.shrink_to_fit();
++    words.shrink_to_fit();
++    let sparse = SparsePixels {
++        width,
++        height,
++        rows,
++        words,
++    };
++    if sparse.bytes() >= pixels.data().len() {
++        FlattenedPixels::Dense(pixels)
++    } else {
++        FlattenedPixels::Sparse(sparse)
++    }
++}
++impl SparsePixels {
++    fn bytes(&self) -> usize {
++        self.words.capacity() * 4
++            + self.rows.capacity() * std::mem::size_of::<usize>()
++            + std::mem::size_of::<Self>()
++    }
++    fn blit(
++        &self,
++        bytes: &mut [u8],
++        size: (u32, u32),
++        damage: Damage,
++        origin: (i32, i32),
++        opacity: f32,
++        swap_red_blue: bool,
++    ) {
++        let (width, height) = size;
++        let alpha = u32::from((opacity * 255.).round() as u8);
++        let scale = |v: u8| (((u32::from(v) * alpha + 128) * 257) >> 16) as u8;
++        for y in damage.y.min(height)..(damage.y + damage.h).min(height) {
++            let x0 = damage.x.min(width) as i64;
++            let x1 = (damage.x + damage.w).min(width) as i64;
++            let out = &mut bytes[(y as usize * width as usize + x0 as usize) * 4
++                ..(y as usize * width as usize + x1 as usize) * 4];
++            out.fill(0);
++            let sy = i64::from(y) - i64::from(origin.1);
++            if sy < 0 || sy >= i64::from(self.height) {
++                continue;
++            }
++            let sx0 = x0.max(i64::from(origin.0)).max(0) - i64::from(origin.0);
++            let sx1 = x1
++                .min(i64::from(origin.0) + i64::from(self.width))
++                .min(i64::from(width))
++                - i64::from(origin.0);
++            let (mut x, mut index) = (0_i64, self.rows[sy as usize]);
++            while index < self.rows[sy as usize + 1] {
++                let command = self.words[index];
++                index += 1;
++                let repeat = command & 0x8000_0000 != 0;
++                let len = (command & 0x7fff_ffff) as i64;
++                let start = x.max(sx0);
++                let end = (x + len).min(sx1);
++                if start < end {
++                    if repeat {
++                        let [r, g, b, a] = self.words[index].to_ne_bytes();
++                        let color = [
++                            if swap_red_blue { scale(b) } else { scale(r) },
++                            scale(g),
++                            if swap_red_blue { scale(r) } else { scale(b) },
++                            scale(a),
++                        ];
++                        let from = (y as usize * width as usize
++                            + (i64::from(origin.0) + start) as usize)
++                            * 4;
++                        let to = from + (end - start) as usize * 4;
++                        bytes[from..to].as_chunks_mut::<4>().0.fill(color);
++                    } else {
++                        for sx in start..end {
++                            let [r, g, b, a] = self.words[index + (sx - x) as usize].to_ne_bytes();
++                            let dst = (y as usize * width as usize
++                                + (i64::from(origin.0) + sx) as usize)
++                                * 4;
++                            bytes[dst..dst + 4].copy_from_slice(&[
++                                if swap_red_blue { scale(b) } else { scale(r) },
++                                scale(g),
++                                if swap_red_blue { scale(r) } else { scale(b) },
++                                scale(a),
++                            ]);
++                        }
++                    }
++                }
++                if repeat {
++                    index += 1;
++                } else {
++                    index += len as usize;
++                }
++                x += len;
++            }
++        }
++    }
++}
++/// Write premultiplied pixels into cleared damage, with opacity and optional BGRA swap.
+ fn blit_with_opacity(
+     bytes: &mut [u8],
+     (width, height): (u32, u32),
+@@ -3416,6 +3615,127 @@ mod tests {
+         }
+     }
+     #[test]
++    fn frozen_cpu_content_survives_hidden_pose_and_reopens_without_repainting() {
++        let mut scene = scene();
++        let mut frozen = TreeCpuRenderer::snapshot(&scene, 1.).unwrap();
++        scene.offset = (3., 4.);
++        for format in [PixelFormat::Rgba, PixelFormat::Bgra] {
++            for opacity in [0., 0.2, 1.] {
++                scene.opacity = opacity;
++                let mut reference =
++                    TreeCpuRenderer::with_opaque_composition(OpaqueComposition::Cached);
++                reference.prepare(&scene, 1.).unwrap();
++                let mut expected = vec![255; 40 * 40 * 4];
++                let mut actual = expected.clone();
++                for (renderer, bytes) in
++                    [(&mut reference, &mut expected), (&mut frozen, &mut actual)]
++                {
++                    renderer
++                        .render(
++                            &scene,
++                            ShmTarget {
++                                bytes,
++                                width: 40,
++                                height: 40,
++                                scale: 1.,
++                                format,
++                            },
++                            Damage::full(40, 40),
++                        )
++                        .unwrap();
++                }
++                assert_eq!(actual, expected);
++            }
++        }
++        assert_eq!(
++            frozen.opacity_builds, 1,
++            "hidden and reopened poses reuse the frozen pixels"
++        );
++    }
++    #[test]
++    fn rle_snapshot_matches_dense_opacity_blits_and_saves_uniform_margins() {
++        let mut scene = scene();
++        scene.width = 100.;
++        scene.bounds = Rect::new(0., 0., 100., 80.);
++        scene.layers.clear();
++        scene.primitives.insert(
++            0,
++            Primitive::Rounded {
++                rect: Rect::new(1., 1., 98., 78.),
++                radius: 0.,
++                fill: [20, 25, 35, 160],
++                border: None,
++            },
++        );
++        scene.offset = (0., 0.);
++        let mut sparse = TreeCpuRenderer::snapshot(&scene, 1.).unwrap();
++        let mut dense = TreeCpuRenderer::with_opaque_composition(OpaqueComposition::Cached);
++        dense.prepare(&scene, 1.).unwrap();
++        dense.cache_content(&scene).unwrap();
++        let Some((_, _, FlattenedPixels::Sparse(pixels))) = sparse.flattened.as_ref() else {
++            panic!("snapshot should RLE-compress its repeated pixels");
++        };
++        let stored = pixels.bytes();
++        assert!(
++            stored * 2 < (pixels.width * pixels.height * 4) as usize,
++            "stored={stored}, full={}x{}",
++            pixels.width,
++            pixels.height
++        );
++        for format in [PixelFormat::Rgba, PixelFormat::Bgra] {
++            for opacity in [0., 0.2, 1.] {
++                scene.opacity = opacity;
++                for offset in [(0., 0.), (-3.25, 4.5), (3.25, -4.5), (-3.25, -4.5)] {
++                    scene.offset = offset;
++                    for damage in [
++                        Damage {
++                            x: 0,
++                            y: 0,
++                            w: 12,
++                            h: 20,
++                        },
++                        Damage {
++                            x: 7,
++                            y: 9,
++                            w: 23,
++                            h: 17,
++                        },
++                        Damage {
++                            x: 28,
++                            y: 0,
++                            w: 12,
++                            h: 40,
++                        },
++                    ] {
++                        let mut expected = vec![0x5a; 40 * 40 * 4];
++                        let mut actual = expected.clone();
++                        for (renderer, bytes) in
++                            [(&mut dense, &mut expected), (&mut sparse, &mut actual)]
++                        {
++                            renderer
++                                .render(
++                                    &scene,
++                                    ShmTarget {
++                                        bytes,
++                                        width: 40,
++                                        height: 40,
++                                        scale: 1.,
++                                        format,
++                                    },
++                                    damage,
++                                )
++                                .unwrap();
++                        }
++                        assert_eq!(
++                            actual, expected,
++                            "format={format:?} opacity={opacity} offset={offset:?} damage={damage:?}"
++                        );
++                    }
++                }
++            }
++        }
++    }
++    #[test]
+     fn partial_repairs_match_full_pixels_with_opaque_background_corners_clip_and_alpha() {
+         let mut scene = scene();
+         scene.width = 80.;
+diff --git a/crates/bead-ui/src/layout.rs b/crates/bead-ui/src/layout.rs
+index c1c090a5..fff68bef 100644
+--- a/crates/bead-ui/src/layout.rs
++++ b/crates/bead-ui/src/layout.rs
+@@ -125,6 +125,7 @@ pub const PROPERTIES: &[&str] = &[
+     "border_color",
+     "border_width",
+     "radius",
++    "shadow",
+     "font_size",
+     "font_weight",
+     "family",
+@@ -211,6 +212,7 @@ pub struct ViewSpec {
+     pub border_color: Option<Json>,
+     pub border_width: f32,
+     pub radius: f32,
++    pub shadow: bool,
+     pub blur: f32,
+     pub start_angle: f32,
+     pub sweep_angle: f32,
+@@ -733,6 +735,9 @@ impl ViewSpec {
+             if p.contains_key("focus_on_pointer") && raw.kind != Widget::Button {
+                 return Err(source.error("focus_on_pointer is only valid on Button"));
+             }
++            if p.contains_key("shadow") && raw.kind != Widget::Panel {
++                return Err(source.error("shadow is only valid on Panel"));
++            }
+             let child_scope = if p.contains_key("id") && raw.kind != Widget::Group {
+                 format!("{id}.")
+             } else {
+@@ -828,6 +833,7 @@ impl ViewSpec {
+                     if raw.kind == Widget::Panel { 12. } else { 9. },
+                     source,
+                 )?,
++                shadow: boolean(p, "shadow", true, source)?,
+                 font_size,
+                 font_weight,
+                 family,
+@@ -1127,7 +1133,7 @@ pub fn layout(
+                 out.scene.clips.insert(index, c);
+             }
+         };
+-        if view.kind == Widget::Panel {
++        if view.kind == Widget::Panel && view.shadow {
+             emit(Primitive::Shadow {
+                 rect: Rect::new(r.x - 30., r.y - 30., r.w + 60., r.h + 60.),
+                 radius: view.radius,
+diff --git a/crates/bead-ui/src/markup_tests.rs b/crates/bead-ui/src/markup_tests.rs
+index 0bc10587..1625c8cd 100644
+--- a/crates/bead-ui/src/markup_tests.rs
++++ b/crates/bead-ui/src/markup_tests.rs
+@@ -123,6 +123,37 @@ fn session(f: &Fixture) -> Session {
+     session
+ }
+ 
++#[test]
++fn panel_shadow_can_be_disabled_without_changing_the_default() {
++    let f = fixture();
++    let path = f.0.join("ui/main.luau");
++    fs::write(
++        &path,
++        "local ui=require('bead.ui')\nreturn ui.Panel{id='panel',width=160,height=80}",
++    )
++    .unwrap();
++    let default_scene = session(&f).current;
++    assert!(
++        default_scene
++            .primitives
++            .iter()
++            .any(|primitive| matches!(primitive, Primitive::Shadow { .. }))
++    );
++
++    fs::write(
++        &path,
++        "local ui=require('bead.ui')\nreturn ui.Panel{id='panel',width=160,height=80,shadow=false}",
++    )
++    .unwrap();
++    let disabled_scene = session(&f).current;
++    assert!(
++        !disabled_scene
++            .primitives
++            .iter()
++            .any(|primitive| matches!(primitive, Primitive::Shadow { .. }))
++    );
++}
++
+ #[test]
+ fn host_policy_resolves_staged_computed_values_and_reject_keeps_previous_state() {
+     let f = fixture();
+diff --git a/crates/bead-wayland/src/lib.rs b/crates/bead-wayland/src/lib.rs
+index e47f24af..e01bc18d 100644
+--- a/crates/bead-wayland/src/lib.rs
++++ b/crates/bead-wayland/src/lib.rs
+@@ -837,11 +837,33 @@ struct WallpaperSurface {
+     layer: LayerSurface,
+     pool: SlotPool,
+     buffers: Vec<Buffer>,
++    staged: Option<StagedWallpaperBuffer>,
+     viewport: Option<WpViewport>,
+     viewport_destination: Option<(i32, i32)>,
+     pixels: Option<Vec<u8>>,
+     transition: Option<WallpaperTransition>,
+ }
++struct StagedWallpaperBuffer {
++    revision: u64,
++    token: std::sync::Arc<dyn std::any::Any + Send + Sync>,
++    width: u32,
++    height: u32,
++    index: usize,
++}
++impl StagedWallpaperBuffer {
++    fn matches(
++        &self,
++        revision: u64,
++        token: &std::sync::Arc<dyn std::any::Any + Send + Sync>,
++        width: u32,
++        height: u32,
++    ) -> bool {
++        self.revision == revision
++            && self.width == width
++            && self.height == height
++            && std::sync::Arc::ptr_eq(&self.token, token)
++    }
++}
+ struct WallpaperTransition {
+     commit: Option<(u64, std::sync::Arc<dyn std::any::Any + Send + Sync>)>,
+     palette: bead_render::Palette,
+diff --git a/crates/bead-wayland/src/panel.rs b/crates/bead-wayland/src/panel.rs
+index be398647..a0fc4b6a 100644
+--- a/crates/bead-wayland/src/panel.rs
++++ b/crates/bead-wayland/src/panel.rs
+@@ -628,6 +628,11 @@ impl App {
+             .ok_or("panel output not available")?;
+         self.panel_close_epoch = self.panel_close_epoch.wrapping_add(1);
+         self.panel_target = open;
++        if open {
++            self.panel_gpu_suspended = false;
++            #[cfg(feature = "native-gl")]
++            self.prepare_panel_gl().map_err(|error| error.to_string())?;
++        }
+         if let Some(m) = spec.fallback.motion.as_ref().filter(|m| m.reveal) {
+             let now = self.started.elapsed().as_secs_f64();
+             let curve = m.curve.unwrap_or(bead_core::animation::Curve::EaseOut);
+@@ -700,26 +705,27 @@ impl App {
+         let epoch = self.panel_epoch;
+         self.panel_reload_pending = false;
+         self.panel_ready = false;
++        #[cfg(feature = "native-gl")]
++        {
++            self.panel_cpu_cached = false;
++        }
+         self.panel_output = Some(output.clone());
+         if open && spec.keyboard_focus && self.pearl.is_none() {
+             self.create_dismiss(&output)?;
+         }
+         self.companion_policy = Default::default();
+         self.options.companion = Some((spec.fallback.clone(), spec.renderer));
+-        let gpu_first = cfg!(feature = "native-gl")
+-            && spec.retain_when_closed
+-            && spec.renderer == RendererKind::FemtovgGl;
+-        self.options.lazy_gl = !gpu_first;
+-        let renderer_kind = if gpu_first {
+-            spec.renderer
+-        } else {
+-            RendererKind::Cpu
+-        };
++        self.options.lazy_gl = true;
++        let renderer_kind = RendererKind::Cpu;
+         self.companion = Some((
+             spec.fallback.clone(),
+             bead_render::renderer(renderer_kind).map_err(|e| e.to_string())?,
+             renderer_kind,
+         ));
++        #[cfg(feature = "native-gl")]
++        if open {
++            self.prepare_panel_gl().map_err(|error| error.to_string())?;
++        }
+         self.sync_all_decorations()?;
+         let factory = spec.factory.clone();
+         let mut source: Box<dyn SceneSource> = Box::new(worker::Source::new(
+@@ -981,6 +987,25 @@ impl App {
+             .as_ref()
+             .is_some_and(|spec| spec.retain_when_closed)
+         {
++            #[cfg(feature = "native-gl")]
++            {
++                let epoch = self.panel_epoch;
++                if let Err(error) = self.loop_handle.insert_source(
++                    Timer::from_duration(Duration::from_secs(2)),
++                    move |_, _, app| {
++                        if !app.panel_target
++                            && app.panel_epoch == epoch
++                            && app.panel_close_epoch == token
++                            && let Err(error) = app.start_panel_snapshot()
++                        {
++                            app.fail(error);
++                        }
++                        TimeoutAction::Drop
++                    },
++                ) {
++                    self.fail(error);
++                }
++            }
+             return;
+         }
+         let qh = self.qh.clone();
+@@ -1003,6 +1028,12 @@ impl App {
+     pub(super) fn release_panel(&mut self) {
+         self.panel_cover = None;
+         self.panel_dock_transition = None;
++        self.panel_gpu_suspended = false;
++        #[cfg(feature = "native-gl")]
++        {
++            self.panel_gl_prewarm_error = None;
++            self.panel_cpu_cached = false;
++        }
+         // Trace probes are weak: observing retirement must not extend raster lifetime.
+         #[cfg(all(target_os = "linux", target_env = "gnu"))]
+         let retired_images = self.options.trace_state.then(|| {
+diff --git a/crates/bead-wayland/src/rendering.rs b/crates/bead-wayland/src/rendering.rs
+index 9ea4a100..0ef73a46 100644
+--- a/crates/bead-wayland/src/rendering.rs
++++ b/crates/bead-wayland/src/rendering.rs
+@@ -186,6 +186,44 @@ fn advise_frame_pages(bytes: &mut [u8], include_edges: bool) {
+ /// Set `SHM_COMPACT_FOCUSED_IDLE` to `SHM_COMPACT_IDLE` for the previous behaviour.
+ const SHM_COMPACT_IDLE: Duration = Duration::from_millis(250);
+ const SHM_COMPACT_FOCUSED_IDLE: Duration = Duration::from_secs(5);
++
++#[cfg(feature = "native-gl")]
++pub(super) struct GlPreparation {
++    result: std::sync::mpsc::Receiver<Result<bead_render::gl::PreparedTransport, String>>,
++    worker: Option<std::thread::JoinHandle<()>>,
++    // Declared last: unused EGL objects are destroyed before the connection.
++    _connection: Connection,
++}
++#[cfg(feature = "native-gl")]
++impl Drop for GlPreparation {
++    fn drop(&mut self) {
++        if let Some(worker) = self.worker.take() {
++            let _ = worker.join();
++        }
++        if let Ok(Ok(prepared)) = self.result.try_recv() {
++            // SAFETY: one preparation is allowed, and no UI GL transport was installed.
++            if let Err(error) = unsafe { prepared.shutdown_exclusive() } {
++                eprintln!("GL_RELEASE_ERROR {error}");
++            }
++        }
++    }
++}
++#[cfg(feature = "native-gl")]
++struct PanelSnapshotWorker(Option<std::thread::JoinHandle<()>>);
++#[cfg(feature = "native-gl")]
++impl PanelSnapshotWorker {
++    fn join(&mut self) -> Option<std::thread::Result<()>> {
++        self.0.take().map(std::thread::JoinHandle::join)
++    }
++}
++#[cfg(feature = "native-gl")]
++impl Drop for PanelSnapshotWorker {
++    fn drop(&mut self) {
++        if let Some(worker) = self.0.take() {
++            let _ = worker.join();
++        }
++    }
++}
+ fn shm_compact_idle(surface: &Surface) -> Duration {
+     if surface
+         .keyboard_visible
+@@ -197,6 +235,286 @@ fn shm_compact_idle(surface: &Surface) -> Duration {
+     }
+ }
+ impl App {
++    #[cfg(feature = "native-gl")]
++    pub(super) fn prepare_panel_gl(&mut self) -> Result<(), Box<dyn Error>> {
++        if self.gl.is_some()
++            || self.gl_preparation.is_some()
++            || self.panel_gl_prewarm_error.is_some()
++            || self.options.renderer != RendererKind::Cpu
++            || !self.panel_target
++            || !self
++                .options
++                .panel_spec
++                .as_ref()
++                .is_some_and(|s| s.retain_when_closed)
++            || self.options.companion.as_ref().map(|(_, kind)| *kind)
++                != Some(RendererKind::FemtovgGl)
++        {
++            return Ok(());
++        }
++        let (sender, result) = std::sync::mpsc::channel();
++        let connection = self.conn.clone();
++        let worker = std::thread::Builder::new()
++            .name("bead-gl-prepare".into())
++            .spawn(move || {
++                use raw_window_handle::{RawDisplayHandle, WaylandDisplayHandle};
++                let prepared = (|| {
++                    let _span = bead_core::profile::Span::new("panel_transport_prewarm");
++                    let pointer = std::ptr::NonNull::new(connection.backend().display_ptr().cast())
++                        .ok_or("native display missing")?;
++                    let display = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(pointer));
++                    // SAFETY: App serializes setup, and the preparation guard holds the connection.
++                    unsafe { bead_render::gl::PreparedTransport::new(display) }
++                        .map_err(|e| e.to_string())
++                })();
++                if let Err(std::sync::mpsc::SendError(Ok(prepared))) = sender.send(prepared) {
++                    // SAFETY: no receiver installed this transport, and setup is exclusive.
++                    let _ = unsafe { prepared.shutdown_exclusive() };
++                }
++            })?;
++        self.gl_preparation = Some(GlPreparation {
++            result,
++            worker: Some(worker),
++            _connection: self.conn.clone(),
++        });
++        if let Err(error) = self.loop_handle.insert_source(
++            Timer::from_duration(Duration::from_millis(2)),
++            |_, _, app| {
++                let Some(preparation) = &app.gl_preparation else {
++                    return TimeoutAction::Drop;
++                };
++                match preparation.result.try_recv() {
++                    Err(std::sync::mpsc::TryRecvError::Empty) => {
++                        return TimeoutAction::ToDuration(Duration::from_millis(2));
++                    }
++                    ready => {
++                        let prepared = ready
++                            .unwrap_or_else(|_| Err("GL preparation worker disconnected".into()));
++                        let _guard = app.gl_preparation.take();
++                        let active_gl_companion = app
++                            .companion
++                            .as_ref()
++                            .is_some_and(|(_, _, kind)| *kind == RendererKind::FemtovgGl);
++                        let wanted = app.gl.is_none()
++                            && app.panel_runtime.is_some()
++                            && (!app.panel_gpu_suspended || active_gl_companion)
++                            && app.options.companion.as_ref().map(|(_, kind)| *kind)
++                                == Some(RendererKind::FemtovgGl);
++                        match prepared {
++                            Ok(prepared) if wanted => app.gl = Some(prepared.into_transport()),
++                            // Another transport owns the display: only drop this context.
++                            Ok(prepared) if app.gl.is_some() => drop(prepared),
++                            Ok(prepared) => {
++                                // SAFETY: no GPU renderer or surface was created during preparation.
++                                if let Err(error) = unsafe { prepared.shutdown_exclusive() } {
++                                    app.fail(error);
++                                }
++                            }
++                            Err(error) if wanted => app.panel_gl_prewarm_error = Some(error),
++                            Err(_) => (),
++                        }
++                    }
++                }
++                let qh = app.qh.clone();
++                let indices: Vec<_> = app
++                    .surfaces
++                    .iter()
++                    .enumerate()
++                    .filter(|(_, s)| s.companion)
++                    .map(|(i, _)| i)
++                    .collect();
++                for index in indices {
++                    app.draw(index, &qh);
++                }
++                TimeoutAction::Drop
++            },
++        ) {
++            self.gl_preparation.take();
++            return Err(error.into());
++        }
++        Ok(())
++    }
++    /// Cache a CPU first frame, then retire closed-panel GPU and SHM allocations.
++    #[cfg(feature = "native-gl")]
++    pub(super) fn start_panel_snapshot(&mut self) -> Result<(), Box<dyn Error>> {
++        if self.panel_snapshot_pending
++            || self.panel_target
++            || self.panel_runtime.is_none()
++            || !self
++                .options
++                .panel_spec
++                .as_ref()
++                .is_some_and(|spec| spec.retain_when_closed)
++            || self.options.companion.as_ref().map(|(_, kind)| *kind)
++                != Some(RendererKind::FemtovgGl)
++        {
++            return Ok(());
++        }
++        let Some((scene, _, _)) = &self.companion else {
++            return Ok(());
++        };
++        let scene = scene.clone();
++        let epoch = self.panel_epoch;
++        let close_epoch = self.panel_close_epoch;
++        let ui_serial = self.panel_ui_serial;
++        let scale = self
++            .surfaces
++            .iter()
++            .find(|surface| surface.companion)
++            .map_or(1., |surface| surface.scale120 as f32 / 120.);
++        let (sender, receiver) = std::sync::mpsc::channel();
++        let worker = std::thread::Builder::new()
++            .name("bead-panel-cpu-snapshot".into())
++            .spawn(move || {
++                let _span = bead_core::profile::Span::new("panel_cpu_snapshot");
++                let result = bead_render::tree::TreeCpuRenderer::snapshot(&scene, scale)
++                    .map_err(|error| error.to_string());
++                let _ = sender.send(result);
++            })?;
++        self.panel_snapshot_pending = true;
++        let mut worker = PanelSnapshotWorker(Some(worker));
++        if let Err(error) = self.loop_handle.insert_source(
++            Timer::from_duration(Duration::from_millis(2)),
++            move |_, _, app| match receiver.try_recv() {
++                Err(std::sync::mpsc::TryRecvError::Empty) => {
++                    TimeoutAction::ToDuration(Duration::from_millis(2))
++                }
++                result => {
++                    let joined = worker.join().is_some_and(|result| result.is_ok());
++                    app.panel_snapshot_pending = false;
++                    if !joined {
++                        app.fail("panel CPU snapshot worker panicked");
++                        return TimeoutAction::Drop;
++                    }
++                    let current_scale = app
++                        .surfaces
++                        .iter()
++                        .find(|surface| surface.companion)
++                        .map_or(1., |surface| surface.scale120 as f32 / 120.);
++                    let current = !app.panel_target
++                        && app.panel_runtime.is_some()
++                        && app.panel_epoch == epoch
++                        && app.panel_close_epoch == close_epoch
++                        && app.panel_ui_serial == ui_serial
++                        && current_scale.to_bits() == scale.to_bits();
++                    if current {
++                        match result.unwrap_or_else(|_| Err("snapshot worker disconnected".into()))
++                        {
++                            Ok(snapshot) => {
++                                if let Err(error) = app.suspend_panel_gpu(snapshot) {
++                                    app.fail(error);
++                                }
++                            }
++                            Err(error) => app.fail(error),
++                        }
++                    } else if !app.panel_target
++                        && app.panel_runtime.is_some()
++                        && let Err(error) = app.start_panel_snapshot()
++                    {
++                        app.fail(error);
++                    }
++                    TimeoutAction::Drop
++                }
++            },
++        ) {
++            self.panel_snapshot_pending = false;
++            return Err(error.into());
++        }
++        Ok(())
++    }
++
++    #[cfg(feature = "native-gl")]
++    pub(super) fn suspend_panel_gpu(
++        &mut self,
++        snapshot: bead_render::tree::TreeCpuRenderer,
++    ) -> Result<(), Box<dyn Error>> {
++        let _span = bead_core::profile::Span::new("panel_gpu_retire");
++        #[cfg(feature = "native-gl")]
++        if self.options.companion.as_ref().map(|(_, kind)| *kind) == Some(RendererKind::FemtovgGl) {
++            let scale = self
++                .surfaces
++                .iter()
++                .find(|s| s.companion)
++                .map_or(1., |s| s.scale120 as f32 / 120.);
++            if let Some(transport) = &self.gl
++                && let Some(surface) = self.surfaces.iter().find(|s| s.companion && s.gl.is_some())
++            {
++                transport.activate(
++                    surface.gl.as_ref().unwrap(),
++                    (surface.width as f32 * scale).ceil() as u32,
++                    (surface.height as f32 * scale).ceil() as u32,
++                )?;
++                if let Some((_, renderer, _)) = &mut self.companion {
++                    renderer.release_gpu_resources();
++                }
++                transport.unbind()?;
++            }
++            if let Some((_, renderer, kind)) = &mut self.companion {
++                *renderer = Box::new(snapshot);
++                *kind = RendererKind::Cpu;
++                self.panel_cpu_cached = true;
++            }
++            for surface in self.surfaces.iter_mut().filter(|s| s.companion) {
++                // Replace the transparent GL buffer too: otherwise the compositor
++                // can retain its BO after our EGL display has been terminated.
++                // Keep the role mapped; a null attachment resets layer-shell state.
++                let wl_surface = surface.wl_surface().clone();
++                drop(surface.gl.take());
++                surface.gl_prepared = false;
++                surface.gl_prepare_pending = false;
++                surface.callbacks.invalidate();
++                surface.visual_damage = Default::default();
++                surface.buffers.clear();
++                surface.pool = SlotPool::new(4096, &self.shm)?;
++                surface.previous = None;
++                let (width, height) = if let Some(viewport) = &surface.viewport {
++                    wl_surface.set_buffer_scale(1);
++                    viewport.set_destination(surface.width as i32, surface.height as i32);
++                    (1, 1)
++                } else {
++                    (
++                        (surface.width as f32 * scale).ceil() as i32,
++                        (surface.height as f32 * scale).ceil() as i32,
++                    )
++                };
++                // A fresh memfd is zero-filled; do not fault transparent pages in.
++                let (buffer, _) = surface.pool.create_buffer(
++                    width,
++                    height,
++                    width * 4,
++                    wl_shm::Format::Argb8888,
++                )?;
++                buffer.attach_to(&wl_surface)?;
++                wl_surface.damage_buffer(0, 0, width, height);
++                wl_surface.commit();
++                surface.buffers.push(Reusable {
++                    buffer,
++                    pending: Vec::new(),
++                    painted: false,
++                });
++                surface.geometry = (0, 0);
++            }
++            if self.options.renderer == RendererKind::Cpu
++                && !self.has_gl_surfaces()
++                && let Some(transport) = self.gl.take()
++            {
++                // SAFETY: renderers and all EGL surfaces are gone; the CPU bar owns no EGL objects.
++                unsafe { transport.shutdown_exclusive() }?;
++            }
++            self.options.lazy_gl = true;
++            self.companion_policy = Default::default();
++            self.panel_gpu_suspended = true;
++            #[cfg(all(target_os = "linux", target_env = "gnu"))]
++            unsafe {
++                libc::malloc_trim(0);
++            }
++            println!(
++                "PANEL_GPU_SUSPENDED shared_context_retained={}",
++                self.gl.is_some()
++            );
++        }
++        Ok(())
++    }
+     fn trim_idle_shm(&mut self, index: usize) {
+         let surface = &mut self.surfaces[index];
+         if surface.shm_trim_pending
+@@ -305,9 +623,38 @@ impl App {
+         if desired != Some(RendererKind::FemtovgGl) {
+             return Ok(());
+         }
++        #[cfg(feature = "native-gl")]
++        if self.gl_preparation.is_some()
++            || (self.options.renderer == RendererKind::Cpu
++                && self.gl.is_none()
++                && self
++                    .options
++                    .panel_spec
++                    .as_ref()
++                    .is_some_and(|s| s.retain_when_closed))
++        {
++            return Ok(());
++        }
+         let now = self.started.elapsed().as_secs_f64();
+         let animated = self.options.animate || self.animations.active(now);
+-        if self.companion_policy.frame(now, animated) {
++        let promote = self.companion_policy.frame(now, animated);
++        #[cfg(feature = "native-gl")]
++        let promote = if self.gl.is_some()
++            && self
++                .options
++                .panel_spec
++                .as_ref()
++                .is_some_and(|s| s.retain_when_closed)
++        {
++            // Cold content may use already-prepared GL immediately. A warm open
++            // paints its CPU snapshot while the one replacement context starts.
++            self.companion
++                .as_ref()
++                .is_some_and(|(_, _, kind)| *kind != RendererKind::FemtovgGl)
++        } else {
++            promote
++        };
++        if promote {
+             if let Some((_, renderer, kind)) = &mut self.companion {
+                 *renderer = bead_render::renderer(RendererKind::FemtovgGl)?;
+                 *kind = RendererKind::FemtovgGl;
+@@ -386,6 +733,13 @@ impl App {
+         use std::ptr::NonNull;
+         let surface = &mut self.surfaces[index];
+         let (w, h, _, _) = buffer_dimensions(surface.width, surface.height, surface.scale120)?;
++        let renderer_kind = if surface.companion {
++            self.companion
++                .as_ref()
++                .map_or(RendererKind::Cpu, |(_, _, kind)| *kind)
++        } else {
++            self.options.renderer
++        };
+         let display = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
+             NonNull::new(self.conn.backend().display_ptr().cast())
+                 .ok_or("native display missing")?,
+@@ -395,7 +749,7 @@ impl App {
+                 .ok_or("native surface missing")?,
+         ));
+         #[cfg(feature = "native-gl")]
+-        if self.options.renderer == RendererKind::FemtovgGl {
++        if renderer_kind == RendererKind::FemtovgGl {
+             if self.gl.is_none() {
+                 // SAFETY: the retained connection outlives the EGL context/surfaces.
+                 self.gl = Some(unsafe { bead_render::gl::Transport::new(display) }?);
+@@ -433,7 +787,7 @@ impl App {
+                         window,
+                         w as u32,
+                         h as u32,
+-                        self.options.renderer,
++                        renderer_kind,
+                     )
+                 }?);
+             }
+@@ -444,6 +798,16 @@ impl App {
+         if self.hidden {
+             return;
+         }
++        if self.surfaces[index].companion && self.panel_gpu_suspended && !self.panel_target {
++            return;
++        }
++        #[cfg(feature = "native-gl")]
++        if self.surfaces[index].companion
++            && let Err(error) = self.prepare_panel_gl()
++        {
++            self.fail(error);
++            return;
++        }
+         if self.wallpaper_palette_outputs.is_some() {
+             self.surfaces[index].redraw = true;
+             return;
+@@ -455,6 +819,18 @@ impl App {
+                 self.surfaces[index].redraw = true;
+                 return;
+             }
++            #[cfg(feature = "native-gl")]
++            if self.gl_preparation.is_some()
++                && self.gl.is_none()
++                && (self
++                    .companion
++                    .as_ref()
++                    .is_some_and(|(_, _, kind)| *kind == RendererKind::FemtovgGl)
++                    || !self.panel_cpu_cached)
++            {
++                self.surfaces[index].redraw = true;
++                return;
++            }
+             std::mem::swap(&mut self.animations, &mut self.panel_animations);
+             let previous_frames = self.surfaces[index].frames;
+             let original = if !self.surfaces[index].callbacks.pending {
+@@ -582,6 +958,12 @@ impl App {
+         // (motion id, clock of this frame) once this frame is the first to show a motion.
+         let mut motion_clock: Option<(String, f64)> = None;
+         let result = (|| -> Result<(), Box<dyn Error>> {
++            #[cfg(feature = "native-gl")]
++            if self.surfaces[index].companion
++                && let Some(error) = self.panel_gl_prewarm_error.take()
++            {
++                return Err(Box::new(GpuUnavailable(error)));
++            }
+             let s = &mut self.surfaces[index];
+             let wl_surface = s.wl_surface().clone();
+             let (scene, renderer, _kind, panel) = if s.companion {
+diff --git a/crates/bead-wayland/src/runtime.rs b/crates/bead-wayland/src/runtime.rs
+index fa4920f8..2bb07b99 100644
+--- a/crates/bead-wayland/src/runtime.rs
++++ b/crates/bead-wayland/src/runtime.rs
+@@ -31,6 +31,11 @@ pub(super) struct App {
+     pub(super) panel_ready: bool,
+     pub(super) panel_reload_pending: bool,
+     pub(super) panel_target: bool,
++    pub(super) panel_gpu_suspended: bool,
++    #[cfg(feature = "native-gl")]
++    pub(super) panel_cpu_cached: bool,
++    #[cfg(feature = "native-gl")]
++    pub(super) panel_snapshot_pending: bool,
+     /// The shown view was offered by a service (see `UiEvent::CompanionOffer`).
+     pub(super) panel_ambient: bool,
+     pub(super) panel_hovered: Option<String>,
+@@ -74,6 +79,10 @@ pub(super) struct App {
+     pub(super) gpu: Option<bead_render::gpu::Transport>,
+     #[cfg(feature = "native-gl")]
+     pub(super) gl: Option<bead_render::gl::Transport>,
++    #[cfg(feature = "native-gl")]
++    pub(super) panel_gl_prewarm_error: Option<String>,
++    #[cfg(feature = "native-gl")]
++    pub(super) gl_preparation: Option<rendering::GlPreparation>,
+     #[cfg(any(feature = "native-gl", feature = "wgpu"))]
+     pub(super) conn: Connection,
+     pub(super) registry: RegistryState,
+@@ -248,6 +257,11 @@ pub fn run_runtime(
+         panel_ready: true,
+         panel_reload_pending: false,
+         panel_target: false,
++        panel_gpu_suspended: false,
++        #[cfg(feature = "native-gl")]
++        panel_cpu_cached: false,
++        #[cfg(feature = "native-gl")]
++        panel_snapshot_pending: false,
+         panel_ambient: false,
+         panel_hovered: None,
+         panel_output: None,
+@@ -289,6 +303,10 @@ pub fn run_runtime(
+         gpu: None,
+         #[cfg(feature = "native-gl")]
+         gl: None,
++        #[cfg(feature = "native-gl")]
++        panel_gl_prewarm_error: None,
++        #[cfg(feature = "native-gl")]
++        gl_preparation: None,
+         #[cfg(any(feature = "native-gl", feature = "wgpu"))]
+         conn: conn.clone(),
+         registry: RegistryState::new(&globals),
+@@ -654,6 +672,7 @@ impl App {
+             surface.pixels = None;
+             surface.transition = None;
+             surface.buffers.clear();
++            surface.staged = None;
+             if let Ok(pool) = SlotPool::new(4096, &self.shm) {
+                 surface.pool = pool;
+             } else {
+@@ -698,6 +717,7 @@ impl App {
+                 layer,
+                 pool: SlotPool::new(4096, &self.shm)?,
+                 buffers: Vec::with_capacity(2),
++                staged: None,
+                 viewport,
+                 viewport_destination: None,
+                 pixels: None,
+@@ -795,10 +815,16 @@ impl App {
+     pub(super) fn complete_wallpaper(&mut self, frame: WallpaperFrame) {
+         self.wallpaper_jobs.remove(&frame.output);
+         let output_name = frame.output.clone();
+-        if let Some(provider) = &self.options.wallpaper
+-            && !provider.is_current(&frame)
+-        {
+-            provider.discarded(&frame.output, frame.revision);
++        let current = self
++            .options
++            .wallpaper
++            .as_ref()
++            .is_none_or(|provider| provider.is_current(&frame));
++        if !current {
++            if let Some(provider) = &self.options.wallpaper {
++                provider.discarded(&frame.output, frame.revision);
++            }
++            self.clear_staged_wallpaper_frame(&frame);
+             // A newer request may have arrived while this superseded frame was
+             // decoding. Retain coalescing, but do not strand that latest request.
+             self.request_dirty_wallpaper(&output_name);
+@@ -810,6 +836,8 @@ impl App {
+             .iter()
+             .map(|(key, value)| (key.clone(), *value))
+             .collect();
++        let stage_revision = frame.revision;
++        let stage_token = frame.commit_token.clone();
+         if self.options.primary_factory.is_some() {
+             if self.wallpaper_palette.as_ref() == Some(&palette_key)
+                 || self.output_sessions.is_empty()
+@@ -828,6 +856,7 @@ impl App {
+                 .is_some_and(|pending| pending.palette == palette_key)
+             {
+                 self.wallpaper_pending_frames.push(frame);
++                self.stage_pending_wallpaper(&output_name, stage_revision, &stage_token);
+                 self.request_dirty_wallpaper(&output_name);
+                 return;
+             }
+@@ -836,6 +865,7 @@ impl App {
+             }
+             self.wallpaper_pending_frames.push(frame);
+             self.prepare_wallpaper_palette_group(palette_key);
++            self.stage_pending_wallpaper(&output_name, stage_revision, &stage_token);
+             self.request_dirty_wallpaper(&output_name);
+             return;
+         }
+@@ -856,6 +886,7 @@ impl App {
+                 .is_some_and(|pending| pending.palette.0 == frame.palette.0)
+             {
+                 self.wallpaper_pending_frames.push(frame);
++                self.stage_pending_wallpaper(&output_name, stage_revision, &stage_token);
+                 if self.wallpaper_dirty.remove(&output_name) {
+                     self.request_wallpaper(&output_name);
+                 }
+@@ -899,10 +930,96 @@ impl App {
+                     self.commit_pending_wallpapers(&palette_key);
+                 }
+             }
++            self.stage_pending_wallpaper(&output_name, stage_revision, &stage_token);
+         }
+         self.request_dirty_wallpaper(&output_name);
+     }
+ 
++    fn stage_pending_wallpaper(
++        &mut self,
++        output: &str,
++        revision: u64,
++        token: &std::sync::Arc<dyn std::any::Any + Send + Sync>,
++    ) {
++        let Some(frame_index) = self.wallpaper_pending_frames.iter().position(|frame| {
++            frame.output == output
++                && frame.revision == revision
++                && std::sync::Arc::ptr_eq(&frame.commit_token, token)
++        }) else {
++            return;
++        };
++        let Some(surface_index) = self
++            .wallpaper_surfaces
++            .iter()
++            .position(|surface| surface.name == output)
++        else {
++            return;
++        };
++        let (frames, surfaces) = (&self.wallpaper_pending_frames, &mut self.wallpaper_surfaces);
++        let frame = &frames[frame_index];
++        let surface = &mut surfaces[surface_index];
++        if frame.revision == 0
++            || surface.transition.is_some()
++            || surface
++                .palette
++                .as_ref()
++                .is_some_and(|palette| palette.0 == frame.palette.0)
++            || (surface.width, surface.height) != (frame.width, frame.height)
++        {
++            return;
++        }
++        let _span = bead_core::profile::Span::new("wallpaper_stage_buffer");
++        let staged = if let Ok(index) = prepare_wallpaper_buffer(
++            &mut surface.pool,
++            &mut surface.buffers,
++            frame.width,
++            frame.height,
++            &frame.rgba,
++            None,
++        ) {
++            surface.staged = Some(StagedWallpaperBuffer {
++                revision,
++                token: token.clone(),
++                width: frame.width,
++                height: frame.height,
++                index,
++            });
++            true
++        } else {
++            false
++        };
++        if staged {
++            self.schedule_wallpaper_release_poll(output.to_owned());
++        }
++    }
++
++    fn clear_staged_wallpaper_frame(&mut self, frame: &WallpaperFrame) {
++        let cleared = if let Some(surface) = self
++            .wallpaper_surfaces
++            .iter_mut()
++            .find(|surface| surface.name == frame.output)
++        {
++            if surface.staged.as_ref().is_some_and(|staged| {
++                staged.matches(
++                    frame.revision,
++                    &frame.commit_token,
++                    frame.width,
++                    frame.height,
++                )
++            }) {
++                surface.staged = None;
++                true
++            } else {
++                false
++            }
++        } else {
++            false
++        };
++        if cleared {
++            self.schedule_wallpaper_release_poll(frame.output.clone());
++        }
++    }
++
+     fn request_dirty_wallpaper(&mut self, output: &str) {
+         if self.wallpaper_dirty.remove(output) {
+             self.request_wallpaper(output);
+@@ -941,8 +1058,11 @@ impl App {
+                 .is_none_or(|provider| provider.is_current(&frame));
+             if same && current {
+                 self.install_wallpaper(frame);
+-            } else if let Some(provider) = &self.options.wallpaper {
+-                provider.discarded(&frame.output, frame.revision);
++            } else {
++                self.clear_staged_wallpaper_frame(&frame);
++                if let Some(provider) = &self.options.wallpaper {
++                    provider.discarded(&frame.output, frame.revision);
++                }
+             }
+         }
+         self.wallpaper_pending_frames = keep;
+@@ -951,6 +1071,7 @@ impl App {
+     pub(super) fn discard_pending_wallpapers(&mut self) {
+         self.wallpaper_palette_outputs = None;
+         for frame in std::mem::take(&mut self.wallpaper_pending_frames) {
++            self.clear_staged_wallpaper_frame(&frame);
+             if let Some(provider) = &self.options.wallpaper {
+                 provider.discarded(&frame.output, frame.revision);
+             }
+@@ -1043,6 +1164,7 @@ impl App {
+                     .collect::<std::collections::BTreeMap<_, _>>()
+                     == *palette;
+                 if same {
++                    self.clear_staged_wallpaper_frame(&frame);
+                     if let Some(provider) = &self.options.wallpaper {
+                         provider.discarded(&frame.output, frame.revision);
+                     }
+@@ -1169,10 +1291,16 @@ impl App {
+     }
+ 
+     pub(super) fn install_wallpaper(&mut self, frame: WallpaperFrame) {
+-        if let Some(provider) = &self.options.wallpaper
+-            && !provider.is_current(&frame)
+-        {
+-            provider.discarded(&frame.output, frame.revision);
++        let current = self
++            .options
++            .wallpaper
++            .as_ref()
++            .is_none_or(|provider| provider.is_current(&frame));
++        if !current {
++            if let Some(provider) = &self.options.wallpaper {
++                provider.discarded(&frame.output, frame.revision);
++            }
++            self.clear_staged_wallpaper_frame(&frame);
+             return;
+         }
+         let Some(index) = self
+@@ -1206,6 +1334,18 @@ impl App {
+         let output = self.wallpaper_surfaces[index].output.clone();
+         let logical = self.output.info(&output).and_then(|info| info.logical_size);
+         let surface = &mut self.wallpaper_surfaces[index];
++        let staged_matches = surface.staged.as_ref().is_some_and(|staged| {
++            staged.matches(
++                frame.revision,
++                &frame.commit_token,
++                frame.width,
++                frame.height,
++            )
++        });
++        if surface.staged.is_some() && !staged_matches {
++            surface.staged = None;
++        }
++        let staged_index = surface.staged.as_ref().map(|staged| staged.index);
+         let old_pixels = surface
+             .transition
+             .take()
+@@ -1221,6 +1361,8 @@ impl App {
+                 .as_ref()
+                 .is_some_and(|palette| palette.0 == frame.palette.0);
+         if transitioning {
++            // A staged final image cannot substitute an intermediate blend.
++            surface.staged = None;
+             surface.transition = Some(WallpaperTransition {
+                 commit: Some((frame.revision, frame.commit_token.clone())),
+                 palette: frame.palette.clone(),
+@@ -1240,6 +1382,8 @@ impl App {
+                     width: surface.width,
+                     height: surface.height,
+                     logical,
++                    reserved_buffer: staged_index,
++                    prepared_buffer: staged_index.filter(|_| staged_matches),
+                     feedback: self
+                         .presentation
+                         .as_ref()
+@@ -1264,6 +1408,9 @@ impl App {
+                 self.schedule_wallpaper_tick(frame.output);
+                 return;
+             }
++            if staged_matches {
++                surface.staged = None;
++            }
+             surface.pixels = self.options.animate.then_some(frame.rgba);
+         }
+         surface.palette = Some(frame.palette.clone());
+@@ -1321,6 +1468,17 @@ impl App {
+             let Some(transition) = surface.transition.as_mut() else {
+                 return;
+             };
++            let prepared_buffer = transition
++                .commit
++                .as_ref()
++                .filter(|_| transition.target.is_none())
++                .and_then(|(revision, token)| {
++                    surface.staged.as_ref().and_then(|staged| {
++                        staged
++                            .matches(*revision, token, surface.width, surface.height)
++                            .then_some(staged.index)
++                    })
++                });
+             if let Some(target) = &transition.target {
+                 let remaining = transition.remaining.max(1) as u16;
+                 for (current, target) in transition.pixels.iter_mut().zip(target.iter()) {
+@@ -1342,6 +1500,8 @@ impl App {
+                     width: surface.width,
+                     height: surface.height,
+                     logical,
++                    reserved_buffer: surface.staged.as_ref().map(|staged| staged.index),
++                    prepared_buffer,
+                     feedback: self
+                         .presentation
+                         .as_ref()
+@@ -1355,6 +1515,9 @@ impl App {
+             {
+                 (false, None)
+             } else {
++                if prepared_buffer.is_some() {
++                    surface.staged = None;
++                }
+                 surface.palette = Some(transition.palette.clone());
+                 if let Some((revision, _)) = &transition.commit {
+                     surface.revision = *revision;
+@@ -1441,6 +1604,14 @@ impl App {
+             return;
+         };
+         self.wallpaper_surfaces[index].release_timer_pending = false;
++        if self.wallpaper_surfaces[index].staged.is_some() {
++            let surface = &mut self.wallpaper_surfaces[index];
++            surface.release_wait_ms = surface.release_wait_ms.saturating_add(100);
++            if surface.release_wait_ms <= 3000 {
++                self.schedule_wallpaper_release_poll(output.to_owned());
++            }
++            return;
++        }
+         if self.wallpaper_surfaces[index].buffers.is_empty() {
+             return;
+         }
+@@ -1462,6 +1633,7 @@ impl App {
+         let surface = &mut self.wallpaper_surfaces[index];
+         if released {
+             surface.buffers.clear();
++            surface.staged = None;
+             surface.pixels = None;
+             if let Some(pool) = replacement_pool {
+                 surface.pool = pool;
+@@ -1866,41 +2038,45 @@ struct WallpaperBufferTarget<'a> {
+     width: u32,
+     height: u32,
+     logical: Option<(i32, i32)>,
++    reserved_buffer: Option<usize>,
++    prepared_buffer: Option<usize>,
+     feedback: Option<(&'a WpPresentation, &'a QueueHandle<App>, u64)>,
+ }
+ 
+-fn attach_wallpaper_buffer(target: WallpaperBufferTarget<'_>, rgba: &[u8]) -> Result<(), String> {
+-    let WallpaperBufferTarget {
+-        pool,
+-        layer,
+-        buffers,
+-        viewport,
+-        scale_factor,
+-        width,
+-        height,
+-        logical,
+-        feedback,
+-    } = target;
++fn prepare_wallpaper_buffer(
++    pool: &mut SlotPool,
++    buffers: &mut Vec<smithay_client_toolkit::shm::slot::Buffer>,
++    width: u32,
++    height: u32,
++    rgba: &[u8],
++    reserved: Option<usize>,
++) -> Result<usize, String> {
+     let expected = (width as usize)
+         .checked_mul(height as usize)
+-        .and_then(|n| n.checked_mul(4))
++        .and_then(|pixels| pixels.checked_mul(4))
+         .ok_or("wallpaper frame too large")?;
+-    if rgba.len() != expected {
++    if width == 0
++        || height == 0
++        || width > MAX_WALLPAPER_DIMENSION
++        || height > MAX_WALLPAPER_DIMENSION
++        || expected > MAX_WALLPAPER_RGBA_BYTES
++        || rgba.len() != expected
++    {
+         return Err("wallpaper frame size mismatch".into());
+     }
+     let stride = i32::try_from(width.checked_mul(4).ok_or("wallpaper stride overflow")?)
+         .map_err(|_| "wallpaper stride overflow")?;
+     let buffer_width = i32::try_from(width).map_err(|_| "wallpaper width overflow")?;
+     let buffer_height = i32::try_from(height).map_err(|_| "wallpaper height overflow")?;
+-    let mut selected = None;
+     for (index, buffer) in buffers.iter_mut().enumerate() {
+-        if let Some(bytes) = buffer.canvas(pool) {
++        if Some(index) != reserved
++            && let Some(bytes) = buffer.canvas(pool)
++        {
+             write_bgra(bytes, rgba);
+-            selected = Some(index);
+-            break;
++            return Ok(index);
+         }
+     }
+-    if selected.is_none() && buffers.len() < 2 {
++    if buffers.len() < 2 {
+         let (buffer, bytes) = pool
+             .create_buffer(
+                 buffer_width,
+@@ -1911,11 +2087,43 @@ fn attach_wallpaper_buffer(target: WallpaperBufferTarget<'_>, rgba: &[u8]) -> Re
+             .map_err(|_| "wallpaper SHM allocation failed")?;
+         write_bgra(bytes, rgba);
+         buffers.push(buffer);
+-        selected = Some(buffers.len() - 1);
++        return Ok(buffers.len() - 1);
+     }
+-    let buffer = selected
+-        .and_then(|index| buffers.get(index))
+-        .ok_or("wallpaper buffers busy")?;
++    Err("wallpaper buffers busy".into())
++}
++
++fn attach_wallpaper_buffer(target: WallpaperBufferTarget<'_>, rgba: &[u8]) -> Result<(), String> {
++    let WallpaperBufferTarget {
++        pool,
++        layer,
++        buffers,
++        viewport,
++        scale_factor,
++        width,
++        height,
++        logical,
++        reserved_buffer,
++        prepared_buffer,
++        feedback,
++    } = target;
++    let expected = (width as usize)
++        .checked_mul(height as usize)
++        .and_then(|n| n.checked_mul(4))
++        .ok_or("wallpaper frame too large")?;
++    if rgba.len() != expected {
++        return Err("wallpaper frame size mismatch".into());
++    }
++    let selected = if let Some(index) = prepared_buffer {
++        if Some(index) != reserved_buffer || index >= buffers.len() {
++            return Err("staged wallpaper buffer unavailable".into());
++        }
++        index
++    } else {
++        prepare_wallpaper_buffer(pool, buffers, width, height, rgba, reserved_buffer)?
++    };
++    let buffer = buffers
++        .get(selected)
++        .ok_or("wallpaper buffer unavailable")?;
+     if let Some(viewport) = viewport {
+         if let Some((width, height)) = logical {
+             viewport.set_destination(width.max(1), height.max(1));
+@@ -1960,7 +2168,25 @@ fn write_bgra(bytes: &mut [u8], rgba: &[u8]) {
+ 
+ #[cfg(test)]
+ mod palette_barrier_tests {
+-    use super::PendingPalette;
++    use super::{PendingPalette, StagedWallpaperBuffer};
++    use std::sync::Arc;
++
++    #[test]
++    fn staged_wallpaper_requires_exact_frame_token_revision_and_dimensions() {
++        let token: Arc<dyn std::any::Any + Send + Sync> = Arc::new("boot-pair");
++        let staged = StagedWallpaperBuffer {
++            revision: 9,
++            token: token.clone(),
++            width: 2880,
++            height: 1800,
++            index: 1,
++        };
++        let other: Arc<dyn std::any::Any + Send + Sync> = Arc::new("boot-pair");
++        assert!(staged.matches(9, &token, 2880, 1800));
++        assert!(!staged.matches(9, &other, 2880, 1800));
++        assert!(!staged.matches(10, &token, 2880, 1800));
++        assert!(!staged.matches(9, &token, 1920, 1200));
++    }
+ 
+     #[test]
+     fn palette_group_waits_for_both_output_and_companion_in_either_order() {
+diff --git a/crates/nacre-shell/Cargo.toml b/crates/nacre-shell/Cargo.toml
+index eda692e9..da6fb995 100644
+--- a/crates/nacre-shell/Cargo.toml
++++ b/crates/nacre-shell/Cargo.toml
+@@ -12,6 +12,7 @@ bead-test = { path = "../bead-test" }
+ bead={path="../bead",default-features=false}
+ image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+ gdk-pixbuf = "0.22"
++fast_image_resize = "=6.1.0"
+ libc = "0.2"
+ notify = { version = "=8.2.0", default-features = false }
+ niri-ipc = "=26.4.0"
+diff --git a/crates/nacre-shell/src/extras.rs b/crates/nacre-shell/src/extras.rs
+index 55f604d7..55c6f723 100644
+--- a/crates/nacre-shell/src/extras.rs
++++ b/crates/nacre-shell/src/extras.rs
+@@ -594,6 +594,8 @@ impl Extras {
+                     })
+                     .filter(|catalogue| catalogue.validate().is_ok());
+                 if let Some(catalogue) = catalogue {
++                    let mut resources_changed =
++                        request_ids.is_empty() || !state.catalogue_pending_handles.is_empty();
+                     let mut seen = std::collections::BTreeSet::new();
+                     let incoming: Vec<Json> = catalogue
+                         .entries
+@@ -618,6 +620,7 @@ impl Extras {
+                             {
+                                 for field in ["thumbnail", "preview"] {
+                                     if entry[field].as_str().is_some_and(|path| !path.is_empty()) {
++                                        resources_changed |= existing[field] != entry[field];
+                                         existing[field] = entry[field].clone();
+                                     }
+                                 }
+@@ -626,7 +629,9 @@ impl Extras {
+                         }
+                         state.catalogue_settled_handles.extend(request_handles);
+                     }
+-                    state.image_revision = state.image_revision.wrapping_add(1);
++                    if resources_changed {
++                        state.image_revision = state.image_revision.wrapping_add(1);
++                    }
+                     state.message.clear();
+                 } else {
+                     for handle in request_handles {
+@@ -1022,7 +1027,7 @@ impl Extras {
+             state.close = true;
+         }
+     }
+-    /// Resolve only advertised cache paths; the byte-accounted cache dies with this open panel.
++    /// Resolve advertised cache paths; keep encoded leases only for this scene's images.
+     pub fn attach_images(&self, scene: &mut bead::render::Scene, wake: Option<CallWake>) {
+         const LIMIT: usize = 16 * bead::core::cache::MIB;
+         let mut state = self.state.borrow_mut();
+@@ -1081,15 +1086,13 @@ impl Extras {
+             let primary_image = primary_file
+                 .as_ref()
+                 .and_then(|file| cached_wallpaper_image(&mut state, file, LIMIT));
+-            let fallback_image = fallback_file
+-                .as_ref()
+-                .and_then(|file| cached_wallpaper_image(&mut state, file, LIMIT));
+             if primary_image.is_none() && !state.catalogue_settled_handles.contains(&logical) {
+                 visible_handles.insert(logical.clone());
+             }
+-            let loaded = primary_image
+-                .zip(primary_file)
+-                .or_else(|| fallback_image.zip(fallback_file));
++            let loaded = primary_image.zip(primary_file).or_else(|| {
++                let file = fallback_file?;
++                cached_wallpaper_image(&mut state, &file, LIMIT).map(|bytes| (bytes, file))
++            });
+             let Some((bytes, file)) = loaded else {
+                 continue;
+             };
+@@ -1107,15 +1110,34 @@ impl Extras {
+             !matches!(primitive, bead::render::Primitive::Image { path, .. }
+                 if path.to_str().is_some_and(|name| name.starts_with("@icon:wallpaper:")))
+         });
++        if self.kind == Kind::Wallpaper {
++            // Luau includes the visible cards and their neighbours in this scene.
++            // Do not keep encoded files from every earlier carousel position warm.
++            state
++                .images
++                .retain(|path, _| scene.asset_data.contains_key(path));
++            state.image_bytes = state
++                .images
++                .iter()
++                .map(|(path, bytes)| bytes.len() + path.capacity() + 128)
++                .sum();
++        }
++        // Palette preparation is required even when the advertised thumbnails
++        // are already cached. It must not hold back that ready first frame.
++        let request_handles: std::collections::BTreeSet<String> = state
++            .catalogue_visible_handles
++            .difference(&state.catalogue_settled_handles)
++            .cloned()
++            .collect();
+         state.catalogue_pending_handles = visible_handles;
+         if self.kind == Kind::Wallpaper
+             && state.wallpaper_open
+             && state.catalogue.is_none()
+             && let Some(wake) = wake
+-            && !state.catalogue_pending_handles.is_empty()
++            && !request_handles.is_empty()
+         {
+             let mut ids = Vec::new();
+-            for handle in &state.catalogue_pending_handles {
++            for handle in &request_handles {
+                 if let Some((id, _)) = parse_wallpaper_handle(handle)
+                     && !ids.iter().any(|known: &String| known == id)
+                 {
+@@ -1125,8 +1147,7 @@ impl Extras {
+                     }
+                 }
+             }
+-            let requested_handles: Vec<String> = state
+-                .catalogue_pending_handles
++            let requested_handles: Vec<String> = request_handles
+                 .iter()
+                 .filter(|handle| {
+                     parse_wallpaper_handle(handle)
+diff --git a/crates/nacre-shell/src/extras/tests.rs b/crates/nacre-shell/src/extras/tests.rs
+index d42bf944..dcce3cc7 100644
+--- a/crates/nacre-shell/src/extras/tests.rs
++++ b/crates/nacre-shell/src/extras/tests.rs
+@@ -607,6 +607,42 @@ async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_previe
+         repeated.asset_data.values().any(|bytes| !bytes.is_empty()),
+         "the advertised thumbnail remains a fallback"
+     );
++    // Cached thumbnails still need the palette/publication-thumbnail prewarm.
++    let mut cached = repeated.clone();
++    if let Primitive::Image { path, .. } = &mut cached.primitives[0] {
++        *path = std::path::PathBuf::from("@icon:wallpaper:thumbnail:/fixture/next.jpg");
++    }
++    let template = cached.clone();
++    let ready_revision = wallpaper.state.borrow().image_revision;
++    wallpaper.attach_images(&mut cached, Some(wake.clone()));
++    assert!(
++        wallpaper.content_ready(),
++        "palette prewarming must not delay ready images"
++    );
++    assert_eq!(
++        lab.calls.recv().await.unwrap(),
++        (
++            "wallpaper.catalogue".into(),
++            json!({"ids":["/fixture/next.jpg"]})
++        )
++    );
++    for _ in 0..200 {
++        wallpaper.project(&open, Some(wake.clone()));
++        if wallpaper.state.borrow().catalogue.is_none() {
++            break;
++        }
++        tokio::time::sleep(Duration::from_millis(5)).await;
++    }
++    assert_eq!(
++        wallpaper.state.borrow().image_revision,
++        ready_revision,
++        "palette-only preparation must not discard prepared render content"
++    );
++    wallpaper.attach_images(&mut template.clone(), Some(wake.clone()));
++    assert!(
++        lab.calls.try_recv().is_err(),
++        "a settled visible set is prepared once"
++    );
+     // A real refresh ticket may be pending while displayed paths remain hydrated.
+     wallpaper.state.borrow_mut().catalogue =
+         wallpaper.begin("wallpaper.catalogue", json!({"ids":[]}), Some(wake));
+@@ -799,9 +835,9 @@ async fn wallpaper_refreshes_deleted_cache_paths_and_settles_still_broken_paths(
+         lab.calls.recv().await.unwrap(),
+         (
+             "wallpaper.catalogue".into(),
+-            json!({"ids":["/fixture/broken.jpg"]})
++            json!({"ids":["/fixture/broken.jpg","/fixture/current.jpg"]})
+         ),
+-        "a changed visible set gets one fresh attempt for its still-broken item"
++        "a changed visible set retries its broken image and prewarms cached visible images"
+     );
+     for _ in 0..200 {
+         wallpaper.project(&open, Some(wake.clone()));
+@@ -1440,6 +1476,11 @@ async fn wallpaper_thumbnail_cache_is_advertised_bounded_and_released_on_close()
+         state.catalogue_boot = Some("extras-boot".into());
+         state.catalogue_request_boot = Some("extras-boot".into());
+         state.image_revision = 9;
++        // A previously visible file must not remain warm after leaving the scene.
++        assert!(
++            cached_wallpaper_image(&mut state, &unadvertised, 16 * bead::core::cache::MIB)
++                .is_some()
++        );
+     }
+ 
+     let logical =
+@@ -1483,6 +1524,7 @@ async fn wallpaper_thumbnail_cache_is_advertised_bounded_and_released_on_close()
+     };
+     extras.attach_images(&mut scene, None);
+     assert!(scene.asset_data.contains_key(&thumbnail));
++    assert_eq!(extras.state.borrow().images.len(), 1);
+     assert!(extras.image_bytes() > 0 && extras.image_bytes() <= 16 * bead::core::cache::MIB);
+     let bead::render::Primitive::Image { path: loaded, .. } = &scene.primitives[0] else {
+         panic!("image primitive")
+diff --git a/crates/nacre-shell/src/wallpaper.rs b/crates/nacre-shell/src/wallpaper.rs
+index 870458cb..f6fb647a 100644
+--- a/crates/nacre-shell/src/wallpaper.rs
++++ b/crates/nacre-shell/src/wallpaper.rs
+@@ -1,11 +1,12 @@
+ // SPDX-License-Identifier: GPL-3.0-only
+ //! Secure, descriptor-pinned decoding for the published wallpaper contract.
+ use bead::core::source::{Publisher, Source, Subscription};
+-use nacre_protocol::wallpaper::{ActiveWallpaper, WallpaperActive};
++use nacre_protocol::wallpaper::{ActiveWallpaper, WallpaperActive, WallpaperFileIdentity};
+ use std::{
+     collections::BTreeMap,
+-    sync::{Arc, Mutex},
+-    time::Duration,
++    sync::{Arc, Condvar, Mutex},
++    thread::JoinHandle,
++    time::{Duration, Instant},
+ };
+ 
+ fn supports_wallpaper_v1(status: &crate::nacre_source::Status) -> bool {
+@@ -20,6 +21,8 @@ fn supports_wallpaper_v1(status: &crate::nacre_source::Status) -> bool {
+ struct PreviewSelection {
+     boot: String,
+     id: String,
++    preview: String,
++    kind: String,
+     generation: u64,
+ }
+ #[derive(Default)]
+@@ -28,25 +31,370 @@ struct PreviewState {
+     selected: Option<PreviewSelection>,
+ }
+ 
+-/// One shared pending selection fence. Never display its image with the previous palette.
+-pub(crate) struct Preview {
+-    publisher: Publisher,
+-    state: Mutex<PreviewState>,
+-    publish_order: Mutex<()>,
++#[derive(Clone, Debug, PartialEq)]
++struct PredecodeKey {
++    generation: u64,
++    boot: String,
++    source: String,
++    identity: WallpaperFileIdentity,
++    decode_path: String,
++    decode_identity: WallpaperFileIdentity,
++    width: u32,
++    height: u32,
++    presentation: String,
+ }
+-impl Default for Preview {
+-    fn default() -> Self {
+-        Self {
+-            publisher: Publisher::new(
+-                "wallpaper-preview".into(),
+-                serde_json::json!({"generation":0,"selected":null}),
+-            )
+-            .expect("static wallpaper preview source is valid"),
+-            state: Mutex::new(PreviewState::default()),
+-            publish_order: Mutex::new(()),
++#[derive(Clone)]
++struct PredecodeTarget {
++    boot: String,
++    pair: Arc<ActiveWallpaper>,
++    width: u32,
++    height: u32,
++}
++struct PredecodeJob {
++    key: PredecodeKey,
++    pair: ActiveWallpaper,
++}
++struct CachedPredecode {
++    key: PredecodeKey,
++    rgba: Vec<u8>,
++    expires: Instant,
++}
++#[derive(Default)]
++struct PredecodeState {
++    target: Option<PredecodeTarget>,
++    desired: Option<PredecodeKey>,
++    pending: Option<PredecodeJob>,
++    active: Option<PredecodeKey>,
++    cached: Option<CachedPredecode>,
++    running: bool,
++    stopping: bool,
++}
++#[derive(Default)]
++struct PredecodeSignal {
++    state: Mutex<PredecodeState>,
++    changed: Condvar,
++}
++impl PredecodeSignal {
++    fn lock(&self) -> std::sync::MutexGuard<'_, PredecodeState> {
++        self.state
++            .lock()
++            .unwrap_or_else(|poison| poison.into_inner())
++    }
++}
++#[derive(Default)]
++struct Predecoder {
++    signal: Arc<PredecodeSignal>,
++    worker: Mutex<Option<JoinHandle<()>>>,
++}
++
++const PREDECODE_WAIT: Duration = Duration::from_millis(150);
++const PREDECODE_LIFETIME: Duration = Duration::from_secs(2);
++
++impl Predecoder {
++    fn target(&self) -> Option<PredecodeTarget> {
++        self.signal.lock().target.clone()
++    }
++
++    fn register_target(&self, boot: String, pair: Arc<ActiveWallpaper>, width: u32, height: u32) {
++        if width == 0 || height == 0 {
++            let mut state = self.signal.lock();
++            state.target = None;
++            state.desired = None;
++            state.pending = None;
++            state.cached = None;
++            self.signal.changed.notify_all();
++            return;
++        }
++        let target = PredecodeTarget {
++            boot,
++            pair,
++            width,
++            height,
++        };
++        self.signal.lock().target = Some(target);
++    }
++
++    fn submit(&self, selection: PreviewSelection, target: PredecodeTarget) {
++        let Some(job) = make_predecode_job(selection, target) else {
++            return;
++        };
++        let mut state = self.signal.lock();
++        if state.desired.as_ref() == Some(&job.key) {
++            return;
+         }
++        state.desired = Some(job.key.clone());
++        state.pending = Some(job);
++        state.cached = None;
++        if !state.running {
++            let mut worker = self
++                .worker
++                .lock()
++                .unwrap_or_else(|poison| poison.into_inner());
++            if let Some(previous) = worker.take() {
++                let _ = previous.join();
++            }
++            state.running = true;
++            let signal = self.signal.clone();
++            match std::thread::Builder::new()
++                .name("wallpaper-predecode".into())
++                .spawn(move || predecode_loop(signal))
++            {
++                Ok(handle) => *worker = Some(handle),
++                Err(_) => {
++                    state.running = false;
++                    state.pending = None;
++                    state.desired = None;
++                    return;
++                }
++            }
++        }
++        self.signal.changed.notify_all();
++    }
++
++    fn take_confirmed(
++        &self,
++        selection: &PreviewSelection,
++        boot: &str,
++        pair: &ActiveWallpaper,
++        width: u32,
++        height: u32,
++    ) -> Option<Vec<u8>> {
++        if selection.boot != boot {
++            return None;
++        }
++        let key = confirmed_predecode_key(selection, pair, width, height)?;
++        let deadline = Instant::now() + PREDECODE_WAIT;
++        let mut state = self.signal.lock();
++        loop {
++            if state
++                .cached
++                .as_ref()
++                .is_some_and(|cached| cached.expires <= Instant::now())
++            {
++                state.cached = None;
++            }
++            if state
++                .cached
++                .as_ref()
++                .is_some_and(|cached| cached.key == key)
++            {
++                let cached = state.cached.take()?;
++                if identity_matches_path(&key.source, &key.identity)
++                    && identity_matches_path(&key.decode_path, &key.decode_identity)
++                {
++                    return Some(cached.rgba);
++                }
++                return None;
++            }
++            if state.desired.as_ref() != Some(&key)
++                || (state.active.as_ref() != Some(&key)
++                    && state.pending.as_ref().is_none_or(|job| job.key != key))
++            {
++                return None;
++            }
++            let remaining = deadline.saturating_duration_since(Instant::now());
++            if remaining.is_zero() {
++                return None;
++            }
++            let (next, timeout) = self
++                .signal
++                .changed
++                .wait_timeout(state, remaining)
++                .unwrap_or_else(|poison| poison.into_inner());
++            state = next;
++            if timeout.timed_out() {
++                return None;
++            }
++        }
++    }
++
++    fn clear_generation(&self, generation: u64) {
++        let mut state = self.signal.lock();
++        if state
++            .desired
++            .as_ref()
++            .is_some_and(|key| key.generation == generation)
++        {
++            state.desired = None;
++            state.pending = None;
++            state.cached = None;
++            self.signal.changed.notify_all();
++        }
++    }
++
++    fn clear(&self) {
++        let mut state = self.signal.lock();
++        state.desired = None;
++        state.pending = None;
++        state.cached = None;
++        self.signal.changed.notify_all();
+     }
+ }
++
++impl Drop for Predecoder {
++    fn drop(&mut self) {
++        {
++            let mut state = self.signal.lock();
++            state.stopping = true;
++            state.pending = None;
++            state.cached = None;
++            self.signal.changed.notify_all();
++        }
++        if let Some(worker) = self
++            .worker
++            .lock()
++            .unwrap_or_else(|poison| poison.into_inner())
++            .take()
++        {
++            let _ = worker.join();
++        }
++    }
++}
++
++fn predecode_loop(signal: Arc<PredecodeSignal>) {
++    let mut idle_deadline = Instant::now() + PREDECODE_LIFETIME;
++    loop {
++        let job = {
++            let mut state = signal.lock();
++            loop {
++                if state.stopping {
++                    state.running = false;
++                    signal.changed.notify_all();
++                    return;
++                }
++                if let Some(job) = state.pending.take() {
++                    state.active = Some(job.key.clone());
++                    break job;
++                }
++                if state
++                    .cached
++                    .as_ref()
++                    .is_some_and(|cached| cached.expires <= Instant::now())
++                {
++                    state.cached = None;
++                }
++                let remaining = idle_deadline.saturating_duration_since(Instant::now());
++                if remaining.is_zero() {
++                    state.running = false;
++                    state.active = None;
++                    signal.changed.notify_all();
++                    return;
++                }
++                let (next, _) = signal
++                    .changed
++                    .wait_timeout(state, remaining)
++                    .unwrap_or_else(|poison| poison.into_inner());
++                state = next;
++            }
++        };
++        let result = {
++            let _span = bead::core::profile::Span::new("wallpaper_predecode");
++            decode_pair(job.pair, job.key.width, job.key.height).map(|decoded| decoded.rgba)
++        };
++        let mut state = signal.lock();
++        state.active = None;
++        idle_deadline = Instant::now() + PREDECODE_LIFETIME;
++        if !state.stopping
++            && state.desired.as_ref() == Some(&job.key)
++            && let Ok(rgba) = result
++        {
++            state.cached = Some(CachedPredecode {
++                key: job.key,
++                rgba,
++                expires: Instant::now() + PREDECODE_LIFETIME,
++            });
++        }
++        signal.changed.notify_all();
++    }
++}
++
++fn make_predecode_job(
++    selection: PreviewSelection,
++    target: PredecodeTarget,
++) -> Option<PredecodeJob> {
++    if selection.boot != target.boot || target.width == 0 || target.height == 0 {
++        return None;
++    }
++    let source_identity = local_file_identity(&selection.id)?;
++    let (decode_path, decode_identity) = if selection.kind == "video" {
++        let identity = local_file_identity(&selection.preview)?;
++        (selection.preview.clone(), identity)
++    } else {
++        (selection.id.clone(), source_identity.clone())
++    };
++    let mut pair = target.pair.as_ref().clone();
++    pair.path = decode_path.clone();
++    pair.file_identity = decode_identity.clone();
++    pair.motion = None;
++    let key = PredecodeKey {
++        generation: selection.generation,
++        boot: selection.boot,
++        source: selection.id,
++        identity: source_identity,
++        decode_path: decode_path.clone(),
++        decode_identity,
++        width: target.width,
++        height: target.height,
++        presentation: serde_json::to_string(&target.pair.presentation).ok()?,
++    };
++    Some(PredecodeJob { key, pair })
++}
++
++fn confirmed_predecode_key(
++    selection: &PreviewSelection,
++    pair: &ActiveWallpaper,
++    width: u32,
++    height: u32,
++) -> Option<PredecodeKey> {
++    let (identity, decode_identity) = if selection.kind == "video" {
++        let motion = pair
++            .motion
++            .as_ref()
++            .filter(|motion| motion.path == selection.id)?;
++        if pair.path != selection.preview {
++            return None;
++        }
++        (motion.file_identity.clone(), pair.file_identity.clone())
++    } else if pair.path == selection.id {
++        (pair.file_identity.clone(), pair.file_identity.clone())
++    } else {
++        return None;
++    };
++    let key = PredecodeKey {
++        generation: selection.generation,
++        boot: selection.boot.clone(),
++        source: selection.id.clone(),
++        identity,
++        decode_path: pair.path.clone(),
++        decode_identity,
++        width,
++        height,
++        presentation: serde_json::to_string(&pair.presentation).ok()?,
++    };
++    (identity_matches_path(&key.source, &key.identity)
++        && identity_matches_path(&key.decode_path, &key.decode_identity))
++    .then_some(key)
++}
++
++fn local_file_identity(path: &str) -> Option<WallpaperFileIdentity> {
++    let metadata = std::fs::symlink_metadata(path).ok()?;
++    if !metadata.is_file() {
++        return None;
++    }
++    Some(WallpaperFileIdentity::from_metadata(&metadata))
++}
++
++fn identity_matches_path(path: &str, identity: &WallpaperFileIdentity) -> bool {
++    std::fs::symlink_metadata(path)
++        .is_ok_and(|metadata| metadata.is_file() && identity.matches(&metadata))
++}
++
++/// One shared pending selection fence. Never display its image with the previous palette.
++#[derive(Default)]
++pub(crate) struct Preview {
++    state: Mutex<PreviewState>,
++    predecode: Predecoder,
++}
+ impl Preview {
+     pub(crate) fn select(
+         &self,
+@@ -56,7 +404,6 @@ impl Preview {
+         kind: String,
+         _animated: bool,
+     ) -> u64 {
+-        let _publish_order = self.publish_order.lock().unwrap_or_else(|p| p.into_inner());
+         let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
+         state.generation = state.generation.saturating_add(1).max(1);
+         let generation = state.generation;
+@@ -68,22 +415,22 @@ impl Preview {
+         .then(|| PreviewSelection {
+             boot: boot.clone(),
+             id: id.clone(),
++            preview,
++            kind,
+             generation,
+         });
+-        let published = selected.as_ref().map(|selection| {
+-            serde_json::json!({
+-                "boot":selection.boot,"id":selection.id
+-            })
+-        });
+-        state.selected = selected;
++        state.selected = selected.clone();
+         drop(state);
+-        let _ = self
+-            .publisher
+-            .publish(serde_json::json!({"generation":generation,"selected":published}));
++        self.predecode.clear();
++        if let Some(selection) = selected
++            && let Some(target) = self.predecode.target()
++            && target.boot == selection.boot
++        {
++            self.predecode.submit(selection, target);
++        }
+         generation
+     }
+     pub(crate) fn cancel(&self, generation: u64) -> bool {
+-        let _publish_order = self.publish_order.lock().unwrap_or_else(|p| p.into_inner());
+         let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
+         if !state
+             .selected
+@@ -94,9 +441,7 @@ impl Preview {
+         }
+         state.selected = None;
+         drop(state);
+-        let _ = self.publisher.publish(serde_json::json!({
+-            "generation":generation,"selected":null
+-        }));
++        self.predecode.clear_generation(generation);
+         true
+     }
+     pub(crate) fn generation_for(&self, boot: &str, id: &str) -> Option<u64> {
+@@ -115,6 +460,23 @@ impl Preview {
+             .selected
+             .clone()
+     }
++
++    fn register_target(
++        &self,
++        selection: Option<PreviewSelection>,
++        boot: String,
++        pair: Arc<ActiveWallpaper>,
++        width: u32,
++        height: u32,
++    ) {
++        self.predecode.register_target(boot, pair, width, height);
++        if let Some(selection) = selection
++            && let Some(target) = self.predecode.target()
++            && target.boot == selection.boot
++        {
++            self.predecode.submit(selection, target);
++        }
++    }
+ }
+ fn valid_local_path(path: &str) -> bool {
+     path.len() <= 4096
+@@ -271,15 +633,6 @@ impl bead::wayland::WallpaperProvider for Consumer {
+             .lock()
+             .map_err(|_| "wallpaper subscription lock failed")?
+             .push(subscription);
+-        let preview_subscription = self
+-            .preview
+-            .publisher
+-            .subscribe(Arc::new(move |_| changed()))
+-            .map_err(|_| "wallpaper preview subscription failed")?;
+-        self.subscriptions
+-            .lock()
+-            .map_err(|_| "wallpaper subscription lock failed")?
+-            .push(preview_subscription);
+         Ok(())
+     }
+     fn prepare(
+@@ -298,7 +651,32 @@ impl bead::wayland::WallpaperProvider for Consumer {
+         }
+         let boot = status.boot.ok_or("wallpaper daemon boot unavailable")?;
+         bead::core::profile::mark("wallpaper_decode_started");
+-        let decoded = decode(&state, &output, width, height)?;
++        let pair = Arc::new(
++            state
++                .outputs
++                .get(&output)
++                .ok_or("output has no wallpaper")?
++                .clone(),
++        );
++        let selection = self.preview.selected();
++        self.preview
++            .register_target(selection.clone(), boot.clone(), pair.clone(), width, height);
++        let predecoded = selection.as_ref().and_then(|selection| {
++            self.preview
++                .predecode
++                .take_confirmed(selection, &boot, pair.as_ref(), width, height)
++        });
++        let decoded = if let Some(rgba) = predecoded {
++            bead::core::profile::mark("wallpaper_predecoded");
++            Decoded {
++                width,
++                height,
++                rgba,
++                pair: pair.as_ref().clone(),
++            }
++        } else {
++            decode(&state, &output, width, height)?
++        };
+         bead::core::profile::mark("wallpaper_decode_finished");
+         let request = serde_json::json!({"revision": decoded.pair.revision});
+         let reply = tokio::runtime::Builder::new_current_thread()
+@@ -350,6 +728,9 @@ impl bead::wayland::WallpaperProvider for Consumer {
+         if previous == current {
+             return None;
+         }
++        if previous.palette != current.palette {
++            return None;
++        }
+         decode_pair(previous, width, height)
+             .ok()
+             .map(|decoded| decoded.rgba)
+@@ -512,7 +893,11 @@ fn decode_in_worker(pair: &ActiveWallpaper, width: u32, height: u32) -> Result<V
+     let mut child = Command::new(executable)
+         .stdin(Stdio::piped())
+         .stdout(Stdio::piped())
+-        .stderr(Stdio::null())
++        .stderr(if bead::core::profile::enabled() {
++            Stdio::inherit()
++        } else {
++            Stdio::null()
++        })
+         .spawn()
+         .map_err(|_| "wallpaper worker unavailable")?;
+     let result = (|| {
+@@ -1020,6 +1405,121 @@ mod tests {
+         drop(consumer);
+         let _ = std::fs::remove_dir_all(root);
+     }
++    #[test]
++    fn predecode_cache_obeys_pair_identity_and_lifetime_fences() {
++        use std::io::Write as _;
++        let root =
++            std::env::temp_dir().join(format!("bead-wallpaper-predecode-{}", std::process::id()));
++        std::fs::create_dir_all(&root).unwrap();
++        let path = root.join("selected.jpg");
++        image::RgbImage::from_pixel(2, 1, image::Rgb([255, 255, 255]))
++            .save(&path)
++            .unwrap();
++        let path = path.to_string_lossy().into_owned();
++        let mut active = pair(7);
++        active.path = path.clone();
++        active.file_identity =
++            WallpaperFileIdentity::from_metadata(&std::fs::symlink_metadata(&path).unwrap());
++        let preview = Preview::default();
++        let generation = preview.select(
++            "boot-a".into(),
++            path.clone(),
++            path.clone(),
++            "image".into(),
++            false,
++        );
++        let selection = preview.selected().unwrap();
++        let target = PredecodeTarget {
++            boot: "boot-a".into(),
++            pair: Arc::new(active.clone()),
++            width: 2,
++            height: 1,
++        };
++        let job = make_predecode_job(selection.clone(), target.clone()).unwrap();
++        assert_eq!(
++            confirmed_predecode_key(&selection, &active, 2, 1),
++            Some(job.key.clone())
++        );
++        assert!(confirmed_predecode_key(&selection, &pair(1), 2, 1).is_none());
++        let mut changed = selection.clone();
++        changed.boot = "boot-b".into();
++        assert_ne!(
++            confirmed_predecode_key(&changed, &active, 2, 1),
++            Some(job.key.clone())
++        );
++        changed = selection.clone();
++        changed.generation += 1;
++        assert_ne!(
++            confirmed_predecode_key(&changed, &active, 2, 1),
++            Some(job.key.clone())
++        );
++        assert_ne!(
++            confirmed_predecode_key(&selection, &active, 4, 1),
++            Some(job.key.clone())
++        );
++
++        let ready = Predecoder::default();
++        ready.submit(selection.clone(), target);
++        let (guard, _) = ready
++            .signal
++            .changed
++            .wait_timeout_while(ready.signal.lock(), Duration::from_secs(2), |state| {
++                state.cached.is_none() && state.running
++            })
++            .unwrap();
++        drop(guard);
++        assert_eq!(
++            ready.take_confirmed(&selection, "boot-a", &active, 2, 1),
++            Some([255, 255, 255, 255].repeat(2))
++        );
++        assert!(
++            ready.signal.lock().cached.is_none(),
++            "confirmed pixels transfer instead of being copied"
++        );
++        drop(ready);
++
++        let mut state = preview.predecode.signal.lock();
++        state.desired = Some(job.key.clone());
++        state.pending = Some(job);
++        state.cached = Some(CachedPredecode {
++            key: confirmed_predecode_key(&selection, &active, 2, 1).unwrap(),
++            rgba: vec![0; 8],
++            expires: Instant::now() + PREDECODE_LIFETIME,
++        });
++        drop(state);
++        assert!(preview.cancel(generation));
++        assert!(preview.predecode.signal.lock().cached.is_none());
++        assert!(preview.predecode.signal.lock().pending.is_none());
++
++        let predecoder = Predecoder::default();
++        let key = confirmed_predecode_key(&selection, &active, 2, 1).unwrap();
++        {
++            let mut state = predecoder.signal.lock();
++            state.desired = Some(key.clone());
++            state.cached = Some(CachedPredecode {
++                key,
++                rgba: vec![0; 8],
++                expires: Instant::now() - Duration::from_millis(1),
++            });
++        }
++        assert!(
++            predecoder
++                .take_confirmed(&selection, "boot-a", &active, 2, 1)
++                .is_none()
++        );
++        assert!(predecoder.signal.lock().cached.is_none());
++        std::fs::OpenOptions::new()
++            .append(true)
++            .open(&path)
++            .unwrap()
++            .write_all(b"changed")
++            .unwrap();
++        assert!(confirmed_predecode_key(&selection, &active, 2, 1).is_none());
++        drop(preview);
++        drop(predecoder);
++        let _ = std::fs::remove_dir_all(root);
++    }
++
+     fn pair(revision: u64) -> ActiveWallpaper {
+         serde_json::from_value(serde_json::json!({"revision":revision,"palette_revision":revision,"path":"/wall.png","file_identity":{"device":"1","inode":"2","size":4,"mtime_sec":0,"mtime_nsec":0,"ctime_sec":0,"ctime_nsec":0},"presentation":"crop","palette":{"mode":"dark","colours":{"background":"#000000","onSurface":"#ffffff","primary":"#112233"}}})).unwrap()
+     }
+diff --git a/crates/nacre-shell/src/wallpaper_decode.rs b/crates/nacre-shell/src/wallpaper_decode.rs
+index b91b5f0a..e34471f7 100644
+--- a/crates/nacre-shell/src/wallpaper_decode.rs
++++ b/crates/nacre-shell/src/wallpaper_decode.rs
+@@ -3,16 +3,55 @@
+ use nacre_protocol::wallpaper::ActiveWallpaper;
+ use std::{
+     fs::File,
+-    io::{BufReader, Read},
++    io::{BufReader, Read, Seek, SeekFrom},
+     os::{
+         fd::{AsRawFd, FromRawFd, OwnedFd},
+-        unix::fs::MetadataExt,
++        unix::fs::{FileExt, MetadataExt},
+     },
+     path::Path,
++    sync::OnceLock,
+ };
+ const MAX_SOURCE_PIXELS: u64 = 100_000_000;
+ const MAX_OUTPUT_RGBA_BYTES: usize = 64 * 1024 * 1024;
+ const MAX_OUTPUT_DIMENSION: u32 = 16_384;
++const MAX_NATIVE_ENCODED_BYTES: usize = 32 * 1024 * 1024;
++
++struct DecoderSpan {
++    stage: &'static str,
++    start: Option<(u64, u64)>,
++}
++
++impl DecoderSpan {
++    fn new(stage: &'static str) -> Self {
++        static ENABLED: OnceLock<bool> = OnceLock::new();
++        let enabled = *ENABLED.get_or_init(|| {
++            std::env::var_os("BEAD_PROFILE_INPUT")
++                .is_some_and(|value| value.as_os_str() != std::ffi::OsStr::new("clocks"))
++        });
++        let start = enabled.then(|| {
++            (
++                bead::core::profile::clock(libc::CLOCK_MONOTONIC),
++                bead::core::profile::clock(libc::CLOCK_THREAD_CPUTIME_ID),
++            )
++        });
++        Self { stage, start }
++    }
++}
++
++impl Drop for DecoderSpan {
++    fn drop(&mut self) {
++        if let Some((wall, cpu)) = self.start {
++            eprintln!(
++                "INPUT_PROFILE stage={} wall_ms={:.4} cpu_ms={:.4}",
++                self.stage,
++                bead::core::profile::clock(libc::CLOCK_MONOTONIC).saturating_sub(wall) as f64 / 1e6,
++                bead::core::profile::clock(libc::CLOCK_THREAD_CPUTIME_ID).saturating_sub(cpu)
++                    as f64
++                    / 1e6
++            );
++        }
++    }
++}
+ 
+ pub(crate) fn decode_pair(
+     pair: ActiveWallpaper,
+@@ -23,7 +62,10 @@ pub(crate) fn decode_pair(
+     if width == 0 || height == 0 {
+         return Err("wallpaper unavailable".into());
+     }
+-    let file = open_validated(&pair)?;
++    if pair.presentation == nacre_protocol::wallpaper::Presentation::Centre {
++        return Err("centre presentation cannot be bounded by pixbuf loaders".into());
++    }
++    let mut file = open_validated(&pair)?;
+     let before = file
+         .metadata()
+         .map_err(|_| "wallpaper metadata unavailable")?;
+@@ -44,21 +86,54 @@ pub(crate) fn decode_pair(
+     {
+         return Err("output dimensions exceed wallpaper bound".into());
+     }
++    let mut signature = [0; 8];
++    let native = if before.len() <= MAX_NATIVE_ENCODED_BYTES as u64
++        && file.read_at(&mut signature, 0).ok() == Some(signature.len())
++    {
++        if signature[..2] == [0xff, 0xd8] {
++            decode_jpeg_fast(&mut file, width, height, pair.presentation)
++        } else if signature == *b"\x89PNG\r\n\x1a\n" {
++            decode_png_fast(&mut file, width, height, pair.presentation)
++        } else {
++            None
++        }
++    } else {
++        None
++    };
++    let (pixbuf, maximum) = if let Some(decoded) = native {
++        decoded
++    } else {
++        // Native and streamed decoders use the same pinned inode sequentially.
++        file.seek(SeekFrom::Start(0))
++            .map_err(|_| "wallpaper seek failed")?;
++        load_streamed(&file, width, height, pair.presentation)?
++    };
++    let rgba = {
++        let _span = DecoderSpan::new("wallpaper_rgba_output");
++        finish_pixbuf(pixbuf, maximum, (width, height), pair.presentation)?
++    };
++    // Check the same still-open inode after decoding, before publishing bytes.
++    let after = identity_fd
++        .metadata()
++        .map_err(|_| "wallpaper metadata unavailable")?;
++    if !pair.file_identity.matches(&after) {
++        return Err("wallpaper changed during decode".into());
++    }
++    Ok(rgba)
++}
++
++fn load_streamed(
++    file: &File,
++    width: u32,
++    height: u32,
++    presentation: nacre_protocol::wallpaper::Presentation,
++) -> Result<(gdk_pixbuf::Pixbuf, (i32, i32)), String> {
+     let max_dim = MAX_SOURCE_PIXELS;
+     let loader = gdk_pixbuf::PixbufLoader::new();
+     let source_size = std::rc::Rc::new(std::cell::Cell::new(None));
+     let source_size_cb = source_size.clone();
+     let requested_size = std::rc::Rc::new(std::cell::Cell::new((1, 1)));
+     let requested_size_cb = requested_size.clone();
+-    let presentation = pair.presentation;
+-    let target = match pair.presentation {
+-        nacre_protocol::wallpaper::Presentation::Crop => (width, height),
+-        nacre_protocol::wallpaper::Presentation::Fit => (width, height),
+-        nacre_protocol::wallpaper::Presentation::Fill => (width, height),
+-        nacre_protocol::wallpaper::Presentation::Centre => {
+-            return Err("centre presentation cannot be bounded by pixbuf loaders".into());
+-        }
+-    };
+     use gdk_pixbuf::prelude::PixbufLoaderExt;
+     loader.connect_size_prepared(move |loader, source_width, source_height| {
+         source_size_cb.set(Some((source_width, source_height)));
+@@ -73,33 +148,22 @@ pub(crate) fn decode_pair(
+         } else {
+             // GdkPixbuf scales as the stream is decoded. For crop, ask for the
+             // smallest aspect-preserving raster covering the output, then crop.
+-            let scale = if matches!(presentation, nacre_protocol::wallpaper::Presentation::Crop) {
+-                (target.0 as f64 / source_width as f64).max(target.1 as f64 / source_height as f64)
++            if let Some(size) = scaled_dimensions(
++                source_width as u32,
++                source_height as u32,
++                width,
++                height,
++                presentation,
++                max_dim,
++            ) {
++                requested_size_cb.set(size);
++                loader.set_size(size.0, size.1);
+             } else {
+-                (target.0 as f64 / source_width as f64)
+-                    .min(target.1 as f64 / source_height as f64)
+-                    .min(1.0)
+-            };
+-            let scaled_width =
+-                ((source_width as f64 * scale).ceil() as i64).clamp(1, 100_000) as i32;
+-            let scaled_height =
+-                ((source_height as f64 * scale).ceil() as i64).clamp(1, 100_000) as i32;
+-            let scaled_bytes = (scaled_width as usize)
+-                .checked_mul(scaled_height as usize)
+-                .and_then(|pixels| pixels.checked_mul(4));
+-            if scaled_width as u32 > MAX_OUTPUT_DIMENSION
+-                || scaled_height as u32 > MAX_OUTPUT_DIMENSION
+-                || scaled_bytes.is_none_or(|bytes| bytes > MAX_OUTPUT_RGBA_BYTES)
+-                || (scaled_width as u64).saturating_mul(scaled_height as u64) > max_dim
+-            {
+                 loader.set_size(1, 1);
+-            } else {
+-                requested_size_cb.set((scaled_width, scaled_height));
+-                loader.set_size(scaled_width, scaled_height);
+             }
+         }
+     });
+-    let mut input = BufReader::new(&file);
++    let mut input = BufReader::new(file);
+     let mut chunk = [0u8; 16 * 1024];
+     let mut total = 0usize;
+     loop {
+@@ -145,7 +209,15 @@ pub(crate) fn decode_pair(
+     let pixbuf = loader
+         .pixbuf()
+         .ok_or("wallpaper decode produced no pixels")?;
+-    let (max_width, max_height) = requested_size.get();
++    Ok((pixbuf, requested_size.get()))
++}
++
++fn finish_pixbuf(
++    pixbuf: gdk_pixbuf::Pixbuf,
++    (max_width, max_height): (i32, i32),
++    (width, height): (u32, u32),
++    presentation: nacre_protocol::wallpaper::Presentation,
++) -> Result<Vec<u8>, String> {
+     if pixbuf.width() <= 0
+         || pixbuf.height() <= 0
+         || pixbuf.width() > max_width
+@@ -159,7 +231,7 @@ pub(crate) fn decode_pair(
+         || u64::try_from(pixbuf.width())
+             .unwrap_or(u64::MAX)
+             .saturating_mul(u64::try_from(pixbuf.height()).unwrap_or(u64::MAX))
+-            > max_dim
++            > MAX_SOURCE_PIXELS
+         || (matches!(presentation, nacre_protocol::wallpaper::Presentation::Crop)
+             && (pixbuf.width() < width as i32 || pixbuf.height() < height as i32))
+     {
+@@ -203,23 +275,234 @@ pub(crate) fn decode_pair(
+     let stride = decoded.rowstride() as usize;
+     let mut rgba = vec![0; width as usize * height as usize * 4];
+     for y in 0..copy_height as usize {
+-        for x in 0..copy_width as usize {
+-            let src = y * stride + x * channels;
+-            let dst = ((y + dy as usize) * width as usize + x + dx as usize) * 4;
+-            rgba[dst..dst + 3].copy_from_slice(&data[src..src + 3]);
+-            rgba[dst + 3] = if channels == 4 { data[src + 3] } else { 255 };
++        let source_start = y * stride;
++        let source = data
++            .get(source_start..source_start + copy_width as usize * channels)
++            .ok_or("wallpaper row unavailable")?;
++        let target_start = ((y + dy as usize) * width as usize + dx as usize) * 4;
++        let target = &mut rgba[target_start..target_start + copy_width as usize * 4];
++        if channels == 4 {
++            target.copy_from_slice(source);
++        } else {
++            for (source, target) in source
++                .as_chunks::<3>()
++                .0
++                .iter()
++                .zip(target.as_chunks_mut::<4>().0.iter_mut())
++            {
++                *target = [source[0], source[1], source[2], 255];
++            }
+         }
+     }
+-    // Check the same still-open inode after decoding, before publishing bytes.
+-    let after = identity_fd
+-        .metadata()
+-        .map_err(|_| "wallpaper metadata unavailable")?;
+-    if !pair.file_identity.matches(&after) {
+-        return Err("wallpaper changed during decode".into());
+-    }
+     Ok(rgba)
+ }
+ 
++fn scaled_dimensions(
++    source_width: u32,
++    source_height: u32,
++    width: u32,
++    height: u32,
++    presentation: nacre_protocol::wallpaper::Presentation,
++    max_dim: u64,
++) -> Option<(i32, i32)> {
++    if source_width == 0
++        || source_height == 0
++        || u64::from(source_width).saturating_mul(u64::from(source_height)) > max_dim
++    {
++        return None;
++    }
++    let scale = if presentation == nacre_protocol::wallpaper::Presentation::Crop {
++        (width as f64 / source_width as f64).max(height as f64 / source_height as f64)
++    } else {
++        (width as f64 / source_width as f64)
++            .min(height as f64 / source_height as f64)
++            .min(1.0)
++    };
++    let w = ((source_width as f64 * scale).ceil() as i64).clamp(1, 100_000) as u32;
++    let h = ((source_height as f64 * scale).ceil() as i64).clamp(1, 100_000) as u32;
++    let bytes = (w as usize).checked_mul(h as usize)?.checked_mul(4)?;
++    (w <= MAX_OUTPUT_DIMENSION
++        && h <= MAX_OUTPUT_DIMENSION
++        && bytes <= MAX_OUTPUT_RGBA_BYTES
++        && u64::from(w).saturating_mul(u64::from(h)) <= max_dim)
++        .then_some((w as i32, h as i32))
++}
++
++fn decode_jpeg_fast(
++    file: &mut File,
++    width: u32,
++    height: u32,
++    presentation: nacre_protocol::wallpaper::Presentation,
++) -> Option<(gdk_pixbuf::Pixbuf, (i32, i32))> {
++    use image::ImageDecoder;
++    let _span = DecoderSpan::new("wallpaper_jpeg");
++    let encoded = read_native_encoded(file)?;
++    let mut decoder = image::codecs::jpeg::JpegDecoder::new(std::io::Cursor::new(encoded)).ok()?;
++    if decoder.icc_profile().ok()?.is_some() || decoder.color_type() != image::ColorType::Rgb8 {
++        return None;
++    }
++    decode_native_pixels(decoder, width, height, presentation)
++}
++
++fn decode_png_fast(
++    file: &mut File,
++    width: u32,
++    height: u32,
++    presentation: nacre_protocol::wallpaper::Presentation,
++) -> Option<(gdk_pixbuf::Pixbuf, (i32, i32))> {
++    use image::ImageDecoder;
++    let _span = DecoderSpan::new("wallpaper_png");
++    let encoded = read_native_encoded(file)?;
++    if !simple_png_chunks(&encoded)? {
++        return None;
++    }
++    let mut limits = image::Limits::default();
++    limits.max_alloc = Some(MAX_OUTPUT_RGBA_BYTES as u64);
++    let mut decoder =
++        image::codecs::png::PngDecoder::with_limits(std::io::Cursor::new(encoded), limits).ok()?;
++    if decoder.is_apng().ok()?
++        || decoder.icc_profile().ok()?.is_some()
++        || !matches!(
++            decoder.color_type(),
++            image::ColorType::Rgb8 | image::ColorType::Rgba8
++        )
++    {
++        return None;
++    }
++    decode_native_pixels(decoder, width, height, presentation)
++}
++
++fn read_native_encoded(file: &mut File) -> Option<Vec<u8>> {
++    let mut encoded = Vec::new();
++    Read::take(&mut *file, (MAX_NATIVE_ENCODED_BYTES + 1) as u64)
++        .read_to_end(&mut encoded)
++        .ok()?;
++    (encoded.len() <= MAX_NATIVE_ENCODED_BYTES).then_some(encoded)
++}
++
++fn simple_png_chunks(encoded: &[u8]) -> Option<bool> {
++    if encoded.get(..8)? != b"\x89PNG\r\n\x1a\n" {
++        return None;
++    }
++    let mut offset = 8usize;
++    let mut header = None;
++    loop {
++        let length_end = offset.checked_add(4)?;
++        let type_end = length_end.checked_add(4)?;
++        if type_end > encoded.len() {
++            return None;
++        }
++        let chunk_length = usize::try_from(u32::from_be_bytes(
++            encoded[offset..length_end].try_into().ok()?,
++        ))
++        .ok()?;
++        let data_end = type_end.checked_add(chunk_length)?;
++        let chunk_end = data_end.checked_add(4)?;
++        if chunk_end > encoded.len() {
++            return None;
++        }
++        let kind = &encoded[length_end..type_end];
++        if header.is_none() {
++            if kind != b"IHDR" || chunk_length != 13 {
++                return None;
++            }
++            let data = &encoded[type_end..data_end];
++            if data[8] != 8 || !matches!(data[9], 2 | 6) {
++                return Some(false);
++            }
++            header = Some(());
++        } else if kind == b"iCCP"
++            || kind == b"gAMA"
++            || kind == b"cHRM"
++            || kind == b"sRGB"
++            || kind == b"cICP"
++            || kind == b"mDCV"
++            || kind == b"cLLI"
++            || kind == b"acTL"
++            || kind == b"fcTL"
++            || kind == b"fdAT"
++        {
++            return Some(false);
++        }
++        if kind == b"IEND" {
++            return (chunk_length == 0 && chunk_end == encoded.len()).then_some(true);
++        }
++        offset = chunk_end;
++    }
++}
++
++fn decode_native_pixels<D: image::ImageDecoder>(
++    decoder: D,
++    width: u32,
++    height: u32,
++    presentation: nacre_protocol::wallpaper::Presentation,
++) -> Option<(gdk_pixbuf::Pixbuf, (i32, i32))> {
++    let (source_width, source_height) = decoder.dimensions();
++    let (scaled_width, scaled_height) = scaled_dimensions(
++        source_width,
++        source_height,
++        width,
++        height,
++        presentation,
++        MAX_SOURCE_PIXELS,
++    )?;
++    let channels = match decoder.color_type() {
++        image::ColorType::Rgb8 => 3usize,
++        image::ColorType::Rgba8 => 4,
++        _ => return None,
++    };
++    let bytes = usize::try_from(decoder.total_bytes()).ok()?;
++    if bytes == 0
++        || bytes > MAX_OUTPUT_RGBA_BYTES
++        || bytes
++            != (source_width as usize)
++                .checked_mul(source_height as usize)?
++                .checked_mul(channels)?
++    {
++        return None;
++    }
++    let mut pixels = Vec::new();
++    pixels.try_reserve_exact(bytes).ok()?;
++    pixels.resize(bytes, 0);
++    {
++        let _span = DecoderSpan::new("wallpaper_native_decode");
++        decoder.read_image(&mut pixels).ok()?;
++    }
++    let pixels = if source_width == scaled_width as u32 && source_height == scaled_height as u32 {
++        pixels
++    } else {
++        let _span = DecoderSpan::new("wallpaper_native_resize");
++        use fast_image_resize::{
++            FilterType, PixelType, ResizeAlg, ResizeOptions, Resizer, images::Image,
++        };
++        let pixel_type = if channels == 4 {
++            PixelType::U8x4
++        } else {
++            PixelType::U8x3
++        };
++        let source = Image::from_vec_u8(source_width, source_height, pixels, pixel_type).ok()?;
++        let mut target = Image::new(scaled_width as u32, scaled_height as u32, pixel_type);
++        Resizer::new()
++            .resize(
++                &source,
++                &mut target,
++                &ResizeOptions::new().resize_alg(ResizeAlg::Convolution(FilterType::Bilinear)),
++            )
++            .ok()?;
++        target.into_vec()
++    };
++    let pixbuf = gdk_pixbuf::Pixbuf::from_bytes(
++        &gdk_pixbuf::glib::Bytes::from_owned(pixels),
++        gdk_pixbuf::Colorspace::Rgb,
++        channels == 4,
++        8,
++        scaled_width,
++        scaled_height,
++        scaled_width.checked_mul(channels as i32)?,
++    );
++    Some((pixbuf, (scaled_width, scaled_height)))
++}
++
+ fn open_validated(pair: &ActiveWallpaper) -> Result<File, String> {
+     let path = Path::new(&pair.path);
+     if !path.is_absolute() || path.as_os_str().len() > 4096 {
+@@ -310,3 +593,146 @@ fn open_validated(pair: &ActiveWallpaper) -> Result<File, String> {
+ fn allowed_format(name: &str) -> bool {
+     matches!(name, "png" | "jpeg" | "webp" | "gif" | "tiff")
+ }
++
++#[cfg(test)]
++mod fast_jpeg_tests {
++    use super::*;
++
++    #[test]
++    fn fast_jpeg_preserves_crop_fit_fill_dimensions_and_file_identity() {
++        let root =
++            std::env::temp_dir().join(format!("bead-wallpaper-fast-jpeg-{}", std::process::id()));
++        std::fs::create_dir_all(&root).unwrap();
++        let path = root.join("sample.jpg");
++        image::RgbImage::from_fn(4, 2, |x, y| image::Rgb([x as u8 * 60, y as u8 * 100, 30]))
++            .save_with_format(&path, image::ImageFormat::Jpeg)
++            .unwrap();
++        let metadata = std::fs::symlink_metadata(&path).unwrap();
++        let identity = nacre_protocol::wallpaper::WallpaperFileIdentity::from_metadata(&metadata);
++        let path = path.to_string_lossy().into_owned();
++        let make_pair = |presentation: &str| {
++            serde_json::from_value::<ActiveWallpaper>(serde_json::json!({
++                "revision":1,"palette_revision":1,"path":path.clone(),"file_identity":identity.clone(),
++                "presentation":presentation,
++                "palette":{"mode":"dark","colours":{"background":"#000000","onSurface":"#ffffff","primary":"#112233"}}
++            }))
++            .unwrap()
++        };
++        let pair = make_pair("crop");
++        let mut pinned = open_validated(&pair).unwrap();
++        assert!(decode_jpeg_fast(&mut pinned, 2, 2, pair.presentation).is_some());
++        let crop = decode_pair(make_pair("crop"), 2, 2).unwrap();
++        let fit = decode_pair(make_pair("fit"), 2, 2).unwrap();
++        let fill = decode_pair(make_pair("fill"), 2, 2).unwrap();
++        assert_eq!((crop.len(), fit.len(), fill.len()), (16, 16, 16));
++        assert!(fit.as_chunks::<4>().0.iter().any(|pixel| pixel[3] == 0));
++        assert!(crop.as_chunks::<4>().0.iter().all(|pixel| pixel[3] == 255));
++        assert!(fill.as_chunks::<4>().0.iter().all(|pixel| pixel[3] == 255));
++        assert_ne!(crop, fill);
++        std::fs::remove_file(&path).unwrap();
++        image::RgbImage::from_pixel(4, 2, image::Rgb([10, 20, 30]))
++            .save_with_format(&path, image::ImageFormat::Jpeg)
++            .unwrap();
++        assert!(decode_pair(make_pair("crop"), 2, 2).is_err());
++        let _ = std::fs::remove_dir_all(root);
++    }
++}
++
++#[cfg(test)]
++mod fast_png_tests {
++    use super::*;
++
++    fn pair_for(path: &Path) -> ActiveWallpaper {
++        let identity = nacre_protocol::wallpaper::WallpaperFileIdentity::from_metadata(
++            &std::fs::metadata(path).unwrap(),
++        );
++        serde_json::from_value(serde_json::json!({
++            "revision":1,
++            "palette_revision":1,
++            "path":path.to_string_lossy(),
++            "file_identity":identity,
++            "presentation":"fit",
++            "palette":{"mode":"dark","colours":{"background":"#000000","onSurface":"#ffffff","primary":"#112233"}}
++        }))
++        .unwrap()
++    }
++
++    #[test]
++    fn fast_png_preserves_rgb_and_rgba_pixels() {
++        let root =
++            std::env::temp_dir().join(format!("bead-wallpaper-fast-png-{}", std::process::id()));
++        std::fs::create_dir_all(&root).unwrap();
++        let rgb_path = root.join("rgb.png");
++        let rgb = image::RgbImage::from_fn(3, 2, |x, y| {
++            image::Rgb([x as u8 * 31, y as u8 * 47, (x + y) as u8 * 13])
++        });
++        rgb.save_with_format(&rgb_path, image::ImageFormat::Png)
++            .unwrap();
++        let rgb_pair = pair_for(&rgb_path);
++        assert!(
++            decode_png_fast(
++                &mut open_validated(&rgb_pair).unwrap(),
++                3,
++                2,
++                rgb_pair.presentation
++            )
++            .is_some()
++        );
++        let rgb_bytes = decode_pair(rgb_pair, 3, 2).unwrap();
++        for (actual, expected) in rgb_bytes.as_chunks::<4>().0.iter().zip(rgb.pixels()) {
++            assert_eq!(&actual[..3], &expected.0);
++            assert_eq!(actual[3], 255);
++        }
++
++        let rgba_path = root.join("rgba.png");
++        let rgba = image::RgbaImage::from_fn(3, 2, |x, y| {
++            image::Rgba([x as u8 * 31, y as u8 * 47, 90, (x + y) as u8 * 63])
++        });
++        rgba.save_with_format(&rgba_path, image::ImageFormat::Png)
++            .unwrap();
++        let rgba_pair = pair_for(&rgba_path);
++        assert!(
++            decode_png_fast(
++                &mut open_validated(&rgba_pair).unwrap(),
++                3,
++                2,
++                rgba_pair.presentation
++            )
++            .is_some()
++        );
++        let rgba_bytes = decode_pair(rgba_pair, 3, 2).unwrap();
++        for (actual, expected) in rgba_bytes.as_chunks::<4>().0.iter().zip(rgba.pixels()) {
++            assert_eq!(actual, &expected.0);
++        }
++        let _ = std::fs::remove_dir_all(root);
++    }
++
++    #[test]
++    fn unsupported_png_uses_streamed_fallback() {
++        let root = std::env::temp_dir().join(format!(
++            "bead-wallpaper-fast-png-fallback-{}",
++            std::process::id()
++        ));
++        std::fs::create_dir_all(&root).unwrap();
++        let path = root.join("sixteen-bit.png");
++        let image = image::ImageBuffer::<image::Luma<u16>, Vec<u16>>::from_fn(3, 2, |x, y| {
++            image::Luma([(x * 4096 + y * 1024) as u16])
++        });
++        image
++            .save_with_format(&path, image::ImageFormat::Png)
++            .unwrap();
++        let pair = pair_for(&path);
++        let mut pinned = open_validated(&pair).unwrap();
++        assert!(decode_png_fast(&mut pinned, 3, 2, pair.presentation).is_none());
++        let pixels = decode_pair(pair, 3, 2).unwrap();
++        assert_eq!(pixels.len(), 3 * 2 * 4);
++        assert!(
++            pixels
++                .as_chunks::<4>()
++                .0
++                .iter()
++                .all(|pixel| pixel[3] == 255)
++        );
++        let _ = std::fs::remove_dir_all(root);
++    }
++}
+diff --git a/crates/nacre-shell/tests/wallpaper_worker.rs b/crates/nacre-shell/tests/wallpaper_worker.rs
+index 36c3c576..633a9dcd 100644
+--- a/crates/nacre-shell/tests/wallpaper_worker.rs
++++ b/crates/nacre-shell/tests/wallpaper_worker.rs
+@@ -24,12 +24,17 @@ fn worker_returns_exact_pixels_and_rejects_changed_identity_and_oversized_output
+         "file_identity":WallpaperFileIdentity::from_metadata(&std::fs::metadata(&path).unwrap()),
+         "presentation":"crop", "palette":{"mode":"dark", "colours":{"background":"#101820", "onSurface":"#ffffff", "primary":"#2255aa"}}
+     })).unwrap();
+-    let run = |pair: &ActiveWallpaper, width, height| {
+-        let mut child = Command::new(env!("CARGO_BIN_EXE_nacre-wallpaper-decode"))
++    let run = |pair: &ActiveWallpaper, width, height, profile: bool| {
++        let mut command = Command::new(env!("CARGO_BIN_EXE_nacre-wallpaper-decode"));
++        command
++            .env_remove("BEAD_PROFILE_INPUT")
+             .stdin(Stdio::piped())
+             .stdout(Stdio::piped())
+-            .spawn()
+-            .unwrap();
++            .stderr(Stdio::piped());
++        if profile {
++            command.env("BEAD_PROFILE_INPUT", "1");
++        }
++        let mut child = command.spawn().unwrap();
+         child
+             .stdin
+             .take()
+@@ -38,12 +43,15 @@ fn worker_returns_exact_pixels_and_rejects_changed_identity_and_oversized_output
+             .unwrap();
+         child.wait_with_output().unwrap()
+     };
+-    let output = run(&pair, 2, 1);
++    let output = run(&pair, 2, 1, true);
+     assert!(output.status.success());
+     assert_eq!(output.stdout, [30, 80, 120, 255, 30, 80, 120, 255]);
+-    assert!(!run(&pair, 16_385, 1).status.success());
++    let diagnostics = String::from_utf8(output.stderr).unwrap();
++    assert!(diagnostics.contains("INPUT_PROFILE stage=wallpaper_png"));
++    assert!(diagnostics.contains("INPUT_PROFILE stage=wallpaper_rgba_output"));
++    assert!(!run(&pair, 16_385, 1, false).status.success());
+     std::fs::write(&path, b"changed").unwrap();
+-    let output = run(&pair, 2, 1);
++    let output = run(&pair, 2, 1, false);
+     assert!(!output.status.success());
+     assert!(output.stdout.is_empty());
+     std::fs::remove_dir_all(root).unwrap();
+diff --git a/shell/extras/wallpaper/main.luau b/shell/extras/wallpaper/main.luau
+index a725361d..27da93ec 100644
+--- a/shell/extras/wallpaper/main.luau
++++ b/shell/extras/wallpaper/main.luau
+@@ -217,7 +217,7 @@ local children={
+     text_align="center",color="onSurfaceVariant"}}
+ if backdrop then table.insert(children,1,scrim);table.insert(children,1,backdrop) end
+ if spotlight then
+-  return kit.Panel{id="extras",edge="bottom",open=ui.bind("panel.open"),width=viewport_w,height=viewport_h,
++  return kit.Panel{id="extras",edge="bottom",open=ui.bind("panel.open"),width=viewport_w,height=viewport_h,shadow=false,
+     duration=T.panel.duration,transition=T.panel.transition,reveal=false,slide_distance=0,fade=true,radius=0,
+     fill=ui.alpha("shadow",T.wallpaper.scrim_alpha),padding=0,gap=0,
+     on_activate=ui.action("close"),aria_label="Close wallpaper picker",
+diff --git a/shell/types/bead_ui.luau b/shell/types/bead_ui.luau
+index ef843815..e67ed662 100644
+--- a/shell/types/bead_ui.luau
++++ b/shell/types/bead_ui.luau
+@@ -49,6 +49,7 @@ export type Props = {
+     border_color:any?,
+     border_width:any?,
+     radius:any?,
++    shadow:any?,
+     font_size:any?,
+     font_weight:any?,
+     family:any?,
+diff --git a/spikes/picker-spotlight-proof.py b/spikes/picker-spotlight-proof.py
+index 19d4cc60..f17ea7c7 100644
+--- a/spikes/picker-spotlight-proof.py
++++ b/spikes/picker-spotlight-proof.py
+@@ -20,6 +20,7 @@ pref = ("wallpaper-pref", "static", "spotlight")
+ for state, preparation in [
+     ("spotlight-cold", []),
+     ("spotlight-repeat", [open_picker, ("sleep", 4), close_picker, ("sleep", 1)]),
++    ("spotlight-settled", [open_picker, ("sleep", 4), close_picker, ("sleep", 3), ("sample", "settled-closed")]),
+     ("spotlight-expired", [open_picker, ("sleep", 4), close_picker, ("sleep", 125), ("sample", "expired-closed")]),
+ ]:
+     m.STATE_PREPARE[state] = [pref, ("bar-window",), *preparation]
+@@ -34,7 +35,8 @@ for state, kind in [("spotlight-hover", "pointer"), ("spotlight-pressed", "press
+     m.STATE_SETTLE[state] = .1
+ palette_layout = "spotlight" if os.environ.get("PICKER_PALETTE_LAYOUT") == "spotlight" else "carousel"
+ m.STATE_PREPARE["palette-sync"] = [("wallpaper-pref", "static", palette_layout), open_picker, ("sleep", 8)]
+-m.STATES["palette-sync"] = ([("selection-key", "Right")], [close_picker], 3)
++selection = ("selection-click", 1225, 1060) if os.environ.get("PICKER_SELECTION_CLICK") == "1" else ("selection-key", "Right")
++m.STATES["palette-sync"] = ([selection], [close_picker], 3)
+ m.STATE_SETTLE["palette-sync"] = 3
+ m.STATE_CLEANUP["palette-sync"] = [("active-assert", "generated-2.jpg")]
+ original_spawn = m.Arm.spawn
+@@ -89,6 +91,13 @@ def steps(self, operations):
+             phases = json.loads(path.read_text()) if path.exists() else {}
+             phases[step[1]] = self.rss()
+             path.write_text(json.dumps(phases))
++        elif step[0] == "selection-click":
++            original_steps(self, [("pointer", step[1], step[2])])
++            press_send_ns = time.monotonic_ns()
++            original_steps(self, [("press", step[1], step[2])])
++            self.selection_keys.append({"key": "Pointer", "press_send_ns": press_send_ns, "send_ns": time.monotonic_ns(), "state_start_ns": round(self.state_start*1e9)})
++            original_steps(self, [("release",)])
++            (self.out / "selection-clocks.json").write_text(json.dumps(self.selection_keys))
+         else:
+             original_steps(self, [step])
+ 

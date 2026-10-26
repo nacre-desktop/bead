@@ -1,0 +1,241 @@
+{
+  "environment": "Remote ghcr.io/archlinux/archlinux:latest containers; nice -n 10; Cargo -j2; no local builds/tests",
+  "exclusions": [
+    "Instrumented diagnostic with decoder stdout corruption excluded from acceptance; child-profile raw-RGBA regression test added and passed",
+    "Integrated smoke fixture initially unpacked shell/ one level too deep, yielding missing-state reload errors and a failed selection; invalid fixture run excluded and full-state retry uses the correct shell root."
+  ],
+  "added_system_build_dependencies": [],
+  "added_rust_dependency": {
+    "name": "fast_image_resize",
+    "version": "6.1.0",
+    "license": "MIT OR Apache-2.0",
+    "features": "default std; no Rayon"
+  },
+  "diagnostic_bead": {
+    "measured_source": "c1aa3717b1f95e84abda344b80bc99ebc78a3a3e",
+    "integrated_source": "b18790407a19aa9700ef820ff6707c84afd62165",
+    "result": "FULL_CI_OK",
+    "checks": [
+      "cargo fmt --all --check",
+      "cargo clippy --workspace --all-targets --locked -j2 -- -D warnings",
+      "python3 tools/check-service-boundary.py",
+      "cargo test --workspace --locked -j2",
+      "cargo test -p nacre-shell --features trace --locked -j2 memory_policy::tests::",
+      "cargo check -p nacre-shell --no-default-features --locked -j2",
+      "cargo check --workspace --all-features --locked -j2",
+      "cargo run -p bead --example minimal --locked -j2 -- --check",
+      "cargo build -p nacre-shell --no-default-features --locked -j2; nacre-shell --check shell/ui/main.luau",
+      "python3 tools/check-luau.py --check-generated (Luau 0.740)",
+      "all workflow capture/packaging Python suites",
+      "python3 spikes/wallpaper-video-smoke.py --expect-presentation shm",
+      "python3 spikes/services-check.py",
+      "private-bus tray integration test --ignored --nocapture",
+      "cargo deny check; independent bead-* graphs --all-features using deny-framework.toml"
+    ],
+    "focused_regression": "cargo test -p bead-wayland --locked -j2 staged_wallpaper: 1 passed"
+  },
+  "bead": {
+    "source": "c63acedfcd7459b2bd6b2faa99a5f5efc7af703c",
+    "result": "FULL_CI_OK",
+    "checks": [
+      "cargo fmt --all --check",
+      "cargo clippy --workspace --all-targets --locked -j2 -- -D warnings",
+      "python3 tools/check-service-boundary.py",
+      "cargo test --workspace --locked -j2",
+      "cargo test -p nacre-shell --features trace --locked -j2 memory_policy::tests::",
+      "cargo check -p nacre-shell --no-default-features --locked -j2",
+      "cargo check --workspace --all-features --locked -j2",
+      "cargo run -p bead --example minimal --locked -j2 -- --check",
+      "cargo build -p nacre-shell --no-default-features --locked -j2; nacre-shell --check shell/ui/main.luau",
+      "python3 tools/check-luau.py --check-generated (Luau 0.740)",
+      "all workflow capture/packaging Python suites",
+      "python3 spikes/wallpaper-video-smoke.py --expect-presentation shm",
+      "python3 spikes/services-check.py",
+      "private-bus tray integration test --ignored --nocapture",
+      "cargo deny check; independent bead-* graphs --all-features using deny-framework.toml"
+    ],
+    "focused_regressions": [
+      "cargo fmt --all: passed",
+      "cargo clippy --workspace --all-targets --locked -j2 -- -D warnings: passed",
+      "cargo test -j2 -p bead-wayland: 68 passed",
+      "cargo test -j2 -p nacre-shell wallpaper::tests: 9 passed"
+    ],
+    "prototype_retries": [
+      "Compile/test setup issues corrected before final focused and full passes; one retry-output test used the wrong palette fixture, corrected and rerun."
+    ]
+  },
+  "nacre_cache": {
+    "source": "de848dc24469ce66f01f5068e1c9f9801689a426",
+    "result": "FULL_NACRE_CI_OK",
+    "checks": [
+      "cargo fmt --check",
+      "cargo clippy -j2 --all-targets -- -D warnings",
+      "cargo build -j2 --locked --examples",
+      "cargo test -j2 --quiet",
+      "minimal-consumer cargo run",
+      "cargo build -j2 --locked --release -p nacre-helper --bin nacre-helper",
+      "strict helper parity and immutable snapshot validation",
+      "tools/i18n/check.py and tools/i18n/generate.py",
+      "dbus-run-session -- xvfb-run -a python tools/check.py",
+      "both workflow font audits",
+      "tools/capture-aur-review.py",
+      "NACRE_MEMORY_BINARY=... cargo test -j2 --locked -p nacre-helper --test daemon memory:: -- --ignored --nocapture"
+    ],
+    "retries": [
+      "Complete Rust suite passed after raising container soft fd limit from 1024 to 524288 (existing hard limit); unchanged test parallelism, no skips",
+      "One Dashboard QML timeout passed focused retry and subsequent complete tools/check.py run"
+    ]
+  },
+  "nacre": {
+    "source": "6abe2498a86fc5ce93662f98849c6fc24f06207f",
+    "result": "FULL_NACRE_CI_OK",
+    "checks": [
+      "cargo fmt --check",
+      "cargo clippy -j2 --all-targets -- -D warnings",
+      "cargo build -j2 --locked --examples",
+      "cargo test -j2 --quiet",
+      "minimal-consumer cargo run",
+      "cargo build -j2 --locked --release -p nacre-helper --bin nacre-helper",
+      "strict helper parity and immutable snapshot validation",
+      "tools/i18n/check.py and tools/i18n/generate.py",
+      "dbus-run-session -- xvfb-run -a python tools/check.py",
+      "both workflow font audits",
+      "tools/capture-aur-review.py",
+      "NACRE_MEMORY_BINARY=... cargo test -j2 --locked -p nacre-helper --test daemon memory:: -- --ignored --nocapture"
+    ],
+    "shell_tool_tests": 490,
+    "helper_parity_cases": 534,
+    "helper_parity_failures": 0,
+    "sandbox_integrity_tests": 28,
+    "translation_states_per_language": [
+      244,
+      185
+    ],
+    "official_workflow": "https://github.com/nacre-desktop/nacre/actions/runs/40264901647",
+    "official_status": "completed: success (desktop and fresh-install)",
+    "environment_note": "The first remote build host rejected the user-namespace probe with workflow flags; the full job passed on another remote Arch host with those flags. No host policy changes or skipped sandbox tests."
+  },
+  "diagnostic_v12_bead": {
+    "source": "bd7387d7eeb75a12ba0b3657f36cb21469a04698",
+    "result": "FULL_CI_OK",
+    "checks": [
+      "cargo fmt --all --check",
+      "cargo clippy --workspace --all-targets --locked -j2 -- -D warnings",
+      "python3 tools/check-service-boundary.py",
+      "cargo test --workspace --locked -j2",
+      "cargo test -p nacre-shell --features trace --locked -j2 memory_policy::tests::",
+      "cargo check -p nacre-shell --no-default-features --locked -j2",
+      "cargo check --workspace --all-features --locked -j2",
+      "cargo run -p bead --example minimal --locked -j2 -- --check",
+      "cargo build -p nacre-shell --no-default-features --locked -j2; nacre-shell --check shell/ui/main.luau",
+      "python3 tools/check-luau.py --check-generated (Luau 0.740)",
+      "all workflow capture/packaging Python suites",
+      "python3 spikes/wallpaper-video-smoke.py --expect-presentation shm",
+      "python3 spikes/services-check.py",
+      "private-bus tray integration test --ignored --nocapture",
+      "cargo deny check; independent bead-* graphs --all-features using deny-framework.toml"
+    ],
+    "focused_regression": "cargo test -p nacre-shell --locked -j2 wallpaper_: 26 passed on retry; new hydration test setup corrected after two assertion failures",
+    "retries": [
+      "First full job stopped because transferred sources were uncommitted in the disposable checkout; complete mirror passed after committing the identical validation tree"
+    ]
+  },
+  "historical_v13_bead": {
+    "source": "7b0d2e4de822d0ed0c36da52c6506ab139cfe8de",
+    "result": "FULL_CI_OK",
+    "checks": [
+      "cargo fmt --all --check",
+      "cargo clippy --workspace --all-targets --locked -j2 -- -D warnings",
+      "python3 tools/check-service-boundary.py",
+      "cargo test --workspace --locked -j2",
+      "cargo test -p nacre-shell --features trace --locked -j2 memory_policy::tests::",
+      "cargo check -p nacre-shell --no-default-features --locked -j2",
+      "cargo check --workspace --all-features --locked -j2",
+      "cargo run -p bead --example minimal --locked -j2 -- --check",
+      "cargo build -p nacre-shell --no-default-features --locked -j2; nacre-shell --check shell/ui/main.luau",
+      "python3 tools/check-luau.py --check-generated (Luau 0.740)",
+      "all workflow capture/packaging Python suites",
+      "python3 spikes/wallpaper-video-smoke.py --expect-presentation shm",
+      "python3 spikes/services-check.py",
+      "private-bus tray integration test --ignored --nocapture",
+      "cargo deny check; independent bead-* graphs --all-features using deny-framework.toml"
+    ],
+    "focused_regression": "cargo clippy --workspace --all-targets --locked -j2 -- -D warnings and cargo test -p bead-wayland --locked -j2 passed before full mirror"
+  },
+  "integrated_bead": {
+    "source": "588d9506ab500eba088a411f77d8aabe51ce4d5b",
+    "result": "FULL_CI_OK",
+    "checks": [
+      "cargo fmt --all --check",
+      "cargo clippy --workspace --all-targets --locked -j2 -- -D warnings",
+      "python3 tools/check-service-boundary.py",
+      "cargo test --workspace --locked -j2",
+      "cargo test -p nacre-shell --features trace --locked -j2 memory_policy::tests::",
+      "cargo check -p nacre-shell --no-default-features --locked -j2",
+      "cargo check --workspace --all-features --locked -j2",
+      "cargo run -p bead --example minimal --locked -j2 -- --check",
+      "cargo build -p nacre-shell --no-default-features --locked -j2; nacre-shell --check shell/ui/main.luau",
+      "python3 tools/check-luau.py --check-generated (Luau 0.740)",
+      "all workflow capture/packaging Python suites",
+      "python3 spikes/wallpaper-video-smoke.py --expect-presentation shm",
+      "python3 spikes/services-check.py",
+      "private-bus tray integration test --ignored --nocapture",
+      "cargo deny check; independent bead-* graphs --all-features using deny-framework.toml",
+      "python3 -m unittest discover -s spikes/tests -p test_scrolling_proof.py"
+    ],
+    "integration_retries": [
+      "Initial rebase compile failed because new native window/overlay PresentationData initializers lacked visibility; fixed with neutral zero epochs and reran all checks."
+    ],
+    "official": {
+      "source": "588d9506ab500eba088a411f77d8aabe51ce4d5b",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 40287010521,
+      "url": "https://github.com/nacre-desktop/bead/actions/runs/40287010521"
+    }
+  },
+  "diagnostic_v16_bead": {
+    "source": "01d54f51d1a320a54083bc0141c56115209f617a",
+    "result": "FULL_CI_OK",
+    "checks": [
+      "cargo fmt --all --check",
+      "cargo clippy --workspace --all-targets --locked -j2 -- -D warnings",
+      "python3 tools/check-service-boundary.py",
+      "cargo test --workspace --locked -j2",
+      "cargo test -p nacre-shell --features trace --locked -j2 memory_policy::tests::",
+      "cargo check -p nacre-shell --no-default-features --locked -j2",
+      "cargo check --workspace --all-features --locked -j2",
+      "cargo run -p bead --example minimal --locked -j2 -- --check",
+      "cargo build -p nacre-shell --no-default-features --locked -j2; nacre-shell --check shell/ui/main.luau",
+      "python3 tools/check-luau.py --check-generated (Luau 0.740)",
+      "all workflow capture/packaging Python suites",
+      "python3 spikes/wallpaper-video-smoke.py --expect-presentation shm",
+      "python3 spikes/services-check.py",
+      "private-bus tray integration test --ignored --nocapture",
+      "cargo deny check; independent bead-* graphs --all-features using deny-framework.toml"
+    ],
+    "focused_regression": "cargo test --locked -j2 -p bead-render image_: 9 passed"
+  },
+  "diagnostic_integrated_bead": {
+    "source": "2f7ef63cdb57f173a7fbc75f4686c604f202d09a",
+    "result": "FULL_CI_OK",
+    "checks": [
+      "cargo fmt --all --check",
+      "cargo clippy --workspace --all-targets --locked -j2 -- -D warnings",
+      "python3 tools/check-service-boundary.py",
+      "cargo test --workspace --locked -j2",
+      "cargo test -p nacre-shell --features trace --locked -j2 memory_policy::tests::",
+      "cargo check -p nacre-shell --no-default-features --locked -j2",
+      "cargo check --workspace --all-features --locked -j2",
+      "cargo run -p bead --example minimal --locked -j2 -- --check",
+      "cargo build -p nacre-shell --no-default-features --locked -j2; nacre-shell --check shell/ui/main.luau",
+      "python3 tools/check-luau.py --check-generated (Luau 0.740)",
+      "all workflow capture/packaging Python suites",
+      "python3 spikes/wallpaper-video-smoke.py --expect-presentation shm",
+      "python3 spikes/services-check.py",
+      "private-bus tray integration test --ignored --nocapture",
+      "cargo deny check; independent bead-* graphs --all-features using deny-framework.toml",
+      "python3 -m unittest discover -s spikes/tests -p test_scrolling_proof.py"
+    ]
+  }
+}

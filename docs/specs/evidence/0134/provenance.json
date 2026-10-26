@@ -1,0 +1,200 @@
+{
+  "status": "five-pair measured review candidate; video picker and expired warm feedback gates fail",
+  "control": {
+    "bead": "d58dfc677d88572dbef4c8e17dfff74fc05f3474",
+    "nacre": "c9adf0f4b29a22a3f9cafeb91447c67828a76959",
+    "sha256": {
+      "nacre-shell": "3616394f8d0737f0f12e26f9a411584514323c297f5dedaf66b979500ef23e39",
+      "nacre-wallpaper-decode": "8e44ed0a99eeaaca9420237fab6762cea0c83c2c495be372380a64db3717caba",
+      "bead-wallpaper-video": "14ab8fbf7e02ff535ab96812ec7e7413c8116a09e88d8633749f0573d73e1212",
+      "nacre-helper": "56038e4af0fa2fb50e67e50c3316da453ed63a373b7c937539ae5f60f7e65ebe"
+    }
+  },
+  "candidate": {
+    "measured_bead": "c63acedfcd7459b2bd6b2faa99a5f5efc7af703c",
+    "nacre": "6abe2498a86fc5ce93662f98849c6fc24f06207f",
+    "sha256": {
+      "nacre-shell": "d6ea012c069f6607e7b9f16596f7d4f0b4baaa30be08b1ebf9a773239796befe",
+      "nacre-wallpaper-decode": "ddbfd4b21eba5d636bd09c2394694ce20ae92b948bd45735267f5c25936690ec",
+      "bead-wallpaper-video": "1b3b69ba1f70de00242a63b1138c95d3fb87bb628ae2144ad80495b378bdaf4c",
+      "nacre-helper": "f5ac9b2f810f86cf44ab754bc41f5cd749dee978a1483aeca06f500aa294ff52"
+    },
+    "status": "full frozen/integrated and official CI pass; five frozen alternating pairs complete, valid misses retained; sampled visual review complete",
+    "integrated_bead": "588d9506ab500eba088a411f77d8aabe51ce4d5b",
+    "integration_note": "Rebased only this unit onto cb3de7e3 shared scrolling/raster-budget work. Added neutral visibility epochs to its new native-window/overlay feedback initializers. Frozen five-pair source remains c63acedf; integrated full CI and targeted capture are separate evidence.",
+    "summary": "final18-summary.json",
+    "integrated_sha256": {
+      "bead-wallpaper-video": "1b3b69ba1f70de00242a63b1138c95d3fb87bb628ae2144ad80495b378bdaf4c",
+      "nacre-helper": "f5ac9b2f810f86cf44ab754bc41f5cd749dee978a1483aeca06f500aa294ff52",
+      "nacre-shell": "6b5af82a2f98c01531d96ce683f01e59f8d44967f6a94b79b15ec4afdca437b0",
+      "nacre-wallpaper-decode": "ddbfd4b21eba5d636bd09c2394694ce20ae92b948bd45735267f5c25936690ec",
+      "swaybg": "5becb0ae9dccbddf9d5bbc0c0fbcddfde9fba76a3987766434c126fc7b9ef6f0"
+    },
+    "integrated_smoke": {
+      "source": "588d9506ab500eba088a411f77d8aabe51ce4d5b",
+      "status": "all five states complete; fixture-misrooted first attempt excluded",
+      "static_wallpaper_bar_ms": 116.911,
+      "static_picker_ms": 120.512,
+      "video_wallpaper_bar_ms": 147.061,
+      "video_picker_ms": 150.468,
+      "closed_static_retained_above_idle_mib": 29.5634765625,
+      "warm_expired_draw_ms": 12.535851,
+      "warm_expired_feedback_ms": 18.059097,
+      "limit": "one integrated smoke, not a substituted five-pair cohort"
+    }
+  },
+  "method": {
+    "build": "cargo build --release --locked -j2; remote Arch container",
+    "backend": "CPU bar, femtovg GL picker; one shared GL context",
+    "geometry": "private nested 2880x1800 at scale 1.5",
+    "pacing": "synthetic 120 Hz; refresh_ns=0; no physical scanout claim",
+    "order": "five alternating control/candidate pairs",
+    "states": [
+      "spotlight-cold",
+      "spotlight-repeat",
+      "spotlight-expired",
+      "palette-sync",
+      "wallpaper-format-mp4"
+    ],
+    "fixture": "five generated static wallpapers plus one generated MP4; separate HOME per arm; static retention sampled before video activation",
+    "retention": "UI unreclaimable after close minus own never-opened idle; absolute totals and paired deltas also reported",
+    "unreclaimable": "Pss_Anon + Pss_Shmem + DRM + SwapPss; clean file-backed PSS informational",
+    "close_grace_seconds": 2,
+    "settle_seconds": 3,
+    "expired_seconds": 125,
+    "selection_clock": "button release; press hold and pointer approach recorded separately",
+    "containment": "private scope, per-command shared capture lock, swap preflight and capture safety guards; no live UI changes"
+  },
+  "reproduction": "Apply final-measured-bead.patch to control d58dfc67 for complete measured V18 source including goldens. diagnostic16-measured-bead.patch applies to ef7d6aa3; integrated-bead.patch applies to cb3de7e3 for the integrated 588d9506 source. Older measured-bead.patch is C1 with its own base; diagnostic-v12-delta.patch maps historical V13 to V12. measured-nacre.patch reconstructs the earlier pre-integration helper cache.",
+  "production_lines": {
+    "bead_added": 2611,
+    "bead_removed": 364,
+    "nacre_added": 410,
+    "nacre_removed": 90,
+    "files_removed": 0,
+    "product_files": 23
+  },
+  "limits": [
+    "No absolute laptop memory acceptance",
+    "Daemon/provider memory is separate",
+    "No proof of unsampled physical frames"
+  ],
+  "diagnostics": {
+    "V10_pair1": {
+      "control_bead": "e2d95769",
+      "candidate_bead": "805efcdf",
+      "candidate_retained_above_idle_mib": 28.713,
+      "cold_presented_ms": 111.843,
+      "warm_first_draw_ms": 9.911,
+      "wallpaper_and_bar_presented_ms": 146.713,
+      "picker_presented_ms": 150.134,
+      "status": "excluded from acceptance; joint target missed, cohort stopped after one pair"
+    },
+    "C1": {
+      "control": {
+        "bead": "3747103bfea43889b208ba1a8968748be589f8a1",
+        "nacre": "37583d61928368bc22a46aa806fd0a2e06cfee55",
+        "sha256": {
+          "nacre-shell": "adec0daceef313ec627640e063f41b36b244ac58cc03d03df3ac8ea422f8f38f",
+          "nacre-wallpaper-decode": "8e44ed0a99eeaaca9420237fab6762cea0c83c2c495be372380a64db3717caba",
+          "bead-wallpaper-video": "14ab8fbf7e02ff535ab96812ec7e7413c8116a09e88d8633749f0573d73e1212",
+          "nacre-helper": "a565a1bf4037aad3b9363384b497302a734def63e0239a9e523e69e964bdf6f0"
+        }
+      },
+      "candidate": {
+        "measured_bead": "c1aa3717b1f95e84abda344b80bc99ebc78a3a3e",
+        "integrated_bead": "b18790407a19aa9700ef820ff6707c84afd62165",
+        "nacre_changes_published": "de848dc24469ce66f01f5068e1c9f9801689a426",
+        "sha256": {
+          "nacre-shell": "f08694640ea2f832a2476a11edf71e32a0b6da09730bc3c199dc106d9e876a5e",
+          "nacre-wallpaper-decode": "a2d4901d6f6e49e08d9ebc5b735373612515ddfb16142a6a8e0140a38f6076cf",
+          "bead-wallpaper-video": "74e068fee4382f25d051cc45cdb1dc1def5991e05ebdafdd61796447d250fa19",
+          "nacre-helper": "76ebae01f0a5069e037a02c3e9a0c25832a20cf5880e78fa20294946509ecb44"
+        },
+        "measured_nacre_base": "37583d61928368bc22a46aa806fd0a2e06cfee55",
+        "nacre_reproduction": "Apply measured-nacre.patch to measured_nacre_base. The changed wallpaper_media.rs blob is identical on the published/integrated de848dc2 source.",
+        "integration_note": "Rebased onto 8d2d1c49; incoming changes cover edge hover, backdrop input regions, dashboard release actions and documentation. Wallpaper staging/decoding/resource-retirement code is unchanged; full integrated CI repeated separately."
+      },
+      "status": "three valid diagnostic pairs; excluded from final acceptance; video handoff subsequently fixed"
+    },
+    "V12": {
+      "candidate": {
+        "measured_bead": "bd7387d7eeb75a12ba0b3657f36cb21469a04698",
+        "nacre": "6abe2498a86fc5ce93662f98849c6fc24f06207f",
+        "sha256": {
+          "nacre-shell": "10b64390932cda9e5f501244c4df58c186cf709c8cc48c4866d6b9dc9965e420",
+          "nacre-wallpaper-decode": "96c264a858b565cc297e778c68524a737176735e946abc81fb553e33eaecb391",
+          "bead-wallpaper-video": "1b3b69ba1f70de00242a63b1138c95d3fb87bb628ae2144ad80495b378bdaf4c",
+          "nacre-helper": "f5ac9b2f810f86cf44ab754bc41f5cd749dee978a1483aeca06f500aa294ff52"
+        }
+      },
+      "video_wallpaper_bar_ms": 155.343,
+      "video_picker_palette_ms": 158.507,
+      "status": "excluded from acceptance; redundant grouped panel palette notification subsequently removed"
+    },
+    "V13": {
+      "candidate": {
+        "measured_bead": "7b0d2e4de822d0ed0c36da52c6506ab139cfe8de",
+        "nacre": "6abe2498a86fc5ce93662f98849c6fc24f06207f",
+        "sha256": {
+          "nacre-shell": "3cb5931c4418b3a7df3b039731576cad2883b70a186e368b66435c950d13eff6",
+          "nacre-wallpaper-decode": "96c264a858b565cc297e778c68524a737176735e946abc81fb553e33eaecb391",
+          "bead-wallpaper-video": "1b3b69ba1f70de00242a63b1138c95d3fb87bb628ae2144ad80495b378bdaf4c",
+          "nacre-helper": "f5ac9b2f810f86cf44ab754bc41f5cd749dee978a1483aeca06f500aa294ff52"
+        }
+      },
+      "status": "historical full-CI source; single and paired timing probes only, no five-pair acceptance",
+      "single_video_wallpaper_bar_ms": 141.828,
+      "single_video_picker_ms": 145.217,
+      "paired_video_wallpaper_bar_ms": 157.57,
+      "paired_video_picker_ms": 160.783
+    },
+    "V14": {
+      "bead": "3c635a59f62c7af4f34301e780acbfd5ffafea22",
+      "static_wallpaper_bar_ms": 163.455,
+      "static_picker_ms": 166.957,
+      "video_wallpaper_bar_ms": 135.151,
+      "video_picker_ms": 138.574,
+      "status": "full CI passed; static timing failed; excluded from acceptance"
+    },
+    "V15": {
+      "bead": "c0b04c5d4a7731a5b28031ff81dd5555f210f095",
+      "static_wallpaper_bar_ms": 165.195,
+      "static_picker_ms": 167.971,
+      "video_wallpaper_bar_ms": 135.025,
+      "video_picker_ms": 138.058,
+      "status": "full CI passed; stable UI IDs alone did not remove extent rebakes; excluded from acceptance"
+    },
+    "V16_probe": {
+      "bead": "01d54f51d1a320a54083bc0141c56115209f617a",
+      "static_wallpaper_bar_ms": 140.972,
+      "static_picker_ms": 144.372,
+      "video_wallpaper_bar_ms": 156.74,
+      "video_picker_ms": 159.99,
+      "status": "valid combined probe, video missed; separate from five-pair distribution"
+    },
+    "V16_five_pair": {
+      "candidate": {
+        "measured_bead": "01d54f51d1a320a54083bc0141c56115209f617a",
+        "nacre": "6abe2498a86fc5ce93662f98849c6fc24f06207f",
+        "sha256": {
+          "nacre-shell": "eeb84efd5cfad8cd2a532bbbbaefff2c9f4edb4aec4256b3b79cc8c162c29fd8",
+          "nacre-wallpaper-decode": "ddbfd4b21eba5d636bd09c2394694ce20ae92b948bd45735267f5c25936690ec",
+          "bead-wallpaper-video": "1b3b69ba1f70de00242a63b1138c95d3fb87bb628ae2144ad80495b378bdaf4c",
+          "nacre-helper": "f5ac9b2f810f86cf44ab754bc41f5cd749dee978a1483aeca06f500aa294ff52"
+        },
+        "status": "superseded five-pair diagnostic; full CI passed",
+        "integrated_bead": "2f7ef63cdb57f173a7fbc75f4686c604f202d09a",
+        "integration_note": "Rebased onto d58dfc67; incoming native-Pearl idle prewarm requires prepared_native, absent on wallpaper picker. Added two profiling marks around unchanged activation confirmation. Full integrated CI and targeted proof are separate from frozen pair source.",
+        "integrated_sha256": {
+          "nacre-shell": "6582664235e3480bf28d738511942aac72f286afb678a3224f8095eb7ca12276",
+          "nacre-wallpaper-decode": "ddbfd4b21eba5d636bd09c2394694ce20ae92b948bd45735267f5c25936690ec",
+          "bead-wallpaper-video": "1b3b69ba1f70de00242a63b1138c95d3fb87bb628ae2144ad80495b378bdaf4c",
+          "nacre-helper": "f5ac9b2f810f86cf44ab754bc41f5cd749dee978a1483aeca06f500aa294ff52"
+        }
+      },
+      "summary": "diagnostic16-summary.json",
+      "status": "5 valid alternating pairs: retention/cold/warm-draw/static pass; video median 153.053/156.482ms fails; superseded pipeline"
+    }
+  }
+}
