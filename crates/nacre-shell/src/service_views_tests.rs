@@ -722,6 +722,228 @@ fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
 }
 
 #[test]
+fn workspace_icon_cells_share_one_bar_pill_at_both_scales() -> Result<()> {
+    for scale in [1., 1.5] {
+        let mut values = super::initial_models()?;
+        values.insert(
+            "bead.workspaces".into(),
+            Value::list(vec![
+                serde_json::json!({"id":"one","index":1,"label":"1","active":true,"icon_mode":true}),
+                serde_json::json!({"id":"apps","index":2,"label":"","icon":"apps","icon_mode":true}),
+                serde_json::json!({"id":"two","index":3,"label":"2","icon_mode":true}),
+            ]),
+        );
+        let mut h = Harness::load(
+            &root(),
+            Path::new("bar/main.luau"),
+            &root().join("palette.json"),
+            values,
+            Config {
+                width: 1920,
+                height: 50,
+                scale,
+            },
+        )?;
+        settle_harness_animations(&mut h)?;
+        assert!(
+            h.scene()
+                .layers
+                .iter()
+                .any(|layer| layer.id.ends_with("active-capsule")),
+            "workspace row must expose one shared active capsule"
+        );
+        assert_eq!(
+            h.session
+                .view_nodes()
+                .iter()
+                .filter(|node| node.action.as_deref() == Some("backend.workspace.switch"))
+                .count(),
+            3,
+            "each workspace remains independently clickable"
+        );
+        let frame = h.pose((0., 0.), 1.)?;
+        let golden = root()
+            .join("tests/goldens")
+            .join(format!("workspaces-pill-{scale}.png"));
+        if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+            frame.save(&golden)?;
+        }
+        frame.compare(
+            &golden,
+            bead_test::Tolerance::default(),
+            &std::env::temp_dir().join(format!("bead-workspaces-pill-{scale}")),
+        )?;
+
+        let mut targets: Vec<_> = h
+            .session
+            .view_nodes()
+            .iter()
+            .filter(|node| node.action.as_deref() == Some("backend.workspace.switch"))
+            .map(|node| bead::ui::rect(&node.draw))
+            .collect();
+        targets.sort_by(|a, b| a.x.total_cmp(&b.x));
+        let rect = *targets.get(1).ok_or("workspace hover target missing")?;
+        h.script([Input::Pointer {
+            x: rect.x + rect.w / 2.,
+            y: rect.y + rect.h / 2.,
+        }])?;
+        let hover = h.pose((0., 0.), 1.)?;
+        let golden = root()
+            .join("tests/goldens")
+            .join(format!("workspaces-pill-hover-{scale}.png"));
+        if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+            hover.save(&golden)?;
+        }
+        hover.compare(
+            &golden,
+            bead_test::Tolerance::default(),
+            &std::env::temp_dir().join(format!("bead-workspaces-pill-hover-{scale}")),
+        )?;
+
+        let capsule_bounds = |h: &Harness| -> Result<(f32, f32)> {
+            let layer = h
+                .scene()
+                .layers
+                .iter()
+                .find(|layer| layer.id.ends_with("active-capsule"))
+                .ok_or("active workspace capsule layer missing")?;
+            h.scene().primitives[layer.own.clone()]
+                .iter()
+                .find_map(|primitive| match primitive {
+                    bead::render::Primitive::Rounded { rect, .. } => Some((rect.x, rect.w)),
+                    _ => None,
+                })
+                .ok_or_else(|| "active workspace capsule geometry missing".into())
+        };
+        let pill_width = |h: &Harness| -> Result<f32> {
+            let layer = h
+                .scene()
+                .layers
+                .iter()
+                .find(|layer| {
+                    layer.id.ends_with("capsule") && !layer.id.ends_with("active-capsule")
+                })
+                .ok_or("workspace pill layer missing")?;
+            h.scene().primitives[layer.own.clone()]
+                .iter()
+                .find_map(|primitive| match primitive {
+                    bead::render::Primitive::Rounded { rect, .. } => Some(rect.w),
+                    _ => None,
+                })
+                .ok_or_else(|| "workspace pill geometry missing".into())
+        };
+        let move_capsule = |h: &mut Harness, model: Vec<serde_json::Value>| -> Result<()> {
+            h.update(BTreeMap::from([(
+                "bead.workspaces".into(),
+                Value::list(model),
+            )]))?;
+            assert!(
+                h.session.preview_deadline().is_some(),
+                "workspace position or width change must animate"
+            );
+            Ok(())
+        };
+        let before_switch = capsule_bounds(&h)?;
+        move_capsule(
+            &mut h,
+            vec![
+                serde_json::json!({"id":"one","index":1,"label":"1","occupied":true,"icon_mode":false}),
+                serde_json::json!({"id":"two","index":2,"label":"2","active":true,"icon_mode":false}),
+                serde_json::json!({"id":"three","index":3,"label":"3","icon_mode":false}),
+            ],
+        )?;
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        h.update(BTreeMap::new())?;
+        let switch_mid = capsule_bounds(&h)?;
+        assert!(
+            switch_mid.0 > before_switch.0 && switch_mid.0 < before_switch.0 + 34.,
+            "active capsule must travel between workspace cells: {before_switch:?} -> {switch_mid:?}"
+        );
+        assert!(
+            switch_mid.1 < before_switch.1 && switch_mid.1 > 32.,
+            "active capsule width must resize with changing window hints"
+        );
+        settle_harness_animations(&mut h)?;
+
+        let before_add = capsule_bounds(&h)?;
+        let pill_before_add = pill_width(&h)?;
+        move_capsule(
+            &mut h,
+            vec![
+                serde_json::json!({"id":"one","index":1,"label":"1","icon_mode":false}),
+                serde_json::json!({"id":"two","index":2,"label":"2","icon_mode":false}),
+                serde_json::json!({"id":"three","index":3,"label":"3","icon_mode":false}),
+                serde_json::json!({"id":"four","index":4,"label":"4","active":true,"icon_mode":false}),
+            ],
+        )?;
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        h.update(BTreeMap::new())?;
+        let add_mid = capsule_bounds(&h)?;
+        let pill_add_mid = pill_width(&h)?;
+        assert!(
+            add_mid.0 > before_add.0 + 1.,
+            "new workspace must not make the active capsule jump directly to its slot"
+        );
+        assert!(
+            pill_add_mid > pill_before_add + 1.,
+            "outer pill width must animate as a workspace is added"
+        );
+        settle_harness_animations(&mut h)?;
+        let pill_after_add = pill_width(&h)?;
+        assert!(
+            pill_after_add > pill_add_mid,
+            "outer pill finishes its width expansion"
+        );
+        assert_eq!(
+            h.session
+                .view_nodes()
+                .iter()
+                .filter(|node| node.action.as_deref() == Some("backend.workspace.switch"))
+                .count(),
+            4,
+            "new workspace cell appears in the repeated row"
+        );
+
+        let before_remove = capsule_bounds(&h)?;
+        let pill_before_remove = pill_width(&h)?;
+        move_capsule(
+            &mut h,
+            vec![
+                serde_json::json!({"id":"one","index":1,"label":"1","occupied":true,"shown":1,"hinted":true,"app1":"apps","icon_mode":false}),
+                serde_json::json!({"id":"two","index":2,"label":"2","active":true,"icon_mode":false}),
+            ],
+        )?;
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        h.update(BTreeMap::new())?;
+        let remove_mid = capsule_bounds(&h)?;
+        let pill_remove_mid = pill_width(&h)?;
+        assert!(
+            remove_mid.0 < before_remove.0 && remove_mid.0 > before_remove.0 - 68.,
+            "removing workspaces moves the active capsule smoothly to a remaining cell"
+        );
+        assert!(
+            pill_remove_mid < pill_before_remove,
+            "outer pill width must begin shrinking as workspaces are removed"
+        );
+        settle_harness_animations(&mut h)?;
+        assert!(
+            pill_width(&h)? < pill_remove_mid,
+            "outer pill finishes its width contraction"
+        );
+        assert_eq!(
+            h.session
+                .view_nodes()
+                .iter()
+                .filter(|node| node.action.as_deref() == Some("backend.workspace.switch"))
+                .count(),
+            2,
+            "removed workspace cell leaves the repeated row"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn status_pill_click_routes_switch_escape_and_reopen() -> Result<()> {
     use bead::wayland::{SceneSource, UiEvent};
     use std::sync::{Arc, Mutex};

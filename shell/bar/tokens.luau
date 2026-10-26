@@ -10,6 +10,7 @@ return {
     status_ink={package=44/3,audio=44/3,network=16,bluetooth=10,battery=8,notifications=40/3,calendar=44/3,power=52/3},
     status_symbol_ink={wifi_off=56/3,battery_unknown=16},
     status_text_offset=0, clock_text_offset=2/3,
+    pill_height=34, pill_radius=17,
     workspace_height=30, workspace_radius=15, active_height=28, active_radius=14, app_font=14,
     pearl_current=22, pearl_occupied=20, pearl_empty=18,
     pearl_current_border=1, pearl_empty_border=1.5,
