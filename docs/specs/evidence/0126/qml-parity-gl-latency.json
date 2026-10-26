@@ -1,0 +1,24 @@
+{
+  "arms": {
+    "candidate-gl-120-bead-direct-labwc-parent": {
+      "n": 181,
+      "p50": 10.490546,
+      "p95": 11.921125,
+      "p99": 12.063285,
+      "hz": 120,
+      "arm": "bead",
+      "phase": "candidate",
+      "p99_two_frames": true,
+      "source_hashes": {
+        "nacre_shell": "e36cd77c94a193e05e6d2bed2e62337fda10dfbf4c74383da193aaa3d289cd0b",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+        "bead_shell_tree": "37be1bfd01888c0f8b31079c45b493fcb5fdda046c209c92e5f39cdce3feaaff",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "3e0ae9878b40576dbe7014253d0b7dce94509b7cecfa0a6ad62602bf7929f640",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      }
+    }
+  }
+}

@@ -1,5 +1,51 @@
 # B0126 validation record
 
+
+## QML-relative continuation through ef9d5c01
+
+Each step ran `RUST_TEST_THREADS=2 nice -n 10 bash /task/ci-canonical.sh`
+in the remote Arch container, Rust 1.99.0 and Cargo `-j2`: fmt, clippy `-D warnings`,
+workspace/trace tests, all/no-default-feature checks, facade/Luau checks, every
+workflow spike/packaging/lifecycle probe, and cargo-deny including independent
+framework graphs. All five final canonical logs end `CI_ALL_OK`, exit zero.
+The stage 5 validation tree matches **every** tracked blob in `ef9d5c01`, with
+only an additional archive `REVISION` file. The source/renderer inputs and
+actuator are frozen before/after every arm.
+
+| Shipped step | Exact-commit GitHub CI |
+| --- | --- |
+| `6528a057` prepared raster retention | [pass](https://github.com/nacre-desktop/bead/actions/runs/40255714748) |
+| `8486ac8f` live label | [pass](https://github.com/nacre-desktop/bead/actions/runs/40256013514) |
+| `27580f9a` placement/flush | [pass](https://github.com/nacre-desktop/bead/actions/runs/40260158065) |
+| `bb054fa2` active GL handoff | [pass](https://github.com/nacre-desktop/bead/actions/runs/40260882205) |
+| `ef9d5c01` GPU input activity clock | [pass, attempt 2](https://github.com/nacre-desktop/bead/actions/runs/40261814242/attempts/2) |
+
+The final job's first attempt failed the unrelated Widgets initial-search
+spawn-reply assertion. The error payload was not printed, so its cause is
+unproven; the unchanged-source rerun passed. No runtime deadline or assertion
+was relaxed. Earlier development Clippy/test-order failures were corrected
+before their steps shipped. Two GL diagnostic arms were rejected after CPU
+fallback; the final GL arm passes the unchanged backend guard. A proof wrapper
+pointing at an older build was stopped after its QML arm, excluded, corrected,
+and the complete final paired proof rerun.
+
+Timing uses three predeclared alternating QML/Bead pairs per rate, every one of
+twelve gestures retained, 2000 physical px/s, queried 2880×1800 at scale 1.5.
+Exact event/state/frame joins and nearest-rank percentiles are recorded in
+`qml-parity-latency*.json`. Screenshot arms are separate; their stress tails and
+the earlier datasets remain available. All final arms pass source, full-window,
+geometry, containment, memory-watchdog, host swap-in and process SwapPss guards.
+Five alternating memory pairs and the 320-app/64-row first-key fixture retain
+component accounting and stable source hashes in `qml-parity-memory.json`.
+Physical scanout/niri-output, Intel and the laptop absolute memory cap are not
+accepted by these synthetic captures.
+
+Private raw archive SHA-256 (retained by the lead): CI/logs/binaries
+`4ffe9eef5d94b9128a1315001ba48cc9b2c31e57994de33d77092d7d7b9b8aca`;
+full desktop evidence/tools/binaries
+`526140289dabc621c9201c8eeed8de61c5fb4523876627aee07d2575e2c6ba2b`.
+
+
 ## Shipped continuation
 
 The baseline and rejected-patch rows below are historical. The owner subsequently

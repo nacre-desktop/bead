@@ -20,6 +20,26 @@ Final search-results UI CPU remains 10.917 ms median; the 8 ms gate above measur
 Startup excursions exceed 4 MiB; acceptance uses five-pair phase medians, not peak residency.
 No live/laptop-cap or physical scanout acceptance is claimed.
 
+## 2026-10-26 — B0126 QML-relative drag gates
+
+The first drag rebuilt a frame image and 59 text layers; cached rasters cut its masked frame from 12.095 to 0.562 ms.
+Local labels avoid layout, and unchanged placement no longer emits redundant parent commits.
+Three alternating pairs per rate pass the latest QML-relative p95 and two-frame p99 gates.
+Shared fill/handle paints and separate home/Sound visual samples agree; controls retain the cheaper CPU default.
+All five source steps passed full remote Arch and exact-commit GitHub CI.
+
+| Direct private CPU proxy | Bead p95 / p99 | QML p95 | Gate |
+| --- | ---: | ---: | --- |
+| 60 Hz, 3 pairs | 26.271 / 26.517 ms | 26.801 ms | pass |
+| 120 Hz, 3 pairs | 11.764 / 11.875 ms | 11.823 ms | pass |
+| Native AMD GL120 | 11.921 / 12.063 ms | 11.823 ms | CPU preferred |
+
+Five-pair unreclaimable deltas idle/open/post-drag/closed are −0.055/+0.156/−0.867/+0.270 MiB (all ≤+0.5 MiB).
+Fixture first-key CPU is 7.110 ms; native home/Sound poses agree 384/384 and sampled frames 84/84 per implementation.
+Timing uses queried 2880×1800 scale 1.5 synthetic labwc feedback, not physical niri scanout.
+Intel/laptop latency, absolute laptop memory, general cursor-error superiority and complete page parity remain unmeasured.
+[All samples, earlier regressions, source provenance and paired images](docs/specs/0126-instant-drag.md).
+
 ## 2026-10-26 — B0126 shared slider paint and local values
 
 Fill and handle now share one value and one small buffer, preventing independent lag.

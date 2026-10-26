@@ -55,37 +55,29 @@ private interaction captures pass. Five-pair CPU unreclaimable deltas pass the
 +0.5 MiB gate: idle +0.168, open +0.117, closed +0.066 MiB (unit-only snapshot).
 [Evidence and remaining parity limits](specs/0132-today-controls.md). No live change.
 
-## 2026-10-25 — B0126 compositor slider drag (owner accepted)
+## 2026-10-26 — B0126 instant drag shipped through ef9d5c01
 
-The visible compositor-moved thumb reduces nested CPU p95 input→feedback from
-72.86 to 56.77 ms at synthetic 60 Hz and 43.62 to 35.87 ms at 120 Hz, but misses
-the 21/12 ms gates. The existing renderer already submits when a frame is free.
-The owner accepted the candidate; the thumb path is now enabled by default.
-The continuation targets immediate dispatch, shared fill/handle pose and local
-slider updates, with a revised 120 Hz total p95 ≤25 ms gate.
-The first continuation handles established drag motion directly on Wayland event
-dispatch and submits the latest pose after fd drain; full Arch CI passes. Fresh
-matched timing records no end-to-end improvement (35.863→35.869 ms p95).
-Shared fill and handle now use one value/buffer; pixel and full Arch CI checks
-pass. Presented shared paints agree exactly (94/94); cursor-free coherence is
-41/41 samples, versus the old thumb-only path's 30/41 and QML's 41/41.
-Local control/sound values now skip view projection and layout; service calls
-continue independently. Full Arch and exact-commit GitHub CI pass. Final CPU
-total p50/p95 improves to 26.499/33.217 ms across five matched pairs; the 25 ms nested gate still fails.
-Steady dispatch→commit p95 is 0.081 ms; first-pose atomic map/mask still costs
-11.935 ms p95, followed by about 16 ms nested compositor latency. Final fill
-and handle agree in all 106 paints and 41/41 cursor-free samples. Five-pair CPU
-unreclaimable deltas pass: idle/open/post-drag/closed −0.055/−0.301/−0.324/−0.168 MiB.
-Fresh fixture first-key CPU passes 8 ms: 7.102 ms control / 7.070 ms final.
-On the verified direct private headless 120 Hz output, total CPU p50/p95 improves
-from 16.447/18.779 to 10.548/17.291 ms, passing the revised 25 ms proxy gate.
-All 181 shared paints and 41/41 samples agree; physical niri acceptance remains open.
-State-verified QML is faster on this direct proxy, 10.326/11.979 ms p50/p95.
-Five-pair median costs peak at +0.711 MiB CPU / +0.914 MiB pinned GL,
-within the declared 1 MiB budget; absolute GL retention is substantial. Pixel
-error, general dragging and complete smoothness remain unproven.
-[Stages, GL/memory results, excluded attempts and validation](specs/0126-instant-drag.md).
-No live deployment or physical-output/laptop-cap acceptance.
+The integrated CPU build passes the current QML-relative gate across three
+alternating pairs per rate: Bead p95 26.271/11.764 ms at 60/120 Hz versus QML
+26.801/11.823 ms. Bead p99 is 26.517/11.875 ms, within two frames. The first
+masked frame falls from 12.095 to 0.562 ms by preserving the generated frame
+image and text rasters; unchanged placement commits and delayed local-value
+flushes are removed. Local labels skip Luau/layout; shared fill and handle agree
+in all 384 recorded visual paints and 84/84 samples per implementation.
+
+Five-pair CPU unreclaimable deltas are −0.055/+0.156/−0.867/+0.270 MiB across
+idle/open/post-drag/closed, within +0.5 MiB and the 1 MiB feature budget. Fresh
+fixture first-key CPU is 7.110 ms, below 8 ms. Native AMD GL p95 11.921 ms is
+slower here; controls keep their CPU default. All five stages passed full remote
+Arch and exact-commit GitHub CI; final GitHub CI passed an unchanged-source retry
+after an unrelated Widgets spawn assertion.
+
+These are private synthetic labwc feedback results at queried 2880×1800, scale
+1.5. Physical scanout, Intel/laptop latency, absolute laptop memory and complete
+page parity remain open. Earlier screenshot-stress tails remain recorded.
+[Measurements, paired five-state images and limits](specs/0126-instant-drag.md).
+No live desktop or installed configuration changes.
+
 ## 2026-10-25 — B0131 covered pearl release
 
 The dragged layer remains visible until native placement succeeds and its first

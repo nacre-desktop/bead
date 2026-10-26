@@ -1,0 +1,241 @@
+{
+  "method": "nearest-rank quantiles pooled over all exact joins from all three predeclared alternating pairs per rate; twelve gestures per arm; no concurrent screenshots",
+  "scope": "private headless labwc synthetic presentation feedback, not physical scanout",
+  "pooled": {
+    "120-bead": {
+      "n": 543,
+      "p50": 10.126154,
+      "p95": 11.764305,
+      "p99": 11.875274,
+      "p95_qml_gate": true,
+      "p99_two_frames_gate": true
+    },
+    "60-bead": {
+      "n": 291,
+      "p50": 18.267201,
+      "p95": 26.271337,
+      "p99": 26.516627,
+      "p95_qml_gate": true,
+      "p99_two_frames_gate": true
+    },
+    "120-qml": {
+      "n": 576,
+      "p50": 10.130805,
+      "p95": 11.823274,
+      "p99": 12.043924
+    },
+    "60-qml": {
+      "n": 326,
+      "p50": 18.176901,
+      "p95": 26.800667,
+      "p99": 34.256474
+    }
+  },
+  "arms": {
+    "pair-1/candidate-cpu-120-bead-direct-labwc-parent": {
+      "n": 181,
+      "p50": 10.113485,
+      "p95": 11.756484,
+      "p99": 11.897934,
+      "source_hashes": {
+        "nacre_shell": "e36cd77c94a193e05e6d2bed2e62337fda10dfbf4c74383da193aaa3d289cd0b",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+        "bead_shell_tree": "37be1bfd01888c0f8b31079c45b493fcb5fdda046c209c92e5f39cdce3feaaff",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "3e0ae9878b40576dbe7014253d0b7dce94509b7cecfa0a6ad62602bf7929f640",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      }
+    },
+    "pair-1/candidate-cpu-60-bead-direct-labwc-parent": {
+      "n": 97,
+      "p50": 18.156431,
+      "p95": 26.308137,
+      "p99": 26.516627,
+      "source_hashes": {
+        "nacre_shell": "e36cd77c94a193e05e6d2bed2e62337fda10dfbf4c74383da193aaa3d289cd0b",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+        "bead_shell_tree": "37be1bfd01888c0f8b31079c45b493fcb5fdda046c209c92e5f39cdce3feaaff",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "3e0ae9878b40576dbe7014253d0b7dce94509b7cecfa0a6ad62602bf7929f640",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      }
+    },
+    "pair-1/control-cpu-120-qml-direct-labwc-parent": {
+      "n": 192,
+      "p50": 10.195665,
+      "p95": 11.861955,
+      "p99": 13.307024,
+      "source_hashes": {
+        "nacre_shell": "625005c995b13b2acae1bcdc1eb10790e1f452b692c5c4c0970684b19fc02088",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+        "bead_shell_tree": "7604a7b7abe4efe64dbd801552e9004653e05008328fbf982117df8eaf392cbc",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "3e0ae9878b40576dbe7014253d0b7dce94509b7cecfa0a6ad62602bf7929f640",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      }
+    },
+    "pair-1/control-cpu-60-qml-direct-labwc-parent": {
+      "n": 109,
+      "p50": 18.176901,
+      "p95": 31.813574,
+      "p99": 34.256474,
+      "source_hashes": {
+        "nacre_shell": "625005c995b13b2acae1bcdc1eb10790e1f452b692c5c4c0970684b19fc02088",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+        "bead_shell_tree": "7604a7b7abe4efe64dbd801552e9004653e05008328fbf982117df8eaf392cbc",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "3e0ae9878b40576dbe7014253d0b7dce94509b7cecfa0a6ad62602bf7929f640",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      }
+    },
+    "pair-2/candidate-cpu-120-bead-direct-labwc-parent": {
+      "n": 181,
+      "p50": 10.133725,
+      "p95": 11.790983,
+      "p99": 11.875274,
+      "source_hashes": {
+        "nacre_shell": "e36cd77c94a193e05e6d2bed2e62337fda10dfbf4c74383da193aaa3d289cd0b",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+        "bead_shell_tree": "37be1bfd01888c0f8b31079c45b493fcb5fdda046c209c92e5f39cdce3feaaff",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "3e0ae9878b40576dbe7014253d0b7dce94509b7cecfa0a6ad62602bf7929f640",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      }
+    },
+    "pair-2/candidate-cpu-60-bead-direct-labwc-parent": {
+      "n": 97,
+      "p50": 18.267201,
+      "p95": 26.187417,
+      "p99": 26.647007,
+      "source_hashes": {
+        "nacre_shell": "e36cd77c94a193e05e6d2bed2e62337fda10dfbf4c74383da193aaa3d289cd0b",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+        "bead_shell_tree": "37be1bfd01888c0f8b31079c45b493fcb5fdda046c209c92e5f39cdce3feaaff",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "3e0ae9878b40576dbe7014253d0b7dce94509b7cecfa0a6ad62602bf7929f640",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      }
+    },
+    "pair-2/control-cpu-120-qml-direct-labwc-parent": {
+      "n": 192,
+      "p50": 10.123545,
+      "p95": 11.821764,
+      "p99": 12.044454,
+      "source_hashes": {
+        "nacre_shell": "625005c995b13b2acae1bcdc1eb10790e1f452b692c5c4c0970684b19fc02088",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+        "bead_shell_tree": "7604a7b7abe4efe64dbd801552e9004653e05008328fbf982117df8eaf392cbc",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "3e0ae9878b40576dbe7014253d0b7dce94509b7cecfa0a6ad62602bf7929f640",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      }
+    },
+    "pair-2/control-cpu-60-qml-direct-labwc-parent": {
+      "n": 109,
+      "p50": 18.249272,
+      "p95": 31.856695,
+      "p99": 34.461044,
+      "source_hashes": {
+        "nacre_shell": "625005c995b13b2acae1bcdc1eb10790e1f452b692c5c4c0970684b19fc02088",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+        "bead_shell_tree": "7604a7b7abe4efe64dbd801552e9004653e05008328fbf982117df8eaf392cbc",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "3e0ae9878b40576dbe7014253d0b7dce94509b7cecfa0a6ad62602bf7929f640",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      }
+    },
+    "pair-3/candidate-cpu-120-bead-direct-labwc-parent": {
+      "n": 181,
+      "p50": 10.124536,
+      "p95": 11.749325,
+      "p99": 11.879195,
+      "source_hashes": {
+        "nacre_shell": "e36cd77c94a193e05e6d2bed2e62337fda10dfbf4c74383da193aaa3d289cd0b",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+        "bead_shell_tree": "37be1bfd01888c0f8b31079c45b493fcb5fdda046c209c92e5f39cdce3feaaff",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "3e0ae9878b40576dbe7014253d0b7dce94509b7cecfa0a6ad62602bf7929f640",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      }
+    },
+    "pair-3/candidate-cpu-60-bead-direct-labwc-parent": {
+      "n": 97,
+      "p50": 18.325291,
+      "p95": 26.297958,
+      "p99": 26.686457,
+      "source_hashes": {
+        "nacre_shell": "e36cd77c94a193e05e6d2bed2e62337fda10dfbf4c74383da193aaa3d289cd0b",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+        "bead_shell_tree": "37be1bfd01888c0f8b31079c45b493fcb5fdda046c209c92e5f39cdce3feaaff",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "3e0ae9878b40576dbe7014253d0b7dce94509b7cecfa0a6ad62602bf7929f640",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      }
+    },
+    "pair-3/control-cpu-120-qml-direct-labwc-parent": {
+      "n": 192,
+      "p50": 10.116975,
+      "p95": 11.796585,
+      "p99": 11.976265,
+      "source_hashes": {
+        "nacre_shell": "625005c995b13b2acae1bcdc1eb10790e1f452b692c5c4c0970684b19fc02088",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+        "bead_shell_tree": "7604a7b7abe4efe64dbd801552e9004653e05008328fbf982117df8eaf392cbc",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "3e0ae9878b40576dbe7014253d0b7dce94509b7cecfa0a6ad62602bf7929f640",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      }
+    },
+    "pair-3/control-cpu-60-qml-direct-labwc-parent": {
+      "n": 108,
+      "p50": 18.158901,
+      "p95": 26.599407,
+      "p99": 26.805297,
+      "source_hashes": {
+        "nacre_shell": "625005c995b13b2acae1bcdc1eb10790e1f452b692c5c4c0970684b19fc02088",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+        "bead_shell_tree": "7604a7b7abe4efe64dbd801552e9004653e05008328fbf982117df8eaf392cbc",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "3e0ae9878b40576dbe7014253d0b7dce94509b7cecfa0a6ad62602bf7929f640",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      }
+    }
+  },
+  "pass": true,
+  "bead_stages": {
+    "60": {
+      "injection_to_dispatch_ms_p95": 0.04336,
+      "dispatch_to_commit_ms_p95": 10.593875,
+      "commit_to_feedback_ms_p95": 15.998012
+    },
+    "120": {
+      "injection_to_dispatch_ms_p95": 0.04311,
+      "dispatch_to_commit_ms_p95": 4.101547,
+      "commit_to_feedback_ms_p95": 8.015706
+    }
+  }
+}

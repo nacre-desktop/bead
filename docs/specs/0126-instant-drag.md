@@ -1,11 +1,11 @@
 # B0126 — instant slider drag
 
-Status: owner accepted the measured candidate on 2026-10-25; the measured thumb path is now enabled by default. The new continuation gate is 120 Hz total p95 ≤25 ms with fill and
-handle derived from the same value in every frame. Immediate fd dispatch, shared
-slider paint and slider-only value updates now pass full CI and are enabled in
-the product. The private 120 Hz proxy, CPU memory and fixture first-key gates pass;
-nested/physical niri acceptance remains open. The prior
-21/12 ms rejection below is historical, superseded by this explicit acceptance.
+Status: shipped by default through `ef9d5c01`. The final integrated CPU build
+passes the current QML-relative p95 and two-frame p99 gates at both 60/120 Hz,
+plus five-pair relative memory, first-key and shared fill/handle checks. All five
+steps passed full remote Arch CI and exact-commit GitHub CI. These are private
+synthetic presentation-feedback results; physical scanout, Intel/laptop latency
+and the absolute laptop memory cap remain unmeasured.
 
 The preserved
 [patch](evidence/0126/compositor-knob.rejected.patch) applies to `61e73507`.
@@ -16,6 +16,98 @@ moving pixel error at 2000 physical px/s strictly below QML, first-key UI CPU
 ≤8 ms, and ≤1 MiB added unreclaimable memory. Unreclaimable means anonymous
 + SHM + DRM + SwapPss. File-backed PSS is informational. Five alternating
 control/candidate pairs are required for memory acceptance.
+
+## Latest continuation: QML-relative gates
+
+The first masked drag frame originally took 12.095 ms. Its prepare stage was
+11.681 ms wall / 11.630 ms CPU: one image layer cost 8.225 ms (7.732 ms image
+resources), and 59 text layers cost 3.041 ms. Source maps the root image to the
+generated joined-frame SVG rasterized by resvg; the asset path itself was not
+logged. These nested spans overlap prepare and must not be added twice.
+`6528a057` retains immutable prepared rasters through masking and preallocates
+the two small child SHM slots. The integrated first masked frame is 0.562 ms,
+including 0.0037 ms prepare and 0.452 ms composition. Pre-draw mask/allocation
+spans are 0.127/0.052 ms. The parent retains its existing reusable three-buffer
+pool and damage history; steady slider motion allocates no SHM buffers.
+[Before/final wall and thread-CPU spans](evidence/0126/qml-parity-profiles.json).
+
+`8486ac8f` adds a local fixed-label patch without Luau/layout. Its first build
+regressed to 18.816/18.985 ms p95/p99 at 120 Hz and 42.383 ms p99 at 60 Hz.
+`27580f9a` removes unchanged anchor/margin commits and flushes local values after
+label-parent paints, preserving one outstanding frame callback. Its isolated
+stage passed both gates (60 Hz p95/p99 26.260/26.626; 120 Hz 11.746/11.957 ms).
+Label-associated damage in that trace was at most 8,960 pixels, 0.68% of the
+panel; changed value-text baking was about 0.06 ms p95. The final integrated
+source includes the intervening launcher/UI changes; its validation tree equals
+`ef9d5c01` apart from the archive's `REVISION` record.
+
+Three predeclared alternating QML/Bead pairs per rate retain all twelve gestures
+in every arm, without concurrent screenshots. All exact joins are pooled using
+nearest-rank quantiles. The output is queried at 2880×1800, scale 1.5, on private
+direct labwc with synthetic feedback. This is not physical niri scanout.
+
+| Rate | Bead joins; p50 / p95 / p99 ms | QML joins; p50 / p95 / p99 ms | Current gates |
+| --- | ---: | ---: | --- |
+| 60 Hz | 291; 18.267 / 26.271 / 26.517 | 326; 18.177 / 26.801 / 34.256 | p95 ≤ QML; p99 ≤33.333: pass |
+| 120 Hz | 543; 10.126 / 11.764 / 11.875 | 576; 10.131 / 11.823 / 12.044 | p95 ≤ QML; p99 ≤16.667: pass |
+
+| Rate | Input→dispatch p95 | Dispatch→commit p95 | Commit→feedback p95 |
+| --- | ---: | ---: | ---: |
+| 60 Hz | 0.043 ms | 10.594 ms | 15.998 ms |
+| 120 Hz | 0.043 ms | 4.102 ms | 8.016 ms |
+
+Dispatch→commit includes waiting for the one-frame callback credit. Stage
+percentiles are not additive. CPU raster work is now confined to the slider and
+changed label; the full frame image is reused.
+
+The 120 Hz p95 margin is small (0.059 ms); individual-run spreads remain in
+[all arm results](evidence/0126/qml-parity-latency.json) and
+[all joined sample durations](evidence/0126/qml-parity-latency-samples.json).
+Earlier concurrent-screenshot stress tails remain below; they are not silently
+replaced or removed from those datasets. The historical 21 ms absolute 60 Hz
+target is not met by this proxy; the latest owner gate compares against QML.
+
+`bb054fa2` keeps GL through an active pointer visual and release handoff;
+`ef9d5c01` refreshes its idle clock on slider input. Closed panels still expire.
+The valid native AMD GL arm stays on GL throughout all twelve gestures and has
+p50/p95/p99 10.491/11.921/12.063 ms at 120 Hz. CPU is cheaper in this comparison,
+so controls retain their existing CPU default. No Intel or fresh GL60 result is
+claimed. [GL result and hashes](evidence/0126/qml-parity-gl-latency.json).
+
+Five alternating CPU pairs use the same integrated source with only the three
+CPU drag improvements removed as control; both include the newer unrelated main
+changes and GL lifecycle fixes. Median candidate−control unreclaimable memory
+(anon+SHM+DRM+SwapPss) is idle −0.055, open +0.156, post-drag −0.867 and closed
++0.270 MiB: all pass +0.5 MiB and stay within the declared 1 MiB feature budget.
+This memory harness uses the existing nested 60 Hz niri under a 120 Hz parent;
+these memory results are separate from direct-path timing. File-backed PSS is
+informational. Host swap-in and process SwapPss are zero. Fresh fixture first-key
+CPU passes 8 ms: 6.921 ms control / 7.110 ms final, with exact typed state and
+64 result rows from 320 fixture applications.
+[Every pair, components, source hashes and key proof](evidence/0126/qml-parity-memory.json).
+
+Separate visual arms verify home 41/41 and Sound 43/43 cursor-free samples for
+both Bead and QML. Full-window images can include the idle pointer outside the
+slider ROI. All 181 home and 203 Sound native shared paints have exactly
+zero fill-end/handle-center difference. Local label tests and runtime text bakes
+cover changes before release; the Sound pressed image shows the updated 85%
+status. [Per-paint and per-image results](evidence/0126/qml-parity-coherence.json).
+
+| State | Home Bead / QML | Sound Bead / QML |
+| --- | --- | --- |
+| idle | [bead](evidence/0126/qml-parity-home-bead-idle.png) / [qml](evidence/0126/qml-parity-home-qml-idle.png) | [bead](evidence/0126/qml-parity-sound-bead-idle.png) / [qml](evidence/0126/qml-parity-sound-qml-idle.png) |
+| open | [bead](evidence/0126/qml-parity-home-bead-open.png) / [qml](evidence/0126/qml-parity-home-qml-open.png) | [bead](evidence/0126/qml-parity-sound-bead-open.png) / [qml](evidence/0126/qml-parity-sound-qml-open.png) |
+| hover | [bead](evidence/0126/qml-parity-home-bead-hover.png) / [qml](evidence/0126/qml-parity-home-qml-hover.png) | [bead](evidence/0126/qml-parity-sound-bead-hover.png) / [qml](evidence/0126/qml-parity-sound-qml-hover.png) |
+| pressed | [bead](evidence/0126/qml-parity-home-bead-pressed.png) / [qml](evidence/0126/qml-parity-home-qml-pressed.png) | [bead](evidence/0126/qml-parity-sound-bead-pressed.png) / [qml](evidence/0126/qml-parity-sound-qml-pressed.png) |
+| after-drags | [bead](evidence/0126/qml-parity-home-bead-after-drags.png) / [qml](evidence/0126/qml-parity-home-qml-after-drags.png) | [bead](evidence/0126/qml-parity-sound-bead-after-drags.png) / [qml](evidence/0126/qml-parity-sound-qml-after-drags.png) |
+
+Active audio slider placement, values and coherent paint agree. Existing wider
+parity gaps remain visible: Bead omits the Home VPN tile, unavailable control
+states/row packing and notification wording differ, and bar provider counts
+vary; QML adds its own Sound peak-detector stream and the Sound header alignment
+is slightly different. Complete all-page parity, general dragging, strictly
+lower cursor pixel error and physical/Intel acceptance remain unproven.
+[Full CI, source provenance and excluded attempts](evidence/0126/checks.md).
 
 ## Continuation: dispatch
 

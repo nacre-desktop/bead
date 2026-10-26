@@ -1,0 +1,3952 @@
+{
+  "home": {
+    "bead": {
+      "source_hashes": {
+        "nacre_shell": "e36cd77c94a193e05e6d2bed2e62337fda10dfbf4c74383da193aaa3d289cd0b",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+        "bead_shell_tree": "37be1bfd01888c0f8b31079c45b493fcb5fdda046c209c92e5f39cdce3feaaff",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "8f88388a497698285f680f68e992971921914311db61aeb09f019ca2db8e427b",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      },
+      "proof_states": [
+        "idle",
+        "open",
+        "after_drag",
+        "hover",
+        "pressed"
+      ],
+      "pixels": {
+        "method": "cursor-free slider ROI PNGs (full-window images may include a pointer outside this ROI): primary handle vertical run >=12px; center-row fill continuity and no trailing accent beyond handle; 3px AA allowance; shared-pose trace is separate exact-value proof",
+        "frames": 41,
+        "valid_frames": 41,
+        "coherent_frames": 41,
+        "rows": [
+          {
+            "frame": "000.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "001.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "002.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "003.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "004.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "005.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "006.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "007.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "008.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "009.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "010.png",
+            "handle_primary_bounds": [
+              88,
+              99
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "011.png",
+            "handle_primary_bounds": [
+              88,
+              99
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "012.png",
+            "handle_primary_bounds": [
+              88,
+              99
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "013.png",
+            "handle_primary_bounds": [
+              88,
+              99
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "014.png",
+            "handle_primary_bounds": [
+              88,
+              99
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "015.png",
+            "handle_primary_bounds": [
+              88,
+              99
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "016.png",
+            "handle_primary_bounds": [
+              88,
+              99
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "017.png",
+            "handle_primary_bounds": [
+              88,
+              99
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "018.png",
+            "handle_primary_bounds": [
+              88,
+              99
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "019.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "020.png",
+            "handle_primary_bounds": [
+              88,
+              99
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "021.png",
+            "handle_primary_bounds": [
+              88,
+              99
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "022.png",
+            "handle_primary_bounds": [
+              103,
+              114
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "023.png",
+            "handle_primary_bounds": [
+              103,
+              114
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "024.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "025.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "026.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "027.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "028.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "029.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "030.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "031.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "032.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "033.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "034.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "035.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "036.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "037.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "038.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "039.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "040.png",
+            "handle_primary_bounds": [
+              298,
+              309
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          }
+        ]
+      },
+      "native": {
+        "method": "each native shared paint logs the same pose used for fill edge and handle center; diagnostic tolerance 0.001 logical px",
+        "paint_records": 181,
+        "identities": [
+          "control-center.home.grid.row-1.tile-volume.level.thumb"
+        ],
+        "maximum_logical_px_difference": 0.0,
+        "pass": true,
+        "records": [
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 108.0,
+            "fill_end": 112.0,
+            "handle_center": 112.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 128.66797,
+            "fill_end": 132.66797,
+            "handle_center": 132.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 138.66797,
+            "fill_end": 142.66797,
+            "handle_center": 142.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 226.66797,
+            "fill_end": 230.66797,
+            "handle_center": 230.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 216.66797,
+            "fill_end": 220.66797,
+            "handle_center": 220.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 206.0,
+            "fill_end": 210.0,
+            "handle_center": 210.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 196.0,
+            "fill_end": 200.0,
+            "handle_center": 200.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 180.0,
+            "fill_end": 184.0,
+            "handle_center": 184.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 170.0,
+            "fill_end": 174.0,
+            "handle_center": 174.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 159.33203,
+            "fill_end": 163.33203,
+            "handle_center": 163.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 149.33203,
+            "fill_end": 153.33203,
+            "handle_center": 153.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 138.66797,
+            "fill_end": 142.66797,
+            "handle_center": 142.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 128.66797,
+            "fill_end": 132.66797,
+            "handle_center": 132.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 118.0,
+            "fill_end": 122.0,
+            "handle_center": 122.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 108.0,
+            "fill_end": 112.0,
+            "handle_center": 112.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 108.0,
+            "fill_end": 112.0,
+            "handle_center": 112.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 118.0,
+            "fill_end": 122.0,
+            "handle_center": 122.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 128.66797,
+            "fill_end": 132.66797,
+            "handle_center": 132.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 138.66797,
+            "fill_end": 142.66797,
+            "handle_center": 142.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 149.33203,
+            "fill_end": 153.33203,
+            "handle_center": 153.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 159.33203,
+            "fill_end": 163.33203,
+            "handle_center": 163.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 170.0,
+            "fill_end": 174.0,
+            "handle_center": 174.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 180.0,
+            "fill_end": 184.0,
+            "handle_center": 184.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 196.0,
+            "fill_end": 200.0,
+            "handle_center": 200.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 206.0,
+            "fill_end": 210.0,
+            "handle_center": 210.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 216.66797,
+            "fill_end": 220.66797,
+            "handle_center": 220.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 226.66797,
+            "fill_end": 230.66797,
+            "handle_center": 230.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 226.66797,
+            "fill_end": 230.66797,
+            "handle_center": 230.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 216.66797,
+            "fill_end": 220.66797,
+            "handle_center": 220.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 206.0,
+            "fill_end": 210.0,
+            "handle_center": 210.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 196.0,
+            "fill_end": 200.0,
+            "handle_center": 200.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 180.0,
+            "fill_end": 184.0,
+            "handle_center": 184.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 170.0,
+            "fill_end": 174.0,
+            "handle_center": 174.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 159.33203,
+            "fill_end": 163.33203,
+            "handle_center": 163.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 149.33203,
+            "fill_end": 153.33203,
+            "handle_center": 153.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 138.66797,
+            "fill_end": 142.66797,
+            "handle_center": 142.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 128.66797,
+            "fill_end": 132.66797,
+            "handle_center": 132.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 118.0,
+            "fill_end": 122.0,
+            "handle_center": 122.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 108.0,
+            "fill_end": 112.0,
+            "handle_center": 112.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 108.0,
+            "fill_end": 112.0,
+            "handle_center": 112.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 118.0,
+            "fill_end": 122.0,
+            "handle_center": 122.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 128.66797,
+            "fill_end": 132.66797,
+            "handle_center": 132.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 138.66797,
+            "fill_end": 142.66797,
+            "handle_center": 142.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 149.33203,
+            "fill_end": 153.33203,
+            "handle_center": 153.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 159.33203,
+            "fill_end": 163.33203,
+            "handle_center": 163.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 170.0,
+            "fill_end": 174.0,
+            "handle_center": 174.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 180.0,
+            "fill_end": 184.0,
+            "handle_center": 184.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 196.0,
+            "fill_end": 200.0,
+            "handle_center": 200.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 206.0,
+            "fill_end": 210.0,
+            "handle_center": 210.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 216.66797,
+            "fill_end": 220.66797,
+            "handle_center": 220.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 226.66797,
+            "fill_end": 230.66797,
+            "handle_center": 230.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 226.66797,
+            "fill_end": 230.66797,
+            "handle_center": 230.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 216.66797,
+            "fill_end": 220.66797,
+            "handle_center": 220.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 206.0,
+            "fill_end": 210.0,
+            "handle_center": 210.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 196.0,
+            "fill_end": 200.0,
+            "handle_center": 200.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 185.33203,
+            "fill_end": 189.33203,
+            "handle_center": 189.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 170.0,
+            "fill_end": 174.0,
+            "handle_center": 174.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 159.33203,
+            "fill_end": 163.33203,
+            "handle_center": 163.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 149.33203,
+            "fill_end": 153.33203,
+            "handle_center": 153.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 138.66797,
+            "fill_end": 142.66797,
+            "handle_center": 142.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 128.66797,
+            "fill_end": 132.66797,
+            "handle_center": 132.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 118.0,
+            "fill_end": 122.0,
+            "handle_center": 122.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 108.0,
+            "fill_end": 112.0,
+            "handle_center": 112.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 108.0,
+            "fill_end": 112.0,
+            "handle_center": 112.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 118.0,
+            "fill_end": 122.0,
+            "handle_center": 122.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 128.66797,
+            "fill_end": 132.66797,
+            "handle_center": 132.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 138.66797,
+            "fill_end": 142.66797,
+            "handle_center": 142.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 149.33203,
+            "fill_end": 153.33203,
+            "handle_center": 153.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 159.33203,
+            "fill_end": 163.33203,
+            "handle_center": 163.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 170.0,
+            "fill_end": 174.0,
+            "handle_center": 174.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 180.0,
+            "fill_end": 184.0,
+            "handle_center": 184.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 196.0,
+            "fill_end": 200.0,
+            "handle_center": 200.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 206.0,
+            "fill_end": 210.0,
+            "handle_center": 210.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 216.66797,
+            "fill_end": 220.66797,
+            "handle_center": 220.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 226.66797,
+            "fill_end": 230.66797,
+            "handle_center": 230.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 226.66797,
+            "fill_end": 230.66797,
+            "handle_center": 230.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 216.66797,
+            "fill_end": 220.66797,
+            "handle_center": 220.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 206.0,
+            "fill_end": 210.0,
+            "handle_center": 210.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 196.0,
+            "fill_end": 200.0,
+            "handle_center": 200.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 180.0,
+            "fill_end": 184.0,
+            "handle_center": 184.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 170.0,
+            "fill_end": 174.0,
+            "handle_center": 174.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 159.33203,
+            "fill_end": 163.33203,
+            "handle_center": 163.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 149.33203,
+            "fill_end": 153.33203,
+            "handle_center": 153.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 138.66797,
+            "fill_end": 142.66797,
+            "handle_center": 142.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 128.66797,
+            "fill_end": 132.66797,
+            "handle_center": 132.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 118.0,
+            "fill_end": 122.0,
+            "handle_center": 122.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 108.0,
+            "fill_end": 112.0,
+            "handle_center": 112.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 108.0,
+            "fill_end": 112.0,
+            "handle_center": 112.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 118.0,
+            "fill_end": 122.0,
+            "handle_center": 122.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 128.66797,
+            "fill_end": 132.66797,
+            "handle_center": 132.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 138.66797,
+            "fill_end": 142.66797,
+            "handle_center": 142.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 149.33203,
+            "fill_end": 153.33203,
+            "handle_center": 153.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 159.33203,
+            "fill_end": 163.33203,
+            "handle_center": 163.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 170.0,
+            "fill_end": 174.0,
+            "handle_center": 174.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 180.0,
+            "fill_end": 184.0,
+            "handle_center": 184.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 196.0,
+            "fill_end": 200.0,
+            "handle_center": 200.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 206.0,
+            "fill_end": 210.0,
+            "handle_center": 210.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 216.66797,
+            "fill_end": 220.66797,
+            "handle_center": 220.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 226.66797,
+            "fill_end": 230.66797,
+            "handle_center": 230.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 226.66797,
+            "fill_end": 230.66797,
+            "handle_center": 230.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 216.66797,
+            "fill_end": 220.66797,
+            "handle_center": 220.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 206.0,
+            "fill_end": 210.0,
+            "handle_center": 210.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 196.0,
+            "fill_end": 200.0,
+            "handle_center": 200.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 180.0,
+            "fill_end": 184.0,
+            "handle_center": 184.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 170.0,
+            "fill_end": 174.0,
+            "handle_center": 174.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 159.33203,
+            "fill_end": 163.33203,
+            "handle_center": 163.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 149.33203,
+            "fill_end": 153.33203,
+            "handle_center": 153.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 138.66797,
+            "fill_end": 142.66797,
+            "handle_center": 142.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 128.66797,
+            "fill_end": 132.66797,
+            "handle_center": 132.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 118.0,
+            "fill_end": 122.0,
+            "handle_center": 122.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 108.0,
+            "fill_end": 112.0,
+            "handle_center": 112.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 108.0,
+            "fill_end": 112.0,
+            "handle_center": 112.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 118.0,
+            "fill_end": 122.0,
+            "handle_center": 122.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 128.66797,
+            "fill_end": 132.66797,
+            "handle_center": 132.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 138.66797,
+            "fill_end": 142.66797,
+            "handle_center": 142.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 149.33203,
+            "fill_end": 153.33203,
+            "handle_center": 153.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 159.33203,
+            "fill_end": 163.33203,
+            "handle_center": 163.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 170.0,
+            "fill_end": 174.0,
+            "handle_center": 174.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 180.0,
+            "fill_end": 184.0,
+            "handle_center": 184.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 196.0,
+            "fill_end": 200.0,
+            "handle_center": 200.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 206.0,
+            "fill_end": 210.0,
+            "handle_center": 210.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 216.66797,
+            "fill_end": 220.66797,
+            "handle_center": 220.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 226.66797,
+            "fill_end": 230.66797,
+            "handle_center": 230.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 226.66797,
+            "fill_end": 230.66797,
+            "handle_center": 230.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 216.66797,
+            "fill_end": 220.66797,
+            "handle_center": 220.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 206.0,
+            "fill_end": 210.0,
+            "handle_center": 210.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 196.0,
+            "fill_end": 200.0,
+            "handle_center": 200.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 180.0,
+            "fill_end": 184.0,
+            "handle_center": 184.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 170.0,
+            "fill_end": 174.0,
+            "handle_center": 174.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 159.33203,
+            "fill_end": 163.33203,
+            "handle_center": 163.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 149.33203,
+            "fill_end": 153.33203,
+            "handle_center": 153.33203
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 138.66797,
+            "fill_end": 142.66797,
+            "handle_center": 142.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 128.66797,
+            "fill_end": 132.66797,
+            "handle_center": 132.66797
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 118.0,
+            "fill_end": 122.0,
+            "handle_center": 122.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 108.0,
+            "fill_end": 112.0,
+            "handle_center": 112.0
+          },
+          {
+            "id": "control-center.home.grid.row-1.tile-volume.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          }
+        ]
+      }
+    },
+    "qml": {
+      "source_hashes": {
+        "nacre_shell": "625005c995b13b2acae1bcdc1eb10790e1f452b692c5c4c0970684b19fc02088",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+        "bead_shell_tree": "7604a7b7abe4efe64dbd801552e9004653e05008328fbf982117df8eaf392cbc",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "8f88388a497698285f680f68e992971921914311db61aeb09f019ca2db8e427b",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      },
+      "proof_states": [
+        "idle",
+        "open",
+        "after_drag",
+        "hover",
+        "pressed"
+      ],
+      "pixels": {
+        "method": "cursor-free slider ROI PNGs (full-window images may include a pointer outside this ROI): primary handle vertical run >=12px; center-row fill continuity and no trailing accent beyond handle; 3px AA allowance; shared-pose trace is separate exact-value proof",
+        "frames": 41,
+        "valid_frames": 41,
+        "coherent_frames": 41,
+        "rows": [
+          {
+            "frame": "000.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "001.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "002.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "003.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "004.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "005.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "006.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "007.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "008.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "009.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "010.png",
+            "handle_primary_bounds": [
+              155,
+              165
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "011.png",
+            "handle_primary_bounds": [
+              66,
+              76
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "012.png",
+            "handle_primary_bounds": [
+              66,
+              76
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "013.png",
+            "handle_primary_bounds": [
+              66,
+              76
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "014.png",
+            "handle_primary_bounds": [
+              66,
+              76
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "015.png",
+            "handle_primary_bounds": [
+              66,
+              76
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "016.png",
+            "handle_primary_bounds": [
+              66,
+              76
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "017.png",
+            "handle_primary_bounds": [
+              66,
+              76
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "018.png",
+            "handle_primary_bounds": [
+              66,
+              76
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "019.png",
+            "handle_primary_bounds": [
+              112,
+              122
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "020.png",
+            "handle_primary_bounds": [
+              112,
+              122
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "021.png",
+            "handle_primary_bounds": [
+              112,
+              122
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "022.png",
+            "handle_primary_bounds": [
+              112,
+              122
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "023.png",
+            "handle_primary_bounds": [
+              298,
+              308
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "024.png",
+            "handle_primary_bounds": [
+              112,
+              122
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "025.png",
+            "handle_primary_bounds": [
+              112,
+              122
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "026.png",
+            "handle_primary_bounds": [
+              112,
+              122
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "027.png",
+            "handle_primary_bounds": [
+              112,
+              122
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "028.png",
+            "handle_primary_bounds": [
+              112,
+              122
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "029.png",
+            "handle_primary_bounds": [
+              112,
+              122
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "030.png",
+            "handle_primary_bounds": [
+              298,
+              308
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "031.png",
+            "handle_primary_bounds": [
+              298,
+              308
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "032.png",
+            "handle_primary_bounds": [
+              298,
+              308
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "033.png",
+            "handle_primary_bounds": [
+              298,
+              308
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "034.png",
+            "handle_primary_bounds": [
+              298,
+              308
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "035.png",
+            "handle_primary_bounds": [
+              298,
+              308
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "036.png",
+            "handle_primary_bounds": [
+              298,
+              308
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "037.png",
+            "handle_primary_bounds": [
+              298,
+              308
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "038.png",
+            "handle_primary_bounds": [
+              298,
+              308
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "039.png",
+            "handle_primary_bounds": [
+              298,
+              308
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "040.png",
+            "handle_primary_bounds": [
+              298,
+              308
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          }
+        ]
+      }
+    }
+  },
+  "sound": {
+    "bead": {
+      "source_hashes": {
+        "nacre_shell": "e36cd77c94a193e05e6d2bed2e62337fda10dfbf4c74383da193aaa3d289cd0b",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+        "bead_shell_tree": "37be1bfd01888c0f8b31079c45b493fcb5fdda046c209c92e5f39cdce3feaaff",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "cd9a2f8560e92cf45765b69fbe313753692e5065fb3eaf1b303ebf70aa26bb4c",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      },
+      "proof_states": [
+        "idle",
+        "open",
+        "after_drag",
+        "hover",
+        "pressed"
+      ],
+      "pixels": {
+        "method": "cursor-free slider ROI PNGs (full-window images may include a pointer outside this ROI): primary handle vertical run >=12px; center-row fill continuity and no trailing accent beyond handle; 3px AA allowance; shared-pose trace is separate exact-value proof",
+        "frames": 43,
+        "valid_frames": 43,
+        "coherent_frames": 43,
+        "rows": [
+          {
+            "frame": "000.png",
+            "handle_primary_bounds": [
+              176,
+              186
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "001.png",
+            "handle_primary_bounds": [
+              176,
+              186
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "002.png",
+            "handle_primary_bounds": [
+              176,
+              186
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "003.png",
+            "handle_primary_bounds": [
+              176,
+              186
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "004.png",
+            "handle_primary_bounds": [
+              176,
+              186
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "005.png",
+            "handle_primary_bounds": [
+              176,
+              186
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "006.png",
+            "handle_primary_bounds": [
+              176,
+              186
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "007.png",
+            "handle_primary_bounds": [
+              176,
+              186
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "008.png",
+            "handle_primary_bounds": [
+              176,
+              186
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "009.png",
+            "handle_primary_bounds": [
+              57,
+              68
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "010.png",
+            "handle_primary_bounds": [
+              64,
+              75
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "011.png",
+            "handle_primary_bounds": [
+              64,
+              75
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "012.png",
+            "handle_primary_bounds": [
+              64,
+              75
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "013.png",
+            "handle_primary_bounds": [
+              64,
+              75
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "014.png",
+            "handle_primary_bounds": [
+              64,
+              75
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "015.png",
+            "handle_primary_bounds": [
+              64,
+              75
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "016.png",
+            "handle_primary_bounds": [
+              64,
+              75
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "017.png",
+            "handle_primary_bounds": [
+              64,
+              75
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "018.png",
+            "handle_primary_bounds": [
+              64,
+              75
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "019.png",
+            "handle_primary_bounds": [
+              64,
+              75
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "020.png",
+            "handle_primary_bounds": [
+              64,
+              75
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "021.png",
+            "handle_primary_bounds": [
+              104,
+              115
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "022.png",
+            "handle_primary_bounds": [
+              104,
+              115
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "023.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "024.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "025.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "026.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "027.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "028.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "029.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "030.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "031.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "032.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "033.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "034.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "035.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "036.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "037.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "038.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "039.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "040.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "041.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "042.png",
+            "handle_primary_bounds": [
+              333,
+              344
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          }
+        ]
+      },
+      "native": {
+        "method": "each native shared paint logs the same pose used for fill edge and handle center; diagnostic tolerance 0.001 logical px",
+        "paint_records": 203,
+        "identities": [
+          "control-center.detail.sound.output.audio.output.level.thumb"
+        ],
+        "maximum_logical_px_difference": 0.0,
+        "pass": true,
+        "records": [
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 106.0,
+            "fill_end": 110.0,
+            "handle_center": 110.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 110.66797,
+            "fill_end": 114.66797,
+            "handle_center": 114.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 137.33203,
+            "fill_end": 141.33203,
+            "handle_center": 141.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 290.0,
+            "fill_end": 294.0,
+            "handle_center": 294.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 290.0,
+            "fill_end": 294.0,
+            "handle_center": 294.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 279.33203,
+            "fill_end": 283.33203,
+            "handle_center": 283.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 226.66797,
+            "fill_end": 230.66797,
+            "handle_center": 230.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 216.0,
+            "fill_end": 220.0,
+            "handle_center": 220.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 205.33203,
+            "fill_end": 209.33203,
+            "handle_center": 209.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 195.33203,
+            "fill_end": 199.33203,
+            "handle_center": 199.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 184.66797,
+            "fill_end": 188.66797,
+            "handle_center": 188.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 174.0,
+            "fill_end": 178.0,
+            "handle_center": 178.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 163.33203,
+            "fill_end": 167.33203,
+            "handle_center": 167.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 152.66797,
+            "fill_end": 156.66797,
+            "handle_center": 156.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 137.33203,
+            "fill_end": 141.33203,
+            "handle_center": 141.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 126.66797,
+            "fill_end": 130.66797,
+            "handle_center": 130.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 116.0,
+            "fill_end": 120.0,
+            "handle_center": 120.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 106.0,
+            "fill_end": 110.0,
+            "handle_center": 110.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 106.0,
+            "fill_end": 110.0,
+            "handle_center": 110.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 116.0,
+            "fill_end": 120.0,
+            "handle_center": 120.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 126.66797,
+            "fill_end": 130.66797,
+            "handle_center": 130.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 137.33203,
+            "fill_end": 141.33203,
+            "handle_center": 141.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 148.0,
+            "fill_end": 152.0,
+            "handle_center": 152.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 158.0,
+            "fill_end": 162.0,
+            "handle_center": 162.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 168.66797,
+            "fill_end": 172.66797,
+            "handle_center": 172.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 179.33203,
+            "fill_end": 183.33203,
+            "handle_center": 183.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 190.0,
+            "fill_end": 194.0,
+            "handle_center": 194.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 200.0,
+            "fill_end": 204.0,
+            "handle_center": 204.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 210.66797,
+            "fill_end": 214.66797,
+            "handle_center": 214.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 221.33203,
+            "fill_end": 225.33203,
+            "handle_center": 225.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 279.33203,
+            "fill_end": 283.33203,
+            "handle_center": 283.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 290.0,
+            "fill_end": 294.0,
+            "handle_center": 294.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 290.0,
+            "fill_end": 294.0,
+            "handle_center": 294.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 279.33203,
+            "fill_end": 283.33203,
+            "handle_center": 283.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 226.66797,
+            "fill_end": 230.66797,
+            "handle_center": 230.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 216.0,
+            "fill_end": 220.0,
+            "handle_center": 220.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 205.33203,
+            "fill_end": 209.33203,
+            "handle_center": 209.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 195.33203,
+            "fill_end": 199.33203,
+            "handle_center": 199.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 184.66797,
+            "fill_end": 188.66797,
+            "handle_center": 188.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 174.0,
+            "fill_end": 178.0,
+            "handle_center": 178.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 163.33203,
+            "fill_end": 167.33203,
+            "handle_center": 167.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 152.66797,
+            "fill_end": 156.66797,
+            "handle_center": 156.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 137.33203,
+            "fill_end": 141.33203,
+            "handle_center": 141.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 126.66797,
+            "fill_end": 130.66797,
+            "handle_center": 130.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 116.0,
+            "fill_end": 120.0,
+            "handle_center": 120.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 106.0,
+            "fill_end": 110.0,
+            "handle_center": 110.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 106.0,
+            "fill_end": 110.0,
+            "handle_center": 110.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 116.0,
+            "fill_end": 120.0,
+            "handle_center": 120.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 126.66797,
+            "fill_end": 130.66797,
+            "handle_center": 130.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 137.33203,
+            "fill_end": 141.33203,
+            "handle_center": 141.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 148.0,
+            "fill_end": 152.0,
+            "handle_center": 152.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 158.0,
+            "fill_end": 162.0,
+            "handle_center": 162.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 168.66797,
+            "fill_end": 172.66797,
+            "handle_center": 172.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 179.33203,
+            "fill_end": 183.33203,
+            "handle_center": 183.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 190.0,
+            "fill_end": 194.0,
+            "handle_center": 194.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 200.0,
+            "fill_end": 204.0,
+            "handle_center": 204.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 210.66797,
+            "fill_end": 214.66797,
+            "handle_center": 214.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 221.33203,
+            "fill_end": 225.33203,
+            "handle_center": 225.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 232.0,
+            "fill_end": 236.0,
+            "handle_center": 236.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 242.66797,
+            "fill_end": 246.66797,
+            "handle_center": 246.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 279.33203,
+            "fill_end": 283.33203,
+            "handle_center": 283.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 290.0,
+            "fill_end": 294.0,
+            "handle_center": 294.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 290.0,
+            "fill_end": 294.0,
+            "handle_center": 294.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 279.33203,
+            "fill_end": 283.33203,
+            "handle_center": 283.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 226.66797,
+            "fill_end": 230.66797,
+            "handle_center": 230.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 216.0,
+            "fill_end": 220.0,
+            "handle_center": 220.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 205.33203,
+            "fill_end": 209.33203,
+            "handle_center": 209.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 195.33203,
+            "fill_end": 199.33203,
+            "handle_center": 199.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 184.66797,
+            "fill_end": 188.66797,
+            "handle_center": 188.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 174.0,
+            "fill_end": 178.0,
+            "handle_center": 178.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 163.33203,
+            "fill_end": 167.33203,
+            "handle_center": 167.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 152.66797,
+            "fill_end": 156.66797,
+            "handle_center": 156.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 137.33203,
+            "fill_end": 141.33203,
+            "handle_center": 141.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 126.66797,
+            "fill_end": 130.66797,
+            "handle_center": 130.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 116.0,
+            "fill_end": 120.0,
+            "handle_center": 120.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 106.0,
+            "fill_end": 110.0,
+            "handle_center": 110.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 106.0,
+            "fill_end": 110.0,
+            "handle_center": 110.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 116.0,
+            "fill_end": 120.0,
+            "handle_center": 120.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 126.66797,
+            "fill_end": 130.66797,
+            "handle_center": 130.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 137.33203,
+            "fill_end": 141.33203,
+            "handle_center": 141.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 148.0,
+            "fill_end": 152.0,
+            "handle_center": 152.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 158.0,
+            "fill_end": 162.0,
+            "handle_center": 162.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 168.66797,
+            "fill_end": 172.66797,
+            "handle_center": 172.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 179.33203,
+            "fill_end": 183.33203,
+            "handle_center": 183.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 190.0,
+            "fill_end": 194.0,
+            "handle_center": 194.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 200.0,
+            "fill_end": 204.0,
+            "handle_center": 204.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 210.66797,
+            "fill_end": 214.66797,
+            "handle_center": 214.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 221.33203,
+            "fill_end": 225.33203,
+            "handle_center": 225.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 232.0,
+            "fill_end": 236.0,
+            "handle_center": 236.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 279.33203,
+            "fill_end": 283.33203,
+            "handle_center": 283.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 290.0,
+            "fill_end": 294.0,
+            "handle_center": 294.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 290.0,
+            "fill_end": 294.0,
+            "handle_center": 294.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 279.33203,
+            "fill_end": 283.33203,
+            "handle_center": 283.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 226.66797,
+            "fill_end": 230.66797,
+            "handle_center": 230.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 216.0,
+            "fill_end": 220.0,
+            "handle_center": 220.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 205.33203,
+            "fill_end": 209.33203,
+            "handle_center": 209.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 195.33203,
+            "fill_end": 199.33203,
+            "handle_center": 199.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 184.66797,
+            "fill_end": 188.66797,
+            "handle_center": 188.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 174.0,
+            "fill_end": 178.0,
+            "handle_center": 178.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 163.33203,
+            "fill_end": 167.33203,
+            "handle_center": 167.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 148.0,
+            "fill_end": 152.0,
+            "handle_center": 152.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 137.33203,
+            "fill_end": 141.33203,
+            "handle_center": 141.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 126.66797,
+            "fill_end": 130.66797,
+            "handle_center": 130.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 116.0,
+            "fill_end": 120.0,
+            "handle_center": 120.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 106.0,
+            "fill_end": 110.0,
+            "handle_center": 110.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 106.0,
+            "fill_end": 110.0,
+            "handle_center": 110.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 116.0,
+            "fill_end": 120.0,
+            "handle_center": 120.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 126.66797,
+            "fill_end": 130.66797,
+            "handle_center": 130.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 137.33203,
+            "fill_end": 141.33203,
+            "handle_center": 141.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 148.0,
+            "fill_end": 152.0,
+            "handle_center": 152.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 158.0,
+            "fill_end": 162.0,
+            "handle_center": 162.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 168.66797,
+            "fill_end": 172.66797,
+            "handle_center": 172.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 179.33203,
+            "fill_end": 183.33203,
+            "handle_center": 183.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 190.0,
+            "fill_end": 194.0,
+            "handle_center": 194.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 200.0,
+            "fill_end": 204.0,
+            "handle_center": 204.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 210.66797,
+            "fill_end": 214.66797,
+            "handle_center": 214.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 221.33203,
+            "fill_end": 225.33203,
+            "handle_center": 225.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 232.0,
+            "fill_end": 236.0,
+            "handle_center": 236.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 242.66797,
+            "fill_end": 246.66797,
+            "handle_center": 246.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 279.33203,
+            "fill_end": 283.33203,
+            "handle_center": 283.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 290.0,
+            "fill_end": 294.0,
+            "handle_center": 294.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 290.0,
+            "fill_end": 294.0,
+            "handle_center": 294.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 279.33203,
+            "fill_end": 283.33203,
+            "handle_center": 283.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 226.66797,
+            "fill_end": 230.66797,
+            "handle_center": 230.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 216.0,
+            "fill_end": 220.0,
+            "handle_center": 220.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 205.33203,
+            "fill_end": 209.33203,
+            "handle_center": 209.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 195.33203,
+            "fill_end": 199.33203,
+            "handle_center": 199.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 184.66797,
+            "fill_end": 188.66797,
+            "handle_center": 188.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 174.0,
+            "fill_end": 178.0,
+            "handle_center": 178.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 163.33203,
+            "fill_end": 167.33203,
+            "handle_center": 167.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 152.66797,
+            "fill_end": 156.66797,
+            "handle_center": 156.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 142.66797,
+            "fill_end": 146.66797,
+            "handle_center": 146.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 126.66797,
+            "fill_end": 130.66797,
+            "handle_center": 130.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 116.0,
+            "fill_end": 120.0,
+            "handle_center": 120.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 106.0,
+            "fill_end": 110.0,
+            "handle_center": 110.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 106.0,
+            "fill_end": 110.0,
+            "handle_center": 110.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 116.0,
+            "fill_end": 120.0,
+            "handle_center": 120.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 126.66797,
+            "fill_end": 130.66797,
+            "handle_center": 130.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 137.33203,
+            "fill_end": 141.33203,
+            "handle_center": 141.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 148.0,
+            "fill_end": 152.0,
+            "handle_center": 152.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 158.0,
+            "fill_end": 162.0,
+            "handle_center": 162.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 168.66797,
+            "fill_end": 172.66797,
+            "handle_center": 172.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 179.33203,
+            "fill_end": 183.33203,
+            "handle_center": 183.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 190.0,
+            "fill_end": 194.0,
+            "handle_center": 194.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 200.0,
+            "fill_end": 204.0,
+            "handle_center": 204.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 210.66797,
+            "fill_end": 214.66797,
+            "handle_center": 214.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 221.33203,
+            "fill_end": 225.33203,
+            "handle_center": 225.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 232.0,
+            "fill_end": 236.0,
+            "handle_center": 236.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 242.66797,
+            "fill_end": 246.66797,
+            "handle_center": 246.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 252.66797,
+            "fill_end": 256.66797,
+            "handle_center": 256.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 279.33203,
+            "fill_end": 283.33203,
+            "handle_center": 283.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 290.0,
+            "fill_end": 294.0,
+            "handle_center": 294.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 290.0,
+            "fill_end": 294.0,
+            "handle_center": 294.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 279.33203,
+            "fill_end": 283.33203,
+            "handle_center": 283.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 268.66797,
+            "fill_end": 272.66797,
+            "handle_center": 272.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 258.0,
+            "fill_end": 262.0,
+            "handle_center": 262.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 247.33203,
+            "fill_end": 251.33203,
+            "handle_center": 251.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 237.33203,
+            "fill_end": 241.33203,
+            "handle_center": 241.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 226.66797,
+            "fill_end": 230.66797,
+            "handle_center": 230.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 216.0,
+            "fill_end": 220.0,
+            "handle_center": 220.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 205.33203,
+            "fill_end": 209.33203,
+            "handle_center": 209.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 195.33203,
+            "fill_end": 199.33203,
+            "handle_center": 199.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 184.66797,
+            "fill_end": 188.66797,
+            "handle_center": 188.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 174.0,
+            "fill_end": 178.0,
+            "handle_center": 178.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 163.33203,
+            "fill_end": 167.33203,
+            "handle_center": 167.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 148.0,
+            "fill_end": 152.0,
+            "handle_center": 152.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 137.33203,
+            "fill_end": 141.33203,
+            "handle_center": 141.33203
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 126.66797,
+            "fill_end": 130.66797,
+            "handle_center": 130.66797
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 116.0,
+            "fill_end": 120.0,
+            "handle_center": 120.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 106.0,
+            "fill_end": 110.0,
+            "handle_center": 110.0
+          },
+          {
+            "id": "control-center.detail.sound.output.audio.output.level.thumb",
+            "x": 290.0,
+            "fill_end": 294.0,
+            "handle_center": 294.0
+          }
+        ]
+      }
+    },
+    "qml": {
+      "source_hashes": {
+        "nacre_shell": "625005c995b13b2acae1bcdc1eb10790e1f452b692c5c4c0970684b19fc02088",
+        "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+        "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+        "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+        "bead_shell_tree": "7604a7b7abe4efe64dbd801552e9004653e05008328fbf982117df8eaf392cbc",
+        "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+        "capture_driver": "cd9a2f8560e92cf45765b69fbe313753692e5065fb3eaf1b303ebf70aa26bb4c",
+        "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+      },
+      "proof_states": [
+        "idle",
+        "open",
+        "after_drag",
+        "hover",
+        "pressed"
+      ],
+      "pixels": {
+        "method": "cursor-free slider ROI PNGs (full-window images may include a pointer outside this ROI): primary handle vertical run >=12px; center-row fill continuity and no trailing accent beyond handle; 3px AA allowance; shared-pose trace is separate exact-value proof",
+        "frames": 43,
+        "valid_frames": 43,
+        "coherent_frames": 43,
+        "rows": [
+          {
+            "frame": "000.png",
+            "handle_primary_bounds": [
+              178,
+              187
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "001.png",
+            "handle_primary_bounds": [
+              178,
+              187
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "002.png",
+            "handle_primary_bounds": [
+              178,
+              187
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "003.png",
+            "handle_primary_bounds": [
+              178,
+              187
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "004.png",
+            "handle_primary_bounds": [
+              178,
+              187
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "005.png",
+            "handle_primary_bounds": [
+              178,
+              187
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "006.png",
+            "handle_primary_bounds": [
+              178,
+              187
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "007.png",
+            "handle_primary_bounds": [
+              178,
+              187
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "008.png",
+            "handle_primary_bounds": [
+              178,
+              187
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "009.png",
+            "handle_primary_bounds": [
+              59,
+              68
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "010.png",
+            "handle_primary_bounds": [
+              59,
+              68
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "011.png",
+            "handle_primary_bounds": [
+              63,
+              72
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "012.png",
+            "handle_primary_bounds": [
+              63,
+              72
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "013.png",
+            "handle_primary_bounds": [
+              63,
+              72
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "014.png",
+            "handle_primary_bounds": [
+              63,
+              72
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "015.png",
+            "handle_primary_bounds": [
+              63,
+              72
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "016.png",
+            "handle_primary_bounds": [
+              63,
+              72
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "017.png",
+            "handle_primary_bounds": [
+              63,
+              72
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "018.png",
+            "handle_primary_bounds": [
+              63,
+              72
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "019.png",
+            "handle_primary_bounds": [
+              114,
+              123
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "020.png",
+            "handle_primary_bounds": [
+              114,
+              123
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "021.png",
+            "handle_primary_bounds": [
+              114,
+              123
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "022.png",
+            "handle_primary_bounds": [
+              114,
+              123
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "023.png",
+            "handle_primary_bounds": [
+              114,
+              123
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "024.png",
+            "handle_primary_bounds": [
+              114,
+              123
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "025.png",
+            "handle_primary_bounds": [
+              114,
+              123
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "026.png",
+            "handle_primary_bounds": [
+              114,
+              123
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "027.png",
+            "handle_primary_bounds": [
+              114,
+              123
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "028.png",
+            "handle_primary_bounds": [
+              114,
+              123
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "029.png",
+            "handle_primary_bounds": [
+              114,
+              123
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "030.png",
+            "handle_primary_bounds": [
+              130,
+              139
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "031.png",
+            "handle_primary_bounds": [
+              130,
+              139
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "032.png",
+            "handle_primary_bounds": [
+              130,
+              139
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "033.png",
+            "handle_primary_bounds": [
+              336,
+              345
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "034.png",
+            "handle_primary_bounds": [
+              130,
+              139
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "035.png",
+            "handle_primary_bounds": [
+              336,
+              345
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "036.png",
+            "handle_primary_bounds": [
+              130,
+              139
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "037.png",
+            "handle_primary_bounds": [
+              336,
+              345
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "038.png",
+            "handle_primary_bounds": [
+              336,
+              345
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "039.png",
+            "handle_primary_bounds": [
+              336,
+              345
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "040.png",
+            "handle_primary_bounds": [
+              336,
+              345
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "041.png",
+            "handle_primary_bounds": [
+              336,
+              345
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          },
+          {
+            "frame": "042.png",
+            "handle_primary_bounds": [
+              336,
+              345
+            ],
+            "gap_pixels": 0,
+            "excess_pixels": 0
+          }
+        ]
+      }
+    }
+  }
+}

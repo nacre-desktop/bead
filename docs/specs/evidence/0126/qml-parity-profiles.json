@@ -1,0 +1,206 @@
+{
+  "before": {
+    "method": "existing numeric wall/thread-CPU spans; first parent frame after gesture start with a shared slider paint; source performs synchronous mask before posting worker click",
+    "note": "Nested shape/raster spans belong to preparation; paint spans belong to composition. Do not add nested stages twice.",
+    "source_hashes": {
+      "nacre_shell": "bb17a655ee4f230e0aa25db8a8f067f958ead4ad0ede7a6effd64c4f91ba416c",
+      "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+      "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+      "qml_probe": "e5d6208454ef515b67f64d9a19609b70d95755e783c717a8f1abf8cb1dc29eff",
+      "bead_shell_tree": "d63574ae624bdc4ccba3e041f2cc157695ff11a27eed0c878a40d0ea518e4341",
+      "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+      "capture_driver": "af028ddb12e4fc89d05093dd7e0febdef78e615263615f4ff043153759d36223",
+      "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+    },
+    "first_mask_frame": {
+      "end_ns": 840426279376174,
+      "frame_wall_ms": 12.095,
+      "shared_paints_in_bracket": 2,
+      "stage_totals": {
+        "shape": {
+          "count": 59,
+          "wall_ms": 0.4273,
+          "thread_cpu_ms": 0.4205
+        },
+        "raster": {
+          "count": 59,
+          "wall_ms": 1.5948,
+          "thread_cpu_ms": 1.596
+        },
+        "present_prepare": {
+          "count": 1,
+          "wall_ms": 11.6809,
+          "thread_cpu_ms": 11.63
+        },
+        "visual_damage": {
+          "count": 1,
+          "wall_ms": 0.0111,
+          "thread_cpu_ms": 0.0111
+        },
+        "repair_setup": {
+          "count": 1,
+          "wall_ms": 0.002,
+          "thread_cpu_ms": 0.0019
+        },
+        "paint_clear": {
+          "count": 1,
+          "wall_ms": 0.003,
+          "thread_cpu_ms": 0.003
+        },
+        "paint_rounded": {
+          "count": 49,
+          "wall_ms": 0.1277,
+          "thread_cpu_ms": 0.1275
+        },
+        "paint_image": {
+          "count": 1,
+          "wall_ms": 0.0024,
+          "thread_cpu_ms": 0.0024
+        },
+        "paint_text": {
+          "count": 62,
+          "wall_ms": 0.0355,
+          "thread_cpu_ms": 0.0356
+        },
+        "paint_format": {
+          "count": 1,
+          "wall_ms": 0.0006,
+          "thread_cpu_ms": 0.0006
+        },
+        "compose": {
+          "count": 1,
+          "wall_ms": 0.3453,
+          "thread_cpu_ms": 0.3433
+        },
+        "commit": {
+          "count": 1,
+          "wall_ms": 0.0327,
+          "thread_cpu_ms": 0.0326
+        }
+      },
+      "resource_wall_ms": {
+        "count": 60,
+        "text": 2.486,
+        "images": 7.732,
+        "shadow": 0.0
+      },
+      "layer_bakes": {
+        "count": 60,
+        "wall_ms": 11.266,
+        "images": [
+          {
+            "id": "control-center/image/0",
+            "wall_ms": 8.225
+          }
+        ],
+        "text_count": 59,
+        "text_wall_ms": 3.041
+      }
+    }
+  },
+  "final": {
+    "method": "existing numeric wall/thread-CPU spans; first parent frame after gesture start with a shared slider paint; source performs synchronous mask before posting worker click",
+    "note": "Nested shape/raster spans belong to preparation; paint spans belong to composition. Do not add nested stages twice.",
+    "source_hashes": {
+      "nacre_shell": "e36cd77c94a193e05e6d2bed2e62337fda10dfbf4c74383da193aaa3d289cd0b",
+      "nacre_helper": "8481f8ca5118d6c42993c18dd5e13a21a1fdc63fbb5b66353d7c8071b4a2acb5",
+      "pointer_tool": "82f5c99bce576cb07a7acc2fae47a53f8370a04cc5484b3da5f728b990a3e030",
+      "qml_probe": "fe762efdcb2205d38935c019532abb5917d441fad551e1835c160e7edefe7046",
+      "bead_shell_tree": "37be1bfd01888c0f8b31079c45b493fcb5fdda046c209c92e5f39cdce3feaaff",
+      "nacre_qml_tree": "dec065e43fe43e4610d935791a3a6040d45a4e0f300e3f365d66fadb4ac2ad9a",
+      "capture_driver": "3e0ae9878b40576dbe7014253d0b7dce94509b7cecfa0a6ad62602bf7929f640",
+      "parity_driver": "920b073d02879ffaa04667f1beb177e7a31056d0914be344f79cce8d32c7bc49"
+    },
+    "first_mask_frame": {
+      "end_ns": 854050719534459,
+      "frame_wall_ms": 0.562,
+      "shared_paints_in_bracket": 1,
+      "stage_totals": {
+        "slider_allocate": {
+          "count": 1,
+          "wall_ms": 0.052,
+          "thread_cpu_ms": 0.0521
+        },
+        "slider_mask": {
+          "count": 1,
+          "wall_ms": 0.1267,
+          "thread_cpu_ms": 0.1267
+        },
+        "present_prepare": {
+          "count": 1,
+          "wall_ms": 0.0037,
+          "thread_cpu_ms": 0.0037
+        },
+        "visual_damage": {
+          "count": 1,
+          "wall_ms": 0.0111,
+          "thread_cpu_ms": 0.0111
+        },
+        "repair_setup": {
+          "count": 1,
+          "wall_ms": 0.0138,
+          "thread_cpu_ms": 0.0047
+        },
+        "paint_clear": {
+          "count": 1,
+          "wall_ms": 0.0028,
+          "thread_cpu_ms": 0.0028
+        },
+        "paint_rounded": {
+          "count": 49,
+          "wall_ms": 0.1559,
+          "thread_cpu_ms": 0.1554
+        },
+        "paint_image": {
+          "count": 1,
+          "wall_ms": 0.0042,
+          "thread_cpu_ms": 0.0042
+        },
+        "paint_text": {
+          "count": 62,
+          "wall_ms": 0.042,
+          "thread_cpu_ms": 0.0418
+        },
+        "paint_format": {
+          "count": 1,
+          "wall_ms": 0.0007,
+          "thread_cpu_ms": 0.0006
+        },
+        "compose": {
+          "count": 1,
+          "wall_ms": 0.4519,
+          "thread_cpu_ms": 0.4436
+        },
+        "slider_paint": {
+          "count": 1,
+          "wall_ms": 0.0443,
+          "thread_cpu_ms": 0.0443
+        },
+        "slider_stage": {
+          "count": 1,
+          "wall_ms": 0.0497,
+          "thread_cpu_ms": 0.0497
+        },
+        "commit": {
+          "count": 1,
+          "wall_ms": 0.0625,
+          "thread_cpu_ms": 0.0625
+        }
+      },
+      "resource_wall_ms": {
+        "count": 0,
+        "text": 0,
+        "images": 0,
+        "shadow": 0
+      },
+      "layer_bakes": {
+        "count": 0,
+        "wall_ms": 0,
+        "images": [],
+        "text_count": 0,
+        "text_wall_ms": 0
+      }
+    }
+  },
+  "asset_mapping_note": "The sole root image layer is inferred from Chrome::decorate_with to be the generated joined-frame SVG rasterized through resvg; the log does not print its path. Nested resource/layer spans overlap present_prepare."
+}
