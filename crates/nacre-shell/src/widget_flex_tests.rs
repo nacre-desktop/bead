@@ -272,8 +272,7 @@ fn nested_pill_includes_child_growth_and_content_changes_do_not_move_neighbors()
         "the parent pill reserves its measured width plus every child's max-width delta"
     );
     assert!(
-        preferred_clock_seconds_span(&first)
-            >= (first_reservations["clock-in-pill"] / 32.).ceil(),
+        preferred_clock_seconds_span(&first) >= (first_reservations["clock-in-pill"] / 32.).ceil(),
         "clock seconds span covers at least the default clock reservation"
     );
     assert_eq!(
