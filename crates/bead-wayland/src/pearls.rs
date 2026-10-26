@@ -2156,6 +2156,10 @@ impl App {
         if self.pearl_saved.as_ref() == Some(&layout) {
             return;
         }
+        // Deliver the covered frame transaction before synchronous persistence.
+        // In particular, fsync must not keep a released native frame client-side.
+        let _ = self.conn.flush();
+        let _store_profile = bead_core::profile::Span::new("pearl_store");
         if let Err(error) = layout.save(&path) {
             eprintln!("PEARL_SAVE_ERROR {error}");
         } else {
