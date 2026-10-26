@@ -173,6 +173,51 @@ struct WidgetHoverPreviewKey {
     output: String,
     revision: u64,
 }
+
+fn widget_drag_source_bounds(
+    source_left: f64,
+    source_top: f64,
+    source_width: f64,
+    source_height: f64,
+    output_width: f64,
+    output_height: f64,
+) -> Option<bead::render::Rect> {
+    if ![
+        source_left,
+        source_top,
+        source_width,
+        source_height,
+        output_width,
+        output_height,
+    ]
+    .into_iter()
+    .all(f64::is_finite)
+        || source_width <= 0.
+        || source_height <= 0.
+        || output_width <= 0.
+        || output_height <= 0.
+    {
+        return None;
+    }
+    let clipped_left = source_left.max(0.);
+    let clipped_top = source_top.max(0.);
+    let clipped_right = (source_left + source_width).min(output_width);
+    let clipped_bottom = (source_top + source_height).min(output_height);
+    if clipped_right <= clipped_left || clipped_bottom <= clipped_top {
+        return None;
+    }
+    let left = clipped_left.floor();
+    let top = clipped_top.floor();
+    let right = (left + (clipped_right - clipped_left).ceil() + 1.).min(output_width);
+    let bottom = (top + (clipped_bottom - clipped_top).ceil() + 1.).min(output_height);
+    (right > left && bottom > top).then_some(bead::render::Rect::new(
+        left as f32,
+        top as f32,
+        (right - left) as f32,
+        (bottom - top) as f32,
+    ))
+}
+
 struct WidgetHoverPreview {
     key: WidgetHoverPreviewKey,
     prepared_at: std::time::Instant,
@@ -1221,28 +1266,27 @@ impl Runtime {
                 .or_else(|| match self.session.stores.get("bead.output.name") {
                     Some(bead::core::Value::Text(name)) if !name.is_empty() => Some(name.clone()),
                     _ => None,
-                })?;
+        })?;
         let target_origin_x = number("widgets.screen_origin_x");
         let target_origin_y = number("widgets.screen_origin_y");
-        let left = source_left - target_origin_x;
-        let top = source_top - target_origin_y;
-        // Match the canvas's constant outward pixel for fractional translation.
-        let width = f64::from(candidate.source_rect.2.max(1.)).ceil() + 1.;
-        let height = f64::from(candidate.source_rect.3.max(1.)).ceil() + 1.;
-        let (left, top) = (left.floor(), top.floor());
-        let initial_bounds =
-            bead::render::Rect::new(left as f32, top as f32, width as f32, height as f32);
-        if ![
-            initial_bounds.x,
-            initial_bounds.y,
-            initial_bounds.w,
-            initial_bounds.h,
-        ]
-        .into_iter()
-        .all(f32::is_finite)
-        {
-            return None;
-        }
+        let number_or = |key: &str, fallback: f64| {
+            match self.session.stores.get(key) {
+                Some(bead::core::Value::Number(value)) if value.is_finite() && *value > 0. => {
+                    *value
+                }
+                _ => fallback,
+            }
+        };
+        let output_width = number_or("widgets.screen_width", f64::from(self.viewport_size.0));
+        let output_height = number_or("widgets.screen_height", f64::from(self.viewport_size.1));
+        let initial_bounds = widget_drag_source_bounds(
+            source_left - target_origin_x,
+            source_top - target_origin_y,
+            f64::from(candidate.source_rect.2.max(1.)),
+            f64::from(candidate.source_rect.3.max(1.)),
+            output_width,
+            output_height,
+        )?;
         let key = WidgetHoverPreviewKey {
             payload: candidate.payload.clone(),
             source_rect: [
