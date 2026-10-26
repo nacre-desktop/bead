@@ -45,6 +45,19 @@ lip input and artwork, replacing the remap race. Final private CPU proof passes
 hold. Full remote Arch CI passes; paired QML states and regenerated goldens were
 inspected. Animation/content parity limits and unmeasured memory are explicit in
 [the spec and evidence](specs/0137-ai-hover.md). No live change.
+## 2026-10-26 — B0135 shared scrolling
+
+Finger input follows pixels directly; real axis_stop starts kinetic motion,
+opposite input cancels old travel, and wheel steps retarget over 125 ms.
+Shared virtual lists and viewport/buffer repair reduce repeated frame work.
+Full remote Arch CI passes on `30ba6683`. Bounded Settings render p95 improves
+15.79→6.78 ms, but reversal remains 29.25 ms. Direct private finger-stop reversal
+is 11.35 ms; neither meets one 120 Hz frame. The GL80 picker now reopens without
+cache errors using demand-driven 256 MiB global admission; sampled active process
+unreclaimable memory reaches 528.64 MiB including DRM. This is a documented stress
+trade, separate from the final five-pair CPU memory validation in progress.
+120 Hz/no-drop acceptance fails. No live deployment or laptop-cap claim.
+[Source pins, per-surface results and known parity gaps](specs/0135-scrolling.md).
 
 ## 2026-10-25 — B0132 Today controls
 

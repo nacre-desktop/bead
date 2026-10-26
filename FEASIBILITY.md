@@ -1,5 +1,29 @@
 # Feasibility
 
+## B0135 — shared scrolling (2026-10-26)
+
+One source-aware policy replaces amplified finger input and queued wheel reversal.
+Virtual lists, retained poses and viewport damage reduce repeated CPU work.
+Real finger-stop motion and cancellation pass; most latency/cadence targets still fail.
+Full remote CI passes; five-pair CPU memory validation is in progress.
+
+| Matched private probes, scale 1.5 | Before | Candidate |
+| --- | ---: | ---: |
+| Bounded Settings finger render p95 / reversal, ms | 15.79 / 45.13 | 6.78 / 29.25 (reversal fails) |
+| Settings side-tab wheel render p95, 3 repeats ms | 15.59–16.15 | 1.29–1.51 |
+| Rapid notification wheel reversal, 3 repeats ms | 63.34–63.91 | 19.08–19.56 (fails) |
+| Direct-Labwc finger-stop reversal, ms | 16.41 | 11.35 (fails) |
+| GL80 finger / reopened wheel render p95, ms | setup fails | 0.86 / 0.74 |
+| GL80 reversal finger / wheel, ms | unavailable | 281.93 / 559.72 (fails) |
+
+Demand-driven global admission grows 192→256 MiB to eliminate a measured reopen
+failure. GL80 sampled process unreclaimable memory is 38.47 MiB idle and
+481.52 / 528.64 MiB during finger/wheel, including DRM; this is a substantial
+stress cost, not the laptop cap or final CPU memory cohort. Historical shared-target
+control artifacts have ambiguous provenance and do not supply final gates.
+No physical scanout or zero-drop acceptance. Long clamped gaps remain reported.
+[Source-pinned results, failures and parity gaps](docs/specs/0135-scrolling.md).
+
 ## 2026-10-26 — B0129 launcher first-frame icons
 
 The launcher retains a bounded shared SVG/PNG raster set after its panel closes.
