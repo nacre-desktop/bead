@@ -1274,8 +1274,8 @@ impl App {
         }
     }
     pub(super) fn stop_app_if_idle(&mut self) {
-        let another_panel_open = self.panel_runtime.is_some()
-            || self.slots.iter().any(|group| group.alive());
+        let another_panel_open =
+            self.panel_runtime.is_some() || self.slots.iter().any(|group| group.alive());
         if should_stop_app_after_panel_release(
             self.options.app.is_some(),
             self.app_pending.is_some(),
