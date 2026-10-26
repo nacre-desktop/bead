@@ -26,7 +26,43 @@ fn validate_frame_rasters(items: &[Item]) -> Result<()> {
         })
         .ok_or("candidate retained rasters overflow")?;
     if bytes > STEADY_RASTER_LIMIT {
-        return Err("candidate retained rasters exceed steady cache budget".into());
+        let mut kind_bytes = [0usize; 4];
+        let mut largest = Vec::new();
+        for (index, item) in items.iter().enumerate() {
+            let Some(raster) = &item.raster else { continue };
+            let kind = match &item.primitive {
+                Primitive::Image { .. } => 0,
+                Primitive::Text { .. } => 1,
+                Primitive::Shadow { .. } => 2,
+                _ => 3,
+            };
+            let size = raster.pixels.data().len();
+            kind_bytes[kind] += size;
+            largest.push((
+                size,
+                index,
+                raster.pixels.width(),
+                raster.pixels.height(),
+                kind,
+            ));
+        }
+        largest.sort_unstable_by_key(|entry| std::cmp::Reverse(entry.0));
+        let largest = largest
+            .iter()
+            .take(3)
+            .map(|(size, index, width, height, kind)| {
+                format!(
+                    "{}#{index}={width}x{height}/{size}",
+                    ["Image", "Text", "Shadow", "Other"][*kind]
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        return Err(format!(
+            "candidate retained rasters exceed steady cache budget: total={bytes}, Image={}, Text={}, Shadow={}, Other={}, largest=[{largest}]",
+            kind_bytes[0], kind_bytes[1], kind_bytes[2], kind_bytes[3]
+        )
+        .into());
     }
     Ok(())
 }
