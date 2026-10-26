@@ -2667,9 +2667,11 @@ impl App {
             }
             // Never pulled: retire the target created for this drag press.
             (_, None) => {
-                self.cancel_prepared_native();
-                self.reserved_pearl_id = None;
-                self.prewarm_attempted = false;
+                self.on_surface(&gesture.surface, |app| {
+                    app.cancel_prepared_native();
+                    app.reserved_pearl_id = None;
+                    app.prewarm_attempted = false;
+                });
             }
         }
         self.end_guides();
