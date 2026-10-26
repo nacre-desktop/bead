@@ -508,13 +508,27 @@ impl App {
             let result = (|| -> Result<(), Box<dyn Error>> {
                 #[cfg(feature = "native-gl")]
                 if self.renderer.wants_gpu()
-                    && let Some(surface) = self.surfaces.iter().find(|surface| surface.companion == self.processing_panel && output_scope_matches(self.active_output.as_deref(), &surface.output_name) && surface.gl.is_some())
+                    && let Some(surface) = self.surfaces.iter().find(|surface| {
+                        surface.companion == self.processing_panel
+                            && output_scope_matches(
+                                self.active_output.as_deref(),
+                                &surface.output_name,
+                            )
+                            && surface.gl.is_some()
+                    })
                 {
-                    let (w, h, _, _) = buffer_dimensions(surface.width, surface.height, surface.scale120)?;
-                    self.gl.as_ref().ok_or("resource retirement GL context missing")?.activate(surface.gl.as_ref().unwrap(), w as u32, h as u32)?;
+                    let (w, h, _, _) =
+                        buffer_dimensions(surface.width, surface.height, surface.scale120)?;
+                    self.gl
+                        .as_ref()
+                        .ok_or("resource retirement GL context missing")?
+                        .activate(surface.gl.as_ref().unwrap(), w as u32, h as u32)?;
                 }
                 self.renderer.release_gpu_resources();
-                for surface in self.surfaces.iter_mut().filter(|surface| surface.companion == self.processing_panel && output_scope_matches(self.active_output.as_deref(), &surface.output_name)) {
+                for surface in self.surfaces.iter_mut().filter(|surface| {
+                    surface.companion == self.processing_panel
+                        && output_scope_matches(self.active_output.as_deref(), &surface.output_name)
+                }) {
                     surface.visual_damage = Default::default();
                 }
                 Ok(())
@@ -523,7 +537,10 @@ impl App {
             return false;
         }
         if let UiEvent::ResourcesPrepared(result) = &event
-            && !self.runtime.as_ref().is_some_and(|source| source.preparation_retry_pending())
+            && !self
+                .runtime
+                .as_ref()
+                .is_some_and(|source| source.preparation_retry_pending())
         {
             if let Err(error) = result {
                 eprintln!("UI_ERROR resource preparation: {error}");
@@ -531,7 +548,10 @@ impl App {
                 let qh = self.qh.clone();
                 for index in 0..self.surfaces.len() {
                     if !self.surfaces[index].companion
-                        && output_scope_matches(self.active_output.as_deref(), &self.surfaces[index].output_name)
+                        && output_scope_matches(
+                            self.active_output.as_deref(),
+                            &self.surfaces[index].output_name,
+                        )
                     {
                         self.draw(index, &qh);
                     }
@@ -787,7 +807,8 @@ impl App {
                         self.options.renderer = RendererKind::Cpu;
                     }
                     if self.processing_panel
-                        && self.options.companion.as_ref().map(|(_, kind)| *kind) == Some(RendererKind::FemtovgGl)
+                        && self.options.companion.as_ref().map(|(_, kind)| *kind)
+                            == Some(RendererKind::FemtovgGl)
                         && !self.renderer.wants_gpu()
                     {
                         // Native content is accepted by the source actor; the
@@ -795,7 +816,8 @@ impl App {
                         continue;
                     }
                     let surface = &self.surfaces[i];
-                    self.renderer.prepare_on_ui(scene, surface.scale120 as f32 / 120.)?;
+                    self.renderer
+                        .prepare_on_ui(scene, surface.scale120 as f32 / 120.)?;
                     #[cfg(feature = "native-gl")]
                     if let Some(gl) = &surface.gl {
                         let transport = self.gl.as_ref().ok_or("missing shared GL context")?;
@@ -970,7 +992,9 @@ impl App {
                 return false;
             }
             Err(error) => {
-                if super::rendering::prepare_pending_images(error.as_ref(), runtime.as_mut()).unwrap_or(false) {
+                if super::rendering::prepare_pending_images(error.as_ref(), runtime.as_mut())
+                    .unwrap_or(false)
+                {
                     self.runtime = Some(runtime);
                     return false;
                 }

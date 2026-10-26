@@ -285,8 +285,12 @@ impl App {
         if let UiEvent::ResourcesPrepared(result) = event {
             match result {
                 Ok(()) => {
-                    if let Some(canvas) = self.canvases.get_mut(key) { canvas.dirty = true; }
-                    if let Err(error) = self.canvas_draw(key) { eprintln!("CANVAS_ERROR {error}"); }
+                    if let Some(canvas) = self.canvases.get_mut(key) {
+                        canvas.dirty = true;
+                    }
+                    if let Err(error) = self.canvas_draw(key) {
+                        eprintln!("CANVAS_ERROR {error}");
+                    }
                 }
                 Err(error) => eprintln!("CANVAS_ERROR {error}"),
             }

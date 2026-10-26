@@ -814,8 +814,12 @@ pub trait Renderer {
         }
     }
     /// Presentation may import worker pixels or reuse an exact frozen frame.
-    fn prepare_on_ui(&mut self, scene: &Scene, scale: f32) -> Result<()> { self.prepare(scene, scale) }
-    fn reusable_scene(&self, _scene: &Scene, _scale: f32) -> Result<bool> { Ok(false) }
+    fn prepare_on_ui(&mut self, scene: &Scene, scale: f32) -> Result<()> {
+        self.prepare(scene, scale)
+    }
+    fn reusable_scene(&self, _scene: &Scene, _scale: f32) -> Result<bool> {
+        Ok(false)
+    }
     fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()>;
     fn render(&mut self, scene: &Scene, target: ShmTarget<'_>, damage: Damage) -> Result<()>;
 }

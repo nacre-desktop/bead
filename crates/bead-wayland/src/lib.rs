@@ -533,11 +533,18 @@ pub trait SceneSource {
     ) -> Result<(), Box<dyn Error>> {
         Err("asynchronous image preparation is unavailable".into())
     }
-    fn prepare_cpu(&mut self, _request: std::sync::Arc<bead_render::tree::CpuPreparation>) -> Result<(), Box<dyn Error>> {
+    fn prepare_cpu(
+        &mut self,
+        _request: std::sync::Arc<bead_render::tree::CpuPreparation>,
+    ) -> Result<(), Box<dyn Error>> {
         Err("asynchronous CPU preparation is unavailable".into())
     }
-    fn resources_retired(&self) -> bool { false }
-    fn preparation_retry_pending(&self) -> bool { false }
+    fn resources_retired(&self) -> bool {
+        false
+    }
+    fn preparation_retry_pending(&self) -> bool {
+        false
+    }
     /// Stage a product-provided presentation palette through the normal scene transaction.
     fn wallpaper_palette(
         &mut self,

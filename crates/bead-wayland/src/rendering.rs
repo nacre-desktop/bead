@@ -284,7 +284,11 @@ impl App {
                     if let Err(error) = self.loop_handle.insert_source(
                         Timer::from_duration(Duration::from_millis(8)),
                         move |_, _, app| {
-                            if let Some(index) = app.surfaces.iter().position(|s| s.wl_surface() == &identity) {
+                            if let Some(index) = app
+                                .surfaces
+                                .iter()
+                                .position(|s| s.wl_surface() == &identity)
+                            {
                                 app.surfaces[index].resources_retry_pending = false;
                                 app.draw(index, &qh);
                             }
@@ -479,8 +483,16 @@ impl App {
                     } else if app.panel_target {
                         drop(result);
                         let qh = app.qh.clone();
-                        let indices = app.surfaces.iter().enumerate().filter(|(_, surface)| surface.companion).map(|(index, _)| index).collect::<Vec<_>>();
-                        for index in indices { app.draw(index, &qh); }
+                        let indices = app
+                            .surfaces
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, surface)| surface.companion)
+                            .map(|(index, _)| index)
+                            .collect::<Vec<_>>();
+                        for index in indices {
+                            app.draw(index, &qh);
+                        }
                     } else if !app.panel_target
                         && app.panel_runtime.is_some()
                         && let Err(error) = app.start_panel_snapshot()
@@ -908,7 +920,6 @@ impl App {
         Ok(())
     }
     pub(super) fn draw(&mut self, index: usize, qh: &QueueHandle<Self>) {
-
         if self.hidden {
             return;
         }
@@ -946,19 +957,27 @@ impl App {
                 return;
             }
             #[cfg(feature = "native-gl")]
-            if self.options.companion.as_ref().map(|(_, kind)| *kind) == Some(RendererKind::FemtovgGl)
-                && self.companion.as_ref().is_some_and(|(_, _, kind)| *kind == RendererKind::Cpu)
+            if self.options.companion.as_ref().map(|(_, kind)| *kind)
+                == Some(RendererKind::FemtovgGl)
+                && self
+                    .companion
+                    .as_ref()
+                    .is_some_and(|(_, _, kind)| *kind == RendererKind::Cpu)
                 && let Err(error) = self.update_companion_policy(index, qh)
             {
-                if !self.prepare_surface_images(index, error.as_ref()) { self.fail(error); }
+                if !self.prepare_surface_images(index, error.as_ref()) {
+                    self.fail(error);
+                }
                 return;
             }
             #[cfg(feature = "native-gl")]
-            if self.options.companion.as_ref().map(|(_, kind)| *kind) == Some(RendererKind::FemtovgGl)
+            if self.options.companion.as_ref().map(|(_, kind)| *kind)
+                == Some(RendererKind::FemtovgGl)
                 && let Some((scene, renderer, kind)) = self.companion.as_ref()
                 && *kind == RendererKind::Cpu
-                && !renderer.reusable_scene(scene, self.surfaces[index].scale120 as f32 / 120.).unwrap_or(false)
-
+                && !renderer
+                    .reusable_scene(scene, self.surfaces[index].scale120 as f32 / 120.)
+                    .unwrap_or(false)
             {
                 self.surfaces[index].redraw = true;
                 return;
@@ -1060,7 +1079,13 @@ impl App {
         self.draw_current(index, qh);
     }
     fn draw_current(&mut self, index: usize, qh: &QueueHandle<Self>) {
-        if (if self.surfaces[index].companion { self.panel_runtime.as_ref() } else { self.runtime.as_ref() }).is_some_and(|source| source.resources_retired()) {
+        if (if self.surfaces[index].companion {
+            self.panel_runtime.as_ref()
+        } else {
+            self.runtime.as_ref()
+        })
+        .is_some_and(|source| source.resources_retired())
+        {
             self.surfaces[index].redraw = true;
             return;
         }
@@ -1220,12 +1245,13 @@ impl App {
                 PixelFormat::Bgra
             };
             let replace_pending_ui = _kind == RendererKind::Cpu
-                && s.callbacks.can_replace_pending_ui(
-                    s.ui_serial != s.last_submitted_ui_serial,
-                )
+                && s.callbacks
+                    .can_replace_pending_ui(s.ui_serial != s.last_submitted_ui_serial)
                 && s.geometry == (w, h)
                 && s.format == format
-                && s.buffers.iter().any(|b| !b.buffer.slot().has_active_buffers());
+                && s.buffers
+                    .iter()
+                    .any(|b| !b.buffer.slot().has_active_buffers());
             if s.callbacks.pending && !replace_pending_ui {
                 s.redraw = true;
                 return Ok(());
