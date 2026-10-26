@@ -2336,8 +2336,8 @@ impl Runtime {
             return Ok(self.with_widget_file());
         }
         self.widgets_client = Some(client.clone());
-        let topic = match client.lease_topic(crate::widgets::TOPIC) {
-            Ok(topic) => std::sync::Arc::new(topic),
+        let topic = match client.view_topic(crate::widgets::TOPIC) {
+            Ok(topic) => topic,
             Err(_) => {
                 eprintln!("SOURCE_ERROR code=widgets_lease");
                 return Ok(self);
