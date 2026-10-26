@@ -28,7 +28,7 @@ spec.loader.exec_module(m)
 m.__file__ = __file__  # capture-safety re-execs must re-enter this wrapper
 m.STATES['release-proof'] = ([], [], 0)
 TRIALS = int(os.environ.get('PEARL_TRIALS', '20'))
-RELEASE_TO_HANDOFF_P95_LIMIT_MS = 33.0
+RELEASE_TO_NATIVE_PRESENTED_P95_LIMIT_MS = 33.0
 DRAG_RELEASE_UI_FRAME_P99_LIMIT_MS = 16.0
 
 
@@ -279,6 +279,71 @@ def covered_handoff_commit_ns(trace, pearl_id):
     return int(timestamp.group(1))
 
 
+def _native_handoff_presentation(trace, pearl_id):
+    """Return target native surface and its first post-handoff presentation time."""
+    lines = trace.splitlines()
+    marker = f'PEARL_HANDOFF_COMMITTED id={pearl_id}'
+    marker_index = next((index for index, line in enumerate(lines)
+                         if re.search(re.escape(marker) + r'(?=\s|$)', line)), None)
+    if marker_index is None:
+        raise RuntimeError(f'missing {marker} in native trace')
+
+    request_re = re.compile(
+        r'wp_presentation\s*[@#]\s*\d+\s*\.\s*feedback\s*\(\s*'
+        r'wl_surface\s*[@#]\s*(\d+)\s*,\s*new\s+id\s+'
+        r'wp_presentation_feedback\s*[@#]\s*(\d+)\s*\)', re.IGNORECASE)
+    event_re = re.compile(
+        r'wp_presentation_feedback\s*[@#]\s*(\d+)\s*\.\s*'
+        r'(presented|discarded)\s*\(([^)]*)\)', re.IGNORECASE)
+    requests = []
+    for index, line in enumerate(lines[:marker_index]):
+        match = request_re.search(line)
+        if match:
+            requests.append((index, int(match.group(1)), int(match.group(2))))
+    if not requests:
+        raise RuntimeError(f'{marker} has no preceding wp_presentation.feedback request')
+
+    # The request immediately before the marker identifies the first native
+    # frame requested for feedback. Track every request generation so an ID
+    # reused after destruction cannot inherit an earlier surface association.
+    target_request_index, target_surface, _ = requests[-1]
+    target_ordinal = len(requests) - 1
+    feedback_ids = {}
+    request_ordinal = 0
+    first_presented_ns = None
+    for index, line in enumerate(lines):
+        match = request_re.search(line)
+        if match:
+            surface_id, feedback_id = map(int, match.groups())
+            feedback_ids[feedback_id] = (surface_id, request_ordinal, index)
+            request_ordinal += 1
+        event = event_re.search(line)
+        if not event:
+            continue
+        feedback_id, kind, arguments = event.groups()
+        association = feedback_ids.get(int(feedback_id))
+        if not association:
+            continue
+        surface_id, ordinal, request_line_index = association
+        if (kind.lower() != 'presented' or surface_id != target_surface
+                or ordinal < target_ordinal or request_line_index < target_request_index):
+            continue
+        stamp = re.match(r'\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,|\s*$)', arguments)
+        if not stamp:
+            continue
+        sec_hi, sec_lo, nsec = map(int, stamp.groups())
+        first_presented_ns = ((sec_hi << 32) + sec_lo) * 1_000_000_000 + nsec
+        break
+    if first_presented_ns is None:
+        raise RuntimeError(f'{marker} has no presented feedback for native surface {target_surface}')
+    return target_surface, first_presented_ns
+
+
+def native_handoff_presented_ns(trace, pearl_id):
+    """Find actual native-surface wp_presentation time for a pearl handoff."""
+    return _native_handoff_presentation(trace, pearl_id)[1]
+
+
 def ui_frame_render_ms(trace, start_ns, end_ns):
     """Return full callback durations overlapping drag and the release observation window."""
     samples = []
@@ -314,22 +379,24 @@ def timing_summary(values):
             'samples_ms': values}
 
 
-def timing_gate_result(release_ms, frame_ms, expected_trials=20):
-    release = timing_summary(release_ms)
+def timing_gate_result(presented_ms, frame_ms, commit_ms=None, expected_trials=20):
+    presented = timing_summary(presented_ms)
     frames = timing_summary(frame_ms)
+    commits = timing_summary(commit_ms) if commit_ms else None
     failures = []
-    if len(release_ms) < expected_trials:
-        failures.append(f'only {len(release_ms)} release-to-handoff timings; {expected_trials} required')
-    if release['p95_ms'] > RELEASE_TO_HANDOFF_P95_LIMIT_MS:
-        failures.append(f"release-to-covered-handoff p95 {release['p95_ms']:.3f} ms exceeds "
-                        f'{RELEASE_TO_HANDOFF_P95_LIMIT_MS:.1f} ms')
+    if len(presented_ms) < expected_trials:
+        failures.append(f'only {len(presented_ms)} release-to-native-presentation timings; {expected_trials} required')
+    if presented['p95_ms'] > RELEASE_TO_NATIVE_PRESENTED_P95_LIMIT_MS:
+        failures.append(f"release-to-native-presentation p95 {presented['p95_ms']:.3f} ms exceeds "
+                        f'{RELEASE_TO_NATIVE_PRESENTED_P95_LIMIT_MS:.1f} ms')
     if frames['p99_ms'] > DRAG_RELEASE_UI_FRAME_P99_LIMIT_MS:
         failures.append(f"drag/release UI_FRAME p99 {frames['p99_ms']:.3f} ms exceeds "
                         f'{DRAG_RELEASE_UI_FRAME_P99_LIMIT_MS:.1f} ms')
-    return {'release_to_covered_handoff_commit': release,
+    return {'release_to_native_presented': presented,
+            'release_to_covered_handoff_commit': commits,
             'drag_release_ui_frame': frames,
             'percentile_method': 'nearest-rank',
-            'limits_ms': {'release_to_covered_handoff_commit_p95': RELEASE_TO_HANDOFF_P95_LIMIT_MS,
+            'limits_ms': {'release_to_native_presented_p95': RELEASE_TO_NATIVE_PRESENTED_P95_LIMIT_MS,
                           'drag_release_ui_frame_p99': DRAG_RELEASE_UI_FRAME_P99_LIMIT_MS},
             'passed': not failures, 'failures': failures}
 
@@ -356,12 +423,12 @@ def drive(self, _names):
         raise RuntimeError(f'PEARL_TRIALS={TRIALS} is fewer than the required 20 trials')
     out = self.out / 'release-proof'
     out.mkdir(parents=True, exist_ok=True)
-    report = {'method': '25ms cropped screencopy-ready PNG series, black-padded to output coordinates; not physical scanout',
+    report = {'method': 'Instrumented Wayland draws with compositor-reported wp_presentation software timestamps; 25ms cropped screencopy PNGs are padded to output coordinates; neither measures physical scanout',
               'renderer': 'cpu' if self.args.cpu else 'femtovg-gl with idle CPU fallback',
               'idle_memory_kib': self.rss(),
               'scale': 1.5, 'size': [2880, 1800], 'parent_hz': self.args.parent_hz, 'trials': [], 'required_trials': 20,
-              'timing_method': 'release uses POINTER_RELEASE monotonic_ns to product PEARL_HANDOFF_COMMITTED monotonic_ns after native-content and source-cover commits; UI_FRAME callbacks overlapping pointer-tool launch through 1.5s after release include prewarm and post-handoff setup; not presentation timing',
-              'timing_gates': {'release_to_covered_handoff_commit_p95_ms': RELEASE_TO_HANDOFF_P95_LIMIT_MS,
+              'timing_method': 'release-to-native-presentation uses POINTER_RELEASE monotonic_ns to the first matching native-surface wp_presentation_feedback.presented timestamp after the pearl handoff marker; release-to-commit is reported separately; UI_FRAME render callbacks retain the p99 gate; these are compositor software presentation timestamps and not physical scanout measurements',
+              'timing_gates': {'release_to_native_presented_p95_ms': RELEASE_TO_NATIVE_PRESENTED_P95_LIMIT_MS,
                                'drag_release_ui_frame_p99_ms': DRAG_RELEASE_UI_FRAME_P99_LIMIT_MS,
                                'percentile_method': 'nearest-rank'}}
     shell_log = self.logs / 'shell.log'
@@ -436,7 +503,8 @@ def drive(self, _names):
             (directory.parent / 'native-frame-trace.log').write_text(
                 '\n'.join(line for line in trace.splitlines()
                           if re.search(r'wl_surface[@#]\d+', line) or 'UI_FRAME' in line
-                          or 'UI_PRESENTED' in line or 'PEARL_HANDOFF_' in line
+                          or 'UI_PRESENTED' in line or 'wp_presentation_feedback' in line
+                          or 'wp_presentation.feedback' in line or 'PEARL_HANDOFF_' in line
                           or 'set_window_geometry' in line) + '\n')
             pearls = panel_call(self, 'pearls')
             detached = [p for p in pearls if p.get('view') == 'launcher']
@@ -462,21 +530,25 @@ def drive(self, _names):
             try:
                 release_ns = parse_pointer_release_ns(marks.get('pointer_stdout'))
                 handoff_ns = covered_handoff_commit_ns(trace, pearl['id'])
+                native_surface, presented_ns = _native_handoff_presentation(trace, pearl['id'])
                 backend_match = re.search(
                     rf'PEARL_HANDOFF_COMMITTED id={pearl["id"]}\b[^\n]*\bbackend=(\w+)', trace)
                 handoff_backend = backend_match.group(1) if backend_match else None
                 if handoff_ns < release_ns:
                     raise RuntimeError('native handoff commit timestamp precedes pointer release')
+                if presented_ns < release_ns:
+                    raise RuntimeError('native surface presentation timestamp precedes pointer release')
                 release_ms = (release_ns - marks['capture_start_monotonic_ns']) / 1_000_000
-                handoff_ms = (handoff_ns - marks['capture_start_monotonic_ns']) / 1_000_000
+                presented_ms = (presented_ns - marks['capture_start_monotonic_ns']) / 1_000_000
                 release_to_handoff_ms = (handoff_ns - release_ns) / 1_000_000
+                release_to_presented_ms = (presented_ns - release_ns) / 1_000_000
                 frame_samples = ui_frame_render_ms(
                     trace, marks['pointer_trigger_start_monotonic_ns'],
                     max(handoff_ns, release_ns + 1_500_000_000))
                 if not frame_samples:
                     raise RuntimeError('no companion UI_FRAME samples overlap drag start through handoff')
                 analysis = analyze(directory, final_screen, stamps, rect, 1.5,
-                                   release_ms, [dx, dy], handoff_start_ms=handoff_ms)
+                                   release_ms, [dx, dy], handoff_start_ms=presented_ms)
             except RuntimeError as error:
                 report['trials'].append({'trial': trial + 1, 'detached': True,
                                          'handoff_committed': True, 'pearl_id': pearl['id'],
@@ -487,8 +559,11 @@ def drive(self, _names):
                       'capture_region_logical': capture_region,
                       'pointer_release_monotonic_ns': release_ns,
                       'covered_handoff_commit_monotonic_ns': handoff_ns,
+                      'native_surface': native_surface,
+                      'native_first_presented_ns': presented_ns,
                       'handoff_backend': handoff_backend,
                       'release_to_covered_handoff_commit_ms': release_to_handoff_ms,
+                      'release_to_native_presented_ms': release_to_presented_ms,
                       'pointer_trigger_start_monotonic_ns': marks['pointer_trigger_start_monotonic_ns'],
                       'drag_release_ui_frame_render_ms': frame_samples,
                       'pointer_start_px': start, 'pointer_end_px': end, 'delta_logical': [dx, dy],
@@ -523,11 +598,13 @@ def drive(self, _names):
         (out / 'release-proof.json').write_text(json.dumps(report, indent=2) + '\n')
     if len(report['trials']) < 20:
         raise RuntimeError(f"only {len(report['trials'])} release trials completed; 20 required")
-    release_latencies = [trial['release_to_covered_handoff_commit_ms'] for trial in report['trials']
-                         if 'release_to_covered_handoff_commit_ms' in trial]
+    presented_latencies = [trial['release_to_native_presented_ms'] for trial in report['trials']
+                           if 'release_to_native_presented_ms' in trial]
+    commit_latencies = [trial['release_to_covered_handoff_commit_ms'] for trial in report['trials']
+                        if 'release_to_covered_handoff_commit_ms' in trial]
     frame_latencies = [sample for trial in report['trials']
                        for sample in trial.get('drag_release_ui_frame_render_ms', [])]
-    report['timing'] = timing_gate_result(release_latencies, frame_latencies)
+    report['timing'] = timing_gate_result(presented_latencies, frame_latencies, commit_latencies)
     (out / 'release-proof.json').write_text(json.dumps(report, indent=2) + '\n')
     if not report['timing']['passed']:
         raise RuntimeError('timing gate failed: ' + '; '.join(report['timing']['failures']))

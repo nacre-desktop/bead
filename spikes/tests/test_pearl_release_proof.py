@@ -137,6 +137,37 @@ class PearlReleaseTimestampTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'no monotonic_ns'):
             proof.covered_handoff_commit_ns('PEARL_HANDOFF_COMMITTED id=7', 7)
 
+    def test_native_presentation_uses_latest_pre_marker_feedback_request_surface(self):
+        trace = ('-> wp_presentation@4.feedback(wl_surface@88, new id wp_presentation_feedback@40)\n'
+                 '<- wp_presentation_feedback@40.presented(0, 2, 100, 16666667, 0, 1, 1)\n'
+                 '-> wp_presentation@4.feedback(wl_surface@21, new id wp_presentation_feedback@41)\n'
+                 'PEARL_HANDOFF_COMMITTED id=7 rect=[0, 0, 1, 1]\n'
+                 '<- wp_presentation_feedback@41.presented(0, 9, 200, 16666667, 0, 1, 1)\n')
+        self.assertEqual(proof._native_handoff_presentation(trace, 7),
+                         (21, 9_000_000_200))
+        self.assertEqual(proof.native_handoff_presented_ns(trace, 7), 9_000_000_200)
+
+    def test_discarded_initial_feedback_and_reused_id_cannot_borrow_other_surface(self):
+        trace = ('-> wp_presentation#4.feedback(wl_surface#77, new id wp_presentation_feedback#40)\n'
+                 '<- wp_presentation_feedback#40.discarded()\n'
+                 '-> wp_presentation#4.feedback(wl_surface#77, new id wp_presentation_feedback#41)\n'
+                 'PEARL_HANDOFF_COMMITTED id=7\n'
+                 '<- wp_presentation_feedback#41.discarded()\n'
+                 '-> wp_presentation#4.feedback(wl_surface#99, new id wp_presentation_feedback#41)\n'
+                 '<- wp_presentation_feedback#41.presented(0, 20, 0, 16666667, 0, 1, 1)\n'
+                 '-> wp_presentation#4.feedback(wl_surface#77, new id wp_presentation_feedback#42)\n'
+                 '<- wp_presentation_feedback#42.presented(0, 21, 500, 16666667, 0, 1, 1)\n')
+        self.assertEqual(proof._native_handoff_presentation(trace, 7),
+                         (77, 21_000_000_500))
+
+    def test_missing_native_surface_presentation_fails_without_ui_fallback(self):
+        trace = ('-> wp_presentation@4.feedback(wl_surface@77, new id wp_presentation_feedback@41)\n'
+                 'PEARL_HANDOFF_COMMITTED id=7\n'
+                 '<- wp_presentation_feedback@41.discarded()\n'
+                 'UI_PRESENTED surface=77 monotonic_ns=21000000000\n')
+        with self.assertRaisesRegex(RuntimeError, 'no presented feedback for native surface 77'):
+            proof.native_handoff_presented_ns(trace, 7)
+
     def test_ui_frame_samples_cover_drag_to_handoff_including_overlapping_prewarm(self):
         trace = ('UI_FRAME monotonic_ns=110000000 render_ms=10.0 companion=true\n'
                  'UI_FRAME monotonic_ns=130000000 render_ms=10.0 companion=true\n'
@@ -147,15 +178,18 @@ class PearlReleaseTimestampTests(unittest.TestCase):
                          [10.0, 10.0])
 
     def test_timing_gate_uses_nearest_rank_over_all_trial_and_frame_samples(self):
-        result = proof.timing_gate_result([10.0] * 18 + [34.0, 35.0], [8.0] * 98 + [17.0, 18.0])
-        self.assertEqual(result['release_to_covered_handoff_commit']['sample_count'], 20)
-        self.assertEqual(result['release_to_covered_handoff_commit']['p95_ms'], 34.0)
+        result = proof.timing_gate_result([10.0] * 18 + [34.0, 35.0],
+                                          [8.0] * 98 + [17.0, 18.0],
+                                          [20.0] * 18 + [40.0, 41.0])
+        self.assertEqual(result['release_to_native_presented']['sample_count'], 20)
+        self.assertEqual(result['release_to_native_presented']['p95_ms'], 34.0)
+        self.assertEqual(result['release_to_covered_handoff_commit']['p95_ms'], 40.0)
         self.assertEqual(result['drag_release_ui_frame']['p99_ms'], 17.0)
         self.assertFalse(result['passed'])
         self.assertEqual(len(result['failures']), 2)
 
     def test_timing_gate_accepts_values_at_both_limits(self):
-        result = proof.timing_gate_result([33.0] * 20, [16.0] * 100)
+        result = proof.timing_gate_result([33.0] * 20, [16.0] * 100, [50.0] * 20)
         self.assertTrue(result['passed'])
 
 
