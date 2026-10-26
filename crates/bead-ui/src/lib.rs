@@ -8,6 +8,7 @@ pub mod input;
 mod interaction;
 pub mod layout;
 mod local_range;
+pub use local_range::LocalRangeFeedback;
 pub mod markdown;
 mod materialized;
 pub mod recovery;

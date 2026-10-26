@@ -2774,6 +2774,72 @@ fn shared_slider_origins_match_at_fractional_scale() -> bead_test::Result<()> {
 fn local_slider_drag_defers_projection_and_releases_once() -> bead_test::Result<()> {
     use bead::wayland::{SceneSource, UiEvent};
 
+    fn text<'a>(scene: &'a bead::render::Scene, id: &str) -> Option<&'a str> {
+        let layer = scene.layers.iter().find(|layer| layer.id == id)?;
+        scene.primitives[layer.own.clone()]
+            .iter()
+            .find_map(|primitive| {
+                if let bead::render::Primitive::Text { text, .. } = primitive {
+                    Some(text.as_str())
+                } else {
+                    None
+                }
+            })
+    }
+    fn assert_text_only_change(before: &bead::render::Scene, after: &bead::render::Scene) {
+        assert_eq!(after.width, before.width);
+        assert_eq!(after.bounds, before.bounds);
+        assert_eq!(after.offset, before.offset);
+        assert_eq!(after.resource_revision, before.resource_revision);
+        assert_eq!(
+            after
+                .layers
+                .iter()
+                .map(|layer| (
+                    &layer.id,
+                    &layer.parent,
+                    &layer.own,
+                    layer.subtree_end,
+                    layer.bounds
+                ))
+                .collect::<Vec<_>>(),
+            before
+                .layers
+                .iter()
+                .map(|layer| (
+                    &layer.id,
+                    &layer.parent,
+                    &layer.own,
+                    layer.subtree_end,
+                    layer.bounds
+                ))
+                .collect::<Vec<_>>(),
+            "local labels preserve retained layer geometry"
+        );
+        let normalized = |scene: &bead::render::Scene| {
+            scene
+                .primitives
+                .iter()
+                .map(|primitive| {
+                    let mut value = serde_json::to_value(primitive).expect("primitive serializes");
+                    if value.get("type").and_then(Json::as_str) == Some("text") {
+                        value["text"] = json!("<local-label>");
+                    }
+                    value
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            normalized(before),
+            normalized(after),
+            "only text contents may change in a local label scene"
+        );
+        assert!(
+            after.prepared.is_empty(),
+            "old prepared glyph frames are invalidated"
+        );
+    }
+
     let h = harness(base(), "home", 1.)?;
     let mut runtime = crate::reload::Runtime::new(h.session).with_control_center(offline())?;
     let projections = std::rc::Rc::new(std::cell::Cell::new(0usize));
@@ -2807,11 +2873,12 @@ fn local_slider_drag_defers_projection_and_releases_once() -> bead_test::Result<
     };
     let press_x = rect.x + rect.w / 2.;
     let press_y = visual.grab.y + visual.grab.h / 2.;
-    runtime.stage(UiEvent::Click {
+    let press_scene = runtime.stage(UiEvent::Click {
         x: press_x,
         y: press_y,
     })?;
     runtime.commit();
+    let mut accepted_scene = press_scene.unwrap_or(scene);
 
     let pressed_visual = runtime
         .drag_visuals()
@@ -2835,10 +2902,9 @@ fn local_slider_drag_defers_projection_and_releases_once() -> bead_test::Result<
         let x = pressed_visual.pointer.0
             + fraction * (pressed_visual.pointer.1 - pressed_visual.pointer.0);
         let y = pressed_visual.grab.y + pressed_visual.grab.h / 2.;
-        assert!(
-            runtime.stage(UiEvent::LocalDrag { x, y })?.is_none(),
-            "local motion must not produce a full scene"
-        );
+        let local_scene = runtime
+            .stage(UiEvent::LocalDrag { x, y })?
+            .expect("a changed value label emits a text-only scene");
         let Some(bead::core::Value::Number(value)) =
             runtime.session.stores.get("bead.preview.value")
         else {
@@ -2847,6 +2913,17 @@ fn local_slider_drag_defers_projection_and_releases_once() -> bead_test::Result<
         assert!(
             ((*value as f32) - fraction * 100.).abs() < 0.2,
             "fraction={fraction}, value={value}"
+        );
+        let slider_id = visual.id.strip_suffix(".thumb").expect("thumb suffix");
+        let label_id = format!("{}.value", slider_id.rsplit_once('.').unwrap().0);
+        let expected_label = format!("{value:.0}%");
+        assert_eq!(text(&local_scene, &label_id), Some(expected_label.as_str()));
+        assert_text_only_change(&accepted_scene, &local_scene);
+        accepted_scene = local_scene;
+
+        assert!(
+            runtime.stage(UiEvent::LocalDrag { x, y })?.is_none(),
+            "the same formatted label value emits no duplicate scene"
         );
         let current_nodes: Vec<_> = runtime
             .session
@@ -2877,6 +2954,17 @@ fn local_slider_drag_defers_projection_and_releases_once() -> bead_test::Result<
         .stage(UiEvent::Release)?
         .expect("release ends the pressed range and projects the latest source data");
     runtime.commit();
+    let Some(bead::core::Value::Number(latest)) = runtime.session.stores.get("bead.preview.value")
+    else {
+        panic!("the latest local preview remains available through release");
+    };
+    let slider_id = visual.id.strip_suffix(".thumb").expect("thumb suffix");
+    let label_id = format!("{}.value", slider_id.rsplit_once('.').unwrap().0);
+    let expected_label = format!("{latest:.0}%");
+    assert_eq!(
+        text(&released_scene, &label_id),
+        Some(expected_label.as_str())
+    );
     assert!(
         projections.get() > before_projection,
         "release projects the source again"

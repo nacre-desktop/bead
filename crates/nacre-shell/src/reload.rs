@@ -3853,7 +3853,7 @@ impl SceneSource for Runtime {
             // Retained ranges already painted the frame; update their value and
             // authored argument without materializing or laying out the panel.
             if local {
-                let format = self.session.view_nodes().iter().find_map(|node| {
+                let motion = self.session.view_nodes().iter().find_map(|node| {
                     let scope = node.id.rsplit_once('.')?.0;
                     if !id.starts_with(&format!("{scope}.")) {
                         return None;
@@ -3861,20 +3861,43 @@ impl SceneSource for Runtime {
                     let bead::core::Value::List(records) = node.metadata.as_ref()? else {
                         return None;
                     };
-                    records
-                        .first()?
-                        .get("pointer_motion")?
-                        .get("argument")
-                        .cloned()
+                    let motion = records.first()?.get("pointer_motion")?;
+                    Some((
+                        node.id.clone(),
+                        motion.get("argument")?.clone(),
+                        motion.get("label").cloned(),
+                    ))
+                });
+                let (thumb_id, format, label) = motion.map_or((None, None, None), |item| {
+                    (Some(item.0), Some(item.1), item.2)
+                });
+                let label = label.and_then(|mut label| {
+                    let authored_id = label.get("id")?.as_str()?;
+                    let relative = authored_id.strip_prefix("../");
+                    if let Some(relative) = relative {
+                        let slider_id = thumb_id.as_deref()?.rsplit_once('.')?.0;
+                        let owner = slider_id.rsplit_once('.').map_or("", |(owner, _)| owner);
+                        let target = if owner.is_empty() {
+                            relative.to_owned()
+                        } else {
+                            format!("{owner}.{relative}")
+                        };
+                        label["id"] = serde_json::Value::String(target);
+                    }
+                    Some(label)
                 });
                 if self.control.is_none() || action_name != "cc.do" || format.is_none() {
                     local = false;
                 }
                 if local && let UiEvent::Drag { x, y } = &event {
-                    if let Some(value) =
-                        self.session.local_range_feedback(id, *x, format.as_ref())?
-                    {
-                        *argument = value;
+                    if let Some(feedback) = self.session.local_range_feedback_with_label(
+                        id,
+                        *x,
+                        format.as_ref(),
+                        label.as_ref(),
+                    )? {
+                        *argument = feedback.argument;
+                        pointer_scene = feedback.scene;
                         self.slider_local_active = true;
                         bead::core::profile::position("slider_local_feedback", *x, *y);
                         bead::core::profile::mark("slider_local_feedback");
@@ -4169,7 +4192,11 @@ impl SceneSource for Runtime {
                 return self.finish_scene(scene, false);
             }
             if local {
-                return Ok(None);
+                return if pointer_scene.is_some() {
+                    self.finish_scene(pointer_scene, false)
+                } else {
+                    Ok(None)
+                };
             }
             // A level step keeps the focus so the drag continues over the next step.
             let scene = match pointer_scene.take().map_or_else(

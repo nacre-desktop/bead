@@ -68,14 +68,39 @@ return function(ui, tokens)
         for i,node in ipairs(kids) do out[i]=node end
         return ui.Box(out)
     end
-    -- Without `on_change` (or with `enabled=false`) the same drawing shows at 35 % and takes no input.
-    function kit.Slider(p)
+    local function slider_range(p)
         local lo,hi=p.min or 0,p.max or 100
-        local step=p.step or (hi-lo)/20
-        assert(hi>lo and step>0 and math.ceil((hi-lo)/step)<=256,"invalid slider range/step")
         local first=p.change_arg and p.change_arg(lo) or lo
         local last=p.change_arg and p.change_arg(hi) or hi
         local key=(p.id or "").."|"..(p.on_change or "").."|"..typeof(first)..":"..tostring(first).."|"..typeof(last)..":"..tostring(last)
+        return lo,hi,key
+    end
+    local function slider_label(p,value)
+        local format=p.local_label and p.local_label.format
+        if type(format)~="table" or type(format.prefix)~="string" or (format.suffix~=nil and type(format.suffix)~="string") then
+            return tostring(value)
+        end
+        local precision=format.precision or 0
+        if type(precision)~="number" or precision%1~=0 or precision<0 or precision>6 then
+            return tostring(value)
+        end
+        return format.prefix..string.format("%."..precision.."f",value)..(format.suffix or "")
+    end
+    -- Use the same action-derived key as Slider, and retain source wording when no preview is active.
+    function kit.SliderValue(p,fallback)
+        if type(p.local_label)~="table" then return fallback or "" end
+        local lo,hi,key=slider_range(p)
+        local preview=ui.preview_value(key,lo-1)
+        if preview>=lo and preview<=hi then
+            return slider_label(p,preview)
+        end
+        return fallback or ""
+    end
+    -- Without `on_change` (or with `enabled=false`) the same drawing shows at 35 % and takes no input.
+    function kit.Slider(p)
+        local lo,hi,key=slider_range(p)
+        local step=p.step or (hi-lo)/20
+        assert(hi>lo and step>0 and math.ceil((hi-lo)/step)<=256,"invalid slider range/step")
         local source=value(p.value,lo)
         local current=math.clamp(ui.preview_value(key,source),lo,hi)
         local width=p.width or 240
@@ -103,7 +128,7 @@ return function(ui, tokens)
             ui.Box{id="track",position="absolute",left=inset,top=12,width=avail,height=6,radius=3,fill="surfaceContainerHighest"},
             kit.Fill{id="level",position="absolute",left=inset,top=12,width=4+fraction*(avail-8),height=6,radius=3,
                 from="primary",to="secondary",opacity=opacity},
-            ui.Box{id="thumb",metadata={{pointer_motion={key=key,origin=inset,argument=p.pointer_format,travel=avail-8,fraction=fraction,fill={id="level",minimum=4,radius=3,gradient_min=16,from=ui.alpha("primary",opacity),to=ui.alpha(tokens.gradients~=false and "secondary" or "primary",opacity)}}}},position="absolute",left=inset+fraction*(avail-8),top=7,width=8,height=16,radius=3,fill=ui.alpha("primary",opacity)},
+            ui.Box{id="thumb",metadata={{pointer_motion={key=key,origin=inset,argument=p.pointer_format,label=p.local_label,travel=avail-8,fraction=fraction,fill={id="level",minimum=4,radius=3,gradient_min=16,from=ui.alpha("primary",opacity),to=ui.alpha(tokens.gradients~=false and "secondary" or "primary",opacity)}}}},position="absolute",left=inset+fraction*(avail-8),top=7,width=8,height=16,radius=3,fill=ui.alpha("primary",opacity)},
             live and ui.Row(props(children,{id="hits",width="100%",height=height,gap=0})) or nil}
     end
     function kit.Tile(p)
@@ -177,9 +202,15 @@ return function(ui, tokens)
         local W,H=p.width,p.height
         local detail=p.on_detail~=nil
         local right=detail and 40 or 8
-        local control=kit.Slider{id="level",position="absolute",left=42,top=23,width=W-90-right,
+        local local_label=p.local_label
+        if local_label==nil and p.detail and p.detail~="" then
+            local_label={id="../value",format={prefix="",suffix="%",precision=0}}
+        end
+        local slider_props={id="level",position="absolute",left=42,top=23,width=W-90-right,
             value=p.value,min=0,max=100,step=p.step or 5,label=p.label,enabled=armed,on_change=p.on_change,change_arg=p.change_arg,
-            echo_value=p.echo_value,echo_tolerance=p.echo_tolerance,pointer_format=p.pointer_format}
+            echo_value=p.echo_value,echo_tolerance=p.echo_tolerance,pointer_format=p.pointer_format,
+            local_label=local_label}
+        local control=kit.Slider(slider_props)
         local kids={
             ui.Text{id="label",position="absolute",left=46,top=7,width=W-46-(detail and 86 or 54),height=16,font_size=(tokens.text.caption-1)*4/3,
                 color="onSurfaceVariant",text=p.caption or p.label},
@@ -188,7 +219,7 @@ return function(ui, tokens)
                 aria_label=p.toggle_label or p.label,on_activate=armed and p.on_toggle or nil},
             control,
             ui.Text{id="value",position="absolute",left=W-right-48,top=29,width=48,height=20,text_align="right",
-                font_size=tokens.text.caption*4/3,color="onSurfaceVariant",text=p.detail or ""}}
+                font_size=tokens.text.caption*4/3,color="onSurfaceVariant",text=kit.SliderValue(slider_props,p.detail or "")}}
         if detail then
             kids[#kids+1]=kit.IconButton{id="detail",position="absolute",left=W-36,top=22,width=32,height=32,padding=0,radius=tokens.radii.full,
                 font_size=17*4/3,text="chevron_right",fill="transparent",hover_fill=ui.alpha("onSurface",.08),color=armed and "onSurface" or "onSurfaceVariant",
