@@ -282,6 +282,7 @@ class ScrollReversalProofTests(unittest.TestCase):
         self.assertEqual(pacing.SCROLL_SCENES["keybindings"][1:3], (960, 900))
         self.assertEqual(pacing.SCROLL_SCENES["ai-chat"][1:3], (240, 650))
         self.assertEqual(pacing.SCROLL_SCENES["widgets-gallery"][0], [("ui", "widgets", "open")])
+        self.assertEqual(pacing.SCROLL_SCENES["widgets-gallery"][1:3], (800, 600))
         self.assertEqual(pacing.SCROLL_STORE_KEYS["widgets-gallery"], "widgets.scroll")
         calls = []
 
