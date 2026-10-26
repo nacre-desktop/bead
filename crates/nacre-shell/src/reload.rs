@@ -7993,7 +7993,24 @@ impl SceneSource for Runtime {
         if !self.trace && std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_none() {
             return String::new();
         }
-        self.session.state_summary()
+        let summary = self.session.state_summary();
+        if self.widget_app && std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some() {
+            let viewport = self.session.view_nodes().iter().find_map(|node| {
+                let Some(bead::core::Value::List(records)) = &node.metadata else {
+                    return None;
+                };
+                let marker = records.iter().find(|record| record["widget_layout"] == true)?;
+                Some(serde_json::json!([marker["viewport_width"], marker["viewport_height"]]))
+            });
+            if let (Some(viewport), Ok(serde_json::Value::Object(mut values))) =
+                (viewport, serde_json::from_str::<serde_json::Value>(&summary))
+            {
+                // Proof of the accepted layout, never a store or requested viewport.
+                values.insert("__bead_committed_viewport".into(), viewport);
+                return serde_json::to_string(&values).unwrap_or(summary);
+            }
+        }
+        summary
     }
     fn scroll_regions(&self) -> Vec<bead::render::Rect> {
         if self.extras.as_ref().is_some_and(|extras| {

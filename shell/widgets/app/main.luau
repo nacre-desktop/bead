@@ -477,7 +477,8 @@ end
 
 local function metadata()
     return {{widget_layout=true,widget_clock_preview_seconds=selected=="clock",document=doc,initial=initial,rev=rev,catalogue=catalogue,
-        screen_width=screen_w,screen_height=screen_h,snap_distance=spacing.lg}}
+        screen_width=screen_w,screen_height=screen_h,snap_distance=spacing.lg,
+        viewport_width=width,viewport_height=height}}
 end
 
 local app_content=ui.Column{id="widgets-app",width="100%",height="100%",fill="surface",
