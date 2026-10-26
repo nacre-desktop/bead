@@ -31,6 +31,43 @@ fn validate_frame_rasters(items: &[Item]) -> Result<()> {
     Ok(())
 }
 
+/// Only immutable image/text rasters wholly outside a persistent clip are omitted.
+/// Reveal-window clips are animated poses and must never decide raster lifetime.
+fn raster_hidden_by_own_clip(scene: &Scene, index: usize, primitive: &Primitive) -> bool {
+    if !matches!(primitive, Primitive::Image { .. } | Primitive::Text { .. }) {
+        return false;
+    }
+    let Some(clip) = scene.clips.get(&index) else {
+        return false;
+    };
+    let offset = scene.content_offset(index);
+    let bounds = rect(primitive).translated(offset.0, offset.1);
+    let clip = clip.translated(offset.0, offset.1);
+    let visible = bounds.intersect(clip);
+    visible.w <= 0. || visible.h <= 0.
+}
+
+/// A caller-supplied prepared pose may be reused only if its image/text raster
+/// attachments still match the scene's persistent clipping state.
+fn prepared_rasters_match_visibility(scene: &Scene, frame: &Frame) -> bool {
+    // Imported frames can intentionally have a different item vector than
+    // the source scene. Preserve that existing path; visibility correspondence
+    // is only defined for the generated one-item-per-primitive frame.
+    frame.items.len() != scene.primitives.len()
+        || scene
+            .primitives
+            .iter()
+            .enumerate()
+            .all(|(index, primitive)| {
+                if matches!(primitive, Primitive::Image { .. } | Primitive::Text { .. }) {
+                    let should_have_raster = !raster_hidden_by_own_clip(scene, index, primitive);
+                    frame.items[index].raster.is_some() == should_have_raster
+                } else {
+                    true
+                }
+            })
+}
+
 #[derive(Clone)]
 pub struct Raster {
     pub pixels: Arc<Pixmap>,
@@ -1005,7 +1042,11 @@ impl TreeCache {
         }))
     }
     pub fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
-        if let Some(frame) = scene.prepared.get(&scale.to_bits()) {
+        if let Some(frame) = scene
+            .prepared
+            .get(&scale.to_bits())
+            .filter(|frame| prepared_rasters_match_visibility(scene, frame))
+        {
             if let Some(motion) = scene.motion.as_ref().filter(|m| m.reveal) {
                 // Build the growing-edge templates as the prepared frame arrives, not in the first reveal frame.
                 for (index, _) in &motion.parts {
@@ -1116,7 +1157,8 @@ impl TreeCache {
                     value.to_bits().hash(&mut frame_hash);
                 }
             }
-            let raster = if kind == "fill" || kind == "arc" || kind == "polyline" {
+            let raster_hidden = raster_hidden_by_own_clip(scene, index, primitive);
+            let raster = if kind == "fill" || kind == "arc" || kind == "polyline" || raster_hidden {
                 None
             } else {
                 let slot = (id.clone(), scale.to_bits());
@@ -3543,6 +3585,220 @@ mod tests {
             bounds: Rect::new(0., 0., 24., 20.),
         }
     }
+
+    fn clipped_wallpaper_scene(count: usize, first_x: f32) -> Scene {
+        let mut scene = scene();
+        scene.width = 32.;
+        scene.bounds = Rect::new(0., 0., 32., 24.);
+        scene.primitives.clear();
+        scene.clips.clear();
+        scene.font_files = vec![
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../bead-test/fonts/IBMPlexSans.ttf"),
+        ];
+        for row in 0..count {
+            let x = if row == 0 {
+                first_x
+            } else {
+                100. + row as f32 * 20.
+            };
+            scene.primitives.push(Primitive::Image {
+                blur: 0.,
+                fit: crate::ImageFit::Fill,
+                clip_polygon: None,
+                rect: Rect::new(x, 2., 512., 512.),
+                path: "proof.png".into(),
+            });
+            scene.clips.insert(row, Rect::new(0., 0., 24., 24.));
+        }
+        scene.primitives.push(Primitive::Text {
+            rect: Rect::new(first_x, 16., 16., 6.),
+            text: "Wallpaper 0".into(),
+            family: "IBM Plex Sans".into(),
+            size: 5.,
+            color: [255, 255, 255, 255],
+            weight: 400,
+            align: None,
+        });
+        scene.clips.insert(count, Rect::new(0., 0., 24., 24.));
+        let length = scene.primitives.len();
+        scene.layers = vec![crate::SceneLayer {
+            id: "viewport".into(),
+            parent: None,
+            own: 0..length,
+            subtree_end: length,
+            bounds: Rect::new(0., 0., 24., 24.),
+        }];
+        scene.prepared.clear();
+        scene
+    }
+
+    fn set_primitive_x(primitive: &mut Primitive, x: f32) {
+        match primitive {
+            Primitive::Image { rect, .. } | Primitive::Text { rect, .. } => rect.x = x,
+            _ => unreachable!(),
+        }
+    }
+
+    fn frame_raster_bytes(frame: &Frame) -> usize {
+        frame
+            .items
+            .iter()
+            .filter_map(|item| item.raster.as_ref())
+            .map(|raster| raster.pixels.data().len())
+            .sum()
+    }
+
+    fn frame_pixels(frame: &Frame, scene: &Scene, scale: f32) -> Vec<u8> {
+        let width = (scene.bounds.w * scale).ceil() as u32;
+        let height = (scene.bounds.h * scale).ceil() as u32;
+        let mut bytes = vec![0; width as usize * height as usize * 4];
+        paint(
+            frame,
+            scene.offset,
+            ShmTarget {
+                bytes: &mut bytes,
+                width,
+                height,
+                scale,
+                format: PixelFormat::Rgba,
+            },
+            Damage::full(width, height),
+        )
+        .unwrap();
+        bytes
+    }
+
+    #[test]
+    fn clipped_wallpaper_rows_keep_descriptions_but_rasterize_only_visible_image_and_text() {
+        for scale in [1., 1.5] {
+            let mut scene = clipped_wallpaper_scene(80, 100.);
+            assert!(80 * 512 * 512 * 4 > STEADY_RASTER_LIMIT);
+            let mut cache = TreeCache::default();
+            cache.prepare(&scene, scale).unwrap();
+            let hidden = cache.frame.as_ref().unwrap().clone();
+            assert_eq!(hidden.items.len(), 81);
+            assert_eq!(hidden.layers.len(), 1);
+            assert!(hidden.items.iter().all(|item| item.raster.is_none()));
+            assert_eq!(frame_raster_bytes(&hidden), 0);
+
+            // A supplied prepared frame from the old pose must not hide the
+            // raster when this row enters the clip.
+            scene.prepared.insert(scale.to_bits(), hidden.clone());
+            set_primitive_x(&mut scene.primitives[0], 2.);
+            set_primitive_x(&mut scene.primitives[80], 2.);
+            cache.prepare(&scene, scale).unwrap();
+            let visible = cache.frame.as_ref().unwrap().clone();
+            assert_eq!(visible.items.len(), 81);
+            assert_eq!(visible.layers.len(), 1);
+            assert!(visible.items[0].raster.is_some());
+            assert!(
+                visible.items[1..80]
+                    .iter()
+                    .all(|item| item.raster.is_none()),
+                "only the overscan row now inside the clip needs pixels"
+            );
+            assert!(visible.items[80].raster.is_some());
+            assert!(frame_raster_bytes(&visible) < 64 * bead_core::cache::MIB);
+
+            let expected_scene = clipped_wallpaper_scene(1, 2.);
+            let mut expected_cache = TreeCache::default();
+            expected_cache.prepare(&expected_scene, scale).unwrap();
+            assert_eq!(
+                frame_pixels(&visible, &scene, scale),
+                frame_pixels(
+                    expected_cache.frame.as_ref().unwrap(),
+                    &expected_scene,
+                    scale
+                ),
+                "visible row pixels at scale {scale}"
+            );
+
+            // A stale prepared visible pose must not keep its raster attached
+            // after the row returns outside the persistent scroll clip.
+            scene.prepared.insert(scale.to_bits(), visible.clone());
+            set_primitive_x(&mut scene.primitives[0], 100.);
+            set_primitive_x(&mut scene.primitives[80], 100.);
+            cache.prepare(&scene, scale).unwrap();
+            let hidden_again = cache.frame.as_ref().unwrap();
+            assert_eq!(hidden_again.items.len(), 81);
+            assert_eq!(hidden_again.layers.len(), 1);
+            assert!(hidden_again.items.iter().all(|item| item.raster.is_none()));
+            assert_eq!(frame_raster_bytes(hidden_again), 0);
+            assert_eq!(
+                frame_pixels(hidden_again, &scene, scale),
+                vec![
+                    0;
+                    (scene.bounds.w * scale).ceil() as usize
+                        * (scene.bounds.h * scale).ceil() as usize
+                        * 4
+                ],
+                "hidden rows paint no pixels at scale {scale}"
+            );
+        }
+    }
+
+    #[test]
+    fn reveal_window_does_not_discard_a_raster_inside_its_persistent_clip() {
+        for scale in [1., 1.5] {
+            let mut scene = scene();
+            scene.width = 160.;
+            scene.bounds = Rect::new(0., 0., 160., 160.);
+            scene.primitives.truncate(1);
+            scene.layers[0].own = 0..1;
+            scene.layers[0].subtree_end = 1;
+            scene.layers[0].bounds = scene.bounds;
+            scene.clips.insert(0, scene.bounds);
+            if let Primitive::Image { rect, .. } = &mut scene.primitives[0] {
+                *rect = Rect::new(40., 100., 8., 8.);
+            }
+            scene.motion = Some(crate::Motion {
+                id: "reveal".into(),
+                open: true,
+                duration: 0.3,
+                spring: false,
+                curve: None,
+                edge: bead_core::Edge::Top,
+                slide_distance: None,
+                fade: false,
+                reveal: true,
+                progress: 1.,
+                parts: Vec::new(),
+                art: None,
+            });
+            let mut cache = TreeCache::default();
+            cache.prepare(&scene, scale).unwrap();
+            let side = (160. * scale).ceil() as usize;
+            assert!(
+                frame_pixels(cache.frame.as_ref().unwrap(), &scene, scale)
+                    .chunks_exact(4)
+                    .any(|pixel| pixel[3] != 0)
+            );
+            let canonical_open = cache.frame.as_ref().unwrap().clone();
+            assert!(canonical_open.items[0].raster.is_some());
+            scene.prepared.insert(scale.to_bits(), canonical_open);
+
+            scene.reveal(0.);
+            cache.prepare(&scene, scale).unwrap();
+            let closed = cache.frame.as_ref().unwrap().clone();
+            assert!(closed.items[0].raster.is_some());
+            assert_eq!(
+                frame_pixels(&closed, &scene, scale),
+                vec![0; side * side * 4]
+            );
+            scene.reveal(1.);
+            cache.prepare(&scene, scale).unwrap();
+            let opened = cache.frame.as_ref().unwrap().clone();
+            assert!(opened.items[0].raster.is_some());
+            assert_eq!(cache.builds, 1, "opening reused the retained image raster");
+            assert!(
+                frame_pixels(&opened, &scene, scale)
+                    .chunks_exact(4)
+                    .any(|pixel| pixel[3] != 0)
+            );
+        }
+    }
+
     #[test]
     fn filtered_frame_reuses_kept_rasters_and_unchanged_layers() {
         let mut source = scene();

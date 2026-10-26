@@ -233,7 +233,14 @@ fn bake(
                 let images = frame
                     .items
                     .iter()
-                    .filter(|item| matches!(item.primitive, bead_render::Primitive::Image { .. }));
+                    .filter(|item| matches!(item.primitive, bead_render::Primitive::Image { .. }))
+                    // Fully clipped descriptions intentionally need no raster.
+                    .filter(|item| {
+                        item.clip.is_none_or(|clip| {
+                            let visible = bead_render::tree::rect(&item.primitive).intersect(clip);
+                            visible.w > 0. && visible.h > 0.
+                        })
+                    });
                 let image_count = images.clone().count();
                 let missing_images = images.filter(|item| item.raster.is_none()).count();
                 bead_core::vprintln!(
