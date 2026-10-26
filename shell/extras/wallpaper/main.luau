@@ -61,6 +61,16 @@ local function rounded_clip(w,h)
   return points
 end
 local hex_clip={{.25,0},{.75,0},{1,.5},{.75,1},{.25,1},{0,.5}}
+local hex_outline_basis=T.wallpaper.hex_max_tile_width
+local hex_outline_height=hex_outline_basis*T.wallpaper.hex_tile_height_ratio
+local hex_outline_points={
+  {.25,T.wallpaper.hex_outline_inset/hex_outline_height},
+  {.75,T.wallpaper.hex_outline_inset/hex_outline_height},
+  {1-T.wallpaper.hex_outline_inset/hex_outline_basis,.5},
+  {.75,1-T.wallpaper.hex_outline_inset/hex_outline_height},
+  {.25,1-T.wallpaper.hex_outline_inset/hex_outline_height},
+  {T.wallpaper.hex_outline_inset/hex_outline_basis,.5},
+}
 
 local function button(id,label,active,request)
   local line_h=math.ceil(T.palette.description_font*1.4)
@@ -95,8 +105,10 @@ local function card(item, card_w, card_h, x, y, selected_card, clip)
       color="onSurfaceVariant",text_align="center"}
   end
   if clip==hex_clip then
-    kids[#kids+1]=ui.Image{id="hex-outline",position="absolute",left=0,top=0,width=card_w,height=card_h,
-      path=selected_card and "extras/wallpaper/assets/hex-selected.themed.svg" or "extras/wallpaper/assets/hex-idle.themed.svg"}
+    kids[#kids+1]=ui.Polyline{id="hex-outline",position="absolute",left=0,top=0,width=card_w,height=card_h,
+      points=hex_outline_points,closed=true,
+      stroke_width=(selected_card and T.wallpaper.hex_outline_selected_stroke or T.wallpaper.hex_outline_idle_stroke)*card_w/hex_outline_basis,
+      color=selected_card and "primary" or ui.alpha("outline",T.wallpaper.hex_outline_idle_opacity)}
     kids[#kids+1]=ui.Text{id="hex-title",position="absolute",left=T.wallpaper.hex_caption_inset,top=card_h-T.wallpaper.hex_caption_bottom,
       width=math.max(0,card_w-T.wallpaper.hex_caption_inset*2),height=T.wallpaper.hex_caption_height,text=item.title or "",font_size=T.palette.description_font,
       text_align="center",color=T.wallpaper.photo_ink}

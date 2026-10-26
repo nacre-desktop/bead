@@ -58,6 +58,8 @@ return {
     hex_min_columns=3, hex_max_columns=7, hex_column_width=230, hex_max_tile_width=340,
     hex_side_padding=30, hex_column_overlap=.76,
     hex_tile_height_ratio=.87, hex_gap=12, hex_extent_tail=.5,
+    hex_outline_inset=1, hex_outline_idle_stroke=1, hex_outline_selected_stroke=2,
+    hex_outline_idle_opacity=.35,
     hex_caption_inset=24, hex_caption_bottom=44, hex_caption_height=20,
     choice_widths={static=52,dynamic=69,carousel=69,spotlight=71,hexagons=76},
     group_gap=12, add_width=65, add_gap=4, disabled_opacity=.4,
