@@ -1,11 +1,17 @@
 # F5 cache follow-up
 
 Owner approved this follow-up before Features 9–10. Cache admission uses one
-192 MiB process-wide ceiling, plus smaller owner limits. This is a ceiling on
+256 MiB process-wide ceiling, plus smaller owner limits. This is a ceiling on
 retained cache payloads and estimated collection metadata, not process RSS/PSS,
 allocator arenas, active store data, source bundles, SHM or driver memory.
 `--report` includes `cache_bytes`: process limit/usage and each live cache owner.
 Missing dependency-internal byte measurements are not represented as zero.
+
+B0135 uses the owner's smoothness-first memory-spend authorization for bounded
+old/new raster and texture overlap: 68 MiB steady CPU/GL pixels, 136 MiB live
+admission each, and 256 MiB globally (previously 192 MiB). An 80-image picker
+reopen exhausted the old global ceiling while keeping the previous UI valid.
+These are admission counters, not allocations; physical memory is measured separately.
 
 Shared raster charges follow their last retained reference, including prepared
 frames and native GL upload references. Removing a lookup does not release its
@@ -17,8 +23,9 @@ host error path, rather than silently discarding a visible resource.
 
 | Cache | Owner ceiling |
 | --- | ---: |
-| Retained CPU pixels, legacy CPU textures, per-scale pixels | 64 MiB each |
-| CPU composite, native GL images/composite, opt-in wgpu images | 64 MiB each |
+| Retained CPU pixels | 68 MiB steady, 136 MiB old/new admission |
+| Native GL images | 68 MiB steady pixels, 136 MiB replacement admission |
+| Legacy CPU textures, per-scale pixels, CPU/GL composite, opt-in wgpu images | 64 MiB each |
 | Reachable Swash glyph images and usage metadata | 8 MiB |
 | Retained nodes / prepared frame metadata | 8 MiB each |
 | Compiled markup / markup values / computed values / materialized view | 8 MiB each |

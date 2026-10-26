@@ -7,7 +7,7 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
 };
 pub const MIB: usize = 1024 * 1024;
-pub const PROCESS_LIMIT: usize = 192 * MIB;
+pub const PROCESS_LIMIT: usize = 256 * MIB;
 #[derive(Default)]
 struct State {
     used: usize,
