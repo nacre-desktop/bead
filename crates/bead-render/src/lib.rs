@@ -2258,6 +2258,8 @@ mod tests {
             id: "opening".into(),
             open: true,
             duration: 0.3,
+            return_duration: None,
+            return_curve: None,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Top,
