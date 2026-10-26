@@ -145,22 +145,95 @@ fn reading_away_stops_following_until_the_bottom_is_reached_again() {
     let visible = cells(&out);
     assert!(visible.len() < 30 * 4, "{}", visible.len());
     assert!(visible.iter().all(|c| c["y"].as_f64().unwrap() < 1500.));
-    // Back near the bottom: following resumes; "Latest" does the same.
-    let out = chat.project(&stores(&[("chat.scroll", Value::Number(bottom - 10.))]));
+    // At the bottom: following resumes; "Latest" does the same.
+    let current_bottom = f64::from(
+        (num(&out, "chat.extent") as f32 - num(&out, "chat.transcript_height") as f32).max(0.),
+    );
+    let out = chat.project(&stores(&[("chat.scroll", Value::Number(current_bottom))]));
     assert!(
         (num(&out, "chat.scroll")
             - (num(&out, "chat.extent") - num(&out, "chat.transcript_height")))
         .abs()
             < 0.01
     );
+    let away_from_bottom = current_bottom - 10.;
+    let out = chat.project(&stores(&[("chat.scroll", Value::Number(away_from_bottom))]));
+    assert_eq!(num(&out, "chat.scroll"), away_from_bottom);
     chat.act("latest", &Stores::default());
-    let out = chat.project(&stores(&[("chat.scroll", Value::Number(bottom - 10.))]));
+    let out = chat.project(&stores(&[("chat.scroll", Value::Number(away_from_bottom))]));
     assert!(
         (num(&out, "chat.scroll")
             - (num(&out, "chat.extent") - num(&out, "chat.transcript_height")))
         .abs()
             < 0.01
     );
+}
+
+#[test]
+fn small_reader_scroll_stops_following_until_actual_bottom() {
+    let _guard = serial();
+    let mut msgs: Vec<(String, String)> = (0..30)
+        .map(|i| (format!("m{i}"), format!("message {i} {}", "x ".repeat(60))))
+        .collect();
+    let rows: Vec<(&str, &str, &str)> = msgs
+        .iter()
+        .map(|(id, text)| (id.as_str(), "assistant", text.as_str()))
+        .collect();
+    let (source, chat) = offline(topic(&rows, state(true, "Working", None)));
+    let initial = chat.project(&Stores::default());
+    let bottom = num(&initial, "chat.scroll");
+    assert!(bottom > 500.);
+
+    let first_reader_offset = bottom - 7.;
+    let first = chat.project(&stores(&[(
+        "chat.scroll",
+        Value::Number(first_reader_offset),
+    )]));
+    assert_eq!(num(&first, "chat.scroll"), first_reader_offset);
+
+    let fractional_offset = first_reader_offset - 0.25;
+    let fractional = chat.project(&stores(&[(
+        "chat.scroll",
+        Value::Number(fractional_offset),
+    )]));
+    assert_eq!(num(&fractional, "chat.scroll"), fractional_offset);
+
+    msgs.push((
+        "m30".into(),
+        format!("new streamed message {}", "x ".repeat(60)),
+    ));
+    let rows: Vec<(&str, &str, &str)> = msgs
+        .iter()
+        .map(|(id, text)| (id.as_str(), "assistant", text.as_str()))
+        .collect();
+    source
+        .publish(topic(&rows, state(true, "Working", None)))
+        .unwrap();
+    let after_append = chat.project(&stores(&[(
+        "chat.scroll",
+        Value::Number(fractional_offset),
+    )]));
+    assert_eq!(num(&after_append, "chat.scroll"), fractional_offset);
+
+    let new_bottom = f64::from(
+        (num(&after_append, "chat.extent") as f32
+            - num(&after_append, "chat.transcript_height") as f32)
+            .max(0.),
+    );
+    let at_bottom = chat.project(&stores(&[("chat.scroll", Value::Number(new_bottom))]));
+    assert_eq!(num(&at_bottom, "chat.scroll"), new_bottom);
+
+    msgs.push(("m31".into(), format!("followed update {}", "x ".repeat(60))));
+    let rows: Vec<(&str, &str, &str)> = msgs
+        .iter()
+        .map(|(id, text)| (id.as_str(), "assistant", text.as_str()))
+        .collect();
+    source
+        .publish(topic(&rows, state(true, "Working", None)))
+        .unwrap();
+    let after_followed_append =
+        chat.project(&stores(&[("chat.scroll", Value::Number(new_bottom))]));
+    assert!(num(&after_followed_append, "chat.scroll") > new_bottom);
 }
 
 #[test]

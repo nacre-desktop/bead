@@ -605,9 +605,8 @@ impl Chat {
         if thread != st.thread {
             st.thread = thread;
             st.follow = true;
-        }
-        if (current - st.written).abs() > 0.5 {
-            st.follow = current >= max_scroll - 48.;
+        } else if current != st.written {
+            st.follow = current >= max_scroll;
         }
         let scroll = if st.follow {
             max_scroll
