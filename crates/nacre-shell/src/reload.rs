@@ -1506,7 +1506,7 @@ impl Runtime {
                     });
                 }
             }
-            if wanted {
+            if self.bar && wanted {
                 let projection = canvas_values.clone();
                 if self.widget_canvas_projection.as_ref() != Some(&projection) {
                     self.widget_canvas_projection = Some(projection.clone());
