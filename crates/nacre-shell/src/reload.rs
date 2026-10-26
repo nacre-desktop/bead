@@ -53,7 +53,11 @@ fn widget_history_feedback_matches(
     {
         return false;
     }
-    if current_revision == previous_revision {
+    if current_revision < previous_revision {
+        // Canonical model publication can lag a trusted native write's feedback.
+        // The caller has already excluded a local draft or pending native edit.
+        true
+    } else if current_revision == previous_revision {
         current_document == Some(previous_document)
     } else {
         current_revision == revision && current_document == Some(document)

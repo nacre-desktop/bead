@@ -431,6 +431,15 @@ fn parent_history_feedback_accepts_topic_before_or_after_and_rejects_stale_revis
     let previous = json!({"version":1,"hosts":{"top_bar":{"instances":[]}}});
     let accepted = json!({"version":1,"hosts":{"top_bar":{"instances":[{"iid":"from-parent"}]}}});
     let newer = json!({"version":1,"hosts":{"top_bar":{"instances":[{"iid":"newer-edit"}]}}});
+    let lagging = json!({"version":1,"hosts":{"top_bar":{"instances":[{"iid":"old-projection"}]}}});
+    assert!(
+        super::widget_history_feedback_matches(2, 0, 4, 5, Some(&lagging), &previous, &accepted),
+        "a projection older than the native write advances to its authoritative feedback"
+    );
+    assert!(
+        !super::widget_history_feedback_matches(2, 5, 4, 5, Some(&lagging), &previous, &accepted),
+        "a lagging projection still cannot append duplicate history"
+    );
     assert!(
         super::widget_history_feedback_matches(4, 0, 4, 5, Some(&previous), &previous, &accepted),
         "feedback arriving before topic publication matches the old canonical snapshot"
