@@ -13,9 +13,8 @@ local time_max=math.max(t.clock_min_width,ui.text_width("23:59",clock_font,t.clo
 local seconds_max=math.max(ui.text_width("23:59:59",clock_font,t.clock_font),ui.text_width("12:59:59 PM",clock_font,t.clock_font))
 local date_max=math.max(ui.text_width("9999-12-31",clock_font,t.detail_font),ui.text_width("8888-88-88",clock_font,t.detail_font),ui.text_width("0000-00-00",clock_font,t.detail_font))+kit.tokens.spacing.hairline
 local date_content_max=time_max+t.item_gap+date_max
-local calendar_ink=t.status_symbol_ink.calendar_month or t.status_ink.calendar
 local function reserve_clock(content_width)
-    return t.status_padding+t.status_count_padding+calendar_ink+t.item_gap+content_width
+    return t.status_padding+t.status_count_padding+t.status_ink.calendar+t.item_gap+content_width
 end
 local function clock_with_seconds(time,seconds)
     local suffix=string.match(seconds,"^%d%d:%d%d:(%d%d)$")
@@ -44,6 +43,7 @@ end
 local function clock_content(style,instance_id,available_width)
     local time=ui.resolve_for_check(ui.bind("bar.clock.text")) or ""
     local time_capacity=math.min(time_max,available_width or time_max)
+    local preview=type(instance_id)=="string" and string.sub(instance_id,1,8)=="preview-"
     if style=="time" then
         local shown=measure.ellipsize(time,time_capacity,clock_font,t.clock_font)
         local natural=math.min(time_capacity,math.max(math.min(t.clock_min_width,time_capacity),
@@ -55,7 +55,8 @@ local function clock_content(style,instance_id,available_width)
         local capacity=math.min(seconds_max,available_width or seconds_max)
         local value=clock_with_seconds(time,seconds)
         local natural=ui.text_width(measure.ellipsize(value,capacity,clock_font,t.clock_font),clock_font,t.clock_font)
-        local width=math.min(capacity,ui.animate("clock-seconds-width:"..tostring(instance_id or "clock"),natural,.18,"out-cubic"))
+        local width=preview and natural or math.min(capacity,
+            ui.animate("clock-seconds-width:"..tostring(instance_id or "clock"),natural,.18,"out-cubic"))
         local shown=measure.ellipsize(value,width,clock_font,t.clock_font)
         return status_text{id="time-seconds",text=shown,width=width,max_width=capacity,shrink=0,font_size=t.clock_font,color="tertiary"}
     end
@@ -66,7 +67,8 @@ local function clock_content(style,instance_id,available_width)
     local target_time=math.min(time_natural,capacity)
     local target_date=math.min(date_natural,math.max(0,capacity-target_time-(date_natural>0 and t.item_gap or 0)))
     local target=target_time+target_date+(target_date>0 and target_time>0 and t.item_gap or 0)
-    local width=math.min(capacity,ui.animate("clock-date-width:"..tostring(instance_id or "clock"),target,.18,"out-cubic"))
+    local width=preview and target or math.min(capacity,
+        ui.animate("clock-date-width:"..tostring(instance_id or "clock"),target,.18,"out-cubic"))
     local time_width=math.min(time_natural,math.max(0,width-(width>time_natural and t.item_gap or 0)))
     local date_width=math.min(date_natural,math.max(0,width-time_width-(time_width>0 and t.item_gap or 0)))
     local gap=date_width>0 and time_width>0 and t.item_gap or 0
@@ -77,7 +79,7 @@ end
 local function bar(props,settings,_data)
     local style=props.form_style
     local inner_capacity=props.available_width and math.max(0,props.available_width-t.status_padding-t.status_count_padding
-        -calendar_ink-t.item_gap) or nil
+        -t.status_ink.calendar-t.item_gap) or nil
     local content=clock_content(style,props.instance and props.instance.iid,inner_capacity)
     return (popouts and kit.Button or ui.Row){id="clock",height=t.status_height,direction=popouts and "row" or nil,gap=t.item_gap,padding=0,padding_left=t.status_padding,padding_right=t.status_count_padding,align="center",fill=popouts and "transparent" or nil,aria_label=popouts and ui.tr("bead.bar.open-calendar") or nil,on_activate=popouts and ui.action("view.open","calendar") or nil,
         status_glyph("calendar","calendar_month","calendar","tertiary"),content,
