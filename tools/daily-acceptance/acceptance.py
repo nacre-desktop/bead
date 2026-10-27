@@ -53,7 +53,7 @@ def output_pixels(env: dict[str, str], raw: pathlib.Path) -> None:
     if len(names) != 1:
         raise RuntimeError(f"expected one Labwc headless output, got {names!r}")
     name = names[0]
-    run(["wlr-randr", "--output", name, "--mode", "2880x1800"], env=env)
+    run(["wlr-randr", "--output", name, "--custom-mode", "2880x1800@60Hz"], env=env)
     deadline = time.monotonic() + 3
     after = ""
     while time.monotonic() < deadline:
