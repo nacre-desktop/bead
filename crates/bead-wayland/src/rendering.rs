@@ -617,9 +617,6 @@ impl App {
                 scene.prepared.clear();
             }
             for surface in self.surfaces.iter_mut().filter(|s| s.companion) {
-                // Replace the transparent GL buffer too: otherwise the compositor
-                // can retain its BO after our EGL display has been terminated.
-                // Keep the role mapped; a null attachment resets layer-shell state.
                 let wl_surface = surface.wl_surface().clone();
                 drop(surface.gl.take());
                 surface.gl_prepared = false;
@@ -629,6 +626,15 @@ impl App {
                 surface.buffers.clear();
                 surface.pool = SlotPool::new(4096, &self.shm)?;
                 surface.previous = None;
+                surface.geometry = (0, 0);
+                if surface.panel_unmapped
+                    || (surface.native.is_none() && !surface.layer.can_attach())
+                {
+                    // No buffer is attached, so the compositor holds no GL BO.
+                    continue;
+                }
+                // Replace the mapped transparent GL buffer too: otherwise the
+                // compositor can retain its BO after our EGL display has been terminated.
                 let scale = surface.scale120 as f32 / 120.;
                 let (width, height) = if let Some(viewport) = &surface.viewport {
                     wl_surface.set_buffer_scale(1);
@@ -650,18 +656,12 @@ impl App {
                 )?;
                 buffer.attach_to(&wl_surface)?;
                 wl_surface.damage_buffer(0, 0, width, height);
-                // This commit also applies any pending layer size; companions are
-                // anchored to one edge, so a zero size would kill the connection.
-                surface
-                    .layer
-                    .set_size(surface.width.max(1), surface.height.max(1));
                 wl_surface.commit();
                 surface.buffers.push(Reusable {
                     buffer,
                     pending: Vec::new(),
                     painted: false,
                 });
-                surface.geometry = (0, 0);
             }
             if self.options.renderer == RendererKind::Cpu
                 && !self.has_gl_surfaces()
@@ -1024,6 +1024,14 @@ impl App {
         {
             // Keep the resident scene and renderer warm, but don't remap a closed
             // layer when its provider publishes a background model update.
+            return;
+        }
+        if self.surfaces[index].native.is_none()
+            && self.surfaces[index].layer.phase() == layer_role::Phase::Initial
+        {
+            // An unmapped role commits without a buffer to ask for a fresh
+            // configure; the configure redraws.
+            self.surfaces[index].layer.commit();
             return;
         }
         if self.surfaces[index].companion && self.panel_gpu_suspended && !self.panel_target {

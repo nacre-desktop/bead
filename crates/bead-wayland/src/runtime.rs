@@ -657,8 +657,25 @@ pub fn run_runtime(
     let watchdog = bead_core::recovery::Watchdog::start(Duration::from_secs(6))?;
     // Five seconds stalled plus one dispatch interval of grace: sleeping is not
     // charged as a stall. No high-frequency heartbeat while idle.
-    let result = loop_.run(Some(Duration::from_secs(1)), &mut app, |_| watchdog.beat());
+    let result = loop_.run(Some(Duration::from_secs(1)), &mut app, |app| {
+        watchdog.beat();
+        // A protocol error or a dead socket never recovers, and the Wayland source
+        // does not surface every such error: stop once instead of spinning on it.
+        if app.failure.is_none()
+            && let Some(error) = app.conn.backend().last_error()
+        {
+            eprintln!("WAYLAND_FATAL {error}");
+            app.fail(format!("wayland connection lost: {error}"));
+        }
+    });
     drop(watchdog);
+    if let Some(error) = conn.backend().last_error() {
+        // Nothing can be released through a dead connection, and every request
+        // would log the error again: skip teardown and let the service manager
+        // restart the shell.
+        std::mem::forget(app);
+        return Err(format!("wayland connection lost: {error}").into());
+    }
     for s in &app.surfaces {
         println!(
             "ACQUIRE p50_ms={:.3} p99_ms={:.3}",
@@ -2268,20 +2285,16 @@ impl App {
             } else {
                 &self.scene
             };
-            layer.set_anchor(if content {
-                match scene
-                    .motion
-                    .as_ref()
-                    .map(|m| m.edge)
-                    .unwrap_or(self.options.edge)
-                {
-                    bead_core::Edge::Left => Anchor::LEFT | Anchor::TOP,
-                    bead_core::Edge::Right => Anchor::RIGHT | Anchor::TOP,
-                    bead_core::Edge::Bottom => Anchor::BOTTOM,
-                    bead_core::Edge::Top => Anchor::TOP,
-                }
+            let anchor = if content {
+                panels::content_anchor(
+                    scene
+                        .motion
+                        .as_ref()
+                        .map(|m| m.edge)
+                        .unwrap_or(self.options.edge),
+                )
             } else if self.options.panel {
-                Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT
+                Anchor::all()
             } else {
                 match self.options.edge {
                     bead_core::Edge::Top => Anchor::TOP | Anchor::LEFT | Anchor::RIGHT,
@@ -2289,32 +2302,17 @@ impl App {
                     bead_core::Edge::Left => Anchor::LEFT | Anchor::TOP | Anchor::BOTTOM,
                     bead_core::Edge::Right => Anchor::RIGHT | Anchor::TOP | Anchor::BOTTOM,
                 }
-            });
-            if content {
-                let height = scene.bounds.y
-                    + scene.bounds.h
-                    + scene.slide.map_or(scene.offset.1, |s| s.open_y);
-                // Content panels anchor to one edge, so a zero width is a protocol error.
-                layer.set_size(
-                    scene.bounds.w.ceil().max(1.) as u32,
-                    height.ceil().max(1.) as u32,
-                );
+            };
+            let size = if content {
+                panels::content_extent(scene)
+            } else if self.options.bar && !companion {
+                self.bar_size()
+            } else if self.options.panel || companion {
+                (0, 0)
             } else {
-                layer.set_size(
-                    0,
-                    if self.options.bar && !companion {
-                        self.bar_thickness()
-                    } else if self.options.panel || companion {
-                        0
-                    } else {
-                        32
-                    },
-                );
-            }
-            if companion {
-                self.position_panel_surface(&layer, &output, scene);
-            }
-            layer.set_exclusive_zone(if self.options.test_passive {
+                (0, 32)
+            };
+            let exclusive_zone = if self.options.test_passive {
                 -1
             } else if self.options.bar && !companion {
                 self.bar_thickness() as i32
@@ -2322,43 +2320,54 @@ impl App {
                 -1
             } else {
                 0
-            });
-            layer.set_keyboard_interactivity(
-                if self.options.test_passive || (companion && !self.panel_target) {
-                    KeyboardInteractivity::None
-                } else if !self.options.test_passive
-                    && ((companion
-                        && self.pearl.is_none()
-                        && self
+            };
+            let keyboard = if self.options.test_passive || (companion && !self.panel_target) {
+                KeyboardInteractivity::None
+            } else if !self.options.test_passive
+                && ((companion
+                    && self.pearl.is_none()
+                    && self
+                        .panel_runtime
+                        .as_ref()
+                        .is_none_or(|source| source.outside_dismiss())
+                    && self
+                        .options
+                        .panel_spec
+                        .as_ref()
+                        .is_some_and(|s| s.keyboard_focus && !s.text_focus_only))
+                    || (self.options.test_keyboard && !companion))
+            {
+                KeyboardInteractivity::Exclusive
+            } else if (self.options.interactive && self.options.keyboard_focus && !companion)
+                || (companion
+                    && (self.pearl.is_some()
+                        || self
                             .panel_runtime
                             .as_ref()
-                            .is_none_or(|source| source.outside_dismiss())
-                        && self
-                            .options
-                            .panel_spec
-                            .as_ref()
-                            .is_some_and(|s| s.keyboard_focus && !s.text_focus_only))
-                        || (self.options.test_keyboard && !companion))
-                {
-                    KeyboardInteractivity::Exclusive
-                } else if (self.options.interactive && self.options.keyboard_focus && !companion)
-                    || (companion
-                        && (self.pearl.is_some()
-                            || self
-                                .panel_runtime
-                                .as_ref()
-                                .is_some_and(|source| !source.outside_dismiss()))
-                        && self
-                            .options
-                            .panel_spec
-                            .as_ref()
-                            .is_some_and(|s| s.keyboard_focus && !s.text_focus_only))
-                {
-                    KeyboardInteractivity::OnDemand
-                } else {
-                    KeyboardInteractivity::None
+                            .is_some_and(|source| !source.outside_dismiss()))
+                    && self
+                        .options
+                        .panel_spec
+                        .as_ref()
+                        .is_some_and(|s| s.keyboard_focus && !s.text_focus_only))
+            {
+                KeyboardInteractivity::OnDemand
+            } else {
+                KeyboardInteractivity::None
+            };
+            let layer = layer_role::LayerRole::new(
+                layer,
+                layer_role::LayerState {
+                    anchor,
+                    size,
+                    margin: [0; 4],
+                    exclusive_zone,
+                    keyboard,
                 },
             );
+            if companion {
+                self.position_panel_surface(&layer, &output, scene);
+            }
             layer.commit();
             let scale120 = self
                 .output
@@ -2376,7 +2385,6 @@ impl App {
                 output_name: output_id.clone(),
                 layer,
                 panel_unmapped: false,
-                panel_position: std::cell::Cell::new(None),
                 native: None,
                 prepared_native: None,
                 handoff: None,

@@ -179,8 +179,7 @@ impl CompositorHandler for App {
                 s.panel_unmapped,
             ) {
                 let output = s.output_name.clone();
-                s.layer.wl_surface().attach(None, 0, 0);
-                s.layer.commit();
+                s.unmap_layer();
                 s.panel_unmapped = true;
                 eprintln!(
                     "PANEL_SURFACE_UNMAPPED output={output} close_epoch={}",
@@ -788,7 +787,12 @@ impl LayerShellHandler for App {
                 return;
             }
             let s = &mut self.surfaces[i];
-            if (s.width, s.height) != config.new_size {
+            s.layer.configured();
+            if !s.layer.can_attach() {
+                // This configure answers a commit from before the last unmap.
+                return;
+            }
+            if (s.width, s.height) != config.new_size || !s.configured {
                 // A compositor may park the old-size callback until a buffer
                 // satisfying this configure arrives. Do not wait on that epoch.
                 s.callbacks.invalidate();

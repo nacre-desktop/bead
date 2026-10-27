@@ -173,6 +173,14 @@ impl App {
             .and_then(|c| c.bar_thickness())
             .unwrap_or(50)
     }
+    /// The bar's layer size: zero spans the edge it is anchored along.
+    pub(super) fn bar_size(&self) -> (u32, u32) {
+        let thickness = self.bar_thickness();
+        match self.options.edge {
+            bead_core::Edge::Left | bead_core::Edge::Right => (thickness, 0),
+            bead_core::Edge::Top | bead_core::Edge::Bottom => (0, thickness),
+        }
+    }
     /// Reconcile edge surfaces with what the product now asks for.
     pub(super) fn sync_edges(&mut self) {
         let Some(control) = self.options.control.clone() else {

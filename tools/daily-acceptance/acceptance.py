@@ -312,7 +312,7 @@ class Runner:
         niri_path = self.root / "niri.kdl"
         niri_config(niri_path, self.args.ctl.resolve(), self.evidence / "routes.log")
         shutil.copy2(niri_path, self.evidence / "niri.kdl")
-        self._spawn(["niri", "--config", str(niri_path)], self.env, self.evidence / "niri.log")
+        self.niri = self._spawn(["niri", "--config", str(niri_path)], self.env, self.evidence / "niri.log")
         child_sock = self._wait_wayland(pathlib.Path(self.env["XDG_RUNTIME_DIR"]), "nested niri")
         self.env["WAYLAND_DISPLAY"] = str(child_sock)
         self.env["BEAD_PARENT_WAYLAND"] = str(parent_sock)
@@ -354,7 +354,11 @@ class Runner:
                 if time.monotonic() >= deadline:
                     raise RuntimeError("private Nacre daemon did not become ready; see daemon.log")
                 time.sleep(.2)
-        shell_env = daemon_env
+        shell_env = dict(daemon_env)
+        if self.args.wayland_debug:
+            shell_env["WAYLAND_DEBUG"] = "client"
+        if self.args.slide_trace:
+            shell_env["BEAD_VERBOSE_LOG"] = "1"
         shell_cmd = [str(self.args.bead), "--bar", "--core-views", "--ui-provider", "--notices",
                      "--daemon-socket", self.env["NACRE_DAEMON_SOCKET"], "--command-socket",
                      str(pathlib.Path(self.env["XDG_RUNTIME_DIR"]) / "nacre/bead-command.sock"),
@@ -365,6 +369,8 @@ class Runner:
             shell_cmd += ["--renderer", self.args.renderer]
         if self.args.palette:
             shell_cmd += ["--palette", str(self.args.palette.resolve())]
+        if self.args.slide_trace:
+            shell_cmd += ["--trace-state"]
         self.log_path = self.evidence / "shell.log"
         self.shell = self._spawn(shell_cmd, shell_env, self.log_path, cwd=self.args.shell)
         self._wait_log("READY", 60)
@@ -589,6 +595,7 @@ class Runner:
         expected = self.profile["surface_names"].get(label)
         latency = self._open_latency(offset, expected, started_ns, before, label)
         latency_source = self.last_latency_source
+        slide = self._slide_visible(latency)
         closing()
         self._pointer("move", self.profile["outside_target"])
         closed = self._wait_closed()
@@ -602,7 +609,7 @@ class Runner:
         row = {"check": label, "result": "PASS" if passed else "FAIL",
                "surface_name": latency[0], "expected_surface_name": expected,
                "latency_ms": latency[1], "latency_source": latency_source,
-               "frame_limit_ms": self.frame_limit_ms,
+               "frame_limit_ms": self.frame_limit_ms, "slide_visible": slide,
                "pixel_diff_empty": empty, "layer_unmapped_at_close": unmapped,
                "layer_count_before_any_open": self.initial_layer_count, "layer_count_closed": closed_layers}
         self.layer_results.append(row)
@@ -611,6 +618,18 @@ class Runner:
             stem = f"r{self.round_no}-{re.sub(r'[^A-Za-z0-9_.-]+', '_', label)}-{len(self.results)}"
             shutil.copy2(before, self.failures / f"{stem}-before.png")
             shutil.copy2(after, self.failures / f"{stem}-after.png")
+
+    def _slide_visible(self, latency):
+        """A shot right after the first presented frame must differ from the
+        settled open state: the panel is still sliding. None when it never opened."""
+        if latency[1] is None:
+            return None
+        mid = self.evidence / "slide-mid.png"
+        settled = self.evidence / "slide-settled.png"
+        self._shot(mid)
+        time.sleep(.6)
+        self._shot(settled)
+        return not self._diff(mid, settled)
 
     def _key(self, *args):
         offset = self.log_path.stat().st_size if self.log_path and self.log_path.exists() else 0
@@ -720,6 +739,7 @@ class Runner:
                 latency = self._open_latency(open_offset, expected, started_ns, before,
                                              f"r{self.round_no}-{name}-{dismiss}")
                 latency_source = self.last_latency_source
+                slide = self._slide_visible(latency) if dismiss == "escape" else None
                 if dismiss == "click":
                     self._pointer("click", point)
                 elif dismiss == "escape":
@@ -740,7 +760,7 @@ class Runner:
                        "result": "PASS" if passed else "FAIL", "latency_ms": latency_value,
                        "surface_name": latency[0], "expected_surface_name": expected,
                        "frame_limit_ms": self.frame_limit_ms,
-                       "latency_source": latency_source,
+                       "latency_source": latency_source, "slide_visible": slide,
                        "pixel_diff_empty": empty, "layer_unmapped_at_close": unmapped,
                        "layer_count_before_any_open": self.initial_layer_count,
                        "layer_count_closed": closed_layers}
@@ -779,9 +799,15 @@ class Runner:
         if row["result"] != "PASS":
             self._shot(self.failures / "battery-gap-rearm.png")
 
+    # Super chords from the parent seat do not reach nested niri's bindings, so
+    # send the bound route straight to the shell's command socket instead.
+    SUPER_ROUTES = {"space": ["nacre", "launcher", ""], "o": ["drawers", "toggle", "dashboard"],
+                    "c": ["nacre", "controls", "home"], "w": ["nacre", "launcher", ">wallpaper "]}
+
     def _super(self, key):
-        run(["wtype", "-s", "20", "-M", "logo", "-k", key, "-m", "logo"],
-            env=self.key_env or self.env, timeout=10)
+        socket = pathlib.Path(self.env["XDG_RUNTIME_DIR"]) / "nacre/bead-command.sock"
+        run([str(self.args.bead), "ipc", "--socket", str(socket), *self.SUPER_ROUTES[key]],
+            env=self.env, timeout=10)
 
     def simple_surface(self, label, opening, closing):
         self._surface_action(label, opening, closing)
@@ -846,6 +872,31 @@ class Runner:
             stem = f"r{self.round_no}-wallpaper-{len(self.results)}"
             shutil.copy2(before, self.failures / f"{stem}-before.png")
             shutil.copy2(after, self.failures / f"{stem}-after.png")
+
+    def wallpaper_stress(self):
+        """Step the picker both ways, apply, close, let the closed panel's GPU
+        state suspend, then reopen: the paths that once broke the layer role."""
+        self._reset_closed()
+        self._super("w")
+        time.sleep(.5)
+        for key in ("Down", "Up"):
+            for _ in range(10):
+                self._key("-k", key)
+                time.sleep(.05)
+        self._key("-k", "Return")
+        time.sleep(.5)
+        self._key("-k", "Escape")
+        closed = self._wait_closed()
+        time.sleep(12)
+        alive_after_suspend = self.shell.poll() is None
+        self._super("w")
+        time.sleep(.5)
+        self._key("-k", "Escape")
+        closed_again = self._wait_closed()
+        alive = alive_after_suspend and self.shell.poll() is None
+        self.results.append({"check": "wallpaper picker step x10/apply/suspend/reopen",
+                             "result": "PASS" if alive and closed and closed_again else "FAIL",
+                             "shell_alive": alive, "closed": closed, "closed_after_reopen": closed_again})
 
     def widget_drag(self):
         drag = self.profile["widget_drag"]
@@ -918,6 +969,7 @@ class Runner:
         self.simple_surface("notification list", lambda: self._pointer("click", targets["notifications"]),
                             lambda: self._key("-k", "Escape"))
         self.wallpaper_picker()
+        self.wallpaper_stress()
         self.widget_drag()
         self._shot(self.evidence / f"round-{round_no}-end.png")
 
@@ -945,6 +997,10 @@ class Runner:
             self.one_round(4)
             self._record_memory("after post-idle round")
         text = self.log_path.read_text(errors="replace")
+        protocol_errors = re.findall(r"^.*(?:#\d+: error \d+:|Protocol error|WAYLAND_FATAL).*$",
+                                     text, re.MULTILINE)
+        self.results.append({"check": "Wayland protocol errors", "result": "FAIL" if protocol_errors else "PASS",
+                             "count": len(protocol_errors), "first": protocol_errors[:1]})
         ui_errors = re.findall(r"^.*UI_ERROR.*$", text, re.MULTILINE)
         self.results.append({"check": "UI_ERROR", "result": "FAIL" if ui_errors else "PASS",
                              "count": len(ui_errors)})
@@ -972,6 +1028,7 @@ class Runner:
         self.results.append({"check": "host swap remains below 64 MiB",
                              "result": "PASS" if swap_used_end is not None and swap_used_end < 64 * 1024**2 else "FAIL",
                              "swap_used_bytes_after": swap_used_end})
+        self.compositor_loss()
         if any(row["result"] != "PASS" for row in self.results):
             last_round = 1 if self.args.quick else 4
             final_shot = self.evidence / f"round-{last_round}-end.png"
@@ -981,6 +1038,21 @@ class Runner:
         self.guard.join(timeout=2)
         self.write_report()
         return 1 if any(row["result"] != "PASS" for row in self.results) else 0
+
+    def compositor_loss(self):
+        """Losing the compositor must end the shell once, non-zero, without a log spin."""
+        offset = self.log_path.stat().st_size
+        self.niri.terminate()
+        try:
+            code = self.shell.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            code = None
+        tail = self.log_path.read_bytes()[offset:].decode(errors="replace")
+        lines = len(re.findall(r"Protocol error|WAYLAND_FATAL|Broken pipe|Connection reset", tail))
+        # Each thread and the video child may report the broken pipe once; a spin logs thousands.
+        passed = code not in (None, 0) and lines <= 10
+        self.results.append({"check": "compositor loss exits once", "result": "PASS" if passed else "FAIL",
+                             "shell_exit": code, "error_lines": lines})
 
     def _record_memory(self, phase):
         sample = measure.memory(self.shell.pid)
@@ -1058,6 +1130,10 @@ def main():
                         help="override the bar renderer for backend diagnosis")
     parser.add_argument("--evidence", type=pathlib.Path,
                         default=pathlib.Path.home() / "nacre-lead/b0162-daily-acceptance/evidence")
+    parser.add_argument("--wayland-debug", action="store_true",
+                        help="log the shell's client-side Wayland requests (WAYLAND_DEBUG=client)")
+    parser.add_argument("--slide-trace", action="store_true",
+                        help="log every presented panel frame (PANEL_PRESENTED) to measure slides")
     parser.add_argument("--capture-guard-child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--capture-guard-ready-file", type=pathlib.Path, help=argparse.SUPPRESS)
     parser.add_argument("--capture-guard-release-file", type=pathlib.Path, help=argparse.SUPPRESS)

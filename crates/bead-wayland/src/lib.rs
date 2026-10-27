@@ -14,6 +14,7 @@ mod decorations;
 mod edges;
 mod hidden;
 pub mod intent;
+mod layer_role;
 mod panel;
 mod panels;
 mod pointer_motion;
@@ -73,7 +74,6 @@ use smithay_client_toolkit::{
     },
 };
 use std::{
-    cell::Cell,
     error::Error,
     time::{Duration, Instant},
 };
@@ -881,11 +881,9 @@ struct Surface {
     companion: bool,
     output: wl_output::WlOutput,
     output_name: String,
-    layer: LayerSurface,
+    layer: layer_role::LayerRole,
     /// The companion layer has no attached buffer after its close animation completes.
     panel_unmapped: bool,
-    /// Last requested companion placement; text-only frames often keep it unchanged.
-    panel_position: Cell<Option<(Anchor, [i32; 4])>>,
     /// Fresh xdg role used while detached. The layer role remains available for
     /// docking because Wayland surfaces cannot change roles.
     native: Option<smithay_client_toolkit::shell::xdg::window::Window>,
@@ -953,6 +951,14 @@ impl Surface {
     }
     fn commit(&self) {
         self.wl_surface().commit();
+    }
+    /// Unmaps the layer role; it accepts buffers again only after a fresh configure.
+    fn unmap_layer(&mut self) {
+        self.layer.unmap();
+        if self.native.is_none() {
+            self.configured = false;
+            self.callbacks.invalidate();
+        }
     }
     fn owns_surface(&self, surface: &wl_surface::WlSurface) -> bool {
         self.wl_surface() == surface
