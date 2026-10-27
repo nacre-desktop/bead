@@ -375,7 +375,8 @@ local function style_tile(widget,placement,package,style_id,style,settings,is_se
     local preview_height=placement=="desktop" and 80 or 44
     local tile_height=preview_height+50
     local tile_preview=preview.render(widget,placement,style_id,settings,preview_width,preview_height)
-    return ui.Button{id="style-"..style_id,width="fill",height=tile_height,shrink=0,padding=spacing.xs,
+    local tile_id="style-"..style_id..(placement=="desktop" and "-desktop" or "")
+    return ui.Button{id=tile_id,width="fill",height=tile_height,shrink=0,padding=spacing.xs,
         radius=kit.tokens.radii.small,fill=is_selected and ui.alpha("primary",.15) or "surfaceContainer",
         hover_fill="surfaceContainerHigh",selected=is_selected,focus_on_pointer=false,
         aria_label=style.title,on_activate=edit({op="style",widget=widget,form=placement,style=style_id}),
