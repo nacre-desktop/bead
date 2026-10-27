@@ -1,5 +1,3 @@
-/tmp/materialized.rs:
-
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Retained patches for fixed-box text and absolute clipped fills. Any structural
 //! binding, focus, hover, viewport or markup change falls back to validated layout.

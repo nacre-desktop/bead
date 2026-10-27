@@ -1,5 +1,3 @@
-/tmp/markup_tests.rs:
-
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::*;
 use crate::tests::Fixture;
