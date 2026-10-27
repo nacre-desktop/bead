@@ -2369,7 +2369,7 @@ fn animated_clipped_fill_and_value_text_reuse_materialized_layout() {
 local level=ui.resolve_for_check(ui.bind("level"))
 return ui.Panel{id="panel",width=200,height=80,
  ui.Box{id="fill-window",position="absolute",left=8,top=8,width=100*ui.animate("fill",level,0,"out-cubic"),height=5,clip_children=true,fill="transparent",
-  ui.Box{id="fill-art",position="absolute",left=0,top=0,width=100,height=5,fill="primary"}},
+  ui.Box{id="fill-art",position="absolute",left=0,top=0,width=100,height=5,fill="surface"}},
  ui.Text{id="value",position="absolute",left=8,top=20,width=64,height=20,text=ui.resolve_for_check(ui.bind("label"))}}"#,
     )
     .unwrap();
