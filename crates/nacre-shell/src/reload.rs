@@ -5369,9 +5369,14 @@ impl SceneSource for Runtime {
                     .map(|preview| preview.prepared_at + WIDGET_HOVER_PREVIEW_RENEW)
             })
             .flatten();
+        let analog = self.session.view_nodes().iter().any(|node| {
+            matches!(&node.metadata, Some(bead::core::Value::List(records))
+                if records.first().is_some_and(|seed| seed["widget_clock_analog"] == true))
+        }).then(|| std::time::Instant::now() + self.smooth_frame_interval.max(std::time::Duration::from_millis(1)));
         [
             send,
             hover,
+            analog,
             self.session.preview_deadline(),
             self.session.hover_close_deadline(),
             self.dashboard_pearl_deadline,

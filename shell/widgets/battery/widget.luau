@@ -24,30 +24,32 @@ local function desktop(props,_settings,_data)
     local value=ui.resolve_for_check(ui.bind("bead.desktop.battery.value")) or "0%"
     local percent=tonumber(string.match(tostring(value),"%d+")) or 0
     local w,h=visual.slot(props.instance,320,190)
-    local gauge=visual.ring("battery-gauge",math.min(h,280),percent,"2 h 10 min left",nil)
+    local status=ui.resolve_for_check(ui.bind("bead.desktop.battery.status")) or ""
+    local remaining=ui.resolve_for_check(ui.bind("bead.desktop.battery.remaining")) or ""
+    local gauge=visual.ring("battery-gauge",math.min(h,280),percent,remaining,nil)
     if style=="frameless" then
         local reading=tostring(percent)
         local reading_width=ui.text_width(reading,visual.display_font,96)+kit.tokens.spacing.lg*4
         return ui.Column{id="battery-line",width=w,height=h,fill="transparent",justify="center",gap=kit.tokens.spacing.sm,
             ui.Row{id="battery-reading",width="fill",height=104,align="center",gap=kit.tokens.spacing.sm,
-                visual.display("value",reading,reading_width,104,96,"onSurface",true),
-                visual.shadow_text("suffix","% battery","fill",34,kit.tokens.text.body*4/3,"onSurface")},
+                visual.display("value",reading,reading_width,104,96,nil,true),
+                visual.shadow_text("suffix","% battery","fill",34,kit.tokens.text.body*4/3,nil)},
             ui.Box{id="battery-track",width=300,height=4,fill=ui.alpha("onSurface",.25),radius=2,
                 ui.Box{id="battery-fill",position="absolute",left=0,top=0,width=300*percent/100,height=4,fill="primary",radius=2}}}
     end
     if style=="card" then
         return visual.reference_glass("battery-desktop",w,h,kit.tokens.spacing.lg,{
             ui.Row{id="battery-heading",width="fill",height=24,align="center",justify="space-between",
-                ui.Text{id="title",text="Battery",font_size=kit.tokens.text.body*4/3,color="secondary"},
-                ui.Text{id="charging-note",text="",font_size=kit.tokens.text.caption*4/3,color="primary"}},
+                ui.Text{id="title",text="Battery",font_size=kit.tokens.text.body*4/3,color=visual.text},
+                ui.Text{id="charging-status",text=status,width="fill",font_size=kit.tokens.text.caption*4/3,color="primary",text_align="right"}},
             ui.Row{id="battery-value-row",width="fill",height=80,align="center",gap=2,
-                visual.display("value",tostring(percent),ui.text_width(tostring(percent),visual.display_font,64),78,64,"onSurface"),
-                ui.Text{id="percent",text="%",width=20,height=42,font_size=26,font_weight=300,family=visual.display_font,color="onSurface"}},
+                visual.display("value",tostring(percent),ui.text_width(tostring(percent),visual.display_font,64),78,64),
+                ui.Text{id="percent",text="%",width=20,height=42,font_size=26,font_weight=300,family=visual.display_font,color=visual.text}},
             ui.Box{id="battery-track",width="fill",height=8,fill={25,43,39,230},radius=4,
                 ui.Box{id="battery-fill",position="absolute",left=0,top=0,width=(w-52)*percent/100*.55,height=8,fill={63,196,168,255},radius=4},
                 ui.Box{id="battery-fill-mid",position="absolute",left=(w-52)*percent/100*.55,top=0,width=(w-52)*percent/100*.25,height=8,fill={91,211,186,255},radius=4},
                 ui.Box{id="battery-fill-end",position="absolute",left=(w-52)*percent/100*.80,top=0,width=(w-52)*percent/100*.20,height=8,fill={130,226,202,255},radius=4}},
-            ui.Text{id="charging-note",text="The fill pulses softly while charging.",width="fill",height=20,font_size=kit.tokens.text.caption*4/3,color="secondary"}})
+            ui.Text{id="battery-remaining",text=remaining,width="fill",height=20,font_size=kit.tokens.text.caption*4/3,color=visual.secondary}})
     end
     return ui.Column{id="battery-ring-layout",width=w,height=h,fill="transparent",align="center",justify="center",
             ui.Box{id="battery-ring",width=math.min(h,280),height=math.min(h,280),fill="transparent",gauge}}

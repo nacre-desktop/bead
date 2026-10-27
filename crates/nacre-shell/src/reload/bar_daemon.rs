@@ -9,7 +9,7 @@ use nacre_protocol::core_services::{
 };
 use std::{collections::BTreeMap, sync::Arc};
 
-const KEYS: [&str; 10] = [
+const KEYS: [&str; 12] = [
     "bead.desktop.network",
     "bead.desktop.bluetooth",
     "bead.desktop.battery",
@@ -20,6 +20,8 @@ const KEYS: [&str; 10] = [
     "bead.desktop.audio.device",
     "bead.desktop.audio.label",
     "bead.desktop.audio.available",
+    "bead.desktop.battery.status",
+    "bead.desktop.battery.remaining",
 ];
 
 fn unavailable() -> BTreeMap<String, Value> {
@@ -34,6 +36,8 @@ fn unavailable() -> BTreeMap<String, Value> {
         (KEYS[7].into(), Value::Text("Output unavailable".into())),
         (KEYS[8].into(), Value::Text("Unavailable".into())),
         (KEYS[9].into(), Value::Bool(false)),
+        (KEYS[10].into(), Value::Text("Battery status unavailable".into())),
+        (KEYS[11].into(), Value::Text(String::new())),
     ])
 }
 
@@ -83,7 +87,7 @@ fn battery(snapshot: &Snapshot) -> BTreeMap<String, Value> {
     let Some(state) = state else {
         return unavailable()
             .into_iter()
-            .filter(|(key, _)| KEYS[2..5].contains(&key.as_str()))
+            .filter(|(key, _)| KEYS[2..5].contains(&key.as_str()) || KEYS[10..12].contains(&key.as_str()))
             .collect();
     };
     let value = state
@@ -108,6 +112,33 @@ fn battery(snapshot: &Snapshot) -> BTreeMap<String, Value> {
                 3.
             } else {
                 7. + 7.5 * value.len() as f64
+            }),
+        ),
+        (
+            KEYS[10].into(),
+            Value::Text(match state.charging {
+                Some(true) => "Charging".into(),
+                Some(false) => "Not charging".into(),
+                None => "Charge status unavailable".into(),
+            }),
+        ),
+        (
+            KEYS[11].into(),
+            Value::Text({
+                let seconds = if state.charging == Some(true) {
+                    state.time_to_full_seconds
+                } else {
+                    state.time_to_empty_seconds
+                };
+                seconds.map_or_else(String::new, |seconds| {
+                    let minutes = seconds.saturating_add(59) / 60;
+                    let ending = if state.charging == Some(true) { "until full" } else { "remaining" };
+                    if minutes >= 60 {
+                        format!("{} h {} min {ending}", minutes / 60, minutes % 60)
+                    } else {
+                        format!("{minutes} min {ending}")
+                    }
+                })
             }),
         ),
     ])

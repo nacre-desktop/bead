@@ -157,9 +157,9 @@ local function desktop(props,_settings,_data)
                 ui.Text{id="date",text=weekday,width="fill",height=date_height,font_size=date_size,family=visual.body_font,color="secondary",text_align="center"}}
         end
         return ui.Column{id="clock-minimal",width=w,height=h,justify="center",gap=compact and 0 or kit.tokens.spacing.xs,on_activate=action,
-            visual.display("hour",hour or visible_time,"fill",digit_height,digit_size,"onSurface",true),
-            visual.display("minute",minute or "","fill",digit_height,digit_size,"primary",true),
-            visual.shadow_text("date",weekday,"fill",date_height,date_size,"secondary")}
+            visual.display("hour",hour or visible_time,"fill",digit_height,digit_size,nil,true),
+            visual.display("minute",minute or "","fill",digit_height,digit_size,nil,true),
+            visual.shadow_text("date",weekday,"fill",date_height,date_size,nil)}
     end
     local compact=h<120
     local time_size=compact and h*.46 or math.min(148,h*.72)
@@ -167,8 +167,8 @@ local function desktop(props,_settings,_data)
     local date_height=compact and 14 or 28
     local date_size=compact and kit.tokens.text.caption*4/3 or kit.tokens.text.body*4/3
     return ui.Column{id="clock-desktop",width=w,height=h,fill="transparent",justify="center",gap=kit.tokens.spacing.xs,on_activate=action,
-        visual.display("time",visible_time,"fill",time_height,time_size,"onSurface",true),
-        visual.shadow_text("date",date_line,"fill",date_height,date_size,"onSurface"),
+        visual.display("time",visible_time,"fill",time_height,time_size,nil,true),
+        visual.shadow_text("date",date_line,"fill",date_height,date_size,nil),
         ui.Box{id="accent-rule",width=48,height=compact and 2 or 3,fill="primary",radius=1.5}}
 end
 local function bar_style(title,style,preferred,requires)

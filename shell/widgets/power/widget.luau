@@ -43,8 +43,7 @@ local function desktop(props,_settings,_data)
             },
             ui.Column{id="actions",width="fill",height=0,grow=1,gap=kit.tokens.spacing.sm,
                 ui.Row{id="actions-top",width="fill",height=64,gap=kit.tokens.spacing.sm,table.unpack(buttons,1,2)},
-                ui.Row{id="actions-bottom",width="fill",height=64,gap=kit.tokens.spacing.sm,table.unpack(buttons,3,4)}},
-            ui.Text{id="confirm-note",text="Restart and Shut down ask to confirm.",width="fill",height=18,font_size=kit.tokens.text.caption*4/3,color="onSurfaceVariant"}}})
+                ui.Row{id="actions-bottom",width="fill",height=64,gap=kit.tokens.spacing.sm,table.unpack(buttons,3,4)}}}})
 end
 local function style(title,preferred,render) return {title=title,min_span=1,max_span=60,preferred_span=preferred,render=render} end
 return {id="power",title="Power",icon="power_settings_new",category="bar",data={topics={},actions={}},settings={},defaults={},budget={fps_active=0,fps_idle=0,pause_on={"fullscreen","lock","battery_saver"}},

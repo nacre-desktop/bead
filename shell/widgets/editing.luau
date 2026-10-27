@@ -41,6 +41,17 @@ function M.requires(document,placement,binding)
     end
     return host and scan(host.instances) or false
 end
+function M.has_style(document,widget,style_name)
+    local host=document.hosts.canvas
+    local function scan(items)
+        for _,item in items or {} do
+            if item.widget==widget and item.style==style_name then return true end
+            if scan(item.children) then return true end
+        end
+        return false
+    end
+    return host and scan(host.instances) or false
+end
 function M.seed(document,width,height,placement)
     local reservations={}
     local geometry=ui.resolve_for_check(ui.bind("widgets.geometry"))
@@ -98,6 +109,7 @@ function M.seed(document,width,height,placement)
     reserve(document.hosts.top_bar.instances)
     return {{widget_layout=true,document=document,initial=require("default")(width),rev=ui.resolve_for_check(ui.bind("widgets.rev")),
         widget_clock_seconds=placement~=nil and M.requires(document,placement,"bead.desktop.clock.seconds") or false,
+        widget_clock_analog=placement=="desktop" and M.has_style(document,"clock","analog") or false,
         geometry=geometry,reservations=reservations,canvas_width=width,canvas_height=height,
         catalogue=descriptors(),snap_distance=sp.lg}}
 end
