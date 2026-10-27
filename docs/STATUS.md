@@ -1,10 +1,12 @@
-## 2026-10-27 — B0157 picker error follow-up (validation pending)
+## 2026-10-27 — B0157 picker error follow-up (functional gates pass; CPU cadence remains open)
 
-CPU snapshot acceptance now treats a full live-view budget as a reason to paint
-from prepared CPU layers without the optional flattened cache. Spotlight row
-selection is bounded to the visible neighborhood instead of scanning the complete
-wallpaper catalogue each animation tick. The real-wallpaper GL/CPU error, cadence
-and memory gates are not yet measured; see [B0157](specs/0157-picker-errors.md).
+CPU snapshot acceptance now falls back to its prepared frame when the optional
+flattened composite cannot be admitted; Spotlight slides visit only visible rows.
+QML and Bead CPU/GL captures at 2880×1800, scale 1.5 passed open, hover, pressed,
+20 slides, 10 applies and close with zero UI errors. The 22.0 MiB warm-cache peak
+is within the 40 MiB picker budget. GL render p99 was 6.72 / 6.43 ms at 60 / 120 Hz;
+CPU was 50.03 / 54.46 ms and reached 61.95 / 67.57 ms, failing the 60 Hz two-interval
+ceiling. Full Bead CI passes. See [B0157](specs/0157-picker-errors.md).
 
 # Status
 
