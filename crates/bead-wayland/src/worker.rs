@@ -521,7 +521,8 @@ impl SceneSource for Source {
                             token += 1;
                             let staged = source.stage(event);
                             let animation_needed = source.animation_frame_needed();
-                            animation_frames.store(animation_needed, std::sync::atomic::Ordering::Release);
+                            animation_frames
+                                .store(animation_needed, std::sync::atomic::Ordering::Release);
                             if std::env::var_os("BEAD_WIDGET_ANIMATION_TRACE").is_some() {
                                 eprintln!("WORKER_ANIMATION_FRAME active={animation_needed}");
                             }
