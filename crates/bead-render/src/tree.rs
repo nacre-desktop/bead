@@ -2938,6 +2938,7 @@ impl std::error::Error for ResourcePreparationFailed {}
 pub struct PreparedCpuSnapshot {
     renderer: TreeCpuRenderer,
     native_budget: Option<bead_core::cache::Budget>,
+    release_cache: bool,
 }
 impl PreparedCpuSnapshot {
     pub fn accept(mut self) -> Result<TreeCpuRenderer> {
@@ -2947,8 +2948,25 @@ impl PreparedCpuSnapshot {
                 .flattened
                 .as_ref()
                 .map_or(0, |(_, _, pixels)| pixels.bytes());
-            self.renderer.group_charge = Some(budget.reserve(bytes + 64)?);
+            match budget.reserve(bytes + 64) {
+                Ok(charge) => self.renderer.group_charge = Some(charge),
+                Err("retained cache byte budget exceeded") => {
+                    // A prepared GPU picker can already occupy its full native view
+                    // allowance. Keep the prepared CPU frame and paint it directly
+                    // rather than turning an optional flat-composite cache into a UI error.
+                    self.renderer.flattened = None;
+                    self.renderer.group_charge = None;
+                    self.renderer.snapshot_fingerprint = None;
+                    self.renderer.opaque_composition = OpaqueComposition::Direct;
+                    self.renderer.group_budget = Some(budget);
+                    return Ok(self.renderer);
+                }
+                Err(error) => return Err(error.into()),
+            }
             self.renderer.group_budget = Some(budget);
+        }
+        if self.release_cache {
+            self.renderer.cache.release_pixel_storage();
         }
         Ok(self.renderer)
     }
@@ -3040,12 +3058,12 @@ impl TreeCpuRenderer {
                 .frame
                 .as_ref()
                 .map_or(0, |frame| frame.layer_count);
-            renderer.cache.release_pixel_storage();
             renderer.snapshot_fingerprint = Some(fingerprint);
         }
         Ok(PreparedCpuSnapshot {
             renderer,
             native_budget,
+            release_cache: !scene.motion.as_ref().is_some_and(|motion| motion.reveal),
         })
     }
 
@@ -3510,6 +3528,29 @@ fn blit_with_opacity(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cpu_snapshot_accept_falls_back_when_native_view_budget_is_full() {
+        let scene = scene();
+        let mut cache = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+        cache.prepare(&scene, 1.).unwrap();
+        let mut scene = scene;
+        scene
+            .prepared
+            .insert(1_f32.to_bits(), cache.frame.as_ref().unwrap().clone());
+
+        let prepared = TreeCpuRenderer::prepare_snapshot(&scene, 1.).unwrap();
+        let budget = prepared.native_budget.as_ref().unwrap();
+        let remaining = 40 * bead_core::cache::MIB - budget.used();
+        let _fill = budget.reserve(remaining).unwrap();
+        let renderer = prepared
+            .accept()
+            .expect("optional flattened snapshot must fall back to CPU layers");
+        assert!(renderer.flattened.is_none());
+        assert!(renderer.group_charge.is_none());
+        assert!(renderer.cache.frame.is_some());
+        assert!(renderer.snapshot_fingerprint.is_none());
+    }
+
     #[test]
     fn raster_blend_matches_the_masked_pixmap_composite() {
         let mut source = Pixmap::new(24, 12).unwrap();

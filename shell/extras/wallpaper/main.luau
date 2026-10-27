@@ -27,10 +27,20 @@ local animated_selection=(carousel or spotlight) and ui.animate("wallpaper-carou
   carousel_position,.3,"out-cubic") or selection_index
 local function circular_rows(limit)
   local visible={}
+  if count==0 then return visible end
+  -- The catalogue can contain hundreds of full-resolution wallpapers. Only
+  -- the bounded neighborhood around the selected row can be painted here;
+  -- walking every row on every animation tick made a slide exceed the markup
+  -- budget even though only a handful of cards were visible.
   local selection=(carousel or spotlight) and animated_selection or selection_index
-  for index,item in ipairs(rows) do
-    local offset=((index-selection+count/2)%count)-count/2
-    if math.abs(offset)<=limit then
+  local first=math.floor(selection-limit)
+  local seen={}
+  for index=first,first+limit*2 do
+    local wrapped=((index-1)%count)+1
+    local item=rows[wrapped]
+    local offset=((wrapped-selection+count/2)%count)-count/2
+    if not seen[wrapped] and math.abs(offset)<=limit then
+      seen[wrapped]=true
       item.carousel_offset=offset
       visible[#visible+1]=item
     end

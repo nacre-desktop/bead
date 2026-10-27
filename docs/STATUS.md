@@ -1,3 +1,11 @@
+## 2026-10-27 — B0157 picker error follow-up (validation pending)
+
+CPU snapshot acceptance now treats a full live-view budget as a reason to paint
+from prepared CPU layers without the optional flattened cache. Spotlight row
+selection is bounded to the visible neighborhood instead of scanning the complete
+wallpaper catalogue each animation tick. The real-wallpaper GL/CPU error, cadence
+and memory gates are not yet measured; see [B0157](specs/0157-picker-errors.md).
+
 # Status
 
 ## 2026-10-27 — B0147 Spotlight overlay (implementation review; smoothness gates fail)
