@@ -10,3 +10,10 @@ window-rule {
     focus-ring { off; }
     shadow { off; }
 }
+
+// The Widgets app draws its own rounded outline; do not add compositor chrome.
+window-rule {
+    match app-id="^nacre-widgets$"
+    border { off; }
+    focus-ring { off; }
+}
