@@ -1,3 +1,5 @@
+/tmp/markup_tests.rs:
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::*;
 use crate::tests::Fixture;
@@ -2370,7 +2372,7 @@ local level=ui.resolve_for_check(ui.bind("level"))
 return ui.Panel{id="panel",width=200,height=80,
  ui.Box{id="fill-window",position="absolute",left=8,top=8,width=100*ui.animate("fill",level,0,"out-cubic"),height=5,clip_children=true,fill="transparent",
   ui.Box{id="fill-art",position="absolute",left=0,top=0,width=100,height=5,fill="primary"}},
- ui.Text{id="value",position="absolute",left=8,top=20,width=64,height=20,text=ui.resolve_for_check(ui.bind("label"))}}}"#,
+ ui.Text{id="value",position="absolute",left=8,top=20,width=64,height=20,text=ui.resolve_for_check(ui.bind("label"))}}"#,
     )
     .unwrap();
     let mut s = session(&f);

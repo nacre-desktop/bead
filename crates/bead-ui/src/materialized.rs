@@ -1,3 +1,5 @@
+/tmp/materialized.rs:
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Retained patches for fixed-box text and absolute clipped fills. Any structural
 //! binding, focus, hover, viewport or markup change falls back to validated layout.
@@ -74,6 +76,20 @@ fn bindings(value: &serde_json::Value, out: &mut BTreeSet<String>) {
     }
 }
 impl Cached {
+    fn fixed_absolute_contents(node: &RawNode) -> bool {
+        node.props
+            .get("position")
+            .and_then(serde_json::Value::as_str)
+            == Some("absolute")
+            && ["left", "top", "width", "height"].iter().all(|name| {
+                node.props
+                    .get(*name)
+                    .and_then(serde_json::Value::as_f64)
+                    .is_some()
+            })
+            && node.children.iter().all(Self::fixed_absolute_contents)
+    }
+
     fn retained_changes(old: &RawNode, new: &RawNode, out: &mut Vec<RetainedChange>) -> bool {
         if old.kind != new.kind
             || old.source != new.source
@@ -100,13 +116,14 @@ impl Cached {
                             .get("position")
                             .and_then(serde_json::Value::as_str)
                             == Some("absolute")
+                        && old.children.iter().all(Self::fixed_absolute_contents)
                         && out
                             .iter()
                             .all(|change| !matches!(change, RetainedChange::ClipWidth { .. })) =>
                 {
                     let Some(width) = next
                         .as_f64()
-                        .filter(|v| v.is_finite() && *v >= 0. && *v <= f64::from(f32::MAX))
+                        .filter(|v| v.is_finite() && *v >= 0. && *v <= 1_000_000.)
                     else {
                         return false;
                     };
@@ -120,13 +137,19 @@ impl Cached {
                 }
                 "text"
                     if old.kind == Widget::Text
+                        && ["width", "height"].iter().all(|property| {
+                            old.props
+                                .get(*property)
+                                .and_then(serde_json::Value::as_f64)
+                                .is_some()
+                        })
                         && out
                             .iter()
                             .all(|change| !matches!(change, RetainedChange::Text { .. })) =>
                 {
                     let (Some(id), Some(text)) = (
                         old.props.get("id").and_then(serde_json::Value::as_str),
-                        next.as_str(),
+                        next.as_str().filter(|text| text.len() <= 256),
                     ) else {
                         return false;
                     };
@@ -765,7 +788,7 @@ mod tests {
             serde_json::from_value(serde_json::json!({
                 "kind":"box",
                 "props":{"id":"window","position":"absolute","clip_children":true,"width":width},
-                "children":[{"kind":"text","props":{"id":"value","width":64,"height":20,"text":text},"children":[],"source":{"file":"view.luau","line":2},"scope":null}],
+                "children":[{"kind":"text","props":{"id":"value","position":"absolute","left":0,"top":0,"width":64,"height":20,"text":text},"children":[],"source":{"file":"view.luau","line":2},"scope":null}],
                 "source":{"file":"view.luau","line":1},
                 "scope":null
             }))
