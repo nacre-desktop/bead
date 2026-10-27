@@ -366,9 +366,10 @@ local function style_tile(widget,placement,package,style_id,style,settings,is_se
     local count=0
     for _ in package.forms[placement].styles do count+=1 end
     local columns=math.max(1,math.min(4,count))
-    local tile_width=math.max(90,math.min(120,
-        (width-2*spacing.lg-(columns-1)*spacing.sm)/columns-2*spacing.xs))
-    local preview_width=tile_width-12
+    local panel_width=(width-RAIL-spacing.xl-spacing.md)/2-2*spacing.md
+    local preview_width=math.max(72,math.min(108,
+        (panel_width-(columns-1)*spacing.sm)/columns-2*spacing.xs))
+    local tile_width=preview_width+12
     local preview_height=42
     local tile_height=70
     local tile_preview=preview.render(widget,placement,style_id,settings,preview_width,preview_height)
