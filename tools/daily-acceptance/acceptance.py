@@ -85,19 +85,20 @@ def output_pixels(env: dict[str, str], raw: pathlib.Path) -> None:
     print(f"PARENT_OUTPUT name={name} pixel_size=2880x1800 absolute_pointer_space=verified", flush=True)
 
 
-def niri_config(path: pathlib.Path, ctl_path: pathlib.Path) -> None:
-    ctl = f"{shlex.quote(str(ctl_path))} ui "
+def niri_config(path: pathlib.Path, ctl_path: pathlib.Path, route_log: pathlib.Path) -> None:
+    ctl = f'NACRE_DAEMON_SOCKET="$XDG_RUNTIME_DIR/nacre/daemon.sock" {shlex.quote(str(ctl_path))} ui '
     routes = [("Super+Space", 'nacre launcher ""'),
               ("Super+O", "drawers toggle dashboard"),
               ("Super+I", "nacre settings"),
               ("Super+C", "nacre controls home"),
               ("Super+A", "nacre left"),
               ("Super+W", 'nacre launcher ">wallpaper "'),
-              ("Super+N", "nacre menu learn.shortcuts \"\"")]
+              ("Super+N", 'nacre menu learn.shortcuts ""')]
     lines = ["input { keyboard { xkb { layout \"us\"; }; }; }", "prefer-no-csd",
              "animations { off; }", "hotkey-overlay { skip-at-startup; }", "binds {"]
-    for key, call in routes:
-        lines.append(f"    {key} repeat=false {{ spawn-sh {json.dumps(ctl + call)}; }}")
+    for key, arguments in routes:
+        command = ctl + arguments + f" >> {shlex.quote(str(route_log))} 2>&1"
+        lines.append(f"    {key} repeat=false {{ spawn-sh {json.dumps(command)}; }}")
     lines.append("}")
     pearls = ROOT / "shell/niri-pearls.kdl"
     if pearls.is_file():
@@ -186,6 +187,7 @@ class Runner:
         self.baseline_mem = None
         self.log_path = None
         self.layer_sample = 0
+        self.last_layer_raw = None
         self.initial_layer_count = None
         self.swapin_start_pages = None
         self.page_size = os.sysconf("SC_PAGE_SIZE")
@@ -195,6 +197,8 @@ class Runner:
         self.failures = self.evidence / "failures"
         self.failures.mkdir(mode=0o700, exist_ok=True)
         self.profile = json.loads(args.profile.read_text())
+        self.diff_before = None
+        self.diff_after = None
         self._validate_profile()
 
     def _validate_profile(self):
@@ -204,9 +208,13 @@ class Runner:
         points = {**self.profile.get("bar_targets", {}),
                   "outside_target": self.profile.get("outside_target"),
                   "left_edge_hover": self.profile.get("left_edge_hover"),
+                  **{f"battery_gap_{index}": point for index, point in
+                     enumerate(self.profile.get("battery_hover_gap_path", []))},
                   **{f"drag_{name}": point for name, point in self.profile.get("widget_drag", {}).items()}}
         required = {"updates", "audio", "network", "bluetooth", "battery", "notifications", "calendar", "power",
                     "outside_target", "left_edge_hover", "drag_bar_start", "drag_desktop_drop", "drag_bar_drop"}
+        if not self.profile.get("battery_hover_gap_path"):
+            required.add("battery_gap_path")
         if not required.issubset(points):
             raise RuntimeError(f"profile missing coordinate targets: {sorted(required - set(points))}")
         for label, point in points.items():
@@ -214,6 +222,12 @@ class Runner:
                     or any(not isinstance(value, int) for value in point)
                     or not (0 <= point[0] < 2880 and 0 <= point[1] < 1800)):
                 raise RuntimeError(f"profile point {label} must be integer pixels within 2880x1800: {point!r}")
+        for rect in self.profile.get("volatile_rectangles", []):
+            if (not isinstance(rect, list) or len(rect) != 4
+                    or any(type(value) is not int for value in rect)
+                    or rect[0] < 0 or rect[1] < 0 or rect[2] <= 0 or rect[3] <= 0
+                    or rect[0] + rect[2] > 2880 or rect[1] + rect[3] > 1800):
+                raise RuntimeError(f"profile volatile rectangle must fit the output: {rect!r}")
 
     def start(self):
         before_free = subprocess.run(["free", "-h"], capture_output=True, text=True, check=True).stdout
@@ -232,6 +246,8 @@ class Runner:
         self.swapin_start_pages = host_swapin_pages()
         self.root = pathlib.Path(tempfile.mkdtemp(prefix="bead-daily-acceptance-"))
         os.chmod(self.root, 0o700)
+        self.diff_before = self.root / "closed-before.png"
+        self.diff_after = self.root / "closed-after.png"
         rt = self.root / "runtime"
         rt.mkdir(mode=0o700)
         for name in ("config", "cache", "data", "state", "home", "tools"):
@@ -286,7 +302,8 @@ class Runner:
         if self.pointer.stdout.readline().strip() != "POINTER_READY":
             raise RuntimeError("Labwc did not expose zwlr_virtual_pointer_manager_v1")
         niri_path = self.root / "niri.kdl"
-        niri_config(niri_path, self.args.ctl.resolve())
+        niri_config(niri_path, self.args.ctl.resolve(), self.evidence / "routes.log")
+        shutil.copy2(niri_path, self.evidence / "niri.kdl")
         self._spawn(["niri", "--config", str(niri_path)], self.env, self.evidence / "niri.log")
         child_sock = self._wait_wayland(pathlib.Path(self.env["XDG_RUNTIME_DIR"]), "nested niri")
         self.env["WAYLAND_DISPLAY"] = str(child_sock)
@@ -442,7 +459,7 @@ class Runner:
         self._pointer("click", self.profile["outside_target"])
         self._wait_closed()
 
-    def _wait_closed(self, timeout=2):
+    def _wait_closed(self, timeout=.5):
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             count, _ = self._layer_count()
@@ -479,8 +496,7 @@ class Runner:
         closed = self._wait_closed()
         self._pointer("move", self.profile["outside_target"])
         closed = self._wait_closed() and closed
-        self._shot(after)
-        empty = self._diff(before, after)
+        empty = self._settled_empty(before, after)
         closed_layers, _ = self._layer_count()
         unmapped = closed and closed_layers == self.initial_layer_count
         expected = self.profile["surface_names"].get(label)
@@ -501,9 +517,17 @@ class Runner:
 
     def _key(self, *args):
         offset = self.log_path.stat().st_size if self.log_path and self.log_path.exists() else 0
-        run(["wtype", *args], env=self.env, timeout=10)
+        run(["wtype", "-s", "20", *args], env=self.env, timeout=10)
         if args and all(not arg.startswith("-") for arg in args):
-            self._wait_log("UI_COMMIT", 5, offset)
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if "UI_COMMIT" in self.log_path.read_text(errors="replace")[offset:]:
+                    return True
+                if self.shell.poll() is not None:
+                    break
+                time.sleep(.025)
+            return False
+        return True
 
     def _shot(self, path):
         run(["grim", str(path)], env=self.env, timeout=10)
@@ -524,12 +548,30 @@ class Runner:
         return poster
 
     def _diff(self, before, after):
-        result = subprocess.run(["compare", "-metric", "AE", str(before), str(after), "null:"],
+        left, right = before, after
+        rectangles = self.profile.get("volatile_rectangles", [])
+        if rectangles:
+            for source, target in ((left, self.diff_before), (right, self.diff_after)):
+                args = ["convert", str(source)]
+                for x, y, width, height in rectangles:
+                    args += ["-fill", "black", "-draw",
+                             f"rectangle {x},{y} {x + width - 1},{y + height - 1}"]
+                run([*args, str(target)], env=self.env, timeout=10)
+            left, right = self.diff_before, self.diff_after
+        result = subprocess.run(["compare", "-metric", "AE", str(left), str(right), "null:"],
                                 env=self.env, capture_output=True, text=True, timeout=10)
         try:
             return int(result.stderr.strip().split()[0]) == 0
         except (ValueError, IndexError):
             return False
+
+    def _settled_empty(self, before, after, timeout=.5):
+        self._shot(after)
+        deadline = time.monotonic() + timeout
+        while not self._diff(before, after) and time.monotonic() < deadline:
+            time.sleep(.025)
+            self._shot(after)
+        return self._diff(before, after)
 
     def _opening_latency(self, offset):
         text = self.log_path.read_text(errors="replace")[offset:]
@@ -542,7 +584,9 @@ class Runner:
                                 capture_output=True, text=True, timeout=5)
         raw = result.stdout + result.stderr
         self.layer_sample += 1
-        (self.evidence / f"layers-{self.layer_sample:03}.txt").write_text(raw)
+        if raw != self.last_layer_raw:
+            (self.evidence / f"layers-{self.layer_sample:03}.txt").write_text(raw)
+            self.last_layer_raw = raw
         if result.returncode or "bead-daily-acceptance" not in raw:
             return None, raw
         return raw.count("bead-daily-acceptance"), raw
@@ -568,8 +612,7 @@ class Runner:
                 if dismiss != "outside":
                     self._pointer("move", self.profile["outside_target"])
                     closed = self._wait_closed() and closed
-                self._shot(after)
-                empty = self._diff(before, after)
+                empty = self._settled_empty(before, after)
                 closed_layers, _ = self._layer_count()
                 unmapped = closed and closed_layers == self.initial_layer_count
                 latency_value = latency[1]
@@ -589,6 +632,29 @@ class Runner:
                     stem = f"r{self.round_no}-{name}-{dismiss}-{len(self.results)}"
                     shutil.copy2(before, self.failures / f"{stem}-before.png")
                     shutil.copy2(after, self.failures / f"{stem}-after.png")
+
+    def battery_gap_rearm(self):
+        self._reset_closed()
+        offset = self.log_path.stat().st_size
+        self._pointer("click", self.profile["bar_targets"]["battery"])
+        opened = self._open_latency(offset, self.profile["surface_names"].get("dropdown:battery"))
+        for target in self.profile["battery_hover_gap_path"]:
+            self._pointer("move", target)
+        deadline = time.monotonic() + .5
+        still_open = False
+        while time.monotonic() < deadline:
+            if self._layer_count()[0] != self.initial_layer_count:
+                still_open = True
+                break
+            time.sleep(.025)
+        self._key("-k", "Escape")
+        self._wait_closed()
+        row = {"check": "battery dropdown stays open across gap/re-arm path",
+               "result": "PASS" if opened[1] is not None and still_open else "FAIL",
+               "latency_ms": opened[1], "surface_name": opened[0], "still_open_after_path": still_open}
+        self.results.append(row)
+        if row["result"] != "PASS":
+            self._shot(self.failures / "battery-gap-rearm.png")
 
     def _super(self, key):
         self._key("-M", "logo", "-k", key, "-m", "logo")
@@ -693,6 +759,7 @@ class Runner:
         targets = self.profile["bar_targets"]
         for name, point in targets.items():
             self.click_dropdown(name, point, 1)
+        self.battery_gap_rearm()
         # Keyboard bindings mirror Nacre's calls in scripts/try-bead.py, with
         # Super in the nested compositor to exercise the requested chord.
         self.simple_surface("launcher open/type/Escape", self.launcher_open_and_type,

@@ -36,7 +36,8 @@ return {stores={
     ["launcher.apps"]={},["bluetooth.devices"]={},["bluetooth.power_checked"]=false,
     ["network.rows"]={},["network.wifi_enabled"]=false,["notifications.rows"]={},
     ["status.updates_checked"]="Never checked",["status.updates_can_open"]=false,["status.updates_can_refresh"]=false,
-        ["session.enabled"]=false,["session.busy"]=false,["session.confirm"]="",["session.confirm_action"]="",["session.message"]="",
+    ["session.enabled"]=false,["session.busy"]=false,["session.confirm"]="",["session.confirm_action"]="",["session.message"]="",
+    ["status.hovered"]="",["status.peek.visible"]=false,["status.peek.kind"]="",["status.panel.kind"]="",
 },computed={
     ["bar.clock.text"]=function(s)
         local clock=s["bead.desktop.clock"]

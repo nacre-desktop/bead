@@ -3,7 +3,7 @@
   "output": { "width": 2880, "height": 1800, "scale": 1.5, "refresh_hz": 60 },
   "bar_targets": {
     "updates": [2390, 53],
-    "audio": [2470, 53],
+    "audio": [2445, 53],
     "network": [2490, 53],
     "bluetooth": [2560, 53],
     "battery": [2645, 53],
@@ -15,7 +15,7 @@
     "dropdown:updates": "panel",
     "dropdown:audio": "control",
     "dropdown:network": "panel",
-    "dropdown:bluetooth": "control",
+    "dropdown:bluetooth": "panel",
     "dropdown:battery": "control",
     "dropdown:notifications": "panel",
     "dropdown:calendar": "panel",
@@ -31,6 +31,7 @@
   },
   "outside_target": [1451, 927],
   "left_edge_hover": [5, 927],
+  "volatile_rectangles": [[2745, 20, 75, 32]],
   "launcher": { "open": ["Super", "Space"], "toggle": ["Super", "Space"], "type": "nacre" },
   "other_targets": {
     "dashboard": "calendar",
@@ -44,6 +45,7 @@
     "desktop_drop": [1441, 927],
     "bar_drop": [2770, 53]
   },
+  "battery_hover_gap_path": [[2600, 53], [2600, 100], [2600, 20]],
   "notes": [
     "Coordinates are absolute private-Labwc output pixels at 2880x1800, calibrated for the nested Niri parent surface's measured (1,27) origin.",
     "Top-right points follow the staged default Bead layout at scale 1.5; pass --profile to override coordinates for a different layout.",

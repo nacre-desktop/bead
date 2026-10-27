@@ -40,3 +40,8 @@ user's own bar layout. `default-profile.json` provides a standard layout. Its
 headless output (the child niri output is separately 2880×1800 physical at
 scale 1.5). An optional JSON override supports custom widget placement. The
 runner rejects missing or out-of-bounds points before input begins.
+
+Closed-state screenshot comparisons mask only the changing clock digits in the
+profile's `volatile_rectangles`; neighboring status icons and the dropdown area
+remain pixel-checked. The standard profile also checks the battery gap/re-arm
+pointer path.
