@@ -137,6 +137,23 @@ pub(crate) fn load_or_decode(
     load_or_decode_async_at(&cache_root(), pair, width, height, decode)
 }
 
+/// Return an already cached raster without starting a decode or blocking on a miss.
+pub(crate) fn load_cached(pair: &ActiveWallpaper, width: u32, height: u32) -> Option<Vec<u8>> {
+    load_cached_at(&cache_root(), pair, width, height)
+}
+
+fn load_cached_at(
+    root: &Path,
+    pair: &ActiveWallpaper,
+    width: u32,
+    height: u32,
+) -> Option<Vec<u8>> {
+    if pair.motion.is_some() || pair.validate().is_err() {
+        return None;
+    }
+    load_from(root, pair, width, height)
+}
+
 fn load_or_decode_async_at(
     root: &Path,
     pair: &ActiveWallpaper,
@@ -298,8 +315,11 @@ mod tests {
         let pixels = vec![5; 16];
         store_at(&cache, &pair, 2, 2, &pixels, 1024);
         assert_eq!(load_from(&cache, &pair, 2, 2), Some(pixels));
+        assert_eq!(load_cached_at(&cache, &pair, 2, 2), Some(vec![5; 16]));
+        assert!(load_cached_at(&cache, &pair, 1, 4).is_none());
         assert!(load_from(&cache, &pair, 1, 4).is_none());
         fs::write(&pair.path, [1u8, 2, 3, 4]).unwrap();
+        assert!(load_cached_at(&cache, &pair, 2, 2).is_none());
         assert!(load_from(&cache, &pair, 2, 2).is_none());
         let _ = fs::remove_dir_all(root);
     }
