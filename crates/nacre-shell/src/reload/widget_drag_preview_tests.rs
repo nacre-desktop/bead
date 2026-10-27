@@ -2003,7 +2003,11 @@ fn completed_drag_retirement_rearms_hover_after_pointer_leaves_drop_bounds() {
     if runtime.stage(UiEvent::Click { x, y }).unwrap().is_some() {
         runtime.commit();
     }
-    assert_eq!(prepares(), 2, "a press reuses its hover-prepared destination");
+    assert_eq!(
+        prepares(),
+        2,
+        "a press reuses its hover-prepared destination"
+    );
     assert!(runtime.widget_hover_preview.is_some());
 
     let _ = std::fs::remove_dir_all(dir);
