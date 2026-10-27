@@ -192,6 +192,7 @@ class Runner:
         self.swapin_start_pages = None
         self.page_size = os.sysconf("SC_PAGE_SIZE")
         self.frame_limit_ms = None
+        self.last_latency_source = None
         self.evidence = args.evidence.resolve()
         self.evidence.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.failures = self.evidence / "failures"
@@ -470,10 +471,11 @@ class Runner:
             time.sleep(.01)
         return False
 
-    def _open_latency(self, offset, expected_name=None):
+    def _open_latency(self, offset, expected_name=None, started_ns=None):
+        self.last_latency_source = None
         deadline = time.monotonic() + 2
         while time.monotonic() < deadline:
-            latency = self._opening_latency(offset)
+            latency = self._opening_latency(offset, started_ns, expected_name)
             if latency[1] is not None and (expected_name is None or latency[0] == expected_name):
                 return latency
             if latency[1] is not None and expected_name is not None and latency[0] != expected_name:
@@ -489,9 +491,11 @@ class Runner:
         self._reset_closed()
         self._shot(before)
         offset = self.log_path.stat().st_size
+        started_ns = time.monotonic_ns()
         opening()
         expected = self.profile["surface_names"].get(label)
-        latency = self._open_latency(offset, expected)
+        latency = self._open_latency(offset, expected, started_ns)
+        latency_source = self.last_latency_source
         closing()
         closed = self._wait_closed()
         self._pointer("move", self.profile["outside_target"])
@@ -505,7 +509,8 @@ class Runner:
         passed = latency_ok and empty and unmapped
         row = {"check": label, "result": "PASS" if passed else "FAIL",
                "surface_name": latency[0], "expected_surface_name": expected,
-               "latency_ms": latency[1], "frame_limit_ms": self.frame_limit_ms,
+               "latency_ms": latency[1], "latency_source": latency_source,
+               "frame_limit_ms": self.frame_limit_ms,
                "pixel_diff_empty": empty, "layer_unmapped_at_close": unmapped,
                "layer_count_before_any_open": self.initial_layer_count, "layer_count_closed": closed_layers}
         self.layer_results.append(row)
@@ -573,10 +578,20 @@ class Runner:
             self._shot(after)
         return self._diff(before, after)
 
-    def _opening_latency(self, offset):
+    def _opening_latency(self, offset, started_ns=None, expected_name=None):
         text = self.log_path.read_text(errors="replace")[offset:]
         matches = re.findall(r"PANEL_OPEN_LATENCY name=([^ ]+) ms_to_first_content_frame=([0-9.]+)", text)
-        return (matches[-1][0], float(matches[-1][1])) if matches else (None, None)
+        if matches:
+            self.last_latency_source = "PANEL_OPEN_LATENCY"
+            return (matches[-1][0], float(matches[-1][1]))
+        if started_ns is not None:
+            presented = re.findall(r"UI_PRESENTED .*?monotonic_ns=(\d+).*?companion=true", text)
+            for timestamp in presented:
+                elapsed = int(timestamp) - started_ns
+                if elapsed >= 0:
+                    self.last_latency_source = "UI_PRESENTED fallback (legacy build)"
+                    return (expected_name or "legacy-companion", elapsed / 1_000_000)
+        return (None, None)
 
     def _layer_count(self):
         """Count this namespace in niri's compositor-side mapped-layer inventory."""
@@ -599,9 +614,11 @@ class Runner:
                 self._reset_closed()
                 self._shot(before)
                 open_offset = self.log_path.stat().st_size
+                started_ns = time.monotonic_ns()
                 self._pointer("click", point)
                 expected = self.profile["surface_names"].get(f"dropdown:{name}")
-                latency = self._open_latency(open_offset, expected)
+                latency = self._open_latency(open_offset, expected, started_ns)
+                latency_source = self.last_latency_source
                 if dismiss == "click":
                     self._pointer("click", point)
                 elif dismiss == "escape":
@@ -623,6 +640,7 @@ class Runner:
                        "result": "PASS" if passed else "FAIL", "latency_ms": latency_value,
                        "surface_name": latency[0], "expected_surface_name": expected,
                        "frame_limit_ms": self.frame_limit_ms,
+                       "latency_source": latency_source,
                        "pixel_diff_empty": empty, "layer_unmapped_at_close": unmapped,
                        "layer_count_before_any_open": self.initial_layer_count,
                        "layer_count_closed": closed_layers}
@@ -636,8 +654,10 @@ class Runner:
     def battery_gap_rearm(self):
         self._reset_closed()
         offset = self.log_path.stat().st_size
+        started_ns = time.monotonic_ns()
         self._pointer("click", self.profile["bar_targets"]["battery"])
-        opened = self._open_latency(offset, self.profile["surface_names"].get("dropdown:battery"))
+        opened = self._open_latency(offset, self.profile["surface_names"].get("dropdown:battery"), started_ns)
+        latency_source = self.last_latency_source
         for target in self.profile["battery_hover_gap_path"]:
             self._pointer("move", target)
         deadline = time.monotonic() + .5
@@ -651,7 +671,8 @@ class Runner:
         self._wait_closed()
         row = {"check": "battery dropdown stays open across gap/re-arm path",
                "result": "PASS" if opened[1] is not None and still_open else "FAIL",
-               "latency_ms": opened[1], "surface_name": opened[0], "still_open_after_path": still_open}
+               "latency_ms": opened[1], "latency_source": latency_source,
+               "surface_name": opened[0], "still_open_after_path": still_open}
         self.results.append(row)
         if row["result"] != "PASS":
             self._shot(self.failures / "battery-gap-rearm.png")
@@ -671,10 +692,12 @@ class Runner:
         start_poster = start_presentation.get("poster")
         offset = self.log_path.stat().st_size
         expected = self.profile["surface_names"].get("wallpaper picker")
+        started_ns = time.monotonic_ns()
         self._super("w")
-        self._open_latency(offset, expected)
+        self._open_latency(offset, expected, started_ns)
         self._key("nacre")
-        latency = self._open_latency(offset, expected)
+        latency = self._open_latency(offset, expected, started_ns)
+        latency_source = self.last_latency_source
         self._key("-k", "Down")
         self._key("-k", "Return")
         # Choosing the highlighted wallpaper applies it; Escape closes the
@@ -689,10 +712,12 @@ class Runner:
         closed = self._wait_closed()
         self._shot(before)
         second_open_offset = self.log_path.stat().st_size
+        second_started_ns = time.monotonic_ns()
         self._super("w")
-        self._open_latency(second_open_offset, expected)
+        self._open_latency(second_open_offset, expected, second_started_ns)
         self._key("nacre")
-        second_latency = self._open_latency(second_open_offset, expected)
+        second_latency = self._open_latency(second_open_offset, expected, second_started_ns)
+        reopen_latency_source = self.last_latency_source
         self._key("-k", "Escape")
         closed_again = self._wait_closed()
         self._shot(after)
@@ -705,7 +730,8 @@ class Runner:
                   and empty and unmapped and applied)
         row = {"check": "wallpaper picker step/apply/close", "result": "PASS" if passed else "FAIL",
                "surface_name": latency[0], "expected_surface_name": expected,
-               "latency_ms": latency[1], "reopen_latency_ms": second_latency[1],
+               "latency_ms": latency[1], "latency_source": latency_source,
+               "reopen_latency_ms": second_latency[1], "reopen_latency_source": reopen_latency_source,
                "frame_limit_ms": self.frame_limit_ms, "pixel_diff_empty_after_apply": empty,
                "layer_unmapped_at_close": unmapped, "wallpaper_apply_changed_presentation": applied,
                "layer_count_before_any_open": self.initial_layer_count, "layer_count_closed": closed_layers,
@@ -748,10 +774,7 @@ class Runner:
             shutil.copy2(after, self.failures / f"{stem}-after.png")
 
     def launcher_open_and_type(self):
-        offset = self.log_path.stat().st_size
-        expected = self.profile["surface_names"].get("launcher open/type/Escape")
         self._super("space")
-        self._open_latency(offset, expected)
         self._key("nacre")
 
     def one_round(self, round_no):
