@@ -301,6 +301,9 @@ return {
             handle(s,{target})
         end,
         ["widgets.edit"]=handle,
+        ["session.select"]=function(_) end,
+        ["session.confirm"]=function(_) end,
+        ["session.cancel"]=function(_) end,
         ["launcher.open"]=function(_) end,
         ["view.open"]=function(_) end,
     },
