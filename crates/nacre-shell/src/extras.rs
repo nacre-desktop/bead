@@ -193,9 +193,8 @@ impl WallpaperActivationQueue {
             .unwrap_or(selection.revision)
             .max(selection.revision);
         let weak_queue = Arc::downgrade(queue);
-        let wake: CallWake = Arc::new(move || {
-            Self::completed(weak_queue.clone(), selection_generation)
-        });
+        let wake: CallWake =
+            Arc::new(move || Self::completed(weak_queue.clone(), selection_generation));
         bead::core::profile::mark("wallpaper_selection_admitted");
         match state.client.begin_call(
             "wallpaper.activate".into(),
@@ -224,10 +223,7 @@ impl WallpaperActivationQueue {
             Err(_) => false,
         }
     }
-    fn completed(
-        weak_queue: std::sync::Weak<std::sync::Mutex<Self>>,
-        selection_generation: u64,
-    ) {
+    fn completed(weak_queue: std::sync::Weak<std::sync::Mutex<Self>>, selection_generation: u64) {
         let Some(queue) = weak_queue.upgrade() else {
             return;
         };
@@ -988,11 +984,12 @@ impl Extras {
             if !active.connected {
                 return;
             }
-            let active_state = serde_json::from_value::<
-                nacre_protocol::wallpaper::WallpaperActive,
-            >((*active.data).clone())
-            .ok()
-            .filter(|state| state.validate().is_ok());
+            let active_state =
+                serde_json::from_value::<nacre_protocol::wallpaper::WallpaperActive>(
+                    (*active.data).clone(),
+                )
+                .ok()
+                .filter(|state| state.validate().is_ok());
             let palette_template = active_state
                 .as_ref()
                 .and_then(|state| state.outputs.values().next());
@@ -1357,7 +1354,10 @@ fn valid_catalogue_palette(palette: &Json) -> bool {
         return false;
     };
     if object.len() != 2
-        || !matches!(object.get("mode").and_then(Json::as_str), Some("light" | "dark"))
+        || !matches!(
+            object.get("mode").and_then(Json::as_str),
+            Some("light" | "dark")
+        )
     {
         return false;
     }

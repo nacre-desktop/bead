@@ -142,12 +142,7 @@ pub(crate) fn load_cached(pair: &ActiveWallpaper, width: u32, height: u32) -> Op
     load_cached_at(&cache_root(), pair, width, height)
 }
 
-fn load_cached_at(
-    root: &Path,
-    pair: &ActiveWallpaper,
-    width: u32,
-    height: u32,
-) -> Option<Vec<u8>> {
+fn load_cached_at(root: &Path, pair: &ActiveWallpaper, width: u32, height: u32) -> Option<Vec<u8>> {
     if pair.motion.is_some() || pair.validate().is_err() {
         return None;
     }

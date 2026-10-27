@@ -216,7 +216,11 @@ impl Predecoder {
         {
             state.cached = None;
         }
-        if !state.cached.as_ref().is_some_and(|cached| cached.key == key) {
+        if !state
+            .cached
+            .as_ref()
+            .is_some_and(|cached| cached.key == key)
+        {
             return None;
         }
         let cached = state.cached.take()?;
@@ -236,7 +240,11 @@ impl Predecoder {
         height: u32,
     ) -> Option<(ActiveWallpaper, Vec<u8>)> {
         let mut state = self.signal.lock();
-        if state.cached.as_ref().is_some_and(|cached| cached.expires <= Instant::now()) {
+        if state
+            .cached
+            .as_ref()
+            .is_some_and(|cached| cached.expires <= Instant::now())
+        {
             state.cached = None;
         }
         let cached = state.cached.as_ref().filter(|cached| {
@@ -352,9 +360,7 @@ fn predecode_loop(signal: Arc<PredecodeSignal>) {
         let mut state = signal.lock();
         state.active = None;
         idle_deadline = Instant::now() + PREDECODE_LIFETIME;
-        let ready = !state.stopping
-            && state.desired.as_ref() == Some(&key)
-            && result.is_ok();
+        let ready = !state.stopping && state.desired.as_ref() == Some(&key) && result.is_ok();
         if ready && let Ok(rgba) = result {
             state.cached = Some(CachedPredecode {
                 key,
@@ -580,9 +586,9 @@ impl Preview {
         requested_at: Instant,
         metadata: SwitchMetadata,
     ) -> u64 {
-        let optimistic_pair = template
-            .zip(palette)
-            .and_then(|(template, palette)| catalogue_pair(template, &id, &kind, video_predecode.as_ref(), palette));
+        let optimistic_pair = template.zip(palette).and_then(|(template, palette)| {
+            catalogue_pair(template, &id, &kind, video_predecode.as_ref(), palette)
+        });
         let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
         // Repeated activation (for example Right followed by Enter) must not
         // discard the same in-flight poster and decode its pixels a second time.
@@ -669,13 +675,7 @@ impl Preview {
             .clone()
     }
 
-    fn remember_pair(
-        &self,
-        boot: &str,
-        pair: &ActiveWallpaper,
-        width: u32,
-        height: u32,
-    ) {
+    fn remember_pair(&self, boot: &str, pair: &ActiveWallpaper, width: u32, height: u32) {
         if pair.validate().is_err() {
             return;
         }
@@ -705,7 +705,11 @@ impl Preview {
             height,
             pair: pair.clone(),
         });
-        let mut bytes = state.known_pairs.iter().map(KnownPair::charge).sum::<usize>();
+        let mut bytes = state
+            .known_pairs
+            .iter()
+            .map(KnownPair::charge)
+            .sum::<usize>();
         while bytes > PREVIEW_PAIR_CACHE_BYTES {
             let Some(removed) = state.known_pairs.pop_back() else {
                 break;
@@ -977,21 +981,20 @@ impl Consumer {
                 .clone(),
         );
         let selection = self.preview.selected();
-        let selection_waiting = selection.as_ref().filter(|selection| {
-            selection.boot == boot && !pair_matches_id(&pair, &selection.id)
+        let selection_waiting = selection
+            .as_ref()
+            .filter(|selection| selection.boot == boot && !pair_matches_id(&pair, &selection.id));
+        let known_pair = selection_waiting.and_then(|selection| {
+            selection
+                .optimistic_pair
+                .as_ref()
+                .filter(|pair| {
+                    pair_matches_secure_id(pair, &selection.id)
+                        && identity_matches_path(&pair.path, &pair.file_identity)
+                })
+                .cloned()
+                .or_else(|| self.preview.known_pair(selection, width, height))
         });
-        let known_pair = selection_waiting
-            .and_then(|selection| {
-                selection
-                    .optimistic_pair
-                    .as_ref()
-                    .filter(|pair| {
-                        pair_matches_secure_id(pair, &selection.id)
-                            && identity_matches_path(&pair.path, &pair.file_identity)
-                    })
-                    .cloned()
-                    .or_else(|| self.preview.known_pair(selection, width, height))
-            });
         let target_pair = known_pair.clone().unwrap_or_else(|| pair.as_ref().clone());
         self.preview.register_target(
             selection.clone(),
@@ -1025,9 +1028,13 @@ impl Consumer {
             if selection_waiting.is_some() {
                 None
             } else {
-                self.preview
-                    .predecode
-                    .take_confirmed(selection, &boot, pair.as_ref(), width, height)
+                self.preview.predecode.take_confirmed(
+                    selection,
+                    &boot,
+                    pair.as_ref(),
+                    width,
+                    height,
+                )
             }
         });
         let optimistic = cached.is_some();
@@ -1090,9 +1097,11 @@ impl Consumer {
         } else {
             Some(frame)
         };
-        if optimistic || selection.as_ref().is_some_and(|selection| {
-            selection.boot == boot && pair_matches_id(&decoded_pair, &selection.id)
-        }) {
+        if optimistic
+            || selection.as_ref().is_some_and(|selection| {
+                selection.boot == boot && pair_matches_id(&decoded_pair, &selection.id)
+            })
+        {
             return Ok(frame);
         }
         let request = serde_json::json!({"revision": decoded_pair.revision});
@@ -1215,9 +1224,7 @@ impl bead::wayland::WallpaperProvider for Consumer {
         self.preview.selected().is_none_or(|selection| {
             selection.boot != token.boot || pair_matches_id(&token.pair, &selection.id)
         }) && self.state().is_ok_and(|state| {
-            state.available
-                && !state.stale
-                && state.outputs.get(&frame.output) == Some(&token.pair)
+            state.available && !state.stale && state.outputs.get(&frame.output) == Some(&token.pair)
         })
     }
     fn uploaded(&self, _output: &str, revision: u64, token: &Arc<dyn std::any::Any + Send + Sync>) {
@@ -1227,9 +1234,11 @@ impl bead::wayland::WallpaperProvider for Consumer {
         if pair.pair.revision != revision {
             return;
         }
-        if !pair.optimistic && let Some(selection) = self.preview.selected().filter(|selection| {
-            selection.boot == pair.boot && pair_matches_id(&pair.pair, &selection.id)
-        }) {
+        if !pair.optimistic
+            && let Some(selection) = self.preview.selected().filter(|selection| {
+                selection.boot == pair.boot && pair_matches_id(&pair.pair, &selection.id)
+            })
+        {
             wallpaper_switch_phase(&selection, revision, "upload_end");
         }
     }
@@ -1297,9 +1306,11 @@ impl bead::wayland::WallpaperProvider for Consumer {
                 ),
             );
         }
-        if !pair.optimistic && let Some(selection) = self.preview.selected().filter(|selection| {
-            selection.boot == pair.boot && pair_matches_id(&pair.pair, &selection.id)
-        }) {
+        if !pair.optimistic
+            && let Some(selection) = self.preview.selected().filter(|selection| {
+                selection.boot == pair.boot && pair_matches_id(&pair.pair, &selection.id)
+            })
+        {
             self.preview.cancel(selection.generation);
         }
         let _ = self
@@ -2260,17 +2271,22 @@ mod tests {
         drop(ready);
 
         let optimistic = Predecoder::default();
-        optimistic.submit(selection.clone(), PredecodeTarget {
-            boot: "boot-a".into(),
-            pair: Arc::new(active.clone()),
-            width: 2,
-            height: 1,
-        });
-        let (guard, _) = optimistic.signal.changed.wait_timeout_while(
-            optimistic.signal.lock(),
-            Duration::from_secs(2),
-            |state| state.cached.is_none() && state.running,
-        ).unwrap();
+        optimistic.submit(
+            selection.clone(),
+            PredecodeTarget {
+                boot: "boot-a".into(),
+                pair: Arc::new(active.clone()),
+                width: 2,
+                height: 1,
+            },
+        );
+        let (guard, _) = optimistic
+            .signal
+            .changed
+            .wait_timeout_while(optimistic.signal.lock(), Duration::from_secs(2), |state| {
+                state.cached.is_none() && state.running
+            })
+            .unwrap();
         drop(guard);
         let (predecoded_pair, predecoded_rgba) = optimistic
             .take_optimistic(&selection, &active, 2, 1)
@@ -2434,14 +2450,10 @@ mod tests {
             "presentation":"crop","palette":{"mode":"dark","colours":{
                 "background":"#123456","onSurface":"#ffffff","primary":"#abcdef"
             }}
-        })).unwrap();
+        }))
+        .unwrap();
         let preview = Preview::default();
-        preview.remember_pair(
-            "boot-a",
-            &cached_pair,
-            2,
-            2,
-        );
+        preview.remember_pair("boot-a", &cached_pair, 2, 2);
         preview.select(
             "boot-a".into(),
             path.to_string_lossy().into_owned(),
@@ -2482,14 +2494,20 @@ mod tests {
         });
         let selected = catalogue_pair(&template, &id, "image", None, &colours).unwrap();
         assert_eq!(selected.path, id);
-        assert_eq!(palette(&selected).get("background").unwrap(), [0x12, 0x34, 0x56, 255]);
-        assert!(catalogue_pair(
-            &template,
-            &id,
-            "image",
-            None,
-            &serde_json::json!({"mode":"dark","colours":{"background":"red"}}),
-        ).is_none());
+        assert_eq!(
+            palette(&selected).get("background").unwrap(),
+            [0x12, 0x34, 0x56, 255]
+        );
+        assert!(
+            catalogue_pair(
+                &template,
+                &id,
+                "image",
+                None,
+                &serde_json::json!({"mode":"dark","colours":{"background":"red"}}),
+            )
+            .is_none()
+        );
 
         let preview = Preview::default();
         let generation = preview.select_at_with_palette(
