@@ -1631,6 +1631,7 @@ impl Runtime {
             "bead.desktop.audio.label",
             "bead.desktop.titlevisible",
             "bead.desktop.clock",
+            "bead.desktop.clock.phase",
             "bead.desktop.clock.seconds",
             "bead.desktop.clock.date",
             "bead.desktop.audio",
@@ -5369,13 +5370,8 @@ impl SceneSource for Runtime {
                     .map(|preview| preview.prepared_at + WIDGET_HOVER_PREVIEW_RENEW)
             })
             .flatten();
-        let canvas_layout = if self.widget_canvas {
-            self.session.stores.get("widgets.layout")
-        } else {
-            self.widgets_canvas_layout.as_ref()
-        };
-        let analog_enabled = (self.widget_canvas || self.widgets_canvas_wanted)
-            && widget_layout_has_analog_clock(canvas_layout);
+        let analog_enabled = self.widget_canvas
+            && widget_layout_has_analog_clock(self.session.stores.get("widgets.layout"));
         let analog = if analog_enabled {
             Some(
                 std::time::Instant::now()
@@ -5998,6 +5994,18 @@ impl SceneSource for Runtime {
     }
     fn stage(&mut self, mut event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
         let now = std::time::Instant::now();
+        if self.widget_canvas
+            && widget_layout_has_analog_clock(self.session.stores.get("widgets.layout"))
+            && let UiEvent::Model(values) = &mut event
+        {
+            let phase = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0., |elapsed| elapsed.as_secs_f64().fract());
+            values.insert(
+                "bead.desktop.clock.phase".into(),
+                bead::core::Value::Number(phase),
+            );
+        }
         if matches!(
             &event,
             UiEvent::Key { .. }

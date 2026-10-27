@@ -31,6 +31,7 @@ pub fn values(s: &Snapshot, menu_item: &str) -> BTreeMap<String, Value> {
         ("bead.desktop.audio.label".into(),Value::Text(s.audio.volume.map(|v|format!("{:.0}%",v*100.)).unwrap_or_else(||"Unavailable".into()))),
         ("bead.desktop.titlevisible".into(),Value::Bool(menu.is_empty())),
         ("bead.desktop.clock".into(), Value::Text(s.clock.clone())),
+        ("bead.desktop.clock.phase".into(), Value::Number(0.)),
         (
             "bead.desktop.clock.seconds".into(),
             Value::Text(s.clock_seconds.clone()),

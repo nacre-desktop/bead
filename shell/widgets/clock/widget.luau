@@ -120,10 +120,11 @@ local function desktop(props,_settings,_data)
         local hours,minutes=string.match(visible_time,"^(%d%d?):(%d%d)")
         hours,minutes=tonumber(hours) or 0,tonumber(minutes) or 0
         local second=tonumber(string.match(seconds,"%d%d$")) or 0
-        local clock_seconds=hours*3600+minutes*60+second
-        local second_angle=ui.animate("wall-clock-second",clock_seconds*6,1,"linear")
-        local minute_angle=ui.animate("wall-clock-minute",clock_seconds*.1,1,"linear")
-        local hour_angle=ui.animate("wall-clock-hour",clock_seconds/120,1,"linear")
+        local phase=tonumber(ui.resolve_for_check(ui.bind("bead.desktop.clock.phase"))) or 0
+        local clock_seconds=hours*3600+minutes*60+second+phase
+        local second_angle=clock_seconds*6
+        local minute_angle=clock_seconds*.1
+        local hour_angle=clock_seconds/120
         local dial_size=math.min(w,h)-16
         local dial_left,dial_top=(w-dial_size)/2,(h-dial_size)/2
         local function hand(id,degrees,length,width,color)

@@ -9,7 +9,7 @@ use nacre_protocol::core_services::{
 };
 use std::{collections::BTreeMap, sync::Arc};
 
-const KEYS: [&str; 12] = [
+const KEYS: [&str; 13] = [
     "bead.desktop.network",
     "bead.desktop.bluetooth",
     "bead.desktop.battery",
@@ -22,6 +22,7 @@ const KEYS: [&str; 12] = [
     "bead.desktop.audio.available",
     "bead.desktop.battery.status",
     "bead.desktop.battery.remaining",
+    "bead.desktop.clock.phase",
 ];
 
 fn unavailable() -> BTreeMap<String, Value> {
@@ -41,6 +42,7 @@ fn unavailable() -> BTreeMap<String, Value> {
             Value::Text("Battery status unavailable".into()),
         ),
         (KEYS[11].into(), Value::Text(String::new())),
+        (KEYS[12].into(), Value::Number(0.)),
     ])
 }
 
