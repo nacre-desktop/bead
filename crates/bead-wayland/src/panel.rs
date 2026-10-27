@@ -3,12 +3,6 @@
 use super::*;
 /// A closed panel stays built for this long, so reopening it shows prepared content on its first frame.
 const PANEL_KEEP_ALIVE: Duration = Duration::from_secs(120);
-fn update_panel_placement(
-    cached: &Cell<Option<(Anchor, [i32; 4])>>,
-    placement: (Anchor, [i32; 4]),
-) -> bool {
-    cached.replace(Some(placement)) != Some(placement)
-}
 fn should_stop_app_after_panel_release(
     app_mode: bool,
     pending: bool,
@@ -503,7 +497,7 @@ impl App {
     }
     pub(super) fn position_panel_surface(
         &self,
-        layer: &LayerSurface,
+        layer: &layer_role::LayerRole,
         output: &wl_output::WlOutput,
         scene: &Scene,
     ) -> bool {
@@ -517,7 +511,7 @@ impl App {
     }
     pub(super) fn position_panel_surface_with_origin(
         &self,
-        layer: &LayerSurface,
+        layer: &layer_role::LayerRole,
         output: &wl_output::WlOutput,
         scene: &Scene,
         tracks_origin: bool,
@@ -576,34 +570,14 @@ impl App {
             self.notify_panel_origin(scene, x, y, tracks_origin);
             (Anchor::TOP | Anchor::LEFT, [y, 0, 0, x])
         } else {
-            let width = scene.bounds.w.ceil().max(1.) as u32;
-            let height = (scene.bounds.y
-                + scene.bounds.h
-                + scene.slide.map_or(scene.offset.1, |s| s.open_y))
-            .ceil()
-            .max(1.) as u32;
             panels::placement(
                 scene.motion.as_ref().map_or(self.options.edge, |m| m.edge),
                 self.panel_center,
-                (width, height),
+                panels::content_extent(scene),
                 self.output.info(output).and_then(|i| i.logical_size),
             )
         };
-        let changed = self
-            .surfaces
-            .iter()
-            .find(|surface| surface.layer.wl_surface() == layer.wl_surface())
-            .is_none_or(|surface| update_panel_placement(&surface.panel_position, placement));
-        if changed {
-            layer.set_anchor(placement.0);
-            layer.set_margin(
-                placement.1[0],
-                placement.1[1],
-                placement.1[2],
-                placement.1[3],
-            );
-        }
-        changed
+        layer.set_placement(placement.0, placement.1)
     }
 
     fn dock_target_body(
@@ -1471,26 +1445,6 @@ mod placement_tests {
         ));
         assert!(!should_stop_app_after_panel_release(
             false, false, false, false
-        ));
-    }
-
-    #[test]
-    fn only_actual_placement_changes_are_committed() {
-        let cached = Cell::new(None);
-        let initial = (Anchor::TOP | Anchor::LEFT, [8, 0, 0, 12]);
-        assert!(update_panel_placement(&cached, initial));
-        assert!(!update_panel_placement(&cached, initial));
-        assert!(update_panel_placement(
-            &cached,
-            (Anchor::TOP | Anchor::LEFT, [9, 0, 0, 12]),
-        ));
-        assert!(update_panel_placement(
-            &cached,
-            (Anchor::TOP | Anchor::RIGHT, [9, 0, 0, 12]),
-        ));
-        assert!(!update_panel_placement(
-            &cached,
-            (Anchor::TOP | Anchor::RIGHT, [9, 0, 0, 12]),
         ));
     }
 }

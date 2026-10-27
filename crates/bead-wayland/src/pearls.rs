@@ -1902,8 +1902,7 @@ impl App {
             .as_mut()
             .is_some_and(|handoff| handoff.gate.finish_frame(committed));
         if retire {
-            s.layer.wl_surface().attach(None, 0, 0);
-            s.layer.commit();
+            s.unmap_layer();
             // Submit the covered swap before allocator/driver retirement work.
             let _ = self.conn.flush();
             let mut handoff = s.handoff.take().unwrap();
@@ -2537,9 +2536,8 @@ impl App {
         let guide_ids: Vec<_> = self.guide_ids.values().copied().collect();
         for id in guide_ids {
             self.in_slot(id, |app| {
-                for surface in app.surfaces.iter().filter(|surface| surface.companion) {
-                    surface.layer.wl_surface().attach(None, 0, 0);
-                    surface.layer.commit();
+                for surface in app.surfaces.iter_mut().filter(|surface| surface.companion) {
+                    surface.unmap_layer();
                 }
             });
         }

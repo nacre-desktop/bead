@@ -1,7 +1,27 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Static view configuration; only the selected factory creates a worker.
 use crate::PanelSpec;
+use smithay_client_toolkit::shell::wlr_layer::Anchor;
 use std::collections::BTreeMap;
+
+/// The layer anchor of a content-sized panel sliding in from `edge`.
+pub(crate) fn content_anchor(edge: bead_core::Edge) -> Anchor {
+    match edge {
+        bead_core::Edge::Left => Anchor::LEFT | Anchor::TOP,
+        bead_core::Edge::Right => Anchor::RIGHT | Anchor::TOP,
+        bead_core::Edge::Top => Anchor::TOP,
+        bead_core::Edge::Bottom => Anchor::BOTTOM,
+    }
+}
+
+/// The layer size of a content-sized panel: its bounds plus the open slide offset.
+pub(crate) fn content_extent(scene: &crate::Scene) -> (u32, u32) {
+    let height = scene.bounds.y + scene.bounds.h + scene.slide.map_or(scene.offset.1, |s| s.open_y);
+    (
+        scene.bounds.w.ceil().max(1.) as u32,
+        height.ceil().max(1.) as u32,
+    )
+}
 
 pub(crate) fn anchored_position(
     scene: &crate::Scene,

@@ -984,12 +984,11 @@ impl App {
                     self.panel_content_ready();
                 }
                 if self.options.panel && (self.processing_panel || self.scene.motion.is_some()) {
-                    let anchor = self.scene.motion.as_ref().map(|motion| match motion.edge {
-                        bead_core::Edge::Left => Anchor::LEFT | Anchor::TOP,
-                        bead_core::Edge::Right => Anchor::RIGHT | Anchor::TOP,
-                        bead_core::Edge::Top => Anchor::TOP,
-                        bead_core::Edge::Bottom => Anchor::BOTTOM,
-                    });
+                    let anchor = self
+                        .scene
+                        .motion
+                        .as_ref()
+                        .map(|motion| panels::content_anchor(motion.edge));
                     for surface in self.surfaces.iter().filter(|s| {
                         s.native.is_none()
                             && s.companion == self.processing_panel
@@ -1003,23 +1002,15 @@ impl App {
                                 runtime.tracks_origin(),
                             )
                         } else {
-                            // Bar surfaces keep their full-width anchors: the bar resizes
-                            // with width 0, which is a protocol error on a one-edge anchor.
-                            if let Some(anchor) = anchor
-                                && !self.options.bar
-                            {
-                                surface.layer.set_anchor(anchor);
-                                // A one-edge anchor needs an explicit, non-zero size in
-                                // the same commit, or the compositor kills the client.
-                                let width = self.scene.bounds.w.ceil().max(1.) as u32;
-                                let height = (self.scene.bounds.y
-                                    + self.scene.bounds.h
-                                    + self.scene.slide.map_or(self.scene.offset.1, |s| s.open_y))
-                                .ceil()
-                                .max(1.) as u32;
-                                surface.layer.set_size(width, height);
-                            }
-                            true
+                            // Bar surfaces keep their own edge anchors; a sliding
+                            // panel anchors to its edge at its content size.
+                            anchor.filter(|_| !self.options.bar).is_some_and(|anchor| {
+                                surface.layer.set(layer_role::LayerState {
+                                    anchor,
+                                    size: panels::content_extent(&self.scene),
+                                    ..surface.layer.state()
+                                })
+                            })
                         };
                         if placement_changed {
                             surface.layer.commit();
@@ -1027,19 +1018,13 @@ impl App {
                     }
                 }
                 if self.options.content_size {
-                    let width = self.scene.bounds.w.ceil().max(1.) as u32;
-                    let height = (self.scene.bounds.y
-                        + self.scene.bounds.h
-                        + self.scene.slide.map_or(self.scene.offset.1, |s| s.open_y))
-                    .ceil()
-                    .max(1.) as u32;
+                    let (width, height) = panels::content_extent(&self.scene);
                     for surface in self.surfaces.iter().filter(|s| {
                         s.native.is_none()
                             && s.companion == self.processing_panel
                             && output_scope_matches(active_output.as_deref(), &s.output_name)
                     }) {
-                        if surface.width != width || surface.height != height {
-                            surface.layer.set_size(width, height);
+                        if surface.layer.set_size(width, height) {
                             surface.layer.commit();
                         }
                     }
