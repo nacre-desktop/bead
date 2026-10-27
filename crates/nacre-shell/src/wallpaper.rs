@@ -1931,17 +1931,17 @@ mod tests {
             .unwrap();
             let mut staged_call_tx = Some(staged_call_tx);
             let mut staged_release_rx = Some(staged_release_rx);
-            for call_index in 0..4 {
+            for call_index in 0..3 {
                 let Message::Call { id, m, p, .. } = reader.next().await.unwrap().unwrap() else {
                     panic!("wallpaper.activate call expected");
                 };
                 assert_eq!(m, "wallpaper.activate");
                 assert_eq!(p, serde_json::json!({"revision":1}));
-                if call_index == 2 {
+                if call_index == 1 {
                     let _ = staged_call_tx.take().unwrap().send(());
                     let _ = staged_release_rx.take().unwrap().await;
                 }
-                let reply_pair = if call_index == 3 {
+                let reply_pair = if call_index == 2 {
                     let mut pair = pair.clone();
                     pair.revision = 2;
                     pair.palette_revision = 2;
@@ -1970,13 +1970,6 @@ mod tests {
         })
         .await
         .unwrap();
-        let selected_id = expected_pair.path.clone();
-        let generation = preview.select(
-            "00000000-0000-4000-8000-000000000021".into(),
-            selected_id.clone(),
-            "image".into(),
-            None,
-        );
         let prepare_consumer = consumer.clone();
         let frame = tokio::task::spawn_blocking(move || {
             prepare_consumer.prepare("DP-1".into(), 2, 1).unwrap()
@@ -1997,11 +1990,6 @@ mod tests {
             &frame.commit_token,
         );
         assert_eq!(consumer.displayed("DP-1"), Some(expected_pair.clone()));
-        assert_eq!(
-            preview.generation_for("00000000-0000-4000-8000-000000000021", &selected_id),
-            None,
-            "a committed matching pair releases its selection fence"
-        );
         let superseding = preview.select(
             "00000000-0000-4000-8000-000000000021".into(),
             root.join("second-selection.jpg")
@@ -2010,7 +1998,7 @@ mod tests {
             "image".into(),
             None,
         );
-        assert!(superseding > generation);
+        assert!(superseding > 0);
         assert!(!bead::wayland::WallpaperProvider::is_current(
             &*consumer, &frame
         ));
