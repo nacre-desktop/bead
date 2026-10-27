@@ -1,5 +1,20 @@
 # Feasibility
 
+## B0162 — daily acceptance and regression repair (remote verification blocked)
+
+The private harness now covers the requested dropdowns, panels, wallpaper apply, drag, idle and close checks.
+Source review confirms `bda20168` made bar popouts text-focus-only, preventing Escape dismissal.
+The fix restores keyboard interaction and unmaps closed companion surfaces after their close frame.
+No timing, pixel-diff, memory or compositor measurements are available because remote hosts became unreachable.
+
+| Gate | Runs | Result |
+| --- | ---: | --- |
+| Remote full CI | 2 | First archive lacked Git metadata; retry result unavailable |
+| Quick nested captures | 0 | Not run |
+| Full captures: base / main-before / fixed | 0 / 0 / 0 | Not run |
+
+The first CI attempt's B0002 proof failed because its git-less archive had neither `.git` nor `REVISION`; the retry added `REVISION` but was not observed to completion. No CI or capture pass is claimed. [Scope and pending gates](docs/specs/0162-daily-acceptance.md).
+
 ## B0151 — widget finish slice (2026-10-27; snap gate fails)
 
 Occupied-pill drops persist at 82%/90%; functional proofs and full CI pass.

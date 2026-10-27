@@ -12,7 +12,7 @@ acceptance remains open. The dated transfer and execution receipts below remain 
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
-| 0 | [B0162 Daily-use acceptance](0162-daily-acceptance.md) | In progress — nested daily-use harness and regression repair | Escape dismissal source fix identified at `bda20168`; baseline, main-before/after, slow-open and black-square runs pending. |
+| 0 | [B0162 Daily-use acceptance](0162-daily-acceptance.md) | In progress — nested daily-use harness and regression repair | Escape fix and panel unmap committed; `bda20168` is the Escape regression. Remote CI retry and all captures remain unverified. |
 | 0 | [B0134 Picker retention](0134-picker-retention.md) | Shipped review candidate — bounded CPU first frame, exclusive GL retirement and confirmed pixel/palette staging | Five pairs: retention 28.868 MiB, static 124.341/127.925 ms pass; video picker 150.743 ms and expired feedback 17.956 ms fail. Full remote/official CI pass; source-pinned limits, no live deployment. |
 | 0 | [B0139 No prewarm toplevel on dropdown open](0139-prewarm-toplevel.md) | Fixed — native admission only at drag start | CPU/GL each: 20 control + 20 dashboard cycles create zero native windows; detach20 has zero blanks/reversals. Full remote CI passes. No live deployment. |
 | 0 | [B0138 Updates icon at zero](0138-updates-icon.md) | Shipped — the bar icon and popout remain available at zero; Nacre refreshes after updater exit and settled pacman database changes | Full Bead/Nacre remote CI; private QML/Bead zero-count pair; B0124 positive-count interaction captures remain applicable; no real update run. |
