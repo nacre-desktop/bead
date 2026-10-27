@@ -1025,16 +1025,16 @@ impl Extras {
                 .preview
                 .clone();
             let generation = preview.as_ref().map(|preview| {
-                preview.select_at_with_palette(
-                    boot.clone(),
-                    id.into(),
-                    entry["kind"].as_str().unwrap_or("image").into(),
-                    serde_json::from_value(entry["video_predecode"].clone()).ok(),
+                preview.select_at_with_palette(crate::wallpaper::SelectionRequest {
+                    boot: boot.clone(),
+                    id: id.into(),
+                    kind: entry["kind"].as_str().unwrap_or("image").into(),
+                    video_predecode: serde_json::from_value(entry["video_predecode"].clone()).ok(),
                     palette_template,
-                    entry.get("palette"),
-                    selected_at,
-                    (file_bytes, source_width, source_height),
-                )
+                    palette: entry.get("palette"),
+                    requested_at: selected_at,
+                    metadata: (file_bytes, source_width, source_height),
+                })
             });
             let admitted = WallpaperActivationQueue::submit(queue, selection, &wake);
             if !admitted && let (Some(preview), Some(generation)) = (preview, generation) {

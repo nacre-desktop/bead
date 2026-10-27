@@ -46,6 +46,16 @@ struct PreviewSelection {
     generation: u64,
 }
 pub(crate) type SwitchMetadata = (u64, u32, u32);
+pub(crate) struct SelectionRequest<'a> {
+    pub boot: String,
+    pub id: String,
+    pub kind: String,
+    pub video_predecode: Option<nacre_protocol::wallpaper::WallpaperVideoPredecode>,
+    pub palette_template: Option<&'a ActiveWallpaper>,
+    pub palette: Option<&'a serde_json::Value>,
+    pub requested_at: Instant,
+    pub metadata: SwitchMetadata,
+}
 #[derive(Default)]
 struct PreviewState {
     generation: u64,
@@ -564,32 +574,34 @@ impl Preview {
         requested_at: Instant,
         metadata: SwitchMetadata,
     ) -> u64 {
-        self.select_at_with_palette(
+        self.select_at_with_palette(SelectionRequest {
             boot,
             id,
             kind,
             video_predecode,
-            None,
-            None,
+            palette_template: None,
+            palette: None,
             requested_at,
             metadata,
-        )
+        })
     }
 
-    pub(crate) fn select_at_with_palette(
-        &self,
-        boot: String,
-        id: String,
-        kind: String,
-        video_predecode: Option<nacre_protocol::wallpaper::WallpaperVideoPredecode>,
-        template: Option<&ActiveWallpaper>,
-        palette: Option<&serde_json::Value>,
-        requested_at: Instant,
-        metadata: SwitchMetadata,
-    ) -> u64 {
-        let optimistic_pair = template.zip(palette).and_then(|(template, palette)| {
-            catalogue_pair(template, &id, &kind, video_predecode.as_ref(), palette)
-        });
+    pub(crate) fn select_at_with_palette(&self, request: SelectionRequest<'_>) -> u64 {
+        let SelectionRequest {
+            boot,
+            id,
+            kind,
+            video_predecode,
+            palette_template,
+            palette,
+            requested_at,
+            metadata,
+        } = request;
+        let optimistic_pair = palette_template
+            .zip(palette)
+            .and_then(|(template, palette)| {
+                catalogue_pair(template, &id, &kind, video_predecode.as_ref(), palette)
+            });
         let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
         // Repeated activation (for example Right followed by Enter) must not
         // discard the same in-flight poster and decode its pixels a second time.
@@ -676,6 +688,7 @@ impl Preview {
             .clone()
     }
 
+    #[cfg(test)]
     pub(crate) fn selected_id(&self) -> Option<String> {
         self.selected().map(|selection| selection.id)
     }
@@ -2515,16 +2528,16 @@ mod tests {
         );
 
         let preview = Preview::default();
-        let generation = preview.select_at_with_palette(
-            "boot-a".into(),
-            id.clone(),
-            "image".into(),
-            None,
-            Some(&template),
-            Some(&colours),
-            Instant::now(),
-            (4, 2, 2),
-        );
+        let generation = preview.select_at_with_palette(SelectionRequest {
+            boot: "boot-a".into(),
+            id: id.clone(),
+            kind: "image".into(),
+            video_predecode: None,
+            palette_template: Some(&template),
+            palette: Some(&colours),
+            requested_at: Instant::now(),
+            metadata: (4, 2, 2),
+        });
         assert_eq!(preview.generation_for("boot-a", &id), Some(generation));
         let selection = preview.selected().unwrap();
         let cached_pair = selection.optimistic_pair.clone().unwrap();
