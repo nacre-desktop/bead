@@ -1714,7 +1714,7 @@ impl Runtime {
             "widgets.screen_id",
             "widgets.outputs",
         ];
-        let mut values = self.widget_surface_values(true);
+        let mut values = self.widget_surface_values(false);
         values.extend(
             self.session
                 .stores

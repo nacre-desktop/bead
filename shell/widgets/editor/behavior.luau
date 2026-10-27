@@ -240,7 +240,7 @@ return {
         ["launcher.apps"]={},["bluetooth.devices"]={},["bluetooth.power_checked"]=false,
         ["network.rows"]={},["network.wifi_enabled"]=false,["notifications.rows"]={},
         ["status.updates_checked"]="Never checked",["status.updates_can_open"]=false,["status.updates_can_refresh"]=false,
-        ["session.enabled"]=false,["session.busy"]=false,["session.confirm_action"]="",
+        ["session.enabled"]=false,["session.busy"]=false,["session.confirm"]="",["session.confirm_action"]="",
         ["widgets.group"]="",
         ["widgets.select"]="",["widgets.scroll"]=0,["widgets.editing"]=true,["panel.open"]=true,
         -- Bar defaults needed by widgets/context during catalogue live previews.
