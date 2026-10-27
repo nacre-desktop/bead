@@ -632,10 +632,8 @@ impl App {
                 let scale = surface.scale120 as f32 / 120.;
                 let (width, height) = if let Some(viewport) = &surface.viewport {
                     wl_surface.set_buffer_scale(1);
-                    viewport.set_destination(
-                        surface.width.max(1) as i32,
-                        surface.height.max(1) as i32,
-                    );
+                    viewport
+                        .set_destination(surface.width.max(1) as i32, surface.height.max(1) as i32);
                     (1, 1)
                 } else {
                     (

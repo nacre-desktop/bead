@@ -1014,10 +1014,7 @@ impl App {
                                 let width = self.scene.bounds.w.ceil().max(1.) as u32;
                                 let height = (self.scene.bounds.y
                                     + self.scene.bounds.h
-                                    + self
-                                        .scene
-                                        .slide
-                                        .map_or(self.scene.offset.1, |s| s.open_y))
+                                    + self.scene.slide.map_or(self.scene.offset.1, |s| s.open_y))
                                 .ceil()
                                 .max(1.) as u32;
                                 surface.layer.set_size(width, height);
