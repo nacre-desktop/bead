@@ -2147,7 +2147,15 @@ fn rejected_threshold_transaction_returns_and_retires_ghost() {
     }
 
     runtime.session.stores = bead::core::Stores::default().reconcile(&declared).unwrap();
-    let _ = runtime.stage(UiEvent::Timer { token }).unwrap();
+    let retired_scene = runtime.stage(UiEvent::Timer { token }).unwrap();
+    assert!(
+        retired_scene.is_some(),
+        "retirement can coincide with a scene update that is still pending"
+    );
+    assert!(events.lock().unwrap().iter().any(|event| matches!(event,
+        UiEvent::CanvasOffer { view, open: false, .. } if view == "widgets-drag")),
+        "the drag canvas closes before the returned scene is committed"
+    );
     if runtime.pending.is_some() {
         runtime.commit();
     }
