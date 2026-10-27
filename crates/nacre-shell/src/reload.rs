@@ -377,7 +377,9 @@ fn suppress_widget_drag_hover(
         true
     } else {
         *suppressed = false;
-        false
+        // Consume the leave event itself. Rewarming on that same event can
+        // reopen the just-retired ghost while the release stream is settling.
+        true
     }
 }
 const WIDGET_HOVER_PREVIEW_RENEW: std::time::Duration = std::time::Duration::from_millis(1500);
@@ -2080,6 +2082,9 @@ impl Runtime {
             inside_drop_target,
             pointer_event,
         ) {
+            if !self.widget_drag_suppress_hover_until_leave {
+                self.widget_drag_suppress_hover_bounds = None;
+            }
             return;
         }
         self.widget_drag_suppress_hover_bounds = None;

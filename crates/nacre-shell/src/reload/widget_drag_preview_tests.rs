@@ -45,7 +45,7 @@ fn prepared_source_bounds_clip_before_padding_at_output_edges() {
 }
 
 #[test]
-fn dropped_ghost_stays_released_until_pointer_leaves_target() {
+fn dropped_ghost_consumes_leave_event_before_rearming_hover() {
     let mut suppressed = true;
     assert!(suppress_widget_drag_hover(&mut suppressed, true, false));
     assert!(
@@ -59,10 +59,10 @@ fn dropped_ghost_stays_released_until_pointer_leaves_target() {
     );
     assert!(suppress_widget_drag_hover(&mut suppressed, false, false));
     assert!(suppressed, "non-pointer updates do not prove pointer leave");
-    assert!(!suppress_widget_drag_hover(&mut suppressed, false, true));
+    assert!(suppress_widget_drag_hover(&mut suppressed, false, true));
     assert!(
         !suppressed,
-        "leaving the target permits a later hover prewarm"
+        "leaving clears suppression but consumes the pointer event"
     );
     assert!(!suppress_widget_drag_hover(&mut suppressed, true, true));
 }
