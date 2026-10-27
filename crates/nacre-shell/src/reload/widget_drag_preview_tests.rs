@@ -2152,8 +2152,9 @@ fn rejected_threshold_transaction_returns_and_retires_ghost() {
         retired_scene.is_some(),
         "retirement can coincide with a scene update that is still pending"
     );
-    assert!(events.lock().unwrap().iter().any(|event| matches!(event,
-        UiEvent::CanvasOffer { view, open: false, .. } if view == "widgets-drag")),
+    assert!(
+        events.lock().unwrap().iter().any(|event| matches!(event,
+            UiEvent::CanvasOffer { view, open: false, .. } if view == "widgets-drag")),
         "the drag canvas closes before the returned scene is committed"
     );
     if runtime.pending.is_some() {
