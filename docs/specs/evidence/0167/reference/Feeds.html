@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Notifications, launcher dock and updates</title>
+</head>
+<body>
+
+
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&amp;family=Outfit:wght@200;300;400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.wall{background-image:url(./wallpaper-nacre-forest.jpg);background-size:cover;background-position:center 85%}
+</style>
+
+<div class="wall" style="width: 1440px; height: 560px; box-sizing: border-box; padding: 44px 48px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 36px; font-family: 'IBM Plex Sans', sans-serif; color: #eef6f3;">
+
+  <!-- Notifications stack -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #ffffff; background: rgba(0,0,0,0.35); align-self: flex-start; padding: 4px 10px; border-radius: 8px;">Notifications · stack</div>
+    <div style="background: rgba(10,22,20,0.64); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 14px 16px; display: flex; gap: 12px;">
+      <div style="width: 38px; height: 38px; border-radius: 11px; background: #5865f2; flex-shrink: 0;"></div>
+      <div style="flex-grow: 1; min-width: 0;">
+        <div style="display: flex; justify-content: space-between;"><div style="font-size: 14px; font-weight: 600;">Discord</div><div style="font-size: 12px; color: #a9bcb6;">2 min</div></div>
+        <div style="font-size: 14px; color: #cfe3dd; margin-top: 2px;">[sender]: [message preview]</div>
+      </div>
+    </div>
+    <div style="background: rgba(10,22,20,0.54); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.06); border-radius: 20px; padding: 12px 16px; display: flex; gap: 12px; margin: 0 8px;">
+      <div style="width: 32px; height: 32px; border-radius: 10px; background: #e8833a; flex-shrink: 0;"></div>
+      <div style="font-size: 13px; color: #cfe3dd; align-self: center;">Firefox · Download finished</div>
+    </div>
+    <div style="background: rgba(10,22,20,0.44); backdrop-filter: blur(18px); border-radius: 18px; height: 22px; margin: 0 18px;"></div>
+    <div style="font-size: 12px; color: #e4f1ed; text-shadow: 0 1px 8px rgba(0,0,0,0.6);">Hover a card to dismiss · newest on top · 3 more</div>
+  </div>
+
+  <!-- Launcher favourites dock -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #ffffff; background: rgba(0,0,0,0.35); align-self: flex-start; padding: 4px 10px; border-radius: 8px;">Launcher · favourites dock</div>
+    <div style="margin-top: 60px; align-self: center; background: rgba(10,22,20,0.56); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.08); border-radius: 24px; padding: 12px 14px; display: flex; gap: 12px; align-items: flex-end;">
+      <div style="width: 52px; height: 52px; border-radius: 15px; background: #2b6cb0;"></div>
+      <div style="width: 64px; height: 64px; border-radius: 18px; background: #e8833a; box-shadow: 0 6px 18px rgba(0,0,0,0.35);"></div>
+      <div style="width: 52px; height: 52px; border-radius: 15px; background: #1db954;"></div>
+      <div style="width: 52px; height: 52px; border-radius: 15px; background: #5865f2;"></div>
+      <div style="width: 52px; height: 52px; border-radius: 15px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 22px; color: #cfe3dd;">+</div>
+    </div>
+    <div style="align-self: center; font-size: 12px; color: #e4f1ed; text-shadow: 0 1px 8px rgba(0,0,0,0.6);">Hovered icon grows; open apps get a dot</div>
+  </div>
+
+  <!-- Updates card -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #ffffff; background: rgba(0,0,0,0.35); align-self: flex-start; padding: 4px 10px; border-radius: 8px;">Updates · card</div>
+    <div style="background: rgba(10,22,20,0.64); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.08); border-radius: 26px; padding: 22px 24px;">
+      <div style="font-size: 14px; color: #cfe3dd;">System updates</div>
+      <div style="display: flex; align-items: baseline; gap: 10px; margin-top: 4px;"><div style="font-family: 'Outfit', sans-serif; font-size: 64px; font-weight: 200; line-height: 1;">23</div><div style="font-size: 15px; color: #e4f1ed;">packages</div></div>
+      <div style="font-size: 12px; color: #a9bcb6; margin-top: 8px;">Checked 12 min ago · linux, mesa, firefox +20</div>
+      <button style="margin-top: 16px; height: 42px; padding: 0 20px; border: 0; border-radius: 21px; background: #6fd3bf; color: #0b1715; font: 600 14px 'IBM Plex Sans';">Update now</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

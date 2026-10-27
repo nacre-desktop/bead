@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Desktop with widgets</title>
+</head>
+<body>
+
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&amp;family=Outfit:wght@200;300;400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.wall{background-image:url(./wallpaper-dark.jpg);background-size:cover;background-position:center}
+a{color:#7fdcc8}a:hover{color:#b5efe2}
+</style>
+
+<div class="wall" style="width: 1440px; height: 900px; position: relative; overflow: hidden; font-family: 'IBM Plex Sans', sans-serif; color: #eef6f3;">
+
+  <!-- bar -->
+  <div style="position: absolute; left: 0; top: 0; right: 0; height: 36px; background: rgba(9,18,17,0.92); display: flex; align-items: center; justify-content: space-between; padding: 0 14px; box-sizing: border-box; font-size: 13px;">
+    <div style="display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.06); border-radius: 14px; padding: 3px 6px;">
+      <span style="width: 20px; height: 20px; border-radius: 10px; background: #6fd3bf; color: #0b1715; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;">1</span>
+      <span style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a9bcb6;">2</span>
+      <span style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a9bcb6;">3</span>
+    </div>
+    <div style="color: #7fdcc8;">Desktop</div>
+    <div style="display: flex; align-items: center; gap: 12px; color: #cfe3dd;">
+      <span>83%</span><span>Wi-Fi</span><span>10:42</span>
+    </div>
+  </div>
+
+  <!-- big frameless clock, top-left on the wallpaper -->
+  <div style="position: absolute; left: 72px; top: 96px; text-shadow: 0 2px 18px rgba(0,0,0,0.45);">
+    <div style="font-family: 'Outfit', sans-serif; font-weight: 200; font-size: 148px; line-height: 1; letter-spacing: -4px;">10:42</div>
+    <div style="font-size: 22px; font-weight: 400; margin-top: 10px; letter-spacing: 0.5px; color: #e4f1ed;">Tuesday, 27 October</div>
+    <div style="width: 56px; height: 3px; border-radius: 2px; background: #6fd3bf; margin-top: 16px;"></div>
+  </div>
+
+  <!-- battery ring, frameless -->
+  <div style="position: absolute; left: 80px; top: 560px; display: flex; align-items: center; gap: 22px; text-shadow: 0 2px 14px rgba(0,0,0,0.45);">
+    <svg width="148" height="148" viewBox="0 0 148 148" aria-hidden="true">
+      <circle cx="74" cy="74" r="62" fill="rgba(8,18,16,0.35)" stroke="rgba(255,255,255,0.16)" stroke-width="10"></circle>
+      <circle cx="74" cy="74" r="62" fill="none" stroke="#6fd3bf" stroke-width="10" stroke-linecap="round" stroke-dasharray="323 390" transform="rotate(-90 74 74)"></circle>
+      <text x="74" y="82" text-anchor="middle" font-family="Outfit, sans-serif" font-size="34" font-weight="300" fill="#eef6f3">83%</text>
+    </svg>
+    <div>
+      <div style="font-size: 20px; font-weight: 500;">Battery</div>
+      <div style="font-size: 15px; color: #d2e5df; margin-top: 4px;">2 h 10 min left</div>
+    </div>
+  </div>
+
+  <!-- notifications stack, glass -->
+  <div style="position: absolute; right: 72px; top: 96px; width: 380px; display: flex; flex-direction: column; gap: 10px;">
+    <div style="font-size: 13px; letter-spacing: 1.2px; text-transform: uppercase; color: #d9ebe6; text-shadow: 0 1px 10px rgba(0,0,0,0.5);">Notifications</div>
+    <div style="background: rgba(10,22,20,0.62); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 14px 16px; display: flex; gap: 12px;">
+      <div style="width: 36px; height: 36px; border-radius: 10px; background: #5865f2; flex-shrink: 0;"></div>
+      <div style="min-width: 0;">
+        <div style="font-size: 14px; font-weight: 600;">Discord <span style="font-weight: 400; color: #a9bcb6; font-size: 12px;">· 2 min</span></div>
+        <div style="font-size: 14px; color: #cfe3dd; margin-top: 2px;">[sender]: [message preview]</div>
+      </div>
+    </div>
+    <div style="background: rgba(10,22,20,0.5); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.06); border-radius: 18px; padding: 12px 16px; display: flex; gap: 12px; transform: scale(0.97); opacity: 0.85;">
+      <div style="width: 30px; height: 30px; border-radius: 9px; background: #1db954; flex-shrink: 0;"></div>
+      <div style="font-size: 13px; color: #cfe3dd; align-self: center;">Spotify · Now playing</div>
+    </div>
+  </div>
+
+  <!-- power card, glass, bottom-right -->
+  <div style="position: absolute; right: 72px; bottom: 64px; background: rgba(10,22,20,0.62); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.08); border-radius: 24px; padding: 18px; display: flex; gap: 12px;">
+    <button style="width: 76px; height: 76px; border-radius: 20px; border: 0; background: rgba(255,255,255,0.07); color: #eef6f3; font: 500 12px 'IBM Plex Sans'; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>Lock</button>
+    <button style="width: 76px; height: 76px; border-radius: 20px; border: 0; background: rgba(255,255,255,0.07); color: #eef6f3; font: 500 12px 'IBM Plex Sans'; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"></path></svg>Sleep</button>
+    <button style="width: 76px; height: 76px; border-radius: 20px; border: 0; background: rgba(255,255,255,0.07); color: #eef6f3; font: 500 12px 'IBM Plex Sans'; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.6"></path><path d="M4 4v4h4"></path></svg>Restart</button>
+    <button style="width: 76px; height: 76px; border-radius: 20px; border: 0; background: rgba(229,96,96,0.18); color: #ffb4ad; font: 500 12px 'IBM Plex Sans'; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v9"></path><path d="M6.3 6.3a8 8 0 1 0 11.4 0"></path></svg>Shut down</button>
+  </div>
+
+  <!-- favourites dock, bottom-centre -->
+  <div style="position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); background: rgba(10,22,20,0.55); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 10px 12px; display: flex; gap: 10px;">
+    <div style="width: 48px; height: 48px; border-radius: 14px; background: #2b6cb0;"></div>
+    <div style="width: 48px; height: 48px; border-radius: 14px; background: #e8833a;"></div>
+    <div style="width: 48px; height: 48px; border-radius: 14px; background: #1db954;"></div>
+    <div style="width: 48px; height: 48px; border-radius: 14px; background: #5865f2;"></div>
+    <div style="width: 48px; height: 48px; border-radius: 14px; background: #3b3b3b; border: 1px solid rgba(255,255,255,0.15);"></div>
+  </div>
+</div>
+
+</body>
+</html>

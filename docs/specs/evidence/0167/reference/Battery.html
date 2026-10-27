@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Battery desktop styles</title>
+</head>
+<body>
+
+
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&amp;family=Outfit:wght@200;300;400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.wall{background-image:url(./wallpaper-nacre-forest.jpg);background-size:cover;background-position:center 70%}
+</style>
+
+<div class="wall" style="width: 1440px; height: 520px; box-sizing: border-box; padding: 48px 56px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; font-family: 'IBM Plex Sans', sans-serif; color: #eef6f3;">
+
+  <!-- A: big ring, frameless -->
+  <div style="display: flex; flex-direction: column; gap: 14px;">
+    <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #ffffff; background: rgba(0,0,0,0.35); align-self: flex-start; padding: 4px 10px; border-radius: 8px;">A · Big ring</div>
+    <svg width="280" height="280" viewBox="0 0 280 280" role="img" aria-label="Battery 83 percent, 2 hours 10 minutes left">
+      <circle cx="140" cy="140" r="118" fill="rgba(8,18,16,0.38)" stroke="rgba(255,255,255,0.15)" stroke-width="16"></circle>
+      <circle cx="140" cy="140" r="118" fill="none" stroke="#6fd3bf" stroke-width="16" stroke-linecap="round" stroke-dasharray="615 742" transform="rotate(-90 140 140)"></circle>
+      <text x="140" y="150" text-anchor="middle" font-family="Outfit, sans-serif" font-size="64" font-weight="200" fill="#eef6f3">83%</text>
+      <text x="140" y="184" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="15" fill="#cfe3dd">2 h 10 min left</text>
+    </svg>
+  </div>
+
+  <!-- B: glass gauge card (charging state) -->
+  <div style="display: flex; flex-direction: column; gap: 14px;">
+    <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #ffffff; background: rgba(0,0,0,0.35); align-self: flex-start; padding: 4px 10px; border-radius: 8px;">B · Glass card (charging)</div>
+    <div style="margin-top: 24px; width: 340px; background: rgba(10,22,20,0.62); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.08); border-radius: 26px; padding: 24px 26px; box-sizing: border-box;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <div style="font-size: 15px; color: #cfe3dd;">Battery</div>
+        <div style="font-size: 13px; color: #9be4d4;">Charging · 45 min to full</div>
+      </div>
+      <div style="font-family: 'Outfit', sans-serif; font-size: 72px; font-weight: 200; line-height: 1.1; margin-top: 6px;">83<span style="font-size: 32px;">%</span></div>
+      <div style="height: 12px; border-radius: 6px; background: rgba(255,255,255,0.1); margin-top: 12px; overflow: hidden;">
+        <div style="width: 83%; height: 12px; border-radius: 6px; background: linear-gradient(90deg, #4fb8a5, #8fe6d4);"></div>
+      </div>
+      <div style="font-size: 12px; color: #a9bcb6; margin-top: 10px;">The fill pulses softly while charging.</div>
+    </div>
+  </div>
+
+  <!-- C: minimal frameless line -->
+  <div style="display: flex; flex-direction: column; gap: 14px;">
+    <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #ffffff; background: rgba(0,0,0,0.35); align-self: flex-start; padding: 4px 10px; border-radius: 8px;">C · Minimal line</div>
+    <div style="margin-top: 72px; text-shadow: 0 2px 14px rgba(0,0,0,0.5);">
+      <div style="display: flex; align-items: baseline; gap: 12px;">
+        <div style="font-family: 'Outfit', sans-serif; font-size: 96px; font-weight: 200; line-height: 1;">83</div>
+        <div style="font-size: 18px; color: #e4f1ed;">% battery</div>
+      </div>
+      <div style="width: 300px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.25); margin-top: 14px;">
+        <div style="width: 249px; height: 4px; border-radius: 2px; background: #6fd3bf;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

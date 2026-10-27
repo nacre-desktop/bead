@@ -5369,14 +5369,8 @@ impl SceneSource for Runtime {
                     .map(|preview| preview.prepared_at + WIDGET_HOVER_PREVIEW_RENEW)
             })
             .flatten();
-        let analog = self
-            .session
-            .view_nodes()
-            .iter()
-            .any(|node| {
-                matches!(&node.metadata, Some(bead::core::Value::List(records))
-                    if records.first().is_some_and(|seed| seed["widget_clock_analog"] == true))
-            })
+        let analog = (self.widgets_canvas_wanted
+            && widget_layout_has_analog_clock(self.widgets_canvas_layout.as_ref()))
             .then(|| {
                 std::time::Instant::now()
                     + self
@@ -9945,6 +9939,38 @@ impl SceneSource for Runtime {
             scene.font_files = files;
         }
         scene
+    }
+}
+
+fn widget_layout_has_analog_clock(layout: Option<&bead::core::Value>) -> bool {
+    let Some(bead::core::Value::List(documents)) = layout else {
+        return false;
+    };
+    documents
+        .first()
+        .and_then(|document| document["hosts"]["canvas"]["instances"].as_array())
+        .is_some_and(|instances| {
+            instances
+                .iter()
+                .any(|instance| instance["widget"] == "clock" && instance["style"] == "analog")
+        })
+}
+
+#[cfg(test)]
+mod widget_animation_tick_tests {
+    use super::widget_layout_has_analog_clock;
+
+    #[test]
+    fn only_a_persisted_analog_clock_schedules_wallpaper_ticks() {
+        let analog = bead::core::Value::list(vec![serde_json::json!({"hosts":{"canvas":{"instances":[
+            {"widget":"clock","style":"analog"}
+        ]}}})]);
+        let digital = bead::core::Value::list(vec![serde_json::json!({"hosts":{"canvas":{"instances":[
+            {"widget":"clock","style":"digital"}
+        ]}}})]);
+        assert!(widget_layout_has_analog_clock(Some(&analog)));
+        assert!(!widget_layout_has_analog_clock(Some(&digital)));
+        assert!(!widget_layout_has_analog_clock(None));
     }
 }
 

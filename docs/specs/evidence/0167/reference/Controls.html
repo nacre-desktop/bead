@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Power, Sound, Bluetooth and Wi-Fi</title>
+</head>
+<body>
+
+
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&amp;family=Outfit:wght@200;300;400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.wall{background-image:url(./wallpaper-nacre-forest.jpg);background-size:cover;background-position:center 30%}
+</style>
+
+<div class="wall" style="width: 1440px; height: 560px; box-sizing: border-box; padding: 44px 48px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px; font-family: 'IBM Plex Sans', sans-serif; color: #eef6f3;">
+
+  <!-- Power -->
+  <div style="display: flex; flex-direction: column; gap: 14px;">
+    <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #ffffff; background: rgba(0,0,0,0.35); align-self: flex-start; padding: 4px 10px; border-radius: 8px;">Power · actions card</div>
+    <div style="background: rgba(10,22,20,0.64); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.08); border-radius: 26px; padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="width: 40px; height: 40px; border-radius: 20px; background: #3a6f66; display: flex; align-items: center; justify-content: center; font-weight: 600;">S</div>
+        <div><div style="font-size: 15px; font-weight: 600;">siverteh</div><div style="font-size: 12px; color: #a9bcb6;">Up 1 day 21 h</div></div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;">
+        <button style="height: 64px; border: 0; border-radius: 18px; background: rgba(255,255,255,0.07); color: #eef6f3; font: 500 13px 'IBM Plex Sans';">Lock</button>
+        <button style="height: 64px; border: 0; border-radius: 18px; background: rgba(255,255,255,0.07); color: #eef6f3; font: 500 13px 'IBM Plex Sans';">Sleep</button>
+        <button style="height: 64px; border: 0; border-radius: 18px; background: rgba(255,255,255,0.07); color: #eef6f3; font: 500 13px 'IBM Plex Sans';">Restart</button>
+        <button style="height: 64px; border: 0; border-radius: 18px; background: rgba(229,96,96,0.2); color: #ffb4ad; font: 500 13px 'IBM Plex Sans';">Shut down</button>
+      </div>
+      <div style="font-size: 11px; color: #a9bcb6;">Restart and Shut down ask to confirm.</div>
+    </div>
+  </div>
+
+  <!-- Sound -->
+  <div style="display: flex; flex-direction: column; gap: 14px;">
+    <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #ffffff; background: rgba(0,0,0,0.35); align-self: flex-start; padding: 4px 10px; border-radius: 8px;">Sound · volume ring</div>
+    <div style="background: rgba(10,22,20,0.6); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.08); border-radius: 26px; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+      <svg width="170" height="170" viewBox="0 0 170 170" role="img" aria-label="Volume 45 percent">
+        <circle cx="85" cy="85" r="70" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="12" stroke-dasharray="330 440" stroke-linecap="round" transform="rotate(135 85 85)"></circle>
+        <circle cx="85" cy="85" r="70" fill="none" stroke="#6fd3bf" stroke-width="12" stroke-dasharray="148 440" stroke-linecap="round" transform="rotate(135 85 85)"></circle>
+        <text x="85" y="94" text-anchor="middle" font-family="Outfit, sans-serif" font-size="40" font-weight="300" fill="#eef6f3">45</text>
+      </svg>
+      <div style="font-size: 14px; color: #cfe3dd;">Speakers</div>
+      <div style="display: flex; gap: 8px;">
+        <button style="height: 36px; padding: 0 16px; border: 0; border-radius: 18px; background: rgba(255,255,255,0.08); color: #eef6f3; font: 500 13px 'IBM Plex Sans';">Mute</button>
+        <button style="height: 36px; padding: 0 16px; border: 0; border-radius: 18px; background: rgba(255,255,255,0.08); color: #eef6f3; font: 500 13px 'IBM Plex Sans';">Output</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bluetooth -->
+  <div style="display: flex; flex-direction: column; gap: 14px;">
+    <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #ffffff; background: rgba(0,0,0,0.35); align-self: flex-start; padding: 4px 10px; border-radius: 8px;">Bluetooth · devices</div>
+    <div style="background: rgba(10,22,20,0.62); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.08); border-radius: 26px; padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="font-size: 16px; font-weight: 600;">Bluetooth</div>
+        <div style="width: 44px; height: 26px; border-radius: 13px; background: #6fd3bf; position: relative;"><div style="position: absolute; right: 3px; top: 3px; width: 20px; height: 20px; border-radius: 10px; background: #0b1715;"></div></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px;"><div style="width: 34px; height: 34px; border-radius: 10px; background: rgba(111,211,191,0.18);"></div><div style="flex-grow: 1;"><div style="font-size: 14px;">[Headphones]</div><div style="height: 4px; width: 120px; border-radius: 2px; background: rgba(255,255,255,0.12); margin-top: 5px;"><div style="width: 86px; height: 4px; border-radius: 2px; background: #6fd3bf;"></div></div></div><div style="font-size: 13px; color: #cfe3dd;">72%</div></div>
+        <div style="display: flex; align-items: center; gap: 10px;"><div style="width: 34px; height: 34px; border-radius: 10px; background: rgba(111,211,191,0.18);"></div><div style="flex-grow: 1;"><div style="font-size: 14px;">[Mouse]</div><div style="height: 4px; width: 120px; border-radius: 2px; background: rgba(255,255,255,0.12); margin-top: 5px;"><div style="width: 48px; height: 4px; border-radius: 2px; background: #e8b04a;"></div></div></div><div style="font-size: 13px; color: #cfe3dd;">40%</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Wi-Fi -->
+  <div style="display: flex; flex-direction: column; gap: 14px;">
+    <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #ffffff; background: rgba(0,0,0,0.35); align-self: flex-start; padding: 4px 10px; border-radius: 8px;">Wi-Fi · frameless</div>
+    <div style="margin-top: 30px; text-shadow: 0 2px 14px rgba(0,0,0,0.55);">
+      <svg width="96" height="72" viewBox="0 0 96 72" aria-hidden="true">
+        <path d="M8 26 A56 56 0 0 1 88 26" fill="none" stroke="#6fd3bf" stroke-width="7" stroke-linecap="round"></path>
+        <path d="M22 40 A36 36 0 0 1 74 40" fill="none" stroke="#6fd3bf" stroke-width="7" stroke-linecap="round"></path>
+        <path d="M36 54 A17 17 0 0 1 60 54" fill="none" stroke="#6fd3bf" stroke-width="7" stroke-linecap="round"></path>
+        <circle cx="48" cy="64" r="5" fill="#6fd3bf"></circle>
+      </svg>
+      <div style="font-family: 'Outfit', sans-serif; font-size: 40px; font-weight: 300; margin-top: 10px;">[Network name]</div>
+      <div style="font-size: 15px; color: #e4f1ed; margin-top: 4px;">Strong signal · 5 GHz</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
