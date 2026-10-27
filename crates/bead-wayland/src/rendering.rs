@@ -632,7 +632,10 @@ impl App {
                 let scale = surface.scale120 as f32 / 120.;
                 let (width, height) = if let Some(viewport) = &surface.viewport {
                     wl_surface.set_buffer_scale(1);
-                    viewport.set_destination(surface.width as i32, surface.height as i32);
+                    viewport.set_destination(
+                        surface.width.max(1) as i32,
+                        surface.height.max(1) as i32,
+                    );
                     (1, 1)
                 } else {
                     (
@@ -649,6 +652,11 @@ impl App {
                 )?;
                 buffer.attach_to(&wl_surface)?;
                 wl_surface.damage_buffer(0, 0, width, height);
+                // This commit also applies any pending layer size; companions are
+                // anchored to one edge, so a zero size would kill the connection.
+                surface
+                    .layer
+                    .set_size(surface.width.max(1), surface.height.max(1));
                 wl_surface.commit();
                 surface.buffers.push(Reusable {
                     buffer,
