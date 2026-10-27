@@ -6,7 +6,7 @@ B0161 review found the frameless clock and battery text hard to read over pale w
 | --- | --- | --- |
 | Contrast and glass | `evidence/0167/` | Pending forest and dark-wallpaper captures |
 | Battery | `shell/widgets/battery/widget.luau`, `crates/nacre-shell/src/reload/bar_daemon.rs` | Uses reported percent, charge state, and time estimate; unknown values remain unknown |
-| Analog cadence | `crates/nacre-shell/src/reload.rs` | Active analog desktop layouts request a refresh-rate wakeup; face image remains retained |
+| Analog cadence | `crates/nacre-shell/src/reload.rs`, `crates/bead-wayland/src/canvas.rs` | Active analog canvas layouts use the generic `SceneSource.wakeup_at()` frame deadline; face image remains retained |
 | Copied notes | all `shell/widgets/**/*.luau` | Removed the battery fill annotation and power confirmation design note |
 | Full CI | remote Ubuntu 24.04 recipe | Pending |
 
