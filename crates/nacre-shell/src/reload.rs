@@ -8855,10 +8855,12 @@ impl SceneSource for Runtime {
                             .session
                             .update(staged)
                             .map_err(|error| -> Box<dyn Error> { Box::new(error) })?;
-                        if scene.is_none() {
-                            let projection = self.widget_drag_projection(&values);
-                            self.publish_widget_drag_projection(projection);
-                        }
+                        // Retire the drag canvas as soon as the settle timer fires,
+                        // even when this update also produced a scene. In that case
+                        // `finish_scene` may be deferred; leaving the old offer open
+                        // retains the ghost's renderer buffers until another update.
+                        let projection = self.widget_drag_projection(&values);
+                        self.publish_widget_drag_projection(projection);
                         scene
                     } else {
                         None
