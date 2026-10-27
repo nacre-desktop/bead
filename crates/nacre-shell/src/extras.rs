@@ -90,6 +90,7 @@ struct WallpaperActivationInFlight {
     ticket: CallTicket,
     boot: String,
     preview_generation: Option<u64>,
+    selection_generation: u64,
     selection: WallpaperSelection,
 }
 /// Panel-factory-owned activation admission survives lazy view retirement without retaining its UI.
@@ -97,7 +98,7 @@ struct WallpaperActivationQueue {
     client: Client,
     preview: Option<Arc<crate::wallpaper::Preview>>,
     inflight: Option<WallpaperActivationInFlight>,
-    pending: Option<WallpaperSelection>,
+    selection_generation: u64,
     confirmed: Option<(String, u64)>,
     error: Option<String>,
     wake: Option<std::sync::Weak<dyn Fn() + Send + Sync>>,
@@ -108,7 +109,7 @@ impl WallpaperActivationQueue {
             client,
             preview: None,
             inflight: None,
-            pending: None,
+            selection_generation: 0,
             confirmed: None,
             error: None,
             wake: None,
@@ -124,13 +125,6 @@ impl WallpaperActivationQueue {
         self.error.clone()
     }
     fn invalidate_boot(&mut self, boot: Option<&str>) {
-        if self
-            .pending
-            .as_ref()
-            .is_some_and(|pending| Some(pending.boot.as_str()) != boot)
-        {
-            self.pending = None;
-        }
         if self
             .confirmed
             .as_ref()
@@ -152,13 +146,6 @@ impl WallpaperActivationQueue {
         if !state.client.snapshot().connected
             || status.boot.as_deref() != Some(selection.boot.as_str())
         {
-            if state
-                .pending
-                .as_ref()
-                .is_some_and(|pending| pending.boot != selection.boot)
-            {
-                state.pending = None;
-            }
             state.error = Some("Wallpaper action unavailable".into());
             return false;
         }
@@ -171,21 +158,22 @@ impl WallpaperActivationQueue {
         {
             state.confirmed = None;
         }
-        if state.inflight.is_some() {
-            state.pending = Some(selection);
-            true
-        } else {
-            let started = Self::start(queue, &mut state, selection);
-            if !started {
-                state.error = Some("Wallpaper action unavailable".into());
-            }
-            started
+        // Each click starts immediately. Dropping the previous ticket abandons its
+        // reply locally; it must never serialize a newer selection behind it.
+        state.inflight = None;
+        state.selection_generation = state.selection_generation.wrapping_add(1).max(1);
+        let generation = state.selection_generation;
+        let started = Self::start(queue, &mut state, selection, generation);
+        if !started {
+            state.error = Some("Wallpaper action unavailable".into());
         }
+        started
     }
     fn start(
         queue: &Arc<std::sync::Mutex<Self>>,
         state: &mut Self,
         selection: WallpaperSelection,
+        selection_generation: u64,
     ) -> bool {
         let status = state.client.status();
         let Some(method) = status
@@ -205,7 +193,9 @@ impl WallpaperActivationQueue {
             .unwrap_or(selection.revision)
             .max(selection.revision);
         let weak_queue = Arc::downgrade(queue);
-        let wake: CallWake = Arc::new(move || Self::completed(weak_queue.clone()));
+        let wake: CallWake = Arc::new(move || {
+            Self::completed(weak_queue.clone(), selection_generation)
+        });
         bead::core::profile::mark("wallpaper_selection_admitted");
         match state.client.begin_call(
             "wallpaper.activate".into(),
@@ -225,6 +215,7 @@ impl WallpaperActivationQueue {
                         .preview
                         .as_ref()
                         .and_then(|preview| preview.generation_for(&selection.boot, &selection.id)),
+                    selection_generation,
                     boot: selection.boot.clone(),
                     selection,
                 });
@@ -233,7 +224,10 @@ impl WallpaperActivationQueue {
             Err(_) => false,
         }
     }
-    fn completed(weak_queue: std::sync::Weak<std::sync::Mutex<Self>>) {
+    fn completed(
+        weak_queue: std::sync::Weak<std::sync::Mutex<Self>>,
+        selection_generation: u64,
+    ) {
         let Some(queue) = weak_queue.upgrade() else {
             return;
         };
@@ -243,17 +237,23 @@ impl WallpaperActivationQueue {
         let Some(inflight) = state.inflight.as_mut() else {
             return;
         };
+        if inflight.selection_generation != selection_generation {
+            return;
+        }
         let Some(reply) = inflight.ticket.try_take() else {
             return;
         };
         let boot = inflight.boot.clone();
         let selection = inflight.selection.clone();
+        let selection_generation = inflight.selection_generation;
         let preview_generation = inflight.preview_generation;
         let preview = state.preview.clone();
         let mut cancel_preview = Vec::new();
         let mut confirmed = false;
         state.inflight = None;
-        if state.client.status().boot.as_deref() == Some(boot.as_str()) {
+        if selection_generation == state.selection_generation
+            && state.client.status().boot.as_deref() == Some(boot.as_str())
+        {
             match reply {
                 Ok(reply) => match serde_json::from_value::<
                     nacre_protocol::wallpaper::ActiveWallpaper,
@@ -277,24 +277,6 @@ impl WallpaperActivationQueue {
         }
         if !confirmed && let Some(generation) = preview_generation {
             cancel_preview.push(generation);
-        }
-        let current_boot = state.client.status().boot;
-        let next = state.pending.take().filter(|pending| {
-            state.client.snapshot().connected
-                && current_boot.as_deref() == Some(pending.boot.as_str())
-        });
-        if let Some(selection) = next {
-            let generation = preview
-                .as_ref()
-                .and_then(|preview| preview.generation_for(&selection.boot, &selection.id));
-            if Self::start(&queue, &mut state, selection) {
-                state.error = None;
-            } else {
-                state.error = Some("Wallpaper action unavailable".into());
-                if let Some(generation) = generation {
-                    cancel_preview.push(generation);
-                }
-            }
         }
         let wake = state.wake.as_ref().and_then(std::sync::Weak::upgrade);
         drop(state);
