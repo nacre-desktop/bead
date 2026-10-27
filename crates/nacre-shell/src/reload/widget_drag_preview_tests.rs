@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Cross-host drag preview is based on one normalized snapshot and commits only on drop.
 use super::{
-    Runtime, SceneSource, UiEvent, suppress_widget_drag_hover, widget_drag_source_bounds,
-    widget_drag_targets_output,
+    Runtime, SceneSource, UiEvent, suppress_dropped_widget_hover, suppress_widget_drag_hover,
+    widget_drag_hover_identity, widget_drag_source_bounds, widget_drag_targets_output,
 };
 use crate::widgets::widget_drag::Controller;
 use bead::core::Value;
