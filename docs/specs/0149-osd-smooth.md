@@ -28,3 +28,10 @@ The full remote Bead and Nacre desktop CI jobs passed. A private nested capture 
 - [All recorded step values and key ages](evidence/0149/held-key-steps.csv)
 - [Bead daemon publish to next overlay commit](evidence/0149/bead-publish-to-commit.csv)
 - [Preview-state pairs and pointer probes](evidence/0149/osd-volume.jpg), [brightness](evidence/0149/osd-brightness.jpg)
+
+
+## N0085 retained-fill follow-up (2026-10-27)
+
+Bead now keeps the OSD surface and fill artwork fixed, updates a clipped fill window, and patches its retained scene without rerunning Taffy for level changes. This avoids resizing/rasterizing the track image; Luau evaluation and Scene vector cloning remain. The general retained clipped-window primitive is recorded in [ADR 0004](../decisions/0004-structure-licensing-generalization.md). Nacre-side companion work is tracked in `docs/specs/0085-fast-key-path.md`.
+
+The private nested 60 Hz desktop run reached the first visible value in 7.262 ms and the remaining 15 values in 4.84–6.54 ms after request. However, raw presentation cadence includes 16 >25 ms intervals in the candidate and 15 in matched baseline, while the internal marker says `dropped=0`; the strict no-drop gate remains unresolved. Paired QML/Bead captures show a fill-strip gradient mismatch (RMSE 2.697% overall, 5.964% in bar ROI). The affected OSD goldens remain unchanged until the implementation preserves QML fill-relative gradient behavior. See [capture details](evidence/0149/n0085/held-key-cadence.md), [QML image](evidence/0149/n0085/volume-qml.jpg), [Bead image](evidence/0149/n0085/volume-bead.jpg), and [diff](evidence/0149/n0085/volume-diff.jpg).
