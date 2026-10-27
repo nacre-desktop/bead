@@ -80,7 +80,16 @@ return function()
     local pauseLabel=not dynamic and ui.tr("bead.dashboard.wallpaper-static")
         or paused and ui.tr("bead.dashboard.wallpaper-resume") or ui.tr("bead.dashboard.wallpaper-pause")
     local colorsText=ui.tr("bead.dashboard.colors")
-    local colorsTextWidth=math.min(l.heroActionWidth-40,math.ceil(ui.text_width(colorsText,"IBM Plex Sans",kit.tokens.text.caption*4/3)))
+    -- One builder for both hero actions so icon and label share size, gap and centring.
+    local function heroAction(id,glyph,text,label,action)
+        local textWidth=math.min(l.heroActionWidth-40,math.ceil(ui.text_width(text,"IBM Plex Sans",kit.tokens.text.caption*4/3)))
+        return kit.Button{id=id,width=l.heroActionWidth,height=l.heroActionHeight,padding=0,radius=l.heroActionRadius,
+            fill=ui.tint("surface","primary",.12),hover_fill=ui.tint(ui.tint("surface","primary",.12),"onSurface",.08),align="center",justify="center",
+            aria_label=label,on_activate=action,activate_on_release=true,
+            ui.Row{width=18+kit.tokens.spacing.xs+textWidth,height=20,gap=kit.tokens.spacing.xs,align="center",justify="center",
+                ui.Text{text=glyph,family="Material Symbols Rounded",font_size=kit.tokens.icons.small*4/3,width=18,height=20,text_align="center",color="onSurface"},
+                ui.Text{text=text,width=textWidth,font_size=kit.tokens.text.caption*4/3,height=20,color="onSurface"}}}
+    end
     local swatches={}
     for i,role in ipairs({"primary","secondary","tertiary","surfaceContainerHigh","onSurface"}) do
         swatches[i]=kit.Button{id="swatch-"..i,width=19,height=19,padding=0,radius=9.5,fill=role,hover_fill=role,
@@ -102,19 +111,8 @@ return function()
         ui.Row{id="palette",position="absolute",left=l.heroInset,top=l.hero-37,width=180,height=19,gap=10,table.unpack(swatches)},
         ui.Row{id="wallpaper-actions",position="absolute",right=l.heroActionsRight,bottom=l.heroActionBottom,
             width=2*l.heroActionWidth+l.heroActionsGap,height=l.heroActionHeight,gap=l.heroActionsGap,
-            kit.Button{id="wallpapers",width=l.heroActionWidth,height=l.heroActionHeight,padding=0,radius=l.heroActionRadius,
-                fill=ui.tint("surface","primary",.12),hover_fill=ui.tint(ui.tint("surface","primary",.12),"onSurface",.08),align="center",justify="center",
-                aria_label=ui.tr("bead.dashboard.wallpapers"),on_activate=wallpapers,activate_on_release=true,
-                ui.Row{width=18+kit.tokens.spacing.xs+math.min(l.heroActionWidth-40,math.ceil(ui.text_width(ui.tr("bead.dashboard.wallpapers"),"IBM Plex Sans",kit.tokens.text.caption*4/3))),height=20,gap=kit.tokens.spacing.xs,align="center",justify="center",
-                    ui.Text{text="wallpaper",family="Material Symbols Rounded",font_size=kit.tokens.icons.small*4/3,width=18,height=20,text_align="center",color="onSurface"},
-                    ui.Text{text=ui.tr("bead.dashboard.wallpapers"),font_size=kit.tokens.text.caption*4/3,height=20,color="onSurface"}}},
-            kit.Button{id="colors",width=l.heroActionWidth,height=l.heroActionHeight,padding=0,radius=l.heroActionRadius,
-            fill=ui.tint("surface","primary",.12),hover_fill=ui.tint(ui.tint("surface","primary",.12),"onSurface",.08),align="center",justify="center",
-            aria_label=ui.tr("bead.welcome.colors-open"),on_activate=colors,activate_on_release=true,
-            ui.Row{width=18+kit.tokens.spacing.xs+colorsTextWidth,height=20,gap=kit.tokens.spacing.xs,align="center",justify="center",
-                ui.Text{text="palette",family="Material Symbols Rounded",font_size=kit.tokens.icons.small*4/3,width=18,height=20,
-                    text_align="center",color="onSurface"},
-                ui.Text{text=colorsText,width=colorsTextWidth,font_size=kit.tokens.text.caption*4/3,height=20,color="onSurface"}}}},
+            heroAction("wallpapers","wallpaper",ui.tr("bead.dashboard.wallpapers"),ui.tr("bead.dashboard.wallpapers"),wallpapers),
+            heroAction("colors","palette",colorsText,ui.tr("bead.welcome.colors-open"),colors)},
         kit.Button{id="wallpaper-transport",position="absolute",right=l.wallpaperTransportRight,bottom=l.wallpaperTransportBottom,
             width=l.wallpaperTransportWidth,height=l.wallpaperTransportHeight,padding=l.wallpaperTransportInset,radius=l.wallpaperTransportRadius,
             fill=ui.tint("surface","secondary",.1),hover_fill=ui.tint("surface","secondary",.1),
