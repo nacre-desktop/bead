@@ -1,13 +1,16 @@
-## 2026-10-27 — B0161 widget reference replacement (implementation and captures complete; performance gates open)
+## 2026-10-27 — B0161 widget reference replacement (review fixes and captures complete; acceptance gates open)
 
 Rendered all six owner-approved HTML boards at their authored CSS sizes with the
 supplied forest wallpaper. Implemented the desktop widget styles and Widgets page,
 including daemon state forwarding. Outfit is bundled under OFL and registered
-with shell Fontconfig; frameless text uses palette shadows, clock dates are
-localized and analog ticks use a cached themed image. Full Bead CI passed on
-e7eeeb01 after rebasing on `a0335140`. Main, Clock, Battery, Controls, Feeds and App Bead captures were made
-in the private nested desktop at 2880×1800/1.5. QML has no equivalent widget/editor
-surface; memory and 60/120 Hz timing remain open.
+with shell Fontconfig; frameless text uses a blurred glyph mask behind solid ink,
+clock dates are localized and analog ticks use a cached themed image. The final
+source passed the full Bead CI recipe after rebasing on current main. Main, Clock,
+Battery, Controls, Feeds and App captures and side-by-side pairs are in
+`specs/evidence/0161/` at 2880×1800/1.5. Single-sample CPU widget deltas are
+recorded in the spec; the 2 MiB always-on delta against a control remains open.
+Analog commit cadence misses the 60/120 Hz target, and presentation refresh
+timestamps are unavailable. No matching QML wallpaper widget/editor exists.
 [B0161 spec and evidence](specs/0161-widget-reference.md).
 
 ## 2026-10-27 — B0152 Widgets (design and private captures complete; performance and parity open)
