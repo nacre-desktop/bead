@@ -11,9 +11,9 @@ Opening and slide cadence miss synthetic 60/120 Hz frame limits (not physical sc
 | 2880×1800, scale 1.5 | 60 Hz | 120 Hz | Gate |
 | --- | ---: | ---: | --- |
 | First real-4K panel frame after trigger | 92.1 ms | 93.0 ms | fallback content shown |
-| Expired-closed unreclaimable delta | 37.05 MiB | 36.36 MiB | ≤40 MiB, 2 samples pass |
-| Cold-open p99 interval / gaps >1.5× vsync | 56.79 ms / 2 | 5.69 ms / 1 | no dropped frames, fail |
-| Expired-open p99 interval / gaps >1.5× vsync | 53.09 ms / 4 | 62.11 ms / 3 | no dropped frames, fail |
+| Expired-closed unreclaimable delta | 37.05 MiB | 39.65 MiB | ≤40 MiB, 2 samples pass |
+| Cold-open p99 interval / gaps >1.5× vsync | 56.79 ms / 2 | 21.59 ms / 2 | no dropped frames, fail |
+| Expired-open p99 interval / gaps >1.5× vsync | 53.09 ms / 4 | 133.75 ms / 3 | no dropped frames, fail |
 | Spotlight slide p99 interval / gaps >12.5 ms | — | 22.73 ms / 2 | frame-rate motion, fail (3 frames / 400 ms) |
 | Large raster LRU charge / limit | 14.64 / 22 MiB | 14.64 / 22 MiB | bounded |
 
