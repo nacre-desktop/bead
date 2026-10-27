@@ -3208,6 +3208,13 @@ impl Renderer for TreeCpuRenderer {
     }
     fn prepare_on_ui(&mut self, scene: &Scene, scale: f32) -> Result<()> {
         if self.reusable_scene(scene, scale)? {
+            // Worker-prepared content is reused across a reveal; each frame only
+            // derives its pose (clip and growing edge) from the retained frame.
+            if self.worker_fingerprint.is_some()
+                && scene.motion.as_ref().is_some_and(|motion| motion.reveal)
+            {
+                return self.cache.prepare(scene, scale);
+            }
             return Ok(());
         }
         let dense = scene.prepared.get(&scale.to_bits()).is_some_and(|frame| {
@@ -3259,8 +3266,11 @@ impl Renderer for TreeCpuRenderer {
                 None => None,
             }
         };
-        if let Some(Ok(prepared)) = ready {
+        if let Some(Ok(mut prepared)) = ready {
+            // Keep the prepared frame: reveals animate it instead of a frozen composite.
+            prepared.release_cache = false;
             let mut renderer = prepared.accept()?;
+            renderer.snapshot_fingerprint = None;
             renderer.worker_fingerprint = Some(SnapshotFingerprint::new(scene, scale)?);
             *self = renderer;
             return Ok(());
@@ -4483,11 +4493,15 @@ mod tests {
         renderer.prepare_on_ui(&scene, 1.).unwrap();
         let builds = renderer.opacity_builds;
 
+        let pose = renderer.prepared_frame().unwrap();
+
         scene.reveal(0.7);
         scene.resource_revision += 1;
         assert!(renderer.reusable_scene(&scene, 1.).unwrap());
         renderer.prepare_on_ui(&scene, 1.).unwrap();
         assert_eq!(renderer.opacity_builds, builds);
+        // The reused content still takes each frame's reveal pose.
+        assert!(!Arc::ptr_eq(&renderer.prepared_frame().unwrap(), &pose));
 
         let mut changed = scene.clone();
         changed.motion.as_mut().unwrap().parts[0].1 = Primitive::Rounded {
