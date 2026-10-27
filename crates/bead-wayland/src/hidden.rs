@@ -76,7 +76,15 @@ impl App {
         let thickness = self.bar_thickness();
         for surface in self.surfaces.iter().filter(|s| !s.companion) {
             if self.options.bar {
-                surface.layer.set_size(0, thickness);
+                // Zero spans the anchored axis; side bars span the height instead.
+                match self.options.edge {
+                    bead_core::Edge::Left | bead_core::Edge::Right => {
+                        surface.layer.set_size(thickness, 0)
+                    }
+                    bead_core::Edge::Top | bead_core::Edge::Bottom => {
+                        surface.layer.set_size(0, thickness)
+                    }
+                }
                 surface.layer.set_exclusive_zone(thickness as i32);
                 surface.layer.commit();
             }

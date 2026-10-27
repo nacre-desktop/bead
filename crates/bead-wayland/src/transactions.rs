@@ -1003,7 +1003,11 @@ impl App {
                                 runtime.tracks_origin(),
                             )
                         } else {
-                            if let Some(anchor) = anchor {
+                            // Bar surfaces keep their full-width anchors: the bar resizes
+                            // with width 0, which is a protocol error on a one-edge anchor.
+                            if let Some(anchor) = anchor
+                                && !self.options.bar
+                            {
                                 surface.layer.set_anchor(anchor);
                             }
                             true

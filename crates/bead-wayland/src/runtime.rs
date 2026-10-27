@@ -2294,7 +2294,11 @@ impl App {
                 let height = scene.bounds.y
                     + scene.bounds.h
                     + scene.slide.map_or(scene.offset.1, |s| s.open_y);
-                layer.set_size(scene.bounds.w.ceil() as u32, height.ceil().max(1.) as u32);
+                // Content panels anchor to one edge, so a zero width is a protocol error.
+                layer.set_size(
+                    scene.bounds.w.ceil().max(1.) as u32,
+                    height.ceil().max(1.) as u32,
+                );
             } else {
                 layer.set_size(
                     0,
