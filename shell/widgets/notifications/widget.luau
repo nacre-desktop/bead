@@ -54,7 +54,7 @@ local function desktop(props,_settings,_data)
                 ui.Text{id="app",text=n.app or "Notification",width="fill",height=18,font_size=kit.tokens.text.caption*4/3,color="primary"},
                 ui.Text{id="summary",text=n.summary or "",width="fill",height=20,font_size=kit.tokens.text.body*4/3,color="onSurface"}},
             kit.IconButton{id="dismiss",text="close",width=30,height=30,aria_label="Dismiss notification",
-                on_activate=ui.action("notifications.dismiss",n.key or n.id)})})
+                on_activate=ui.action("notifications.dismiss",n.key or n.id)}})
     end
     if #notices==0 then table.insert(notices,ui.Text{id="empty",text="You're all caught up",width="fill",height=30,font_size=kit.tokens.text.body*4/3,color="onSurfaceVariant"}) end
     local action=popouts and ui.action("status.pill.open","notifications") or nil
