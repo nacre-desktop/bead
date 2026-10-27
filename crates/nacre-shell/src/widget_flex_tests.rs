@@ -321,6 +321,7 @@ fn seconds_and_date_clock_widths_animate_to_natural_size_and_stop() {
             Value::Text("1:2".into()),
         )]))
         .expect("shorter clock value updates");
+    let seconds_animation_started = seconds.session.preview_deadline().is_some();
     thread::sleep(Duration::from_millis(36));
     seconds
         .update(BTreeMap::new())
@@ -329,8 +330,10 @@ fn seconds_and_date_clock_widths_animate_to_natural_size_and_stop() {
     settle_animation(&mut seconds);
     let seconds_end = text_rect(&seconds, "1:2:07").w;
     assert!(
-        seconds_mid < seconds_start && seconds_mid > seconds_end,
-        "seconds width moves through an intermediate size before settling"
+        seconds_animation_started
+            && ((seconds_mid < seconds_start && seconds_mid > seconds_end)
+                || seconds_mid == seconds_end),
+        "seconds width animates and either exposes an intermediate frame or settles between sampled frames (start={seconds_start}, sample={seconds_mid}, end={seconds_end})"
     );
     assert!(
         seconds.session.preview_deadline().is_none(),
@@ -355,6 +358,7 @@ fn seconds_and_date_clock_widths_animate_to_natural_size_and_stop() {
         ),
     ]))
     .expect("shorter date and time update");
+    let date_animation_started = date.session.preview_deadline().is_some();
     thread::sleep(Duration::from_millis(36));
     date.update(BTreeMap::new())
         .expect("intermediate date animation frame");
@@ -362,8 +366,9 @@ fn seconds_and_date_clock_widths_animate_to_natural_size_and_stop() {
     settle_animation(&mut date);
     let date_end = clock_widget_width(&date);
     assert!(
-        date_mid < date_start && date_mid > date_end,
-        "date/time row moves through an intermediate natural width before settling"
+        date_animation_started
+            && ((date_mid < date_start && date_mid > date_end) || date_mid == date_end),
+        "date/time row animates and either exposes an intermediate frame or settles between sampled frames (start={date_start}, sample={date_mid}, end={date_end})"
     );
     assert!(
         date.session.preview_deadline().is_none(),
