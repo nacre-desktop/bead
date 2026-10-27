@@ -314,8 +314,7 @@ class Runner:
         if self.args.tools:
             self.env["NACRE_HELPER_TOOLS"] = str(self.args.tools.resolve())
         daemon_env = {**self.env, "WAYLAND_DISPLAY": str(child_sock), "NIRI_SOCKET": str(niri_sockets[0])}
-        self._spawn([str(self.args.daemon), "daemon", "--notifications=daemon", "--behaviours=daemon"],
-                    daemon_env, self.evidence / "daemon.log")
+        self._spawn([str(self.args.daemon), "daemon"], daemon_env, self.evidence / "daemon.log")
         daemon_cli = [str(self.args.ctl), "call", "--timeout", "2000", "daemon.status", "{}"]
         deadline = time.monotonic() + 30
         while True:
