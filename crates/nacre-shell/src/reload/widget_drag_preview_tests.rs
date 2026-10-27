@@ -2025,7 +2025,7 @@ fn bar_drag_threshold_offers_ghost_before_root_reflow_commit() {
     runtime.wakeup = Some(std::sync::Arc::new(move |event| {
         sent.lock().unwrap().push(event);
     }));
-    runtime.prewarm_widget_drag_hover(x, y, true);
+    runtime.prewarm_widget_drag_hover(x, y);
     assert!(runtime.widget_drag_controller_primed);
     if runtime.stage(UiEvent::Click { x, y }).unwrap().is_some() {
         runtime.commit();

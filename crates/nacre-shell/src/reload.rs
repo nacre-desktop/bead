@@ -2049,7 +2049,7 @@ impl Runtime {
             });
         }
     }
-    fn prewarm_widget_drag_hover(&mut self, x: f32, y: f32, pointer_event: bool) {
+    fn prewarm_widget_drag_hover(&mut self, x: f32, y: f32) {
         if self.widget_drag_is_active() {
             return;
         }
@@ -5854,7 +5854,7 @@ impl SceneSource for Runtime {
                 .as_ref()
                 .is_some_and(|preview| preview.prepared_at.elapsed() >= WIDGET_HOVER_PREVIEW_RENEW)
         {
-            self.prewarm_widget_drag_hover(self.pointer_at.0, self.pointer_at.1, false);
+            self.prewarm_widget_drag_hover(self.pointer_at.0, self.pointer_at.1);
         }
         // Finish the old gesture before release can retire its final target. A final flush is exempt from the continuous-drag cap.
         if matches!(&event, UiEvent::Release)
@@ -8935,7 +8935,7 @@ impl SceneSource for Runtime {
                 value,
             } => self.session.accessibility_action(target, &action, value)?,
             UiEvent::Hover { x, y } => {
-                self.prewarm_widget_drag_hover(x, y, true);
+                self.prewarm_widget_drag_hover(x, y);
                 let before = self.status_pill.clone();
                 let pill_item = self
                     .session
@@ -9232,7 +9232,7 @@ impl SceneSource for Runtime {
                     && self.session.transfer_candidate_at(x, y).is_some()
                 {
                     self.widget_drag_suppress_hover_until_press = false;
-                    self.prewarm_widget_drag_hover(x, y, true);
+                    self.prewarm_widget_drag_hover(x, y);
                 }
                 self.session.click(x, y)?
             }
