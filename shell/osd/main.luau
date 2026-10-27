@@ -41,6 +41,7 @@ return kit.Panel{edge="bottom",id="osd",width=W,height=H,on_activate=ui.action("
     ui.Text{id="value",position="absolute",left=W-EDGE-VALUE_W,top=titleTop,width=VALUE_W,height=TITLE_H,family="IBM Plex Sans",text=level and percent or "",text_align="right",font_size=TITLE,color="onSurfaceVariant"},
     ui.Text{id="detail",position="absolute",left=TEXT_X,top=titleTop+TITLE_H+2,width=W-TEXT_X-EDGE,height=DETAIL_H,family="IBM Plex Sans",text=text,font_size=12,color="onSurfaceVariant",visible=text~=""},
     ui.Box{id="track",position="absolute",left=TEXT_X,top=H-18-kit.tokens.spacing.hairline,width=TRACK_W,height=5,radius=2.5,fill="surfaceContainer",visible=level,
-        ui.Image{id="fill",path="osd/assets/progress.themed.svg",width=TRACK_W*fill_value,height=5,visible=not muted},
-        ui.Box{id="muted-fill",width=TRACK_W*fill_value,height=5,radius=2.5,fill=ui.alpha("primary",.35),visible=muted}},
+        ui.Box{id="fill-window",position="absolute",left=0,top=0,width=TRACK_W*fill_value,height=5,clip_children=true,fill="transparent",
+            ui.Image{id="fill",position="absolute",left=0,top=0,path="osd/assets/progress.themed.svg",width=TRACK_W,height=5,visible=not muted},
+            ui.Box{id="muted-fill",position="absolute",left=0,top=0,width=TRACK_W,height=5,radius=2.5,fill=ui.alpha("primary",.35),visible=muted}}},
 }
