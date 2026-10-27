@@ -1241,7 +1241,7 @@ return {
         ["launcher.apps"]={},["bluetooth.devices"]={},["bluetooth.power_checked"]=false,
         ["network.rows"]={},["network.wifi_enabled"]=false,["notifications.rows"]={},
         ["status.updates_checked"]="Never checked",["status.updates_can_open"]=false,["status.updates_can_refresh"]=false,
-        ["session.enabled"]=false,["session.busy"]=false,["session.confirm"]="",["session.confirm_action"]="",
+        ["session.enabled"]=false,["session.busy"]=false,["session.confirm"]="",["session.confirm_action"]="",["session.message"]="",
         ["status.hovered"]="",["status.peek.visible"]=false,["status.peek.kind"]="",["status.panel.kind"]="",
         ["widgets.drag.active"]=false,["widgets.drag.source"]={},["widgets.drag.destination"]="",
         ["widgets.drag.x"]=0,["widgets.drag.y"]=0,["widgets.drag.start_x"]=0,["widgets.drag.start_y"]=0,
