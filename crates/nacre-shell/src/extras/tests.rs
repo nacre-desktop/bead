@@ -41,6 +41,45 @@ fn raw_catalogue_palette_extension_survives_typed_entry_projection() {
     }
 }
 #[test]
+fn targeted_palette_hydration_keeps_the_retained_cache_bounded() {
+    let mut entries = (0..80)
+        .map(|index| {
+            json!({
+                "id":format!("/wall/{index}.png"),
+                "active":index == 0,
+                "palette":{"mode":"dark","colours":{
+                    "background":"#123456","onSurface":"#ffffff","primary":"#abcdef"
+                }}
+            })
+        })
+        .collect::<Vec<_>>();
+    let requested = (16..80)
+        .map(|index| format!("/wall/{index}.png"))
+        .collect::<Vec<_>>();
+    trim_catalogue_palette_cache(&mut entries, &requested);
+    let retained = entries
+        .iter()
+        .filter(|entry| entry.get("palette").is_some())
+        .count();
+    assert_eq!(retained, CATALOGUE_PALETTE_CACHE_LIMIT);
+    assert!(
+        entries
+            .iter()
+            .any(|entry| { entry["id"] == "/wall/0.png" && entry.get("palette").is_some() })
+    );
+    assert!(
+        entries
+            .iter()
+            .any(|entry| { entry["id"] == "/wall/16.png" && entry.get("palette").is_some() })
+    );
+    assert!(
+        entries
+            .iter()
+            .any(|entry| { entry["id"] == "/wall/79.png" && entry.get("palette").is_none() })
+    );
+}
+
+#[test]
 fn overview_follows_focused_output_and_stable_ids() {
     let (windows, workspaces) = compositor_rows(&fixture());
     assert_eq!(windows.len(), 1);

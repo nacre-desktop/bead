@@ -43,6 +43,7 @@ impl Kind {
 /// N0058: the daemon owns palette content, order and matching; Bead only displays `order`.
 const PALETTE_MODE: &str = "palette";
 const PALETTE_ROUTE: &str = "palette";
+const CATALOGUE_PALETTE_CACHE_LIMIT: usize = 64;
 struct Query {
     text: String,
     route: String,
@@ -744,6 +745,7 @@ impl Extras {
                         }
                         state.catalogue_settled_handles.extend(request_handles);
                     }
+                    trim_catalogue_palette_cache(&mut state.catalogue_result, &request_ids);
                     if resources_changed {
                         state.image_revision = state.image_revision.wrapping_add(1);
                     }
@@ -1365,7 +1367,7 @@ fn valid_catalogue_palette(palette: &Json) -> bool {
         return false;
     };
     if colours.is_empty()
-        || colours.len() > 128
+        || colours.len() > 64
         || !["background", "onSurface", "primary"]
             .iter()
             .all(|key| colours.contains_key(*key))
@@ -1381,6 +1383,50 @@ fn valid_catalogue_palette(palette: &Json) -> bool {
                     && colour[1..].bytes().all(|byte| byte.is_ascii_hexdigit())
             })
     })
+}
+
+fn trim_catalogue_palette_cache(entries: &mut [Json], requested_ids: &[String]) {
+    let has_palette = |entry: &Json| entry.get("palette").is_some_and(valid_catalogue_palette);
+    let mut keep = std::collections::BTreeSet::new();
+    for entry in entries.iter().filter(|entry| entry["active"] == true) {
+        if keep.len() == CATALOGUE_PALETTE_CACHE_LIMIT {
+            break;
+        }
+        if has_palette(entry)
+            && let Some(id) = entry["id"].as_str()
+        {
+            keep.insert(id.to_owned());
+        }
+    }
+    for id in requested_ids {
+        if keep.len() == CATALOGUE_PALETTE_CACHE_LIMIT {
+            break;
+        }
+        if entries
+            .iter()
+            .any(|entry| entry["id"].as_str() == Some(id) && has_palette(entry))
+        {
+            keep.insert(id.clone());
+        }
+    }
+    for entry in entries.iter() {
+        if keep.len() == CATALOGUE_PALETTE_CACHE_LIMIT {
+            break;
+        }
+        if has_palette(entry)
+            && let Some(id) = entry["id"].as_str()
+        {
+            keep.insert(id.to_owned());
+        }
+    }
+    for entry in entries.iter_mut() {
+        if has_palette(entry)
+            && !entry["id"].as_str().is_some_and(|id| keep.contains(id))
+            && let Some(object) = entry.as_object_mut()
+        {
+            object.remove("palette");
+        }
+    }
 }
 
 fn wallpaper_switch_phase(selection: &WallpaperSelection, phase: &str) {
