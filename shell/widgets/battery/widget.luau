@@ -28,8 +28,8 @@ local function desktop(props,_settings,_data)
     if style=="frameless" then
         return ui.Column{id="battery-line",width=w,height=h,fill="transparent",justify="center",gap=kit.tokens.spacing.sm,
             ui.Row{id="battery-reading",width="fill",height=104,align="baseline",gap=kit.tokens.spacing.sm,
-                visual.display("value",tostring(percent),108,104,96,"onSurface"),
-                ui.Text{id="suffix",text="% battery",font_size=kit.tokens.text.body*4/3,color="onSurface"}},
+                visual.display("value",tostring(percent),108,104,96,"onSurface",true),
+                visual.shadow_text("suffix","% battery","fill",34,kit.tokens.text.body*4/3,"onSurface")},
             ui.Box{id="battery-track",width=300,height=4,fill=ui.alpha("onSurface",.25),radius=2,
                 ui.Box{id="battery-fill",position="absolute",left=0,top=0,width=300*percent/100,height=4,fill="primary",radius=2}}}
     end

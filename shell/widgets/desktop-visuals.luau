@@ -11,10 +11,10 @@ M.glass_fill=ui.alpha("surface",.62)
 M.glass_border=ui.alpha("onSurface",.08)
 M.text="onSurface"
 M.secondary="onSurfaceVariant"
-M.display_font="Outfit" -- Fontconfig falls back to the closest installed face.
+M.display_font="Outfit"
 M.display_weight=200
 M.body_font="IBM Plex Sans"
-M.display_shadow=ui.alpha("shadow",.52)
+M.display_shadow=ui.alpha("shadow",.14)
 M.radius=kit.tokens.radii.large
 
 function M.glass(id,width,height,padding,children)
@@ -24,9 +24,35 @@ function M.glass(id,width,height,padding,children)
     return ui.Box(props)
 end
 
-function M.display(id,value,width,height,size,color)
-    return ui.Text{id=id,text=value,width=width,height=height,font_size=size,
+function M.display(id,value,width,height,size,color,shadow)
+    local props={text=value,width=width,height=height,font_size=size,
         font_weight=M.display_weight,family=M.display_font,color=color or M.text}
+    if not shadow then
+        props.id=id
+        return ui.Text(props)
+    end
+    local children={}
+    for index,offset in ipairs({{-3,0},{-2,-2},{0,-3},{2,-2},{3,0},{2,2},{0,3},{-2,2}}) do
+        table.insert(children,ui.Text{id=id.."-shadow-"..index,position="absolute",left=offset[1],top=offset[2],
+            text=value,width=width,height=height,font_size=size,font_weight=M.display_weight,
+            family=M.display_font,color=M.display_shadow})
+    end
+    props.id=id
+    table.insert(children,ui.Text(props))
+    return ui.Box{id=id.."-shadow-layer",width=width,height=height,fill="transparent",table.unpack(children)}
+end
+
+function M.shadow_text(id,value,width,height,size,color)
+    local props={text=value,width=width,height=height,font_size=size,font_weight=400,
+        family=M.body_font,color=color or M.text}
+    local children={}
+    for index,offset in ipairs({{-3,0},{-2,-2},{0,-3},{2,-2},{3,0},{2,2},{0,3},{-2,2}}) do
+        table.insert(children,ui.Text{id=id.."-shadow-"..index,position="absolute",left=offset[1],top=offset[2],
+            text=value,width=width,height=height,font_size=size,font_weight=400,family=M.body_font,color=M.display_shadow})
+    end
+    props.id=id
+    table.insert(children,ui.Text(props))
+    return ui.Box{id=id.."-shadow-layer",width=width,height=height,fill="transparent",table.unpack(children)}
 end
 
 function M.slot(instance,w,h)

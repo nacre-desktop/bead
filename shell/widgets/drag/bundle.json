@@ -24,6 +24,7 @@
     "widgets/desktop-visuals.luau"
   ],
   "assets": [
+    "widgets/clock/assets/analog-ticks.themed.svg",
     "bar/assets/nacre-logo.themed.svg",
     "bar/assets/pearl-current.themed.svg",
     "bar/assets/pearl-occupied.themed.svg",

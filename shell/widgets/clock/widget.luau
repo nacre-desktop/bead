@@ -25,6 +25,20 @@ local function clock_with_seconds(time,seconds)
     if prefix then return prefix..":"..suffix..meridiem end
     return time..":"..suffix
 end
+local months={"bead.common.month-january","bead.common.month-february","bead.common.month-march","bead.common.month-april","bead.common.month-may","bead.common.month-june","bead.common.month-july","bead.common.month-august","bead.common.month-september","bead.common.month-october","bead.common.month-november","bead.common.month-december"}
+local weekdays={"bead.common.weekday-long-sunday","bead.common.weekday-long-monday","bead.common.weekday-long-tuesday","bead.common.weekday-long-wednesday","bead.common.weekday-long-thursday","bead.common.weekday-long-friday","bead.common.weekday-long-saturday"}
+local function date_parts(iso)
+    local y,m,d=string.match(iso,"^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+    if not y then return iso,"",nil end
+    local year,month,day=tonumber(y),tonumber(m),tonumber(d)
+    if month<1 or month>12 or day<1 or day>31 then return iso,"",nil end
+    local adjusted=month<3 and year-1 or year
+    local offsets={0,3,2,5,0,3,5,1,4,6,2,4}
+    local weekday=(adjusted+math.floor(adjusted/4)-math.floor(adjusted/100)+math.floor(adjusted/400)+offsets[month]+day)%7
+    local weekday_text=ui.tr(weekdays[weekday+1])
+    local month_text=ui.tr(months[month])
+    return ui.tr("bead.dashboard.date-line",{weekday=weekday_text,day=day,month=month_text}),weekday_text,day
+end
 local function natural_content_width(style)
     local time=ui.resolve_for_check(ui.bind("bar.clock.text")) or ""
     if style=="time" then
@@ -98,18 +112,7 @@ local function desktop(props,_settings,_data)
     end
     local visible_time=tostring(ui.resolve_for_check(time) or "")
     local iso=ui.resolve_for_check(ui.bind("bead.desktop.clock.date")) or ""
-    local year,month,day=string.match(iso,"^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
-    local weekday=""
-    if year then
-        year,month,day=tonumber(year),tonumber(month),tonumber(day)
-        if month<3 then month+=12; year-=1 end
-        local zeller=(day+math.floor(13*(month+1)/5)+year+math.floor(year/4)-math.floor(year/100)+math.floor(year/400))%7
-        weekday=({[0]="Saturday",[1]="Sunday",[2]="Monday",[3]="Tuesday",[4]="Wednesday",[5]="Thursday",[6]="Friday"})[zeller]
-    end
-    local _,month_text,day_text=string.match(iso,"^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
-    local months={"January","February","March","April","May","June","July","August","September","October","November","December"}
-    local month=tonumber(month_text)
-    local date_line=weekday~="" and month and (weekday..", "..tonumber(day_text).." "..months[month]) or iso
+    local date_line,weekday,day=date_parts(iso)
     if style=="analog" then
         local seconds=ui.resolve_for_check(ui.bind("bead.desktop.clock.seconds")) or "00:00:00"
         local hours,minutes=string.match(visible_time,"^(%d%d?):(%d%d)")
@@ -126,39 +129,27 @@ local function desktop(props,_settings,_data)
                 points={{.5,.5},{.5+math.cos(radians)*length,.5+math.sin(radians)*length}},
                 stroke_width=width,round_caps=true,color=color}
         end
-        local ticks={}
-        for index=0,59 do
-            local angle=math.rad(index*6-90)
-            local major=index%5==0
-            local outer=major and .46 or .465
-            local inner=major and .39 or .435
-            table.insert(ticks,ui.Polyline{id="tick-"..tostring(index),position="absolute",left=dial_left,top=dial_left,
-                width=dial_size,height=dial_size,points={{.5+math.cos(angle)*outer,.5+math.sin(angle)*outer},
-                    {.5+math.cos(angle)*inner,.5+math.sin(angle)*inner}},stroke_width=major and 4 or 2,
-                round_caps=true,color=major and ui.alpha("onSurface",.85) or ui.alpha("onSurface",.48)})
-        end
         return ui.Box{id="clock-analog",width=w,height=h,fill=visual.glass_fill,radius=h/2,
             border_width=1,border_color=visual.glass_border,on_activate=action,
-            table.unpack(ticks),
+            ui.Image{id="dial-ticks",position="absolute",left=dial_left,top=dial_left,width=dial_size,height=dial_size,path="widgets/clock/assets/analog-ticks.themed.svg"},
             hand("hour-hand",hour_angle,.26,7,"onSurface"),
             hand("minute-hand",minute_angle,.37,4.5,"onSurface"),
             hand("second-hand",second_angle,.42,2,"primary"),
             ui.Box{id="hand-pin",position="absolute",left=h/2-5,top=h/2-5,width=10,height=10,radius=5,fill="primary"},
             ui.Column{id="dial-caption",position="absolute",left=h+kit.tokens.spacing.lg,top=0,width=w-h-kit.tokens.spacing.lg,height=h,justify="center",gap=kit.tokens.spacing.sm,
-                ui.Text{id="weekday",text=date_line,width="fill",height=28,font_size=kit.tokens.text.title*4/3,color="primary"},
-                ui.Text{id="digital-time",text=time,width="fill",height=56,font_size=kit.tokens.text.headline*2,color="onSurface"}}}
+                ui.Text{id="weekday",text=day and (string.upper(string.sub(weekday,1,3)).." "..day) or date_line,width="fill",height=28,font_size=kit.tokens.text.title*4/3,color="primary"},
+                ui.Text{id="digital-time",text=visible_time,width="fill",height=56,font_size=kit.tokens.text.headline*2,color="onSurface"}}}
     elseif style=="minimal" then
         local hour,minute=string.match(visible_time,"^(%d%d?):(%d%d)")
         return ui.Column{id="clock-minimal",width=w,height=h,justify="center",gap=kit.tokens.spacing.xs,on_activate=action,
-            visual.display("hour",hour or visible_time,"fill",h*.38,math.min(110,h*.42),"onSurface"),
-            visual.display("minute",minute or "","fill",h*.38,math.min(110,h*.42),"primary"),
-            ui.Text{id="date",text=weekday,width="fill",height=24,font_size=kit.tokens.text.body*4/3,color="secondary"}}
+            visual.display("hour",hour or visible_time,"fill",h*.38,math.min(110,h*.42),"onSurface",true),
+            visual.display("minute",minute or "","fill",h*.38,math.min(110,h*.42),"primary",true),
+            visual.shadow_text("date",weekday,"fill",24,kit.tokens.text.body*4/3,"secondary")}
     end
-    return ui.Box{id="clock-desktop",width=w,height=h,padding=kit.tokens.spacing.lg,radius=kit.tokens.radii.large,fill=visual.glass_fill,border_width=1,border_color=visual.glass_border,on_activate=action,
-        ui.Column{id="clock-content",width="fill",height="fill",justify="center",gap=kit.tokens.spacing.xs,
-            ui.Text{id="weekday",text=weekday,width="fill",height=26,font_size=kit.tokens.text.body*4/3,color="primary"},
-            visual.display("time",time,"fill",h*.52,math.min(120,h*.6),"onSurface"),
-            ui.Text{id="date",text=iso,width="fill",height=24,font_size=kit.tokens.text.body*4/3,color="onSurfaceVariant"}}}
+    return ui.Column{id="clock-desktop",width=w,height=h,fill="transparent",justify="center",gap=kit.tokens.spacing.xs,on_activate=action,
+        visual.display("time",visible_time,"fill",h*.62,math.min(148,h*.72),"onSurface",true),
+        visual.shadow_text("date",date_line,"fill",28,kit.tokens.text.body*4/3,"onSurface"),
+        ui.Box{id="accent-rule",width=48,height=3,fill="primary",radius=1.5}}
 end
 local function bar_style(title,style,preferred,requires)
     local descriptor={title=title,min_span=1,max_span=60,preferred_span=preferred,requires=requires,render=function(props,settings,data)
