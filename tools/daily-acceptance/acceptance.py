@@ -525,7 +525,7 @@ class Runner:
 
     def _key(self, *args):
         offset = self.log_path.stat().st_size if self.log_path and self.log_path.exists() else 0
-        run(["wtype", "-s", "20", *args], env=self.key_env or self.env, timeout=10)
+        run(["wtype", "-s", "20", *args], env=self.env, timeout=10)
         if args and all(not arg.startswith("-") for arg in args):
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline:
@@ -681,7 +681,8 @@ class Runner:
             self._shot(self.failures / "battery-gap-rearm.png")
 
     def _super(self, key):
-        self._key("-M", "logo", "-k", key, "-m", "logo")
+        run(["wtype", "-s", "20", "-M", "logo", "-k", key, "-m", "logo"],
+            env=self.key_env or self.env, timeout=10)
 
     def simple_surface(self, label, opening, closing):
         self._surface_action(label, opening, closing)
