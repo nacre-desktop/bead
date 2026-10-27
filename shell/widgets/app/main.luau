@@ -348,7 +348,10 @@ local function form_state(widget,placement,package,requested_group)
         end
         matching(host and host.instances)
     end
-    return group,entry,instance,config,active,configured or style_name(package,placement)
+    local selected=configured or style_name(package,placement)
+    local selected_descriptor=package.forms[placement].styles[selected]
+    if selected_descriptor and selected_descriptor.hidden then selected=package.forms[placement].default_style end
+    return group,entry,instance,config,active,selected
 end
 local function active_settings(package,entry,instance)
     local values=table.clone(package.defaults)
@@ -369,13 +372,15 @@ local function style_tile(widget,placement,package,style_id,style,settings,is_se
     for _ in package.forms[placement].styles do count+=1 end
     local columns=math.max(1,math.min(4,count))
     local preview_width=math.max(76,math.min(240,(width-2*spacing.lg-(columns-1)*spacing.sm)/columns-2*spacing.xs))
-    local tile_preview=preview.render(widget,placement,style_id,settings,preview_width,44)
-    return ui.Button{id="style-"..style_id,width="fill",height=104,shrink=0,padding=spacing.xs,
+    local preview_height=placement=="desktop" and 80 or 44
+    local tile_height=preview_height+50
+    local tile_preview=preview.render(widget,placement,style_id,settings,preview_width,preview_height)
+    return ui.Button{id="style-"..style_id,width="fill",height=tile_height,shrink=0,padding=spacing.xs,
         radius=kit.tokens.radii.small,fill=is_selected and ui.alpha("primary",.15) or "surfaceContainer",
         hover_fill="surfaceContainerHigh",selected=is_selected,focus_on_pointer=false,
         aria_label=style.title,on_activate=edit({op="style",widget=widget,form=placement,style=style_id}),
         ui.Column{id="style-card",width="fill",height="fill",gap=spacing.xs,align="center",
-            ui.Box{id="style-preview",width="fill",height=54,align="center",justify="center",
+            ui.Box{id="style-preview",width="fill",height=preview_height+10,align="center",justify="center",
                 radius=kit.tokens.radii.small,fill="surfaceContainerHighest",clip_children=true,tile_preview},
             label("style-title",style.title,text.caption*4/3,"onSurface",{width="fill",height=18,text_align="center"})}}
 end
@@ -384,7 +389,8 @@ local function style_tiles(widget,placement,package,style_id,settings)
     local keys={}
     for key,style in forms.styles do if not style.hidden then table.insert(keys,key) end end
     table.sort(keys)
-    local tiles={id="style-tiles",width="fill",columns=math.max(1,math.min(4,#keys)),gap=spacing.sm,row_height=104,shrink=0}
+    local row_height=(placement=="desktop" and 80 or 44)+50
+    local tiles={id="style-tiles",width="fill",columns=math.max(1,math.min(4,#keys)),gap=spacing.sm,row_height=row_height,shrink=0}
     for _,key in keys do table.insert(tiles,style_tile(widget,placement,package,key,forms.styles[key],settings,key==style_id)) end
     return ui.Grid(tiles)
 end
@@ -416,8 +422,11 @@ local function detail()
     local bar_node=preview.render_bar(doc,screen_w,bar_h,stage_scale,
         bar_enabled and selected or nil,bar_style,settings,bar_group,entry_candidate)
     local stage_bar_height=bar_h*stage_scale
-    local widget_w=math.min(mini_w*.38,320*stage_scale)
-    local widget_h=math.min(widget_w*.5,mini_h*.4)
+    local desktop_descriptor=package.forms.desktop and package.forms.desktop.styles[desktop_style]
+    local design_width=desktop_descriptor and desktop_descriptor.preferred_span or 320
+    local design_height=desktop_descriptor and desktop_descriptor.preferred_height or 120
+    local widget_w=math.min(mini_w*.45,design_width*stage_scale)
+    local widget_h=math.min(mini_h*.42,design_height*stage_scale)
     local widget_left=mini_left+(mini_w-widget_w)/2
     local widget_top=mini_top+stage_bar_height+math.max(0,(mini_h-stage_bar_height-widget_h)/2)
     local wallpaper_image=wallpaper~="" and ui.Image{id="stage-wallpaper",position="absolute",left=mini_left,top=mini_top,width=mini_w,height=mini_h,icon=wallpaper,image_fit="cover"} or nil

@@ -53,7 +53,7 @@ local function desktop(props,_settings,_data)
         return ui.Column{id="updates-wallpaper",width=width,height=height,fill="transparent",justify="center",gap=kit.tokens.spacing.xs,
             ui.Text{id="count",text=count,width="fill",height=72,font_size=kit.tokens.text.headline*2,color="primary"},
             ui.Text{id="checked",text=checked,width="fill",height=24,font_size=kit.tokens.text.body*4/3,color="onSurface"},
-            kit.Button{id="update",text="Update",height=38,enabled=open,focus_on_pointer=false,on_activate=open and ui.action("updates.open") or nil}}
+            kit.Button{id="update",text="Update",height=38,focus_on_pointer=false,on_activate=open and ui.action("updates.open") or nil}}
     end
     return ui.Box{id="updates-desktop",width=width,height=height,padding=kit.tokens.spacing.md,radius=kit.tokens.radii.large,
         fill=style=="pearl" and "surfaceContainerHigh" or "surfaceContainer",on_activate=action,
@@ -64,7 +64,7 @@ local function desktop(props,_settings,_data)
                 ui.Text{id="count",text=count,font_size=kit.tokens.text.headline*4/3,color="primary"}},
             ui.Text{id="checked",text=checked,width="fill",height=24,font_size=kit.tokens.text.caption*4/3,color="onSurfaceVariant"},
             ui.Row{id="actions",width="fill",height=38,gap=kit.tokens.spacing.xs,align="center",
-                kit.Button{id="update",text="Update",height=36,enabled=open,focus_on_pointer=false,on_activate=open and ui.action("updates.open") or nil},
+                kit.Button{id="update",text="Update",height=36,focus_on_pointer=false,on_activate=open and ui.action("updates.open") or nil},
                 kit.Button{id="check",text="Check",height=36,focus_on_pointer=false,on_activate=ui.action("updates.refresh")}}}}
 end
 local function style(title,preferred,render)

@@ -140,7 +140,7 @@ local function preferred_span(width)
     return math.ceil(reserve_clock(width)/32)
 end
 local function desktop_style(title,style,preferred,requires)
-    return {title=title,min_span=1,max_span=1200,preferred_span=preferred,requires=requires,render=function(props,settings,data)
+    return {title=title,min_span=1,max_span=1200,preferred_span=preferred,preferred_height=190,requires=requires,render=function(props,settings,data)
         props.form_style=style
         return desktop(props,settings,data)
     end}
