@@ -365,25 +365,8 @@ struct WidgetHoverPreview {
     key: WidgetHoverPreviewKey,
     prepared_at: std::time::Instant,
 }
-fn suppress_widget_drag_hover_until(
-    suppressed_until: &mut Option<std::time::Instant>,
-    now: std::time::Instant,
-    pointer_event: bool,
-) -> bool {
-    let Some(deadline) = *suppressed_until else {
-        return false;
-    };
-    if now < deadline || !pointer_event {
-        true
-    } else {
-        *suppressed_until = None;
-        false
-    }
-}
 const WIDGET_HOVER_PREVIEW_RENEW: std::time::Duration = std::time::Duration::from_millis(1500);
 const WIDGET_HOVER_PREVIEW_DEDUPE: std::time::Duration = std::time::Duration::from_millis(1400);
-const WIDGET_DRAG_HOVER_RETIRE_COOLDOWN: std::time::Duration =
-    std::time::Duration::from_millis(1500);
 fn widget_floating_action(
     request: &mut Option<WidgetFloatingRequest>,
     active: Option<(u32, u64)>,
@@ -804,7 +787,7 @@ pub struct Runtime {
     widget_drag_output: Option<String>,
     widget_drag_projection: Option<BTreeMap<String, bead::core::Value>>,
     widget_hover_preview: Option<WidgetHoverPreview>,
-    widget_drag_hover_suppress_until: Option<std::time::Instant>,
+    widget_drag_suppress_hover_until_press: bool,
     widget_drag_epoch: u64,
     widget_drag_retire_cleanup: bool,
     widget_drag_action_registered: bool,
@@ -2070,11 +2053,7 @@ impl Runtime {
         if self.widget_drag_is_active() {
             return;
         }
-        if suppress_widget_drag_hover_until(
-            &mut self.widget_drag_hover_suppress_until,
-            std::time::Instant::now(),
-            pointer_event,
-        ) {
+        if self.widget_drag_suppress_hover_until_press {
             return;
         }
         let candidate = self.session.transfer_candidate_at(x, y);
@@ -2561,10 +2540,9 @@ impl Runtime {
         self.publish_widget_drag_projection(drag_values);
     }
     fn retire_widget_drag_after_feedback(&mut self) {
-        // Keep pointer motion from recreating the just-dropped ghost while its
-        // settle/release input finishes. A fresh press can warm the next drag.
-        self.widget_drag_hover_suppress_until =
-            Some(std::time::Instant::now() + WIDGET_DRAG_HOVER_RETIRE_COOLDOWN);
+        // Keep hover preparation closed while the drop release settles. A fresh
+        // press on a drag source can warm the next drag.
+        self.widget_drag_suppress_hover_until_press = true;
         self.widget_drag_epoch = self.widget_drag_epoch.wrapping_add(1).max(1u64 << 63);
         let token = self.widget_drag_epoch;
         if let Some(wakeup) = self.wakeup.clone() {
@@ -2924,7 +2902,7 @@ impl Runtime {
             widget_drag_output: None,
             widget_drag_projection: None,
             widget_hover_preview: None,
-            widget_drag_hover_suppress_until: None,
+            widget_drag_suppress_hover_until_press: false,
             widget_drag_epoch: 1u64 << 63,
             widget_drag_retire_cleanup: false,
             widget_drag_action_registered: false,
@@ -9250,10 +9228,10 @@ impl SceneSource for Runtime {
             | UiEvent::WallpaperTick(_)
             | UiEvent::HorizontalScroll { .. } => None,
             UiEvent::Click { x, y } => {
-                if self.widget_drag_hover_suppress_until.is_some()
+                if self.widget_drag_suppress_hover_until_press
                     && self.session.transfer_candidate_at(x, y).is_some()
                 {
-                    self.widget_drag_hover_suppress_until = None;
+                    self.widget_drag_suppress_hover_until_press = false;
                     self.prewarm_widget_drag_hover(x, y, true);
                 }
                 self.session.click(x, y)?

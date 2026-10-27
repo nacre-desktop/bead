@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Cross-host drag preview is based on one normalized snapshot and commits only on drop.
-use super::{
-    Runtime, SceneSource, UiEvent, WIDGET_DRAG_HOVER_RETIRE_COOLDOWN,
-    suppress_widget_drag_hover_until, widget_drag_source_bounds, widget_drag_targets_output,
-};
+use super::{Runtime, SceneSource, UiEvent, widget_drag_source_bounds, widget_drag_targets_output};
 use crate::widgets::widget_drag::Controller;
 use bead::core::Value;
 use serde_json::{Value as Json, json};
@@ -42,32 +39,6 @@ fn prepared_source_bounds_clip_before_padding_at_output_edges() {
         bead::render::Rect::new(0., 0., 79., 30.)
     );
     assert!(widget_drag_source_bounds(1920., 20., 10., 10., 1920., 1080.).is_none());
-}
-
-#[test]
-fn dropped_ghost_stays_suppressed_through_the_release_window() {
-    let now = std::time::Instant::now();
-    let mut suppressed_until = Some(now + std::time::Duration::from_millis(200));
-    assert!(suppress_widget_drag_hover_until(
-        &mut suppressed_until,
-        now + std::time::Duration::from_millis(100),
-        true
-    ));
-    assert!(suppress_widget_drag_hover_until(
-        &mut suppressed_until,
-        now + std::time::Duration::from_millis(250),
-        false
-    ));
-    assert!(
-        suppressed_until.is_some(),
-        "timer refreshes cannot rearm hover"
-    );
-    assert!(!suppress_widget_drag_hover_until(
-        &mut suppressed_until,
-        now + std::time::Duration::from_millis(250),
-        true
-    ));
-    assert!(suppressed_until.is_none());
 }
 
 fn catalogue() -> Json {
@@ -1966,8 +1937,7 @@ fn completed_drag_retirement_stops_hover_renewal_until_a_fresh_press() {
         "widgets.drag.active".into(),
         Value::Bool(false),
     )]));
-    runtime.widget_drag_hover_suppress_until =
-        Some(std::time::Instant::now() + WIDGET_DRAG_HOVER_RETIRE_COOLDOWN);
+    runtime.widget_drag_suppress_hover_until_press = true;
     runtime.widget_drag_retire_cleanup = true;
     runtime.commit();
 
