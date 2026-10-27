@@ -229,6 +229,7 @@ impl Predecoder {
     fn take_optimistic(
         &self,
         selection: &PreviewSelection,
+        expected_pair: &ActiveWallpaper,
         width: u32,
         height: u32,
     ) -> Option<(ActiveWallpaper, Vec<u8>)> {
@@ -242,6 +243,7 @@ impl Predecoder {
                 && cached.key.source == selection.id
                 && cached.key.width == width
                 && cached.key.height == height
+                && cached.pair == *expected_pair
         })?;
         if !identity_matches_path(&cached.key.source, &cached.key.identity)
             || !identity_matches_path(&cached.key.decode_path, &cached.key.decode_identity)
@@ -651,15 +653,13 @@ impl Preview {
         Some(result)
     }
 
-    fn cached_selection(
-        &self,
-        selection: &PreviewSelection,
+    fn cached_pair_raster(
+        pair: &ActiveWallpaper,
         width: u32,
         height: u32,
     ) -> Option<(ActiveWallpaper, Vec<u8>)> {
-        let pair = self.known_pair(selection, width, height)?;
-        let rgba = crate::wallpaper_cache::load_cached(&pair, width, height)?;
-        Some((pair, rgba))
+        let rgba = crate::wallpaper_cache::load_cached(pair, width, height)?;
+        Some((pair.clone(), rgba))
     }
 
     fn register_target(
@@ -895,10 +895,12 @@ impl Consumer {
         let known_pair = selection_waiting
             .and_then(|selection| self.preview.known_pair(selection, width, height));
         let cached = selection_waiting.and_then(|selection| {
-            self.preview
-                .predecode
-                .take_optimistic(selection, width, height)
-                .or_else(|| self.preview.cached_selection(selection, width, height))
+            known_pair.as_ref().and_then(|known_pair| {
+                self.preview
+                    .predecode
+                    .take_optimistic(selection, known_pair, width, height)
+                    .or_else(|| Preview::cached_pair_raster(known_pair, width, height))
+            })
         });
         if selection_waiting.is_some() && cached.is_none() {
             // A cold click must wait for the daemon's matching pair and palette.
@@ -2172,8 +2174,9 @@ mod tests {
             |state| state.cached.is_none() && state.running,
         ).unwrap();
         drop(guard);
-        let (predecoded_pair, predecoded_rgba) =
-            optimistic.take_optimistic(&selection, 2, 1).unwrap();
+        let (predecoded_pair, predecoded_rgba) = optimistic
+            .take_optimistic(&selection, &active, 2, 1)
+            .unwrap();
         assert_eq!(predecoded_pair.palette, active.palette);
         assert_eq!(predecoded_rgba, [255, 255, 255, 255].repeat(2));
         assert!(optimistic.signal.lock().cached.is_none());
