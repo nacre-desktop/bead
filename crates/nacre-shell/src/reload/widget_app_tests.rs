@@ -488,16 +488,13 @@ fn widget_app_stage_uses_the_presentation_poster_when_no_catalogue_thumbnail_is_
     image::DynamicImage::new_rgb8(32, 18).save(&poster).unwrap();
     let mut stores = crate::desktop::values(&Default::default(), "");
     stores.insert("widgets.selected".into(), Value::Text("clock".into()));
-    let wallpaper_path = format!("@icon:wallpaper:current:{}", poster.display());
+    let wallpaper_path = format!("wallpaper:current:{}", poster.display());
     stores.insert(
         "widgets.wallpaper.path".into(),
         Value::Text(wallpaper_path.clone()),
     );
     let mut icons = BTreeMap::new();
-    icons.insert(
-        wallpaper_path.trim_start_matches("@icon:").to_owned(),
-        poster.clone(),
-    );
+    icons.insert(wallpaper_path.clone(), poster.clone());
     let harness = Harness::load_with_icons(
         &root,
         Path::new("widgets/app/main.luau"),

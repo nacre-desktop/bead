@@ -435,7 +435,7 @@ local function detail()
     if wallpaper~="" then
         wallpaper_image=ui.Image{id="stage-wallpaper",position="absolute",left=mini_left,top=mini_top,width=mini_w,height=mini_h,icon=wallpaper,image_fit="cover"}
     elseif wallpaper_path~="" then
-        wallpaper_image=ui.Image{id="stage-wallpaper",position="absolute",left=mini_left,top=mini_top,width=mini_w,height=mini_h,path=wallpaper_path,image_fit="cover"}
+        wallpaper_image=ui.Image{id="stage-wallpaper",position="absolute",left=mini_left,top=mini_top,width=mini_w,height=mini_h,icon=wallpaper_path,image_fit="cover"}
     end
     local desktop_preview=desktop_available and preview.render(selected,"desktop",desktop_style,settings,widget_w,widget_h)
     local stage_source=dragging.app_payload(doc,selected,placement,style_id,settings,group)

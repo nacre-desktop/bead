@@ -23,7 +23,7 @@ fn presentation_wallpaper_path_from(state: &std::path::Path) -> Option<String> {
     let poster = record.get("poster")?.as_str()?;
     let poster_path = std::path::Path::new(poster);
     (poster_path.is_absolute() && poster_path.is_file())
-        .then(|| format!("@icon:wallpaper:current:{poster}"))
+        .then(|| format!("wallpaper:current:{poster}"))
 }
 
 #[path = "widget_drag.rs"]
@@ -707,10 +707,7 @@ mod file_tests {
         .unwrap();
         assert_eq!(
             presentation_wallpaper_path_from(&state),
-            Some(format!(
-                "@icon:wallpaper:current:{}",
-                poster.to_string_lossy()
-            ))
+            Some(format!("wallpaper:current:{}", poster.to_string_lossy()))
         );
         std::fs::write(
             &record,
