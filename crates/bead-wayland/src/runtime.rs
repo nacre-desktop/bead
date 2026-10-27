@@ -756,6 +756,9 @@ impl App {
         }
         let name = self.output_id(output);
         let interval = self.output_frame_interval(output);
+        if let Ok(refresh_ns) = u32::try_from(interval.as_nanos()) {
+            crate::scroll::note_refresh(refresh_ns);
+        }
         if let Some(session) = self.output_sessions.get_mut(&name)
             && let Some(source) = &mut session.source
         {

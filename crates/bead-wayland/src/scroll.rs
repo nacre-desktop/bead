@@ -73,6 +73,12 @@ mod tests {
     use super::*;
 
     #[test]
+    fn output_mode_refresh_drives_fallback_tick() {
+        note_refresh(16_666_667);
+        assert_eq!(tick(), Duration::from_nanos(16_666_667));
+    }
+
+    #[test]
     fn action_gestures_are_never_amplified_or_glided() {
         let axis = AxisScroll {
             absolute: 15.,

@@ -266,11 +266,14 @@ mod tests {
             atomic::{AtomicUsize, Ordering},
         };
         let calls = Arc::new(AtomicUsize::new(0));
+        let mut retained = spec(calls.clone());
+        retained.retain_when_closed = true;
         let catalog = crate::overlay::Overlays::new(BTreeMap::from([
             ("cards".into(), spec(calls.clone())),
-            ("level".into(), spec(calls.clone())),
+            ("level".into(), retained),
         ]))
         .unwrap();
+        assert_eq!(catalog.retained_view(), Some("level"));
         assert_eq!(catalog.layer("cards"), Layer::Overlay);
         let catalog = catalog.with_fullscreen_covered(&["cards".into()]).unwrap();
         assert_eq!(catalog.layer("cards"), Layer::Top);

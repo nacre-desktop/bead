@@ -5,9 +5,27 @@
 //! whatever the panel slot shows (launcher, dashboard, popout). The application
 //! catalogs its views ([`Options::overlays`]) and offers them with
 //! [`UiEvent::CompanionOffer`]; the framework knows no view names, placement or
-//! suppression rule. Like the window slot, nothing is resident while no overlay view is
-//! shown: closing animates out, then drops the source, renderer and every buffer.
+//! suppression rule. Most views are released after their close animation; a view whose
+//! PanelSpec opts into retain_when_closed can keep a hidden, unmapped warm source.
 use super::*;
+
+fn overlay_ready_to_draw(warming: bool, retained: bool, ready: bool) -> bool {
+    !warming && (!retained || ready)
+}
+
+fn overlay_draw_delay(
+    last_draw: Option<Instant>,
+    now: Instant,
+    interval: Duration,
+    urgent: bool,
+) -> Option<Duration> {
+    if urgent {
+        return None;
+    }
+    last_draw
+        .map(|last| interval.saturating_sub(now.saturating_duration_since(last)))
+        .filter(|delay| !delay.is_zero())
+}
 
 pub(super) struct Overlay {
     name: String,
@@ -33,6 +51,10 @@ pub(super) struct Overlay {
     viewport: Option<WpViewport>,
     /// Target visibility; false while the close animation runs.
     open: bool,
+    /// A retained source is being prepared or kept warm while hidden.
+    warming: bool,
+    retain_when_closed: bool,
+    ready: bool,
     close_token: u64,
     passive: bool,
     position: Option<PanelPositioner>,
@@ -178,6 +200,7 @@ impl App {
                 // Re-offered while fading out: stay.
                 if !shown.open {
                     shown.open = true;
+                    shown.warming = false;
                     shown.close_token = shown.close_token.wrapping_add(1);
                     self.overlay_ui(UiEvent::PanelVisibility(true));
                 }
@@ -185,11 +208,28 @@ impl App {
             }
             self.release_overlay();
         }
-        if let Err(error) = self.open_overlay(view, output) {
+        if let Err(error) = self.open_overlay(view, output, true) {
             eprintln!("COMPANION_ERROR {error}");
         }
     }
-    fn open_overlay(&mut self, view: &str, output: Option<&str>) -> Result<(), String> {
+    pub(super) fn prewarm_retained_overlay(&mut self) {
+        if self.overlay.is_some() {
+            return;
+        }
+        let Some(view) = self
+            .options
+            .overlays
+            .as_ref()
+            .and_then(Overlays::retained_view)
+            .map(str::to_owned)
+        else {
+            return;
+        };
+        if let Err(error) = self.open_overlay(&view, None, false) {
+            eprintln!("OVERLAY_PREWARM_ERROR view={view} detail={error}");
+        }
+    }
+    fn open_overlay(&mut self, view: &str, output: Option<&str>, open: bool) -> Result<(), String> {
         let layer_kind = self
             .options
             .overlays
@@ -243,7 +283,7 @@ impl App {
         let epoch = self.overlay_epoch;
         let factory = spec.factory.clone();
         let mut source: Box<dyn SceneSource> = Box::new(worker::Source::new(
-            Box::new(move || factory(true)),
+            Box::new(move || factory(open)),
             spec.fallback.clone(),
         ));
         let sender = self
@@ -296,7 +336,10 @@ impl App {
             scale120,
             fractional,
             viewport,
-            open: true,
+            open,
+            warming: !open,
+            retain_when_closed: spec.retain_when_closed,
+            ready: false,
             close_token: 0,
             passive: spec.passive,
             position: spec.position.clone(),
@@ -311,8 +354,10 @@ impl App {
             self.overlay_ui(UiEvent::WallpaperPalette(palette));
         }
         self.overlay_ui(UiEvent::Reload);
-        self.overlay_ui(UiEvent::PanelVisibility(true));
-        println!("OVERLAY_OPEN view={view} epoch={epoch}");
+        self.overlay_ui(UiEvent::PanelVisibility(open));
+        if open {
+            println!("OVERLAY_OPEN view={view} epoch={epoch}");
+        }
         Ok(())
     }
     fn place_overlay(
@@ -363,11 +408,28 @@ impl App {
                     .as_ref()
                     .is_some_and(|o| o.epoch == epoch && o.close_token == token && !o.open)
                 {
-                    app.release_overlay();
+                    if app.overlay.as_ref().is_some_and(|o| o.retain_when_closed) {
+                        app.keep_overlay_warm();
+                    } else {
+                        app.release_overlay();
+                    }
                 }
                 TimeoutAction::Drop
             },
         );
+    }
+    fn keep_overlay_warm(&mut self) {
+        let Some(overlay) = self.overlay.as_mut() else {
+            return;
+        };
+        overlay.warming = true;
+        overlay.last_draw = None;
+        overlay.buffers.clear();
+        overlay.pool = None;
+        overlay.geometry = (0, 0);
+        overlay.damage = Default::default();
+        overlay.layer.wl_surface().attach(None, 0, 0);
+        overlay.layer.commit();
     }
     pub(super) fn release_overlay(&mut self) {
         let Some(overlay) = self.overlay.take() else {
@@ -459,7 +521,7 @@ impl App {
             ) {
                 Ok(true) => {
                     o.ui_serial = o.ui_serial.wrapping_add(1);
-                    self.overlay_draw();
+                    self.overlay_draw_now();
                     return;
                 }
                 Ok(false) => return,
@@ -476,11 +538,13 @@ impl App {
                 if !o.source.commit() {
                     return;
                 }
+                o.ready = true;
                 scene
             }
             Ok(None) => return,
             Err(e) => {
                 eprintln!("UI_ERROR {e}");
+                o.ready = true;
                 o.source.error_scene(e.to_string())
             }
         };
@@ -529,18 +593,26 @@ impl App {
             });
     }
     fn overlay_draw(&mut self) {
+        self.overlay_draw_with_priority(false);
+    }
+    fn overlay_draw_now(&mut self) {
+        self.overlay_draw_with_priority(true);
+    }
+    fn overlay_draw_with_priority(&mut self, urgent: bool) {
         let Some(o) = self.overlay.as_mut() else {
             return;
         };
+        if !overlay_ready_to_draw(o.warming, o.retain_when_closed, o.ready) {
+            return;
+        }
         if !o.configured || self.hidden {
             return;
         }
-        if let Some(last) = o.last_draw {
-            let delay = super::scroll::tick().saturating_sub(last.elapsed());
-            if !delay.is_zero() {
-                self.overlay_retry(delay);
-                return;
-            }
+        if let Some(delay) =
+            overlay_draw_delay(o.last_draw, Instant::now(), super::scroll::tick(), urgent)
+        {
+            self.overlay_retry(delay);
+            return;
         }
         match self.overlay_render() {
             Ok(animating) => {
@@ -663,6 +735,9 @@ impl App {
             o.damage.reset(w as u32, h as u32, o.buffers.len());
         }
         o.renderer.prepare(scene, scale)?;
+        if o.source.has_retained_scalar_targets() {
+            scene.prepared.clear();
+        }
         o.damage.update(
             o.renderer.prepared_frame().as_deref(),
             scene.offset,
@@ -876,9 +951,43 @@ impl Overlays {
     pub fn contains(&self, view: &str) -> bool {
         self.views.contains_key(view)
     }
+    pub(super) fn retained_view(&self) -> Option<&str> {
+        self.views
+            .iter()
+            .find_map(|(name, spec)| spec.retain_when_closed.then_some(name.as_str()))
+    }
     fn resolve(&self, view: Option<&str>) -> Result<(&str, &PanelSpec), String> {
         view.and_then(|v| self.views.get_key_value(v))
             .map(|(k, v)| (k.as_str(), v))
             .ok_or_else(|| "unknown overlay view".into())
+    }
+}
+
+#[cfg(test)]
+mod retained_warm_tests {
+    use super::{overlay_draw_delay, overlay_ready_to_draw};
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn retained_overlay_stays_hidden_until_its_scene_is_accepted() {
+        assert!(!overlay_ready_to_draw(true, true, false));
+        assert!(!overlay_ready_to_draw(true, true, true));
+        assert!(!overlay_ready_to_draw(false, true, false));
+        assert!(overlay_ready_to_draw(false, true, true));
+        assert!(overlay_ready_to_draw(false, false, false));
+    }
+
+    #[test]
+    fn retained_scalar_input_bypasses_frame_draw_throttle() {
+        let last = Instant::now();
+        let now = last + Duration::from_millis(4);
+        assert_eq!(
+            overlay_draw_delay(Some(last), now, Duration::from_nanos(16_666_666), false),
+            Some(Duration::from_nanos(12_666_666))
+        );
+        assert_eq!(
+            overlay_draw_delay(Some(last), now, Duration::from_nanos(16_666_666), true),
+            None
+        );
     }
 }

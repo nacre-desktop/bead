@@ -500,6 +500,8 @@ struct Entry {
 #[derive(Default)]
 pub struct TreeCache {
     pub frame: Option<Arc<Frame>>,
+    scratch_items: Vec<Item>,
+    scratch_layers: Vec<LayerPose>,
     pub builds: usize,
     image_policy: ImagePolicy,
     image_payloads: BTreeMap<u64, Weak<ImagePayload>>,
@@ -1482,6 +1484,12 @@ impl TreeCache {
                     || frame.items.iter().all(|item| item.image.is_none())
             })
         {
+            if self.scratch_items.capacity() < frame.items.len() {
+                self.scratch_items.reserve(frame.items.len());
+            }
+            if self.scratch_layers.capacity() < frame.layers.len() {
+                self.scratch_layers.reserve(frame.layers.len());
+            }
             if let Some(motion) = scene.motion.as_ref().filter(|m| m.reveal) {
                 // Build the growing-edge templates as the prepared frame arrives, not in the first reveal frame.
                 for (index, _) in &motion.parts {
@@ -1571,7 +1579,11 @@ impl TreeCache {
             }
         }
         let mut ordinals = BTreeMap::<(String, &'static str), usize>::new();
-        let mut items = Vec::with_capacity(scene.primitives.len());
+        let mut items = std::mem::take(&mut self.scratch_items);
+        items.clear();
+        if items.capacity() < scene.primitives.len() {
+            items.reserve(scene.primitives.len());
+        }
         let mut keys = Vec::with_capacity(scene.primitives.len());
         let mut asset_keys = BTreeMap::new();
         let mut frame_hash = std::collections::hash_map::DefaultHasher::new();
@@ -1939,7 +1951,11 @@ impl TreeCache {
                     .push(layer.id.clone());
             }
         }
-        let mut layers = Vec::with_capacity(scene.layers.len());
+        let mut layers = std::mem::take(&mut self.scratch_layers);
+        layers.clear();
+        if layers.capacity() < scene.layers.len() {
+            layers.reserve(scene.layers.len());
+        }
         for layer in &scene.layers {
             let mut key = std::collections::hash_map::DefaultHasher::new();
             let mut own = Vec::new();
@@ -2015,6 +2031,12 @@ impl TreeCache {
                 bounds: layer.bounds,
             });
         }
+        if items.is_empty() {
+            items.shrink_to_fit();
+        }
+        if layers.is_empty() {
+            layers.shrink_to_fit();
+        }
         while self.nodes.len() > 4096 {
             let victim = self
                 .nodes
@@ -2081,21 +2103,50 @@ impl TreeCache {
                 })
                 .reserve(bytes)?,
         );
-        let frame = Arc::new(Frame {
-            native_resource_budget: self.resource_budget.clone(),
-            _assets: assets,
-            _accounting: accounting,
-            items,
-            scale,
-            key: frame_hash.finish(),
-            layer_count: if scene.layers.is_empty() {
-                scene.primitives.len()
-            } else {
-                scene.layers.len()
-            },
-            layers,
-        });
-        self.frame = Some(frame);
+        let frame_key = frame_hash.finish();
+        let layer_count = if scene.layers.is_empty() {
+            scene.primitives.len()
+        } else {
+            scene.layers.len()
+        };
+        let mut items = items;
+        let mut layers = layers;
+        if let Some(frame) = self.frame.as_mut().and_then(Arc::get_mut)
+            && frame.scale.to_bits() == scale.to_bits()
+            && frame.items.len() == items.len()
+            && frame.layers.len() == layers.len()
+        {
+            std::mem::swap(&mut frame.items, &mut items);
+            std::mem::swap(&mut frame.layers, &mut layers);
+            frame.key = frame_key;
+            frame.layer_count = layer_count;
+            frame.native_resource_budget = self.resource_budget.clone();
+            frame._assets = assets;
+            frame._accounting = accounting;
+            self.scratch_items = items;
+            self.scratch_layers = layers;
+            self.scratch_items.clear();
+            self.scratch_layers.clear();
+        } else {
+            let item_capacity = scene.primitives.len();
+            let layer_capacity = scene.layers.len();
+            self.frame = Some(Arc::new(Frame {
+                native_resource_budget: self.resource_budget.clone(),
+                _assets: assets,
+                _accounting: accounting,
+                items,
+                scale,
+                key: frame_key,
+                layer_count,
+                layers,
+            }));
+            if self.scratch_items.capacity() < item_capacity {
+                self.scratch_items.reserve(item_capacity);
+            }
+            if self.scratch_layers.capacity() < layer_capacity {
+                self.scratch_layers.reserve(layer_capacity);
+            }
+        }
         // A scroll source already materializes its visible rows and a small
         // neighbour window. Keeping every previously visited row here defeats
         // that bound: raster and node identities survive until the much larger
@@ -5145,6 +5196,51 @@ mod tests {
             offset: (0., 0.),
             bounds: Rect::new(0., 0., 24., 20.),
         }
+    }
+
+    #[test]
+    fn retained_clip_refreshes_the_owned_frame_in_place_and_reports_damage() {
+        let mut scene = scene();
+        let mut cache = TreeCache::default();
+        let mut damage = crate::damage::FrameDamage::default();
+        cache.prepare(&scene, 1.).unwrap();
+        let frame = cache.frame.as_ref().unwrap();
+        let frame_ptr = Arc::as_ptr(frame);
+        let item_capacity = frame.items.capacity();
+        let layer_capacity = frame.layers.capacity();
+        assert!(
+            damage
+                .update(frame, (0., 0.), 1., 24, 20)
+                .unwrap()
+                .iter()
+                .any(|area| area.w > 0 && area.h > 0)
+        );
+
+        scene.clips.insert(1, Rect::new(6., 12., 3., 3.));
+        let Primitive::Rounded { rect, .. } = &mut scene.primitives[1] else {
+            panic!("fixture cap should be rounded");
+        };
+        rect.x = 6.;
+        scene.prepared.clear();
+        cache.prepare(&scene, 1.).unwrap();
+
+        let frame = cache.frame.as_ref().unwrap();
+        assert_eq!(Arc::as_ptr(frame), frame_ptr, "prepared Frame stays unique");
+        assert_eq!(frame.items.len(), 2);
+        assert_eq!(frame.items.capacity(), item_capacity);
+        assert_eq!(frame.layers.capacity(), layer_capacity);
+        assert_eq!(frame.items[1].clip, Some(Rect::new(6., 12., 3., 3.)));
+        assert!(matches!(
+            frame.items[1].primitive,
+            Primitive::Rounded { rect, .. } if rect.x == 6.
+        ));
+        assert!(
+            damage
+                .update(frame, (0., 0.), 1., 24, 20)
+                .unwrap()
+                .iter()
+                .any(|area| area.w > 0 && area.h > 0)
+        );
     }
 
     #[test]

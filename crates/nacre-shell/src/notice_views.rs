@@ -93,7 +93,11 @@ pub fn osd(owner: Owner, style: Style, interactive: bool) -> PanelSpec {
         entry: "osd/main.luau",
         position: None,
     };
-    spec(owner, style, geometry, interactive)
+    let mut spec = spec(owner, style, geometry, interactive);
+    // Build the view on the hidden overlay slot before the first daemon event.
+    // The generic overlay host keeps the prepared source until a later offer.
+    spec.retain_when_closed = true;
+    spec
 }
 
 /// Top-right popup stack (QML `NacreNotificationStack`), flush with the usable area.

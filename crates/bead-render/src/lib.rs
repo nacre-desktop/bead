@@ -571,6 +571,9 @@ impl Scene {
                 }
             }
         }
+        // The retained renderer rebuilds its prepared items from this patched
+        // scene. Drop this scene's stale Arc handles so it can reuse that cache.
+        self.prepared.clear();
         true
     }
     /// Remove resources while preserving primitive-indexed clips, layers and reveal metadata.
@@ -1728,9 +1731,9 @@ fn shadow_pixmap(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixma
     let cache = SHADOWS.get_or_init(|| std::sync::Mutex::new(Vec::new()));
     let key = (w, h, radius.to_bits(), blur.to_bits(), scale.to_bits());
     let osd_shape = rect.w == 396.
-        && ((rect.h == 120. && radius == 30.) || (rect.h == 136. && radius == 38.))
-        && blur == 10.
-        && scale == 1.5;
+        && ((rect.h == 120. && radius == 30. && scale == 1.5)
+            || (rect.h == 136. && radius == 38. && matches!(scale, 1.5 | 2.)))
+        && blur == 10.;
     if osd_shape
         && let Ok(shadows) = cache.lock()
         && let Some((_, pixmap)) = shadows.iter().find(|(candidate, _)| *candidate == key)
@@ -1742,7 +1745,7 @@ fn shadow_pixmap(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixma
             if let Some(index) = shadows.iter().position(|(candidate, _)| *candidate == key) {
                 shadows.remove(index);
             }
-            if shadows.len() >= 2 {
+            if shadows.len() >= 3 {
                 shadows.remove(0);
             }
             shadows.push((key, std::sync::Arc::new(pixmap.clone())));
@@ -1817,12 +1820,13 @@ fn shadow_pixmap(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixma
     Ok(cache_osd(result))
 }
 
-/// Warm the brightness and volume CPU shadows recorded by B0149 at 1.5x. These
-/// fixed geometries are independent of text, palette, and OSD kind.
+/// Warm the current OSD CPU shadows at 1.5x and the volume fallback at 2x.
+/// The 2x fallback is prepared before output scale is reported by Wayland.
 pub fn prewarm_osd_shadows() -> Result<()> {
     for (height, radius) in [(60., 30.), (76., 38.)] {
         let _ = shadow_pixmap(Rect::new(0., 0., 396., height + 60.), radius, 10., 1.5)?;
     }
+    let _ = shadow_pixmap(Rect::new(0., 0., 396., 136.), 38., 10., 2.)?;
     Ok(())
 }
 
@@ -3546,18 +3550,31 @@ mod weight_tests {
 
     #[test]
     fn osd_shadows_are_ready_from_the_shared_cache() {
-        let started = std::time::Instant::now();
         let brightness = shadow_pixmap(Rect::new(0., 0., 396., 120.), 30., 10., 1.5).unwrap();
-        let before_ms = started.elapsed().as_secs_f64() * 1000.;
         prewarm_osd_shadows().unwrap();
+        let started = std::time::Instant::now();
+        let brightness_warm = shadow_pixmap(Rect::new(0., 0., 396., 120.), 30., 10., 1.5).unwrap();
+        let brightness_after_ms = started.elapsed().as_secs_f64() * 1000.;
         let started = std::time::Instant::now();
         let volume = shadow_pixmap(Rect::new(0., 0., 396., 136.), 38., 10., 1.5).unwrap();
         let after_ms = started.elapsed().as_secs_f64() * 1000.;
-        let cached_mib = (brightness.data().len() + volume.data().len()) as f64 / 1_048_576.;
-        eprintln!(
-            "OSD_SHADOW_RASTER before_ms={before_ms:.3} after_ms={after_ms:.3} cached_mib={cached_mib:.3}"
+        let started = std::time::Instant::now();
+        let fallback = shadow_pixmap(Rect::new(0., 0., 396., 136.), 38., 10., 2.).unwrap();
+        let fallback_after_ms = started.elapsed().as_secs_f64() * 1000.;
+        let cached_mib =
+            (brightness_warm.data().len() + volume.data().len() + fallback.data().len()) as f64
+                / 1_048_576.;
+        assert_eq!(brightness.width(), brightness_warm.width());
+        assert!(
+            brightness_after_ms < 16.7,
+            "warmed OSD brightness shadow took {brightness_after_ms:.3} ms"
         );
         assert!(after_ms < 16.7, "warmed OSD shadow took {after_ms:.3} ms");
-        assert_eq!(brightness.width(), volume.width());
+        assert!(
+            fallback_after_ms < 16.7,
+            "warmed OSD fallback shadow took {fallback_after_ms:.3} ms"
+        );
+        assert_eq!(brightness_warm.width(), volume.width());
+        assert!(cached_mib < 2., "OSD shadows exceed approved 2 MiB budget");
     }
 }

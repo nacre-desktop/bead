@@ -2589,6 +2589,56 @@ fn retained_scalar_zero_duration_applies_target_immediately() {
 }
 
 #[test]
+fn retained_scalar_model_update_patches_before_materialization() {
+    let (_fixture, mut session) = retained_scalar_session();
+    assert!(
+        session
+            .generation
+            .as_ref()
+            .unwrap()
+            .has_scalar_binding("level")
+    );
+    let generation = session.generation.as_ref().unwrap();
+    assert!(
+        generation.model_affects_view(std::iter::once("level")),
+        "fixture models the OSD's model-read scalar binding"
+    );
+    let materializations = generation.materialize_count();
+    let initial = session
+        .current
+        .layers
+        .iter()
+        .find(|layer| layer.id == "panel.fill")
+        .and_then(|layer| layer.clip_bounds)
+        .unwrap()
+        .w;
+
+    assert!(
+        session
+            .update_model(BTreeMap::from([("level".into(), Value::Number(0.8))]))
+            .unwrap()
+            .is_none()
+    );
+    assert!(session.take_retained_scalar_patch().is_some());
+    let next = session
+        .current
+        .layers
+        .iter()
+        .find(|layer| layer.id == "panel.fill")
+        .and_then(|layer| layer.clip_bounds)
+        .unwrap()
+        .w;
+    assert!(
+        (next - initial).abs() < 0.1,
+        "animation starts at current pose"
+    );
+    assert_eq!(
+        session.generation.as_ref().unwrap().materialize_count(),
+        materializations
+    );
+}
+
+#[test]
 fn retained_scalar_label_rounds_negative_values_symmetrically() {
     let (fixture, mut session) = retained_scalar_session();
     let main = fixture.0.join("ui/main.luau");

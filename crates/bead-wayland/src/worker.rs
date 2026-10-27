@@ -66,6 +66,7 @@ pub struct Packet {
     reload: bool,
     wallpaper_palette: Option<std::collections::BTreeMap<String, [u8; 4]>>,
     scalar_patch: Option<bead_render::RetainedScalarPatch>,
+    scalar_target: bool,
 }
 impl std::fmt::Debug for Packet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -200,6 +201,7 @@ pub struct Source {
     current: Scene,
     candidate: Option<Scene>,
     retained_scalar_patch: Option<bead_render::RetainedScalarPatch>,
+    retained_scalar_targets: bool,
     viewport: Option<(u32, u32)>,
     frame_interval: Option<std::time::Duration>,
 }
@@ -219,6 +221,7 @@ impl Source {
             current: fallback,
             candidate: None,
             retained_scalar_patch: None,
+            retained_scalar_targets: false,
             viewport: None,
             frame_interval: None,
         }
@@ -290,29 +293,6 @@ fn bake(
     Ok(())
 }
 
-fn retained_scalar_scene_copy_bytes(scene: &Scene) -> usize {
-    std::mem::size_of::<Scene>()
-        + scene
-            .primitives
-            .iter()
-            .map(bead_render::primitive_bytes)
-            .sum::<usize>()
-        + scene
-            .layers
-            .iter()
-            .map(|layer| {
-                std::mem::size_of::<bead_render::SceneLayer>()
-                    + layer.id.capacity()
-                    + layer.parent.as_ref().map_or(0, String::capacity)
-            })
-            .sum::<usize>()
-        + scene.clips.len() * std::mem::size_of::<(usize, Rect)>()
-        + scene
-            .asset_data
-            .keys()
-            .map(|path| path.as_os_str().len() + std::mem::size_of::<std::sync::Arc<[u8]>>())
-            .sum::<usize>()
-}
 fn prepare_resource_job(
     job: Job,
     cache: &mut bead_render::tree::TreeCache,
@@ -338,6 +318,9 @@ fn prepare_resource_job(
     }
 }
 impl SceneSource for Source {
+    fn has_retained_scalar_targets(&self) -> bool {
+        self.retained_scalar_targets
+    }
     fn take_retained_scalar_patch(&mut self) -> Option<bead_render::RetainedScalarPatch> {
         self.retained_scalar_patch.clone()
     }
@@ -411,6 +394,7 @@ impl SceneSource for Source {
                             reload: false,
                             wallpaper_palette: None,
                             scalar_patch: None,
+                            scalar_target: false,
                         })));
                         return;
                     }
@@ -564,6 +548,7 @@ impl SceneSource for Source {
                                                 reload,
                                                 wallpaper_palette,
                                                 scalar_patch: None,
+                                                scalar_target: source.has_retained_scalar_targets(),
                                             })));
                                             continue;
                                         };
@@ -576,6 +561,7 @@ impl SceneSource for Source {
                                             reload,
                                             wallpaper_palette,
                                             scalar_patch: Some(patch.clone()),
+                                            scalar_target: true,
                                         })));
                                         loop {
                                             match receiver.recv() {
@@ -608,6 +594,8 @@ impl SceneSource for Source {
                                                             reload,
                                                             wallpaper_palette: None,
                                                             scalar_patch: None,
+                                                            scalar_target: source
+                                                                .has_retained_scalar_targets(),
                                                         })));
                                                     }
                                                     break;
@@ -626,6 +614,7 @@ impl SceneSource for Source {
                                         reload,
                                         wallpaper_palette,
                                         scalar_patch: None,
+                                        scalar_target: source.has_retained_scalar_targets(),
                                     })));
                                     continue;
                                 }
@@ -683,6 +672,7 @@ impl SceneSource for Source {
                                     reload,
                                     wallpaper_palette: wallpaper_palette.clone(),
                                     scalar_patch: None,
+                                    scalar_target: source.has_retained_scalar_targets(),
                                 })));
                                 continue;
                             }
@@ -702,6 +692,7 @@ impl SceneSource for Source {
                                 reload,
                                 wallpaper_palette: wallpaper_palette.clone(),
                                 scalar_patch: None,
+                                scalar_target: source.has_retained_scalar_targets(),
                             })));
                             // No later script event may overwrite this staged transaction before its GPU acknowledgement.
                             loop {
@@ -727,19 +718,14 @@ impl SceneSource for Source {
                                                     source.commit();
                                                     accepted_resource_revision =
                                                         Some(resource_revision);
-                                                    accepted_scene = if source
-                                                        .has_retained_scalar_targets()
-                                                    {
-                                                        eprintln!(
-                                                            "RETAINED_SCALAR_SCENE_COPY bytes={} asset_payloads_shared=true",
-                                                            retained_scalar_scene_copy_bytes(
-                                                                &scene
-                                                            )
-                                                        );
-                                                        Some(scene.clone())
-                                                    } else {
-                                                        None
-                                                    };
+                                                    accepted_scene =
+                                                        if source.has_retained_scalar_targets() {
+                                                            let mut retained = scene.clone();
+                                                            retained.prepared.clear();
+                                                            Some(retained)
+                                                        } else {
+                                                            None
+                                                        };
                                                 }
                                                 if look_change {
                                                     cache.drop_unused_since(baked_after);
@@ -762,6 +748,8 @@ impl SceneSource for Source {
                                                     reload,
                                                     wallpaper_palette: wallpaper_palette.clone(),
                                                     scalar_patch: None,
+                                                    scalar_target: source
+                                                        .has_retained_scalar_targets(),
                                                 })));
                                             }
                                             Err(error) => {
@@ -779,6 +767,8 @@ impl SceneSource for Source {
                                                         wallpaper_palette: wallpaper_palette
                                                             .clone(),
                                                         scalar_patch: None,
+                                                        scalar_target: source
+                                                            .has_retained_scalar_targets(),
                                                     })));
                                                 } else {
                                                     wakeup(UiEvent::WatchError(error));
@@ -851,6 +841,7 @@ impl SceneSource for Source {
         }
         if let UiEvent::Worker(packet) = event {
             self.token = packet.token;
+            self.retained_scalar_targets = packet.scalar_target;
             if let Some(mirror) = &packet.mirror {
                 self.mirror = mirror.clone();
             }
@@ -920,6 +911,9 @@ impl SceneSource for Source {
             self.accepted = false;
             if let Some(scene) = self.candidate.take() {
                 self.current = scene;
+            }
+            if self.retained_scalar_targets {
+                self.current.prepared.clear();
             }
             true
         } else {
@@ -1656,6 +1650,7 @@ mod tests {
         let accepted = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
         assert!(source.stage(accepted).unwrap().is_some());
         assert!(source.commit());
+        assert!(source.has_retained_scalar_targets());
         let mirror = source.mirror.clone();
         let mirror_calls = mirror_reads.load(Ordering::SeqCst);
 

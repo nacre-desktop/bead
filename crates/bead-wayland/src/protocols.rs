@@ -476,6 +476,7 @@ impl OutputHandler for App {
     fn new_output(&mut self, _: &Connection, qh: &QueueHandle<Self>, output: wl_output::WlOutput) {
         self.add_output(qh, output.clone());
         self.output_mode_changed(&output);
+        self.prewarm_retained_overlay();
         self.restore_pearls();
         self.sync_edges();
         self.app_open_pending();
