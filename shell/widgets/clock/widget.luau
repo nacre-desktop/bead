@@ -104,6 +104,8 @@ end
 local function desktop(props,_settings,_data)
     local style=props.form_style or "digital"
     local w,h=visual.slot(props.instance,420,190)
+    local iid=props.instance and props.instance.iid
+    local preview=type(iid)=="string" and string.sub(iid,1,8)=="preview-"
     local action=popouts and ui.action("view.open","calendar") or nil
     local time=ui.bind("bar.clock.text")
     if style=="seconds" then
@@ -144,8 +146,8 @@ local function desktop(props,_settings,_data)
     elseif style=="minimal" then
         local hour,minute=string.match(visible_time,"^(%d%d?):(%d%d)")
         local compact=h<120
-        local digit_height=compact and h*.4 or h*.38
-        local digit_size=compact and h*.28 or math.min(110,h*.42)
+        local digit_size=preview and h*.25 or compact and h*.28 or math.min(110,h*.42)
+        local digit_height=preview and digit_size*1.4 or compact and h*.4 or h*.38
         local date_height=compact and 12 or 24
         local date_size=compact and kit.tokens.text.caption*4/3 or kit.tokens.text.body*4/3
         return ui.Column{id="clock-minimal",width=w,height=h,justify="center",gap=compact and 0 or kit.tokens.spacing.xs,on_activate=action,
