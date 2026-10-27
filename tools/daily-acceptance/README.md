@@ -23,10 +23,24 @@ with a user systemd scope (`MemoryMax=12G`, no swap) and holds the desktop heavy
 lock for the arm.
 
 `--quick` runs one full interaction round without the two-minute idle or final
-repeat. A normal run uses three rounds, the two-minute idle, and one final round.
+repeat. `--quick --focus-dropdown updates` runs the three dismissal paths for
+one status panel for regression bisection. A normal run uses three rounds, the
+two-minute idle, and one final round.
 The scope uses Bead's existing `spikes/capture_safety.py` guard for its memory
 rail, cgroup containment, and watchdog. The runner also gates host swap-in,
 process `SwapPss`, full-window screenshots, and the shell's `Pss_Anon` delta.
+Open latency is measured from `PanelVisibility(true)` to the first Wayland
+presentation-feedback callback. Legacy comparison builds receive only a
+measurement overlay for this same boundary; the overlay does not alter rendering.
+The nested 60 Hz TEST host uses a 65 ms limit, calibrated against stable baseline
+900369fb (60.1–63.9 ms on the common marker). This is a TEST-host comparison
+limit, not a claim that the physical two-frame target is 65 ms.
+The runner enables `BEAD_ACCEPTANCE_PANEL_LATENCY=1`; current Bead records the
+request at the layer-panel open transition and the first matching presentation
+callback, while 900369fb receives the same two-point overlay at build time.
+Per-widget focused arms run Escape and outside before click, so the click-to-close
+path is exercised after the lazy view has been exercised once. Each method still
+has its own open, latency, close, and pixel-diff assertion.
 
 Pointer input is sent to the *parent* Labwc compositor through
 `wlr-virtual-pointer`, so the host pointer is never moved. Modifier chords use
@@ -45,4 +59,8 @@ runner rejects missing or out-of-bounds points before input begins.
 Closed-state screenshot comparisons mask only the changing clock digits in the
 profile's `volatile_rectangles`; neighboring status icons and the dropdown area
 remain pixel-checked. The standard profile also checks the battery gap/re-arm
-pointer path.
+pointer path. Niri may report the blank `bead-daily-acceptance` Background canvas,
+the Overlay widget-drag canvas, or one duplicate Top layer beyond startup. The
+harness records only those exact identities when the closed screenshot matches
+pixel-for-pixel, then permits previously verified identities at idle; changed
+pixels, an unknown identity, or duplicate extras fail.

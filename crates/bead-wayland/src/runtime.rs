@@ -33,6 +33,8 @@ pub(super) struct App {
     pub(super) panel_fallback_ready: bool,
     pub(super) panel_reload_pending: bool,
     pub(super) panel_target: bool,
+    pub(super) acceptance_panel_open_started: Option<(u64, Instant)>,
+    pub(super) panel_open_latency_started: Option<(u64, Instant)>,
     pub(super) panel_gpu_suspended: bool,
     #[cfg(feature = "native-gl")]
     pub(super) panel_cpu_cached: bool,
@@ -355,6 +357,8 @@ pub fn run_runtime(
         panel_fallback_ready: false,
         panel_reload_pending: false,
         panel_target: false,
+        acceptance_panel_open_started: None,
+        panel_open_latency_started: None,
         panel_gpu_suspended: false,
         #[cfg(feature = "native-gl")]
         panel_cpu_cached: false,

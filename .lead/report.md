@@ -1,15 +1,12 @@
-Status: INCOMPLETE — safe-pushed to main; memory-control, analog smoothness and app-window-size acceptance gates remain open.
-Slices: Clock, Battery, Controls, Feeds and Widgets app.
-Code/evidence commits: b6e84db7, e0ee98e7, 369ec980, 76334baf, 955d3cb3, 839fc185; all contain `[no-publish]`.
-Push: fast-forwarded code/evidence `ba77e92d..839fc185`; this report-only `[no-publish]` commit follows.
-Full CI: Ubuntu 24.04 on dev-2, `bash /ci/full-ci-final.sh`, PASS (`CI_EXIT=0`) on final evidence revision `839fc185`; the following commit changes only this report.
-Text root cause: eight hard-offset halo copies visually outlined Outfit-200; replaced by a blurred glyph-alpha mask behind solid ink. Digit-interior and soft-shadow goldens pass.
-Captures: `docs/specs/evidence/0161/bead/{Main,Clock,Battery,Controls,Feeds,App}.png`, 2880×1800/1.5 CPU; all complete, zero OOM, zero host swap.
-Pairs in `docs/specs/evidence/0161/`: `comparison/Main.png` ↔ `reference/Main.png`; `comparison/Clock.png` ↔ `reference/Clock.png`; `comparison/Battery.png` ↔ `reference/Battery.png`; `comparison/Controls.png` ↔ `reference/Controls.png`; `comparison/Feeds.png` ↔ `reference/Feeds.png`; `comparison/App.png` ↔ `reference/App.png`.
-Memory: one CPU sample each; Empty 48.400 MiB unreclaimable. Deltas vs Empty: Clock +1.936, Battery +4.934, Power +4.494, Sound +7.852, Bluetooth +4.150, Wi-Fi +6.713, Notifications +3.518, Launcher +5.633, Updates +5.039 MiB. File PSS 56.294–56.885 MiB (informational).
-Memory gate: ≤2 MiB always-on delta versus a same-host control was not isolated; open.
-Analog, synthetic 60 Hz: five windows/phase; commit p50 178.06–178.22 ms, p95/p99 209.17–209.36 ms, estimated drops 91.2%, render p99 31.2 ms; fails target.
-Analog, synthetic 120 Hz: five windows/phase; commit p50 178.35–178.46 ms, p95/p99 209.40–209.46 ms, estimated drops 95.4%, render p99 31.2 ms; fails target.
-Pacing used CPU; presentation refresh timestamps are unavailable (`refresh_ns=0`), so no physical scanout claim.
-Visual: digits are solid, shadows soft, and app tiles do not overlap/clip; the 926×1108 logical window is smaller than the reference (open). No equivalent QML widgets/editor exists; Bluetooth/Wi-Fi/update capture data is unavailable.
-Removed: 47 product lines.
+Status: core dropdown regressions fixed and pushed; focused dropdown matrix passes. Full sequential acceptance still has separate route/fixture gaps below.
+Commit: `be031320` (`[no-publish]`), siverteh author and committer; prior B0161 report remains in parent commit `1f99b426`.
+Measure: `PanelVisibility(true)` to first Wayland presentation feedback; calibrated 65 ms limit on nested 60 Hz TEST host.
+Baseline `900369fb`: seven available dropdowns, 21/21 closes PASS; p50/p99 64.200/64.746 ms. Bluetooth unavailable (no private service).
+Fixed main: eight dropdowns, 24/24 closes PASS; p50/p99 52.017/60.932 ms; all closed screenshots pixel-identical.
+Memory, CPU and swap: baseline/fixed full arms pass; fixed Pss_Anon +13.758 MiB after idle and +18.723 MiB after repeat (<20 MiB limit).
+Bisect: `ec6cd311` first bad; parent `860aa794` passes. Reveal ticks reshaped saved primitives, invalidating CPU snapshots; canonical open-state content reuse removes repeated ~270 ms opens and stale pixels.
+Blank layer calibration accepts only known Top/Background/Overlay identities with pixel-identical closes; post-idle inventory returns to six layers.
+Full sequential arm still has launcher/dashboard/control/wallpaper route and AI-hover fixture gaps on both revisions; these remain unverified, not passes.
+Remote Bead full-CI recipe on exact code passed: `BEAD_CI_AND_RELEASE_ARMS_PASS` (exit 0).
+Prior official GitHub CI run `40531337840` passed `37596135`; current pushed commit CI is pending verification.
+No laptop build, test, install or configuration changes.

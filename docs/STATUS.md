@@ -34,9 +34,9 @@ ceiling. Full Bead CI passes. See [B0157](specs/0157-picker-errors.md).
 
 # Status
 
-## 2026-10-27 — B0162 daily acceptance (CI passes; interaction acceptance remains open)
+## 2026-10-27 — B0162 daily acceptance (dropdown regressions fixed; broad fixture gaps remain)
 
-The full Bead CI-equivalent passes on the rebased current-main source (`5a39635d`), and three full nested arms cover 900369fb, main-before `24709327`, and the current-main candidate. `bda20168` introduced the Escape regression; main-before screenshots retain the Updates panel after Escape. The current candidate has zero UI errors after widget-state fixes and passes memory, CPU, swap, drag-commit and idle-layer gates, but open latency remains ~240–300 ms, close-pixel checks fail, and synthetic Niri shortcut routes remain unverified. See [B0162](specs/0162-daily-acceptance.md).
+Using one `PanelVisibility` to first Wayland presentation-feedback boundary, the 900369fb baseline focused dropdown matrix is 64.20/64.75 ms p50/p99; fixed main is 52.02/60.93 ms. All 21 closes on each matched seven-widget matrix are pixel-identical. `ec6cd311` is the first bad commit: reveal ticks reshaped primitives that the CPU snapshot fingerprint treated as new content, rebuilding the panel snapshot and retaining stale pixels after the surface unmapped. The fix fingerprints and prepares canonical open-state content. The baseline Bluetooth service is unavailable in the private TEST session. Full sequential launcher/dashboard/control/wallpaper and AI-hover coverage still has fixture/route gaps; see [B0162](specs/0162-daily-acceptance.md) and `.lead/report.md`.
 
 ## 2026-10-27 — B0159 AI chat scroll (implementation complete; smoothness gates open)
 

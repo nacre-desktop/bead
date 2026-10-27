@@ -436,6 +436,20 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
             state.in_slot(id, |app| Self::event(app, proxy, event, data, conn, qh));
             return;
         }
+        if matches!(&event, wp_presentation_feedback::Event::Presented { .. })
+            && let Some((open_epoch, started)) = state.acceptance_panel_open_started
+            && open_epoch == data.visibility
+            && state
+                .surfaces
+                .iter()
+                .any(|surface| surface.companion && surface.wl_surface() == &data.surface)
+        {
+            state.acceptance_panel_open_started = None;
+            eprintln!(
+                "PANEL_OPEN_LATENCY name=panel ms_to_first_content_frame={:.3}",
+                started.elapsed().as_secs_f64() * 1000.
+            );
+        }
         let mut frame_interval_update = None;
         if let Some(s) = state
             .surfaces

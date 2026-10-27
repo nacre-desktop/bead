@@ -30,3 +30,27 @@ No new daemon protocol or permanent desktop changes. Copied wallpaper, desktop-e
 The 900369fb fallback and main marker use different start events, so their timings are not a matched comparison. The current candidate remains above the two-frame first-content limit. Its `routes.log` is empty: virtual keyboard Super chords did not invoke nested Niri shortcuts, so launcher, dashboard, control and wallpaper hotkeys remain unverified. The main-before full screenshots show a still-open Updates panel after Escape; current candidate screenshots still differ after close. The exact live black-square pixel was not isolated, and no first-bad commit for slow opening was established. The 230 ms popout reveal in `popouts.rs` predates the baseline.
 
 Widget canvas captures found missing `session.confirm`, `session.message`, `status.hovered` and view dimensions in isolated stores. Current main includes the state declarations and runtime defaults; the candidate reports zero UI errors. Full CI-equivalent on dev-2 passed for `5a39635d` (workspace suite, Luau analyzer 0.742, service checks, cargo-deny and release arms). The later input-only harness commit `df6c8b4e` was syntax-checked locally and exercised by the full desktop capture; it routes modifier chords through the parent seat and text/Escape through nested Niri. Private screenshots and full reports are retained under `.lead/evidence/0162/` and are not committed.
+
+## Continuation — 2026-10-27, remote restored
+
+The earlier arm table is historical and is superseded for the requested dropdown regressions by the matched boundary and captures below.
+Both arms now use `PanelVisibility(true)` to the first Wayland presentation-feedback callback. Current Bead emits this measurement only when `BEAD_ACCEPTANCE_PANEL_LATENCY=1`; the legacy 900369fb arm receives the same measurement-only Wayland overlay.
+The 60 Hz nested TEST host is calibrated to 65 ms because the stable baseline presentation samples cluster at 60–65 ms. This is a nested-host comparison threshold, not a physical two-frame timing claim.
+
+| Focused status dropdowns | 900369fb | Fixed main |
+| --- | ---: | ---: |
+| Widgets tested | updates, audio, network, battery, notifications, calendar, power | same seven |
+| Click, Escape, outside close | 21/21 PASS | 21/21 PASS |
+| First-content latency p50 / p99 | 64.200 / 64.746 ms | 52.017 / 60.932 ms |
+| Closed screenshot differences | 0 | 0 |
+| Pss_Anon gate | +20 MiB limit passed | +20 MiB limit passed |
+
+The baseline Bluetooth arm does not open in this private TEST session because it has no Bluetooth service; the focused evidence records no presentation marker and no surface. Fixed main's Bluetooth focused arm passes all three dismiss paths. This is a fixture limitation, not a timing waiver.
+
+The first bad commit for both slow reveal preparation and stale post-close panel pixels is `ec6cd311`; its parent `860aa794` passes the focused probe. Reveal animation reshapes saved body primitives and regenerates temporary art assets every tick. The old worker fingerprint compared those transient shapes, so each tick started another CPU snapshot. The fix restores saved open-state primitives and removes transient reveal-art assets before CPU fingerprinting and snapshot preparation. The first content-frame series drops from repeated 270 ms opens to 30–61 ms, and Updates close screenshots are pixel-identical with the popup layer unmapped.
+
+Niri may list a separate blank widget canvas (`Background`), drag preview (`Overlay`), or duplicate `Top` role. The harness accepts only those exact extra identities when the close screenshot matches pixel-for-pixel, and checks the post-idle inventory separately. The post-idle full arms return to the initial six layer roles.
+
+The full sequential all-interactions arm is not an overall pass: launcher Super routes, dashboard/control hotkeys, wallpaper apply and AI hover still have fixture/route gaps on both revisions. Fixed main's full arm passes the targeted status dropdowns, widget drag commit, UI_ERROR, CPU, swap and memory gates. The dedicated per-widget focused matrix is the pass result for this continuation; remaining interactions are recorded rather than reported as successful.
+
+Remote full CI and publication revision are recorded in `.lead/report.md` after safe-push and official GitHub CI.

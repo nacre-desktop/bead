@@ -522,20 +522,41 @@ pub struct TreeCache {
     revealed_pose: Option<((u64, u32, u32), Arc<Frame>)>,
 }
 
-/// Exact non-pixel content identity for a frozen CPU panel snapshot. The byte
-/// asset storage is immutable behind `Arc`; weak identities detect replacement
-/// without hashing every encoded image on each presenter prepare.
+/// Exact content identity for worker-prepared or frozen CPU panel content.
+/// Resource revisions can advance during reveal ticks, so worker reuse compares
+/// the prepared pixels and asset bytes directly.
 struct SnapshotFingerprint {
     scale_bits: u32,
+    resource_revision: u64,
     metadata: Vec<u8>,
     assets: Vec<(PathBuf, Weak<[u8]>)>,
 }
+
+fn cpu_content_scene(scene: &Scene) -> Scene {
+    let mut content = scene.clone();
+    if let Some(motion) = content.motion.as_ref().filter(|motion| motion.reveal) {
+        for (index, original) in &motion.parts {
+            if let Some(primitive) = content.primitives.get_mut(*index) {
+                *primitive = original.clone();
+            }
+        }
+        if motion.art.is_some() {
+            content
+                .asset_data
+                .retain(|path, _| !path.to_string_lossy().starts_with("@reveal-art-"));
+        }
+    }
+    content.motion = None;
+    content
+}
+
 impl SnapshotFingerprint {
     fn new(scene: &Scene, scale: f32) -> Result<Self> {
         if !scale.is_finite() || scale <= 0. {
             return Err("invalid layer scale".into());
         }
-        let layers = scene
+        let content = cpu_content_scene(scene);
+        let layers = content
             .layers
             .iter()
             .map(|layer| {
@@ -554,7 +575,7 @@ impl SnapshotFingerprint {
                 )
             })
             .collect::<Vec<_>>();
-        let clips = scene
+        let clips = content
             .clips
             .iter()
             .map(|(index, clip)| {
@@ -570,38 +591,34 @@ impl SnapshotFingerprint {
             })
             .collect::<Vec<_>>();
         let metadata = serde_json::to_vec(&(
-            scene.resource_revision,
             scale.to_bits(),
-            scene.width.to_bits(),
+            content.width.to_bits(),
             [
-                scene.bounds.x.to_bits(),
-                scene.bounds.y.to_bits(),
-                scene.bounds.w.to_bits(),
-                scene.bounds.h.to_bits(),
+                content.bounds.x.to_bits(),
+                content.bounds.y.to_bits(),
+                content.bounds.w.to_bits(),
+                content.bounds.h.to_bits(),
             ],
-            &scene.font_files,
+            &content.font_files,
             layers,
             clips,
-            &scene.primitives,
+            &content.primitives,
         ))?;
-        let assets = scene
+        let assets = content
             .asset_data
             .iter()
             .map(|(path, bytes)| (path.clone(), Arc::downgrade(bytes)))
             .collect();
         Ok(Self {
             scale_bits: scale.to_bits(),
+            resource_revision: scene.resource_revision,
             metadata,
             assets,
         })
     }
 
-    fn matches(&self, scene: &Scene, scale: f32) -> Result<bool> {
-        // A flattened closed snapshot cannot substitute for a moving reveal
-        // edge; keep the original frame path for those scenes.
-        if scene.motion.as_ref().is_some_and(|motion| motion.reveal)
-            || self.scale_bits != scale.to_bits()
-        {
+    fn matches_content(&self, scene: &Scene, scale: f32) -> Result<bool> {
+        if self.scale_bits != scale.to_bits() {
             return Ok(false);
         }
         let current = Self::new(scene, scale)?;
@@ -609,9 +626,24 @@ impl SnapshotFingerprint {
             && self.assets.len() == current.assets.len()
             && self.assets.iter().zip(&current.assets).all(
                 |((old_path, old_bytes), (path, bytes))| {
-                    old_path == path && Weak::ptr_eq(old_bytes, bytes)
+                    old_path == path
+                        && (Weak::ptr_eq(old_bytes, bytes)
+                            || matches!((old_bytes.upgrade(), bytes.upgrade()),
+                                (Some(old), Some(current)) if old.as_ref() == current.as_ref()))
                 },
             ))
+    }
+
+    fn matches_snapshot(&self, scene: &Scene, scale: f32) -> Result<bool> {
+        // A flattened closed snapshot cannot substitute for a moving reveal
+        // edge; keep the original frame path for those scenes. Snapshot reuse
+        // also preserves resource-revision invalidation for unresolved assets.
+        if scene.motion.as_ref().is_some_and(|motion| motion.reveal)
+            || self.resource_revision != scene.resource_revision
+        {
+            return Ok(false);
+        }
+        self.matches_content(scene, scale)
     }
 }
 /// The artwork's growing edge, rasterised once per size and scale and slid along the growth axis every frame.
@@ -3037,8 +3069,7 @@ impl TreeCpuRenderer {
         Self::prepare_snapshot(scene, scale)?.accept()
     }
     pub fn prepare_snapshot(scene: &Scene, scale: f32) -> Result<PreparedCpuSnapshot> {
-        let mut content = scene.clone();
-        content.motion = None;
+        let content = cpu_content_scene(scene);
         let mut renderer = Self::with_opaque_composition(OpaqueComposition::Cached);
         renderer.keep_hidden_group = true;
         renderer.sparse_snapshot = true;
@@ -3167,12 +3198,11 @@ impl Renderer for TreeCpuRenderer {
         )
     }
     fn reusable_scene(&self, scene: &Scene, scale: f32) -> Result<bool> {
-        if let Some(fingerprint) = self
-            .worker_fingerprint
-            .as_ref()
-            .or(self.snapshot_fingerprint.as_ref())
-        {
-            return fingerprint.matches(scene, scale);
+        if let Some(fingerprint) = self.worker_fingerprint.as_ref() {
+            return fingerprint.matches_content(scene, scale);
+        }
+        if let Some(fingerprint) = self.snapshot_fingerprint.as_ref() {
+            return fingerprint.matches_snapshot(scene, scale);
         }
         Ok(false)
     }
@@ -3203,11 +3233,12 @@ impl Renderer for TreeCpuRenderer {
         {
             return self.prepare(scene, scale);
         }
-        if self
-            .cpu_preparation
-            .as_ref()
-            .is_none_or(|request| !request.fingerprint.matches(scene, scale).unwrap_or(false))
-        {
+        if self.cpu_preparation.as_ref().is_none_or(|request| {
+            !request
+                .fingerprint
+                .matches_content(scene, scale)
+                .unwrap_or(false)
+        }) {
             self.cpu_preparation = Some(Arc::new(CpuPreparation {
                 scene: scene.clone(),
                 scale,
@@ -3238,7 +3269,7 @@ impl Renderer for TreeCpuRenderer {
     }
     fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
         if let Some(snapshot) = &self.snapshot_fingerprint {
-            if snapshot.matches(scene, scale)? {
+            if snapshot.matches_snapshot(scene, scale)? {
                 return Ok(());
             }
 
@@ -4399,6 +4430,74 @@ mod tests {
             accepted,
             "failed worker replacement keeps accepted pixels"
         );
+    }
+
+    #[test]
+    fn ui_cpu_prepare_reuses_content_across_reveal_progress() {
+        let mut scene = scene();
+        let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+        worker.prepare(&scene, 1.).unwrap();
+        scene
+            .prepared
+            .insert(1.0f32.to_bits(), worker.frame.clone().unwrap());
+        scene.motion = Some(crate::Motion {
+            id: "reveal-test".into(),
+            open: true,
+            duration: 0.2,
+            return_duration: None,
+            return_curve: None,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            fade: false,
+            reveal: true,
+            progress: 0.2,
+            parts: vec![(1, scene.primitives[1].clone())],
+            art: None,
+        });
+        scene.reveal(0.2);
+
+        let mut renderer = TreeCpuRenderer::default();
+        let pending = renderer.prepare_on_ui(&scene, 1.).unwrap_err();
+        let request = pending
+            .downcast_ref::<CpuResourcesPending>()
+            .unwrap()
+            .request
+            .clone();
+        assert!(request.mark_requested());
+        request.prepare().unwrap();
+
+        scene.reveal(0.45);
+        scene.resource_revision += 1;
+        let same_asset_bytes = Arc::from(
+            scene
+                .asset_data
+                .get(std::path::Path::new("proof.png"))
+                .unwrap()
+                .as_ref(),
+        );
+        scene
+            .asset_data
+            .insert("proof.png".into(), same_asset_bytes);
+        renderer.prepare_on_ui(&scene, 1.).unwrap();
+        let builds = renderer.opacity_builds;
+
+        scene.reveal(0.7);
+        scene.resource_revision += 1;
+        assert!(renderer.reusable_scene(&scene, 1.).unwrap());
+        renderer.prepare_on_ui(&scene, 1.).unwrap();
+        assert_eq!(renderer.opacity_builds, builds);
+
+        let mut changed = scene.clone();
+        changed.motion.as_mut().unwrap().parts[0].1 = Primitive::Rounded {
+            rect: Rect::new(2., 12., 8., 3.),
+            radius: 0.,
+            fill: [41, 100, 30, 255],
+            border: None,
+        };
+        assert!(!renderer.reusable_scene(&changed, 1.).unwrap());
+        assert!(!renderer.reusable_scene(&scene, 1.5).unwrap());
     }
     #[test]
     fn compact_svg_upload_reconstructs_exact_dense_pixels() {
