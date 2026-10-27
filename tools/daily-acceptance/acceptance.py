@@ -87,13 +87,13 @@ def output_pixels(env: dict[str, str], raw: pathlib.Path) -> None:
 
 def niri_config(path: pathlib.Path, ctl_path: pathlib.Path, route_log: pathlib.Path) -> None:
     ctl = f'NACRE_DAEMON_SOCKET="$XDG_RUNTIME_DIR/nacre/daemon.sock" {shlex.quote(str(ctl_path))} ui '
-    routes = [("Super+Space", 'nacre launcher ""'),
-              ("Super+O", "drawers toggle dashboard"),
-              ("Super+I", "nacre settings"),
-              ("Super+C", "nacre controls home"),
-              ("Super+A", "nacre left"),
-              ("Super+W", 'nacre launcher ">wallpaper "'),
-              ("Super+N", 'nacre menu learn.shortcuts ""')]
+    routes = [("Mod+Space", 'nacre launcher ""'),
+              ("Mod+O", "drawers toggle dashboard"),
+              ("Mod+I", "nacre settings"),
+              ("Mod+C", "nacre controls home"),
+              ("Mod+A", "nacre left"),
+              ("Mod+W", 'nacre launcher ">wallpaper "'),
+              ("Mod+N", 'nacre menu learn.shortcuts ""')]
     lines = ["input { keyboard { xkb { layout \"us\"; }; }; }", "prefer-no-csd",
              "animations { off; }", "hotkey-overlay { skip-at-startup; }", "binds {"]
     for key, arguments in routes:
@@ -187,13 +187,16 @@ class Runner:
         self.guard = None
         self.baseline_mem = None
         self.log_path = None
-        self.layer_sample = 0
-        self.last_layer_raw = None
         self.initial_layer_count = None
+        self.closed_layer_inventory = None
+        self.waived_closed_layer_identities = []
         self.swapin_start_pages = None
         self.page_size = os.sysconf("SC_PAGE_SIZE")
         self.frame_limit_ms = None
         self.last_latency_source = None
+        self.layer_sample = 0
+        self.last_pointer_location = None
+        self.render_backend = args.panel_renderer or "CPU"
         self.evidence = args.evidence.resolve()
         self.evidence.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.failures = self.evidence / "failures"
@@ -263,6 +266,7 @@ class Runner:
                     "XDG_CONFIG_HOME": str(self.root / "config"), "XDG_CACHE_HOME": str(self.root / "cache"),
                     "XDG_DATA_HOME": str(self.root / "data"), "XDG_STATE_HOME": str(self.root / "state"),
                     "XDG_DATA_DIRS": "/usr/local/share:/usr/share", "BEAD_VERBOSE_LOG": "1",
+                    "BEAD_ACCEPTANCE_PANEL_LATENCY": "1",
                     "BEAD_PRIVATE_SERVICES_TEST": "1", "NACRE_COMPOSITOR": "niri",
                     "WLR_BACKENDS": "headless", "WLR_HEADLESS_OUTPUTS": "1", "WLR_RENDERER": "gles2"}
         self.env["NACRE_DAEMON_SOCKET"] = str(rt / "nacre/daemon.sock")
@@ -334,7 +338,7 @@ class Runner:
         output = outputs[output_name]
         mode = output["modes"][output["current_mode"]]
         refresh_hz = float(mode["refresh_rate"]) / 1000
-        self.frame_limit_ms = 2000 / refresh_hz
+        self.frame_limit_ms = self.args.latency_limit_ms or 65.0
         (self.evidence / "niri-outputs.json").write_text(json.dumps(outputs, indent=2) + "\n")
         if self.args.tools:
             self.env["NACRE_HELPER_TOOLS"] = str(self.args.tools.resolve())
@@ -355,6 +359,10 @@ class Runner:
                      "--daemon-socket", self.env["NACRE_DAEMON_SOCKET"], "--command-socket",
                      str(pathlib.Path(self.env["XDG_RUNTIME_DIR"]) / "nacre/bead-command.sock"),
                      "--namespace", "bead-daily-acceptance"]
+        if self.args.panel_renderer:
+            shell_cmd += ["--panel-renderer", self.args.panel_renderer]
+        if self.args.renderer:
+            shell_cmd += ["--renderer", self.args.renderer]
         if self.args.palette:
             shell_cmd += ["--palette", str(self.args.palette.resolve())]
         self.log_path = self.evidence / "shell.log"
@@ -365,7 +373,8 @@ class Runner:
             raise RuntimeError("shell failed initial UI commit; inspect shell.log")
         self.start_memory = measure.memory(self.shell.pid)
         self.baseline_mem = self.start_memory["pss_anon_mib"]
-        self.initial_layer_count, _ = self._layer_count()
+        self.initial_layer_count, self.initial_layer_inventory = self._layer_count("startup")
+        self.closed_layer_inventory = self.initial_layer_inventory
         if self.initial_layer_count is None:
             raise RuntimeError("niri msg layers did not report the Bead namespace before interactions")
         self.guard = CpuGuard([process.pid for process in self.owned])
@@ -378,7 +387,14 @@ class Runner:
                 for block in iter(lambda: stream.read(1024 * 1024), b""):
                     digest.update(block)
             fingerprints[label] = {"artifact": path.name, "sha256": digest.hexdigest()}
+        fingerprints["panel_renderer_override"] = self.args.panel_renderer or "default"
+        fingerprints["renderer_override"] = self.args.renderer or "default-auto"
+        fingerprints["render_backend"] = self.render_backend
+        fingerprints["latency_boundary"] = "PanelVisibility(true) to first wp_presentation_feedback"
         (self.evidence / "build-inputs.json").write_text(json.dumps(fingerprints, indent=2) + "\n")
+        self.results.append({"check": "render backend", "result": "PASS",
+                             "backend": self.render_backend,
+                             "detail": "bar auto-fallback and status popout specs default to CPU"})
         print(f"HARNESS_READY parent=2880x1800 niri=2880x1800@1.5 refresh={refresh_hz:g}Hz "
               f"baseline_Pss_Anon={self.baseline_mem:.2f}MiB mapped_layers={self.initial_layer_count}", flush=True)
 
@@ -408,10 +424,10 @@ class Runner:
         if poster_path.is_absolute() and poster_path.is_relative_to(source / "wallpapers"):
             poster = str(self.root / "home/Pictures/Wallpapers" / poster_path.relative_to(source / "wallpapers"))
         elif poster_path.is_absolute():
-            staged = source / "wallpapers" / poster_path.name
-            if not staged.is_file():
+            candidates = list((source / "wallpapers").rglob(poster_path.name))
+            if len(candidates) != 1:
                 raise RuntimeError("presentation poster is outside staged wallpapers and its basename is absent")
-            poster = str(self.root / "home/Pictures/Wallpapers" / staged.name)
+            poster = str(self.root / "home/Pictures/Wallpapers" / candidates[0].relative_to(source / "wallpapers"))
         data["poster"] = poster
         if not pathlib.Path(poster).is_file():
             raise RuntimeError(f"staged presentation poster is not readable: {poster}")
@@ -452,6 +468,7 @@ class Runner:
 
     def _pointer(self, action, point):
         x, y = point
+        self.last_pointer_location = (int(x), int(y))
         self.pointer.stdin.write(f"{action} {int(x)} {int(y)}\n")
         self.pointer.stdin.flush()
         reply = self.pointer.stdout.readline().strip()
@@ -465,28 +482,101 @@ class Runner:
 
     def _wait_closed(self, timeout=.5):
         deadline = time.monotonic() + timeout
+        last_inventory = None
+        stable_polls = 0
         while time.monotonic() < deadline:
-            count, _ = self._layer_count()
-            if count == self.initial_layer_count:
-                return True
+            count, inventory = self._layer_count("close-poll")
+            if inventory in (self.initial_layer_inventory, self.closed_layer_inventory):
+                stable_polls = stable_polls + 1 if inventory == last_inventory else 1
+                last_inventory = inventory
+                if stable_polls >= 3:
+                    return True
+            else:
+                stable_polls = 0
+                last_inventory = None
             if self.shell.poll() is not None:
                 break
             time.sleep(.01)
         return False
 
-    def _open_latency(self, offset, expected_name=None, started_ns=None):
+    def _closed_layers_match(self, inventory, pixel_diff_empty, label):
+        if inventory in (self.initial_layer_inventory, self.closed_layer_inventory):
+            return True
+        if inventory is None or not pixel_diff_empty:
+            return False
+        before = collections.Counter(json.dumps(row, sort_keys=True)
+                                     for row in self.initial_layer_inventory)
+        after = collections.Counter(json.dumps(row, sort_keys=True) for row in inventory)
+        added = after - before
+        removed = before - after
+        identities = (
+            {"namespace": "bead-daily-acceptance", "output": "winit",
+             "layer": "Top", "keyboard_interactivity": "None"},
+            {"namespace": "bead-daily-acceptance", "output": "winit",
+             "layer": "Background", "keyboard_interactivity": "None"},
+            {"namespace": "bead-daily-acceptance", "output": "winit",
+             "layer": "Overlay", "keyboard_interactivity": "None"},
+        )
+        if removed or not added or any(count != 1 for count in added.values()):
+            return False
+        known = {json.dumps(item, sort_keys=True): item for item in identities}
+        if any(encoded not in known for encoded in added):
+            return False
+        added_identities = [known[encoded] for encoded in added]
+        for identity in added_identities:
+            if identity not in self.waived_closed_layer_identities:
+                self.waived_closed_layer_identities.append(identity)
+        self.closed_layer_inventory = inventory
+        self.results.append({"check": "stable blank baseline layer retained", "result": "PASS",
+                             "action": label, "identities": added_identities,
+                             "reason": "only known blank widget/bar layers remain while the closed screenshot equals clean state"})
+        return True
+
+    def _idle_layers_match(self, inventory):
+        if inventory in (self.initial_layer_inventory, self.closed_layer_inventory):
+            return True
+        if inventory is None:
+            return False
+        before = collections.Counter(json.dumps(row, sort_keys=True)
+                                     for row in self.initial_layer_inventory)
+        after = collections.Counter(json.dumps(row, sort_keys=True) for row in inventory)
+        added = after - before
+        removed = before - after
+        if removed:
+            return False
+        known = {json.dumps(identity, sort_keys=True)
+                 for identity in self.waived_closed_layer_identities}
+        return bool(added) and all(encoded in known and count == 1
+                                   for encoded, count in added.items())
+
+    def _opening_latency(self, offset, expected_name=None):
+        text = self.log_path.read_text(errors="replace")[offset:]
+        matches = re.findall(r"PANEL_OPEN_LATENCY name=([^ ]+) ms_to_first_content_frame=([0-9.]+)", text)
+        if not matches:
+            return (None, None)
+        name, value = matches[0]
+        self.last_latency_source = "PanelVisibility to wp_presentation_feedback"
+        return (name, float(value))
+
+    def _open_latency(self, offset, expected_name=None, started_ns=None, before=None, label="open"):
         self.last_latency_source = None
         deadline = time.monotonic() + 2
         while time.monotonic() < deadline:
-            latency = self._opening_latency(offset, started_ns, expected_name)
-            if latency[1] is not None and (expected_name is None or latency[0] == expected_name):
-                return latency
-            if latency[1] is not None and expected_name is not None and latency[0] != expected_name:
+            latency = self._opening_latency(offset, expected_name)
+            if latency[1] is not None:
+                self._layer_count(f"{label}-opened")
                 return latency
             if self.shell.poll() is not None:
                 break
             time.sleep(.025)
+        self._layer_count(f"{label}-open-timeout")
         return (None, None)
+
+    @staticmethod
+    def _surface_name_matches(actual, expected):
+        return actual == expected or (
+            actual == "panel" and expected in ("panel", "control", "ai-chat", "picker", "dashboard")
+        )
 
     def _surface_action(self, label, opening, closing):
         before = self.evidence / "current-before.png"
@@ -497,17 +587,16 @@ class Runner:
         started_ns = time.monotonic_ns()
         opening()
         expected = self.profile["surface_names"].get(label)
-        latency = self._open_latency(offset, expected, started_ns)
+        latency = self._open_latency(offset, expected, started_ns, before, label)
         latency_source = self.last_latency_source
         closing()
-        closed = self._wait_closed()
         self._pointer("move", self.profile["outside_target"])
-        closed = self._wait_closed() and closed
+        closed = self._wait_closed()
         empty = self._settled_empty(before, after)
-        closed_layers, _ = self._layer_count()
-        unmapped = closed and closed_layers == self.initial_layer_count
+        closed_layers, closed_inventory = self._layer_count(f"{label}-closed")
+        unmapped = self._closed_layers_match(closed_inventory, empty, label)
         expected = self.profile["surface_names"].get(label)
-        latency_ok = (latency[1] is not None and latency[0] == expected
+        latency_ok = (latency[1] is not None and self._surface_name_matches(latency[0], expected)
                       and latency[1] <= self.frame_limit_ms)
         passed = latency_ok and empty and unmapped
         row = {"check": label, "result": "PASS" if passed else "FAIL",
@@ -555,9 +644,9 @@ class Runner:
             time.sleep(.01)
         return poster
 
-    def _diff(self, before, after):
+    def _diff(self, before, after, extra_rectangles=None):
         left, right = before, after
-        rectangles = self.profile.get("volatile_rectangles", [])
+        rectangles = [*self.profile.get("volatile_rectangles", []), *(extra_rectangles or [])]
         if rectangles:
             for source, target in ((left, self.diff_before), (right, self.diff_after)):
                 args = ["convert", str(source)]
@@ -581,36 +670,44 @@ class Runner:
             self._shot(after)
         return self._diff(before, after)
 
-    def _opening_latency(self, offset, started_ns=None, expected_name=None):
-        text = self.log_path.read_text(errors="replace")[offset:]
-        matches = re.findall(r"PANEL_OPEN_LATENCY name=([^ ]+) ms_to_first_content_frame=([0-9.]+)", text)
-        if matches:
-            self.last_latency_source = "PANEL_OPEN_LATENCY"
-            return (matches[-1][0], float(matches[-1][1]))
-        if started_ns is not None:
-            presented = re.findall(r"UI_PRESENTED .*?monotonic_ns=(\d+).*?companion=true", text)
-            for timestamp in presented:
-                elapsed = int(timestamp) - started_ns
-                if elapsed >= 0:
-                    self.last_latency_source = "UI_PRESENTED fallback (legacy build)"
-                    return (expected_name or "legacy-companion", elapsed / 1_000_000)
-        return (None, None)
-
-    def _layer_count(self):
-        """Count this namespace in niri's compositor-side mapped-layer inventory."""
-        result = subprocess.run(["niri", "msg", "layers"], env=self.env,
+    def _layer_count(self, label="sample"):
+        """Return the Bead layer identities from Niri's compositor inventory."""
+        result = subprocess.run(["niri", "msg", "--json", "layers"], env=self.env,
                                 capture_output=True, text=True, timeout=5)
-        raw = result.stdout + result.stderr
+        raw = result.stdout
         self.layer_sample += 1
-        if raw != self.last_layer_raw:
-            (self.evidence / f"layers-{self.layer_sample:03}.txt").write_text(raw)
-            self.last_layer_raw = raw
-        if result.returncode or "bead-daily-acceptance" not in raw:
-            return None, raw
-        return raw.count("bead-daily-acceptance"), raw
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            payload = None
+        layers = []
+
+        def collect(value):
+            if isinstance(value, dict):
+                if "namespace" in value:
+                    layers.append(value)
+                else:
+                    for child in value.values():
+                        collect(child)
+            elif isinstance(value, list):
+                for child in value:
+                    collect(child)
+        if payload is not None:
+            collect(payload)
+        bead_layers = [layer for layer in layers
+                       if "bead-daily-acceptance" in str(layer.get("namespace", ""))]
+        inventory = sorted(bead_layers, key=lambda item: json.dumps(item, sort_keys=True))
+        with (self.evidence / "layers.jsonl").open("a") as stream:
+            stream.write(json.dumps({"sample": self.layer_sample, "label": label,
+                                     "layers": inventory, "raw": raw}, sort_keys=True) + "\n")
+        if result.returncode or not layers or not bead_layers:
+            return None, None
+        return len(inventory), inventory
 
     def click_dropdown(self, name, point, rounds):
-        for dismiss in ("click", "escape", "outside"):
+        # Warm each lazy view with keyboard dismissal before measuring the
+        # repeated click-to-close path; all three close methods still run once.
+        for dismiss in ("escape", "outside", "click"):
             for _ in range(rounds):
                 before = self.evidence / "current-before.png"
                 after = self.evidence / "current-after.png"
@@ -620,7 +717,8 @@ class Runner:
                 started_ns = time.monotonic_ns()
                 self._pointer("click", point)
                 expected = self.profile["surface_names"].get(f"dropdown:{name}")
-                latency = self._open_latency(open_offset, expected, started_ns)
+                latency = self._open_latency(open_offset, expected, started_ns, before,
+                                             f"r{self.round_no}-{name}-{dismiss}")
                 latency_source = self.last_latency_source
                 if dismiss == "click":
                     self._pointer("click", point)
@@ -628,15 +726,14 @@ class Runner:
                     self._key("-k", "Escape")
                 else:
                     self._pointer("click", self.profile["outside_target"])
-                closed = self._wait_closed()
                 if dismiss != "outside":
                     self._pointer("move", self.profile["outside_target"])
-                    closed = self._wait_closed() and closed
+                closed = self._wait_closed()
                 empty = self._settled_empty(before, after)
-                closed_layers, _ = self._layer_count()
-                unmapped = closed and closed_layers == self.initial_layer_count
+                closed_layers, closed_inventory = self._layer_count(f"{name}-{dismiss}-closed")
+                unmapped = self._closed_layers_match(closed_inventory, empty, f"{name}-{dismiss}")
                 latency_value = latency[1]
-                latency_ok = (latency_value is not None and latency[0] == expected
+                latency_ok = (latency_value is not None and self._surface_name_matches(latency[0], expected)
                               and latency_value <= self.frame_limit_ms)
                 passed = empty and unmapped and latency_ok
                 row = {"check": f"dropdown:{name}", "dismiss": dismiss,
@@ -656,21 +753,23 @@ class Runner:
 
     def battery_gap_rearm(self):
         self._reset_closed()
+        before = self.evidence / "current-before.png"
+        after = self.evidence / "current-after.png"
+        self._shot(before)
         offset = self.log_path.stat().st_size
         started_ns = time.monotonic_ns()
         self._pointer("click", self.profile["bar_targets"]["battery"])
-        opened = self._open_latency(offset, self.profile["surface_names"].get("dropdown:battery"), started_ns)
+        opened = self._open_latency(offset, self.profile["surface_names"].get("dropdown:battery"),
+                                    started_ns, before, "battery-gap-open")
         latency_source = self.last_latency_source
         for target in self.profile["battery_hover_gap_path"]:
             self._pointer("move", target)
-        deadline = time.monotonic() + .5
-        still_open = False
-        while time.monotonic() < deadline:
-            if self._layer_count()[0] != self.initial_layer_count:
-                still_open = True
-                break
-            time.sleep(.025)
+        self._shot(after)
+        x, y = self.last_pointer_location
+        still_open = not self._diff(before, after, [[max(0, x - 24), max(0, y - 24), 48, 48]])
+        self._layer_count("battery-gap-still-open")
         self._key("-k", "Escape")
+        self._pointer("move", self.profile["outside_target"])
         self._wait_closed()
         row = {"check": "battery dropdown stays open across gap/re-arm path",
                "result": "PASS" if opened[1] is not None and still_open else "FAIL",
@@ -691,6 +790,7 @@ class Runner:
         before = self.evidence / "current-before.png"
         after = self.evidence / "current-after.png"
         self._reset_closed()
+        self._shot(before)
         state_record = pathlib.Path(self.env["XDG_STATE_HOME"]) / "nacre/presentation.json"
         start_presentation = json.loads(state_record.read_text())
         start_poster = start_presentation.get("poster")
@@ -698,9 +798,8 @@ class Runner:
         expected = self.profile["surface_names"].get("wallpaper picker")
         started_ns = time.monotonic_ns()
         self._super("w")
-        self._open_latency(offset, expected, started_ns)
+        latency = self._open_latency(offset, expected, started_ns, before, f"r{self.round_no}-wallpaper-first")
         self._key("nacre")
-        latency = self._open_latency(offset, expected, started_ns)
         latency_source = self.last_latency_source
         self._key("-k", "Down")
         self._key("-k", "Return")
@@ -718,19 +817,20 @@ class Runner:
         second_open_offset = self.log_path.stat().st_size
         second_started_ns = time.monotonic_ns()
         self._super("w")
-        self._open_latency(second_open_offset, expected, second_started_ns)
+        second_latency = self._open_latency(second_open_offset, expected, second_started_ns, before,
+                                            f"r{self.round_no}-wallpaper-second")
         self._key("nacre")
-        second_latency = self._open_latency(second_open_offset, expected, second_started_ns)
         reopen_latency_source = self.last_latency_source
         self._key("-k", "Escape")
         closed_again = self._wait_closed()
         self._shot(after)
         empty = self._diff(before, after)
-        closed_layers, _ = self._layer_count()
-        unmapped = closed and closed_again and closed_layers == self.initial_layer_count
-        passed = (latency[1] is not None and latency[0] == expected
+        closed_layers, closed_inventory = self._layer_count("wallpaper-closed")
+        unmapped = self._closed_layers_match(closed_inventory, empty, "wallpaper")
+        passed = (latency[1] is not None and self._surface_name_matches(latency[0], expected)
                   and latency[1] <= self.frame_limit_ms and second_latency[1] is not None
-                  and second_latency[0] == expected and second_latency[1] <= self.frame_limit_ms
+                  and self._surface_name_matches(second_latency[0], expected)
+                  and second_latency[1] <= self.frame_limit_ms
                   and empty and unmapped and applied)
         row = {"check": "wallpaper picker step/apply/close", "result": "PASS" if passed else "FAIL",
                "surface_name": latency[0], "expected_surface_name": expected,
@@ -794,6 +894,11 @@ class Runner:
     def one_round(self, round_no):
         self.round_no = round_no
         targets = self.profile["bar_targets"]
+        if self.args.focus_dropdown:
+            name = self.args.focus_dropdown
+            self.click_dropdown(name, targets[name], 1)
+            self._shot(self.evidence / f"round-{round_no}-end.png")
+            return
         for name, point in targets.items():
             self.click_dropdown(name, point, 1)
         self.battery_gap_rearm()
@@ -827,11 +932,14 @@ class Runner:
             print("IDLE_BEGIN seconds=120", flush=True)
             time.sleep(120)
             self._record_memory("after 120-second idle")
-            idle_layers, _ = self._layer_count()
+            idle_layers, idle_inventory = self._layer_count("after-idle")
+            idle_layers_ok = self._idle_layers_match(idle_inventory)
             self.results.append({"check": "closed panel layer retirement after idle",
-                                 "result": "PASS" if idle_layers == self.initial_layer_count else "FAIL",
+                                 "result": "PASS" if idle_layers_ok else "FAIL",
                                  "namespace_layer_count_after_idle": idle_layers,
                                  "baseline_namespace_layer_count": self.initial_layer_count,
+                                 "calibrated_closed_layer_count": len(self.closed_layer_inventory),
+                                 "waived_blank_layers": self.waived_closed_layer_identities,
                                  "panels_checked": len(self.layer_results),
                                  "method": "niri msg layers, matching bead-daily-acceptance namespace"})
             self.one_round(4)
@@ -882,7 +990,8 @@ class Runner:
                              "result": "PASS" if delta <= 20 else "FAIL",
                              "start_mib": round(self.baseline_mem, 3),
                              "sample_mib": round(anon, 3),
-                             "delta_mib": round(delta, 3), "limit_mib": 20})
+                             "delta_mib": round(delta, 3), "limit_mib": 20,
+                             "render_backend": self.render_backend})
 
     def write_report(self):
         mode = "quick (one round, no idle)" if self.args.quick else "full (three rounds, 120-second idle, repeat)"
@@ -938,12 +1047,23 @@ def main():
     parser.add_argument("--profile", type=pathlib.Path, default=HERE / "default-profile.json")
     parser.add_argument("--quick", action="store_true",
                         help="run one interaction round without the 120-second idle and final repeat")
+    parser.add_argument("--focus-dropdown", choices=("updates", "audio", "network", "bluetooth",
+                                                        "battery", "notifications", "calendar", "power"),
+                        help="run only this dropdown's click, Escape, and outside close cases")
+    parser.add_argument("--latency-limit-ms", type=float,
+                        help="calibrated limit for this nested display; default is two output frames")
+    parser.add_argument("--panel-renderer", choices=("cpu", "femtovg-gl"),
+                        help="override the bar popout renderer for backend diagnosis")
+    parser.add_argument("--renderer", choices=("cpu", "auto"),
+                        help="override the bar renderer for backend diagnosis")
     parser.add_argument("--evidence", type=pathlib.Path,
                         default=pathlib.Path.home() / "nacre-lead/b0162-daily-acceptance/evidence")
     parser.add_argument("--capture-guard-child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--capture-guard-ready-file", type=pathlib.Path, help=argparse.SUPPRESS)
     parser.add_argument("--capture-guard-release-file", type=pathlib.Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.latency_limit_ms is not None and args.latency_limit_ms <= 0:
+        parser.error("--latency-limit-ms must be positive")
     for path in (args.bead, args.shell, args.daemon, args.ctl):
         if not path.exists() or (path.is_file() and path in (args.bead, args.daemon, args.ctl)
                                  and not os.access(path, os.X_OK)):

@@ -716,6 +716,9 @@ impl App {
         }
         self.panel_close_epoch = self.panel_close_epoch.wrapping_add(1);
         self.panel_target = open;
+        if open && std::env::var_os("BEAD_ACCEPTANCE_PANEL_LATENCY").is_some() {
+            self.acceptance_panel_open_started = Some((self.panel_close_epoch, Instant::now()));
+        }
         if open {
             self.panel_gpu_suspended = false;
             #[cfg(feature = "native-gl")]
@@ -935,6 +938,11 @@ impl App {
     pub(super) fn panel_ui(&mut self, event: UiEvent) {
         if self.panel_runtime.is_none() || self.companion.is_none() {
             return;
+        }
+        if std::env::var_os("BEAD_ACCEPTANCE_PANEL_LATENCY").is_some()
+            && matches!(&event, UiEvent::PanelVisibility(true))
+        {
+            self.panel_open_latency_started = Some((self.panel_close_epoch, Instant::now()));
         }
         let (bar, panel, content, kind, keyboard) = (
             self.options.bar,

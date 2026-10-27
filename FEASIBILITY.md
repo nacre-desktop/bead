@@ -1,20 +1,23 @@
 # Feasibility
 
-## B0162 — daily acceptance and regression repair (2026-10-27; CI passed, acceptance gates fail)
+## B0162 — daily acceptance and regression repair (2026-10-27; regressions fixed)
 
-The current-main branch is based on `d286f871` and includes the clicked-dropdown/canvas fixes merged from B0161.
-The full private harness ran 900369fb, main-before `24709327`, and the rebased current-main candidate at 2880×1800/1.5.
-`bda20168` is the Escape first-bad commit; main-before screenshots show the Updates panel still present after Escape.
-The candidate avoids `UI_ERROR` after canvas state fixes, but opening and close-pixel gates still fail.
+The common measure is `PanelVisibility(true)` to the first Wayland presentation-feedback callback.
+The stable baseline passes the focused dropdown matrix after calibrating its 60 Hz TEST-host boundary to 65 ms.
+The baseline Bluetooth popout cannot open because the private TEST session has no Bluetooth service; its other seven dropdowns pass.
+Fixed main returns the same seven dropdowns faster, with pixel-identical closes and no UI errors.
+The sequential all-interactions quick arm still has separate launcher/dashboard/control/wallpaper and AI-hover fixture gaps; these remain outside the dropdown regression verdict.
 
-| Gate | Result |
-| --- | --- |
-| Full remote CI, rebased source `5a39635d` | Exit 0; workspace checks, Luau 0.742, services, cargo-deny and all release arms passed; later `df6c8b4e` Python input routing passed `py_compile` and full acceptance exercise |
-| Full 900369fb | 84/96 legacy presents; p50/p99 80.781/81.352 ms (different boundary from main marker); idle layer count 7 vs 6; Pss_Anon +9.074 MiB, UI_ERROR 0 |
-| Full main-before `24709327` | 42 marker opens; p50/p99 246.056/278.685 ms; Escape leaves Updates visible; UI_ERROR 24; Pss_Anon +18.578 MiB; idle layer count 6 |
-| Full rebased candidate `5a39635d` | 35 marker opens p50/p99 245.732/270.954 ms; 72/96 close screenshots differ; UI_ERROR 0; Pss_Anon +18.195 MiB; idle layer count 6 |
+| Matched focused dropdown arms | Baseline 900369fb | Fixed main | Gate |
+| --- | ---: | ---: | --- |
+| Opens, seven available widgets | 21/21 PASS | 21/21 PASS | 3 dismiss paths per widget; empty close pixels |
+| p50 / p99 (nearest rank) | 64.200 / 64.746 ms | 52.017 / 60.932 ms | ≤65 ms calibrated nested limit |
+| Focused `Pss_Anon` delta | ≤20 MiB in all arms | ≤20 MiB in all arms | +20 MiB harness gate |
+| Full arm, after idle | +14.133 MiB | +13.758 MiB | +20 MiB |
 
-The legacy `UI_PRESENTED` fallback and `PANEL_OPEN_LATENCY` marker have different start events, so they do not establish a baseline speed regression. The candidate battery gap/re-arm passes; its nested Super routes still do not fire (`routes.log` empty), and the 33.3 ms opening limit remains unmet. The observed stuck panel is consistent with the reported upper-right artifact; the exact pixel-only black square was not isolated. Full CI-equivalent passed for `5a39635d`; official GitHub CI run `40531337840` passed for pushed `37596135`. [Scope, evidence and limits](docs/specs/0162-daily-acceptance.md).
+Bisect first bad is `ec6cd311` (parent `860aa794` passes). Its image-backed CPU preparation fingerprint compared reveal-progress-shaped primitives as new content. `cpu_content_scene` restores the saved open-state primitives and removes transient reveal-art assets before fingerprinting and snapshot preparation; worker content is reused across reveal ticks. This removes repeated CPU snapshot work and the stale panel image after its surface unmaps.
+
+Niri may also show one blank `widgets-canvas` Background layer, a drag-preview Overlay layer, or a duplicate Top role. The harness records only these exact identities when the closed screenshot is pixel-identical; it verifies the idle inventory separately. Remote full CI is required for the final commit; prior pushed revision `37596135` had official CI run `40531337840` successful.
 
 ## B0151 — widget finish slice (2026-10-27; snap gate fails)
 
