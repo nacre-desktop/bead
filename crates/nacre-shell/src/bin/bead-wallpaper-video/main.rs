@@ -3,10 +3,10 @@
 //! separate process on purpose (the shell UI never links or decodes video); a crash here
 //! only removes this process's surfaces, so the static wallpaper underneath stays visible.
 //!
-//! One libmpv decoder serves every output, on per-output background layer surfaces (no
-//! input). This keeps motion wallpaper in niri's shared overview backdrop; the shell's static
-//! wallpaper is mapped first on the same layer and remains visible beneath poster/fade frames.
-//! With a GPU the decoder's dmabuf frames are drawn by mpv's OpenGL render API into
+//! One libmpv decoder serves every output, on per-output layer surfaces (no input). Niri uses
+//! its Background layer so `place-within-backdrop` includes motion in the shared overview;
+//! other compositors retain Bottom so video stays above their static wallpaper layer. With a
+//! GPU the decoder's dmabuf frames are drawn by mpv's OpenGL render API into
 //! an EGL window surface (no CPU pixel work); without one, mpv's software render API fills
 //! shared-memory buffers from a copy-back decoder. Either falls back to software decoding on
 //! its own. Protocol: `bead_wallpaper::protocol` JSON lines on stdin/stdout.
@@ -59,6 +59,16 @@ use wayland_protocols::wp::viewporter::client::{
 };
 
 const NAMESPACE: &str = "bead-wallpaper-video";
+
+fn wallpaper_layer(compositor: Option<&str>, niri_socket: bool) -> Layer {
+    match compositor {
+        Some("niri") => Layer::Background,
+        Some("hyprland") => Layer::Bottom,
+        _ if niri_socket => Layer::Background,
+        _ => Layer::Bottom,
+    }
+}
+
 /// A frame callback that does not arrive within this long means the output is not being
 /// presented (switched off, or fully occluded): stop decoding until it comes back.
 const STARVED_AFTER: Duration = Duration::from_millis(1500);
@@ -770,7 +780,10 @@ impl Engine {
         let layer = self.layers.create_layer_surface(
             &self.qh,
             surface,
-            Layer::Background,
+            wallpaper_layer(
+                std::env::var("NACRE_COMPOSITOR").ok().as_deref(),
+                std::env::var_os("NIRI_SOCKET").is_some(),
+            ),
             Some(NAMESPACE),
             Some(output),
         );
@@ -1173,5 +1186,13 @@ mod tests {
         assert!(parse(&["--hwdec=cuda"]).is_err());
         assert!(parse(&["--vaapi-device=renderD129"]).is_err());
         assert!(parse(&["--render=gl"]).is_err());
+    }
+
+    #[test]
+    fn only_niri_uses_the_shared_backdrop_layer() {
+        assert_eq!(wallpaper_layer(Some("niri"), false), Layer::Background);
+        assert_eq!(wallpaper_layer(None, true), Layer::Background);
+        assert_eq!(wallpaper_layer(Some("hyprland"), true), Layer::Bottom);
+        assert_eq!(wallpaper_layer(None, false), Layer::Bottom);
     }
 }

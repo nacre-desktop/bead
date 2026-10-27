@@ -8,19 +8,20 @@ Use Background for the video surface too; preserve the still surface underneath 
 | Surface | Layer before | Layer after | Overview behavior |
 | --- | --- | --- | --- |
 | `bead-wallpaper` still image | Background | Background | Shared backdrop |
-| `bead-wallpaper-video` motion image | Bottom | Background | Shared backdrop |
+| `bead-wallpaper-video` motion image | Bottom | Background on Niri; Bottom elsewhere | Shared backdrop on Niri; existing placement elsewhere |
 | Picker preview | Panel content | Panel content | No separate wallpaper surface |
 | Dimmed backdrop | Existing background effect | Existing background effect | No separate wallpaper surface |
 
 ## Change and constraints
 
-The motion renderer now creates its per-output surface on Background. Niri's layer
+The motion renderer selects Background when the compositor is Niri, using
+`NACRE_COMPOSITOR` or the existing `NIRI_SOCKET` environment marker. Niri's layer
 rule already matches both wallpaper namespaces and enables `place-within-backdrop`.
-The renderer remains a separate process and does not change decoder lifecycle,
-switch protocol, fade/poster behavior, or idle-release policy. Its surface is mapped
-after the shell's still wallpaper, keeping the video above the still frame on the
-same layer while the latter remains available underneath. No temporary duplicate
-or new dependency is introduced.
+Other compositors retain Bottom, where moving video to Background puts it beneath
+their static wallpaper surface (reproduced by the full CI smoke). The renderer
+remains a separate process and does not change decoder lifecycle, switch protocol,
+fade/poster behavior, or idle-release policy. No temporary duplicate or new
+dependency is introduced.
 
 ## Verification
 
@@ -31,5 +32,13 @@ Also verify switching, the poster/fade transition, and return to idle do not exp
 a blank frame or retain the decoder. Check any additional wallpaper-like surface
 for its own layer surface before treating it as backdrop-related.
 
-Evidence and exact commands are recorded below after desktop verification. CI uses
-the pinned full Bead workflow recipe in `.lead/rules.txt`; no laptop builds or tests.
+## Results
+
+- Full Bead CI (`.github/workflows/ci.yml`, Ubuntu 24.04 recipe from B0156) passed
+  on `cf8ea1cf`, including the renderer smoke and `cargo deny`.
+- The desktop test host reports `libmpv is not installed` for the candidate renderer.
+  The private Niri preview committed the still wallpaper surface, then exited with
+  a Wayland broken pipe before producing an overview frame. Static/video overview
+  captures and the paired QML comparison remain unverified; no screenshot evidence
+  is claimed.
+- No laptop builds or tests were run.
