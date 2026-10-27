@@ -430,7 +430,7 @@ local function detail()
     local widget_left=mini_left+(mini_w-widget_w)/2
     local widget_top=mini_top+stage_bar_height+math.max(0,(mini_h-stage_bar_height-widget_h)/2)
     local wallpaper_image=wallpaper~="" and ui.Image{id="stage-wallpaper",position="absolute",left=mini_left,top=mini_top,width=mini_w,height=mini_h,icon=wallpaper,image_fit="cover"} or nil
-    local desktop_preview=desktop_available and preview.render(selected,"desktop",desktop_style,settings,widget_w,widget_h,true)
+    local desktop_preview=desktop_available and preview.render(selected,"desktop",desktop_style,settings,widget_w,widget_h)
     local stage_source=dragging.app_payload(doc,selected,placement,style_id,settings,group)
     local settings_package=table.clone(package)
     settings_package.settings={}
