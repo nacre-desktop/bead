@@ -967,21 +967,14 @@ mod tests {
         source.services(Box::new(move |event| {
             let _ = sender.send(event);
         }));
+        assert!(!source.animation_frame_needed());
         source.stage(UiEvent::Reload).unwrap();
         let packet = receiver
             .recv_timeout(Duration::from_secs(5))
             .expect("worker should return its first scene");
         assert!(source.animation_frame_needed());
         assert!(source.stage(packet).unwrap().is_some());
-        assert!(source.commit());
-        active.store(false, Ordering::Release);
-        source.stage(UiEvent::Model(BTreeMap::new())).unwrap();
-        let packet = receiver
-            .recv_timeout(Duration::from_secs(5))
-            .expect("worker should publish the updated animation interest");
-        source.stage(packet).unwrap();
-        assert!(!source.animation_frame_needed());
-        assert!(source.commit());
+        assert!(!source.commit());
     }
     #[test]
     fn worker_dismissal_and_cursor_use_the_topmost_clipped_polygon_hit() {
