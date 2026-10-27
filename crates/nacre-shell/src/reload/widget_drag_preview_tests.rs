@@ -1885,7 +1885,7 @@ fn bar_hover_prewarms_once_retires_on_leave_and_reuses_the_warm_destination() {
 }
 
 #[test]
-fn completed_drag_retirement_stops_hover_renewal_until_a_fresh_press() {
+fn completed_drag_retirement_rearms_hover_after_pointer_leaves_drop_bounds() {
     let dir = std::env::temp_dir().join(format!("widget-drag-hover-retire-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -1937,7 +1937,8 @@ fn completed_drag_retirement_stops_hover_renewal_until_a_fresh_press() {
         "widgets.drag.active".into(),
         Value::Bool(false),
     )]));
-    runtime.widget_drag_suppress_hover_until_press = true;
+    runtime.widget_drag_suppress_hover_until_leave = true;
+    runtime.widget_drag_suppress_hover_bounds = Some((bounds.x, bounds.y, bounds.w, bounds.h));
     runtime.widget_drag_retire_cleanup = true;
     runtime.commit();
 
@@ -1979,10 +1980,30 @@ fn completed_drag_retirement_stops_hover_renewal_until_a_fresh_press() {
         1,
         "a hover over the dropped widget does not rewarm its ghost"
     );
+    assert!(runtime.widget_drag_suppress_hover_until_leave);
+    if runtime
+        .stage(UiEvent::Hover { x: -1., y: -1. })
+        .unwrap()
+        .is_some()
+    {
+        runtime.commit();
+    }
+    assert!(
+        !runtime.widget_drag_suppress_hover_until_leave,
+        "leaving the dropped bounds rearms passive prewarming"
+    );
+    if runtime.stage(UiEvent::Hover { x, y }).unwrap().is_some() {
+        runtime.commit();
+    }
+    assert_eq!(
+        prepares(),
+        2,
+        "a new hover prewarms the next drag after leaving the prior drop"
+    );
     if runtime.stage(UiEvent::Click { x, y }).unwrap().is_some() {
         runtime.commit();
     }
-    assert_eq!(prepares(), 2, "a fresh press may prewarm the next drag");
+    assert_eq!(prepares(), 2, "a press reuses its hover-prepared destination");
     assert!(runtime.widget_hover_preview.is_some());
 
     let _ = std::fs::remove_dir_all(dir);
@@ -2025,7 +2046,7 @@ fn bar_drag_threshold_offers_ghost_before_root_reflow_commit() {
     runtime.wakeup = Some(std::sync::Arc::new(move |event| {
         sent.lock().unwrap().push(event);
     }));
-    runtime.prewarm_widget_drag_hover(x, y);
+    runtime.prewarm_widget_drag_hover(x, y, true);
     assert!(runtime.widget_drag_controller_primed);
     if runtime.stage(UiEvent::Click { x, y }).unwrap().is_some() {
         runtime.commit();
