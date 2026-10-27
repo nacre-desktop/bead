@@ -1009,6 +1009,18 @@ impl App {
                                 && !self.options.bar
                             {
                                 surface.layer.set_anchor(anchor);
+                                // A one-edge anchor needs an explicit, non-zero size in
+                                // the same commit, or the compositor kills the client.
+                                let width = self.scene.bounds.w.ceil().max(1.) as u32;
+                                let height = (self.scene.bounds.y
+                                    + self.scene.bounds.h
+                                    + self
+                                        .scene
+                                        .slide
+                                        .map_or(self.scene.offset.1, |s| s.open_y))
+                                .ceil()
+                                .max(1.) as u32;
+                                surface.layer.set_size(width, height);
                             }
                             true
                         };
