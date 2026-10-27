@@ -27,7 +27,7 @@ local function desktop(props,_settings,_data)
     local gauge=visual.ring("battery-gauge",math.min(h,280),percent,"",nil)
     if style=="frameless" then
         return ui.Column{id="battery-line",width=w,height=h,fill="transparent",justify="center",gap=kit.tokens.spacing.sm,
-            ui.Row{id="battery-reading",width="fill",height=104,align="baseline",gap=kit.tokens.spacing.sm,
+            ui.Row{id="battery-reading",width="fill",height=104,align="center",gap=kit.tokens.spacing.sm,
                 visual.display("value",tostring(percent),108,104,96,"onSurface",true),
                 visual.shadow_text("suffix","% battery","fill",34,kit.tokens.text.body*4/3,"onSurface")},
             ui.Box{id="battery-track",width=300,height=4,fill=ui.alpha("onSurface",.25),radius=2,
