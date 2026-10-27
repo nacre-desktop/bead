@@ -143,15 +143,25 @@ local function desktop(props,_settings,_data)
                 font_size=kit.tokens.text.body*4/3,color="onSurfaceVariant",text_align="center"}}
     elseif style=="minimal" then
         local hour,minute=string.match(visible_time,"^(%d%d?):(%d%d)")
+        local compact=h<120
+        local digit_height=compact and h*.28 or h*.38
+        local digit_size=compact and h*.28 or math.min(110,h*.42)
+        local date_height=compact and 14 or 24
+        local date_size=compact and kit.tokens.text.caption*4/3 or kit.tokens.text.body*4/3
         return ui.Column{id="clock-minimal",width=w,height=h,justify="center",gap=kit.tokens.spacing.xs,on_activate=action,
-            visual.display("hour",hour or visible_time,"fill",h*.38,math.min(110,h*.42),"onSurface",true),
-            visual.display("minute",minute or "","fill",h*.38,math.min(110,h*.42),"primary",true),
-            visual.shadow_text("date",weekday,"fill",24,kit.tokens.text.body*4/3,"secondary")}
+            visual.display("hour",hour or visible_time,"fill",digit_height,digit_size,"onSurface",true),
+            visual.display("minute",minute or "","fill",digit_height,digit_size,"primary",true),
+            visual.shadow_text("date",weekday,"fill",date_height,date_size,"secondary")}
     end
+    local compact=h<120
+    local time_size=compact and h*.46 or math.min(148,h*.72)
+    local time_height=h*.62
+    local date_height=compact and 14 or 28
+    local date_size=compact and kit.tokens.text.caption*4/3 or kit.tokens.text.body*4/3
     return ui.Column{id="clock-desktop",width=w,height=h,fill="transparent",justify="center",gap=kit.tokens.spacing.xs,on_activate=action,
-        visual.display("time",visible_time,"fill",h*.62,math.min(148,h*.72),"onSurface",true),
-        visual.shadow_text("date",date_line,"fill",28,kit.tokens.text.body*4/3,"onSurface"),
-        ui.Box{id="accent-rule",width=48,height=3,fill="primary",radius=1.5}}
+        visual.display("time",visible_time,"fill",time_height,time_size,"onSurface",true),
+        visual.shadow_text("date",date_line,"fill",date_height,date_size,"onSurface"),
+        ui.Box{id="accent-rule",width=48,height=compact and 2 or 3,fill="primary",radius=1.5}}
 end
 local function bar_style(title,style,preferred,requires)
     local descriptor={title=title,min_span=1,max_span=60,preferred_span=preferred,requires=requires,render=function(props,settings,data)
