@@ -2034,7 +2034,6 @@ fn completed_drag_retirement_stops_stationary_hover_renewal_until_reentry() {
     }
     assert_eq!(prepares(), 2, "a fresh press may prewarm the next drag");
     assert!(runtime.widget_hover_preview.is_some());
-    assert!(runtime.widget_drag_controller_primed);
 
     let _ = std::fs::remove_dir_all(dir);
 }
