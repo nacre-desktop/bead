@@ -4,6 +4,27 @@ use bead::core::{Value, source::Snapshot};
 use std::collections::BTreeMap;
 
 pub const TOPIC: &str = "settings.store.widgets";
+
+/// Read the active presentation poster for the Widgets app's wallpaper preview fallback.
+pub(crate) fn presentation_wallpaper_path() -> Option<String> {
+    let state = std::env::var_os("XDG_STATE_HOME")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(std::path::PathBuf::from)
+                .map(|home| home.join(".local/state"))
+        })?;
+    presentation_wallpaper_path_from(&state)
+}
+
+fn presentation_wallpaper_path_from(state: &std::path::Path) -> Option<String> {
+    let path = state.join("nacre/presentation.json");
+    let record: serde_json::Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+    let poster = record.get("poster")?.as_str()?;
+    let poster_path = std::path::Path::new(poster);
+    (poster_path.is_absolute() && poster_path.is_file()).then(|| poster.to_owned())
+}
+
 #[path = "widget_drag.rs"]
 pub mod widget_drag;
 
@@ -665,6 +686,30 @@ mod file_tests {
             serde_json::from_slice::<serde_json::Value>(&std::fs::read(&path).unwrap()).unwrap(),
             doc
         );
+        std::fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
+    fn presentation_poster_fallback_requires_an_existing_absolute_file() {
+        let parent =
+            std::env::temp_dir().join(format!("bead-widget-poster-{}", std::process::id()));
+        let state = parent.join("state");
+        let poster = parent.join("wallpaper.jpg");
+        let _ = std::fs::remove_dir_all(&parent);
+        std::fs::create_dir_all(state.join("nacre")).unwrap();
+        std::fs::write(&poster, b"fixture poster").unwrap();
+        let record = state.join("nacre/presentation.json");
+        std::fs::write(
+            &record,
+            serde_json::to_vec(&serde_json::json!({"poster":poster.to_string_lossy()})).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            presentation_wallpaper_path_from(&state),
+            Some(poster.to_string_lossy().into_owned())
+        );
+        std::fs::write(&record, br#"{"poster":"https://example.invalid/wallpaper"}"#).unwrap();
+        assert_eq!(presentation_wallpaper_path_from(&state), None);
         std::fs::remove_dir_all(parent).unwrap();
     }
 }

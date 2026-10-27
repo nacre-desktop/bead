@@ -3153,6 +3153,12 @@ impl Runtime {
         root: &std::path::Path,
     ) -> Result<Self, Box<dyn Error>> {
         self = self.with_widget_editor(client, false)?;
+        if let Some(path) = crate::widgets::presentation_wallpaper_path() {
+            self.session.stores = self.session.stores.reconcile(&BTreeMap::from([(
+                "widgets.wallpaper.path".into(),
+                bead::core::Value::Text(path),
+            )]))?;
+        }
         self.widget_app = true;
         self.state_file = None;
         self.session.restore_on_start(BTreeMap::new());

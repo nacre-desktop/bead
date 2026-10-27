@@ -1237,6 +1237,7 @@ return {
         ["widgets.selected"]="",["widgets.group"]="",["widgets.form"]="bar",["widgets.advanced.open"]=false,["widgets.scroll"]=0,["widgets.nav.scroll"]=0,
         ["widgets.screen_width"]=1920,["widgets.screen_height"]=1080,
         ["widgets.screen_origin_x"]=0,["widgets.screen_origin_y"]=0,["widgets.screen_id"]="",["widgets.outputs"]={},
+        ["widgets.wallpaper.path"]="",
         ["launcher.apps"]={},["bluetooth.devices"]={},["bluetooth.power_checked"]=false,
         ["network.rows"]={},["network.wifi_enabled"]=false,["notifications.rows"]={},
         ["status.updates_checked"]="Never checked",["status.updates_can_open"]=false,["status.updates_can_refresh"]=false,

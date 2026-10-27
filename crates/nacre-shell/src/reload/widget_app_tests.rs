@@ -476,3 +476,43 @@ fn widget_app_stage_uses_the_settings_wallpaper_thumbnail() {
     drop(plain);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn widget_app_stage_uses_the_presentation_poster_when_no_catalogue_thumbnail_is_ready() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+    let dir = std::env::temp_dir()
+        .join(format!("widget-app-poster-fallback-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let poster = dir.join("poster.png");
+    image::DynamicImage::new_rgb8(32, 18).save(&poster).unwrap();
+    let mut stores = crate::desktop::values(&Default::default(), "");
+    stores.insert("widgets.selected".into(), Value::Text("clock".into()));
+    stores.insert(
+        "widgets.wallpaper.path".into(),
+        Value::Text(poster.to_string_lossy().into_owned()),
+    );
+    let harness = Harness::load(
+        &root,
+        Path::new("widgets/app/main.luau"),
+        &root.join("palette.json"),
+        stores,
+        Config {
+            width: 1200,
+            height: 800,
+            scale: 1.,
+        },
+    )
+    .unwrap();
+    assert!(
+        harness
+            .scene()
+            .primitives
+            .iter()
+            .any(|primitive| matches!(
+                primitive,
+                bead::render::Primitive::Image { path, .. } if path == &poster
+            ))
+    );
+    std::fs::remove_dir_all(dir).unwrap();
+}
