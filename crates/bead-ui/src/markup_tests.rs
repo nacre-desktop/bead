@@ -2356,6 +2356,51 @@ return ui.Panel{id="panel",width=400,height=240,
 }
 
 #[test]
+fn animated_clipped_fill_and_value_text_reuse_materialized_layout() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        r#"return {stores={level=0.42,label="42%"},actions={},computed={}}"#,
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+local level=ui.resolve_for_check(ui.bind("level"))
+return ui.Panel{id="panel",width=200,height=80,
+ ui.Box{id="fill-window",position="absolute",left=8,top=8,width=100*ui.animate("fill",level,0,"out-cubic"),height=5,clip_children=true,fill="transparent",
+  ui.Box{id="fill-art",position="absolute",left=0,top=0,width=100,height=5,fill="primary"}},
+ ui.Text{id="value",position="absolute",left=8,top=20,width=64,height=20,text=ui.resolve_for_check(ui.bind("label"))}}}"#,
+    )
+    .unwrap();
+    let mut s = session(&f);
+    let old_clip = s.current.clips.values().next().copied().unwrap();
+    #[cfg(feature = "test-counters")]
+    let passes = layout::layout_passes();
+    let next = s
+        .update(BTreeMap::from([
+            ("level".into(), Value::Number(0.58)),
+            ("label".into(), Value::Text("58%".into())),
+        ]))
+        .unwrap()
+        .unwrap();
+    #[cfg(feature = "test-counters")]
+    assert_eq!(
+        layout::layout_passes(),
+        passes,
+        "fill values must patch without Taffy layout"
+    );
+    let new_clip = next.clips.values().next().copied().unwrap();
+    assert!(
+        new_clip.w > old_clip.w,
+        "fill clip should grow with the scalar value"
+    );
+    assert!(next.primitives.iter().any(
+        |primitive| matches!(primitive,bead_render::Primitive::Text{text,..} if text == "58%")
+    ));
+}
+
+#[test]
 fn windowed_repeat_keeps_stable_ids_extent_and_validates_offscreen_keys() {
     let f = fixture();
     fs::write(

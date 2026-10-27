@@ -229,6 +229,11 @@ After Bead's core switch on Nacre, plan support for:
   Embedded markup support bytecode is weakly shared across frontends; Lua VMs,
   caller sources and values remain private, with the same 8 MiB frontend cap.
 
+- B0149: materialized views patch a fixed-box text string and the width of an
+  absolute clipped `Box` without rerunning Taffy layout. The shell chooses the
+  progress artwork and animation; the patcher only accepts this constrained
+  geometry update, and scenes still clone their primitive vectors.
+
 ## Housekeeping (later)
 
 - Move the GPL `nacre-shell` crate and `shell/` assets from Bead to Nacre at a

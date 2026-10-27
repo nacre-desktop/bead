@@ -666,7 +666,7 @@ impl Generation {
                 .build(entry, &resolve)?;
             drop(markup_profile);
             bead_core::profile::mark("luau_view_ready");
-            if let Some(cached) = &*self.materialized.borrow()
+            if let Some(cached) = &mut *self.materialized.borrow_mut()
                 && let Some(result) = cached.patch(&raw, &resolve, palette, viewport)?
             {
                 return Ok(result);

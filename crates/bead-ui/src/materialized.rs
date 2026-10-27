@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! Fixed-box text candidate patching. Any structural binding, focus, hover, viewport
-//! or markup change falls back to validated full layout. Text has no intrinsic
-//! Taffy measure in this frontend; its fixed box never depends on the string.
+//! Retained patches for fixed-box text and absolute clipped fills. Any structural
+//! binding, focus, hover, viewport or markup change falls back to validated layout.
+//! Patched text and clip width never affect Taffy's intrinsic measurements.
 use crate::{
     Diagnostic, Node,
     frontend::Resolve,
@@ -34,6 +34,10 @@ struct ClipRegion {
 struct Floating {
     index: usize,
     node: String,
+}
+enum RetainedChange {
+    ClipWidth { id: String, width: f32 },
+    Text { id: String, text: String },
 }
 pub(super) struct Cached {
     raw: Rc<RawNode>,
@@ -70,6 +74,87 @@ fn bindings(value: &serde_json::Value, out: &mut BTreeSet<String>) {
     }
 }
 impl Cached {
+    fn retained_changes(old: &RawNode, new: &RawNode, out: &mut Vec<RetainedChange>) -> bool {
+        if old.kind != new.kind
+            || old.source != new.source
+            || old.scope != new.scope
+            || old.children.len() != new.children.len()
+            || old.props.len() != new.props.len()
+        {
+            return false;
+        }
+        for (name, value) in &old.props {
+            let Some(next) = new.props.get(name) else {
+                return false;
+            };
+            if value == next {
+                continue;
+            }
+            match name.as_str() {
+                "width"
+                    if old.kind == Widget::Box
+                        && old.props.get("clip_children")
+                            == Some(&serde_json::Value::Bool(true))
+                        && old
+                            .props
+                            .get("position")
+                            .and_then(serde_json::Value::as_str)
+                            == Some("absolute")
+                        && out
+                            .iter()
+                            .all(|change| !matches!(change, RetainedChange::ClipWidth { .. })) =>
+                {
+                    let Some(width) = next
+                        .as_f64()
+                        .filter(|v| v.is_finite() && *v >= 0. && *v <= f64::from(f32::MAX))
+                    else {
+                        return false;
+                    };
+                    let Some(id) = old.props.get("id").and_then(serde_json::Value::as_str) else {
+                        return false;
+                    };
+                    out.push(RetainedChange::ClipWidth {
+                        id: id.to_owned(),
+                        width: width as f32,
+                    });
+                }
+                "text"
+                    if old.kind == Widget::Text
+                        && out
+                            .iter()
+                            .all(|change| !matches!(change, RetainedChange::Text { .. })) =>
+                {
+                    let (Some(id), Some(text)) = (
+                        old.props.get("id").and_then(serde_json::Value::as_str),
+                        next.as_str(),
+                    ) else {
+                        return false;
+                    };
+                    out.push(RetainedChange::Text {
+                        id: id.to_owned(),
+                        text: text.to_owned(),
+                    });
+                }
+                _ => return false,
+            }
+        }
+        old.children
+            .iter()
+            .zip(&new.children)
+            .all(|(old, new)| Self::retained_changes(old, new, out))
+    }
+
+    fn intersect(a: bead_render::Rect, b: bead_render::Rect) -> bead_render::Rect {
+        let x = a.x.max(b.x);
+        let y = a.y.max(b.y);
+        bead_render::Rect::new(
+            x,
+            y,
+            ((a.x + a.w).min(b.x + b.w) - x).max(0.),
+            ((a.y + a.h).min(b.y + b.h) - y).max(0.),
+        )
+    }
+
     pub fn new(
         raw: Rc<RawNode>,
         view: &ViewSpec,
@@ -358,7 +443,7 @@ impl Cached {
         }
     }
     pub fn patch(
-        &self,
+        &mut self,
         raw: &Rc<RawNode>,
         resolve: &Resolve<'_>,
         palette: &Palette,
@@ -367,7 +452,10 @@ impl Cached {
         if palette.0 != self.palette.0 {
             return Ok(None);
         }
-        if !Rc::ptr_eq(raw, &self.raw) || viewport != self.viewport {
+        let mut retained = Vec::new();
+        if !Rc::ptr_eq(raw, &self.raw) && !Self::retained_changes(&self.raw, raw, &mut retained)
+            || viewport != self.viewport
+        {
             if bead_core::profile::enabled() {
                 println!(
                     "INPUT_PATCH_MISS kind={}",
@@ -422,6 +510,111 @@ impl Cached {
                     nodes[node].label = paint.clone();
                 }
             }
+        }
+        for change in &retained {
+            match change {
+                RetainedChange::Text { id, text } => {
+                    let Some(layer) = scene.layers.iter().find(|layer| layer.id == *id) else {
+                        return Ok(None);
+                    };
+                    let Some(index) = layer.own.clone().find(|index| {
+                        matches!(scene.primitives.get(*index), Some(Primitive::Text { .. }))
+                    }) else {
+                        return Ok(None);
+                    };
+                    let Some(Primitive::Text { text: current, .. }) =
+                        scene.primitives.get_mut(index)
+                    else {
+                        return Ok(None);
+                    };
+                    *current = text.clone();
+                }
+                RetainedChange::ClipWidth { id, width } => {
+                    let Some(layer) = scene.layers.iter_mut().find(|layer| layer.id == *id) else {
+                        return Ok(None);
+                    };
+                    layer.bounds.w = *width;
+                    let clip = layer.bounds;
+                    if let Some(region) =
+                        self.clip_regions.iter_mut().find(|region| region.id == *id)
+                    {
+                        region.bounds = clip;
+                    } else {
+                        return Ok(None);
+                    }
+                    let mut ancestors = BTreeMap::<String, Vec<String>>::new();
+                    let clip_ids: BTreeSet<_> =
+                        self.clip_regions.iter().map(|r| r.id.as_str()).collect();
+                    for layer in &scene.layers {
+                        let mut chain = layer
+                            .parent
+                            .as_deref()
+                            .and_then(|parent| ancestors.get(parent))
+                            .cloned()
+                            .unwrap_or_default();
+                        if let Some(parent) = &layer.parent
+                            && clip_ids.contains(parent.as_str())
+                        {
+                            chain.insert(0, parent.clone());
+                        }
+                        ancestors.insert(layer.id.clone(), chain);
+                    }
+                    let clip_by_id: BTreeMap<_, _> = self
+                        .clip_regions
+                        .iter()
+                        .map(|r| (r.id.as_str(), r.bounds))
+                        .collect();
+                    scene.clips.clear();
+                    for layer in &scene.layers {
+                        let mut inherited = None;
+                        for ancestor in ancestors
+                            .get(&layer.id)
+                            .map_or(&[][..], Vec::as_slice)
+                            .iter()
+                            .rev()
+                        {
+                            if let Some(bounds) = clip_by_id.get(ancestor.as_str()) {
+                                inherited = Some(
+                                    inherited
+                                        .map_or(*bounds, |prior| Self::intersect(prior, *bounds)),
+                                );
+                            }
+                        }
+                        if let Some(bounds) = inherited {
+                            for index in layer.own.clone() {
+                                scene.clips.insert(index, bounds);
+                            }
+                        }
+                    }
+                    for node in &mut nodes {
+                        if let Some(bounds) = ancestors
+                            .get(&node.id)
+                            .map_or(&[][..], Vec::as_slice)
+                            .iter()
+                            .rev()
+                            .filter_map(|id| clip_by_id.get(id.as_str()).copied())
+                            .reduce(Self::intersect)
+                        {
+                            node.clip = Some(bounds);
+                        }
+                        if node.id == *id {
+                            match &mut node.draw {
+                                Primitive::Arc { rect, .. }
+                                | Primitive::Polyline { rect, .. }
+                                | Primitive::Rounded { rect, .. }
+                                | Primitive::Text { rect, .. }
+                                | Primitive::Image { rect, .. }
+                                | Primitive::Shadow { rect, .. } => rect.w = *width,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if !retained.is_empty() {
+            self.raw = raw.clone();
+            self.scene = scene.clone();
+            self.nodes = nodes.clone();
         }
         fn translated(mut primitive: Primitive, dy: f32) -> Primitive {
             match &mut primitive {
@@ -560,5 +753,51 @@ impl Cached {
             }
         }
         Ok(Some((scene, nodes)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tree(width: f64, text: &str) -> Rc<RawNode> {
+        Rc::new(
+            serde_json::from_value(serde_json::json!({
+                "kind":"box",
+                "props":{"id":"window","position":"absolute","clip_children":true,"width":width},
+                "children":[{"kind":"text","props":{"id":"value","width":64,"height":20,"text":text},"children":[],"source":{"file":"view.luau","line":2},"scope":null}],
+                "source":{"file":"view.luau","line":1},
+                "scope":null
+            }))
+            .unwrap(),
+        )
+    }
+
+    #[test]
+    fn retained_clip_width_and_fixed_text_changes_skip_layout_compatibility() {
+        let old = tree(42., "42%");
+        let new = tree(58., "58%");
+        let mut changes = Vec::new();
+        assert!(Cached::retained_changes(&old, &new, &mut changes));
+        assert_eq!(changes.len(), 2);
+        assert!(changes.iter().any(|change| matches!(change, RetainedChange::ClipWidth { id, width } if id == "window" && *width == 58.)));
+        assert!(changes.iter().any(|change| matches!(change, RetainedChange::Text { id, text } if id == "value" && text == "58%")));
+    }
+
+    #[test]
+    fn retained_patch_rejects_unclipped_geometry_and_structure_changes() {
+        let old = tree(42., "42%");
+        let mut unclipped = (*tree(58., "58%")).clone();
+        unclipped
+            .props
+            .insert("clip_children".into(), serde_json::Value::Bool(false));
+        let mut changes = Vec::new();
+        assert!(!Cached::retained_changes(&old, &unclipped, &mut changes));
+        let mut structural = (*tree(42., "42%")).clone();
+        structural
+            .props
+            .insert("height".into(), serde_json::json!(8));
+        let mut changes = Vec::new();
+        assert!(!Cached::retained_changes(&old, &structural, &mut changes));
     }
 }
