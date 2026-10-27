@@ -300,7 +300,7 @@ mod tests {
         let source = root.join("source.bin");
         fs::write(&source, [1u8, 2, 3]).unwrap();
         let identity = WallpaperFileIdentity::from_metadata(&fs::metadata(&source).unwrap());
-        let pair: ActiveWallpaper = serde_json::from_value(serde_json::json!({"revision":1,"palette_revision":1,"path":source,"file_identity":identity,"presentation":"crop","palette":{"mode":"dark","colours":{}}})).unwrap();
+        let pair: ActiveWallpaper = serde_json::from_value(serde_json::json!({"revision":1,"palette_revision":1,"path":source,"file_identity":identity,"presentation":"crop","palette":{"mode":"dark","colours":{"background":"#101820","onSurface":"#f0f4f8","primary":"#22aa88"}}})).unwrap();
         (root, pair)
     }
     #[test]

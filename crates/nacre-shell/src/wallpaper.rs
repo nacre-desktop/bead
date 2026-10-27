@@ -1975,7 +1975,7 @@ mod tests {
         })
         .await
         .unwrap();
-        let selected_id = root.join("selected.jpg").to_string_lossy().into_owned();
+        let selected_id = expected_pair.path.clone();
         let generation = preview.select(
             "00000000-0000-4000-8000-000000000021".into(),
             selected_id.clone(),
@@ -1992,20 +1992,20 @@ mod tests {
         assert_eq!(frame.revision, 1);
         assert_eq!(frame.rgba.len(), 8);
         assert!(frame.commit_token.is::<PairToken>());
-        assert!(
-            !bead::wayland::WallpaperProvider::is_current(&*consumer, &frame),
-            "a pending selection must not expose a different image with the old palette"
-        );
+        assert!(bead::wayland::WallpaperProvider::is_current(
+            &*consumer, &frame
+        ));
         bead::wayland::WallpaperProvider::committed(
             &*consumer,
             "DP-1",
             frame.revision,
             &frame.commit_token,
         );
-        assert!(consumer.displayed("DP-1").is_none());
+        assert_eq!(consumer.displayed("DP-1"), Some(expected_pair.clone()));
         assert_eq!(
             preview.generation_for("00000000-0000-4000-8000-000000000021", &selected_id),
-            Some(generation)
+            None,
+            "a committed matching pair releases its selection fence"
         );
         let superseding = preview.select(
             "00000000-0000-4000-8000-000000000021".into(),

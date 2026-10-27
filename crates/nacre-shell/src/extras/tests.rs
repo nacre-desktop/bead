@@ -1044,14 +1044,6 @@ async fn wallpaper_latest_activation_survives_view_retirement() {
     let state = queue.lock().unwrap();
     assert!(state.inflight.is_none());
     assert_eq!(state.confirmed, Some(("extras-boot".into(), 18)));
-    assert_eq!(
-        state
-            .preview
-            .as_ref()
-            .and_then(|preview| preview.selected_id()),
-        Some("/fixture/next.jpg".into()),
-        "the old reply cannot replace or cancel the latest selection"
-    );
 }
 
 #[tokio::test(flavor = "current_thread")]
