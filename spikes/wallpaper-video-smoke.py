@@ -61,6 +61,9 @@ for _ in range(100):
 if not display:
     sys.exit("sway did not start")
 env["WAYLAND_DISPLAY"] = display
+wallpaper = subprocess.Popen(["swaybg", "--output", "*", "--color", "202020"], env=env,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+procs.append(wallpaper)
 time.sleep(0.5)
 
 def shot(name):
