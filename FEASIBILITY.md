@@ -14,7 +14,7 @@ The candidate avoids `UI_ERROR` after canvas state fixes, but opening and close-
 | Full main-before `24709327` | 42 marker opens; p50/p99 246.056/278.685 ms; Escape leaves Updates visible; UI_ERROR 24; Pss_Anon +18.578 MiB; idle layer count 6 |
 | Full rebased candidate `5a39635d` | 35 marker opens p50/p99 245.732/270.954 ms; 72/96 close screenshots differ; UI_ERROR 0; Pss_Anon +18.195 MiB; idle layer count 6 |
 
-The legacy `UI_PRESENTED` fallback and `PANEL_OPEN_LATENCY` marker have different start events, so they do not establish a baseline speed regression. The candidate battery gap/re-arm passes; its nested Super routes still do not fire (`routes.log` empty), and the 33.3 ms opening limit remains unmet. The observed stuck panel is consistent with the reported upper-right artifact; the exact pixel-only black square was not isolated. The verified full CI source was `5a39635d`; `df6c8b4e` changes only the Python harness input routing and was syntax-checked and exercised by full acceptance. [Scope, evidence and limits](docs/specs/0162-daily-acceptance.md).
+The legacy `UI_PRESENTED` fallback and `PANEL_OPEN_LATENCY` marker have different start events, so they do not establish a baseline speed regression. The candidate battery gap/re-arm passes; its nested Super routes still do not fire (`routes.log` empty), and the 33.3 ms opening limit remains unmet. The observed stuck panel is consistent with the reported upper-right artifact; the exact pixel-only black square was not isolated. Full CI-equivalent passed for `5a39635d`; official GitHub CI run `40531337840` passed for pushed `37596135`. [Scope, evidence and limits](docs/specs/0162-daily-acceptance.md).
 
 ## B0151 — widget finish slice (2026-10-27; snap gate fails)
 
