@@ -5369,14 +5369,23 @@ impl SceneSource for Runtime {
                     .map(|preview| preview.prepared_at + WIDGET_HOVER_PREVIEW_RENEW)
             })
             .flatten();
-        let analog = (self.widgets_canvas_wanted
-            && widget_layout_has_analog_clock(self.widgets_canvas_layout.as_ref()))
-            .then(|| {
+        let canvas_layout = if self.widget_canvas {
+            self.session.stores.get("widgets.layout")
+        } else {
+            self.widgets_canvas_layout.as_ref()
+        };
+        let analog_enabled = (self.widget_canvas || self.widgets_canvas_wanted)
+            && widget_layout_has_analog_clock(canvas_layout);
+        let analog = if analog_enabled {
+            Some(
                 std::time::Instant::now()
                     + self
                         .smooth_frame_interval
-                        .max(std::time::Duration::from_millis(1))
-            });
+                        .max(std::time::Duration::from_millis(1)),
+            )
+        } else {
+            None
+        };
         [
             send,
             hover,
@@ -9962,12 +9971,14 @@ mod widget_animation_tick_tests {
 
     #[test]
     fn only_a_persisted_analog_clock_schedules_wallpaper_ticks() {
-        let analog = bead::core::Value::list(vec![serde_json::json!({"hosts":{"canvas":{"instances":[
-            {"widget":"clock","style":"analog"}
-        ]}}})]);
-        let digital = bead::core::Value::list(vec![serde_json::json!({"hosts":{"canvas":{"instances":[
-            {"widget":"clock","style":"digital"}
-        ]}}})]);
+        let analog =
+            bead::core::Value::list(vec![serde_json::json!({"hosts":{"canvas":{"instances":[
+                {"widget":"clock","style":"analog"}
+            ]}}})]);
+        let digital =
+            bead::core::Value::list(vec![serde_json::json!({"hosts":{"canvas":{"instances":[
+                {"widget":"clock","style":"digital"}
+            ]}}})]);
         assert!(widget_layout_has_analog_clock(Some(&analog)));
         assert!(!widget_layout_has_analog_clock(Some(&digital)));
         assert!(!widget_layout_has_analog_clock(None));
