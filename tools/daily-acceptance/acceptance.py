@@ -477,6 +477,8 @@ class Runner:
         latency = self._open_latency(offset, expected)
         closing()
         closed = self._wait_closed()
+        self._pointer("move", self.profile["outside_target"])
+        closed = self._wait_closed() and closed
         self._shot(after)
         empty = self._diff(before, after)
         closed_layers, _ = self._layer_count()
@@ -501,7 +503,7 @@ class Runner:
         offset = self.log_path.stat().st_size if self.log_path and self.log_path.exists() else 0
         run(["wtype", *args], env=self.env, timeout=10)
         if args and all(not arg.startswith("-") for arg in args):
-            self._wait_log("UI_COMMIT", 1, offset)
+            self._wait_log("UI_COMMIT", 5, offset)
 
     def _shot(self, path):
         run(["grim", str(path)], env=self.env, timeout=10)
@@ -563,6 +565,9 @@ class Runner:
                 else:
                     self._pointer("click", self.profile["outside_target"])
                 closed = self._wait_closed()
+                if dismiss != "outside":
+                    self._pointer("move", self.profile["outside_target"])
+                    closed = self._wait_closed() and closed
                 self._shot(after)
                 empty = self._diff(before, after)
                 closed_layers, _ = self._layer_count()
@@ -599,9 +604,10 @@ class Runner:
         start_presentation = json.loads(state_record.read_text())
         start_poster = start_presentation.get("poster")
         offset = self.log_path.stat().st_size
-        self._super("w")
-        self._key("nacre")
         expected = self.profile["surface_names"].get("wallpaper picker")
+        self._super("w")
+        self._open_latency(offset, expected)
+        self._key("nacre")
         latency = self._open_latency(offset, expected)
         self._key("-k", "Down")
         self._key("-k", "Return")
@@ -618,6 +624,7 @@ class Runner:
         self._shot(before)
         second_open_offset = self.log_path.stat().st_size
         self._super("w")
+        self._open_latency(second_open_offset, expected)
         self._key("nacre")
         second_latency = self._open_latency(second_open_offset, expected)
         self._key("-k", "Escape")
@@ -674,6 +681,13 @@ class Runner:
             shutil.copy2(middle, self.failures / f"{stem}-desktop.png")
             shutil.copy2(after, self.failures / f"{stem}-after.png")
 
+    def launcher_open_and_type(self):
+        offset = self.log_path.stat().st_size
+        expected = self.profile["surface_names"].get("launcher open/type/Escape")
+        self._super("space")
+        self._open_latency(offset, expected)
+        self._key("nacre")
+
     def one_round(self, round_no):
         self.round_no = round_no
         targets = self.profile["bar_targets"]
@@ -681,7 +695,7 @@ class Runner:
             self.click_dropdown(name, point, 1)
         # Keyboard bindings mirror Nacre's calls in scripts/try-bead.py, with
         # Super in the nested compositor to exercise the requested chord.
-        self.simple_surface("launcher open/type/Escape", lambda: (self._super("space"), self._key("nacre")),
+        self.simple_surface("launcher open/type/Escape", self.launcher_open_and_type,
                             lambda: self._key("-k", "Escape"))
         self.simple_surface("launcher toggle", lambda: self._super("space"), lambda: self._super("space"))
         self.simple_surface("dashboard/calendar", lambda: self._super("o"), lambda: self._key("-k", "Escape"))
