@@ -1063,7 +1063,13 @@ fn dimensions(rect: Rect, scale: f32) -> (u32, u32) {
 fn blur_text_shadow(pix: &mut Pixmap, shadow: TextShadow, scale: f32) {
     let width = pix.width() as usize;
     let height = pix.height() as usize;
-    let foreground = pix.data().to_vec();
+    let source_alpha = pix
+        .data()
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|pixel| pixel[3])
+        .collect::<Vec<_>>();
     let radius = (shadow.blur * scale).ceil().clamp(1., 64.) as isize;
     let sigma = (shadow.blur * scale / 3.).max(0.5);
     let mut kernel = (-radius..=radius)
@@ -1071,46 +1077,46 @@ fn blur_text_shadow(pix: &mut Pixmap, shadow: TextShadow, scale: f32) {
         .collect::<Vec<_>>();
     let total = kernel.iter().sum::<f32>();
     kernel.iter_mut().for_each(|weight| *weight /= total);
-    let mut horizontal = vec![0f32; width * height];
+    let mut horizontal = vec![0u8; width * height];
     for y in 0..height {
         for x in 0..width {
-            horizontal[y * width + x] = (-radius..=radius)
+            let coverage: f32 = (-radius..=radius)
                 .zip(&kernel)
                 .filter_map(|(step, weight)| {
                     let sx = x as isize + step;
                     (0..width as isize)
                         .contains(&sx)
-                        .then(|| foreground[(y * width + sx as usize) * 4 + 3] as f32 * weight)
+                        .then(|| f32::from(source_alpha[y * width + sx as usize]) * weight)
                 })
                 .sum();
+            horizontal[y * width + x] = coverage.round().clamp(0., 255.) as u8;
         }
     }
     let offset = (shadow.offset_y * scale).round() as isize;
-    let mut blurred = vec![0f32; width * height];
+    let pixels = pix.data_mut();
     for y in 0..height {
         for x in 0..width {
-            blurred[y * width + x] = (-radius..=radius)
+            let coverage: f32 = (-radius..=radius)
                 .zip(&kernel)
                 .filter_map(|(step, weight)| {
                     let sy = y as isize + step - offset;
                     (0..height as isize)
                         .contains(&sy)
-                        .then(|| horizontal[sy as usize * width + x] * weight)
+                        .then(|| f32::from(horizontal[sy as usize * width + x]) * weight)
                 })
                 .sum();
+            let alpha = (coverage * f32::from(shadow.color[3]) / 255.).round() as u8;
+            let inverse = 255 - alpha;
+            let index = (y * width + x) * 4;
+            let pixel = &mut pixels[index..index + 4];
+            for (channel, component) in pixel[..3].iter_mut().enumerate() {
+                let under = u16::from(shadow.color[channel]) * u16::from(alpha) / 255;
+                *component =
+                    (u16::from(*component) + under * u16::from(inverse) / 255).min(255) as u8;
+            }
+            pixel[3] =
+                (u16::from(pixel[3]) + u16::from(alpha) * u16::from(inverse) / 255).min(255) as u8;
         }
-    }
-    for (index, pixel) in pix.data_mut().as_chunks_mut::<4>().0.iter_mut().enumerate() {
-        let alpha = (blurred[index] * f32::from(shadow.color[3]) / 255.).round() as u8;
-        let inverse = 255 - alpha;
-        let original = &foreground[index * 4..index * 4 + 4];
-        for channel in 0..3 {
-            let under = u16::from(shadow.color[channel]) * u16::from(alpha) / 255;
-            pixel[channel] =
-                (u16::from(original[channel]) + under * u16::from(inverse) / 255).min(255) as u8;
-        }
-        pixel[3] =
-            (u16::from(original[3]) + u16::from(alpha) * u16::from(inverse) / 255).min(255) as u8;
     }
 }
 fn apply_polygon_clip(pix: &mut Pixmap, points: &[[f32; 2]]) -> Result<()> {
@@ -2992,6 +2998,32 @@ mod tests {
         assert!(
             center[0] > 210 && center[1] > 220 && center[2] > 215,
             "digit center pixel ({x},{y}) is not Outfit text color: {center:?}"
+        );
+    }
+    #[test]
+    fn glyph_text_shadow_is_soft_and_stays_behind_solid_ink() {
+        let mut pixmap = Pixmap::new(64, 64).unwrap();
+        for y in 24..40 {
+            for x in 24..40 {
+                let pixel = &mut pixmap.data_mut()[(y * 64 + x) * 4..(y * 64 + x) * 4 + 4];
+                pixel.copy_from_slice(&[238, 246, 243, 255]);
+            }
+        }
+        blur_text_shadow(
+            &mut pixmap,
+            TextShadow {
+                color: [0, 0, 0, 128],
+                blur: 8.,
+                offset_y: 2.,
+            },
+            1.,
+        );
+        let foreground = &pixmap.data()[(32 * 64 + 32) * 4..(32 * 64 + 32) * 4 + 4];
+        assert!(foreground[0] > 220 && foreground[1] > 230 && foreground[2] > 225);
+        let halo = &pixmap.data()[(30 * 64 + 22) * 4..(30 * 64 + 22) * 4 + 4];
+        assert!(
+            halo[3] > 0 && halo[3] < 255,
+            "shadow edge must stay softly blurred: {halo:?}"
         );
     }
     #[test]
