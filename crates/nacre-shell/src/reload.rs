@@ -868,6 +868,7 @@ pub struct Runtime {
     smooth_started_at: std::time::Instant,
     smooth_user_interacted: bool,
     smooth_bar_startup_animation: bool,
+    retained_scalar_patch: Option<bead::render::RetainedScalarPatch>,
 }
 #[derive(Clone)]
 struct DashboardPearlAnimation {
@@ -3007,6 +3008,7 @@ impl Runtime {
             smooth_started_at: std::time::Instant::now(),
             smooth_user_interacted: false,
             smooth_bar_startup_animation: false,
+            retained_scalar_patch: None,
         }
     }
     pub fn with_connection_status(
@@ -4791,6 +4793,10 @@ impl Runtime {
             // effect and cleared pressed feedback, without replaying Luau.
             scene = self.session.release_without_activation()?.or(scene);
         }
+        if let Some(patch) = self.session.take_retained_scalar_patch() {
+            self.retained_scalar_patch = Some(patch);
+            return Ok(None);
+        }
         if self.popup_anchor_changed && scene.is_none() {
             scene = self.session.relayout()?;
         }
@@ -5124,6 +5130,12 @@ impl Runtime {
 }
 
 impl SceneSource for Runtime {
+    fn has_retained_scalar_targets(&self) -> bool {
+        self.session.has_retained_scalar_targets()
+    }
+    fn take_retained_scalar_patch(&mut self) -> Option<bead::render::RetainedScalarPatch> {
+        self.retained_scalar_patch.take()
+    }
     fn drag_visuals(&self) -> Vec<bead::wayland::DragVisual> {
         use bead::core::Value;
 

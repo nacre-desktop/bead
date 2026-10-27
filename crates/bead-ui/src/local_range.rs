@@ -248,6 +248,7 @@ mod tests {
                 own: 0..1,
                 subtree_end: 1,
                 bounds: Rect::new(20., 10., 40., 16.),
+                clip_bounds: None,
             }],
             prepared: Default::default(),
             font_files: vec![],

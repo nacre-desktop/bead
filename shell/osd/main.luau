@@ -28,7 +28,7 @@ local function detail(d)
     return ""
 end
 local level,text=spec.level==true,detail(spec.detail)
-local fill_value=level and ui.animate("osd-level",value,0.13,"out-cubic") or value
+local fill_value=value
 local dim=muted or (spec.toggle==true and value<=0)
 local percent=muted and ui.tr("bead.osd.muted") or string.format("%d%%",math.floor(value*100+.5))
 local H=level and (text~="" and 76 or 60) or 68
@@ -41,7 +41,8 @@ return kit.Panel{edge="bottom",id="osd",width=W,height=H,on_activate=ui.action("
     ui.Text{id="value",position="absolute",left=W-EDGE-VALUE_W,top=titleTop,width=VALUE_W,height=TITLE_H,family="IBM Plex Sans",text=level and percent or "",text_align="right",font_size=TITLE,color="onSurfaceVariant"},
     ui.Text{id="detail",position="absolute",left=TEXT_X,top=titleTop+TITLE_H+2,width=W-TEXT_X-EDGE,height=DETAIL_H,family="IBM Plex Sans",text=text,font_size=12,color="onSurfaceVariant",visible=text~=""},
     ui.Box{id="track",position="absolute",left=TEXT_X,top=H-18-kit.tokens.spacing.hairline,width=TRACK_W,height=5,radius=2.5,fill="surfaceContainer",visible=level,clip_children=true,
-        ui.Box{id="fill-window",position="absolute",left=0,top=0,width=TRACK_W*fill_value,height=5,clip_children=true,fill="transparent",
+        ui.Box{id="fill-window",position="absolute",left=0,top=0,width=TRACK_W,height=5,clip_children=true,fill="transparent",
+            scalar_target=level and ui.scalar_target{id="osd-level",binding="osd.value",value=fill_value,min=0,max=1,scale=TRACK_W,duration=.13,transition="out-cubic",cap_id="osd.track.fill-window.fill-cap",label_id=not muted and "osd.value" or nil,label_format=not muted and {multiplier=100,precision=0,suffix="%"} or nil} or nil,
             ui.Image{id="fill",position="absolute",left=0,top=0,path="osd/assets/progress.themed.svg",width=TRACK_W,height=5,visible=not muted},
             ui.Box{id="muted-fill",position="absolute",left=0,top=0,width=TRACK_W,height=5,radius=2.5,fill=ui.alpha("primary",.35),visible=muted},
             ui.Box{id="fill-cap",position="absolute",right=0,top=0,width=5,height=5,radius=2.5,fill=muted and ui.alpha("primary",.35) or "secondary"}},

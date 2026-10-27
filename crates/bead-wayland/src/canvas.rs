@@ -610,6 +610,27 @@ impl App {
             canvas.source.validate()?;
             Ok(scene)
         });
+        if matches!(&staged, Ok(None)) {
+            match super::rendering::accept_retained_scalar_patch(
+                canvas.source.as_mut(),
+                &mut canvas.scene,
+                &mut *canvas.renderer,
+                scale,
+            ) {
+                Ok(true) => {
+                    canvas.dirty = true;
+                    let _ = self.canvas_draw(key);
+                    return;
+                }
+                Ok(false) => return,
+                Err(error) => {
+                    eprintln!("CANVAS_ERROR {error}");
+                    canvas.scene = canvas.source.error_scene(error.to_string());
+                    let _ = self.canvas_draw(key);
+                    return;
+                }
+            }
+        }
         match staged {
             Ok(Some(scene)) => {
                 if !canvas.source.commit() {
@@ -1385,6 +1406,7 @@ mod tests {
                 own: 0..1,
                 subtree_end: 1,
                 bounds: Rect::new(96., 96., 88., 34.),
+                clip_bounds: None,
             }],
             prepared: Default::default(),
             font_files: Vec::new(),

@@ -475,6 +475,30 @@ fn session(f: &Fixture) -> Session {
     session
 }
 
+fn retained_scalar_session() -> (Fixture, Session) {
+    let f = Fixture::new();
+    fs::create_dir_all(f.0.join("ui")).unwrap();
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        "return {stores={level=0.2},actions={},computed={}}",
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+local level=ui.resolve_for_check(ui.bind("level"))
+local percent=string.format("%d%%",math.floor(level*100+.5))
+return ui.Panel{id="panel",width=180,height=48,
+ ui.Text{id="label",position="absolute",left=104,top=4,width=60,height=20,text=percent},
+ ui.Box{id="fill",position="absolute",left=4,top=28,width=100,height=5,clip_children=true,
+  scalar_target=ui.scalar_target{id="level",binding="level",value=level,min=0,max=1,scale=100,duration=.13,transition="out-cubic",label_id="panel.label",label_format={multiplier=100,precision=0,suffix="%"}},
+  ui.Box{id="bar",position="absolute",left=0,top=0,width=100,height=5,fill="surface"}}}"#,
+    )
+    .unwrap();
+    let session = session(&f);
+    (f, session)
+}
+
 fn nested_scroll_session(inner_content: &str) -> (Fixture, Session) {
     let f = fixture();
     fs::write(
@@ -2409,6 +2433,199 @@ return ui.Panel{id="panel",width=200,height=80,
         new_cap_x > old_cap_x,
         "rounded cap tracks the fill endpoint"
     );
+}
+
+#[test]
+fn retained_scalar_updates_tween_latest_value_without_materializing_or_cloning_scene_vectors() {
+    use std::{thread, time::Duration};
+
+    let (_fixture, mut session) = retained_scalar_session();
+    let clip_width = |session: &Session| {
+        session
+            .current
+            .layers
+            .iter()
+            .find(|layer| layer.id == "panel.fill")
+            .and_then(|layer| layer.clip_bounds)
+            .map(|bounds| bounds.w)
+            .expect("retained clip width")
+    };
+    let text = |session: &Session| {
+        session
+            .current
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                Primitive::Text { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .expect("retained label")
+    };
+    let primitive_ptr = session.current.primitives.as_ptr();
+    let primitive_capacity = session.current.primitives.capacity();
+    let layer_ptr = session.current.layers.as_ptr();
+    let layer_capacity = session.current.layers.capacity();
+    let node_ptr = session.current_nodes.as_ptr();
+    let node_capacity = session.current_nodes.capacity();
+    let materializations = session.generation.as_ref().unwrap().materialize_count();
+    let initial = clip_width(&session);
+    let label_capacity = session
+        .current
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text { text, .. } => Some(text.capacity()),
+            _ => None,
+        })
+        .unwrap();
+    assert!(session.pending.is_none());
+    assert!(
+        session
+            .generation
+            .as_ref()
+            .unwrap()
+            .has_scalar_binding("level")
+    );
+
+    assert!(
+        session
+            .update(BTreeMap::from([("level".into(), Value::Number(0.8))]))
+            .unwrap()
+            .is_none()
+    );
+    assert!(session.take_retained_scalar_patch().is_some());
+    assert_eq!(
+        clip_width(&session),
+        initial,
+        "retarget begins at current pose"
+    );
+    assert_eq!(text(&session), "80%");
+    assert_eq!(
+        session.generation.as_ref().unwrap().materialize_count(),
+        materializations
+    );
+
+    thread::sleep(Duration::from_millis(40));
+    session.update(BTreeMap::new()).unwrap();
+    assert!(session.take_retained_scalar_patch().is_some());
+    let midway = clip_width(&session);
+    assert!(
+        midway > initial + 1. && midway < 79.,
+        "fill advances: {initial} -> {midway}"
+    );
+    assert!(
+        session
+            .update(BTreeMap::from([("level".into(), Value::Number(0.4))]))
+            .unwrap()
+            .is_none()
+    );
+    assert!(session.take_retained_scalar_patch().is_some());
+    let retargeted = clip_width(&session);
+    assert!(
+        (retargeted - midway).abs() < 1.,
+        "latest target retargets at current pose"
+    );
+    assert_eq!(text(&session), "40%");
+    thread::sleep(Duration::from_millis(150));
+    session.update(BTreeMap::new()).unwrap();
+    assert!(session.take_retained_scalar_patch().is_some());
+    assert!((clip_width(&session) - 40.).abs() < 0.1);
+    assert_eq!(text(&session), "40%");
+
+    assert_eq!(session.current.primitives.as_ptr(), primitive_ptr);
+    assert_eq!(session.current.primitives.capacity(), primitive_capacity);
+    assert_eq!(session.current.layers.as_ptr(), layer_ptr);
+    assert_eq!(session.current.layers.capacity(), layer_capacity);
+    assert_eq!(session.current_nodes.as_ptr(), node_ptr);
+    assert_eq!(session.current_nodes.capacity(), node_capacity);
+    assert_eq!(
+        session.generation.as_ref().unwrap().materialize_count(),
+        materializations
+    );
+    assert_eq!(
+        session
+            .current
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                Primitive::Text { text, .. } => Some(text.capacity()),
+                _ => None,
+            }),
+        Some(label_capacity)
+    );
+}
+
+#[test]
+fn retained_scalar_zero_duration_applies_target_immediately() {
+    let (fixture, mut session) = retained_scalar_session();
+    let main = fixture.0.join("ui/main.luau");
+    let source = fs::read_to_string(&main)
+        .unwrap()
+        .replace("duration=.13", "duration=0");
+    fs::write(main, source).unwrap();
+    let replacement = session.reload().unwrap();
+    session.commit(replacement);
+
+    session
+        .update(BTreeMap::from([("level".into(), Value::Number(0.8))]))
+        .unwrap();
+    assert!(session.take_retained_scalar_patch().is_some());
+    let clip = session
+        .current
+        .layers
+        .iter()
+        .find(|layer| layer.id == "panel.fill")
+        .and_then(|layer| layer.clip_bounds)
+        .unwrap();
+    assert!((clip.w - 80.).abs() < 0.1);
+    assert!(
+        session
+            .generation
+            .as_ref()
+            .unwrap()
+            .animation_deadline()
+            .is_none()
+    );
+}
+
+#[test]
+fn retained_scalar_label_rounds_negative_values_symmetrically() {
+    let (fixture, mut session) = retained_scalar_session();
+    let main = fixture.0.join("ui/main.luau");
+    let source = fs::read_to_string(&main)
+        .unwrap()
+        .replace("min=0,max=1", "min=-1,max=1");
+    fs::write(main, source).unwrap();
+    let replacement = session.reload().unwrap();
+    session.commit(replacement);
+
+    session
+        .update(BTreeMap::from([("level".into(), Value::Number(-0.125))]))
+        .unwrap();
+    assert!(session.take_retained_scalar_patch().is_some());
+    assert!(
+        session
+            .current
+            .primitives
+            .iter()
+            .any(|primitive| matches!(primitive, Primitive::Text { text, .. } if text == "-13%"))
+    );
+}
+
+#[test]
+fn retained_scalar_patch_is_rejected_after_same_asset_view_reload() {
+    let (_fixture, mut session) = retained_scalar_session();
+    session
+        .update(BTreeMap::from([("level".into(), Value::Number(0.8))]))
+        .unwrap();
+    let stale = session
+        .take_retained_scalar_patch()
+        .expect("scalar update emits a patch");
+    let old_revision = session.current.resource_revision;
+    let replacement = session.reload().unwrap();
+    session.commit(replacement);
+    assert!(session.current.resource_revision > old_revision);
+    assert!(!session.current.apply_retained_scalar_patch(&stale));
 }
 
 #[test]

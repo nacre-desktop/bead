@@ -129,6 +129,8 @@ pub struct Generation {
     materialized: std::cell::RefCell<Option<crate::materialized::Cached>>,
     view_reads: std::cell::RefCell<BTreeSet<String>>,
     view_reads_overflow: std::cell::Cell<bool>,
+    #[cfg(test)]
+    materialize_count: std::cell::Cell<usize>,
     pub(super) root: PathBuf,
 }
 struct Loader {
@@ -161,15 +163,56 @@ impl Loader {
     }
 }
 impl Generation {
+    #[cfg(test)]
+    pub(super) fn materialize_count(&self) -> usize {
+        self.materialize_count.get()
+    }
     pub(super) fn set_frame_interval(&self, interval: std::time::Duration) {
         if let Some(frontend) = &self.markup_frontend {
             frontend.set_frame_interval(interval);
         }
     }
     pub(super) fn animation_deadline(&self) -> Option<std::time::Instant> {
-        self.markup_frontend
+        let script = self
+            .markup_frontend
             .as_ref()
-            .and_then(frontend::LuauFrontEnd::animation_deadline)
+            .and_then(frontend::LuauFrontEnd::animation_deadline);
+        let retained = self
+            .materialized
+            .borrow()
+            .as_ref()
+            .and_then(crate::materialized::Cached::scalar_deadline);
+        [script, retained].into_iter().flatten().min()
+    }
+    pub(super) fn has_scalar_binding(&self, binding: &str) -> bool {
+        self.materialized
+            .borrow()
+            .as_ref()
+            .is_some_and(|cached| cached.has_scalar_binding(binding))
+    }
+    pub(super) fn has_scalar_target(&self) -> bool {
+        self.materialized
+            .borrow()
+            .as_ref()
+            .is_some_and(crate::materialized::Cached::has_scalar_target)
+    }
+    pub(super) fn retarget_scalar(
+        &self,
+        binding: &str,
+        target: f64,
+        now: std::time::Instant,
+        interval: std::time::Duration,
+    ) -> Option<bead_render::RetainedScalarPatch> {
+        self.materialized
+            .borrow_mut()
+            .as_mut()?
+            .retarget_scalar(binding, target, now, interval)
+    }
+    pub(super) fn advance_scalar(
+        &self,
+        now: std::time::Instant,
+    ) -> Option<bead_render::RetainedScalarPatch> {
+        self.materialized.borrow_mut().as_mut()?.advance_scalar(now)
     }
     pub(super) fn animation_snapshot(&self) -> Option<frontend::AnimationSnapshot> {
         self.markup_frontend
@@ -400,6 +443,8 @@ impl Generation {
             materialized: Default::default(),
             view_reads: Default::default(),
             view_reads_overflow: Default::default(),
+            #[cfg(test)]
+            materialize_count: Default::default(),
             root: loader.root.clone(),
         };
         // Validate properties even when a node is currently hidden.
@@ -598,6 +643,8 @@ impl Generation {
             materialized: Default::default(),
             view_reads: Default::default(),
             view_reads_overflow: Default::default(),
+            #[cfg(test)]
+            materialize_count: Default::default(),
             root: loader.root,
         };
         generation.check_sources(root)?;
@@ -633,6 +680,9 @@ impl Generation {
         palette: &Palette,
         viewport: (f32, f32),
     ) -> Result<(Scene, Vec<Node>), Diagnostic> {
+        #[cfg(test)]
+        self.materialize_count
+            .set(self.materialize_count.get().wrapping_add(1));
         if let Some(entry) = &self.markup_entry {
             use frontend::FrontEnd;
             self.script.begin();

@@ -405,11 +405,56 @@ pub struct SceneLayer {
     pub own: std::ops::Range<usize>,
     pub subtree_end: usize,
     pub bounds: Rect,
+    /// This layer's authored child clip, independent of its full layout bounds.
+    pub clip_bounds: Option<Rect>,
+}
+/// Fixed-size text payload for a retained scalar update. The buffer travels through worker
+/// packets without a per-frame heap allocation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ScalarText {
+    bytes: [u8; 256],
+    len: u16,
+}
+impl Default for ScalarText {
+    fn default() -> Self {
+        Self {
+            bytes: [0; 256],
+            len: 0,
+        }
+    }
+}
+impl ScalarText {
+    pub fn from_text(text: &str) -> Option<Self> {
+        if text.len() > 256 || !text.is_char_boundary(text.len()) {
+            return None;
+        }
+        let mut value = Self::default();
+        value.bytes[..text.len()].copy_from_slice(text.as_bytes());
+        value.len = text.len() as u16;
+        Some(value)
+    }
+    pub fn as_str(&self) -> &str {
+        // The value is constructed from a valid Rust string and only copied as a whole.
+        std::str::from_utf8(&self.bytes[..self.len as usize]).unwrap_or("")
+    }
+}
+/// In-place scalar patch against one accepted retained scene generation.
+#[derive(Clone, Debug)]
+pub struct RetainedScalarPatch {
+    pub generation: u64,
+    pub binding_id: std::sync::Arc<str>,
+    pub target: std::sync::Arc<str>,
+    pub clip_width: f32,
+    pub cap_id: Option<std::sync::Arc<str>>,
+    pub cap_x: f32,
+    pub label_id: Option<std::sync::Arc<str>>,
+    pub label: Option<ScalarText>,
 }
 #[derive(Clone)]
 pub struct Scene {
     pub opacity: f32,
     pub motion: Option<Motion>,
+    /// Monotonic accepted view-generation revision; also invalidates generation-owned resources.
     pub resource_revision: u64,
     pub asset_data: std::collections::BTreeMap<std::path::PathBuf, std::sync::Arc<[u8]>>,
     pub clips: std::collections::BTreeMap<usize, Rect>,
@@ -423,6 +468,111 @@ pub struct Scene {
     pub bounds: Rect,
 }
 impl Scene {
+    /// Apply a stable scalar clip/label patch without replacing or cloning scene vectors.
+    pub fn apply_retained_scalar_patch(&mut self, patch: &RetainedScalarPatch) -> bool {
+        if self.resource_revision != patch.generation
+            || !patch.clip_width.is_finite()
+            || patch.clip_width < 0.
+            || !patch.cap_x.is_finite()
+        {
+            return false;
+        }
+        let Some(clip_index) = self
+            .layers
+            .iter()
+            .position(|layer| layer.id == patch.target.as_ref())
+        else {
+            return false;
+        };
+        if self.layers[clip_index].clip_bounds.is_none() {
+            return false;
+        }
+        let cap_index = match &patch.cap_id {
+            Some(id) => match self.layers.iter().position(|layer| layer.id == id.as_ref()) {
+                Some(index) => Some(index),
+                None => return false,
+            },
+            None => None,
+        };
+        let label_index = match &patch.label_id {
+            Some(id) => match self.layers.iter().find(|layer| layer.id == id.as_ref()) {
+                Some(layer) => match layer.own.clone().find(|index| {
+                    matches!(self.primitives.get(*index), Some(Primitive::Text { .. }))
+                }) {
+                    Some(index) => Some(index),
+                    None => return false,
+                },
+                None => return false,
+            },
+            None => None,
+        };
+        {
+            let max_width = self.layers[clip_index].bounds.w;
+            let clip_bounds = self.layers[clip_index]
+                .clip_bounds
+                .as_mut()
+                .expect("checked above");
+            clip_bounds.w = patch.clip_width.min(max_width);
+        }
+        if let Some(cap_index) = cap_index {
+            let cap = &mut self.layers[cap_index];
+            let dx = patch.cap_x - cap.bounds.x;
+            cap.bounds.x = patch.cap_x;
+            if dx != 0. {
+                for primitive in cap.own.clone() {
+                    let Some(primitive) = self.primitives.get_mut(primitive) else {
+                        return false;
+                    };
+                    match primitive {
+                        Primitive::Arc { rect, .. }
+                        | Primitive::Polyline { rect, .. }
+                        | Primitive::Rounded { rect, .. }
+                        | Primitive::Text { rect, .. }
+                        | Primitive::Image { rect, .. }
+                        | Primitive::Shadow { rect, .. } => rect.x += dx,
+                    }
+                }
+            }
+        }
+        if let Some(index) = label_index {
+            let Some(Primitive::Text { text, .. }) = self.primitives.get_mut(index) else {
+                return false;
+            };
+            if let Some(label) = patch.label {
+                text.clear();
+                text.push_str(label.as_str());
+            }
+        }
+
+        // Recompute effective primitive clips in place. Parent links and per-layer clip
+        // rectangles were captured at layout time, so this does not allocate a traversal.
+        for layer_index in 0..self.layers.len() {
+            let mut parent = self.layers[layer_index].parent.as_deref();
+            let mut inherited: Option<Rect> = None;
+            while let Some(id) = parent {
+                let Some(ancestor) = self.layers.iter().find(|layer| layer.id == id) else {
+                    return false;
+                };
+                if let Some(bounds) = ancestor.clip_bounds {
+                    inherited = Some(inherited.map_or(bounds, |prior| prior.intersect(bounds)));
+                }
+                parent = ancestor.parent.as_deref();
+            }
+            for primitive in self.layers[layer_index].own.clone() {
+                if let Some(bounds) = inherited {
+                    if let Some(existing) = self.clips.get_mut(&primitive) {
+                        *existing = bounds;
+                    } else {
+                        // A scalar target is only accepted for an existing clip subtree.
+                        return false;
+                    }
+                } else {
+                    self.clips.remove(&primitive);
+                }
+            }
+        }
+        true
+    }
     /// Remove resources while preserving primitive-indexed clips, layers and reveal metadata.
     pub fn retain_primitives(&mut self, mut keep: impl FnMut(&Primitive) -> bool) {
         let Some(first_removed) = self
@@ -2295,6 +2445,106 @@ fn boundary_x(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn retained_scalar_patch_preserves_scene_vectors_and_rejects_stale_generation() {
+        let mut scene = font_pool_scene();
+        scene.resource_revision = 7;
+        scene.primitives = vec![
+            Primitive::Rounded {
+                rect: Rect::new(0., 0., 100., 5.),
+                radius: 2.,
+                fill: [10, 20, 30, 255],
+                border: None,
+            },
+            Primitive::Text {
+                rect: Rect::new(0., 0., 40., 16.),
+                text: String::with_capacity(256),
+                family: "test".into(),
+                weight: 400,
+                align: None,
+                size: 12.,
+                color: [255; 4],
+            },
+            Primitive::Rounded {
+                rect: Rect::new(95., 0., 5., 5.),
+                radius: 2.5,
+                fill: [40, 50, 60, 255],
+                border: None,
+            },
+        ];
+        let full_clip = Rect::new(0., 0., 100., 5.);
+        scene.clips = [(0, full_clip), (1, full_clip), (2, full_clip)].into();
+        scene.layers = vec![
+            SceneLayer {
+                id: "fill".into(),
+                parent: None,
+                own: 0..1,
+                subtree_end: 3,
+                bounds: full_clip,
+                clip_bounds: Some(full_clip),
+            },
+            SceneLayer {
+                id: "fill.label".into(),
+                parent: Some("fill".into()),
+                own: 1..2,
+                subtree_end: 2,
+                bounds: Rect::new(0., 0., 40., 16.),
+                clip_bounds: None,
+            },
+            SceneLayer {
+                id: "fill.cap".into(),
+                parent: Some("fill".into()),
+                own: 2..3,
+                subtree_end: 3,
+                bounds: Rect::new(95., 0., 5., 5.),
+                clip_bounds: None,
+            },
+        ];
+        let primitive_ptr = scene.primitives.as_ptr();
+        let primitive_capacity = scene.primitives.capacity();
+        let layer_ptr = scene.layers.as_ptr();
+        let layer_capacity = scene.layers.capacity();
+        let label_capacity = match &scene.primitives[1] {
+            Primitive::Text { text, .. } => text.capacity(),
+            _ => unreachable!(),
+        };
+        let patch = RetainedScalarPatch {
+            generation: 7,
+            binding_id: Arc::from("level"),
+            target: Arc::from("fill"),
+            clip_width: 40.,
+            cap_id: Some(Arc::from("fill.cap")),
+            cap_x: 35.,
+            label_id: Some(Arc::from("fill.label")),
+            label: Some(ScalarText::from_text("42%").unwrap()),
+        };
+        assert!(scene.apply_retained_scalar_patch(&patch));
+        assert_eq!(scene.primitives.as_ptr(), primitive_ptr);
+        assert_eq!(scene.primitives.capacity(), primitive_capacity);
+        assert_eq!(scene.layers.as_ptr(), layer_ptr);
+        assert_eq!(scene.layers.capacity(), layer_capacity);
+        assert_eq!(scene.layers[0].clip_bounds.unwrap().w, 40.);
+        assert_eq!(scene.clips[&1].w, 40.);
+        assert_eq!(scene.layers[2].bounds.x, 35.);
+        assert_eq!(scene.clips[&2].w, 40.);
+        match &scene.primitives[1] {
+            Primitive::Text { text, .. } => {
+                assert_eq!(text, "42%");
+                assert_eq!(text.capacity(), label_capacity);
+            }
+            _ => unreachable!(),
+        }
+        let mut stale = patch;
+        stale.generation = 6;
+        assert!(!scene.apply_retained_scalar_patch(&stale));
+    }
+
+    #[test]
+    fn retained_scalar_text_rejects_overflow() {
+        assert!(ScalarText::from_text(&"x".repeat(257)).is_none());
+    }
     #[test]
     fn resource_pruning_remaps_retained_layers_clips_and_reveal_parts() {
         let mut scene = font_pool_scene();
@@ -2315,6 +2565,7 @@ mod tests {
                 own: 0..1,
                 subtree_end: 3,
                 bounds: Rect::new(0., 0., 60., 20.),
+                clip_bounds: None,
             },
             SceneLayer {
                 id: "child".into(),
@@ -2322,6 +2573,7 @@ mod tests {
                 own: 1..3,
                 subtree_end: 3,
                 bounds: Rect::new(20., 0., 40., 20.),
+                clip_bounds: None,
             },
         ];
         scene.motion = Some(Motion {
@@ -2440,6 +2692,7 @@ mod tests {
             own: 0..3,
             subtree_end: 3,
             bounds: Rect::new(0., 0., 60., 20.),
+            clip_bounds: None,
         }];
         let mut cache = tree::TreeCache::default();
         cache.prepare(&scene, 1.5).unwrap();
@@ -2470,7 +2723,6 @@ mod tests {
         assert!(filtered.items.iter().all(|item| item.raster.is_none()));
     }
 
-    use super::*;
     #[test]
     fn fill_image_premultiplication_preserves_exact_lanczos_pixels() {
         use image::ImageEncoder;

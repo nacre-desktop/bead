@@ -93,6 +93,10 @@ return function(ui, constructors, allowed, arrayMarker)
         return ui.__animate(string_arg(key, "animation key"), number_arg(target, "animation target"),
             number_arg(duration, "animation duration"), string_arg(transition, "animation transition"))
     end
+    ui.scalar_target = function(spec)
+        if type(spec) ~= "table" then error("scalar_target needs a table", 2) end
+        return table.clone(spec)
+    end
     ui.action = function(name, argument)
         return {name=string_arg(name, "action name"), argument=argument}
     end

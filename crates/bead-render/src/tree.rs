@@ -4823,6 +4823,7 @@ mod tests {
             own: 0..1,
             subtree_end: 1,
             bounds: scene.bounds,
+            clip_bounds: None,
         }];
         let mut cache = TreeCache::default();
         cache.prepare(&scene, 1.5).unwrap();
@@ -4894,6 +4895,7 @@ mod tests {
                 own: index..index + 1,
                 subtree_end: index + 1,
                 bounds: Rect::new(index as f32 * 8., 0., 8., 8.),
+                clip_bounds: None,
             })
             .collect();
 
@@ -5119,6 +5121,7 @@ mod tests {
                 own: 0..1,
                 subtree_end: 1,
                 bounds: Rect::new(2., 2., 8., 8.),
+                clip_bounds: None,
             }],
             prepared: Default::default(),
             font_files: vec![],
@@ -5254,6 +5257,7 @@ mod tests {
             own: 0..length,
             subtree_end: length,
             bounds: Rect::new(0., 0., 24., 24.),
+            clip_bounds: None,
         }];
         scene.prepared.clear();
         scene
@@ -5389,6 +5393,7 @@ mod tests {
                 own: index..index + 1,
                 subtree_end: index + 1,
                 bounds: Rect::new(0., y, 24., 8.),
+                clip_bounds: None,
             });
         }
         scene
@@ -5685,6 +5690,7 @@ mod tests {
                 own: 0..2,
                 subtree_end: 3,
                 bounds: source.bounds,
+                clip_bounds: None,
             },
             crate::SceneLayer {
                 id: "kept".into(),
@@ -5692,6 +5698,7 @@ mod tests {
                 own: 2..3,
                 subtree_end: 3,
                 bounds: Rect::new(2., 2., 18., 8.),
+                clip_bounds: None,
             },
         ];
         let mut fresh_scene = source.clone();

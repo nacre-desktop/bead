@@ -53,6 +53,7 @@ pub struct Session {
     pub(super) watch_revision: std::sync::Arc<std::sync::atomic::AtomicU64>,
     pub(crate) current: Scene,
     pub(super) current_nodes: Vec<Node>,
+    pub(super) retained_scalar_patch: Option<bead_render::RetainedScalarPatch>,
     pub(super) editors: BTreeMap<String, input::Editor>,
     pub(super) committed_editors: BTreeMap<String, input::Editor>,
     pub(super) viewport: (f32, f32),
@@ -168,6 +169,7 @@ impl Session {
             watch_revision: Default::default(),
             current: fallback,
             current_nodes: vec![],
+            retained_scalar_patch: None,
             viewport: (1200., 800.),
             editors: BTreeMap::new(),
             committed_editors: BTreeMap::new(),
@@ -773,6 +775,9 @@ impl Session {
         if matches!(changes.get("panel.anchor_hovered"), Some(Value::Bool(_))) {
             self.pointer_seen = true;
         }
+        let Some(changes) = self.retained_scalar_update(changes)? else {
+            return Ok(None);
+        };
         // A change in the same event (a hover, then a service value) builds on the staged state, not on the
         // committed one, so the later scene still carries the earlier change.
         let mut stores = match &self.pending {
@@ -788,6 +793,80 @@ impl Session {
             return Ok(None);
         }
         self.stage_state_from(stores, base)
+    }
+    fn retained_scalar_update(
+        &mut self,
+        changes: BTreeMap<String, Value>,
+    ) -> Result<Option<BTreeMap<String, Value>>, Diagnostic> {
+        if self.pending.is_some() || self.retained_scalar_patch.is_some() {
+            return Ok(Some(changes));
+        }
+        let Some(generation) = &self.generation else {
+            return Ok(Some(changes));
+        };
+        let now = std::time::Instant::now();
+        let mut binding = None;
+        let mut target = None;
+        for (name, value) in &changes {
+            if self.stores.get(name) == Some(value) {
+                continue;
+            }
+            if !generation.has_scalar_binding(name) {
+                return Ok(Some(changes));
+            }
+            let Value::Number(number) = value else {
+                return Ok(Some(changes));
+            };
+            if !number.is_finite() || binding.is_some() {
+                return Ok(Some(changes));
+            }
+            binding = Some(name.as_str());
+            target = Some(*number);
+        }
+        let has_target = target.is_some();
+        let patch = if let (Some(binding), Some(target)) = (binding, target) {
+            generation.retarget_scalar(binding, target, now, self.frame_interval)
+        } else {
+            generation.advance_scalar(now)
+        };
+        let Some(patch) = patch else {
+            return Ok(Some(changes));
+        };
+        if has_target {
+            self.stores
+                .commit(changes)
+                .map_err(|error| Diagnostic::new(&self.entry, 1, 1, error))?;
+        }
+        if !self.current.apply_retained_scalar_patch(&patch) {
+            return Err(Diagnostic::new(
+                &self.entry,
+                1,
+                1,
+                "stale retained scalar patch",
+            ));
+        }
+        if let Some(label) = patch.label
+            && let Some(node) = patch.label_id.as_ref().and_then(|id| {
+                self.current_nodes
+                    .iter_mut()
+                    .find(|node| node.id == id.as_ref())
+            })
+        {
+            node.label.clear();
+            node.label.push_str(label.as_str());
+        }
+        self.retained_scalar_patch = Some(patch);
+        Ok(None)
+    }
+
+    /// Take a retained scalar patch for the host's in-place scene path.
+    pub fn take_retained_scalar_patch(&mut self) -> Option<bead_render::RetainedScalarPatch> {
+        self.retained_scalar_patch.take()
+    }
+    pub fn has_retained_scalar_targets(&self) -> bool {
+        self.generation
+            .as_ref()
+            .is_some_and(Generation::has_scalar_target)
     }
     /// Host-owned models stay current without painting when no binding reads them.
     /// Behavior/input updates continue through the ordinary staged transaction.

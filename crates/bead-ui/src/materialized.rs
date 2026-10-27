@@ -11,7 +11,10 @@ use bead_core::Value;
 use bead_render::{Palette, Primitive, Scene};
 use std::{
     collections::{BTreeMap, BTreeSet},
+    fmt::Write as _,
     rc::Rc,
+    sync::Arc,
+    time::{Duration, Instant},
 };
 struct Text {
     masked: bool,
@@ -35,6 +38,20 @@ struct Floating {
     index: usize,
     node: String,
 }
+struct RetainedScalar {
+    spec: layout::ScalarTarget,
+    id: Arc<str>,
+    clip_id: Arc<str>,
+    clip_layer: usize,
+    cap_id: Option<Arc<str>>,
+    label_id: Option<Arc<str>>,
+    from: f64,
+    to: f64,
+    started: Instant,
+    next_frame: Option<Instant>,
+    frame_interval: Duration,
+    text: String,
+}
 enum RetainedChange {
     ClipWidth { id: String, width: f32 },
     Text { id: String, text: String },
@@ -52,6 +69,7 @@ pub(super) struct Cached {
     scroll: Vec<Scroll>,
     clip_regions: Vec<ClipRegion>,
     floating: Vec<Floating>,
+    retained_scalar: Option<RetainedScalar>,
     _charge: Option<bead_core::cache::Charge>,
 }
 fn bindings(value: &serde_json::Value, out: &mut BTreeSet<String>) {
@@ -255,6 +273,7 @@ impl Cached {
             scroll: vec![],
             clip_regions: vec![],
             floating: vec![],
+            retained_scalar: None,
         };
         fn walk(
             raw: &RawNode,
@@ -381,6 +400,85 @@ impl Cached {
         }
         scrolls(view, scene, nodes, &mut cached.scroll);
         clip_regions(view, scene, &mut cached.clip_regions);
+        fn scalar_targets(
+            view: &ViewSpec,
+            cached: &mut Cached,
+            now: Instant,
+            interval: Duration,
+        ) -> Result<(), Diagnostic> {
+            if let Some(spec) = &view.scalar_target {
+                if cached.retained_scalar.is_some() {
+                    return Err(view
+                        .source
+                        .error("a view may declare one retained scalar target"));
+                }
+                let clip_layer = cached
+                    .scene
+                    .layers
+                    .iter()
+                    .position(|layer| layer.id == view.id)
+                    .ok_or_else(|| view.source.error("scalar_target clip layer is missing"))?;
+                if spec
+                    .cap_id
+                    .as_ref()
+                    .is_some_and(|id| !cached.scene.layers.iter().any(|layer| layer.id == *id))
+                {
+                    return Err(view.source.error(format!(
+                        "scalar_target cap layer is missing: {:?}; layers={:?}",
+                        spec.cap_id,
+                        cached
+                            .scene
+                            .layers
+                            .iter()
+                            .map(|layer| layer.id.as_str())
+                            .collect::<Vec<_>>()
+                    )));
+                }
+                let label_primitive = spec.label_id.as_ref().and_then(|id| {
+                    cached
+                        .scene
+                        .layers
+                        .iter()
+                        .find(|layer| layer.id == *id)
+                        .and_then(|layer| {
+                            layer.own.clone().find(|index| {
+                                matches!(
+                                    cached.scene.primitives.get(*index),
+                                    Some(Primitive::Text { .. })
+                                )
+                            })
+                        })
+                });
+                if spec.label_format.is_some() && label_primitive.is_none() {
+                    return Err(view.source.error("scalar_target label layer is missing"));
+                }
+                let text = String::with_capacity(256);
+                cached.retained_scalar = Some(RetainedScalar {
+                    spec: spec.clone(),
+                    id: Arc::from(spec.id.as_str()),
+                    clip_id: Arc::from(view.id.as_str()),
+                    clip_layer,
+                    cap_id: spec.cap_id.as_deref().map(Arc::from),
+                    label_id: spec.label_id.as_deref().map(Arc::from),
+                    from: spec.value,
+                    to: spec.value,
+                    started: now,
+                    next_frame: None,
+                    frame_interval: interval.max(Duration::from_millis(1)),
+                    text,
+                });
+            }
+            for child in &view.children {
+                scalar_targets(child, cached, now, interval)?;
+            }
+            Ok(())
+        }
+        scalar_targets(view, &mut cached, Instant::now(), Duration::from_millis(16))?;
+        if let Some(scalar) = &cached.retained_scalar {
+            cached
+                .values
+                .insert(scalar.spec.binding.clone(), resolve(&scalar.spec.binding)?);
+        }
         for scroll in &cached.scroll {
             cached
                 .values
@@ -516,6 +614,162 @@ impl Cached {
             }
         }
     }
+
+    fn scalar_progress(scalar: &RetainedScalar, now: Instant) -> f64 {
+        let duration = Duration::from_secs_f64(scalar.spec.duration.max(0.001));
+        let t =
+            now.saturating_duration_since(scalar.started).as_secs_f64() / duration.as_secs_f64();
+        let t = t.clamp(0., 1.);
+        let eased = match scalar.spec.transition.as_str() {
+            "linear" => t,
+            "in-out-cubic" if t < 0.5 => 4. * t * t * t,
+            "in-out-cubic" => 1. - (-2. * t + 2.).powi(3) / 2.,
+            _ => 1. - (1. - t).powi(3),
+        };
+        scalar.from + (scalar.to - scalar.from) * eased
+    }
+
+    fn scalar_text(scalar: &mut RetainedScalar, value: f64) -> Option<bead_render::ScalarText> {
+        let format = scalar.spec.label_format.as_ref()?;
+        let scaled = value * format.multiplier;
+        if !scaled.is_finite() {
+            return None;
+        }
+        scalar.text.clear();
+        scalar.text.push_str(&format.prefix);
+        let factor = 10_f64.powi(format.precision as i32);
+        let rounded = scaled.signum() * (scaled.abs() * factor + 0.5).floor() / factor;
+        write!(scalar.text, "{:.*}", format.precision, rounded).ok()?;
+        scalar.text.push_str(&format.suffix);
+        bead_render::ScalarText::from_text(&scalar.text)
+    }
+
+    fn patch_for_scalar(
+        &mut self,
+        value: f64,
+        now: Instant,
+        label_value: Option<f64>,
+    ) -> Option<bead_render::RetainedScalarPatch> {
+        let scalar = self.retained_scalar.as_mut()?;
+        let range = scalar.spec.max - scalar.spec.min;
+        let progress = ((value - scalar.spec.min) / range).clamp(0., 1.);
+        let clip_bounds = self.scene.layers.get(scalar.clip_layer)?.clip_bounds?;
+        let max_width = self.scene.layers.get(scalar.clip_layer)?.bounds.w;
+        let clip_width = (scalar.spec.scale * progress as f32).clamp(0., max_width);
+        let cap_x = scalar
+            .cap_id
+            .as_ref()
+            .and_then(|id| {
+                self.scene
+                    .layers
+                    .iter()
+                    .find(|layer| layer.id == id.as_ref())
+            })
+            .map_or(0., |cap| clip_bounds.x + clip_width - cap.bounds.w);
+        let label = match label_value.filter(|_| scalar.spec.label_format.is_some()) {
+            Some(label) => Some(Self::scalar_text(scalar, label)?),
+            None => None,
+        };
+        let patch = bead_render::RetainedScalarPatch {
+            generation: self.scene.resource_revision,
+            binding_id: scalar.id.clone(),
+            target: scalar.clip_id.clone(),
+            clip_width,
+            cap_id: scalar.cap_id.clone(),
+            cap_x,
+            label_id: scalar.label_id.clone(),
+            label,
+        };
+        if !self.scene.apply_retained_scalar_patch(&patch) {
+            #[cfg(test)]
+            eprintln!(
+                "RETAINED_PATCH_FAIL target={} generation={} clip={:?} label={:?}",
+                patch.target,
+                patch.generation,
+                self.scene
+                    .layers
+                    .iter()
+                    .find(|layer| layer.id == patch.target.as_ref())
+                    .map(|layer| layer.clip_bounds),
+                patch.label_id
+            );
+            return None;
+        }
+        if let (Some(id), Some(label)) = (&scalar.label_id, patch.label)
+            && let Some(node) = self.nodes.iter_mut().find(|node| node.id == id.as_ref())
+        {
+            node.label.clear();
+            node.label.push_str(label.as_str());
+        }
+        let _ = now;
+        Some(patch)
+    }
+
+    pub fn retarget_scalar(
+        &mut self,
+        binding: &str,
+        target: f64,
+        now: Instant,
+        interval: Duration,
+    ) -> Option<bead_render::RetainedScalarPatch> {
+        if !self.has_scalar_binding(binding) {
+            return None;
+        }
+        let scalar = self.retained_scalar.as_mut()?;
+        if !target.is_finite() {
+            return None;
+        }
+        let target = target.clamp(scalar.spec.min, scalar.spec.max);
+        let current = if scalar.spec.duration == 0. {
+            target
+        } else {
+            Self::scalar_progress(scalar, now)
+        };
+        scalar.from = current;
+        scalar.to = target;
+        scalar.started = now;
+        scalar.frame_interval = interval.max(Duration::from_millis(1));
+        scalar.next_frame = (current != target && scalar.spec.duration > 0.).then_some(
+            now + scalar
+                .frame_interval
+                .min(Duration::from_secs_f64(scalar.spec.duration.max(0.001))),
+        );
+        if let Some(value) = self.values.get_mut(binding) {
+            *value = Value::Number(target);
+        }
+        self.patch_for_scalar(current, now, Some(target))
+    }
+
+    pub fn advance_scalar(&mut self, now: Instant) -> Option<bead_render::RetainedScalarPatch> {
+        let scalar = self.retained_scalar.as_mut()?;
+        if !scalar.next_frame.is_some_and(|deadline| now >= deadline) {
+            return None;
+        }
+        let value = Self::scalar_progress(scalar, now);
+        let end = scalar.started + Duration::from_secs_f64(scalar.spec.duration.max(0.001));
+        if now >= end || value == scalar.to {
+            scalar.next_frame = None;
+        } else {
+            scalar.next_frame = Some((now + scalar.frame_interval).min(end));
+        }
+        self.patch_for_scalar(value, now, None)
+    }
+
+    pub fn scalar_deadline(&self) -> Option<Instant> {
+        self.retained_scalar
+            .as_ref()
+            .and_then(|scalar| scalar.next_frame)
+    }
+
+    pub fn has_scalar_binding(&self, binding: &str) -> bool {
+        self.retained_scalar
+            .as_ref()
+            .is_some_and(|scalar| scalar.spec.binding == binding)
+    }
+
+    pub fn has_scalar_target(&self) -> bool {
+        self.retained_scalar.is_some()
+    }
     pub fn patch(
         &mut self,
         raw: &Rc<RawNode>,
@@ -608,6 +862,9 @@ impl Cached {
                         return Ok(None);
                     };
                     layer.bounds.w = *width;
+                    if let Some(bounds) = &mut layer.clip_bounds {
+                        bounds.w = *width;
+                    }
                     let clip = layer.bounds;
                     let Some(raw_clip) = Self::raw_node(raw, id, "") else {
                         return Ok(None);

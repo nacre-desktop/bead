@@ -240,6 +240,17 @@ impl Harness {
     pub fn update(&mut self, values: BTreeMap<String, Value>) -> Result<()> {
         if let Some(scene) = self.session.update(values)? {
             self.commit(scene)?;
+        } else {
+            self.apply_retained_scalar_patch()?;
+        }
+        Ok(())
+    }
+    fn apply_retained_scalar_patch(&mut self) -> Result<()> {
+        if let Some(patch) = self.session.take_retained_scalar_patch() {
+            if !self.scene.apply_retained_scalar_patch(&patch) {
+                return Err("stale retained scalar test patch".into());
+            }
+            self.renderer.prepare(&self.scene, self.config.scale)?;
         }
         Ok(())
     }
@@ -259,6 +270,7 @@ impl Harness {
             if let Some(scene) = scene {
                 self.commit(scene)?;
             }
+            self.apply_retained_scalar_patch()?;
         }
         Ok(())
     }

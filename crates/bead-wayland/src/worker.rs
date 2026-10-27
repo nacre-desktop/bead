@@ -53,6 +53,7 @@ impl Mirror {
 enum Phase {
     Ready,
     Accepted,
+    RetainedScalar,
     Settled,
     Failed,
 }
@@ -64,6 +65,7 @@ pub struct Packet {
     error: Option<String>,
     reload: bool,
     wallpaper_palette: Option<std::collections::BTreeMap<String, [u8; 4]>>,
+    scalar_patch: Option<bead_render::RetainedScalarPatch>,
 }
 impl std::fmt::Debug for Packet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -91,6 +93,9 @@ impl Packet {
     }
     pub fn is_failed(&self) -> bool {
         matches!(self.phase, Phase::Failed)
+    }
+    pub fn retained_scalar_patch(&self) -> Option<&bead_render::RetainedScalarPatch> {
+        self.scalar_patch.as_ref()
     }
 }
 #[derive(Debug)]
@@ -194,6 +199,7 @@ pub struct Source {
     accepted: bool,
     current: Scene,
     candidate: Option<Scene>,
+    retained_scalar_patch: Option<bead_render::RetainedScalarPatch>,
     viewport: Option<(u32, u32)>,
     frame_interval: Option<std::time::Duration>,
 }
@@ -212,6 +218,7 @@ impl Source {
             accepted: false,
             current: fallback,
             candidate: None,
+            retained_scalar_patch: None,
             viewport: None,
             frame_interval: None,
         }
@@ -282,6 +289,30 @@ fn bake(
     }
     Ok(())
 }
+
+fn retained_scalar_scene_copy_bytes(scene: &Scene) -> usize {
+    std::mem::size_of::<Scene>()
+        + scene
+            .primitives
+            .iter()
+            .map(bead_render::primitive_bytes)
+            .sum::<usize>()
+        + scene
+            .layers
+            .iter()
+            .map(|layer| {
+                std::mem::size_of::<bead_render::SceneLayer>()
+                    + layer.id.capacity()
+                    + layer.parent.as_ref().map_or(0, String::capacity)
+            })
+            .sum::<usize>()
+        + scene.clips.len() * std::mem::size_of::<(usize, Rect)>()
+        + scene
+            .asset_data
+            .keys()
+            .map(|path| path.as_os_str().len() + std::mem::size_of::<std::sync::Arc<[u8]>>())
+            .sum::<usize>()
+}
 fn prepare_resource_job(
     job: Job,
     cache: &mut bead_render::tree::TreeCache,
@@ -307,6 +338,9 @@ fn prepare_resource_job(
     }
 }
 impl SceneSource for Source {
+    fn take_retained_scalar_patch(&mut self) -> Option<bead_render::RetainedScalarPatch> {
+        self.retained_scalar_patch.clone()
+    }
     fn resources_retired(&self) -> bool {
         self.retired.load(std::sync::atomic::Ordering::Acquire)
     }
@@ -376,6 +410,7 @@ impl SceneSource for Source {
                             error: Some(error),
                             reload: false,
                             wallpaper_palette: None,
+                            scalar_patch: None,
                         })));
                         return;
                     }
@@ -391,6 +426,7 @@ impl SceneSource for Source {
                 let mut needs_trim = false;
                 let mut active_scales = vec![1.];
                 let mut accepted_resource_revision = None;
+                let mut accepted_scene: Option<Scene> = None;
                 'actor: loop {
                     for job in receiver.try_iter() {
                         match job {
@@ -514,6 +550,73 @@ impl SceneSource for Source {
                             let (mut scene, fault) = match source.stage(event) {
                                 Ok(Some(scene)) => (scene, None),
                                 Ok(None) => {
+                                    if let Some(patch) = source.take_retained_scalar_patch() {
+                                        let Some(_) = accepted_scene.as_ref() else {
+                                            wakeup(UiEvent::Worker(Arc::new(Packet {
+                                                phase: Phase::Failed,
+                                                token,
+                                                scene: None,
+                                                mirror: None,
+                                                error: Some(
+                                                    "retained scalar patch has no accepted scene"
+                                                        .into(),
+                                                ),
+                                                reload,
+                                                wallpaper_palette,
+                                                scalar_patch: None,
+                                            })));
+                                            continue;
+                                        };
+                                        wakeup(UiEvent::Worker(Arc::new(Packet {
+                                            phase: Phase::RetainedScalar,
+                                            token,
+                                            scene: None,
+                                            mirror: None,
+                                            error: None,
+                                            reload,
+                                            wallpaper_palette,
+                                            scalar_patch: Some(patch.clone()),
+                                        })));
+                                        loop {
+                                            match receiver.recv() {
+                                                Ok(Job::Stop) | Err(_) => break 'actor,
+                                                Ok(Job::Ack(id, result)) if id == token => {
+                                                    let accepted = result
+                                                        .and_then(|()| source.validate().map_err(|e| e.to_string()))
+                                                        .and_then(|()| {
+                                                            accepted_scene
+                                                                .as_mut()
+                                                                .is_some_and(|scene| scene.apply_retained_scalar_patch(&patch))
+                                                                .then_some(())
+                                                                .ok_or_else(|| "retained scalar patch was stale".to_owned())
+                                                        });
+                                                    if accepted.is_ok() {
+                                                        source.commit();
+                                                    } else {
+                                                        let error =
+                                                            accepted.err().unwrap_or_else(|| {
+                                                                "retained scalar patch rejected"
+                                                                    .into()
+                                                            });
+                                                        let _ = source.error_scene(error.clone());
+                                                        wakeup(UiEvent::Worker(Arc::new(Packet {
+                                                            phase: Phase::Failed,
+                                                            token,
+                                                            scene: None,
+                                                            mirror: None,
+                                                            error: Some(error),
+                                                            reload,
+                                                            wallpaper_palette: None,
+                                                            scalar_patch: None,
+                                                        })));
+                                                    }
+                                                    break;
+                                                }
+                                                Ok(job) => enqueue(&mut queue, job),
+                                            }
+                                        }
+                                        continue;
+                                    }
                                     wakeup(UiEvent::Worker(Arc::new(Packet {
                                         phase: Phase::Settled,
                                         token,
@@ -522,6 +625,7 @@ impl SceneSource for Source {
                                         error: None,
                                         reload,
                                         wallpaper_palette,
+                                        scalar_patch: None,
                                     })));
                                     continue;
                                 }
@@ -578,6 +682,7 @@ impl SceneSource for Source {
                                     error: Some(error),
                                     reload,
                                     wallpaper_palette: wallpaper_palette.clone(),
+                                    scalar_patch: None,
                                 })));
                                 continue;
                             }
@@ -596,6 +701,7 @@ impl SceneSource for Source {
                                 error: fault.clone(),
                                 reload,
                                 wallpaper_palette: wallpaper_palette.clone(),
+                                scalar_patch: None,
                             })));
                             // No later script event may overwrite this staged transaction before its GPU acknowledgement.
                             loop {
@@ -621,6 +727,19 @@ impl SceneSource for Source {
                                                     source.commit();
                                                     accepted_resource_revision =
                                                         Some(resource_revision);
+                                                    accepted_scene = if source
+                                                        .has_retained_scalar_targets()
+                                                    {
+                                                        eprintln!(
+                                                            "RETAINED_SCALAR_SCENE_COPY bytes={} asset_payloads_shared=true",
+                                                            retained_scalar_scene_copy_bytes(
+                                                                &scene
+                                                            )
+                                                        );
+                                                        Some(scene.clone())
+                                                    } else {
+                                                        None
+                                                    };
                                                 }
                                                 if look_change {
                                                     cache.drop_unused_since(baked_after);
@@ -642,6 +761,7 @@ impl SceneSource for Source {
                                                     error: fault,
                                                     reload,
                                                     wallpaper_palette: wallpaper_palette.clone(),
+                                                    scalar_patch: None,
                                                 })));
                                             }
                                             Err(error) => {
@@ -658,6 +778,7 @@ impl SceneSource for Source {
                                                         reload,
                                                         wallpaper_palette: wallpaper_palette
                                                             .clone(),
+                                                        scalar_patch: None,
                                                     })));
                                                 } else {
                                                     wakeup(UiEvent::WatchError(error));
@@ -736,6 +857,10 @@ impl SceneSource for Source {
             if let Some(error) = &packet.error {
                 eprintln!("UI_ERROR {error}");
             }
+            if matches!(packet.phase, Phase::RetainedScalar) {
+                self.retained_scalar_patch = packet.scalar_patch.clone();
+                return Ok(None);
+            }
             match packet.phase {
                 Phase::Failed => {
                     self.retired
@@ -749,6 +874,7 @@ impl SceneSource for Source {
                 Phase::Settled => return Ok(None),
                 Phase::Ready => self.accepted = false,
                 Phase::Accepted => self.accepted = true,
+                Phase::RetainedScalar => unreachable!("retained scalar handled above"),
             }
             self.candidate = packet.scene.clone();
             return Ok(packet.scene.clone());
@@ -775,6 +901,19 @@ impl SceneSource for Source {
         let _ = self.send(Job::Presented(revision));
     }
     fn commit(&mut self) -> bool {
+        if let Some(patch) = &self.retained_scalar_patch {
+            let accepted = self.current.apply_retained_scalar_patch(patch);
+            self.retained_scalar_patch = None;
+            let _ = self.send(Job::Ack(
+                self.token,
+                if accepted {
+                    Ok(())
+                } else {
+                    Err("retained scalar patch was stale".into())
+                },
+            ));
+            return accepted;
+        }
         if self.accepted {
             self.retired
                 .store(false, std::sync::atomic::Ordering::Release);
@@ -789,6 +928,7 @@ impl SceneSource for Source {
         }
     }
     fn error_scene(&mut self, error: String) -> Scene {
+        self.retained_scalar_patch = None;
         let _ = self.send(Job::Ack(self.token, Err(error)));
         self.current.clone()
     }
@@ -1412,6 +1552,137 @@ mod tests {
             source.allows_edge_hover(8., 8.),
             "the accepted worker mirror must preserve edge-hover opt-in"
         );
+    }
+
+    struct ScalarMock {
+        first: bool,
+        patch: bead_render::RetainedScalarPatch,
+        commits: Arc<AtomicUsize>,
+        mirror_reads: Arc<AtomicUsize>,
+    }
+    impl SceneSource for ScalarMock {
+        fn has_retained_scalar_targets(&self) -> bool {
+            true
+        }
+        fn take_retained_scalar_patch(&mut self) -> Option<bead_render::RetainedScalarPatch> {
+            (!self.first).then(|| self.patch.clone())
+        }
+        fn watch(
+            &mut self,
+            _: Box<dyn Fn(Result<(), String>) + Send>,
+        ) -> Result<(), Box<dyn Error>> {
+            Ok(())
+        }
+        fn stage(&mut self, _: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+            if self.first {
+                self.first = false;
+                let mut scene = scene();
+                scene.resource_revision = 2;
+                scene.clips.insert(0, Rect::new(0., 0., 16., 5.));
+                scene.layers = vec![
+                    bead_render::SceneLayer {
+                        id: "fill".into(),
+                        parent: None,
+                        own: 0..0,
+                        subtree_end: 1,
+                        bounds: Rect::new(0., 0., 16., 5.),
+                        clip_bounds: Some(Rect::new(0., 0., 16., 5.)),
+                    },
+                    bead_render::SceneLayer {
+                        id: "fill.bar".into(),
+                        parent: Some("fill".into()),
+                        own: 0..1,
+                        subtree_end: 1,
+                        bounds: Rect::new(0., 0., 16., 5.),
+                        clip_bounds: None,
+                    },
+                ];
+                Ok(Some(scene))
+            } else {
+                Ok(None)
+            }
+        }
+        fn validate(&self) -> Result<(), Box<dyn Error>> {
+            Ok(())
+        }
+        fn state_summary(&self) -> String {
+            self.mirror_reads.fetch_add(1, Ordering::SeqCst);
+            "scalar-test".into()
+        }
+        fn commit(&mut self) -> bool {
+            self.commits.fetch_add(1, Ordering::SeqCst);
+            true
+        }
+        fn error_scene(&mut self, _: String) -> Scene {
+            scene()
+        }
+    }
+
+    #[test]
+    fn retained_scalar_packet_keeps_scene_and_mirror_storage_until_ack() {
+        let commits = Arc::new(AtomicUsize::new(0));
+        let mirror_reads = Arc::new(AtomicUsize::new(0));
+        let actor_commits = commits.clone();
+        let actor_mirror_reads = mirror_reads.clone();
+        let patch = bead_render::RetainedScalarPatch {
+            generation: 2,
+            binding_id: Arc::from("level"),
+            target: Arc::from("fill"),
+            clip_width: 6.,
+            cap_id: None,
+            cap_x: 0.,
+            label_id: None,
+            label: None,
+        };
+        let mut source = Source::new(
+            Box::new(move || {
+                Ok(Box::new(ScalarMock {
+                    first: true,
+                    patch,
+                    commits: actor_commits,
+                    mirror_reads: actor_mirror_reads,
+                }))
+            }),
+            scene(),
+        );
+        let (sender, receiver) = mpsc::channel();
+        source.services(Box::new(move |event| {
+            let _ = sender.send(event);
+        }));
+        assert!(source.stage(UiEvent::Reload).unwrap().is_none());
+        let ready = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(source.stage(ready).unwrap().is_some());
+        assert!(!source.commit(), "ready scene must wait for CPU/GPU ack");
+        let accepted = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(source.stage(accepted).unwrap().is_some());
+        assert!(source.commit());
+        let mirror = source.mirror.clone();
+        let mirror_calls = mirror_reads.load(Ordering::SeqCst);
+
+        assert!(
+            source
+                .stage(UiEvent::Model(BTreeMap::new()))
+                .unwrap()
+                .is_none()
+        );
+        let patch_packet = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(
+            matches!(&patch_packet, UiEvent::Worker(packet) if packet.retained_scalar_patch().is_some())
+        );
+        assert!(source.stage(patch_packet).unwrap().is_none());
+        assert!(
+            Arc::ptr_eq(&mirror, &source.mirror),
+            "scalar patch must preserve the mirror snapshot"
+        );
+        assert_eq!(mirror_reads.load(Ordering::SeqCst), mirror_calls);
+        assert!(source.take_retained_scalar_patch().is_some());
+        assert!(source.commit());
+        assert_eq!(source.current.clips[&0].w, 6.);
+        let end = std::time::Instant::now() + Duration::from_secs(2);
+        while commits.load(Ordering::SeqCst) < 2 && std::time::Instant::now() < end {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert_eq!(commits.load(Ordering::SeqCst), 2);
     }
     #[test]
     fn worker_stop_in_initial_drain_cancels_unacknowledged_stage() {

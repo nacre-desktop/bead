@@ -17,6 +17,7 @@ pub fn luau() -> String {
         ("bind", "(string)->any"),
         ("action", "(string,any?)->any"),
         ("animate", "(string,number,number,string)->number"),
+        ("scalar_target", "(any)->any"),
         ("alpha", "(string,number)->any"),
         ("tint", "(string,string,number)->any"),
         ("component", "(string,any,any)->any"),

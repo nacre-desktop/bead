@@ -65,6 +65,35 @@ pub struct RawNode {
     pub source: Source,
     pub scope: Option<String>,
 }
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ScalarTextFormat {
+    #[serde(default)]
+    pub prefix: String,
+    #[serde(default)]
+    pub suffix: String,
+    pub multiplier: f64,
+    #[serde(default)]
+    pub precision: usize,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ScalarTarget {
+    pub id: String,
+    pub binding: String,
+    pub value: f64,
+    pub min: f64,
+    pub max: f64,
+    pub scale: f32,
+    pub duration: f64,
+    pub transition: String,
+    #[serde(default)]
+    pub cap_id: Option<String>,
+    #[serde(default)]
+    pub label_id: Option<String>,
+    #[serde(default)]
+    pub label_format: Option<ScalarTextFormat>,
+}
 pub(crate) fn raw_bytes(raw: &RawNode) -> usize {
     std::mem::size_of::<RawNode>()
         + raw.source.file.capacity()
@@ -156,6 +185,7 @@ pub const PROPERTIES: &[&str] = &[
     "image_fit",
     "clip_polygon",
     "clip_children",
+    "scalar_target",
     "points",
     "closed",
     "text_align",
@@ -227,6 +257,7 @@ pub struct ViewSpec {
     pub image_fit: bead_render::ImageFit,
     pub clip_polygon: Option<Vec<[f32; 2]>>,
     pub clip_children: bool,
+    pub scalar_target: Option<ScalarTarget>,
     pub points: Vec<[f32; 2]>,
     pub closed: bool,
     pub drag: bool,
@@ -768,6 +799,79 @@ impl ViewSpec {
             if raw.kind == Widget::Button && !p.contains_key("text") && children.is_empty() {
                 return Err(source.error("Button requires text or content children"));
             }
+            let scalar_target = p
+                .get("scalar_target")
+                .cloned()
+                .map(serde_json::from_value::<ScalarTarget>)
+                .transpose()
+                .map_err(|error| source.error(error))?;
+            if let Some(target) = &scalar_target {
+                fn interactive(node: &ViewSpec) -> bool {
+                    node.action.is_some()
+                        || node.input.is_some()
+                        || node.drag
+                        || node.drop_action.is_some()
+                        || node.children.iter().any(interactive)
+                }
+                if children.iter().any(interactive) {
+                    return Err(
+                        source.error("scalar_target clips cannot contain interactive descendants")
+                    );
+                }
+                if raw.kind != Widget::Box
+                    || !boolean(p, "clip_children", false, source)?
+                    || text(p, "position", "", source)? != "absolute"
+                    || !p.contains_key("width")
+                    || !p.contains_key("height")
+                {
+                    return Err(
+                        source.error("scalar_target requires a fixed-size absolute clipped Box")
+                    );
+                }
+                if target.id.is_empty()
+                    || target.id.len() > 128
+                    || target.binding.is_empty()
+                    || target.binding.len() > 2048
+                    || !target.value.is_finite()
+                    || !target.min.is_finite()
+                    || !target.max.is_finite()
+                    || target.min >= target.max
+                    || target.min.abs() > 1.0e12
+                    || target.max.abs() > 1.0e12
+                    || !(target.min..=target.max).contains(&target.value)
+                    || !target.scale.is_finite()
+                    || !(0. ..=20_000.).contains(&target.scale)
+                    || !target.duration.is_finite()
+                    || !(0. ..=60.).contains(&target.duration)
+                    || !matches!(
+                        target.transition.as_str(),
+                        "linear" | "out-cubic" | "in-out-cubic"
+                    )
+                    || target
+                        .cap_id
+                        .as_ref()
+                        .is_some_and(|id| id.is_empty() || id.len() > 256)
+                    || target
+                        .label_id
+                        .as_ref()
+                        .is_some_and(|id| id.is_empty() || id.len() > 256)
+                {
+                    return Err(source.error("scalar_target has invalid bounds or animation data"));
+                }
+                if let Some(format) = &target.label_format
+                    && (format.prefix.len() + format.suffix.len() > 160
+                        || !format.multiplier.is_finite()
+                        || format.multiplier.abs() > 1.0e6
+                        || format.precision > 6)
+                {
+                    return Err(source.error("scalar_target text format exceeds its bound"));
+                }
+                if target.label_format.is_some() != target.label_id.is_some() {
+                    return Err(
+                        source.error("scalar_target label_id and label_format must be paired")
+                    );
+                }
+            }
             Ok(ViewSpec {
                 id: id.clone(),
                 kind: raw.kind,
@@ -833,6 +937,7 @@ impl ViewSpec {
                 },
                 clip_polygon: polygon(p.get("clip_polygon"), source)?,
                 clip_children: boolean(p, "clip_children", false, source)?,
+                scalar_target,
                 points,
                 closed,
                 radius: number(
@@ -1111,6 +1216,12 @@ pub fn layout(
             l.size.width,
             l.size.height,
         );
+        let own_clip = (view.clip_children || view.scroll.is_some()).then(|| {
+            let width = view.scalar_target.as_ref().map_or(r.w, |target| {
+                target.scale * ((target.value - target.min) / (target.max - target.min)) as f32
+            });
+            Rect::new(r.x, r.y, width.clamp(0., r.w), r.h)
+        });
         let own_visible = r.w > 0. && r.h > 0. && !clip.is_some_and(|c| intersect(c, r).is_none());
         // Containers may have overflowing/absolute descendants outside their
         // assigned box. Cull leaves; retain traversal through such containers.
@@ -1125,6 +1236,7 @@ pub fn layout(
             own: own_start..own_start,
             subtree_end: own_start,
             bounds: r,
+            clip_bounds: own_clip,
         });
         let source = &view.source;
         let palette_role = |name: &str, default| palette.get(name).unwrap_or(default);
@@ -1338,8 +1450,8 @@ pub fn layout(
         }
         let mut children_pos = (r.x, r.y);
         let mut child_clip = if view.clip_children {
-            Some(clip.map_or(r, |clip| {
-                intersect(clip, r).unwrap_or(Rect::new(0., 0., 0., 0.))
+            Some(clip.map_or(own_clip.unwrap_or(r), |clip| {
+                intersect(clip, own_clip.unwrap_or(r)).unwrap_or(Rect::new(0., 0., 0., 0.))
             }))
         } else {
             clip
@@ -1363,7 +1475,7 @@ pub fn layout(
                 children_pos,
                 Some(&view.id),
                 child_clip,
-                retain_offscreen || view.scroll.is_some(),
+                retain_offscreen || view.scroll.is_some() || view.scalar_target.is_some(),
                 inherited_scroll,
                 scroll_limit,
                 resolve,
@@ -1390,5 +1502,40 @@ pub fn layout(
         &hover,
         &mut output,
     )?;
+    fn reserve_scalar_labels(view: &ViewSpec, out: &mut LaidOut) {
+        if let (Some(label_id), Some(format)) = (
+            view.scalar_target
+                .as_ref()
+                .and_then(|target| target.label_id.as_ref()),
+            view.scalar_target
+                .as_ref()
+                .and_then(|target| target.label_format.as_ref()),
+        ) {
+            if let Some(layer) = out.scene.layers.iter().find(|layer| layer.id == *label_id)
+                && let Some(index) = layer.own.clone().find(|index| {
+                    matches!(
+                        out.scene.primitives.get(*index),
+                        Some(Primitive::Text { .. })
+                    )
+                })
+                && let Some(Primitive::Text { text, .. }) = out.scene.primitives.get_mut(index)
+            {
+                let reserve = (format.prefix.len() + format.suffix.len() + 32).min(256);
+                if text.capacity() < reserve {
+                    text.reserve(reserve.saturating_sub(text.len()));
+                }
+            }
+            if let Some(node) = out.nodes.iter_mut().find(|node| node.id == *label_id) {
+                let reserve = (format.prefix.len() + format.suffix.len() + 32).min(256);
+                if node.label.capacity() < reserve {
+                    node.label.reserve(reserve.saturating_sub(node.label.len()));
+                }
+            }
+        }
+        for child in &view.children {
+            reserve_scalar_labels(child, out);
+        }
+    }
+    reserve_scalar_labels(view, &mut output);
     Ok(output)
 }

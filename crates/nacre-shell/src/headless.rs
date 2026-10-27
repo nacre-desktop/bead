@@ -823,7 +823,7 @@ mod tests {
                     .layers
                     .iter()
                     .find(|layer| layer.id == "osd.track.fill-window")
-                    .map(|layer| layer.bounds.w)
+                    .and_then(|layer| layer.clip_bounds.map(|clip| clip.w))
             };
             let initial = fill_width(&harness).expect("OSD fill window");
             harness.update(BTreeMap::from([("osd.value".into(), Value::Number(0.8))]))?;

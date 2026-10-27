@@ -527,6 +527,13 @@ pub struct DragFill {
     pub to: [u8; 4],
 }
 pub trait SceneSource {
+    fn has_retained_scalar_targets(&self) -> bool {
+        false
+    }
+    /// Drain one bounded scalar update for an in-place retained-scene path.
+    fn take_retained_scalar_patch(&mut self) -> Option<bead_render::RetainedScalarPatch> {
+        None
+    }
     fn drag_visuals(&self) -> Vec<DragVisual> {
         Vec::new()
     }

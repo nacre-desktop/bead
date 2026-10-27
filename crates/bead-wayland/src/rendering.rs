@@ -38,6 +38,27 @@ pub(super) fn prepare_pending_images(
     Ok(true)
 }
 
+/// Apply one retained scalar update to the accepted scene and validate it in place.
+pub(super) fn accept_retained_scalar_patch(
+    source: &mut dyn SceneSource,
+    scene: &mut Scene,
+    renderer: &mut dyn Renderer,
+    scale: f32,
+) -> Result<bool, Box<dyn Error>> {
+    let Some(patch) = source.take_retained_scalar_patch() else {
+        return Ok(false);
+    };
+    if !scene.apply_retained_scalar_patch(&patch) {
+        return Err("retained scalar patch does not match the accepted scene".into());
+    }
+    renderer.prepare(scene, scale)?;
+    source.validate()?;
+    if !source.commit() {
+        return Err("retained scalar patch was not accepted".into());
+    }
+    Ok(true)
+}
+
 /// Hidden content never requests a keyboard, including retained warm panels.
 fn panel_keyboard_mode(visible: bool, click_focus: bool, exclusive: bool) -> KeyboardInteractivity {
     if !visible {
@@ -2813,6 +2834,7 @@ mod input_tests {
                 own: 0..2,
                 subtree_end: 2,
                 bounds: body,
+                clip_bounds: None,
             }],
             prepared: Default::default(),
             font_files: vec![],

@@ -450,6 +450,27 @@ impl App {
             o.source.validate()?;
             Ok(scene)
         });
+        if matches!(&staged, Ok(None)) {
+            match super::rendering::accept_retained_scalar_patch(
+                o.source.as_mut(),
+                &mut o.scene,
+                &mut *o.renderer,
+                scale,
+            ) {
+                Ok(true) => {
+                    o.ui_serial = o.ui_serial.wrapping_add(1);
+                    self.overlay_draw();
+                    return;
+                }
+                Ok(false) => return,
+                Err(error) => {
+                    eprintln!("OVERLAY_ERROR {error}");
+                    o.scene = o.source.error_scene(error.to_string());
+                    self.overlay_draw();
+                    return;
+                }
+            }
+        }
         let scene = match staged {
             Ok(Some(scene)) => {
                 if !o.source.commit() {

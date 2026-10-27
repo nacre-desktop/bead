@@ -578,6 +578,32 @@ impl App {
             win.source.validate()?;
             Ok(scene)
         });
+        if matches!(&staged, Ok(None)) {
+            match super::rendering::accept_retained_scalar_patch(
+                win.source.as_mut(),
+                &mut win.scene,
+                &mut *win.renderer,
+                scale,
+            ) {
+                Ok(true) => {
+                    win.ui_serial = win.ui_serial.wrapping_add(1);
+                    if let (Some(bridge), Some(tree)) =
+                        (&mut self.accessibility, win.source.accessibility_tree())
+                    {
+                        bridge.update(tree);
+                    }
+                    self.window_draw();
+                    return;
+                }
+                Ok(false) => return,
+                Err(error) => {
+                    eprintln!("UI_ERROR {error}");
+                    win.scene = win.source.error_scene(error.to_string());
+                    self.window_draw();
+                    return;
+                }
+            }
+        }
         let scene = match staged {
             Ok(Some(scene)) => {
                 if !win.source.commit() {
