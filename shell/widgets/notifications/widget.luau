@@ -31,7 +31,7 @@ local function bar(props,settings,_data)
         width=ui.animate("notifications-width:"..tostring(props.instance and props.instance.iid or "preview"),width,.18,"out-cubic")
         width=math.min(width,style=="icon+value" and value_capacity or text_capacity)
     end
-    return (popouts and kit.StatusIcon or ui.Row){id="notifications",width=text and props.available_width or nil,direction="row",height=t.status_height,gap=style~="icon" and t.item_gap or 0,padding=0,padding_left=t.status_padding,padding_right=t.status_count_padding,fill="transparent",hover_fill="surfaceContainerHigh",align="center",justify=text and "start" or "center",
+    return (popouts and kit.StatusIcon or ui.Row){id="notifications",width=text and props.available_width or nil,direction="row",height=t.status_height,radius=t.status_radius,gap=style~="icon" and t.item_gap or 0,padding=0,padding_left=t.status_padding,padding_right=t.status_count_padding,fill="transparent",hover_fill="surfaceContainerHigh",align="center",justify=text and "start" or "center",
         aria_label=ui.tr("bead.bar.open-notifications"),on_activate=popouts and ui.action("status.pill.open","notifications") or nil,
         status_glyph("glyph","notifications","notifications"),
         text and status_text{id="notifications-count",text=text,width=width,max_width=content_capacity,font_size=t.detail_font,color="secondary"} or nil,

@@ -36,7 +36,7 @@ local function bar(props,settings,_data)
         width=math.min(width,content_capacity)
     end
     local action=popouts and ui.action("status.pill.open","updates") or nil
-    return updates_on and kit.Button{id="updates",width=content and props.available_width or nil,direction="row",padding=0,fill="transparent",hover_fill="surfaceContainerHigh",on_activate=action,height=t.status_height,gap=t.item_gap,shrink=0,padding_left=t.status_padding,padding_right=t.status_count_padding,align="center",justify=content and "start" or "center",
+    return updates_on and kit.Button{id="updates",width=content and props.available_width or nil,direction="row",padding=0,fill="transparent",hover_fill="surfaceContainerHigh",on_activate=action,height=t.status_height,radius=t.status_radius,gap=t.item_gap,shrink=0,padding_left=t.status_padding,padding_right=t.status_count_padding,align="center",justify=content and "start" or "center",
         status_glyph("package","package_2","package","primary"),
         content and status_text{id="count",text=content,width=width,max_width=content_capacity,font_size=t.clock_font,color="primary"} or nil,
     } or ui.Box{id="updates",width=0,height=0,shrink=0,visible=false}

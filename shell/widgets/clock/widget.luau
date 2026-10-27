@@ -90,7 +90,7 @@ local function clock_content(style,instance_id,available_width)
     local gap=date_width>0 and time_width>0 and t.item_gap or 0
     local date_node=status_text{id="date",text=measure.ellipsize(date,date_width,clock_font,t.detail_font),width=date_width,max_width=date_width,shrink=0,font_size=t.detail_font,color="secondary"}
     local time_node=status_text{id="time",text=measure.ellipsize(time,time_width,clock_font,t.clock_font),width=time_width,max_width=time_width,shrink=0,font_size=t.clock_font,color="tertiary"}
-    return ui.Row{id="time-date",width=width,height=t.status_height,gap=gap,align="center",time_node,date_node}
+    return ui.Row{id="time-date",width=width,height=t.status_height,radius=t.status_radius,gap=gap,align="center",time_node,date_node}
 end
 local function bar(props,settings,_data)
     local style=props.form_style
