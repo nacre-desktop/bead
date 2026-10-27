@@ -150,6 +150,12 @@ local function desktop(props,_settings,_data)
         local digit_height=preview and digit_size*1.4 or compact and h*.4 or h*.38
         local date_height=compact and 12 or 24
         local date_size=compact and kit.tokens.text.caption*4/3 or kit.tokens.text.body*4/3
+        if preview then
+            return ui.Column{id="clock-minimal-preview",width=w,height=h,justify="center",gap=kit.tokens.spacing.xs,
+                ui.Text{id="hour",text=hour or visible_time,width="fill",height=digit_height,font_size=digit_size,font_weight=visual.display_weight,family=visual.display_font,color="onSurface",text_align="center"},
+                ui.Text{id="minute",text=minute or "",width="fill",height=digit_height,font_size=digit_size,font_weight=visual.display_weight,family=visual.display_font,color="primary",text_align="center"},
+                ui.Text{id="date",text=weekday,width="fill",height=date_height,font_size=date_size,family=visual.body_font,color="secondary",text_align="center"}}
+        end
         return ui.Column{id="clock-minimal",width=w,height=h,justify="center",gap=compact and 0 or kit.tokens.spacing.xs,on_activate=action,
             visual.display("hour",hour or visible_time,"fill",digit_height,digit_size,"onSurface",true),
             visual.display("minute",minute or "","fill",digit_height,digit_size,"primary",true),
