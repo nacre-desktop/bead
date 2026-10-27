@@ -31,12 +31,9 @@ ceiling. Full Bead CI passes. See [B0157](specs/0157-picker-errors.md).
 
 # Status
 
-## 2026-10-27 — B0162 daily acceptance (implementation complete; remote gates pending)
+## 2026-10-27 — B0162 daily acceptance (CI passes; interaction acceptance remains open)
 
-The private four-round harness, quick mode, Escape keyboard-interactivity fix and closed-panel unmap are committed.
-Source inspection identifies `bda20168` as the first Escape regression; slow-open and black-square behavior remain unmeasured.
-Remote CI's first archive attempt lacked Git metadata; its retry and all baseline/main/fixed captures are unverified because the private test hosts became unreachable.
-No live desktop was used and no validation pass is claimed; see [B0162](specs/0162-daily-acceptance.md).
+The full Bead CI-equivalent passes on the rebased current-main source (`5a39635d`), and three full nested arms cover 900369fb, main-before `24709327`, and the current-main candidate. `bda20168` introduced the Escape regression; main-before screenshots retain the Updates panel after Escape. The current candidate has zero UI errors after widget-state fixes and passes memory, CPU, swap, drag-commit and idle-layer gates, but open latency remains ~240–300 ms, close-pixel checks fail, and synthetic Niri shortcut routes remain unverified. See [B0162](specs/0162-daily-acceptance.md).
 
 ## 2026-10-27 — B0159 AI chat scroll (implementation complete; smoothness gates open)
 

@@ -1,19 +1,20 @@
 # Feasibility
 
-## B0162 — daily acceptance and regression repair (remote verification blocked)
+## B0162 — daily acceptance and regression repair (2026-10-27; CI passed, acceptance gates fail)
 
-The private harness now covers the requested dropdowns, panels, wallpaper apply, drag, idle and close checks.
-Source review confirms `bda20168` made bar popouts text-focus-only, preventing Escape dismissal.
-The fix restores keyboard interaction and unmaps closed companion surfaces after their close frame.
-No timing, pixel-diff, memory or compositor measurements are available because remote hosts became unreachable.
+The current-main branch is based on `d286f871` and includes the clicked-dropdown/canvas fixes merged from B0161.
+The full private harness ran 900369fb, main-before `24709327`, and the rebased current-main candidate at 2880×1800/1.5.
+`bda20168` is the Escape first-bad commit; main-before screenshots show the Updates panel still present after Escape.
+The candidate avoids `UI_ERROR` after canvas state fixes, but opening and close-pixel gates still fail.
 
-| Gate | Runs | Result |
-| --- | ---: | --- |
-| Remote full CI | 2 | First archive lacked Git metadata; retry result unavailable |
-| Quick nested captures | 0 | Not run |
-| Full captures: base / main-before / fixed | 0 / 0 / 0 | Not run |
+| Gate | Result |
+| --- | --- |
+| Full remote CI, rebased source `5a39635d` | Exit 0; workspace checks, Luau 0.742, services, cargo-deny and all release arms passed; later `df6c8b4e` Python input routing passed `py_compile` and full acceptance exercise |
+| Full 900369fb | 84/96 legacy presents; p50/p99 80.781/81.352 ms (different boundary from main marker); idle layer count 7 vs 6; Pss_Anon +9.074 MiB, UI_ERROR 0 |
+| Full main-before `24709327` | 42 marker opens; p50/p99 246.056/278.685 ms; Escape leaves Updates visible; UI_ERROR 24; Pss_Anon +18.578 MiB; idle layer count 6 |
+| Full rebased candidate `5a39635d` | 35 marker opens p50/p99 245.732/270.954 ms; 72/96 close screenshots differ; UI_ERROR 0; Pss_Anon +18.195 MiB; idle layer count 6 |
 
-The first CI attempt's B0002 proof failed because its git-less archive had neither `.git` nor `REVISION`; the retry added `REVISION` but was not observed to completion. No CI or capture pass is claimed. [Scope and pending gates](docs/specs/0162-daily-acceptance.md).
+The legacy `UI_PRESENTED` fallback and `PANEL_OPEN_LATENCY` marker have different start events, so they do not establish a baseline speed regression. The candidate battery gap/re-arm passes; its nested Super routes still do not fire (`routes.log` empty), and the 33.3 ms opening limit remains unmet. The observed stuck panel is consistent with the reported upper-right artifact; the exact pixel-only black square was not isolated. The verified full CI source was `5a39635d`; `df6c8b4e` changes only the Python harness input routing and was syntax-checked and exercised by full acceptance. [Scope, evidence and limits](docs/specs/0162-daily-acceptance.md).
 
 ## B0151 — widget finish slice (2026-10-27; snap gate fails)
 
