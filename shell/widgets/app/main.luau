@@ -437,7 +437,7 @@ local function detail()
     local settings_package=table.clone(package)
     settings_package.settings={}
     for key,schema in package.settings do
-        if not schema.style_alias and not schema.hidden then settings_package.settings[key]=schema end
+        if key~="dropdown_trigger" and not schema.style_alias and not schema.hidden then settings_package.settings[key]=schema end
     end
     local item={iid=group,widget=selected,settings=settings}
     local fields=settings_form.rows(item,settings_package,form_action(selected,placement,group))
