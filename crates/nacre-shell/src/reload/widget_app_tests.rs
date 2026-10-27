@@ -493,7 +493,12 @@ fn widget_app_stage_uses_the_presentation_poster_when_no_catalogue_thumbnail_is_
         "widgets.wallpaper.path".into(),
         Value::Text(wallpaper_path.clone()),
     );
-    let harness = Harness::load(
+    let mut icons = BTreeMap::new();
+    icons.insert(
+        wallpaper_path.trim_start_matches("@icon:").to_owned(),
+        poster.clone(),
+    );
+    let harness = Harness::load_with_icons(
         &root,
         Path::new("widgets/app/main.luau"),
         &root.join("palette.json"),
@@ -503,11 +508,12 @@ fn widget_app_stage_uses_the_presentation_poster_when_no_catalogue_thumbnail_is_
             height: 800,
             scale: 1.,
         },
+        icons,
     )
     .unwrap();
     assert!(harness.scene().primitives.iter().any(|primitive| matches!(
         primitive,
-        bead::render::Primitive::Image { path, .. } if path.to_string_lossy() == wallpaper_path.as_str()
+        bead::render::Primitive::Image { path, .. } if path == &poster
     )));
     std::fs::remove_dir_all(dir).unwrap();
 }
