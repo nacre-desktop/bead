@@ -144,11 +144,11 @@ local function desktop(props,_settings,_data)
     elseif style=="minimal" then
         local hour,minute=string.match(visible_time,"^(%d%d?):(%d%d)")
         local compact=h<120
-        local digit_height=compact and h*.28 or h*.38
+        local digit_height=compact and h*.4 or h*.38
         local digit_size=compact and h*.28 or math.min(110,h*.42)
-        local date_height=compact and 14 or 24
+        local date_height=compact and 12 or 24
         local date_size=compact and kit.tokens.text.caption*4/3 or kit.tokens.text.body*4/3
-        return ui.Column{id="clock-minimal",width=w,height=h,justify="center",gap=kit.tokens.spacing.xs,on_activate=action,
+        return ui.Column{id="clock-minimal",width=w,height=h,justify="center",gap=compact and 0 or kit.tokens.spacing.xs,on_activate=action,
             visual.display("hour",hour or visible_time,"fill",digit_height,digit_size,"onSurface",true),
             visual.display("minute",minute or "","fill",digit_height,digit_size,"primary",true),
             visual.shadow_text("date",weekday,"fill",date_height,date_size,"secondary")}
