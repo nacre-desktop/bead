@@ -2996,6 +2996,7 @@ impl Runtime {
             state_file,
             actions: Default::default(),
             wakeup: None,
+            smooth_open_started: None,
             smooth_key_starts: std::collections::VecDeque::new(),
             smooth_scroll_started: None,
             smooth_scroll_last: None,
