@@ -329,7 +329,7 @@ class Runner:
                 if time.monotonic() >= deadline:
                     raise RuntimeError("private Nacre daemon did not become ready; see daemon.log")
                 time.sleep(.2)
-        shell_env = {**daemon_env, "WAYLAND_DEBUG": "1"}
+        shell_env = daemon_env
         shell_cmd = [str(self.args.bead), "--bar", "--core-views", "--ui-provider", "--notices",
                      "--daemon-socket", self.env["NACRE_DAEMON_SOCKET"], "--command-socket",
                      str(pathlib.Path(self.env["XDG_RUNTIME_DIR"]) / "nacre/bead-command.sock"),
