@@ -1040,7 +1040,14 @@ os.execv(real, [real, *args])
                     self.pointer(438, 248, 'click')
             elif kind == 'chat-seed':
                 self.call('ai.chat.open', {'channel': ''})
-                self.call('ai.chat.send', {'channel': '', 'text': 'Why does the release build fail on CI?', 'attachments': []})
+                text = step[1] if len(step) > 1 else 'Why does the release build fail on CI?'
+                self.call('ai.chat.send', {'channel': '', 'text': text, 'attachments': []})
+            elif kind == 'chat-assert-count':
+                count_path = self.root / 'turn_state'
+                actual = int(count_path.read_text() if count_path.exists() else '0')
+                if actual < step[1]:
+                    raise RuntimeError(f'AI chat fixture expected at least {step[1]} completed turns; observed {actual}')
+                self.chat_fixture_turns = actual
             elif kind == 'click':
                 self.pointer(step[1], step[2], 'click')
             elif kind == 'qml_settings':

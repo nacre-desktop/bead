@@ -12,7 +12,6 @@ use std::{
     collections::{BTreeSet, HashMap},
     hash::{Hash, Hasher},
     path::PathBuf,
-    rc::Rc,
     sync::Arc,
 };
 
@@ -274,7 +273,6 @@ impl Cell {
 }
 struct Laid {
     cells: Vec<Cell>,
-    height: f32,
 }
 
 fn groups(text: &str) -> Vec<&str> {
@@ -337,7 +335,7 @@ impl Flow<'_> {
     }
 }
 
-fn lay(meter: &Meter, style: &Style, entry: &Entry) -> Laid {
+fn lay(meter: &Meter, style: &Style, entry: &Entry, blocks: &[Block]) -> Laid {
     let s = &style.scale;
     let (pad, body, small) = (s.md, s.body, s.caption - s.xs / 3.);
     let inner = style.width - 2. * pad;
@@ -367,7 +365,7 @@ fn lay(meter: &Meter, style: &Style, entry: &Entry) -> Laid {
         flow.y += used;
     } else {
         let mut first = true;
-        for block in markdown::parse(&entry.text) {
+        for block in blocks.iter().cloned() {
             if !first {
                 flow.y += s.sm;
             }
@@ -473,18 +471,106 @@ fn lay(meter: &Meter, style: &Style, entry: &Entry) -> Laid {
     }
     let height = button_y + button_h + pad - 1.;
     flow.cells[0].h = height;
-    Laid {
-        cells: flow.cells,
-        height,
+    Laid { cells: flow.cells }
+}
+
+fn text_height(meter: &Meter, style: &Style, text: &str, size: f32, mono: bool, width: f32) -> f32 {
+    let family = if mono { &style.mono } else { &style.sans };
+    groups(text)
+        .into_iter()
+        .map(|group| meter.height(group.trim_end_matches('\n'), family, size, width))
+        .sum()
+}
+
+/// Measure row geometry without allocating scene cells. This lets `window` build cells
+/// only for rows near the viewport while retaining exact extent and stable scroll offsets.
+fn measure(meter: &Meter, style: &Style, entry: &Entry, blocks: &[Block]) -> f32 {
+    let s = &style.scale;
+    let (pad, body) = (s.md, s.body);
+    let inner = style.width - 2. * pad;
+    let mut y = pad * 2. + s.xs + 1.;
+    if !entry.markdown {
+        y += text_height(meter, style, &entry.text, body, false, inner);
+    } else {
+        for (index, block) in blocks.iter().enumerate() {
+            if index > 0 {
+                y += s.sm;
+            }
+            y += match block {
+                Block::Paragraph(text) => text_height(meter, style, text, body, false, inner),
+                Block::Heading(level, text) => {
+                    let size = body + [4., 3., 1.][usize::from((*level).min(3)) - 1];
+                    text_height(meter, style, text, size, false, inner)
+                }
+                Block::Item { depth, text, .. } => {
+                    let indent = pad + f32::from(*depth) * (s.md + s.xs);
+                    (body * PITCH).max(text_height(
+                        meter,
+                        style,
+                        text,
+                        body,
+                        false,
+                        inner - indent + pad - s.xxl + s.xs,
+                    ))
+                }
+                Block::Quote(text) => text_height(meter, style, text, body, false, inner - s.md),
+                Block::Code(text) => {
+                    text_height(meter, style, text, style.code(), true, inner - 2. * s.sm)
+                        + 2. * s.sm
+                }
+                Block::Rule => s.sm + 1.,
+            };
+        }
     }
+
+    let code_buttons = if entry.markdown {
+        blocks
+            .iter()
+            .filter(|block| matches!(block, Block::Code(_)))
+            .count()
+    } else {
+        0
+    };
+    let button_count = entry.actions.len()
+        + if entry.code_action.is_some() {
+            code_buttons
+        } else {
+            0
+        };
+    let button_h = s.xxl + 2.5 * s.xs;
+    let mut button_y = y + s.xs + 1.;
+    let mut x = 0.;
+    if button_count > 0 {
+        for label in entry.actions.iter().map(|(label, _)| label.as_str()).chain(
+            entry
+                .code_action
+                .iter()
+                .flat_map(|(label, _)| std::iter::repeat_n(label.as_str(), code_buttons)),
+        ) {
+            let width = (meter.width(label, &style.sans, body) + s.xxl + s.sm).min(style.width);
+            if x > 0. && x + width > style.width {
+                x = 0.;
+                button_y += button_h + s.xs + 1.;
+            }
+            x += width + s.xs + 1.;
+        }
+    }
+    button_y + button_h + pad - 1.
+}
+
+struct CachedRow {
+    fingerprint: u64,
+    height: f32,
+    markdown: Vec<Block>,
+    cells: Option<Laid>,
 }
 
 /// Layout cache and window for one transcript.
 pub struct Transcript {
     style: Style,
     meter: Meter,
-    laid: HashMap<String, (u64, Rc<Laid>)>,
-    order: Vec<(f32, Rc<Laid>)>,
+    rows: HashMap<String, CachedRow>,
+    order: Vec<(f32, String)>,
     extent: f32,
 }
 impl Transcript {
@@ -492,7 +578,7 @@ impl Transcript {
         Self {
             style,
             meter,
-            laid: HashMap::new(),
+            rows: HashMap::new(),
             order: Vec::new(),
             extent: 0.,
         }
@@ -503,8 +589,8 @@ impl Transcript {
     pub fn meter(&self) -> &Meter {
         &self.meter
     }
-    /// Lay out `entries`; unchanged messages reuse their cells, so streaming text only
-    /// re-measures its last group. Returns the total height.
+    /// Measure row extents; unchanged messages reuse their cached markdown and height.
+    /// Scene cells are built lazily by `window` for visible rows only.
     pub fn layout(&mut self, entries: &[Entry]) -> f32 {
         let mut seen = BTreeSet::new();
         self.order.clear();
@@ -522,19 +608,32 @@ impl Transcript {
             )
                 .hash(&mut hash);
             let hash = hash.finish();
-            let laid = match self.laid.get(&entry.key) {
-                Some((known, laid)) if *known == hash => laid.clone(),
+            let height = match self.rows.get(&entry.key) {
+                Some(row) if row.fingerprint == hash => row.height,
                 _ => {
-                    let laid = Rc::new(lay(&self.meter, &self.style, entry));
-                    self.laid.insert(entry.key.clone(), (hash, laid.clone()));
-                    laid
+                    let markdown = if entry.markdown {
+                        markdown::parse(&entry.text)
+                    } else {
+                        Vec::new()
+                    };
+                    let height = measure(&self.meter, &self.style, entry, &markdown);
+                    self.rows.insert(
+                        entry.key.clone(),
+                        CachedRow {
+                            fingerprint: hash,
+                            height,
+                            markdown,
+                            cells: None,
+                        },
+                    );
+                    height
                 }
             };
             seen.insert(entry.key.clone());
-            self.order.push((y, laid.clone()));
-            y += laid.height + self.style.scale.md;
+            self.order.push((y, entry.key.clone()));
+            y += height + self.style.scale.md;
         }
-        self.laid.retain(|key, _| seen.contains(key));
+        self.rows.retain(|key, _| seen.contains(key));
         self.extent = if self.order.is_empty() {
             0.
         } else {
@@ -543,16 +642,35 @@ impl Transcript {
         self.extent
     }
     /// Cells overlapping `[scroll - overscan, scroll + height + overscan]`, as model rows.
-    pub fn window(&self, scroll: f32, height: f32) -> Vec<Value> {
+    /// Off-window scene cells are retired after each projection; measured row heights and
+    /// parsed Markdown remain cached for stable extent and fast reversals.
+    pub fn window(&mut self, scroll: f32, height: f32, entries: &[Entry]) -> Vec<Value> {
         let (low, high) = (
             scroll - self.style.overscan,
             scroll + height + self.style.overscan,
         );
+        let entries: HashMap<&str, &Entry> = entries
+            .iter()
+            .map(|entry| (entry.key.as_str(), entry))
+            .collect();
         let mut out = Vec::new();
-        for (top, laid) in &self.order {
-            if top + laid.height < low || *top > high {
+        let mut visible = BTreeSet::new();
+        let meter = &self.meter;
+        let style = &self.style;
+        for (top, key) in &self.order {
+            let Some(row) = self.rows.get_mut(key) else {
+                continue;
+            };
+            if top + row.height < low || *top > high {
                 continue;
             }
+            let Some(entry) = entries.get(key.as_str()).copied() else {
+                continue;
+            };
+            visible.insert(key.clone());
+            let laid = row
+                .cells
+                .get_or_insert_with(|| lay(meter, style, entry, &row.markdown));
             for c in &laid.cells {
                 out.push(json!({
                     "id": c.id,
@@ -564,11 +682,20 @@ impl Transcript {
                 }));
             }
         }
+        for (key, row) in &mut self.rows {
+            if !visible.contains(key) {
+                row.cells = None;
+            }
+        }
         out
+    }
+    #[cfg(test)]
+    pub(crate) fn materialized_rows(&self) -> usize {
+        self.rows.values().filter(|row| row.cells.is_some()).count()
     }
     /// Drop caches and fonts (the panel is closed).
     pub fn release(&mut self) {
-        self.laid.clear();
+        self.rows.clear();
         self.order.clear();
         self.extent = 0.;
         self.meter.release();

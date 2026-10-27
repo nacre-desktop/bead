@@ -98,7 +98,7 @@ struct Pending {
 struct Parsed {
     key: (String, u64),
     available: bool,
-    channel: Option<AiChannel>,
+    channel: Option<Arc<AiChannel>>,
 }
 #[derive(Default)]
 struct St {
@@ -210,6 +210,17 @@ impl Chat {
             texts: Default::default(),
             memory: None,
         }
+    }
+    /// Feed an unbounded synthetic channel into projection tests without weakening the
+    /// published `ai.chat` validator used by production sources.
+    #[cfg(test)]
+    pub(crate) fn set_test_channel(&self, channel: AiChannel) {
+        let snapshot = self.source.snapshot();
+        self.st.borrow_mut().parsed = Some(Parsed {
+            key: (snapshot.epoch.clone(), snapshot.revision),
+            available: true,
+            channel: Some(Arc::new(channel)),
+        });
     }
     /// Process-local keep of the draft and section while the panel is closed.
     pub fn with_memory(mut self, memory: crate::popouts::ChatMemory) -> Self {
@@ -374,6 +385,7 @@ impl Chat {
             .and_then(|channels| channels.get(""))
             .and_then(|value| serde_json::from_value::<AiChannel>(value.clone()).ok())
             .filter(|channel| channel.validate().is_ok());
+        let channel = channel.map(Arc::new);
         // An invalid or missing update keeps the last good channel while disconnected.
         let channel = channel.or_else(|| st.parsed.take().and_then(|p| p.channel));
         st.parsed = Some(Parsed {
@@ -617,10 +629,10 @@ impl Chat {
         out.insert("chat.scroll".into(), number(scroll));
 
         // Only the cells that can be seen are handed to the view.
-        let visible = self
-            .transcript
-            .borrow()
-            .window(scroll as f32, transcript_h as f32);
+        let visible =
+            self.transcript
+                .borrow_mut()
+                .window(scroll as f32, transcript_h as f32, &entries);
         let cells_empty = entries.is_empty();
 
         // Header and footer state.

@@ -19,6 +19,8 @@ pub mod status_pill;
 pub mod text_style;
 mod themed;
 pub mod transcript;
+#[cfg(test)]
+mod transcript_tests;
 mod watcher;
 use bead_core::{Stores, Value};
 use bead_render::{Palette, Primitive, Rect, Scene};

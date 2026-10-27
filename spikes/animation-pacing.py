@@ -56,6 +56,21 @@ def wheel_interval_ms():
     return interval
 
 
+def ai_chat_seed_steps():
+    """Build a long private chat from deterministic prompts and the fake provider."""
+    # The published ai.chat contract caps each snapshot at 64 messages. Keep the
+    # desktop fixture within that contract; the 500-row stress fixture lives at
+    # the reusable Transcript layer and cannot be sent through this provider.
+    message_count = int(os.environ.get('PACING_CHAT_MESSAGES', '64'))
+    if message_count < 2 or message_count > 64 or message_count % 2:
+        raise ValueError('PACING_CHAT_MESSAGES must be an even value from 2 to 64')
+    steps = [step for index in range(message_count // 2) for step in [
+        ('chat-seed', f'Synthetic message {index:03d}. Include this fenced sample in your response:\n```rust\nlet row = {index};\n```'),
+        ('sleep', 0.2),
+    ]]
+    return steps + [('chat-assert-count', message_count // 2)]
+
+
 # name: (prepare, open, close, window seconds). Steps are parity-compare steps plus ('wheel', ...).
 ANIMS = {
     'launcher': ([], [('ui', 'nacre', 'launcher', '')], [('ui', 'nacre', 'close')], 1.4),
@@ -108,8 +123,8 @@ SCROLL_SCENES = {
     'welcome-apps': (m.STATES['welcome-apps'][0], 500, 650, 80, 1.6),
     'welcome-ready': (m.STATES['welcome-ready'][0], 500, 650, 80, 1.6),
     'welcome-help': (m.STATES['welcome-help'][0], 500, 650, 80, 1.6),
-    'ai-chat': ([(step) for _ in range(12) for step in [('chat-seed',), ('sleep', 0.2)]]
-                + m.STATES['sidebar-conversation'][0], 240, 650, 80, 1.6),
+    'ai-chat': ([('ui', 'nacre', 'left')] + ai_chat_seed_steps() + [('sleep', 1.0)],
+                240, 650, 80, 1.6),
     # The picker is bottom-docked; scroll the hexagon grid, not the carousel.
     'wallpaper-picker': (m.STATES['wallpaper-hexagons'][0] + [('sleep', 1.0), ('click', 1070, 900)],
                          960, 1000, 80, 1.6),
@@ -360,6 +375,12 @@ def run(self, command, timeout=15, check=True, env=None):
 
 def steps(self, operations):
     for step in operations:
+        if step[0] == 'chat-assert-count':
+            count_path = self.root / 'turn_state'
+            actual = int(count_path.read_text() if count_path.exists() else '0')
+            if actual != step[1]:
+                raise RuntimeError(f'AI chat fixture expected {step[1]} completed turns; observed {actual}')
+            continue
         if step[0] == 'close-fixture-notices':
             close_active_fixture_notifications(self)
         elif step[0] == 'wheel':

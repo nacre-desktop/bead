@@ -10,6 +10,16 @@ ceiling. Full Bead CI passes. See [B0157](specs/0157-picker-errors.md).
 
 # Status
 
+## 2026-10-27 — B0159 AI chat scroll (implementation complete; smoothness gates open)
+
+Both chat views use lazy visible-window transcript cells with cached Markdown
+measurement. The 500-row Markdown/code component and chat tests are added. At
+2880×1800/1.5, detached-chat reversal improved from control medians of 31.97/40.01
+ms to 15.96/23.93 ms (GL/CPU), still above the 8.33 ms target; nested presented
+cadence was ~16 ms, so this is not a physical 120 Hz result. UI fixture input is
+capped at the published 64-message protocol limit. Docked candidate timing,
+momentum hit-testing, and 500-row UI timing remain open; see [B0159](specs/0159-chat-scroll.md).
+
 ## 2026-10-27 — B0147 Spotlight overlay (implementation review; smoothness gates fail)
 
 Spotlight is a transparent full-output overlay with idle raster warming and an output-sized CPU fallback scene. The fallback is ready before `PANEL_OPEN`; the first traced real-4K content frame arrived 92.1 / 93.0 ms after trigger at synthetic 60 / 120 Hz. QML/Bead idle, open, hover, pressed and slide pairs were visually inspected; removing QML's full-screen selected-wallpaper backdrop is intentional. Two expired-closed memory samples are 37.05 / 39.65 MiB above idle, within B0134's 40 MiB cap. Synthetic nested 60/120 Hz open intervals and Spotlight slide cadence fail the no-drop gate; this is not a physical scanout measurement. Bead slide probes exceeded the 50 ms markup limit in `extras/main.luau` and `widgets/registry.luau`; real 4K Enter also produced `retained cache byte budget exceeded` in the separate activation path. None of these paths was changed. Full remote Bead CI and regenerated goldens pass. No live deployment. [Scope and measurements](specs/0147-spotlight-overlay.md).

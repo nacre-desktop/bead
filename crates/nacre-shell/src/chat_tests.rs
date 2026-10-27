@@ -122,14 +122,27 @@ fn streaming_text_keeps_earlier_cells_and_follows_the_bottom() {
 #[test]
 fn reading_away_stops_following_until_the_bottom_is_reached_again() {
     let _guard = serial();
-    let msgs: Vec<(String, String)> = (0..30)
-        .map(|i| (format!("m{i}"), format!("message {i} {}", "x ".repeat(60))))
+    let msgs: Vec<(String, String)> = (0..500)
+        .map(|i| {
+            let code = if i % 10 == 0 {
+                format!("\n\n```rust\nfn message_{i}() {{}}\n```\n")
+            } else {
+                String::new()
+            };
+            (
+                format!("m{i}"),
+                format!("message {i} {}{code}", "x ".repeat(60)),
+            )
+        })
         .collect();
     let rows: Vec<(&str, &str, &str)> = msgs
         .iter()
         .map(|(a, b)| (a.as_str(), "assistant", b.as_str()))
         .collect();
-    let (source, chat) = offline(topic(&rows, state(false, "", None)));
+    let data = topic(&rows, state(false, "", None));
+    let channel = serde_json::from_value(data["channels"][""].clone()).unwrap();
+    let (source, chat) = offline(data);
+    chat.set_test_channel(channel);
     let out = chat.project(&Stores::default());
     let bottom = num(&out, "chat.scroll");
     assert!(bottom > 500.);
@@ -141,9 +154,10 @@ fn reading_away_stops_following_until_the_bottom_is_reached_again() {
         .unwrap();
     let out = chat.project(&stores(&[("chat.scroll", Value::Number(0.))]));
     assert_eq!(num(&out, "chat.scroll"), 0.);
-    // Only the cells near the viewport exist (virtualized), not all 30 messages.
+    // The synthetic fixture exceeds the published snapshot bound, so the test helper
+    // installs it directly; production sources still go through AiChannel::validate.
     let visible = cells(&out);
-    assert!(visible.len() < 30 * 4, "{}", visible.len());
+    assert!(visible.len() < 100, "{} cells materialized", visible.len());
     assert!(visible.iter().all(|c| c["y"].as_f64().unwrap() < 1500.));
     // At the bottom: following resumes; "Latest" does the same.
     let current_bottom = f64::from(

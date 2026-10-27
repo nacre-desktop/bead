@@ -857,7 +857,7 @@ pub struct Runtime {
     actions: bead::core::capabilities::Registry,
     wakeup: Option<std::sync::Arc<dyn Fn(UiEvent) + Send + Sync>>,
     smooth_open_started: Option<std::time::Instant>,
-    smooth_key_starts: std::collections::VecDeque<std::time::Instant>,
+    smooth_key_starts: std::collections::VecDeque<(std::time::Instant, &'static str)>,
     smooth_scroll_started: Option<std::time::Instant>,
     smooth_scroll_last: Option<std::time::Instant>,
     smooth_scroll_dropped: u64,
@@ -925,7 +925,7 @@ impl Runtime {
         } else if self.control.is_some() {
             "control".into()
         } else if self.chat.is_some() {
-            "ai".into()
+            "ai-chat".into()
         } else if self.bar {
             "bar".into()
         } else {
@@ -5848,11 +5848,22 @@ impl SceneSource for Runtime {
             UiEvent::PanelVisibility(true) if self.smooth_open_started.is_none() => {
                 self.smooth_open_started = Some(now);
             }
-            UiEvent::Key { .. } if self.launcher.is_some() => {
+            UiEvent::Key { .. } if self.launcher.is_some() || self.chat.is_some() => {
                 if self.smooth_key_starts.len() == 32 {
                     self.smooth_key_starts.pop_front();
                 }
-                self.smooth_key_starts.push_back(now);
+                let surface = if self.chat.is_some() {
+                    "ai-chat"
+                } else {
+                    "launcher"
+                };
+                self.smooth_key_starts.push_back((now, surface));
+            }
+            UiEvent::Click { .. } if self.chat.is_some() => {
+                if self.smooth_key_starts.len() == 32 {
+                    self.smooth_key_starts.pop_front();
+                }
+                self.smooth_key_starts.push_back((now, "ai-chat"));
             }
             UiEvent::Scroll { .. } => {
                 if self.smooth_scroll_last.is_none_or(|last| {
@@ -7447,6 +7458,15 @@ impl SceneSource for Runtime {
             && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
                 || matches!(&event, UiEvent::Command { command, shift: false } if command == "enter"))
         {
+            if self.trace || std::env::var_os("BEAD_PRIVATE_INPUT_PROOF").is_some() {
+                let event_name = match &event {
+                    UiEvent::Click { .. } => "click",
+                    UiEvent::Release => "release",
+                    UiEvent::Command { .. } => "command",
+                    _ => "other",
+                };
+                eprintln!("INPUT_HIT surface=ai-chat node={id} event={event_name}");
+            }
             self.actions.authorize(name)?;
             let mut outcome = chat.act(arg, &self.session.stores);
             if matches!(&event, UiEvent::Release) {
@@ -9429,9 +9449,9 @@ impl SceneSource for Runtime {
                 now.duration_since(started).as_secs_f64() * 1000.
             );
         }
-        while let Some(started) = self.smooth_key_starts.pop_front() {
+        while let Some((started, surface)) = self.smooth_key_starts.pop_front() {
             eprintln!(
-                "INPUT_ECHO_LATENCY surface=launcher ms={:.3}",
+                "INPUT_ECHO_LATENCY surface={surface} ms={:.3}",
                 now.duration_since(started).as_secs_f64() * 1000.
             );
         }
