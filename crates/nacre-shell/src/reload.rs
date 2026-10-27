@@ -1713,6 +1713,22 @@ impl Runtime {
             "widgets.screen_origin_y",
             "widgets.screen_id",
             "widgets.outputs",
+            // Desktop widgets consume the same published service rows and action
+            // availability as the bar; keep these at the adapter edge.
+            "launcher.apps",
+            "bluetooth.devices",
+            "bluetooth.power_checked",
+            "network.rows",
+            "network.wifi_enabled",
+            "notifications.rows",
+            "status.updates_checked",
+            "status.updates_can_open",
+            "status.updates_can_refresh",
+            "session.enabled",
+            "session.busy",
+            "session.confirm",
+            "session.confirm_action",
+            "session.message",
         ];
         let mut values = self.widget_surface_values(false);
         values.extend(
