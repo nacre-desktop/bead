@@ -21,12 +21,24 @@ mod closed_panel_unmap_tests {
 
     #[test]
     fn unmaps_only_after_the_close_frame_finishes() {
-        assert!(closed_panel_ready_to_unmap(true, false, false, false, false));
-        assert!(!closed_panel_ready_to_unmap(false, false, false, false, false));
-        assert!(!closed_panel_ready_to_unmap(true, true, false, false, false));
-        assert!(!closed_panel_ready_to_unmap(true, false, true, false, false));
-        assert!(!closed_panel_ready_to_unmap(true, false, false, true, false));
-        assert!(!closed_panel_ready_to_unmap(true, false, false, false, true));
+        assert!(closed_panel_ready_to_unmap(
+            true, false, false, false, false
+        ));
+        assert!(!closed_panel_ready_to_unmap(
+            false, false, false, false, false
+        ));
+        assert!(!closed_panel_ready_to_unmap(
+            true, true, false, false, false
+        ));
+        assert!(!closed_panel_ready_to_unmap(
+            true, false, true, false, false
+        ));
+        assert!(!closed_panel_ready_to_unmap(
+            true, false, false, true, false
+        ));
+        assert!(!closed_panel_ready_to_unmap(
+            true, false, false, false, true
+        ));
     }
 }
 delegate_noop!(App: ignore ZwpRelativePointerManagerV1);

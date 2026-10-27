@@ -724,12 +724,9 @@ mod tests {
         ))
         .expect("test client starts without connecting synchronously");
         let mut specs = vec![
-            calendar(path.clone(), (*colors).clone(), owner.clone(), false)
-                .expect("calendar spec"),
-            core_sound(None, path.clone(), (*colors).clone(), false)
-                .expect("sound spec"),
-            session(client.clone(), path.clone(), (*colors).clone(), false)
-                .expect("power spec"),
+            calendar(path.clone(), (*colors).clone(), owner.clone(), false).expect("calendar spec"),
+            core_sound(None, path.clone(), (*colors).clone(), false).expect("sound spec"),
+            session(client.clone(), path.clone(), (*colors).clone(), false).expect("power spec"),
             chat(
                 client.clone(),
                 path.clone(),
@@ -763,7 +760,10 @@ mod tests {
         }
 
         for spec in specs {
-            assert!(spec.keyboard_focus, "a dismissible bar popout needs keyboard input");
+            assert!(
+                spec.keyboard_focus,
+                "a dismissible bar popout needs keyboard input"
+            );
             assert!(
                 !spec.text_focus_only,
                 "text-only keyboard interactivity starves Escape dismissal"
