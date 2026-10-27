@@ -5,7 +5,7 @@ supplied forest wallpaper. Implemented the desktop widget styles and Widgets pag
 including daemon state forwarding. Outfit is bundled under OFL and registered
 with shell Fontconfig; frameless text uses palette shadows, clock dates are
 localized and analog ticks use a cached themed image. Full Bead CI passed on
-9f7fb124. Main, Clock, Battery, Controls, Feeds and App Bead captures were made
+e7eeeb01 after rebasing on `a0335140`. Main, Clock, Battery, Controls, Feeds and App Bead captures were made
 in the private nested desktop at 2880×1800/1.5. QML has no equivalent widget/editor
 surface; memory and 60/120 Hz timing remain open.
 [B0161 spec and evidence](specs/0161-widget-reference.md).
