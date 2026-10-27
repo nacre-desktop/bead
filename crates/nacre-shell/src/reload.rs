@@ -5370,8 +5370,8 @@ impl SceneSource for Runtime {
                     .map(|preview| preview.prepared_at + WIDGET_HOVER_PREVIEW_RENEW)
             })
             .flatten();
-        let analog_enabled = self.widget_canvas
-            && widget_layout_has_analog_clock(self.session.stores.get("widgets.layout"));
+        let analog_enabled = self.widgets_canvas_wanted
+            && widget_layout_has_analog_clock(self.widgets_canvas_layout.as_ref());
         let analog = if analog_enabled {
             Some(
                 std::time::Instant::now()
@@ -5994,8 +5994,8 @@ impl SceneSource for Runtime {
     }
     fn stage(&mut self, mut event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
         let now = std::time::Instant::now();
-        if self.widget_canvas
-            && widget_layout_has_analog_clock(self.session.stores.get("widgets.layout"))
+        if self.widgets_canvas_wanted
+            && widget_layout_has_analog_clock(self.widgets_canvas_layout.as_ref())
             && let UiEvent::Model(values) = &mut event
         {
             let phase = std::time::SystemTime::now()
