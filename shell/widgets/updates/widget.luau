@@ -79,6 +79,7 @@ return {id="updates",title="Updates",icon="package_2",category="bar",data={topic
     forms={bar={default_style="icon+value",styles={
         icon=style("Icon",1,bar),["icon+value"]=count_style("Icon + value",2),["icon+text"]=style("Icon + text",3,bar),
     }},desktop={default_style="card",styles={
+        summary={title="Stored summary",min_span=1,max_span=1200,preferred_span=280,preferred_height=80,hidden=true,render=function(p,s,d) p.form_style="card"; return desktop(p,s,d) end},
         card={title="Update card",min_span=1,max_span=1200,preferred_span=320,preferred_height=160,render=function(p,s,d) p.form_style="card"; return desktop(p,s,d) end},
         pearl={title="Pearl notice",min_span=1,max_span=1200,preferred_span=320,preferred_height=160,render=function(p,s,d) p.form_style="pearl"; return desktop(p,s,d) end},
         wallpaper={title="Wallpaper count",min_span=1,max_span=1200,preferred_span=280,preferred_height=150,render=function(p,s,d) p.form_style="wallpaper"; return desktop(p,s,d) end}}},

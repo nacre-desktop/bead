@@ -17,7 +17,9 @@ local function catalogue_descriptors()
             if placement~="panel" then
                 local form_copy={default_style=form_def.default_style,legacy_style_setting=form_def.legacy_style_setting,styles={}}
                 for name,style in form_def.styles do
-                    form_copy.styles[name]={title=style.title,min_span=style.min_span,max_span=style.max_span,preferred_span=style.preferred_span,preferred_height=style.preferred_height or spacing.huge*3}
+                    if not style.hidden then
+                        form_copy.styles[name]={title=style.title,min_span=style.min_span,max_span=style.max_span,preferred_span=style.preferred_span,preferred_height=style.preferred_height or spacing.huge*3}
+                    end
                 end
                 descriptor.forms[placement]=form_copy
             end
@@ -380,7 +382,7 @@ end
 local function style_tiles(widget,placement,package,style_id,settings)
     local forms=package.forms[placement]
     local keys={}
-    for key in forms.styles do table.insert(keys,key) end
+    for key,style in forms.styles do if not style.hidden then table.insert(keys,key) end end
     table.sort(keys)
     local tiles={id="style-tiles",width="fill",columns=math.max(1,math.min(4,#keys)),gap=spacing.sm,row_height=104,shrink=0}
     for _,key in keys do table.insert(tiles,style_tile(widget,placement,package,key,forms.styles[key],settings,key==style_id)) end

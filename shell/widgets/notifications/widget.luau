@@ -75,7 +75,8 @@ local function count_style()
 end
 return {id="notifications",title="Notifications",icon="notifications",category="bar",data={topics={},actions={}},settings={},defaults={},budget={fps_active=0,fps_idle=0,pause_on={"fullscreen","lock","battery_saver"}},
     forms={bar={default_style="icon+value",styles={icon=style("Icon",1,bar),["icon+value"]=count_style(),["icon+text"]=style("Icon + text",3,bar)}},
-        desktop={default_style="stack",styles={stack={title="Notification stack",min_span=1,max_span=1200,preferred_span=360,preferred_height=184,render=function(p,s,d) p.form_style="stack"; return desktop(p,s,d) end},
+        desktop={default_style="stack",styles={summary={title="Stored summary",min_span=1,max_span=1200,preferred_span=320,preferred_height=80,hidden=true,render=function(p,s,d) p.form_style="stack"; return desktop(p,s,d) end},
+            stack={title="Notification stack",min_span=1,max_span=1200,preferred_span=360,preferred_height=184,render=function(p,s,d) p.form_style="stack"; return desktop(p,s,d) end},
             pearl={title="Pearl stack",min_span=1,max_span=1200,preferred_span=360,preferred_height=184,render=function(p,s,d) p.form_style="pearl"; return desktop(p,s,d) end}}},
         panel={styles={notifications={view="notifications"}}}}
 }

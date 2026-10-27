@@ -37,7 +37,8 @@ end
 local function style(title,preferred,render) return {title=title,min_span=1,max_span=60,preferred_span=preferred,render=render} end
 return {id="power",title="Power",icon="power_settings_new",category="bar",data={topics={},actions={}},settings={},defaults={},budget={fps_active=0,fps_idle=0,pause_on={"fullscreen","lock","battery_saver"}},
     forms={bar={default_style="icon",styles={icon=style("Icon",1,bar),["icon+text"]=style("Icon + text",2,bar)}},
-        desktop={default_style="actions",styles={actions={title="Action card",min_span=1,max_span=1200,preferred_span=360,preferred_height=112,render=function(p,s,d) p.form_style="actions"; return desktop(p,s,d) end},
+        desktop={default_style="actions",styles={button={title="Stored button",min_span=1,max_span=1200,preferred_span=220,preferred_height=92,hidden=true,render=function(p,s,d) p.form_style="actions"; return desktop(p,s,d) end},
+            actions={title="Action card",min_span=1,max_span=1200,preferred_span=360,preferred_height=112,render=function(p,s,d) p.form_style="actions"; return desktop(p,s,d) end},
             compact={title="Quiet row",min_span=1,max_span=1200,preferred_span=320,preferred_height=92,render=function(p,s,d) p.form_style="compact"; return desktop(p,s,d) end}}},
         panel={styles={session={view="session"}}}}
 }

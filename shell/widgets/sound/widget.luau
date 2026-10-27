@@ -44,7 +44,8 @@ local function style(title,preferred,render)
 end
 return {id="sound",title="Sound",icon="volume_up",category="bar",data={topics={},actions={}},settings={},defaults={},budget={fps_active=0,fps_idle=0,pause_on={"fullscreen","lock","battery_saver"}},
     forms={bar={default_style="icon",styles={icon=style("Icon",1,bar),["icon+value"]=style("Icon + value",2,bar),["icon+text"]=style("Icon + text",2,bar)}},
-        desktop={default_style="ring",styles={ring={title="Volume ring",min_span=1,max_span=1200,preferred_span=320,preferred_height=176,render=function(p,s,d) p.form_style="ring"; return desktop(p,s,d) end},
+        desktop={default_style="ring",styles={level={title="Stored level",min_span=1,max_span=1200,preferred_span=260,preferred_height=96,hidden=true,render=function(p,s,d) p.form_style="ring"; return desktop(p,s,d) end},
+            ring={title="Volume ring",min_span=1,max_span=1200,preferred_span=320,preferred_height=176,render=function(p,s,d) p.form_style="ring"; return desktop(p,s,d) end},
             pearl={title="Pearl dial",min_span=1,max_span=1200,preferred_span=320,preferred_height=176,render=function(p,s,d) p.form_style="pearl"; return desktop(p,s,d) end},
             frameless={title="Wallpaper type",min_span=1,max_span=1200,preferred_span=420,preferred_height=176,render=function(p,s,d) p.form_style="frameless"; return desktop(p,s,d) end}}},
         panel={styles={audio={view="audio"}}}}

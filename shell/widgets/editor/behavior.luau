@@ -237,6 +237,10 @@ return {
         ["widgets.drag.app_width"]=0,["widgets.drag.app_height"]=0,["widgets.drag.target_output_id"]="",
         ["widgets.app.open"]=false,["widgets.screen_width"]=0,["widgets.screen_height"]=0,
         ["widgets.screen_origin_x"]=0,["widgets.screen_origin_y"]=0,["widgets.screen_id"]="",["widgets.outputs"]={},
+        ["launcher.apps"]={},["bluetooth.devices"]={},["bluetooth.power_checked"]=false,
+        ["network.rows"]={},["network.wifi_enabled"]=false,["notifications.rows"]={},
+        ["status.updates_checked"]="Never checked",["status.updates_can_open"]=false,["status.updates_can_refresh"]=false,
+        ["session.enabled"]=false,["session.busy"]=false,["session.confirm_action"]="",
         ["widgets.group"]="",
         ["widgets.select"]="",["widgets.scroll"]=0,["widgets.editing"]=true,["panel.open"]=true,
         -- Bar defaults needed by widgets/context during catalogue live previews.

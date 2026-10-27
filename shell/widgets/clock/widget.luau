@@ -91,6 +91,10 @@ local function desktop(props,_settings,_data)
     local w,h=visual.slot(props.instance,420,190)
     local action=popouts and ui.action("view.open","calendar") or nil
     local time=ui.bind("bar.clock.text")
+    if style=="seconds" then
+        time=clock_with_seconds(ui.resolve_for_check(ui.bind("bar.clock.text")) or "",
+            ui.resolve_for_check(ui.bind("bead.desktop.clock.seconds")) or "")
+    end
     local iso=ui.resolve_for_check(ui.bind("bead.desktop.clock.date")) or ""
     local year,month,day=string.match(iso,"^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
     local weekday=""
@@ -118,7 +122,7 @@ local function desktop(props,_settings,_data)
             ui.Text{id="time",text=time,width="fill",height=h*.58,font_size=kit.tokens.text.headline*2,color="onSurface"},
             ui.Text{id="date",text=date_line,width="fill",height=28,font_size=kit.tokens.text.title*4/3,color="primary"}}
     end
-    return ui.Box{id="clock-digital",width=w,height=h,padding=kit.tokens.spacing.lg,radius=kit.tokens.radii.large,fill="surfaceContainer",on_activate=action,
+    return ui.Box{id="clock-desktop",width=w,height=h,padding=kit.tokens.spacing.lg,radius=kit.tokens.radii.large,fill="surfaceContainer",on_activate=action,
         ui.Column{id="clock-content",width="fill",height="fill",justify="center",gap=kit.tokens.spacing.xs,
             ui.Text{id="weekday",text=weekday,width="fill",height=26,font_size=kit.tokens.text.body*4/3,color="primary"},
             ui.Text{id="time",text=time,width="fill",height=h*.52,font_size=kit.tokens.text.headline*2,color="onSurface"},
@@ -146,6 +150,9 @@ return {id="clock",title="Clock",icon="schedule",category="bar",data={topics={},
         time=bar_style("Time","time",preferred_span(time_max),nil),["time+date"]=bar_style("Time + date","time+date",preferred_span(date_content_max),{"bead.desktop.clock.date"}),
         seconds=bar_style("Seconds","seconds",preferred_span(seconds_max),{"bead.desktop.clock.seconds"}),
     }},desktop={default_style="digital",styles={
+        time={title="Stored time",min_span=1,max_span=1200,preferred_span=220,preferred_height=92,hidden=true,render=function(p,s,d) p.form_style="digital"; return desktop(p,s,d) end},
+        ["time+date"]={title="Stored time and date",min_span=1,max_span=1200,preferred_span=360,preferred_height=92,hidden=true,requires={"bead.desktop.clock.date"},render=function(p,s,d) p.form_style="digital"; return desktop(p,s,d) end},
+        seconds={title="Stored seconds",min_span=1,max_span=1200,preferred_span=240,preferred_height=92,hidden=true,requires={"bead.desktop.clock.seconds"},render=function(p,s,d) p.form_style="seconds"; return desktop(p,s,d) end},
         digital=desktop_style("Glass digital","digital",420,{"bead.desktop.clock.date"}),
         analog=desktop_style("Analog dial","analog",420,{"bead.desktop.clock.seconds","bead.desktop.clock.date"}),
         minimal=desktop_style("Minimal type","minimal",420,{"bead.desktop.clock.date"}),

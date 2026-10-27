@@ -369,19 +369,20 @@ fn clock_detail_stage_and_style_previews_keep_all_content_inside_their_clips() {
                 _ => None,
             })
             .collect();
-        assert_eq!(matches.len(), 1, "style preview omitted {expected}");
-        let (index, rect) = matches[0];
-        let clip = scene
-            .clips
-            .get(&index)
-            .unwrap_or_else(|| panic!("{expected} preview is missing its clipping frame"));
-        assert!(
-            rect.x >= clip.x - 0.01
-                && rect.y >= clip.y - 0.01
-                && rect.x + rect.w <= clip.x + clip.w + 0.01
-                && rect.y + rect.h <= clip.y + clip.h + 0.01,
-            "{expected} preview content {rect:?} exceeds its clip {clip:?}"
-        );
+        assert!(!matches.is_empty(), "style previews omitted {expected}");
+        for (index, rect) in matches {
+            let clip = scene
+                .clips
+                .get(&index)
+                .unwrap_or_else(|| panic!("{expected} preview is missing its clipping frame"));
+            assert!(
+                rect.x >= clip.x - 0.01
+                    && rect.y >= clip.y - 0.01
+                    && rect.x + rect.w <= clip.x + clip.w + 0.01
+                    && rect.y + rect.h <= clip.y + clip.h + 0.01,
+                "{expected} preview content {rect:?} exceeds its clip {clip:?}"
+            );
+        }
     }
 }
 
