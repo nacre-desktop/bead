@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Cross-host drag preview is based on one normalized snapshot and commits only on drop.
 use super::{
-    Runtime, SceneSource, UiEvent, suppress_widget_drag_hover_until,
-    WIDGET_DRAG_HOVER_RETIRE_COOLDOWN, widget_drag_source_bounds, widget_drag_targets_output,
+    Runtime, SceneSource, UiEvent, WIDGET_DRAG_HOVER_RETIRE_COOLDOWN,
+    suppress_widget_drag_hover_until, widget_drag_source_bounds, widget_drag_targets_output,
 };
 use crate::widgets::widget_drag::Controller;
 use bead::core::Value;
@@ -58,7 +58,10 @@ fn dropped_ghost_stays_suppressed_through_the_release_window() {
         now + std::time::Duration::from_millis(250),
         false
     ));
-    assert!(suppressed_until.is_some(), "timer refreshes cannot rearm hover");
+    assert!(
+        suppressed_until.is_some(),
+        "timer refreshes cannot rearm hover"
+    );
     assert!(!suppress_widget_drag_hover_until(
         &mut suppressed_until,
         now + std::time::Duration::from_millis(250),

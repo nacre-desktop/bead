@@ -382,7 +382,8 @@ fn suppress_widget_drag_hover_until(
 }
 const WIDGET_HOVER_PREVIEW_RENEW: std::time::Duration = std::time::Duration::from_millis(1500);
 const WIDGET_HOVER_PREVIEW_DEDUPE: std::time::Duration = std::time::Duration::from_millis(1400);
-const WIDGET_DRAG_HOVER_RETIRE_COOLDOWN: std::time::Duration = std::time::Duration::from_millis(1500);
+const WIDGET_DRAG_HOVER_RETIRE_COOLDOWN: std::time::Duration =
+    std::time::Duration::from_millis(1500);
 fn widget_floating_action(
     request: &mut Option<WidgetFloatingRequest>,
     active: Option<(u32, u64)>,
