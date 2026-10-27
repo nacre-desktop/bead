@@ -4,6 +4,31 @@
 // pearl swapped in, so some parameters are used only by that recursive call.
 #![allow(clippy::only_used_in_recursion)]
 use super::*;
+
+fn closed_panel_ready_to_unmap(
+    companion: bool,
+    panel_target: bool,
+    redraw: bool,
+    animation_active: bool,
+    already_unmapped: bool,
+) -> bool {
+    companion && !panel_target && !redraw && !animation_active && !already_unmapped
+}
+
+#[cfg(test)]
+mod closed_panel_unmap_tests {
+    use super::closed_panel_ready_to_unmap;
+
+    #[test]
+    fn unmaps_only_after_the_close_frame_finishes() {
+        assert!(closed_panel_ready_to_unmap(true, false, false, false, false));
+        assert!(!closed_panel_ready_to_unmap(false, false, false, false, false));
+        assert!(!closed_panel_ready_to_unmap(true, true, false, false, false));
+        assert!(!closed_panel_ready_to_unmap(true, false, true, false, false));
+        assert!(!closed_panel_ready_to_unmap(true, false, false, true, false));
+        assert!(!closed_panel_ready_to_unmap(true, false, false, false, true));
+    }
+}
 delegate_noop!(App: ignore ZwpRelativePointerManagerV1);
 impl Dispatch<ZwpRelativePointerV1, ()> for App {
     fn event(
@@ -133,6 +158,23 @@ impl CompositorHandler for App {
                     s.output.id().protocol_id(),
                     self.started.elapsed().as_secs_f64() * 1000.
                 );
+            }
+            if closed_panel_ready_to_unmap(
+                s.companion,
+                self.panel_target,
+                s.redraw,
+                animation_active,
+                s.panel_unmapped,
+            ) {
+                let output = s.output_name.clone();
+                s.layer.wl_surface().attach(None, 0, 0);
+                s.layer.commit();
+                s.panel_unmapped = true;
+                eprintln!(
+                    "PANEL_SURFACE_UNMAPPED output={output} close_epoch={}",
+                    self.panel_close_epoch
+                );
+                return;
             }
             if self
                 .options

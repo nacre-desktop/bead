@@ -2367,6 +2367,7 @@ impl App {
                 output: output.clone(),
                 output_name: output_id.clone(),
                 layer,
+                panel_unmapped: false,
                 panel_position: std::cell::Cell::new(None),
                 native: None,
                 prepared_native: None,

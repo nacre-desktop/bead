@@ -1012,6 +1012,14 @@ impl App {
         if self.hidden {
             return;
         }
+        if self.surfaces[index].companion
+            && self.surfaces[index].panel_unmapped
+            && !self.panel_target
+        {
+            // Keep the resident scene and renderer warm, but don't remap a closed
+            // layer when its provider publishes a background model update.
+            return;
+        }
         if self.surfaces[index].companion && self.panel_gpu_suspended && !self.panel_target {
             return;
         }
@@ -1286,6 +1294,9 @@ impl App {
                 if let Some(first_frame) = handoff.first_frame.as_ref() {
                     first_frame.attach_to(&wl_surface)?;
                     wl_surface.commit();
+                    if s.companion {
+                        s.panel_unmapped = false;
+                    }
                 }
                 s.last_submitted_ui_serial = s.ui_serial;
                 #[cfg(feature = "native-gl")]
@@ -2199,6 +2210,7 @@ impl App {
             b.buffer.attach_to(&wl_surface)?;
             if s.companion {
                 bead_core::profile::mark("panel_commit");
+                s.panel_unmapped = false;
             }
             wl_surface.commit();
             if replace_pending_ui {
@@ -2239,6 +2251,13 @@ impl App {
             s.frames += 1;
             Ok(())
         })();
+        if result.is_ok()
+            && self.surfaces[index].companion
+            && self.panel_target
+            && self.surfaces[index].frames > previous_frames
+        {
+            self.surfaces[index].panel_unmapped = false;
+        }
         if result.is_ok() && self.surfaces[index].frames > previous_frames {
             self.log_prepared_native_ready(index);
         }

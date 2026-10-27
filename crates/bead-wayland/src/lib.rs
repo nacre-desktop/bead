@@ -877,6 +877,8 @@ struct Surface {
     output: wl_output::WlOutput,
     output_name: String,
     layer: LayerSurface,
+    /// The companion layer has no attached buffer after its close animation completes.
+    panel_unmapped: bool,
     /// Last requested companion placement; text-only frames often keep it unchanged.
     panel_position: Cell<Option<(Anchor, [i32; 4])>>,
     /// Fresh xdg role used while detached. The layer role remains available for

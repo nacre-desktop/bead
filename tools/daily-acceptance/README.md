@@ -3,11 +3,11 @@
 This directory contains the private, nested-compositor acceptance runner. Run
 `./tools/daily-acceptance/run.sh` on the desktop test host. The runner
 requires `niri`, `labwc`, `wlr-randr`, `grim`, `wtype`, Python
-3, ImageMagick (`compare`), `flock`, `dbus-run-session`, `systemd-run`, a C
+3, ImageMagick (`compare`, `identify`), `flock`, `dbus-run-session`, `systemd-run`, a C
 compiler, `pkg-config`, `wayland-client`, and `wayland-scanner`.
 
 Use the default `target/release/nacre-shell`, `/usr/bin/nacre-helper`, and
-`~/nacre-lead/daily-acceptance/staged-data` paths, or pass `--bead`, `--daemon`,
+`~/nacre-lead/b0162-daily-acceptance/staged-data` paths, or pass `--bead`, `--daemon`,
 and `--data` explicitly. The staged-data directory must contain `wallpapers/`,
 `applications/`, `icons/`, and `state/nacre/presentation.json`. The one-command
 wrapper takes the desktop heavy lock for the full acceptance arm; it never
@@ -17,6 +17,12 @@ temporary HOME (`Pictures/Wallpapers`, `XDG_DATA_HOME/applications`,
 written to the selected private evidence directory. The wrapper caps the run
 with a user systemd scope (`MemoryMax=12G`, no swap) and holds the desktop heavy
 lock for the arm.
+
+`--quick` runs one full interaction round without the two-minute idle or final
+repeat. A normal run uses three rounds, the two-minute idle, and one final round.
+The scope uses Bead's existing `spikes/capture_safety.py` guard for its memory
+rail, cgroup containment, and watchdog. The runner also gates host swap-in,
+process `SwapPss`, full-window screenshots, and the shell's `Pss_Anon` delta.
 
 Input is sent to the *parent* Labwc compositor through the `wlr-virtual-pointer`
 protocol, so the host pointer is never moved. Keyboard input uses `wtype` on the

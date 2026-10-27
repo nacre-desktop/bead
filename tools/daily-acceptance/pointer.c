@@ -99,6 +99,8 @@ int main(int argc, char **argv) {
             zwlr_virtual_pointer_v1_frame(pointer);
         }
         if (wl_display_roundtrip(display) < 0) die("input roundtrip failed");
+        puts("POINTER_ACK");
+        fflush(stdout);
     }
     zwlr_virtual_pointer_v1_destroy(pointer);
     if (g.manager) zwlr_virtual_pointer_manager_v1_destroy(g.manager);

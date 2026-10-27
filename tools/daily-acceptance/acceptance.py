@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import hashlib
 import importlib.util
 import json
 import os
@@ -53,8 +54,19 @@ def output_pixels(env: dict[str, str], raw: pathlib.Path) -> None:
         raise RuntimeError(f"expected one Labwc headless output, got {names!r}")
     name = names[0]
     run(["wlr-randr", "--output", name, "--mode", "2880x1800"], env=env)
-    time.sleep(.3)
-    after = run(["wlr-randr", "--json"], env=env).stdout
+    deadline = time.monotonic() + 3
+    after = ""
+    while time.monotonic() < deadline:
+        after = run(["wlr-randr", "--json"], env=env).stdout
+        try:
+            outputs = json.loads(after)
+            row = outputs[name] if isinstance(outputs, dict) else next(o for o in outputs if o["name"] == name)
+            mode = row.get("current_mode", row.get("currentMode", {}))
+            if (mode.get("width", row.get("width")), mode.get("height", row.get("height"))) == (2880, 1800):
+                break
+        except (json.JSONDecodeError, KeyError, StopIteration, TypeError):
+            pass
+        time.sleep(.01)
     (raw / "parent-outputs.json").write_text(after)
     try:
         outputs = json.loads(after)
@@ -89,14 +101,14 @@ def niri_config(path: pathlib.Path, ctl_path: pathlib.Path) -> None:
     path.write_text("\n".join(lines) + "\n")
 
 
-def process_threads(pid: int) -> dict[int, tuple[int, int, str]]:
+def process_threads(pid: int) -> dict[int, tuple[int, int, str, int]]:
     rows = {}
     for stat in pathlib.Path(f"/proc/{pid}/task").glob("*/stat"):
         try:
             line = stat.read_text()
             name = line[line.index("(") + 1:line.rindex(")")]
             fields = line[line.rindex(")") + 2:].split()
-            rows[int(stat.parent.name)] = (int(fields[19]), int(fields[11]) + int(fields[12]), name)
+            rows[int(stat.parent.name)] = (int(fields[19]), int(fields[11]) + int(fields[12]), name, pid)
         except (OSError, ValueError, IndexError):
             continue
     return rows
@@ -110,23 +122,35 @@ def pss_anon(pid: int) -> float:
     return int(match.group(1)) / 1024
 
 
+def host_swapin_pages() -> int:
+    text = pathlib.Path("/proc/vmstat").read_text()
+    match = re.search(r"^pswpin\s+(\d+)\s*$", text, re.MULTILINE)
+    if not match:
+        raise RuntimeError("kernel does not expose host pswpin in /proc/vmstat")
+    return int(match.group(1))
+
+
 class CpuGuard(threading.Thread):
-    def __init__(self, pid: int):
+    def __init__(self, pids: list[int]):
         super().__init__(daemon=True)
-        self.pid = pid
+        self.pids = pids
         self.failure: str | None = None
         self.stop_event = threading.Event()
         self.clock = os.sysconf("SC_CLK_TCK")
 
     def run(self):
-        prior = process_threads(self.pid)
+        prior = {}
+        for pid in self.pids:
+            prior.update(process_threads(pid))
         samples = collections.deque([(time.monotonic(), prior)])
         while not self.stop_event.wait(.2):
             now = time.monotonic()
-            try:
-                current = process_threads(self.pid)
-            except (FileNotFoundError, ProcessLookupError):
-                return
+            current = {}
+            for pid in self.pids:
+                try:
+                    current.update(process_threads(pid))
+                except (FileNotFoundError, ProcessLookupError):
+                    continue
             samples.append((now, current))
             while samples and now - samples[0][0] > 5.2:
                 samples.popleft()
@@ -134,13 +158,13 @@ class CpuGuard(threading.Thread):
                 continue
             start_at, start = samples[0]
             elapsed = now - start_at
-            for tid, (started, ticks, name) in current.items():
+            for tid, (started, ticks, name, pid) in current.items():
                 old = start.get(tid)
                 if old is None or old[0] != started:
                     continue
                 percent = (ticks - old[1]) / self.clock / elapsed * 100
                 if percent > 80:
-                    self.failure = f"TID {tid} ({name}) at {percent:.1f}% for {elapsed:.1f}s"
+                    self.failure = f"PID {pid} TID {tid} ({name}) at {percent:.1f}% for {elapsed:.1f}s"
                     return
 
 
@@ -159,6 +183,9 @@ class Runner:
         self.log_path = None
         self.layer_sample = 0
         self.initial_layer_count = None
+        self.swapin_start_pages = None
+        self.page_size = os.sysconf("SC_PAGE_SIZE")
+        self.frame_limit_ms = None
         self.evidence = args.evidence.resolve()
         self.evidence.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.failures = self.evidence / "failures"
@@ -198,6 +225,7 @@ class Runner:
                 "host swap used is at least 64 MiB; stop between arms, ensure no build or capture is running "
                 "and MemAvailable > swap_used + 8 GiB, then use the authorized `sudo swapoff -a && sudo "
                 "swapon -a` reset, log free -h before/after, preserve swap devices/capacity, and recheck <64 MiB")
+        self.swapin_start_pages = host_swapin_pages()
         self.root = pathlib.Path(tempfile.mkdtemp(prefix="bead-daily-acceptance-"))
         os.chmod(self.root, 0o700)
         rt = self.root / "runtime"
@@ -268,15 +296,27 @@ class Runner:
             raise RuntimeError(f"expected one nested niri output, got {outputs!r}")
         output_name = next(iter(outputs))
         run(["niri", "msg", "output", output_name, "scale", "1.5"], env=self.env)
-        time.sleep(.3)
-        outputs = json.loads(run(["niri", "msg", "--json", "outputs"], env=self.env).stdout)
-        measure.validate_dashboard_output_geometry("niri", outputs)
+        deadline = time.monotonic() + 3
+        while True:
+            outputs = json.loads(run(["niri", "msg", "--json", "outputs"], env=self.env).stdout)
+            try:
+                measure.validate_dashboard_output_geometry("niri", outputs)
+                break
+            except RuntimeError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(.01)
+        output = outputs[output_name]
+        mode = output["modes"][output["current_mode"]]
+        refresh_hz = float(mode["refresh_rate"]) / 1000
+        self.frame_limit_ms = 2000 / refresh_hz
         (self.evidence / "niri-outputs.json").write_text(json.dumps(outputs, indent=2) + "\n")
         if self.args.tools:
             self.env["NACRE_HELPER_TOOLS"] = str(self.args.tools.resolve())
         daemon_env = {**self.env, "WAYLAND_DISPLAY": str(child_sock), "NIRI_SOCKET": str(niri_sockets[0])}
-        self._spawn([str(self.args.daemon), "daemon"], daemon_env, self.evidence / "daemon.log")
-        daemon_cli = [str(self.args.daemon), "call", "--timeout", "2000", "daemon.status", "{}"]
+        self._spawn([str(self.args.daemon), "daemon", "--notifications=daemon", "--behaviours=daemon"],
+                    daemon_env, self.evidence / "daemon.log")
+        daemon_cli = [str(self.args.ctl), "call", "--timeout", "2000", "daemon.status", "{}"]
         deadline = time.monotonic() + 30
         while True:
             try:
@@ -299,14 +339,23 @@ class Runner:
         text = self.log_path.read_text(errors="replace")
         if "UI_COMMIT" not in text or "UI_ERROR" in text:
             raise RuntimeError("shell failed initial UI commit; inspect shell.log")
-        self.baseline_mem = pss_anon(self.shell.pid)
+        self.start_memory = measure.memory(self.shell.pid)
+        self.baseline_mem = self.start_memory["pss_anon_mib"]
         self.initial_layer_count, _ = self._layer_count()
         if self.initial_layer_count is None:
             raise RuntimeError("niri msg layers did not report the Bead namespace before interactions")
-        self.guard = CpuGuard(self.shell.pid)
+        self.guard = CpuGuard([process.pid for process in self.owned])
         self.guard.start()
         self._shot(self.evidence / "baseline.png")
-        print(f"HARNESS_READY parent=2880x1800 niri=2880x1800@1.5 "
+        fingerprints = {}
+        for label, path in (("bead", self.args.bead.resolve()), ("daemon", self.args.daemon.resolve())):
+            digest = hashlib.sha256()
+            with path.open("rb") as stream:
+                for block in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(block)
+            fingerprints[label] = {"artifact": path.name, "sha256": digest.hexdigest()}
+        (self.evidence / "build-inputs.json").write_text(json.dumps(fingerprints, indent=2) + "\n")
+        print(f"HARNESS_READY parent=2880x1800 niri=2880x1800@1.5 refresh={refresh_hz:g}Hz "
               f"baseline_Pss_Anon={self.baseline_mem:.2f}MiB mapped_layers={self.initial_layer_count}", flush=True)
 
     def _stage_data(self):
@@ -381,17 +430,33 @@ class Runner:
         x, y = point
         self.pointer.stdin.write(f"{action} {int(x)} {int(y)}\n")
         self.pointer.stdin.flush()
-        time.sleep(.12)
+        reply = self.pointer.stdout.readline().strip()
+        if reply != "POINTER_ACK":
+            raise RuntimeError(f"virtual pointer did not acknowledge {action}: {reply!r}")
 
     def _reset_closed(self):
         self._key("-k", "Escape")
         self._pointer("click", self.profile["outside_target"])
+        self._wait_closed()
 
-    def _open_latency(self, offset):
+    def _wait_closed(self, timeout=2):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            count, _ = self._layer_count()
+            if count == self.initial_layer_count:
+                return True
+            if self.shell.poll() is not None:
+                break
+            time.sleep(.01)
+        return False
+
+    def _open_latency(self, offset, expected_name=None):
         deadline = time.monotonic() + 2
         while time.monotonic() < deadline:
             latency = self._opening_latency(offset)
-            if latency[1] is not None:
+            if latency[1] is not None and (expected_name is None or latency[0] == expected_name):
+                return latency
+            if latency[1] is not None and expected_name is not None and latency[0] != expected_name:
                 return latency
             if self.shell.poll() is not None:
                 break
@@ -405,18 +470,22 @@ class Runner:
         self._shot(before)
         offset = self.log_path.stat().st_size
         opening()
-        latency = self._open_latency(offset)
-        time.sleep(.25)
+        expected = self.profile["surface_names"].get(label)
+        latency = self._open_latency(offset, expected)
         closing()
-        time.sleep(.35)
+        closed = self._wait_closed()
         self._shot(after)
         empty = self._diff(before, after)
         closed_layers, _ = self._layer_count()
-        unmapped = closed_layers == self.initial_layer_count
-        latency_ok = latency[1] is not None and latency[1] <= 1000 * 2 / 60
+        unmapped = closed and closed_layers == self.initial_layer_count
+        expected = self.profile["surface_names"].get(label)
+        latency_ok = (latency[1] is not None and latency[0] == expected
+                      and latency[1] <= self.frame_limit_ms)
         passed = latency_ok and empty and unmapped
         row = {"check": label, "result": "PASS" if passed else "FAIL",
-               "latency_ms": latency[1], "pixel_diff_empty": empty, "layer_unmapped_immediately": unmapped,
+               "surface_name": latency[0], "expected_surface_name": expected,
+               "latency_ms": latency[1], "frame_limit_ms": self.frame_limit_ms,
+               "pixel_diff_empty": empty, "layer_unmapped_at_close": unmapped,
                "layer_count_before_any_open": self.initial_layer_count, "layer_count_closed": closed_layers}
         self.layer_results.append(row)
         self.results.append(row)
@@ -426,11 +495,28 @@ class Runner:
             shutil.copy2(after, self.failures / f"{stem}-after.png")
 
     def _key(self, *args):
+        offset = self.log_path.stat().st_size if self.log_path and self.log_path.exists() else 0
         run(["wtype", *args], env=self.env, timeout=10)
-        time.sleep(.15)
+        if args and all(not arg.startswith("-") for arg in args):
+            self._wait_log("UI_COMMIT", 1, offset)
 
     def _shot(self, path):
         run(["grim", str(path)], env=self.env, timeout=10)
+        size = run(["identify", "-format", "%wx%h", str(path)], env=self.env, timeout=10).stdout
+        if size != "2880x1800":
+            raise RuntimeError(f"full-window screenshot has unexpected size {size!r}: {path}")
+
+    def _wait_presentation_change(self, path, poster, timeout=5):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                current = json.loads(path.read_text()).get("poster")
+            except (OSError, json.JSONDecodeError):
+                current = None
+            if current != poster:
+                return current
+            time.sleep(.01)
+        return poster
 
     def _diff(self, before, after):
         result = subprocess.run(["compare", "-metric", "AE", str(before), str(after), "null:"],
@@ -465,25 +551,28 @@ class Runner:
                 self._shot(before)
                 open_offset = self.log_path.stat().st_size
                 self._pointer("click", point)
-                latency = self._open_latency(open_offset)
-                time.sleep(.25)
+                expected = self.profile["surface_names"].get(f"dropdown:{name}")
+                latency = self._open_latency(open_offset, expected)
                 if dismiss == "click":
                     self._pointer("click", point)
                 elif dismiss == "escape":
                     self._key("-k", "Escape")
                 else:
                     self._pointer("click", self.profile["outside_target"])
-                time.sleep(.35)
+                closed = self._wait_closed()
                 self._shot(after)
                 empty = self._diff(before, after)
                 closed_layers, _ = self._layer_count()
-                unmapped = closed_layers == self.initial_layer_count
+                unmapped = closed and closed_layers == self.initial_layer_count
                 latency_value = latency[1]
-                latency_ok = latency_value is not None and latency_value <= 1000 * 2 / 60
+                latency_ok = (latency_value is not None and latency[0] == expected
+                              and latency_value <= self.frame_limit_ms)
                 passed = empty and unmapped and latency_ok
                 row = {"check": f"dropdown:{name}", "dismiss": dismiss,
                        "result": "PASS" if passed else "FAIL", "latency_ms": latency_value,
-                       "pixel_diff_empty": empty, "layer_unmapped_immediately": unmapped,
+                       "surface_name": latency[0], "expected_surface_name": expected,
+                       "frame_limit_ms": self.frame_limit_ms,
+                       "pixel_diff_empty": empty, "layer_unmapped_at_close": unmapped,
                        "layer_count_before_any_open": self.initial_layer_count,
                        "layer_count_closed": closed_layers}
                 self.results.append(row)
@@ -509,35 +598,40 @@ class Runner:
         offset = self.log_path.stat().st_size
         self._super("w")
         self._key("nacre")
-        latency = self._open_latency(offset)
+        expected = self.profile["surface_names"].get("wallpaper picker")
+        latency = self._open_latency(offset, expected)
         self._key("-k", "Down")
         self._key("-k", "Return")
-        time.sleep(.5)
         # Choosing the highlighted wallpaper applies it; Escape closes the
         # picker after the daemon has acknowledged the selection.
         self._key("-k", "Return")
-        time.sleep(.5)
-        end_presentation = json.loads(state_record.read_text())
-        applied = end_presentation.get("poster") != start_poster
+        applied_poster = self._wait_presentation_change(state_record, start_poster)
+        applied = applied_poster != start_poster
         # The apply changes the wallpaper behind the picker. Close once, then
         # take a fresh closed-state baseline and run a second open/close cycle
         # to isolate leftover panel pixels from the intentional wallpaper change.
         self._key("-k", "Escape")
-        time.sleep(.4)
+        closed = self._wait_closed()
         self._shot(before)
+        second_open_offset = self.log_path.stat().st_size
         self._super("w")
         self._key("nacre")
-        time.sleep(.35)
+        second_latency = self._open_latency(second_open_offset, expected)
         self._key("-k", "Escape")
-        time.sleep(.35)
+        closed_again = self._wait_closed()
         self._shot(after)
         empty = self._diff(before, after)
         closed_layers, _ = self._layer_count()
-        unmapped = closed_layers == self.initial_layer_count
-        passed = latency[1] is not None and latency[1] <= 1000 * 2 / 60 and empty and unmapped and applied
+        unmapped = closed and closed_again and closed_layers == self.initial_layer_count
+        passed = (latency[1] is not None and latency[0] == expected
+                  and latency[1] <= self.frame_limit_ms and second_latency[1] is not None
+                  and second_latency[0] == expected and second_latency[1] <= self.frame_limit_ms
+                  and empty and unmapped and applied)
         row = {"check": "wallpaper picker step/apply/close", "result": "PASS" if passed else "FAIL",
-               "latency_ms": latency[1], "pixel_diff_empty_after_apply": empty,
-               "layer_unmapped_immediately": unmapped, "wallpaper_apply_changed_presentation": applied,
+               "surface_name": latency[0], "expected_surface_name": expected,
+               "latency_ms": latency[1], "reopen_latency_ms": second_latency[1],
+               "frame_limit_ms": self.frame_limit_ms, "pixel_diff_empty_after_apply": empty,
+               "layer_unmapped_at_close": unmapped, "wallpaper_apply_changed_presentation": applied,
                "layer_count_before_any_open": self.initial_layer_count, "layer_count_closed": closed_layers,
                "data_staged": True}
         self.results.append(row)
@@ -549,16 +643,33 @@ class Runner:
 
     def widget_drag(self):
         drag = self.profile["widget_drag"]
+        before = self.evidence / "widget-drag-before.png"
+        middle = self.evidence / "widget-drag-desktop.png"
+        after = self.evidence / "widget-drag-after.png"
+        self._reset_closed()
+        self._shot(before)
+        offset = self.log_path.stat().st_size
         self._pointer("down", drag["bar_start"])
         self._pointer("move", drag["desktop_drop"])
+        self._wait_log("UI_COMMIT", 2, offset)
+        self._shot(middle)
+        ghost_visible = not self._diff(before, middle)
         self._pointer("move", drag["bar_drop"])
+        release_offset = self.log_path.stat().st_size
         self._pointer("up", drag["bar_drop"])
-        time.sleep(.4)
-        self._shot(self.evidence / f"round-{self.round_no}-widget-drag.png")
+        self._wait_log("UI_COMMIT", 2, release_offset)
+        self._shot(after)
         errors = re.findall(r"^.*UI_ERROR.*$", self.log_path.read_text(errors="replace"), re.MULTILINE)
+        passed = ghost_visible and not errors
         self.results.append({"check": "widget drag bar→desktop→bar",
-                             "result": "PASS" if not errors else "FAIL",
+                             "result": "PASS" if passed else "FAIL",
+                             "desktop_ghost_visible": ghost_visible,
                              "ui_errors_seen": len(errors)})
+        if not passed:
+            stem = f"r{self.round_no}-widget-drag"
+            shutil.copy2(before, self.failures / f"{stem}-before.png")
+            shutil.copy2(middle, self.failures / f"{stem}-desktop.png")
+            shutil.copy2(after, self.failures / f"{stem}-after.png")
 
     def one_round(self, round_no):
         self.round_no = round_no
@@ -574,7 +685,7 @@ class Runner:
         self.simple_surface("control panel", lambda: self._super("c"),
                             lambda: self._key("-k", "Escape"))
         hover = self.profile["left_edge_hover"]
-        self.simple_surface("AI panel hover open", lambda: (self._pointer("move", hover), time.sleep(.4)),
+        self.simple_surface("AI panel hover open", lambda: self._pointer("move", hover),
                             lambda: self._key("-k", "Escape"))
         self.simple_surface("AI panel click open", lambda: self._pointer("click", hover),
                             lambda: self._key("-k", "Escape"))
@@ -586,27 +697,24 @@ class Runner:
 
     def run(self):
         self.start()
-        for number in range(1, 4):
-            self.one_round(number)
-        print("IDLE_BEGIN seconds=120", flush=True)
-        time.sleep(120)
-        idle_mem = pss_anon(self.shell.pid)
-        growth = idle_mem - self.baseline_mem
-        self.results.append({"check": "idle Pss_Anon delta", "result": "PASS" if growth <= 20 else "FAIL",
-                             "start_mib": round(self.baseline_mem, 3), "idle_mib": round(idle_mem, 3),
-                             "delta_mib": round(growth, 3), "limit_mib": 20})
-        idle_layers, _ = self._layer_count()
-        for row in self.layer_results:
-            row["layer_unmapped_after_idle"] = idle_layers == self.initial_layer_count
-        idle_retired = (idle_layers is not None and all(
-            row.get("layer_unmapped_after_idle", False) for row in self.layer_results))
-        self.results.append({"check": "closed panel layer retirement after idle",
-                             "result": "PASS" if idle_retired else "FAIL",
-                             "namespace_layer_count_after_idle": idle_layers,
-                             "baseline_namespace_layer_count": self.initial_layer_count,
-                             "panels_checked": len(self.layer_results),
-                             "method": "niri msg layers, matching bead-daily-acceptance namespace"})
-        self.one_round(4)
+        if self.args.quick:
+            self.one_round(1)
+            self._record_memory("quick round end")
+        else:
+            for number in range(1, 4):
+                self.one_round(number)
+            print("IDLE_BEGIN seconds=120", flush=True)
+            time.sleep(120)
+            self._record_memory("after 120-second idle")
+            idle_layers, _ = self._layer_count()
+            self.results.append({"check": "closed panel layer retirement after idle",
+                                 "result": "PASS" if idle_layers == self.initial_layer_count else "FAIL",
+                                 "namespace_layer_count_after_idle": idle_layers,
+                                 "baseline_namespace_layer_count": self.initial_layer_count,
+                                 "panels_checked": len(self.layer_results),
+                                 "method": "niri msg layers, matching bead-daily-acceptance namespace"})
+            self.one_round(4)
+            self._record_memory("after post-idle round")
         text = self.log_path.read_text(errors="replace")
         ui_errors = re.findall(r"^.*UI_ERROR.*$", text, re.MULTILINE)
         self.results.append({"check": "UI_ERROR", "result": "FAIL" if ui_errors else "PASS",
@@ -614,8 +722,30 @@ class Runner:
         self.results.append({"check": "thread CPU <=80%/5s",
                              "result": "FAIL" if self.guard.failure else "PASS",
                              "detail": self.guard.failure or "none"})
+        swapin_end = host_swapin_pages()
+        swapin_bytes = (swapin_end - self.swapin_start_pages) * self.page_size
+        self.results.append({"check": "host swap-in <1 MiB",
+                             "result": "PASS" if 0 <= swapin_bytes < 1024**2 else "FAIL",
+                             "delta_bytes": swapin_bytes})
+        swap_rows = []
+        for process in self.owned:
+            if process.poll() is None:
+                swap_rows.append({"pid": process.pid,
+                                  "swap_pss_mib": measure.memory(process.pid)["swap_pss_mib"]})
+        swap_ok = all(row["swap_pss_mib"] == 0 for row in swap_rows)
+        self.results.append({"check": "owned process SwapPss=0",
+                             "result": "PASS" if swap_ok else "FAIL", "processes": swap_rows})
+        free_after = subprocess.run(["free", "-h"], capture_output=True, text=True, check=True).stdout
+        (self.evidence / "free-after.txt").write_text(free_after)
+        free_bytes = subprocess.run(["free", "-b"], capture_output=True, text=True, check=True).stdout
+        swap_line = next((line.split() for line in free_bytes.splitlines() if line.startswith("Swap:")), None)
+        swap_used_end = int(swap_line[2]) if swap_line and len(swap_line) >= 3 else None
+        self.results.append({"check": "host swap remains below 64 MiB",
+                             "result": "PASS" if swap_used_end is not None and swap_used_end < 64 * 1024**2 else "FAIL",
+                             "swap_used_bytes_after": swap_used_end})
         if any(row["result"] != "PASS" for row in self.results):
-            final_shot = self.evidence / "round-4-end.png"
+            last_round = 1 if self.args.quick else 4
+            final_shot = self.evidence / f"round-{last_round}-end.png"
             if final_shot.exists():
                 shutil.copy2(final_shot, self.failures / "global-metric-failure.png")
         self.guard.stop_event.set()
@@ -623,8 +753,19 @@ class Runner:
         self.write_report()
         return 1 if any(row["result"] != "PASS" for row in self.results) else 0
 
+    def _record_memory(self, phase):
+        sample = measure.memory(self.shell.pid)
+        anon = sample["pss_anon_mib"]
+        delta = anon - self.baseline_mem
+        self.results.append({"check": f"Pss_Anon +20 MiB ({phase})",
+                             "result": "PASS" if delta <= 20 else "FAIL",
+                             "start_mib": round(self.baseline_mem, 3),
+                             "sample_mib": round(anon, 3),
+                             "delta_mib": round(delta, 3), "limit_mib": 20})
+
     def write_report(self):
-        out = ["# Daily acceptance result", "", "| Check | Result | Evidence |", "|---|---:|---|"]
+        mode = "quick (one round, no idle)" if self.args.quick else "full (three rounds, 120-second idle, repeat)"
+        out = [f"# Daily acceptance result — {mode}", "", "| Check | Result | Evidence |", "|---|---:|---|"]
         for row in self.results:
             detail = ", ".join(f"{k}={v}" for k, v in row.items() if k not in ("check", "result"))
             out.append(f"| {row['check']} | {row['result']} | {detail} |")
@@ -671,15 +812,25 @@ def main():
                         help="matching Nacre nacre/shell-tools directory for daemon routes")
     parser.add_argument("--palette", type=pathlib.Path)
     parser.add_argument("--data", type=pathlib.Path,
-                        default=pathlib.Path.home() / "nacre-lead/daily-acceptance/staged-data")
+                        default=pathlib.Path.home() / "nacre-lead/b0162-daily-acceptance/staged-data")
     parser.add_argument("--profile", type=pathlib.Path, default=HERE / "default-profile.json")
+    parser.add_argument("--quick", action="store_true",
+                        help="run one interaction round without the 120-second idle and final repeat")
     parser.add_argument("--evidence", type=pathlib.Path,
-                        default=pathlib.Path.home() / "nacre-lead/daily-acceptance/evidence")
+                        default=pathlib.Path.home() / "nacre-lead/b0162-daily-acceptance/evidence")
+    parser.add_argument("--capture-guard-child", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--capture-guard-ready-file", type=pathlib.Path, help=argparse.SUPPRESS)
+    parser.add_argument("--capture-guard-release-file", type=pathlib.Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
     for path in (args.bead, args.shell, args.daemon, args.ctl):
         if not path.exists() or (path.is_file() and path in (args.bead, args.daemon, args.ctl)
                                  and not os.access(path, os.X_OK)):
             parser.error(f"required input does not exist: {path}")
+    if args.capture_guard_child:
+        if not args.capture_guard_ready_file or not args.capture_guard_release_file:
+            parser.error("capture safety child requires ready and release files")
+        measure.capture_safety.wait_for_release(args.capture_guard_ready_file,
+                                                args.capture_guard_release_file)
     os.setpriority(os.PRIO_PROCESS, 0, max(10, os.getpriority(os.PRIO_PROCESS, 0)))
     runner = Runner(args)
     try:

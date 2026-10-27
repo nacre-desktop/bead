@@ -42,7 +42,7 @@ pub fn calendar(
         retain_when_closed: false,
         passive: false,
         keyboard_focus: true,
-        text_focus_only: true,
+        text_focus_only: false,
         initial_open: false,
         fallback,
         fallback_factory: None,
@@ -146,7 +146,7 @@ pub(crate) fn core_sound_with_root(
         retain_when_closed: false,
         passive: false,
         keyboard_focus: true,
-        text_focus_only: true,
+        text_focus_only: false,
         initial_open: false,
         fallback,
         fallback_factory: None,
@@ -215,7 +215,7 @@ pub fn session(
         retain_when_closed: false,
         passive: false,
         keyboard_focus: true,
-        text_focus_only: true,
+        text_focus_only: false,
         initial_open: false,
         fallback,
         fallback_factory: None,
@@ -350,7 +350,7 @@ fn status_at_root_mode(
         retain_when_closed: false,
         passive: false,
         keyboard_focus: !peek,
-        text_focus_only: true,
+        text_focus_only: false,
         initial_open: false,
         fallback,
         fallback_factory: None,
@@ -496,7 +496,7 @@ pub fn chat(
         retain_when_closed: false,
         passive: false,
         keyboard_focus: true,
-        text_focus_only: true,
+        text_focus_only: false,
         initial_open: false,
         fallback,
         fallback_factory: None,
@@ -664,7 +664,7 @@ fn notification_panel(
         retain_when_closed: false,
         passive: false,
         keyboard_focus: !peek,
-        text_focus_only: true,
+        text_focus_only: false,
         initial_open: false,
         fallback,
         fallback_factory: None,
@@ -704,4 +704,70 @@ fn notification_panel(
                 .map_err(|e| e.to_string())
         }),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bar_popouts_keep_escape_keyboard_interactivity() {
+        let colors = Arc::new(
+            Palette::parse(include_bytes!("../../../shell/palette.json"))
+                .expect("bundled palette is valid"),
+        );
+        let owner = Arc::new(OnceLock::new());
+        let path = PathBuf::from("shell/palette.json");
+        let client = crate::nacre_source::Client::start(crate::nacre_source::Config::new(
+            std::env::temp_dir().join("b0162-unused-daemon.sock"),
+            Vec::new(),
+        ))
+        .expect("test client starts without connecting synchronously");
+        let mut specs = vec![
+            calendar(path.clone(), (*colors).clone(), owner.clone(), false)
+                .expect("calendar spec"),
+            core_sound(None, path.clone(), (*colors).clone(), false)
+                .expect("sound spec"),
+            session(client.clone(), path.clone(), (*colors).clone(), false)
+                .expect("power spec"),
+            chat(
+                client.clone(),
+                path.clone(),
+                (*colors).clone(),
+                Arc::new(std::sync::Mutex::new(std::collections::BTreeMap::new())),
+                false,
+            )
+            .expect("AI spec"),
+            notification_history(client.clone(), path.clone(), (*colors).clone(), false)
+                .expect("notification spec"),
+        ];
+        for kind in [
+            crate::status_views::Kind::Network,
+            crate::status_views::Kind::Bluetooth,
+            crate::status_views::Kind::Battery,
+            crate::status_views::Kind::Audio,
+            crate::status_views::Kind::Updates,
+        ] {
+            specs.push(
+                status(
+                    kind,
+                    Arc::new(path.clone()),
+                    colors.clone(),
+                    owner.clone(),
+                    None,
+                    12.,
+                    false,
+                )
+                .expect("status spec"),
+            );
+        }
+
+        for spec in specs {
+            assert!(spec.keyboard_focus, "a dismissible bar popout needs keyboard input");
+            assert!(
+                !spec.text_focus_only,
+                "text-only keyboard interactivity starves Escape dismissal"
+            );
+        }
+    }
 }
