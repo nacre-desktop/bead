@@ -1,0 +1,34 @@
+{
+  "profile": "standard-top-bar-2880x1800-scale-1.5",
+  "output": { "width": 2880, "height": 1800, "scale": 1.5, "refresh_hz": 60 },
+  "bar_targets": {
+    "updates": [2338, 26],
+    "audio": [2409, 26],
+    "network": [2470, 26],
+    "bluetooth": [2521, 26],
+    "battery": [2580, 26],
+    "notifications": [2640, 26],
+    "calendar": [2709, 26],
+    "power": [2825, 26]
+  },
+  "outside_target": [1450, 900],
+  "left_edge_hover": [4, 900],
+  "launcher": { "open": ["Super", "Space"], "toggle": ["Super", "Space"], "type": "nacre" },
+  "other_targets": {
+    "dashboard": "calendar",
+    "control_panel": "Super+C (nacre controls home)",
+    "ai_panel": "launcher-route:ai",
+    "notification_list": "notifications",
+    "wallpaper_picker": "launcher-route:wallpaper"
+  },
+  "widget_drag": {
+    "bar_start": [2709, 26],
+    "desktop_drop": [1440, 900],
+    "bar_drop": [2709, 26]
+  },
+  "notes": [
+    "Coordinates are output pixels for the private Labwc parent and are anchored from B0152's 2880x1800 top-bar capture.",
+    "The task host must confirm output name and the staged user's top-right widget ordering before the first run; pass --profile to override coordinates.",
+    "AI and wallpaper routes require the named launcher entries to exist in the staged user's Nacre data."
+  ]
+}
