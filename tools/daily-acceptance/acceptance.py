@@ -806,7 +806,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bead", type=pathlib.Path,
                         default=ROOT / "target/release/nacre-shell")
-    parser.add_argument("--shell", type=pathlib.Path, default=ROOT / "shell")
+    parser.add_argument("--shell", type=pathlib.Path, default=ROOT,
+                        help="project root containing the arm's shell/ directory")
     parser.add_argument("--daemon", type=pathlib.Path,
                         default=pathlib.Path("/usr/bin/nacre-helper"))
     parser.add_argument("--ctl", type=pathlib.Path,

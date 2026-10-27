@@ -8,7 +8,8 @@ compiler, `pkg-config`, `wayland-client`, and `wayland-scanner`.
 
 Use the default `target/release/nacre-shell`, `/usr/bin/nacre-helper`, and
 `~/nacre-lead/b0162-daily-acceptance/staged-data` paths, or pass `--bead`, `--daemon`,
-and `--data` explicitly. The daemon executable must be the current Nacre
+and `--data` explicitly. Pass `--shell` as the project root containing `shell/`
+when using an arm build. The daemon executable must be the current Nacre
 `nacre-helper` multi-call binary; the runner launches its `daemon` command with
 the private `NACRE_DAEMON_SOCKET` environment. The control executable must be
 `nacrectl` (a symlink to that same multi-call binary). The staged-data directory must contain `wallpapers/`,
