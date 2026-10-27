@@ -190,6 +190,7 @@ pub struct Source {
     image_policy: bead_render::tree::ImagePolicy,
     preparation_retry: bool,
     retired: Arc<std::sync::atomic::AtomicBool>,
+    animation_frames: Arc<std::sync::atomic::AtomicBool>,
     token: u64,
     accepted: bool,
     current: Scene,
@@ -207,6 +208,7 @@ impl Source {
             image_policy: bead_render::tree::ImagePolicy::Dense,
             preparation_retry: false,
             retired: Default::default(),
+            animation_frames: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             scales: vec![1.],
             token: 0,
             accepted: false,
@@ -307,6 +309,11 @@ fn prepare_resource_job(
     }
 }
 impl SceneSource for Source {
+    fn animation_frame_needed(&self) -> bool {
+        self.animation_frames
+            .load(std::sync::atomic::Ordering::Acquire)
+    }
+
     fn resources_retired(&self) -> bool {
         self.retired.load(std::sync::atomic::Ordering::Acquire)
     }
@@ -360,6 +367,7 @@ impl SceneSource for Source {
         bead_core::profile::mark("worker_spawn");
         let image_policy = self.image_policy;
         let retired = self.retired.clone();
+        let animation_frames = self.animation_frames.clone();
         self.thread = Some(std::thread::spawn(move || {
             bead_core::profile::mark("worker_started");
             let wakeup: Arc<dyn Fn(UiEvent) + Send + Sync> = Arc::from(wakeup);
@@ -511,7 +519,12 @@ impl SceneSource for Source {
                             let _profile = bead_core::profile::Span::new("worker");
                             let started = std::time::Instant::now();
                             token += 1;
-                            let (mut scene, fault) = match source.stage(event) {
+                            let staged = source.stage(event);
+                            animation_frames.store(
+                                source.animation_frame_needed(),
+                                std::sync::atomic::Ordering::Release,
+                            );
+                            let (mut scene, fault) = match staged {
                                 Ok(Some(scene)) => (scene, None),
                                 Ok(None) => {
                                     wakeup(UiEvent::Worker(Arc::new(Packet {
@@ -906,6 +919,65 @@ mod tests {
             receiver.try_recv(),
             Err(mpsc::TryRecvError::Empty)
         ));
+    }
+
+    #[test]
+    fn worker_source_exposes_authored_animation_frame_interest() {
+        struct Animated {
+            active: Arc<std::sync::atomic::AtomicBool>,
+        }
+        impl SceneSource for Animated {
+            fn animation_frame_needed(&self) -> bool {
+                self.active.load(Ordering::Acquire)
+            }
+            fn watch(
+                &mut self,
+                _: Box<dyn Fn(Result<(), String>) + Send>,
+            ) -> Result<(), Box<dyn Error>> {
+                Ok(())
+            }
+            fn stage(&mut self, _: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+                Ok(Some(scene()))
+            }
+            fn validate(&self) -> Result<(), Box<dyn Error>> {
+                Ok(())
+            }
+            fn state_summary(&self) -> String {
+                String::new()
+            }
+            fn commit(&mut self) -> bool {
+                true
+            }
+            fn error_scene(&mut self, _: String) -> Scene {
+                scene()
+            }
+        }
+
+        let active = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let source_active = active.clone();
+        let mut source = Source::new(
+            Box::new(move || Ok(Box::new(Animated { active: source_active }))),
+            scene(),
+        );
+        let (sender, receiver) = mpsc::channel();
+        source.services(Box::new(move |event| {
+            let _ = sender.send(event);
+        }));
+        source.stage(UiEvent::Reload).unwrap();
+        let packet = receiver
+            .recv_timeout(Duration::from_secs(5))
+            .expect("worker should return its first scene");
+        assert!(source.animation_frame_needed());
+        assert!(source.stage(packet).unwrap().is_some());
+        assert!(source.commit());
+        active.store(false, Ordering::Release);
+        source.stage(UiEvent::Model(BTreeMap::new())).unwrap();
+        let packet = receiver
+            .recv_timeout(Duration::from_secs(5))
+            .expect("worker should publish the updated animation interest");
+        source.stage(packet).unwrap();
+        assert!(!source.animation_frame_needed());
+        assert!(source.commit());
     }
     #[test]
     fn worker_dismissal_and_cursor_use_the_topmost_clipped_polygon_hit() {

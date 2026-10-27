@@ -5370,41 +5370,10 @@ impl SceneSource for Runtime {
                     .map(|preview| preview.prepared_at + WIDGET_HOVER_PREVIEW_RENEW)
             })
             .flatten();
-        let analog_layout =
-            widget_layout_has_analog_clock(self.session.stores.get("widgets.layout"));
-        let analog_enabled = self.widget_canvas && analog_layout;
         let preview = self.session.preview_deadline();
-        if std::env::var_os("BEAD_WIDGET_ANIMATION_TRACE").is_some()
-            && (self.widget_canvas || self.widgets_canvas_wanted)
-        {
-            eprintln!(
-                "WIDGET_TICK_WAKE canvas={} host_wanted={} analog_layout={} interval_ms={:.3} preview_ms={:?}",
-                self.widget_canvas,
-                self.widgets_canvas_wanted,
-                analog_layout,
-                self.smooth_frame_interval.as_secs_f64() * 1000.,
-                preview.map(|deadline| {
-                    deadline
-                        .saturating_duration_since(std::time::Instant::now())
-                        .as_secs_f64()
-                        * 1000.
-                })
-            );
-        }
-        let analog = if analog_enabled {
-            Some(
-                std::time::Instant::now()
-                    + self
-                        .smooth_frame_interval
-                        .max(std::time::Duration::from_millis(1)),
-            )
-        } else {
-            None
-        };
         [
             send,
             hover,
-            analog,
             preview,
             self.session.hover_close_deadline(),
             self.dashboard_pearl_deadline,
@@ -5415,18 +5384,13 @@ impl SceneSource for Runtime {
     }
 
     fn frame_interval(&mut self, interval: std::time::Duration) {
-        if std::env::var_os("BEAD_WIDGET_ANIMATION_TRACE").is_some()
-            && (self.widget_canvas || self.widgets_canvas_wanted)
-        {
-            eprintln!(
-                "WIDGET_FRAME_INTERVAL canvas={} host_wanted={} interval_ms={:.3}",
-                self.widget_canvas,
-                self.widgets_canvas_wanted,
-                interval.as_secs_f64() * 1000.
-            );
-        }
         self.session.set_frame_interval(interval);
         self.smooth_frame_interval = interval.max(std::time::Duration::from_millis(1));
+    }
+
+    fn animation_frame_needed(&self) -> bool {
+        self.widget_canvas
+            && widget_layout_has_analog_clock(self.session.stores.get("widgets.layout"))
     }
 
     fn initial_model(
@@ -6034,9 +5998,6 @@ impl SceneSource for Runtime {
                 "bead.desktop.clock.phase".into(),
                 bead::core::Value::Number(phase),
             );
-            if std::env::var_os("BEAD_WIDGET_ANIMATION_TRACE").is_some() {
-                eprintln!("WIDGET_TICK_STAGE phase={phase:.6}");
-            }
         }
         if matches!(
             &event,

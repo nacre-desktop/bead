@@ -17,22 +17,6 @@ fn canvas_event_belongs_to_host(event: &UiEvent) -> bool {
     )
 }
 
-fn canvas_wakeup_delay(
-    visible: bool,
-    timer_pending: bool,
-    deadline: Option<Instant>,
-    now: Instant,
-) -> Option<Duration> {
-    if !visible || timer_pending {
-        return None;
-    }
-    deadline.map(|deadline| {
-        deadline
-            .saturating_duration_since(now)
-            .max(Duration::from_millis(1))
-    })
-}
-
 pub(super) struct Canvas {
     pub(super) epoch: u64,
     lifecycle: CanvasLifecycle,
@@ -66,7 +50,6 @@ pub(super) struct Canvas {
     pub(super) pressed: bool,
     pub(super) callbacks: policy::Callbacks,
     pub(super) frame_pending: bool,
-    tick_timer: bool,
     pub(super) dirty: bool,
     pub(super) refresh_ns: u32,
 }
@@ -513,7 +496,6 @@ impl App {
                 pressed: false,
                 callbacks: Default::default(),
                 frame_pending: false,
-                tick_timer: false,
                 dirty: false,
                 refresh_ns: 0,
             },
@@ -631,7 +613,6 @@ impl App {
         match staged {
             Ok(Some(scene)) => {
                 if !canvas.source.commit() {
-                    self.canvas_schedule_wakeup(key);
                     return;
                 }
                 canvas.lifecycle.accept_scene(warmup_response);
@@ -729,47 +710,6 @@ impl App {
             }
             Ok(None) => (),
             Err(error) => eprintln!("CANVAS_ERROR {error}"),
-        }
-        self.canvas_schedule_wakeup(key);
-    }
-
-    fn canvas_schedule_wakeup(&mut self, key: &(String, String)) {
-        let now = Instant::now();
-        let Some((delay, epoch)) = self.canvases.get(key).and_then(|canvas| {
-            let delay = canvas_wakeup_delay(
-                canvas.lifecycle.open && canvas.bounds.is_some(),
-                canvas.tick_timer,
-                canvas.source.wakeup_at(),
-                now,
-            )?;
-            Some((delay, canvas.epoch))
-        }) else {
-            return;
-        };
-        if let Some(canvas) = self.canvases.get_mut(key) {
-            canvas.tick_timer = true;
-        }
-        let timer_key = key.clone();
-        if let Err(error) =
-            self.loop_handle
-                .insert_source(Timer::from_duration(delay), move |_, _, app| {
-                    let open = app.canvases.get_mut(&timer_key).is_some_and(|canvas| {
-                        if canvas.epoch != epoch {
-                            return false;
-                        }
-                        canvas.tick_timer = false;
-                        canvas.lifecycle.open && canvas.bounds.is_some()
-                    });
-                    if open {
-                        app.canvas_ui(&timer_key, UiEvent::Model(Default::default()));
-                    }
-                    TimeoutAction::Drop
-                })
-        {
-            if let Some(canvas) = self.canvases.get_mut(key) {
-                canvas.tick_timer = false;
-            }
-            eprintln!("CANVAS_ERROR {error}");
         }
     }
     pub(super) fn canvas_event(&mut self, epoch: u64, mut event: UiEvent) {
@@ -1145,17 +1085,19 @@ impl App {
         else {
             return;
         };
-        let again = if let Some(canvas) = self.canvases.get_mut(&key) {
+        let (again, animation_frame_needed) = if let Some(canvas) = self.canvases.get_mut(&key) {
             if canvas.callbacks.accept(epoch) {
                 canvas.frame_pending = false;
-                canvas.dirty
+                (canvas.dirty, canvas.source.animation_frame_needed())
             } else {
-                false
+                (false, false)
             }
         } else {
-            false
+            (false, false)
         };
-        if again {
+        if animation_frame_needed {
+            self.canvas_ui(&key, UiEvent::Model(Default::default()));
+        } else if again {
             let _ = self.canvas_draw(&key);
         }
     }
@@ -1304,22 +1246,6 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn canvas_wakeup_only_schedules_visible_unarmed_sources() {
-        let now = Instant::now();
-        let deadline = now + Duration::from_millis(16);
-        assert_eq!(
-            canvas_wakeup_delay(true, false, Some(deadline), now),
-            Some(Duration::from_millis(16))
-        );
-        assert_eq!(canvas_wakeup_delay(false, false, Some(deadline), now), None);
-        assert_eq!(canvas_wakeup_delay(true, true, Some(deadline), now), None);
-        assert_eq!(
-            canvas_wakeup_delay(true, false, Some(now), now),
-            Some(Duration::from_millis(1))
-        );
-    }
 
     #[test]
     fn host_canvas_envelopes_are_routed_out_of_the_canvas_runtime() {
