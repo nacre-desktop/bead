@@ -1,3 +1,12 @@
+## 2026-10-27 — B0152 Widgets (design and private captures complete; performance and parity open)
+
+Desktop forms and the both-form Widgets gallery are implemented; 28 CPU captures
+cover the wallpaper stage, gallery, widget detail/style pages and Advanced page at
+2880×1800/1.5 on the owner forest wallpaper. Capture-safety completed with 76
+watchdog samples and zero OOM events. Full Bead CI passes (759 passed, 2 ignored).
+Widget memory, 60/120 Hz cadence, QML parity, and live service data for Bluetooth,
+Wi-Fi, notifications and updates remain open; see [B0152](specs/0152-widget-design.md).
+
 ## 2026-10-27 — B0157 picker error follow-up (functional gates pass; CPU cadence remains open)
 
 CPU snapshot acceptance now falls back to its prepared frame when the optional

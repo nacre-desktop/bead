@@ -15,6 +15,10 @@ Wallpaper-level widget surfaces use the existing canvas layer, which defaults to
 
 Memory budget: at most 2 MiB unreclaimable for the always-on widget system across phases; the active-widget cost is included in that cap. This change has no measured memory result yet. Smoothness targets are 60/120 Hz with no dropped frames; no frame timing result is claimed before the private capture run.
 
-Known source limits: battery contracts currently provide percentage and charging icon but no remaining-time estimate. Network rows provide label and signal; Bluetooth rows provide connected device and optional battery. The output source publishes physical and logical dimensions but no fractional display-scale field to this view; the stage preserves the logical output aspect and labels source-reported dimensions.
+Saved legacy style IDs remain hidden aliases and map into the new desktop forms, so existing layouts continue to load without showing duplicate choices. The wallpaper preview resolves the `presentation.json` poster through the existing icon-thumbnail attachment path.
 
-Known verification gaps: wallpaper-level visual styling has not yet been paired against QML; the compositor-owned niri focus ring is outside the Bead window surface. Captures and visual review are pending. Evidence will be stored in `docs/specs/evidence/0152/`.
+Capture evidence: 28 Bead CPU screenshots at 2880×1800, scale 1.5, use the owner forest wallpaper; capture-safety completed with 76 watchdog samples, zero OOM events, and minimum `MemAvailable` 10,555,992 KiB. The gallery, each widget detail/style and Advanced page are in `docs/specs/evidence/0152/captures/bead/`; `captures/index.html` is the contact index. These are visual captures, not widget memory or frame-pacing measurements.
+
+Known source limits: battery data has no remaining-time estimate or charging pulse. The current desktop snapshot adapter does not populate Bluetooth devices/battery, Wi-Fi network/signal, notification rows or update details, so those forms render empty/default data until their published contracts supply it. The output source reports physical and logical dimensions but no fractional display-scale field. The selected style is outlined in the preview; niri owns the visible blue focus ring around the app and Bead cannot remove it.
+
+Known verification gaps: paired QML screenshots and hover/pressed/animation-frame comparisons were not captured. The 2 MiB unreclaimable memory budget and 60/120 Hz no-drop target remain unmeasured; no result is claimed.
