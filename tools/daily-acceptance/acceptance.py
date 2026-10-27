@@ -753,19 +753,29 @@ class Runner:
         offset = self.log_path.stat().st_size
         self._pointer("down", drag["bar_start"])
         self._pointer("move", drag["desktop_drop"])
-        self._wait_log("UI_COMMIT", 2, offset)
+        move_committed = True
+        try:
+            self._wait_log("UI_COMMIT", 2, offset)
+        except RuntimeError:
+            move_committed = False
         self._shot(middle)
         ghost_visible = not self._diff(before, middle)
         self._pointer("move", drag["bar_drop"])
         release_offset = self.log_path.stat().st_size
         self._pointer("up", drag["bar_drop"])
-        self._wait_log("UI_COMMIT", 2, release_offset)
+        release_committed = True
+        try:
+            self._wait_log("UI_COMMIT", 2, release_offset)
+        except RuntimeError:
+            release_committed = False
         self._shot(after)
         errors = re.findall(r"^.*UI_ERROR.*$", self.log_path.read_text(errors="replace"), re.MULTILINE)
-        passed = ghost_visible and not errors
+        passed = move_committed and release_committed and ghost_visible and not errors
         self.results.append({"check": "widget drag bar→desktop→bar",
                              "result": "PASS" if passed else "FAIL",
                              "desktop_ghost_visible": ghost_visible,
+                             "move_ui_commit": move_committed,
+                             "release_ui_commit": release_committed,
                              "ui_errors_seen": len(errors)})
         if not passed:
             stem = f"r{self.round_no}-widget-drag"
@@ -945,9 +955,8 @@ def main():
         return runner.run()
     except Exception as exc:
         print(f"HARNESS_ERROR {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
-        if not runner.results:
-            runner.results.append({"check": "harness startup", "result": "FAIL",
-                                   "detail": f"{type(exc).__name__}: {exc}"})
+        runner.results.append({"check": "harness execution", "result": "FAIL",
+                               "detail": f"{type(exc).__name__}: {exc}"})
         runner.write_report()
         return 2
     finally:
