@@ -7,7 +7,7 @@ import pathlib
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
-ROOT = HERE.parents[2]
+ROOT = HERE.parents[1]
 spec = importlib.util.spec_from_file_location("daily_capture_safety", ROOT / "spikes/capture_safety.py")
 if spec is None or spec.loader is None:
     raise SystemExit("cannot load spikes/capture_safety.py")
