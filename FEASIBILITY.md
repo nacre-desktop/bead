@@ -1,5 +1,21 @@
 # Feasibility
 
+## B0151 — widget finish slice (2026-10-27; snap gate fails)
+
+Occupied-pill drops persist at 82%/90%; functional proofs and full CI pass.
+The exact B0153 shell-PID smaps method shows no +378 MiB shell retention.
+First-key CPU and five-pair after-drag memory pass relative limits.
+Synthetic 60 Hz snap timing is worse than main on overlay and bar-tail smoothness; no push.
+
+| Matched private CPU capture | Main | Candidate | Gate |
+| --- | ---: | ---: | --- |
+| First-key UI CPU, median | 28.187 ms | 27.602 ms | candidate ≤ control +1 ms; pass (paired Δ −0.175 ms) |
+| After-drag/closed unreclaimable, median | 42.053 MiB | 42.402 MiB | paired Δ +0.232 MiB; ≤2 MiB feature budget |
+| 60 Hz overlay first-visible p50 | ~151 ms | ~176 ms | candidate ~24 ms later; fail smoothness |
+| 60 Hz primary bar p99 gaps / dropped commits | ~90 ms / ~32 | ~117 ms / ~37 | worse than main; fail |
+
+2880×1800 at scale 1.5, private nested Niri, synthetic 60 Hz scheduling; not physical scanout. The old +378 MiB runner enabled after-drag only for candidate, so its phase comparison was invalid. Its exact aggregator cannot be reconstructed; B0153 reads only the shell PID rollup and reports excluded processes separately (about 400 MiB total in pair 1). Niri remained at 60 Hz; 120 Hz was unavailable. [Full evidence and limits](docs/specs/0151-widgets-finish.md).
+
 ## B0147 — Spotlight overlay (2026-10-27; smoothness gates fail)
 
 Spotlight now floats directly over the desktop; Luau owns layout and the carousel motion.

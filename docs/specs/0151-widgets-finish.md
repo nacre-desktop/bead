@@ -1,19 +1,19 @@
 # B0151 — Widgets finish slice
 
-Occupied bar slots now nest the dragged clock into the overlapping status pill and persist the layout at 82% and 90% bar width.
-The ghost has a tinted slot marker; settle and invalid-return motion use the reusable `out-back` curve.
-Clock width follows its live format, and the shipped default content bar preserves its prior pixel output.
-Widget design polish remains B0152; these checks cover the existing clock forms and bar-growth regressions only.
+Occupied bar slots now persist desktop-clock drops at 82% and 90% bar width.
+The drag ghost retires after a rejected transaction; hover prewarming resumes when the pointer leaves the dropped widget.
+The default content bar remains byte-identical to its prior golden.
+The functional and relative first-key CPU gates pass; 60 Hz snap smoothness remains a release blocker.
 
 | Proof | Result |
 | --- | --- |
-| Desktop clock drop at 82% / 90% | File and store six-state runs pass; canonical store layout nests the clock in the status pill. |
-| Drag, app, resize, pearls, focus | Both six-state drag runs, seven app states, resize, API detach/dock, and popup focus proof pass. |
-| Default bar / full CI | Default bar goldens remain byte-identical; remote Bead CI passes at `ea5efd7c` (750 passed). |
-| 5-pair CPU memory gate | Official gate rejects all candidate pairs: first-key UI CPU 26.45–28.17 ms (>8 ms). Diagnostic paired medians: idle +1.758 MiB; launcher +7.834; typed +12.670; closed +162.533; after drag/close +378.191. Budget: 2 MiB. |
-| 60 Hz CPU snap cadence | Fails after source hover: first overlay 143–166 ms, first bar paint 145–146 ms, 24–26 dropped bar frames per repeat. |
-| 120 Hz | Not measured: the private Niri Winit output remained at 60 Hz despite parent/custom-mode requests. |
+| Drop and functional states | 82% and 90% file/store drops persist; six-state drag, app, resize, pearls and focus proofs pass. |
+| Full remote CI | Bead CI-equivalent passes at `96e1754a`; 750 tests and optimized release build. |
+| First-key UI CPU | Exact B0153 shell-only harness: main 28.187 ms, candidate 27.602 ms, paired median Δ −0.175 ms (limit +1 ms). |
+| After-drag/close memory | Five alternating pairs, CPU, 2880×1800/1.5: shell unreclaimable medians 42.053 / 42.402 MiB, paired Δ +0.232 MiB. All widgets processes exited after close. |
+| 60 Hz snap | Fails smoothness: candidate overlay first-visible p50 is about 24 ms later than main; bar p99 gaps and dropped commits are also worse despite earlier first paint. |
+| 120 Hz | Not measured: nested Niri remained at 60 Hz. |
 
-The memory medians use all five same-host pairs; the diagnostic summarizer relaxes only its 8 ms first-key validator so the memory deltas remain visible. The official gate is failed, not passed. Desktop captures are private CPU sessions at 2880×1800/1.5 with host swap at 0 MiB. Existing QML/Bead default-bar pairs are in [B0113 evidence](evidence/0113/idle-pair.png); the Widgets app has no QML equivalent, and its preview-stage design remains an explicit B0152 gap. No push was made because the memory and snap gates are red.
+The old `+378 MiB` value is invalid as a shell-only delta: its earlier runner enabled the after-drag phase for the candidate but not main. The old aggregate cannot be reconstructed because its raw inputs were cleaned. The exact B0153 method reads the Bead shell PID's smaps rollup and reports other processes separately; in pair 1, excluded compositor/Niri/capture-runtime/daemon rows sum to about 400 MiB while shell rows are about 46 MiB (main) and 38 MiB (candidate). This explains the scale of the old figure, not its exact arithmetic. Across the final-code five-pair run, the after-drag paired median is +0.232 MiB; phase medians are bar +0.207, open +0.445, typed −0.330, closed +0.744, expired +0.121, and desktop-active −0.625 MiB. The 2 MiB widget budget is met; the noisy closed-phase median is reported.
 
-The overlap fallback is in `shell/widgets/app/behavior.luau`; reusable easing is in ADR 0004. No temporary duplicate product paths were added.
+The matched CPU snap capture used synthetic 60 Hz scheduling in a private nested Niri session, not physical scanout. Final-code repeats remained less smooth than main on overlay timing and bar tail gaps, so this slice is not pushed. Existing paired default-bar evidence is in [B0113 evidence](../evidence/0113/idle-pair.png); preview-stage visual polish remains B0152.

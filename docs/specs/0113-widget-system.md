@@ -308,18 +308,28 @@ were superseded after integrating B0110/B0118 and refreshing QML/daemon main.
 Nacre store registration remains the one-line request above. Phase 2 owns the
 edit/menu/settings UI, content-preset grid editing policy and canvas host.
 
-## B0151 finish-slice gate — 2026-10-26 (not accepted)
+## B0151 finish-slice gate — 2026-10-27 (not shipped; snap smoothness open)
 
-Occupied status-pill drops now save the desktop clock at 82% and 90% of bar width.
-Six-state file/store drags and the app, resize, pearl detach/dock, and popup-focus captures pass.
-The default bar remains byte-identical to its accepted goldens, and remote Bead CI passes.
-Memory and 60 Hz CPU snap gates fail; Niri's private output did not reach 120 Hz.
+Occupied status-pill drops persist at 82% and 90% of bar width. Functional proofs,
+default-bar golden parity and full remote Bead CI pass. Exact B0153 shell-only
+measurement puts first-key UI CPU at 27.602 ms candidate / 28.187 ms main
+(paired median −0.175 ms; relative limit +1 ms). Five-pair after-drag/close
+unreclaimable delta is +0.232 MiB median; the declared 2 MiB widget budget passes.
 
 | Gate | Measurement |
 | --- | --- |
-| First-key UI CPU | Candidate 26.45–28.17 ms; limit 8 ms. |
-| 5-pair unreclaimable Δ, CPU | Idle +1.758 MiB; launcher +7.834; typed +12.670; closed +162.533; after drag/close +378.191. Budget 2 MiB. |
-| 60 Hz snap | First overlay 143–166 ms; first bar paint 145–146 ms; 24–26 dropped bar frames/repeat. |
-| 120 Hz | Not measured; nested Niri stayed at 60 Hz under the private 120 Hz parent/custom-mode requests. |
+| First-key UI CPU | Main 28.187 ms; candidate 27.602 ms; Δ −0.175 ms paired median (≤ control +1 ms). |
+| 5-pair after-drag/close unreclaimable Δ | +0.232 MiB; CPU, 2880×1800/1.5; widget budget ≤2 MiB. |
+| 60 Hz snap | Fails: candidate overlay first-visible p50 is ~24 ms later; bar p99 gaps and dropped commits are worse, despite earlier first paint. |
+| 120 Hz | Not measured; private nested Niri remained at 60 Hz. |
 
-The official memory summarizer rejected the five pairs for first-key CPU >8 ms. A diagnostic copy relaxed only that validator to calculate the paired memory medians above; these numbers are evidence of a failed gate, not acceptance. No push was made. The preview-stage visual gap remains with B0152; existing default-bar paired QML/Bead crops remain linked above.
+The historical +378 MiB is not a valid shell-only delta: its runner enabled the
+after-drag phase only for candidate, not main. Its raw aggregate inputs are gone.
+The exact B0153 harness reads the shell PID smaps rollup and lists compositor,
+Niri, capture-runtime and daemon processes separately; their pair-1 sum is about
+400 MiB, versus shell rows of about 46 MiB main and 38 MiB candidate. Final-code
+phase paired medians are bar +0.207, launcher-open +0.445, typed −0.330,
+closed +0.744, expired +0.121, desktop-active −0.625 and after-drag +0.232 MiB.
+Nested CPU timing is synthetic scheduling, not physical scanout. No push was
+made because snap cadence did not satisfy the smoothness gate. Preview-stage
+visual polish remains B0152; paired default-bar evidence remains linked above.

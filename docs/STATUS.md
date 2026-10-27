@@ -23,14 +23,15 @@ Bead 900369fb measured 27.5 → 28.7 MiB after expiry; current main measured 28.
 Current main with 128 notification rows ended at 33.9 MiB from 29.1 MiB. Each
 run used three launcher cycles at 2880×1800/1.5 and a 125-second expiry wait.
 The B0150 claim remains unattributed and unreproduced; no product fix is claimed.
-## 2026-10-26 — B0151 Widgets finish slice (not accepted)
+## 2026-10-27 — B0151 Widgets finish slice (not shipped; snap gate open)
 
-Desktop clock drops into an occupied pill at 82% and 90%; both file/store functional
-runs pass, as do the six-state drags, app, resize, pearl detach/dock and popup-focus
-proofs. The default-bar goldens are unchanged and remote Bead CI passes. The five-pair
-CPU gate fails: first-key UI CPU is 26–28 ms, and after-drag/close unreclaimable delta
-is +378 MiB versus the 2 MiB widget budget. The 60 Hz bar snap also drops 24–26 frames
-per repeat; private Niri remained at 60 Hz for the attempted 120 Hz run. No push.
+Desktop clock drops into an occupied pill at 82% and 90%; functional proofs, default-bar
+goldens and full remote CI pass. The exact B0153 shell-only five-pair CPU capture gives
+first-key UI CPU 27.602 ms candidate vs 28.187 ms main (paired Δ −0.175 ms), and
+after-drag/close unreclaimable memory Δ +0.232 MiB. The historical +378 MiB used a
+candidate-only after-drag phase and is not a valid matched shell delta; separate process
+rows include about 400 MiB of compositor/Niri/capture/daemon memory. 60 Hz snap timing
+remains less smooth than main; Niri stayed at 60 Hz, so 120 Hz was not measured. No push.
 [Results and limits](specs/0151-widgets-finish.md).
 
 ## 2026-10-26 — B0148 cache admission (synthetic checks pass; real gate blocked)
