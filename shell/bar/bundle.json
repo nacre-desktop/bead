@@ -19,6 +19,7 @@
     "widgets/updates/widget.luau",
     "widgets/wifi/widget.luau",
     "widgets/workspaces/widget.luau",
-    "widgets/editing.luau"
+    "widgets/editing.luau",
+    "widgets/desktop-visuals.luau"
   ]
 }

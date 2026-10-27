@@ -7,6 +7,7 @@ local status_text=c.status_text
 local popouts=c.popouts
 local t=c.t
 local status_glyph=c.status_glyph
+local visual=require("../desktop-visuals")
 local clock_font="IBM Plex Sans"
 local time_max=math.max(t.clock_min_width,ui.text_width("23:59",clock_font,t.clock_font),
     ui.text_width("11:59 PM",clock_font,t.clock_font),ui.text_width("12:59 PM",clock_font,t.clock_font))
@@ -86,12 +87,42 @@ local function bar(props,settings,_data)
     }
 end
 local function desktop(props,_settings,_data)
-    local slot=props.instance.slot or {w=320,h=92}
-    return ui.Box{id="clock-desktop",width=slot.w,height=slot.h,padding=kit.tokens.spacing.md,radius=kit.tokens.radii.medium,fill="surfaceContainer",on_activate=popouts and ui.action("view.open","calendar") or nil,
-        ui.Column{id="clock-content",width="fill",height="fill",align="center",justify="center",gap=kit.tokens.spacing.md/2,
-            status_glyph("calendar","calendar_month","calendar","tertiary"),
-            clock_content(props.form_style,props.instance and props.instance.iid),
-        }}
+    local style=props.form_style or "digital"
+    local w,h=visual.slot(props.instance,420,190)
+    local action=popouts and ui.action("view.open","calendar") or nil
+    local time=ui.bind("bar.clock.text")
+    local iso=ui.resolve_for_check(ui.bind("bead.desktop.clock.date")) or ""
+    local year,month,day=string.match(iso,"^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+    local weekday=""
+    if year then
+        year,month,day=tonumber(year),tonumber(month),tonumber(day)
+        if month<3 then month+=12; year-=1 end
+        local zeller=(day+math.floor(13*(month+1)/5)+year+math.floor(year/4)-math.floor(year/100)+math.floor(year/400))%7
+        weekday=({[0]="Saturday",[1]="Sunday",[2]="Monday",[3]="Tuesday",[4]="Wednesday",[5]="Thursday",[6]="Friday"})[zeller]
+    end
+    local date_line=weekday~="" and (weekday.." · "..iso) or iso
+    if style=="analog" then
+        local seconds=ui.resolve_for_check(ui.bind("bead.desktop.clock.seconds")) or "00:00:00"
+        local second=tonumber(string.match(seconds,"%d%d$")) or 0
+        local minute=tonumber(string.match(seconds,":(%d%d):")) or 0
+        local angle=ui.animate("wall-clock-second",second*6,1,"linear")
+        return ui.Box{id="clock-analog",width=w,height=h,fill="transparent",on_activate=action,
+            ui.Arc{id="dial",position="absolute",left=8,top=8,width=h-16,height=h-16,start_angle=-90,sweep_angle=360,stroke_width=3,color="primary",round_caps=true},
+            ui.Arc{id="minute-hand",position="absolute",left=h*.22,top=h*.22,width=h*.56,height=h*.56,start_angle=-90,sweep_angle=ui.animate("wall-clock-minute",minute*6+second/10,.12,"linear"),stroke_width=5,color="secondary",round_caps=true},
+            ui.Arc{id="second-hand",position="absolute",left=h*.32,top=h*.32,width=h*.36,height=h*.36,start_angle=-90,sweep_angle=angle,stroke_width=3,color="tertiary",round_caps=true},
+            ui.Column{id="dial-caption",position="absolute",left=h+kit.tokens.spacing.lg,top=0,width=w-h-kit.tokens.spacing.lg,height=h,justify="center",gap=kit.tokens.spacing.sm,
+                ui.Text{id="weekday",text=date_line,width="fill",height=28,font_size=kit.tokens.text.title*4/3,color="primary"},
+                ui.Text{id="digital-time",text=time,width="fill",height=56,font_size=kit.tokens.text.headline*2,color="onSurface"}}}
+    elseif style=="minimal" then
+        return ui.Column{id="clock-minimal",width=w,height=h,justify="center",gap=kit.tokens.spacing.xs,on_activate=action,
+            ui.Text{id="time",text=time,width="fill",height=h*.58,font_size=kit.tokens.text.headline*2,color="onSurface"},
+            ui.Text{id="date",text=date_line,width="fill",height=28,font_size=kit.tokens.text.title*4/3,color="primary"}}
+    end
+    return ui.Box{id="clock-digital",width=w,height=h,padding=kit.tokens.spacing.lg,radius=kit.tokens.radii.large,fill="surfaceContainer",on_activate=action,
+        ui.Column{id="clock-content",width="fill",height="fill",justify="center",gap=kit.tokens.spacing.xs,
+            ui.Text{id="weekday",text=weekday,width="fill",height=26,font_size=kit.tokens.text.body*4/3,color="primary"},
+            ui.Text{id="time",text=time,width="fill",height=h*.52,font_size=kit.tokens.text.headline*2,color="onSurface"},
+            ui.Text{id="date",text=iso,width="fill",height=24,font_size=kit.tokens.text.body*4/3,color="onSurfaceVariant"}}}
 end
 local function bar_style(title,style,preferred,requires)
     local descriptor={title=title,min_span=1,max_span=60,preferred_span=preferred,requires=requires,render=function(props,settings,data)
@@ -114,8 +145,9 @@ return {id="clock",title="Clock",icon="schedule",category="bar",data={topics={},
     forms={bar={default_style="time",styles={
         time=bar_style("Time","time",preferred_span(time_max),nil),["time+date"]=bar_style("Time + date","time+date",preferred_span(date_content_max),{"bead.desktop.clock.date"}),
         seconds=bar_style("Seconds","seconds",preferred_span(seconds_max),{"bead.desktop.clock.seconds"}),
-    }},desktop={default_style="time",styles={
-        time=desktop_style("Time","time",220),["time+date"]=desktop_style("Time + date","time+date",360,{"bead.desktop.clock.date"}),
-        seconds=desktop_style("Seconds","seconds",240,{"bead.desktop.clock.seconds"}),
+    }},desktop={default_style="digital",styles={
+        digital=desktop_style("Glass digital","digital",420,{"bead.desktop.clock.date"}),
+        analog=desktop_style("Analog dial","analog",420,{"bead.desktop.clock.seconds","bead.desktop.clock.date"}),
+        minimal=desktop_style("Minimal type","minimal",420,{"bead.desktop.clock.date"}),
     }},panel={styles={calendar={view="calendar"}}}}
 }

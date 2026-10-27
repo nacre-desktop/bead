@@ -528,6 +528,9 @@ pub(crate) fn canvas_spec_with_root(
                         runtime = runtime.with_shared_desktop(desktop.clone(), false)?;
                     }
                     runtime = runtime.with_widget_editor(inputs.client.as_ref(), true)?;
+                    if let Some(client) = &inputs.client {
+                        runtime = runtime.with_session_menu(client.clone())?;
+                    }
                     if let Some(prefs) = &inputs.prefs {
                         runtime = runtime.with_prefs(prefs.clone())?;
                     }

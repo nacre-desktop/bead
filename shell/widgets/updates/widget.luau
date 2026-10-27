@@ -44,12 +44,28 @@ local function desktop(props,_settings,_data)
     local slot=props.instance.slot or {w=280,h=80}
     local width=slot.w
     local height=slot.h
-    return ui.Box{id="updates-desktop",width=width,height=height,padding=kit.tokens.spacing.md,radius=kit.tokens.radii.medium,fill="surfaceContainer",on_activate=popouts and ui.action("status.pill.open","updates") or nil,
-        ui.Row{id="content",width="fill",height="fill",gap=kit.tokens.spacing.md,align="center",
-            status_glyph("package","package_2","package","primary"),
-            ui.Column{id="labels",width="fill",gap=kit.tokens.spacing.xs,ui.Text{id="title",text="Updates",font_size=kit.tokens.text.body*4/3,color="onSurface"},
-                ui.Text{id="count",text=ui.bind("bar.updates.text"),font_size=kit.tokens.text.title*4/3,color="primary"}},
-        }}
+    local style=props.form_style or "card"
+    local count=ui.resolve_for_check(ui.bind("bar.updates.text")) or "0"
+    local checked=ui.bind("status.updates_checked")
+    local open=ui.resolve_for_check(ui.bind("status.updates_can_open"))==true
+    local action=popouts and ui.action("status.pill.open","updates") or nil
+    if style=="wallpaper" then
+        return ui.Column{id="updates-wallpaper",width=width,height=height,fill="transparent",justify="center",gap=kit.tokens.spacing.xs,
+            ui.Text{id="count",text=count,width="fill",height=72,font_size=kit.tokens.text.headline*2,color="primary"},
+            ui.Text{id="checked",text=checked,width="fill",height=24,font_size=kit.tokens.text.body*4/3,color="onSurface"},
+            kit.Button{id="update",text="Update",height=38,enabled=open,focus_on_pointer=false,on_activate=open and ui.action("updates.open") or nil}}
+    end
+    return ui.Box{id="updates-desktop",width=width,height=height,padding=kit.tokens.spacing.md,radius=kit.tokens.radii.large,
+        fill=style=="pearl" and "surfaceContainerHigh" or "surfaceContainer",on_activate=action,
+        ui.Column{id="updates-card",width="fill",height="fill",gap=kit.tokens.spacing.sm,
+            ui.Row{id="header",width="fill",height=28,gap=kit.tokens.spacing.sm,align="center",
+                status_glyph("package","package_2","package","primary"),
+                ui.Text{id="title",text="Updates",width=0,grow=1,font_size=kit.tokens.text.title*4/3,color="onSurface"},
+                ui.Text{id="count",text=count,font_size=kit.tokens.text.headline*4/3,color="primary"}},
+            ui.Text{id="checked",text=checked,width="fill",height=24,font_size=kit.tokens.text.caption*4/3,color="onSurfaceVariant"},
+            ui.Row{id="actions",width="fill",height=38,gap=kit.tokens.spacing.xs,align="center",
+                kit.Button{id="update",text="Update",height=36,enabled=open,focus_on_pointer=false,on_activate=open and ui.action("updates.open") or nil},
+                kit.Button{id="check",text="Check",height=36,focus_on_pointer=false,on_activate=ui.action("updates.refresh")}}}}
 end
 local function style(title,preferred,render)
     return {title=title,min_span=1,max_span=60,preferred_span=preferred,render=render}
@@ -62,6 +78,9 @@ end
 return {id="updates",title="Updates",icon="package_2",category="bar",data={topics={},actions={}},settings={},defaults={},budget={fps_active=0,fps_idle=0,pause_on={"fullscreen","lock","battery_saver"}},
     forms={bar={default_style="icon+value",styles={
         icon=style("Icon",1,bar),["icon+value"]=count_style("Icon + value",2),["icon+text"]=style("Icon + text",3,bar),
-    }},desktop={default_style="summary",styles={summary={title="Summary",min_span=1,max_span=1200,preferred_span=280,render=desktop}}},
+    }},desktop={default_style="card",styles={
+        card={title="Update card",min_span=1,max_span=1200,preferred_span=320,preferred_height=160,render=function(p,s,d) p.form_style="card"; return desktop(p,s,d) end},
+        pearl={title="Pearl notice",min_span=1,max_span=1200,preferred_span=320,preferred_height=160,render=function(p,s,d) p.form_style="pearl"; return desktop(p,s,d) end},
+        wallpaper={title="Wallpaper count",min_span=1,max_span=1200,preferred_span=280,preferred_height=150,render=function(p,s,d) p.form_style="wallpaper"; return desktop(p,s,d) end}}},
         panel={styles={updates={view="updates"}}}}
 }

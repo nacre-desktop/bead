@@ -22,7 +22,8 @@
     "widgets/updates/widget.luau",
     "widgets/wifi/widget.luau",
     "widgets/workspaces/widget.luau",
-    "bar/tokens.luau"
+    "bar/tokens.luau",
+    "widgets/desktop-visuals.luau"
   ],
   "assets": [
     "bar/assets/nacre-logo.themed.svg",

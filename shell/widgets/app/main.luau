@@ -47,8 +47,17 @@ local function wallpaper_preview(rows)
 end
 local width=get("bead.viewport.width",1280)
 local height=get("bead.viewport.height",800)
-local screen_w=math.max(1,get("widgets.screen_width",1920))
-local screen_h=math.max(1,get("widgets.screen_height",1080))
+local screen_w=math.max(1,get("widgets.screen_width",get("bead.viewport.width",1920)))
+local screen_h=math.max(1,get("widgets.screen_height",get("bead.viewport.height",1080)))
+local output_w,output_h=screen_w,screen_h
+local output_id=get("widgets.screen_id","")
+for _,output in get("widgets.outputs",{}) do
+    if output.name==output_id then
+        output_w=math.max(1,tonumber(output.width) or screen_w)
+        output_h=math.max(1,tonumber(output.height) or screen_h)
+        break
+    end
+end
 local drag_active=get("widgets.drag.active",false)==true
 local drag_phase=get("widgets.drag.phase","")
 local transient=document_value(get("widgets.drag.layout"))
@@ -243,7 +252,7 @@ local function gallery_card(item)
     local package=registry.catalogue[item.id]
     local bar=preview.render(item.id,"bar",style_name(package,"bar"),package.defaults,PREVIEW_W,36)
     local desktop=package.forms.desktop and preview.render(item.id,"desktop",style_name(package,"desktop"),package.defaults,PREVIEW_W,48)
-    return ui.Button{id="widget-card-"..item.id,width="fill",height=208,shrink=0,padding=spacing.md,
+    return ui.Button{id="widget-card-"..item.id,width="fill",height=192,shrink=0,padding=spacing.sm,
         radius=kit.tokens.radii.medium,fill="surfaceContainer",hover_fill="surfaceContainerHigh",
         selected=selected==item.id,selected_fill=ui.alpha("primary",.12),focus_on_pointer=false,
         aria_label="Open "..item.title,on_activate=navigate("select",item.id),
@@ -383,6 +392,13 @@ local function detail()
     if not package then return gallery() end
     local placement=package.forms[form] and form or package.forms.bar and "bar" or "desktop"
     local group,entry,instance,form_config,enabled,style_id=form_state(selected,placement,package,selected_group)
+    local bar_group,bar_entry,bar_instance,bar_config,bar_enabled,bar_style=form_state(selected,"bar",package,selected_group)
+    local desktop_group,desktop_entry,desktop_instance,desktop_config,desktop_enabled,desktop_style
+    if package.forms.desktop then
+        desktop_group,desktop_entry,desktop_instance,desktop_config,desktop_enabled,desktop_style=form_state(selected,"desktop",package,selected_group)
+    else
+        desktop_enabled=false; desktop_style=""
+    end
     local instance_groups=groups_for(selected)
     local settings=active_settings(package,entry,instance)
     local desktop_available=package.forms.desktop~=nil
@@ -392,21 +408,18 @@ local function detail()
     local mini_w,mini_h=screen_w*stage_scale,screen_h*stage_scale
     local mini_left,mini_top=(stage_w-mini_w)/2,(stage_h-mini_h)/2
     local bar_h=math.max(1,get("bar.height",50))
-    local entry_candidate=placement=="bar" and not enabled and {
-        widget=selected,group=group,style=style_id,settings=settings,placement=form_config.placement,
+    local entry_candidate=not bar_enabled and {
+        widget=selected,group=bar_group,style=bar_style,settings=settings,placement=bar_config.placement,
     } or nil
     local bar_node=preview.render_bar(doc,screen_w,bar_h,stage_scale,
-        placement=="bar" and enabled and selected or nil,style_id,settings,group,entry_candidate)
+        bar_enabled and selected or nil,bar_style,settings,bar_group,entry_candidate)
     local stage_bar_height=bar_h*stage_scale
     local widget_w=math.min(mini_w*.38,320*stage_scale)
     local widget_h=math.min(widget_w*.5,mini_h*.4)
     local widget_left=mini_left+(mini_w-widget_w)/2
     local widget_top=mini_top+stage_bar_height+math.max(0,(mini_h-stage_bar_height-widget_h)/2)
     local wallpaper_image=wallpaper~="" and ui.Image{id="stage-wallpaper",position="absolute",left=mini_left,top=mini_top,width=mini_w,height=mini_h,icon=wallpaper,image_fit="cover"} or nil
-    local desktop_preview
-    if placement=="desktop" then
-        desktop_preview=preview.render(selected,"desktop",style_id,settings,widget_w,widget_h,true)
-    end
+    local desktop_preview=desktop_available and preview.render(selected,"desktop",desktop_style,settings,widget_w,widget_h,true)
     local stage_source=dragging.app_payload(doc,selected,placement,style_id,settings,group)
     local settings_package=table.clone(package)
     settings_package.settings={}
@@ -415,6 +428,8 @@ local function detail()
     end
     local item={iid=group,widget=selected,settings=settings}
     local fields=settings_form.rows(item,settings_package,form_action(selected,placement,group))
+    local advanced_fields=settings_form.rows(item,settings_package,form_action(selected,placement,group),true)
+    local advanced_open=get("widgets.advanced.open",false)==true
     local stage_children={ui.Box{id="stage-background",position="absolute",left=mini_left,top=mini_top,
         width=mini_w,height=mini_h,fill="surfaceContainerHighest"}}
     if wallpaper_image then table.insert(stage_children,wallpaper_image) end
@@ -424,9 +439,10 @@ local function detail()
         width=mini_w,height=stage_bar_height,clip_children=true,fill="surface",bar_node})
     if desktop_preview then
         desktop_preview.props=desktop_preview.props or {}
-        desktop_preview.props.metadata={{widget_entry_source=true,group=group,widget=selected,form="desktop",style=style_id}}
+        desktop_preview.props.metadata={{widget_entry_source=true,group=desktop_group,widget=selected,form="desktop",style=desktop_style}}
         table.insert(stage_children,ui.Box{id="desktop-widget-preview",position="absolute",left=widget_left,top=widget_top,
-            width=widget_w,height=widget_h,clip_children=true,visible=true,align="center",justify="center",desktop_preview})
+            width=widget_w,height=widget_h,clip_children=true,visible=true,align="center",justify="center",
+            border_width=2,border_color="primary",radius=kit.tokens.radii.small,desktop_preview})
     end
     if stage_source then
         table.insert(stage_children,ui.Box{id="stage-drag-source",position="absolute",left=mini_left,top=mini_top,
@@ -434,23 +450,22 @@ local function detail()
     end
     table.insert(stage_children,ui.Column{id="stage-caption",position="absolute",left=spacing.md,bottom=spacing.md,gap=spacing.xs,
         label("stage-title","Your screen",text.caption*4/3,"onSurface",{height=18}),
-        label("stage-size",tostring(screen_w).." × "..tostring(screen_h),text.caption*4/3,"onSurfaceVariant",{height=16})})
+        label("stage-size",tostring(output_w).." × "..tostring(output_h),text.caption*4/3,"onSurfaceVariant",{height=16})})
     local stage_props={id="preview-stage",width="fill",height=stage_h,shrink=0,clip_children=true,
         radius=kit.tokens.radii.medium,fill="surfaceContainerHigh"}
     for _,child in stage_children do table.insert(stage_props,child) end
-    local tabs_props={id="form-tabs",width="fill",height=46,shrink=0,gap=spacing.xs,
-        button("bar-tab","In the bar",navigate("form","bar"),{selected=placement=="bar",fill=placement=="bar" and ui.alpha("primary",.15) or "surfaceContainer"})}
-    if desktop_available then
-        table.insert(tabs_props,button("desktop-tab","On the desktop",navigate("form","desktop"),
-            {selected=placement=="desktop",fill=placement=="desktop" and ui.alpha("primary",.15) or "surfaceContainer"}))
-    end
     local content_props={id="detail-content",width="fill",gap=spacing.md,
         ui.Box(stage_props),
-        ui.Row(tabs_props),
-        kit.ToggleRow{id="form-enabled",label=placement=="bar" and "Show in the bar" or "Show on the desktop",
-            checked=enabled,enabled=not busy,on_activate=edit({op="toggle-form",widget=selected,form=placement,enabled=not enabled})},
-        label("style-heading","Style",text.body*4/3,"onSurface",{height=22}),
-        style_tiles(selected,placement,package,style_id,settings)}
+        ui.Row{id="form-enable-row",width="fill",gap=spacing.md,
+            kit.ToggleRow{id="bar-enabled",width="fill",label="Show in the bar",checked=bar_enabled,enabled=not busy,
+                on_activate=edit({op="toggle-form",widget=selected,form="bar",enabled=not bar_enabled})},
+            desktop_available and kit.ToggleRow{id="desktop-enabled",width="fill",label="Show on the desktop",checked=desktop_enabled,enabled=not busy,
+                on_activate=edit({op="toggle-form",widget=selected,form="desktop",enabled=not desktop_enabled})} or nil},
+        ui.Row{id="form-style-columns",width="fill",gap=spacing.md,
+            ui.Column{id="bar-style-section",width=0,grow=1,gap=spacing.sm,
+                label("bar-style-heading","Bar style",text.body*4/3,"onSurface",{height=22}),style_tiles(selected,"bar",package,bar_style,settings)},
+            desktop_available and ui.Column{id="desktop-style-section",width=0,grow=1,gap=spacing.sm,
+                label("desktop-style-heading","Desktop style",text.body*4/3,"onSurface",{height=22}),style_tiles(selected,"desktop",package,desktop_style,settings)} or nil}}
     if #instance_groups>1 then
         local options={id="instance-options",width="fill",gap=spacing.sm}
         for _,copy in instance_groups do
@@ -463,7 +478,11 @@ local function detail()
     if next(settings_package.settings)~=nil then
         table.insert(content_props,ui.Column{id="settings-section",width="fill",gap=spacing.md,padding=spacing.md,
             radius=kit.tokens.radii.medium,fill="surfaceContainer",
-            label("settings-title","Settings",text.title*4/3,"onSurface",{height=24}),fields})
+            label("settings-title","Settings",text.title*4/3,"onSurface",{height=24}),
+            #fields.children>0 and fields or nil,
+            #advanced_fields.children>0 and ui.Column{id="advanced-fields",width="fill",gap=spacing.sm,
+                button("advanced-toggle",advanced_open and "Hide advanced" or "Advanced",ui.action("widgets.advanced.toggle"),{fill="transparent"}),
+                advanced_open and advanced_fields or nil} or nil})
     end
     if error_message~="" or message~="" then
         table.insert(content_props,label("save-status",error_message~="" and error_message or message,

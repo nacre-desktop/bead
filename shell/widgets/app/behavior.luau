@@ -1234,7 +1234,7 @@ return {
         ["window.preferred_min_width"]=800,["window.preferred_min_height"]=600,
         ["window.width_fraction"]=0.88,["window.height_fraction"]=0.86,
         ["widgets.layout"]={},["widgets.rev"]=0,["widgets.category"]="all",["widgets.search"]="",
-        ["widgets.selected"]="",["widgets.group"]="",["widgets.form"]="bar",["widgets.scroll"]=0,["widgets.nav.scroll"]=0,
+        ["widgets.selected"]="",["widgets.group"]="",["widgets.form"]="bar",["widgets.advanced.open"]=false,["widgets.scroll"]=0,["widgets.nav.scroll"]=0,
         ["widgets.screen_width"]=1920,["widgets.screen_height"]=1080,
         ["widgets.screen_origin_x"]=0,["widgets.screen_origin_y"]=0,["widgets.screen_id"]="",["widgets.outputs"]={},
         ["widgets.drag.active"]=false,["widgets.drag.source"]={},["widgets.drag.destination"]="",
@@ -1292,6 +1292,7 @@ return {
                 if req.value=="bar" or req.value=="desktop" then s["widgets.form"]=req.value end
             end
         end,
+        ["widgets.advanced.toggle"]=function(s) s["widgets.advanced.open"]=not s["widgets.advanced.open"] end,
         ["widgets.edit"]=op,
     },
     computed={
