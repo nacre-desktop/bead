@@ -259,6 +259,7 @@ return {
         ["bead.desktop.clock"]="",["bead.desktop.clock.seconds"]="",["bead.desktop.clock.date"]="",
         ["bead.desktop.audio"]="volume_mute",["bead.desktop.audio.available"]=false,
         ["bead.desktop.battery"]="battery_unknown",["bead.desktop.battery.value"]="",
+        ["bead.desktop.battery.status"]="",["bead.desktop.battery.remaining"]="",
         ["bead.desktop.battery.value.width"]=3,["bead.desktop.network"]="wifi_off",
         ["bead.desktop.bluetooth"]="bluetooth_disabled",["bead.desktop.tray"]={},["bead.desktop.menu"]={},
         ["bead.desktop.tray.tooltip"]="",["bead.desktop.tray.tooltip.visible"]=false,
