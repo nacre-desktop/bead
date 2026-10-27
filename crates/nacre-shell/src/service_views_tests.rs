@@ -603,8 +603,8 @@ fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
             h.session.preview_deadline().is_none(),
             "bar geometry must be at its authored animation endpoint before golden capture"
         );
-        // A pill is a visual container. Its children are the only hit targets,
-        // including each icon/count pair; clicks between them must hit nothing.
+        // The pill's buttons tile it edge to edge: every point between two icons
+        // belongs to one of them, and the area outside the pill is inert.
         let mut targets: Vec<_> = h
             .session
             .view_nodes()
@@ -632,8 +632,15 @@ fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
         assert_eq!(targets.len(), 8, "every status widget owns one hit target");
         {
             for pair in targets.windows(2) {
-                let x = (pair[0].x + pair[0].w + pair[1].x) / 2.;
-                assert!(h.session.action_at(x, 25.).is_none(), "pill gap is inert");
+                assert!(
+                    (pair[0].x + pair[0].w - pair[1].x).abs() < 0.01,
+                    "pill buttons must not leave a gap: {pair:?}"
+                );
+                let x = pair[1].x;
+                assert!(
+                    h.session.action_at(x, 25.).is_some(),
+                    "the seam between two pill buttons is a hit target"
+                );
             }
             assert!(
                 h.session.action_at(targets[0].x - 2., 25.).is_none(),

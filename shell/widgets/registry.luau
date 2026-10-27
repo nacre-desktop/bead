@@ -322,7 +322,8 @@ function M.renderer(document)
         node=require("dragging").attach(document,item,node)
         if item.widget=="pill" and item.host=="top_bar" and host and host.mode=="content" and node.props then
             local props=node.props
-            local natural=measured_width(node,0)
+            -- An empty pill stays a visible drop target as wide as it is tall.
+            local natural=math.max(measured_width(node,0),require("context").t.pill_height)
             if natural>0 then props.width=ui.animate("pill-width:"..item.iid,natural,.18,"out-cubic") end
             props.clip_children=true
             node.props=props
