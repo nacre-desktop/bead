@@ -1300,8 +1300,11 @@ impl App {
             .and_then(|d| d.size)
             .or_else(|| self.output.info(&output).and_then(|info| info.logical_size));
         let enabled = enabled && self.pearl.is_none() && !self.options.test_passive;
+        // Panel events run with `options.bar` cleared; their panel is still hosted by the bar, whose
+        // strip must stay outside the dismissal catcher so other bar controls keep receiving input.
+        let bar_hosted = self.options.bar || self.processing_panel;
         let bounds = size.filter(|_| enabled).map(|(width, height)| {
-            let extent = if self.options.bar {
+            let extent = if bar_hosted {
                 self.surfaces
                     .iter()
                     .find(|s| !s.companion && s.output == output)
