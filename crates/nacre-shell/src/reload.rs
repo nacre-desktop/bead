@@ -367,13 +367,13 @@ struct WidgetHoverPreview {
 }
 fn suppress_widget_drag_hover(
     suppressed: &mut bool,
-    has_candidate: bool,
+    inside_drop_target: bool,
     pointer_event: bool,
 ) -> bool {
     if !*suppressed {
         return false;
     }
-    if has_candidate || !pointer_event {
+    if inside_drop_target || !pointer_event {
         true
     } else {
         *suppressed = false;
@@ -803,6 +803,7 @@ pub struct Runtime {
     widget_drag_projection: Option<BTreeMap<String, bead::core::Value>>,
     widget_hover_preview: Option<WidgetHoverPreview>,
     widget_drag_suppress_hover_until_leave: bool,
+    widget_drag_suppress_hover_bounds: Option<(f32, f32, f32, f32)>,
     widget_drag_epoch: u64,
     widget_drag_retire_cleanup: bool,
     widget_drag_action_registered: bool,
@@ -2069,13 +2070,19 @@ impl Runtime {
             return;
         }
         let candidate = self.session.transfer_candidate_at(x, y);
+        let inside_drop_target = self
+            .widget_drag_suppress_hover_bounds
+            .is_some_and(|(left, top, width, height)| {
+                x >= left && x < left + width && y >= top && y < top + height
+            });
         if suppress_widget_drag_hover(
             &mut self.widget_drag_suppress_hover_until_leave,
-            candidate.is_some(),
+            inside_drop_target,
             pointer_event,
         ) {
             return;
         }
+        self.widget_drag_suppress_hover_bounds = None;
         let preview = candidate.and_then(|candidate| self.widget_drag_preview(x, y, candidate));
         let Some((key, values)) = preview else {
             self.retire_widget_hover_preview();
@@ -2562,6 +2569,10 @@ impl Runtime {
         // Keep the just-dropped ghost from being prewarmed again while the pointer
         // remains over the target widget. A leave and re-entry can warm the next drag.
         self.widget_drag_suppress_hover_until_leave = true;
+        self.widget_drag_suppress_hover_bounds = self
+            .session
+            .transfer_candidate_at(self.pointer_at.0, self.pointer_at.1)
+            .map(|candidate| candidate.source_rect);
         self.widget_drag_epoch = self.widget_drag_epoch.wrapping_add(1).max(1u64 << 63);
         let token = self.widget_drag_epoch;
         if let Some(wakeup) = self.wakeup.clone() {
@@ -2922,6 +2933,7 @@ impl Runtime {
             widget_drag_projection: None,
             widget_hover_preview: None,
             widget_drag_suppress_hover_until_leave: false,
+            widget_drag_suppress_hover_bounds: None,
             widget_drag_epoch: 1u64 << 63,
             widget_drag_retire_cleanup: false,
             widget_drag_action_registered: false,
