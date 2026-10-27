@@ -674,11 +674,20 @@ impl Extras {
                 state.catalogue = None;
                 let request_ids = std::mem::take(&mut state.catalogue_request_ids);
                 let request_handles = std::mem::take(&mut state.catalogue_request_handles);
-                let catalogue = reply
-                    .ok()
+                let raw_catalogue = reply.ok();
+                let catalogue = raw_catalogue
+                    .as_ref()
                     .and_then(|reply| {
+                        let mut typed_reply = reply.clone();
+                        if let Some(entries) = typed_reply["entries"].as_array_mut() {
+                            for entry in entries {
+                                if let Some(object) = entry.as_object_mut() {
+                                    object.remove("palette");
+                                }
+                            }
+                        }
                         serde_json::from_value::<nacre_protocol::wallpaper::WallpaperCatalogue>(
-                            reply,
+                            typed_reply,
                         )
                         .ok()
                     })
@@ -692,7 +701,16 @@ impl Extras {
                         .into_iter()
                         .filter(|entry| seen.insert(entry.id.clone()))
                         .map(|entry| {
-                            serde_json::to_value(entry).expect("validated wallpaper entry")
+                            let id = entry.id.clone();
+                            let mut row =
+                                serde_json::to_value(entry).expect("validated wallpaper entry");
+                            if let Some(palette) = raw_catalogue
+                                .as_ref()
+                                .and_then(|raw| raw_catalogue_palette(raw, &id))
+                            {
+                                row["palette"] = palette.clone();
+                            }
+                            row
                         })
                         .collect();
                     if request_ids.is_empty() {
@@ -717,6 +735,14 @@ impl Extras {
                                 existing["active"] = entry["active"].clone();
                                 if request_ids.iter().any(|requested| requested.as_str() == id) {
                                     existing["video_predecode"] = entry["video_predecode"].clone();
+                                    if let Some(palette) = entry
+                                        .get("palette")
+                                        .filter(|palette| valid_catalogue_palette(palette))
+                                    {
+                                        existing["palette"] = palette.clone();
+                                    } else if let Some(object) = existing.as_object_mut() {
+                                        object.remove("palette");
+                                    }
                                 }
                             }
                         }
@@ -962,6 +988,14 @@ impl Extras {
             if !active.connected {
                 return;
             }
+            let active_state = serde_json::from_value::<
+                nacre_protocol::wallpaper::WallpaperActive,
+            >((*active.data).clone())
+            .ok()
+            .filter(|state| state.validate().is_ok());
+            let palette_template = active_state
+                .as_ref()
+                .and_then(|state| state.outputs.values().next());
             let revision = active.data["revision"]
                 .as_u64()
                 .or_else(|| {
@@ -994,11 +1028,13 @@ impl Extras {
                 .preview
                 .clone();
             let generation = preview.as_ref().map(|preview| {
-                preview.select_at(
+                preview.select_at_with_palette(
                     boot.clone(),
                     id.into(),
                     entry["kind"].as_str().unwrap_or("image").into(),
                     serde_json::from_value(entry["video_predecode"].clone()).ok(),
+                    palette_template,
+                    entry.get("palette"),
                     selected_at,
                     (file_bytes, source_width, source_height),
                 )
@@ -1305,6 +1341,46 @@ fn wallpaper_source_metadata(path: &str) -> (u64, u32, u32) {
         .and_then(|reader| reader.into_dimensions().ok())
         .unwrap_or_default();
     (bytes, dimensions.0, dimensions.1)
+}
+
+fn raw_catalogue_palette<'a>(catalogue: &'a Json, id: &str) -> Option<&'a Json> {
+    catalogue["entries"]
+        .as_array()?
+        .iter()
+        .find(|entry| entry["id"].as_str() == Some(id))?
+        .get("palette")
+        .filter(|palette| valid_catalogue_palette(palette))
+}
+
+fn valid_catalogue_palette(palette: &Json) -> bool {
+    let Some(object) = palette.as_object() else {
+        return false;
+    };
+    if object.len() != 2
+        || !matches!(object.get("mode").and_then(Json::as_str), Some("light" | "dark"))
+    {
+        return false;
+    }
+    let Some(colours) = object.get("colours").and_then(Json::as_object) else {
+        return false;
+    };
+    if colours.is_empty()
+        || colours.len() > 128
+        || !["background", "onSurface", "primary"]
+            .iter()
+            .all(|key| colours.contains_key(*key))
+    {
+        return false;
+    }
+    colours.iter().all(|(role, value)| {
+        role.len() <= 64
+            && !role.is_empty()
+            && value.as_str().is_some_and(|colour| {
+                colour.len() == 7
+                    && colour.starts_with('#')
+                    && colour[1..].bytes().all(|byte| byte.is_ascii_hexdigit())
+            })
+    })
 }
 
 fn wallpaper_switch_phase(selection: &WallpaperSelection, phase: &str) {

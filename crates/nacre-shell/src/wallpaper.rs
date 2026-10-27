@@ -42,6 +42,7 @@ struct PreviewSelection {
     id: String,
     kind: String,
     video_predecode: Option<nacre_protocol::wallpaper::WallpaperVideoPredecode>,
+    optimistic_pair: Option<ActiveWallpaper>,
     generation: u64,
 }
 pub(crate) type SwitchMetadata = (u64, u32, u32);
@@ -117,6 +118,7 @@ struct PredecodeState {
 struct PredecodeSignal {
     state: Mutex<PredecodeState>,
     changed: Condvar,
+    repaint: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 impl PredecodeSignal {
     fn lock(&self) -> std::sync::MutexGuard<'_, PredecodeState> {
@@ -350,10 +352,10 @@ fn predecode_loop(signal: Arc<PredecodeSignal>) {
         let mut state = signal.lock();
         state.active = None;
         idle_deadline = Instant::now() + PREDECODE_LIFETIME;
-        if !state.stopping
+        let ready = !state.stopping
             && state.desired.as_ref() == Some(&key)
-            && let Ok(rgba) = result
-        {
+            && result.is_ok();
+        if ready && let Ok(rgba) = result {
             state.cached = Some(CachedPredecode {
                 key,
                 pair: palette_pair,
@@ -362,6 +364,17 @@ fn predecode_loop(signal: Arc<PredecodeSignal>) {
             });
         }
         signal.changed.notify_all();
+        drop(state);
+        if ready
+            && let Some(repaint) = signal
+                .repaint
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .as_ref()
+                .cloned()
+        {
+            repaint();
+        }
     }
 }
 
@@ -467,6 +480,44 @@ fn identity_matches_path(path: &str, identity: &WallpaperFileIdentity) -> bool {
         .is_ok_and(|metadata| metadata.is_file() && identity.matches(&metadata))
 }
 
+fn catalogue_pair(
+    template: &ActiveWallpaper,
+    id: &str,
+    kind: &str,
+    video_predecode: Option<&nacre_protocol::wallpaper::WallpaperVideoPredecode>,
+    palette: &serde_json::Value,
+) -> Option<ActiveWallpaper> {
+    let source_identity = local_file_identity(id)?;
+    let mut pair = serde_json::to_value(template).ok()?;
+    pair["palette"] = palette.clone();
+    if kind == "image" {
+        pair["path"] = id.into();
+        pair["file_identity"] = serde_json::to_value(&source_identity).ok()?;
+        pair["motion"] = serde_json::Value::Null;
+    } else if kind == "video" {
+        let descriptor = video_predecode?;
+        if descriptor.source_file_identity != source_identity
+            || !identity_matches_path(&descriptor.poster_path, &descriptor.poster_file_identity)
+        {
+            return None;
+        }
+        pair["path"] = descriptor.poster_path.clone().into();
+        pair["file_identity"] = serde_json::to_value(&descriptor.poster_file_identity).ok()?;
+        pair["motion"] = serde_json::json!({
+            "kind":"video",
+            "path":id,
+            "file_identity":descriptor.source_file_identity,
+        });
+    } else {
+        return None;
+    }
+    let pair = serde_json::from_value::<ActiveWallpaper>(pair).ok()?;
+    (pair.validate().is_ok()
+        && pair_matches_secure_id(&pair, id)
+        && identity_matches_path(&pair.path, &pair.file_identity))
+    .then_some(pair)
+}
+
 /// One shared pending selection fence. Never display its image with the previous palette.
 #[derive(Default)]
 pub(crate) struct Preview {
@@ -476,7 +527,14 @@ pub(crate) struct Preview {
 }
 impl Preview {
     fn set_changed(&self, changed: Arc<dyn Fn() + Send + Sync>) {
+        let repaint = changed.clone();
         *self.changed.lock().unwrap_or_else(|p| p.into_inner()) = Some(changed);
+        *self
+            .predecode
+            .signal
+            .repaint
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = Some(repaint);
     }
 
     #[cfg(test)]
@@ -499,6 +557,32 @@ impl Preview {
         requested_at: Instant,
         metadata: SwitchMetadata,
     ) -> u64 {
+        self.select_at_with_palette(
+            boot,
+            id,
+            kind,
+            video_predecode,
+            None,
+            None,
+            requested_at,
+            metadata,
+        )
+    }
+
+    pub(crate) fn select_at_with_palette(
+        &self,
+        boot: String,
+        id: String,
+        kind: String,
+        video_predecode: Option<nacre_protocol::wallpaper::WallpaperVideoPredecode>,
+        template: Option<&ActiveWallpaper>,
+        palette: Option<&serde_json::Value>,
+        requested_at: Instant,
+        metadata: SwitchMetadata,
+    ) -> u64 {
+        let optimistic_pair = template
+            .zip(palette)
+            .and_then(|(template, palette)| catalogue_pair(template, &id, &kind, video_predecode.as_ref(), palette));
         let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
         // Repeated activation (for example Right followed by Enter) must not
         // discard the same in-flight poster and decode its pixels a second time.
@@ -507,6 +591,7 @@ impl Preview {
             && selected.id == id
             && selected.kind == kind
             && selected.video_predecode == video_predecode
+            && selected.optimistic_pair == optimistic_pair
         {
             return selected.generation;
         }
@@ -525,6 +610,7 @@ impl Preview {
             id: id.clone(),
             kind,
             video_predecode,
+            optimistic_pair,
             generation,
         });
         state.selected = selected.clone();
@@ -534,7 +620,9 @@ impl Preview {
             && let Some(mut target) = self.predecode.target()
             && target.boot == selection.boot
         {
-            if let Some(pair) = self.known_pair(&selection, target.width, target.height) {
+            if let Some(pair) = &selection.optimistic_pair {
+                target.pair = Arc::new(pair.clone());
+            } else if let Some(pair) = self.known_pair(&selection, target.width, target.height) {
                 target.pair = Arc::new(pair);
             }
             self.predecode.submit(selection, target);
@@ -893,7 +981,25 @@ impl Consumer {
             selection.boot == boot && !pair_matches_id(&pair, &selection.id)
         });
         let known_pair = selection_waiting
-            .and_then(|selection| self.preview.known_pair(selection, width, height));
+            .and_then(|selection| {
+                selection
+                    .optimistic_pair
+                    .as_ref()
+                    .filter(|pair| {
+                        pair_matches_secure_id(pair, &selection.id)
+                            && identity_matches_path(&pair.path, &pair.file_identity)
+                    })
+                    .cloned()
+                    .or_else(|| self.preview.known_pair(selection, width, height))
+            });
+        let target_pair = known_pair.clone().unwrap_or_else(|| pair.as_ref().clone());
+        self.preview.register_target(
+            selection.clone(),
+            boot.clone(),
+            Arc::new(target_pair),
+            width,
+            height,
+        );
         let cached = selection_waiting.and_then(|selection| {
             known_pair.as_ref().and_then(|known_pair| {
                 self.preview
@@ -915,14 +1021,6 @@ impl Consumer {
         }) {
             wallpaper_switch_phase(selection, pair.revision, "decode_start");
         }
-        let target_pair = known_pair.unwrap_or_else(|| pair.as_ref().clone());
-        self.preview.register_target(
-            selection.clone(),
-            boot.clone(),
-            Arc::new(target_pair.clone()),
-            width,
-            height,
-        );
         let predecoded = selection.as_ref().and_then(|selection| {
             if selection_waiting.is_some() {
                 None
@@ -2357,6 +2455,86 @@ mod tests {
 
         std::fs::write(&path, [9u8, 8, 7, 6, 5]).unwrap();
         assert!(preview.known_pair(&selection, 2, 2).is_none());
+        drop(preview);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn catalogue_palette_is_validated_and_installed_with_the_selected_pair() {
+        let root = std::env::temp_dir().join(format!(
+            "bead-wallpaper-catalogue-palette-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("first-seen.png");
+        image::RgbImage::from_pixel(2, 2, image::Rgb([20, 40, 60]))
+            .save(&path)
+            .unwrap();
+        let id = path.to_string_lossy().into_owned();
+        let template = pair(7);
+        let colours = serde_json::json!({
+            "mode":"dark",
+            "colours":{"background":"#123456","onSurface":"#ffffff","primary":"#abcdef"}
+        });
+        let selected = catalogue_pair(&template, &id, "image", None, &colours).unwrap();
+        assert_eq!(selected.path, id);
+        assert_eq!(palette(&selected).get("background").unwrap(), [0x12, 0x34, 0x56, 255]);
+        assert!(catalogue_pair(
+            &template,
+            &id,
+            "image",
+            None,
+            &serde_json::json!({"mode":"dark","colours":{"background":"red"}}),
+        ).is_none());
+
+        let preview = Preview::default();
+        let generation = preview.select_at_with_palette(
+            "boot-a".into(),
+            id.clone(),
+            "image".into(),
+            None,
+            Some(&template),
+            Some(&colours),
+            Instant::now(),
+            (4, 2, 2),
+        );
+        assert_eq!(preview.generation_for("boot-a", &id), Some(generation));
+        let selection = preview.selected().unwrap();
+        let cached_pair = selection.optimistic_pair.unwrap();
+        assert_eq!(cached_pair.palette, selected.palette);
+        assert!(pair_matches_secure_id(&cached_pair, &id));
+
+        let predecode = Predecoder::default();
+        predecode.submit(
+            selection.clone(),
+            PredecodeTarget {
+                boot: "boot-a".into(),
+                pair: Arc::new(cached_pair.clone()),
+                width: 2,
+                height: 2,
+            },
+        );
+        let (guard, _) = predecode
+            .signal
+            .changed
+            .wait_timeout_while(predecode.signal.lock(), Duration::from_secs(2), |state| {
+                state.cached.is_none() && state.running
+            })
+            .unwrap();
+        drop(guard);
+        let (frame_pair, frame_rgba) = predecode
+            .take_optimistic(&selection, &cached_pair, 2, 2)
+            .unwrap();
+        assert_eq!(frame_pair.palette, cached_pair.palette);
+        assert_eq!(frame_rgba.len(), 16);
+        drop(predecode);
+
+        std::fs::write(&path, [9u8, 8, 7, 6, 5]).unwrap();
+        assert!(!pair_matches_secure_id(&cached_pair, &id));
         drop(preview);
         let _ = std::fs::remove_dir_all(root);
     }

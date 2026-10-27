@@ -12,6 +12,34 @@ fn fixture() -> Json {
         "workspaces":{"ws1":{"index":1,"name":"Work","outputId":"OUT"},"ws2":{"index":2,"outputId":"OTHER"}},"workspaceOrder":["ws1","ws2"],
         "windows":{"win1":{"title":"Editor","wmClass":"editor","workspaceId":"ws1","outputId":"OUT"},"win2":{"title":"Other","workspaceId":"ws2","outputId":"OTHER"},"hidden":{"hidden":true}},"windowOrder":["win1","win2","hidden"]})
 }
+
+#[test]
+fn raw_catalogue_palette_extension_survives_typed_entry_projection() {
+    let catalogue = json!({"entries":[
+        {"id":"/wall/a.png","kind":"image","palette":{"mode":"dark","colours":{"background":"#123456","onSurface":"#ffffff","primary":"#abcdef"}}},
+        {"id":"/wall/b.png","kind":"image"},
+        {"id":"/wall/c.png","kind":"image","palette":{"mode":"dark","colours":{"background":"red","onSurface":"#ffffff","primary":"#abcdef"}}}
+    ]});
+    let expected = json!({"mode":"dark","colours":{"background":"#123456","onSurface":"#ffffff","primary":"#abcdef"}});
+    assert_eq!(
+        raw_catalogue_palette(&catalogue, "/wall/a.png"),
+        Some(&expected)
+    );
+    assert!(raw_catalogue_palette(&catalogue, "/wall/b.png").is_none());
+    assert!(raw_catalogue_palette(&catalogue, "/wall/c.png").is_none());
+    assert!(raw_catalogue_palette(&catalogue, "/wall/missing.png").is_none());
+    assert!(valid_catalogue_palette(&json!({
+        "mode":"dark",
+        "colours":{"background":"#123456","onSurface":"#ffffff","primary":"#abcdef"}
+    })));
+    for invalid in [
+        json!({"mode":"dark","colours":{"background":"#123456","onSurface":"#ffffff"}}),
+        json!({"mode":"dark","colours":{"background":"red","onSurface":"#ffffff","primary":"#abcdef"}}),
+        json!({"mode":"sepia","colours":{"background":"#123456","onSurface":"#ffffff","primary":"#abcdef"}}),
+    ] {
+        assert!(!valid_catalogue_palette(&invalid));
+    }
+}
 #[test]
 fn overview_follows_focused_output_and_stable_ids() {
     let (windows, workspaces) = compositor_rows(&fixture());
