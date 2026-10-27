@@ -480,8 +480,8 @@ fn widget_app_stage_uses_the_settings_wallpaper_thumbnail() {
 #[test]
 fn widget_app_stage_uses_the_presentation_poster_when_no_catalogue_thumbnail_is_ready() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
-    let dir = std::env::temp_dir()
-        .join(format!("widget-app-poster-fallback-{}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("widget-app-poster-fallback-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let poster = dir.join("poster.png");
@@ -504,15 +504,9 @@ fn widget_app_stage_uses_the_presentation_poster_when_no_catalogue_thumbnail_is_
         },
     )
     .unwrap();
-    assert!(
-        harness
-            .scene()
-            .primitives
-            .iter()
-            .any(|primitive| matches!(
-                primitive,
-                bead::render::Primitive::Image { path, .. } if path == &poster
-            ))
-    );
+    assert!(harness.scene().primitives.iter().any(|primitive| matches!(
+        primitive,
+        bead::render::Primitive::Image { path, .. } if path == &poster
+    )));
     std::fs::remove_dir_all(dir).unwrap();
 }

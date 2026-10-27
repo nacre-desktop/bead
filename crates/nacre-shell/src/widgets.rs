@@ -708,7 +708,11 @@ mod file_tests {
             presentation_wallpaper_path_from(&state),
             Some(poster.to_string_lossy().into_owned())
         );
-        std::fs::write(&record, br#"{"poster":"https://example.invalid/wallpaper"}"#).unwrap();
+        std::fs::write(
+            &record,
+            br#"{"poster":"https://example.invalid/wallpaper"}"#,
+        )
+        .unwrap();
         assert_eq!(presentation_wallpaper_path_from(&state), None);
         std::fs::remove_dir_all(parent).unwrap();
     }
