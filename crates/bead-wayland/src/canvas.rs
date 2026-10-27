@@ -26,7 +26,11 @@ fn canvas_wakeup_delay(
     if !visible || timer_pending {
         return None;
     }
-    deadline.map(|deadline| deadline.saturating_duration_since(now).max(Duration::from_millis(1)))
+    deadline.map(|deadline| {
+        deadline
+            .saturating_duration_since(now)
+            .max(Duration::from_millis(1))
+    })
 }
 
 pub(super) struct Canvas {
@@ -745,19 +749,22 @@ impl App {
             canvas.tick_timer = true;
         }
         let timer_key = key.clone();
-        if let Err(error) = self.loop_handle.insert_source(Timer::from_duration(delay), move |_, _, app| {
-            let open = app.canvases.get_mut(&timer_key).is_some_and(|canvas| {
-                if canvas.epoch != epoch {
-                    return false;
-                }
-                canvas.tick_timer = false;
-                canvas.lifecycle.open && canvas.bounds.is_some()
-            });
-            if open {
-                app.canvas_ui(&timer_key, UiEvent::Model(Default::default()));
-            }
-            TimeoutAction::Drop
-        }) {
+        if let Err(error) =
+            self.loop_handle
+                .insert_source(Timer::from_duration(delay), move |_, _, app| {
+                    let open = app.canvases.get_mut(&timer_key).is_some_and(|canvas| {
+                        if canvas.epoch != epoch {
+                            return false;
+                        }
+                        canvas.tick_timer = false;
+                        canvas.lifecycle.open && canvas.bounds.is_some()
+                    });
+                    if open {
+                        app.canvas_ui(&timer_key, UiEvent::Model(Default::default()));
+                    }
+                    TimeoutAction::Drop
+                })
+        {
             if let Some(canvas) = self.canvases.get_mut(key) {
                 canvas.tick_timer = false;
             }
