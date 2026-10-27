@@ -5370,7 +5370,8 @@ impl SceneSource for Runtime {
                     .map(|preview| preview.prepared_at + WIDGET_HOVER_PREVIEW_RENEW)
             })
             .flatten();
-        let analog_layout = widget_layout_has_analog_clock(self.session.stores.get("widgets.layout"));
+        let analog_layout =
+            widget_layout_has_analog_clock(self.session.stores.get("widgets.layout"));
         let analog_enabled = self.widget_canvas && analog_layout;
         if std::env::var_os("BEAD_WIDGET_ANIMATION_TRACE").is_some()
             && (self.widget_canvas || self.widgets_canvas_wanted)
