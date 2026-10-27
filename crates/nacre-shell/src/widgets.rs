@@ -22,7 +22,8 @@ fn presentation_wallpaper_path_from(state: &std::path::Path) -> Option<String> {
     let record: serde_json::Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
     let poster = record.get("poster")?.as_str()?;
     let poster_path = std::path::Path::new(poster);
-    (poster_path.is_absolute() && poster_path.is_file()).then(|| poster.to_owned())
+    (poster_path.is_absolute() && poster_path.is_file())
+        .then(|| format!("@icon:wallpaper:current:{poster}"))
 }
 
 #[path = "widget_drag.rs"]
@@ -706,7 +707,10 @@ mod file_tests {
         .unwrap();
         assert_eq!(
             presentation_wallpaper_path_from(&state),
-            Some(poster.to_string_lossy().into_owned())
+            Some(format!(
+                "@icon:wallpaper:current:{}",
+                poster.to_string_lossy()
+            ))
         );
         std::fs::write(
             &record,

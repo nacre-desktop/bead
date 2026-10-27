@@ -480,17 +480,18 @@ fn widget_app_stage_uses_the_settings_wallpaper_thumbnail() {
 #[test]
 fn widget_app_stage_uses_the_presentation_poster_when_no_catalogue_thumbnail_is_ready() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
-    let dir =
-        std::env::temp_dir().join(format!("widget-app-poster-fallback-{}", std::process::id()));
+    let dir = std::env::temp_dir()
+        .join(format!("widget-app-poster-fallback-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let poster = dir.join("poster.png");
     image::DynamicImage::new_rgb8(32, 18).save(&poster).unwrap();
     let mut stores = crate::desktop::values(&Default::default(), "");
     stores.insert("widgets.selected".into(), Value::Text("clock".into()));
+    let wallpaper_path = format!("@icon:wallpaper:current:{}", poster.display());
     stores.insert(
         "widgets.wallpaper.path".into(),
-        Value::Text(poster.to_string_lossy().into_owned()),
+        Value::Text(wallpaper_path.clone()),
     );
     let harness = Harness::load(
         &root,
@@ -506,7 +507,7 @@ fn widget_app_stage_uses_the_presentation_poster_when_no_catalogue_thumbnail_is_
     .unwrap();
     assert!(harness.scene().primitives.iter().any(|primitive| matches!(
         primitive,
-        bead::render::Primitive::Image { path, .. } if path == &poster
+        bead::render::Primitive::Image { path, .. } if path.to_string_lossy() == wallpaper_path.as_str()
     )));
     std::fs::remove_dir_all(dir).unwrap();
 }
