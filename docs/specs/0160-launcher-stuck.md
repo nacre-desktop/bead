@@ -11,4 +11,4 @@ This unit caps sparse-compression work at 4,194,304 pixels; larger snapshots use
 | Sparse scan | 4,194,304 pixels/job |
 | Large snapshot test | 4320×2700; ≤15 s; dense ≤64 MiB |
 
-The reported owner laptop spin was not reproduced on the private desktop before the interruption. The root cause remains a source-supported hypothesis; full CI and nested real-wallpaper restart evidence are required before attributing the incident conclusively.
+The live one-thread spin itself remains unreproduced. A matched private nested launcher run with the copied app catalog measured 9d266afb and current main at about 488 ms first content, with 19 presented frames on both; this does not reproduce the owner's no-animation report. The B0151 control-panel regression did reproduce: Escape closed on 9d266afb but not 5466495a, with outside click closing both. Commit 4c206d51 had made the control panel text-focus-only; B0160 restores its keyboard interactivity. The exact spin trigger remains unconfirmed.

@@ -33,8 +33,10 @@ momentum hit-testing, and 500-row UI timing remain open; see [B0159](specs/0159-
 The CPU snapshot's optional sparse row compressor now skips frames above 4,194,304
 pixels, avoiding a full high-entropy scan and expanded temporary representation.
 A 4320×2700 CPU snapshot regression checks bounded completion and dense storage.
-The owner's one-thread spin and B0151 launcher behavior have not yet been attributed
-to a specific commit; see [B0160](specs/0160-launcher-stuck.md).
+Matched nested niri runs at 2880×1800/1.5 with the copied app catalog found control
+panel Escape closes on 9d266afb and fails on 5466495a; 4c206d51 made the control panel
+text-focus-only. The fix restores keyboard interaction for that panel. The live spin
+itself remains unreproduced; see [B0160](specs/0160-launcher-stuck.md).
 
 ## 2026-10-27 — B0147 Spotlight overlay (implementation review; smoothness gates fail)
 

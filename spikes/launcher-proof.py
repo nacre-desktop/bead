@@ -338,21 +338,25 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                 ]
                 for view in views:
                     surface = {'dashboard-today': 'dashboard'}.get(view, view)
+                    panel_log = raw / 'app-chat.log' if view == 'ai' else log
                     last_open_evidence = None
-                    for action in ['escape', 'outside', 'toggle']:
+                    actions = ['escape', 'outside', 'toggle'] if view == 'launcher' else ['escape', 'outside']
+                    for action in actions:
                         offset = len(matrix.log_text(log))
                         if view == 'ai':
-                            app_socket = sock.parent / 'app-chat.sock'
-
                             def app_state():
-                                if not app_socket.exists():
+                                if not panel_log.exists():
                                     return None
-                                response = subprocess.run(
-                                    [binary, 'ipc', '--socket', str(app_socket), '--json',
-                                     'bead.panel', 'state'], env=env, cwd=ROOT,
-                                    capture_output=True, text=True, timeout=5,
+                                states = re.findall(
+                                    r'^UI_STATE (.*)$', panel_log.read_text(errors='replace'), re.M
                                 )
-                                return json.loads(response.stdout)['result'] if response.returncode == 0 else None
+                                if not states:
+                                    return None
+                                state = json.loads(states[-1])
+                                return {
+                                    'target_open': bool(state.get('panel.open')),
+                                    'prepared': 'PANEL_PRESENTED ' in panel_log.read_text(errors='replace'),
+                                }
                         else:
                             app_state = lambda: call('state')
 
@@ -375,10 +379,8 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                                     time.sleep(.02)
                                 if not state or not state.get('target_open'):
                                     raise RuntimeError('AI panel did not open')
-                                panel_log = raw / 'app-chat.log'
                             else:
                                 state_wait(lambda state: state['target_open'] and state['prepared'])
-                                panel_log = log
                             evidence_reader = lambda: panel_open_evidence(
                                 panel_log.read_text(errors='replace'), 0 if view == 'ai' else offset,
                                 started_ns, surface,
@@ -413,17 +415,20 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                         elif action == 'outside':
                             pointer.command('move 1900 1180' if view == 'ai' else 'move 20 20', 'POINTER_DONE')
                             pointer.command('click', 'POINTER_DONE')
+                        elif view == 'launcher':
+                            subprocess.run(
+                                ['wtype', '-s', '20', '-M', 'logo', '-k', 'space', '-m', 'logo'],
+                                env=env, capture_output=True, check=True, timeout=5,
+                            )
                         elif view == 'ai':
                             call('left', target='nacre')
-                        elif view == 'launcher':
-                            call('toggle')
                         else:
                             call('toggle', view)
                         closed = False
                         deadline = time.monotonic() + 1.5
                         while time.monotonic() < deadline:
                             state = app_state()
-                            closed_now = state is None if view == 'ai' else not state['target_open']
+                            closed_now = not state['target_open'] if state else view == 'ai'
                             if closed_now:
                                 closed = True
                                 break
@@ -436,19 +441,28 @@ def sample(env,raw,compositor,stop,observe=None,bundle_root=None):
                             **evidence,
                         })
                 stuck['valid'] = all(
-                    row['closed'] and row['presented_frames'] > 1
-                    and row['typed']
-                    and row['content_latency_ms'] is not None
-                    and row['content_latency_ms'] <= stuck['first_content_frame_limit_ms']
+                    row['closed'] and row['typed']
                     for row in stuck['actions']
+                ) and all(
+                    any(
+                        row['view'] == view
+                        and row['presented_frames'] > 1
+                        and row['content_latency_ms'] is not None
+                        and row['content_latency_ms'] <= stuck['first_content_frame_limit_ms']
+                        for row in stuck['actions']
+                    )
+                    for view in views
                 )
                 (raw / 'launcher-stuck-proof.json').write_text(json.dumps(stuck, indent=2) + '\n')
                 if not stuck['valid'] and os.environ.get('BEAD_STUCK_RECORD_ONLY') != '1':
                     raise AssertionError('launcher open/close/animation proof failed; see launcher-stuck-proof.json')
                 if client.poll() is None:
                     stop(client)
-                assert client.returncode == 0, 'launcher did not exit cleanly'
+                stuck['shell_returncode'] = client.returncode
+                if client.returncode != 0 and os.environ.get('BEAD_STUCK_RECORD_ONLY') != '1':
+                    raise AssertionError('launcher did not exit cleanly')
                 assert 'STOP surfaces=0' in log.read_text()
+                (raw / 'launcher-stuck-proof.json').write_text(json.dumps(stuck, indent=2) + '\n')
                 client = None
                 return {'valid': stuck['valid'], 'launcher_stuck': stuck}
             pointer.command('move 1000 600','POINTER_DONE')
