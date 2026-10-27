@@ -62,6 +62,8 @@ def output_pixels(env: dict[str, str], raw: pathlib.Path) -> None:
             outputs = json.loads(after)
             row = outputs[name] if isinstance(outputs, dict) else next(o for o in outputs if o["name"] == name)
             mode = row.get("current_mode", row.get("currentMode", {}))
+            if not mode and isinstance(row.get("modes"), list):
+                mode = next((candidate for candidate in row["modes"] if candidate.get("current")), {})
             if (mode.get("width", row.get("width")), mode.get("height", row.get("height"))) == (2880, 1800):
                 break
         except (json.JSONDecodeError, KeyError, StopIteration, TypeError):
