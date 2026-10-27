@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Cross-host drag preview is based on one normalized snapshot and commits only on drop.
 use super::{
-    Runtime, SceneSource, UiEvent, suppress_dropped_widget_hover, suppress_widget_drag_hover,
-    widget_drag_hover_identity, widget_drag_source_bounds, widget_drag_targets_output,
+    Runtime, SceneSource, UiEvent, suppress_widget_drag_hover_until,
+    widget_drag_source_bounds, widget_drag_targets_output,
 };
 use crate::widgets::widget_drag::Controller;
 use bead::core::Value;
@@ -45,50 +45,26 @@ fn prepared_source_bounds_clip_before_padding_at_output_edges() {
 }
 
 #[test]
-fn dropped_ghost_consumes_leave_event_before_rearming_hover() {
-    let mut suppressed = true;
-    assert!(suppress_widget_drag_hover(&mut suppressed, true, false));
-    assert!(
-        suppressed,
-        "timer refreshes while over the target must not rebuild the ghost"
-    );
-    assert!(suppress_widget_drag_hover(&mut suppressed, true, true));
-    assert!(
-        suppressed,
-        "hovering the drop target must not rebuild the ghost"
-    );
-    assert!(suppress_widget_drag_hover(&mut suppressed, false, false));
-    assert!(suppressed, "non-pointer updates do not prove pointer leave");
-    assert!(suppress_widget_drag_hover(&mut suppressed, false, true));
-    assert!(
-        !suppressed,
-        "leaving clears suppression but consumes the pointer event"
-    );
-    assert!(!suppress_widget_drag_hover(&mut suppressed, true, true));
-}
-
-#[test]
-fn dropped_ghost_stays_suppressed_for_the_same_widget_across_forms() {
-    let bar = Value::list(vec![json!({
-        "widget":"clock", "group":"clock", "iid":"clock", "form":"bar"
-    })]);
-    let desktop = Value::list(vec![json!({
-        "widget":"clock", "group":"clock", "iid":"clock", "form":"desktop"
-    })]);
-    let network = Value::list(vec![json!({
-        "widget":"network", "group":"wifi", "iid":"wifi", "form":"bar"
-    })]);
-    let mut suppressed = widget_drag_hover_identity(&bar);
-    assert!(suppress_dropped_widget_hover(
-        &mut suppressed,
-        widget_drag_hover_identity(&desktop)
+fn dropped_ghost_stays_suppressed_through_the_release_window() {
+    let now = std::time::Instant::now();
+    let mut suppressed_until = Some(now + std::time::Duration::from_millis(200));
+    assert!(suppress_widget_drag_hover_until(
+        &mut suppressed_until,
+        now + std::time::Duration::from_millis(100),
+        true
     ));
-    assert!(suppress_dropped_widget_hover(&mut suppressed, None));
-    assert!(!suppress_dropped_widget_hover(
-        &mut suppressed,
-        widget_drag_hover_identity(&network)
+    assert!(suppress_widget_drag_hover_until(
+        &mut suppressed_until,
+        now + std::time::Duration::from_millis(250),
+        false
     ));
-    assert!(suppressed.is_none());
+    assert!(suppressed_until.is_some(), "timer refreshes cannot rearm hover");
+    assert!(!suppress_widget_drag_hover_until(
+        &mut suppressed_until,
+        now + std::time::Duration::from_millis(250),
+        true
+    ));
+    assert!(suppressed_until.is_none());
 }
 
 fn catalogue() -> Json {
@@ -1935,7 +1911,7 @@ fn bar_hover_prewarms_once_retires_on_leave_and_reuses_the_warm_destination() {
 }
 
 #[test]
-fn completed_drag_retirement_stops_stationary_hover_renewal_until_reentry() {
+fn completed_drag_retirement_stops_hover_renewal_until_a_fresh_press() {
     let dir = std::env::temp_dir().join(format!("widget-drag-hover-retire-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -1987,7 +1963,8 @@ fn completed_drag_retirement_stops_stationary_hover_renewal_until_reentry() {
         "widgets.drag.active".into(),
         Value::Bool(false),
     )]));
-    runtime.widget_drag_suppress_hover_identity = Some(("clock".into(), "clock-main".into()));
+    runtime.widget_drag_hover_suppress_until =
+        Some(std::time::Instant::now() + WIDGET_DRAG_HOVER_RETIRE_COOLDOWN);
     runtime.widget_drag_retire_cleanup = true;
     runtime.commit();
 
