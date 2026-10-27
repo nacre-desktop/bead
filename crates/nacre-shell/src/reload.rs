@@ -4,6 +4,19 @@ use bead::render::Scene;
 use bead::wayland::{SceneSource, UiEvent};
 use std::collections::BTreeMap;
 use std::error::Error;
+
+fn consume_pending_owner_dismiss(
+    pending: &mut Option<(String, std::time::Instant)>,
+    id: &str,
+    now: std::time::Instant,
+) -> bool {
+    let Some((owner, dismissed_at)) = pending.take() else {
+        return false;
+    };
+    owner == id
+        && now.saturating_duration_since(dismissed_at) <= std::time::Duration::from_millis(250)
+}
+
 #[path = "reload/bar_daemon.rs"]
 mod bar_daemon;
 fn scope_recovery(session: &mut bead::ui::Session, output: Option<&str>) {
@@ -843,6 +856,7 @@ pub struct Runtime {
     status_pill_epoch: u64,
     status_pill_scheduled: Option<std::time::Instant>,
     status_pill_route: Option<String>,
+    status_owner_dismissed: Option<(String, std::time::Instant)>,
     status_route_center: Option<f32>,
     status_route_anchor: Option<bead::wayland::PanelAnchor>,
     status_route_id: Option<String>,
@@ -2801,6 +2815,66 @@ impl Runtime {
             .map(|rect| rect.x + rect.w / 2.)
     }
 
+    fn status_keep_open_zone(&self) -> Option<bead::ui::status_pill::KeepOpenZone> {
+        use bead::ui::status_pill::{KeepOpenZone, PointerRect};
+        let owner_id = self.status_pill.panel()?;
+        let view = self.dropdown_kind(owner_id);
+        let width = crate::popouts::status_panel_width(&view);
+        let center = self
+            .status_route_center
+            .or_else(|| self.status_icon_center(&view))?;
+        let bar_height = match self.session.stores.get("bar.height") {
+            Some(bead::core::Value::Number(height)) if height.is_finite() && *height > 0. => {
+                *height as f32
+            }
+            _ => 50.,
+        };
+        let owner_slot = self
+            .session
+            .view_nodes()
+            .iter()
+            .find(|node| node.id == owner_id)
+            .map(|node| {
+                let rect = bead::ui::rect(&node.draw);
+                PointerRect {
+                    x: rect.x,
+                    y: rect.y,
+                    width: rect.w,
+                    height: rect.h,
+                }
+            })
+            .unwrap_or(PointerRect {
+                x: center - 24.,
+                y: 0.,
+                width: 48.,
+                height: bar_height,
+            });
+        Some(KeepOpenZone {
+            dropdown: PointerRect {
+                x: center - width / 2.,
+                y: bar_height,
+                width,
+                height: 1.,
+            },
+            bar_band: PointerRect {
+                x: center - width / 2.,
+                y: 0.,
+                width,
+                height: bar_height,
+            },
+            owner_slot,
+            tolerance: 4.,
+        })
+    }
+
+    fn consume_dismissed_owner_click(&mut self, id: &str) -> bool {
+        consume_pending_owner_dismiss(
+            &mut self.status_owner_dismissed,
+            id,
+            std::time::Instant::now(),
+        )
+    }
+
     #[cfg(test)]
     pub(crate) fn isolate_state(&mut self, path: &std::path::Path) {
         self.state_file = None;
@@ -2976,12 +3050,11 @@ impl Runtime {
             status_pill: bead::ui::status_pill::StatusPill::new(bead::ui::status_pill::Timings {
                 peek_dwell: std::time::Duration::from_millis(350),
                 peek_exit: std::time::Duration::from_millis(120),
-                panel_crossing: std::time::Duration::from_millis(600),
-                panel_exit: std::time::Duration::from_millis(130),
             }),
             status_pill_epoch: 0,
             status_pill_scheduled: None,
             status_pill_route: None,
+            status_owner_dismissed: None,
             status_route_center: None,
             status_route_anchor: None,
             status_route_id: None,
@@ -4664,6 +4737,40 @@ fn panel_route_name(stores: &bead::core::Stores) -> String {
 fn suppress_startup_bar_jank(bar: bool, user_interacted: bool, age: std::time::Duration) -> bool {
     bar && !user_interacted && age < std::time::Duration::from_millis(750)
 }
+
+#[cfg(test)]
+mod dismissed_owner_tests {
+    use super::consume_pending_owner_dismiss;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn consumes_only_a_matching_owner_release_within_its_pointer_press() {
+        let now = Instant::now();
+        let mut pending = Some(("battery".into(), now));
+        assert!(consume_pending_owner_dismiss(
+            &mut pending,
+            "battery",
+            now + Duration::from_millis(100)
+        ));
+        assert!(pending.is_none());
+
+        let mut pending = Some(("battery".into(), now));
+        assert!(!consume_pending_owner_dismiss(
+            &mut pending,
+            "bluetooth",
+            now + Duration::from_millis(100)
+        ));
+        assert!(pending.is_none());
+
+        let mut pending = Some(("battery".into(), now));
+        assert!(!consume_pending_owner_dismiss(
+            &mut pending,
+            "battery",
+            now + Duration::from_millis(251)
+        ));
+    }
+}
+
 #[cfg(test)]
 mod panel_route_name_tests {
     use super::panel_route_name;
@@ -7211,6 +7318,26 @@ impl SceneSource for Runtime {
         {
             return Ok(None);
         }
+        if self.bar
+            && self.status_pill.panel().is_some()
+            && matches!(&event, UiEvent::Click { .. })
+            && !host_action.as_ref().is_some_and(|(_, name, _)| {
+                matches!(
+                    name.as_str(),
+                    "status.pill.open" | "view.open" | "updates.open"
+                )
+            })
+            && let Some(zone) = self.status_keep_open_zone()
+            && !zone.contains(self.pointer_at)
+        {
+            self.status_pill.outside_click(self.pointer_at, zone);
+            self.schedule_status_pill();
+            self.sync_status_peek_route()?;
+            let scene = self.publish_status_pill()?;
+            if host_action.is_none() {
+                return self.finish_scene(scene);
+            }
+        }
         if !self.dock_status.is_empty()
             && (matches!(&event, UiEvent::Click { .. })
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
@@ -7256,11 +7383,14 @@ impl SceneSource for Runtime {
             && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
-            self.status_pill.click_icon(if id.is_empty() {
+            let owner = if id.is_empty() {
                 view.clone()
             } else {
                 id.clone()
-            });
+            };
+            if !self.consume_dismissed_owner_click(&owner) {
+                self.status_pill.click_icon(owner);
+            }
             self.schedule_status_pill();
             let scene = self.publish_status_pill()?;
             self.actions.authorize(name)?;
@@ -7284,6 +7414,22 @@ impl SceneSource for Runtime {
                 status.updates_action(name, callback);
             }
             let scene = self.session.update(BTreeMap::new())?;
+            return self.finish_scene(scene);
+        }
+        if let Some((id, name, bead::core::Value::Text(view))) = &host_action
+            && self.bar
+            && name == "view.open"
+            && matches!(view.as_str(), "calendar" | "session")
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            if !self.consume_dismissed_owner_click(id) {
+                self.status_pill.click_icon(id.clone());
+            }
+            self.schedule_status_pill();
+            self.actions.authorize(name)?;
+            self.sync_status_peek_route()?;
+            let scene = self.publish_status_pill()?;
             return self.finish_scene(scene);
         }
         if let Some((id, name, bead::core::Value::Text(view))) = &host_action
@@ -8932,6 +9078,9 @@ impl SceneSource for Runtime {
                 }
                 self.last_launch = None;
                 if self.status_pill_route.is_some() {
+                    if let Some(owner) = self.status_pill.panel().map(String::from) {
+                        self.status_owner_dismissed = Some((owner, std::time::Instant::now()));
+                    }
                     self.status_pill.escape();
                     self.status_pill_route = None;
                     self.schedule_status_pill();

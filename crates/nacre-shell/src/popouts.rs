@@ -67,6 +67,17 @@ pub fn calendar(
     })
 }
 
+/// Logical content width used by status dropdown placement and its pointer zone.
+pub(crate) fn status_panel_width(view: &str) -> f32 {
+    match view {
+        "battery" | "battery-status" => 230.,
+        "calendar" | "session" | "power" => 310.,
+        "control" => 424.,
+        "notifications" => 410.,
+        _ => 382.,
+    }
+}
+
 /// Closed views retain only a small factory and fallback geometry. Fonts, Luau,
 /// service subscriptions and data snapshots are created by the panel worker.
 pub fn status(

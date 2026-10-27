@@ -78,6 +78,8 @@ After Bead's core switch on Nacre, plan support for:
 
 ## Generalization list (framework pieces added by feature work)
 
+- B0163: `bead-ui::status_pill::KeepOpenZone` joins panel bounds, a bar band and its owner slot with a small tolerance; shell code supplies the route-specific geometry.
+
 - B0146: `WallpaperProvider::uploaded` reports that a wallpaper buffer has been attached immediately before surface commit, giving host adapters a neutral upload phase hook.
 - B0147: `bead-render::prewarm_image` caches explicitly warmed large raster variants in a separate 22 MiB LRU, keyed by path, content, size and fit; `PanelSpec.fallback_factory` provides an output-sized prepared first scene for lazy panels. Luau remains responsible for layout geometry.
 
