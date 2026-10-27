@@ -190,7 +190,6 @@ pub struct Source {
     image_policy: bead_render::tree::ImagePolicy,
     preparation_retry: bool,
     retired: Arc<std::sync::atomic::AtomicBool>,
-    animation_frames: Arc<std::sync::atomic::AtomicBool>,
     token: u64,
     accepted: bool,
     current: Scene,
@@ -208,7 +207,6 @@ impl Source {
             image_policy: bead_render::tree::ImagePolicy::Dense,
             preparation_retry: false,
             retired: Default::default(),
-            animation_frames: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             scales: vec![1.],
             token: 0,
             accepted: false,
@@ -309,11 +307,6 @@ fn prepare_resource_job(
     }
 }
 impl SceneSource for Source {
-    fn animation_frame_needed(&self) -> bool {
-        self.animation_frames
-            .load(std::sync::atomic::Ordering::Acquire)
-    }
-
     fn resources_retired(&self) -> bool {
         self.retired.load(std::sync::atomic::Ordering::Acquire)
     }
@@ -367,7 +360,6 @@ impl SceneSource for Source {
         bead_core::profile::mark("worker_spawn");
         let image_policy = self.image_policy;
         let retired = self.retired.clone();
-        let animation_frames = self.animation_frames.clone();
         self.thread = Some(std::thread::spawn(move || {
             bead_core::profile::mark("worker_started");
             let wakeup: Arc<dyn Fn(UiEvent) + Send + Sync> = Arc::from(wakeup);
@@ -520,12 +512,6 @@ impl SceneSource for Source {
                             let started = std::time::Instant::now();
                             token += 1;
                             let staged = source.stage(event);
-                            let animation_needed = source.animation_frame_needed();
-                            animation_frames
-                                .store(animation_needed, std::sync::atomic::Ordering::Release);
-                            if std::env::var_os("BEAD_WIDGET_ANIMATION_TRACE").is_some() {
-                                eprintln!("WORKER_ANIMATION_FRAME active={animation_needed}");
-                            }
                             let (mut scene, fault) = match staged {
                                 Ok(Some(scene)) => (scene, None),
                                 Ok(None) => {
@@ -923,61 +909,6 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn worker_source_exposes_authored_animation_frame_interest() {
-        struct Animated {
-            active: Arc<std::sync::atomic::AtomicBool>,
-        }
-        impl SceneSource for Animated {
-            fn animation_frame_needed(&self) -> bool {
-                self.active.load(Ordering::Acquire)
-            }
-            fn watch(
-                &mut self,
-                _: Box<dyn Fn(Result<(), String>) + Send>,
-            ) -> Result<(), Box<dyn Error>> {
-                Ok(())
-            }
-            fn stage(&mut self, _: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
-                Ok(Some(scene()))
-            }
-            fn validate(&self) -> Result<(), Box<dyn Error>> {
-                Ok(())
-            }
-            fn state_summary(&self) -> String {
-                String::new()
-            }
-            fn commit(&mut self) -> bool {
-                true
-            }
-            fn error_scene(&mut self, _: String) -> Scene {
-                scene()
-            }
-        }
-
-        let active = Arc::new(std::sync::atomic::AtomicBool::new(true));
-        let source_active = active.clone();
-        let mut source = Source::new(
-            Box::new(move || {
-                Ok(Box::new(Animated {
-                    active: source_active,
-                }))
-            }),
-            scene(),
-        );
-        let (sender, receiver) = mpsc::channel();
-        source.services(Box::new(move |event| {
-            let _ = sender.send(event);
-        }));
-        assert!(!source.animation_frame_needed());
-        source.stage(UiEvent::Reload).unwrap();
-        let packet = receiver
-            .recv_timeout(Duration::from_secs(5))
-            .expect("worker should return its first scene");
-        assert!(source.animation_frame_needed());
-        assert!(source.stage(packet).unwrap().is_some());
-        assert!(!source.commit());
-    }
     #[test]
     fn worker_dismissal_and_cursor_use_the_topmost_clipped_polygon_hit() {
         let background = InputRegion {

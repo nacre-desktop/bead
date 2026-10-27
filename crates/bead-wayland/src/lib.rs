@@ -545,11 +545,6 @@ pub trait SceneSource {
     /// Set the display frame interval used by authored animations on this source.
     fn frame_interval(&mut self, _interval: Duration) {}
 
-    /// Whether a visible surface needs its next compositor frame for an authored animation.
-    fn animation_frame_needed(&self) -> bool {
-        false
-    }
-
     /// Whether configured edge hover may start over this region.
     fn allows_edge_hover(&self, x: f32, y: f32) -> bool {
         self.pointer_cursor(x, y) == "default"

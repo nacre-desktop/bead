@@ -1085,25 +1085,17 @@ impl App {
         else {
             return;
         };
-        let (again, animation_frame_needed) = if let Some(canvas) = self.canvases.get_mut(&key) {
+        let again = if let Some(canvas) = self.canvases.get_mut(&key) {
             if canvas.callbacks.accept(epoch) {
                 canvas.frame_pending = false;
-                (canvas.dirty, canvas.source.animation_frame_needed())
+                canvas.dirty
             } else {
-                (false, false)
+                false
             }
         } else {
-            (false, false)
+            false
         };
-        if std::env::var_os("BEAD_WIDGET_ANIMATION_TRACE").is_some() {
-            eprintln!(
-                "CANVAS_FRAME animation={} dirty={again}",
-                animation_frame_needed
-            );
-        }
-        if animation_frame_needed {
-            self.canvas_ui(&key, UiEvent::Model(Default::default()));
-        } else if again {
+        if again {
             let _ = self.canvas_draw(&key);
         }
     }
