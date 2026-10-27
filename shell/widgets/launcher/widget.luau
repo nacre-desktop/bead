@@ -26,7 +26,7 @@ local function render(props,settings,_data)
                     aria_label=app.name,on_activate=ui.action("launcher.open"),
                     ui.Column{id="favorite",width="fill",height="fill",align="center",justify="center",gap=kit.tokens.spacing.xs,
                         ui.Image{id="icon",icon=app.icon,width=36,height=36,aria_label=app.name},
-                        ui.Text{id="name",text=app.name,width="fill",height=20,font_size=kit.tokens.text.caption*4/3,text_align="center",color="onSurface"}}}))
+                        ui.Text{id="name",text=app.name,width="fill",height=20,font_size=kit.tokens.text.caption*4/3,text_align="center",color="onSurface"}}})
             end
         end
         if #favorites==0 then table.insert(favorites,kit.Button{id="open-launcher",width=size,height=size,padding=0,
