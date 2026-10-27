@@ -554,6 +554,7 @@ impl Preview {
         self.select_at(boot, id, kind, video_predecode, Instant::now(), (0, 0, 0))
     }
 
+    #[cfg(test)]
     pub(crate) fn select_at(
         &self,
         boot: String,
@@ -673,6 +674,10 @@ impl Preview {
             .unwrap_or_else(|p| p.into_inner())
             .selected
             .clone()
+    }
+
+    pub(crate) fn selected_id(&self) -> Option<String> {
+        self.selected().map(|selection| selection.id)
     }
 
     fn remember_pair(&self, boot: &str, pair: &ActiveWallpaper, width: u32, height: u32) {
@@ -2522,7 +2527,7 @@ mod tests {
         );
         assert_eq!(preview.generation_for("boot-a", &id), Some(generation));
         let selection = preview.selected().unwrap();
-        let cached_pair = selection.optimistic_pair.unwrap();
+        let cached_pair = selection.optimistic_pair.clone().unwrap();
         assert_eq!(cached_pair.palette, selected.palette);
         assert!(pair_matches_secure_id(&cached_pair, &id));
 

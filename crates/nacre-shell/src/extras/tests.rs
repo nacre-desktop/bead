@@ -980,9 +980,13 @@ async fn wallpaper_latest_activation_survives_view_retirement() {
         )
     );
     extras.act("wallpaper:activate:/fixture/next.jpg", &open, wake.clone());
-    assert!(
-        lab.calls.try_recv().is_err(),
-        "only the first activation may be in flight"
+    assert_eq!(
+        lab.calls.recv().await.unwrap(),
+        (
+            "wallpaper.activate".into(),
+            json!({"revision":17,"id":"/fixture/next.jpg"})
+        ),
+        "the latest click starts immediately instead of waiting for the first reply"
     );
 
     let file = std::path::PathBuf::from("/cache/view-only.png");
@@ -1018,16 +1022,6 @@ async fn wallpaper_latest_activation_survives_view_retirement() {
     );
 
     lab.activation_release.take().unwrap().send(()).unwrap();
-    assert_eq!(
-        tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
-            .await
-            .unwrap()
-            .unwrap(),
-        (
-            "wallpaper.activate".into(),
-            json!({"revision":18,"id":"/fixture/next.jpg"})
-        )
-    );
     for _ in 0..200 {
         if queue.lock().unwrap().inflight.is_none() {
             break;
@@ -1036,12 +1030,19 @@ async fn wallpaper_latest_activation_survives_view_retirement() {
     }
     let state = queue.lock().unwrap();
     assert!(state.inflight.is_none());
-    assert!(state.pending.is_none());
-    assert_eq!(state.confirmed, Some(("extras-boot".into(), 19)));
+    assert_eq!(state.confirmed, Some(("extras-boot".into(), 18)));
+    assert_eq!(
+        state
+            .preview
+            .as_ref()
+            .and_then(|preview| preview.selected_id()),
+        Some("/fixture/next.jpg".into()),
+        "the old reply cannot replace or cancel the latest selection"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn wallpaper_activation_error_is_reported_without_retry_and_boot_change_drops_pending() {
+async fn wallpaper_activation_error_is_reported_without_retry_and_boot_change_clears_state() {
     let mut lab = lab_with_activation_behavior(vec!["wallpaper.active".into()], true, true).await;
     let extras = Extras::new(Kind::Wallpaper, lab.client.clone()).unwrap();
     let queue = extras.wallpaper_actions.as_ref().unwrap().clone();
@@ -1092,19 +1093,8 @@ async fn wallpaper_activation_error_is_reported_without_retry_and_boot_change_dr
     {
         let mut state = queue.lock().unwrap();
         assert!(state.inflight.is_none());
-        assert!(state.pending.is_none());
         state.confirmed = Some(("extras-boot".into(), 18));
-        state.pending = Some(WallpaperSelection {
-            id: "/fixture/next.jpg".into(),
-            boot: "extras-boot".into(),
-            revision: 17,
-            selected_at: std::time::Instant::now(),
-            file_bytes: 0,
-            source_width: 0,
-            source_height: 0,
-        });
         state.invalidate_boot(Some("new-boot"));
-        assert!(state.pending.is_none());
         assert!(state.confirmed.is_none());
         assert!(state.error.is_none());
     }
