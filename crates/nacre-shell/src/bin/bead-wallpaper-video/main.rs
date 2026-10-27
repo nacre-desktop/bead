@@ -3,8 +3,10 @@
 //! separate process on purpose (the shell UI never links or decodes video); a crash here
 //! only removes this process's surfaces, so the static wallpaper underneath stays visible.
 //!
-//! One libmpv decoder serves every output, on per-output layer surfaces (layer `bottom`, no
-//! input). With a GPU the decoder's dmabuf frames are drawn by mpv's OpenGL render API into
+//! One libmpv decoder serves every output, on per-output background layer surfaces (no
+//! input). This keeps motion wallpaper in niri's shared overview backdrop; the shell's static
+//! wallpaper is mapped first on the same layer and remains visible beneath poster/fade frames.
+//! With a GPU the decoder's dmabuf frames are drawn by mpv's OpenGL render API into
 //! an EGL window surface (no CPU pixel work); without one, mpv's software render API fills
 //! shared-memory buffers from a copy-back decoder. Either falls back to software decoding on
 //! its own. Protocol: `bead_wallpaper::protocol` JSON lines on stdin/stdout.
@@ -768,7 +770,7 @@ impl Engine {
         let layer = self.layers.create_layer_surface(
             &self.qh,
             surface,
-            Layer::Bottom,
+            Layer::Background,
             Some(NAMESPACE),
             Some(output),
         );
