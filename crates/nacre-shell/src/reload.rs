@@ -2070,11 +2070,11 @@ impl Runtime {
             return;
         }
         let candidate = self.session.transfer_candidate_at(x, y);
-        let inside_drop_target = self
-            .widget_drag_suppress_hover_bounds
-            .is_some_and(|(left, top, width, height)| {
-                x >= left && x < left + width && y >= top && y < top + height
-            });
+        let inside_drop_target =
+            self.widget_drag_suppress_hover_bounds
+                .is_some_and(|(left, top, width, height)| {
+                    x >= left && x < left + width && y >= top && y < top + height
+                });
         if suppress_widget_drag_hover(
             &mut self.widget_drag_suppress_hover_until_leave,
             inside_drop_target,
