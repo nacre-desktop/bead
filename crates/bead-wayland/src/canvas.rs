@@ -1095,6 +1095,12 @@ impl App {
         } else {
             (false, false)
         };
+        if std::env::var_os("BEAD_WIDGET_ANIMATION_TRACE").is_some() {
+            eprintln!(
+                "CANVAS_FRAME animation={} dirty={again}",
+                animation_frame_needed
+            );
+        }
         if animation_frame_needed {
             self.canvas_ui(&key, UiEvent::Model(Default::default()));
         } else if again {

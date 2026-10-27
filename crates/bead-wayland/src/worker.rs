@@ -520,10 +520,11 @@ impl SceneSource for Source {
                             let started = std::time::Instant::now();
                             token += 1;
                             let staged = source.stage(event);
-                            animation_frames.store(
-                                source.animation_frame_needed(),
-                                std::sync::atomic::Ordering::Release,
-                            );
+                            let animation_needed = source.animation_frame_needed();
+                            animation_frames.store(animation_needed, std::sync::atomic::Ordering::Release);
+                            if std::env::var_os("BEAD_WIDGET_ANIMATION_TRACE").is_some() {
+                                eprintln!("WORKER_ANIMATION_FRAME active={animation_needed}");
+                            }
                             let (mut scene, fault) = match staged {
                                 Ok(Some(scene)) => (scene, None),
                                 Ok(None) => {

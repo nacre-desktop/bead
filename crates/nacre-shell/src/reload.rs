@@ -5389,8 +5389,15 @@ impl SceneSource for Runtime {
     }
 
     fn animation_frame_needed(&self) -> bool {
-        self.widget_canvas
-            && widget_layout_has_analog_clock(self.session.stores.get("widgets.layout"))
+        let layout = widget_layout_has_analog_clock(self.session.stores.get("widgets.layout"));
+        let active = self.widget_canvas && layout;
+        if std::env::var_os("BEAD_WIDGET_ANIMATION_TRACE").is_some() {
+            eprintln!(
+                "RUNTIME_ANIMATION_FRAME canvas={} layout_analog={} active={}",
+                self.widget_canvas, layout, active
+            );
+        }
+        active
     }
 
     fn initial_model(
