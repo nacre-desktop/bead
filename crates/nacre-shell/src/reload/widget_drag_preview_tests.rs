@@ -1987,7 +1987,7 @@ fn completed_drag_retirement_stops_stationary_hover_renewal_until_reentry() {
         "widgets.drag.active".into(),
         Value::Bool(false),
     )]));
-    runtime.widget_drag_suppress_hover_identity = Some(("clock".into(), "clock".into()));
+    runtime.widget_drag_suppress_hover_identity = Some(("clock".into(), "clock-main".into()));
     runtime.widget_drag_retire_cleanup = true;
     runtime.commit();
 
