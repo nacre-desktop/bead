@@ -3179,12 +3179,27 @@ impl Runtime {
             values.insert("bar.popouts".into(), bead::core::Value::Bool(true));
             values.insert("bar.launcher".into(), bead::core::Value::Bool(true));
             values.extend(BTreeMap::from([
-                ("session.confirm".into(), bead::core::Value::Text(String::new())),
-                ("session.message".into(), bead::core::Value::Text(String::new())),
-                ("status.hovered".into(), bead::core::Value::Text(String::new())),
+                (
+                    "session.confirm".into(),
+                    bead::core::Value::Text(String::new()),
+                ),
+                (
+                    "session.message".into(),
+                    bead::core::Value::Text(String::new()),
+                ),
+                (
+                    "status.hovered".into(),
+                    bead::core::Value::Text(String::new()),
+                ),
                 ("status.peek.visible".into(), bead::core::Value::Bool(false)),
-                ("status.peek.kind".into(), bead::core::Value::Text(String::new())),
-                ("status.panel.kind".into(), bead::core::Value::Text(String::new())),
+                (
+                    "status.peek.kind".into(),
+                    bead::core::Value::Text(String::new()),
+                ),
+                (
+                    "status.panel.kind".into(),
+                    bead::core::Value::Text(String::new()),
+                ),
             ]));
         }
         values.insert(
