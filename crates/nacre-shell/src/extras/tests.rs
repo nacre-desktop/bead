@@ -981,12 +981,14 @@ async fn wallpaper_latest_activation_survives_view_retirement() {
     );
     extras.act("wallpaper:activate:/fixture/next.jpg", &open, wake.clone());
     assert_eq!(
-        lab.calls.recv().await.unwrap(),
-        (
-            "wallpaper.activate".into(),
-            json!({"revision":17,"id":"/fixture/next.jpg"})
-        ),
-        "the latest click starts immediately instead of waiting for the first reply"
+        queue
+            .lock()
+            .unwrap()
+            .inflight
+            .as_ref()
+            .map(|inflight| inflight.selection.id.as_str()),
+        Some("/fixture/next.jpg"),
+        "the latest click replaces the in-flight selection immediately"
     );
 
     let file = std::path::PathBuf::from("/cache/view-only.png");
@@ -1022,6 +1024,17 @@ async fn wallpaper_latest_activation_survives_view_retirement() {
     );
 
     lab.activation_release.take().unwrap().send(()).unwrap();
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
+            .await
+            .unwrap()
+            .unwrap(),
+        (
+            "wallpaper.activate".into(),
+            json!({"revision":17,"id":"/fixture/next.jpg"})
+        ),
+        "the new request proceeds after the serial fixture finishes the old one"
+    );
     for _ in 0..200 {
         if queue.lock().unwrap().inflight.is_none() {
             break;
