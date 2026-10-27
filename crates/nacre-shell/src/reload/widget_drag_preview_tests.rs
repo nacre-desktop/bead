@@ -67,6 +67,30 @@ fn dropped_ghost_consumes_leave_event_before_rearming_hover() {
     assert!(!suppress_widget_drag_hover(&mut suppressed, true, true));
 }
 
+#[test]
+fn dropped_ghost_stays_suppressed_for_the_same_widget_across_forms() {
+    let bar = Value::list(vec![json!({
+        "widget":"clock", "group":"clock", "iid":"clock", "form":"bar"
+    })]);
+    let desktop = Value::list(vec![json!({
+        "widget":"clock", "group":"clock", "iid":"clock", "form":"desktop"
+    })]);
+    let network = Value::list(vec![json!({
+        "widget":"network", "group":"wifi", "iid":"wifi", "form":"bar"
+    })]);
+    let mut suppressed = widget_drag_hover_identity(&bar);
+    assert!(suppress_dropped_widget_hover(
+        &mut suppressed,
+        widget_drag_hover_identity(&desktop)
+    ));
+    assert!(suppress_dropped_widget_hover(&mut suppressed, None));
+    assert!(!suppress_dropped_widget_hover(
+        &mut suppressed,
+        widget_drag_hover_identity(&network)
+    ));
+    assert!(suppressed.is_none());
+}
+
 fn catalogue() -> Json {
     json!([
         {"id":"clock","defaults":{},"forms":{"bar":{"default_style":"time","styles":{"time":{"min_span":1,"max_span":4,"preferred_span":2}}}}},
@@ -1963,6 +1987,7 @@ fn completed_drag_retirement_stops_stationary_hover_renewal_until_reentry() {
         "widgets.drag.active".into(),
         Value::Bool(false),
     )]));
+    runtime.widget_drag_suppress_hover_identity = Some(("clock".into(), "clock".into()));
     runtime.widget_drag_retire_cleanup = true;
     runtime.commit();
 
@@ -1999,7 +2024,15 @@ fn completed_drag_retirement_stops_stationary_hover_renewal_until_reentry() {
     if runtime.stage(UiEvent::Hover { x, y }).unwrap().is_some() {
         runtime.commit();
     }
-    assert_eq!(prepares(), 2, "a fresh pointer hover may prewarm again");
+    assert_eq!(
+        prepares(),
+        1,
+        "a hover over the dropped widget does not rewarm its ghost"
+    );
+    if runtime.stage(UiEvent::Click { x, y }).unwrap().is_some() {
+        runtime.commit();
+    }
+    assert_eq!(prepares(), 2, "a fresh press may prewarm the next drag");
     assert!(runtime.widget_hover_preview.is_some());
     assert!(runtime.widget_drag_controller_primed);
 
