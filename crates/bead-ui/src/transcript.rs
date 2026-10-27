@@ -148,6 +148,7 @@ impl Meter {
                         family: crate::text_style::family(family),
                         size: 16.,
                         color: [0; 4],
+                        shadow: None,
                     });
                 }
                 picker(&scene)

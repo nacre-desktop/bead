@@ -261,6 +261,7 @@ mod tests {
                 align: Some(bead_render::TextAlign::Right),
                 size: 12.,
                 color: [255, 255, 255, 255],
+                shadow: None,
             }],
             offset: (0., 0.),
             bounds: Rect::new(0., 0., 100., 100.),

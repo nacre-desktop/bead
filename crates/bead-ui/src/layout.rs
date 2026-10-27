@@ -130,6 +130,9 @@ pub const PROPERTIES: &[&str] = &[
     "shadow",
     "font_size",
     "font_weight",
+    "text_shadow_blur",
+    "text_shadow_y",
+    "text_shadow_color",
     "family",
     "icon",
     "path",
@@ -236,6 +239,9 @@ pub struct ViewSpec {
     pub drop_argument: Option<Value>,
     pub font_size: f32,
     pub font_weight: u16,
+    pub text_shadow_blur: f32,
+    pub text_shadow_y: f32,
+    pub text_shadow_color: Option<Json>,
     pub family: String,
     pub icon: Option<String>,
     pub path: Option<PathBuf>,
@@ -440,6 +446,14 @@ impl ViewSpec {
                 return Err(source.error("font_weight must be an integer 1..1000"));
             }
             let font_weight = font_weight as u16;
+            let text_shadow_blur = number(p, "text_shadow_blur", 0., source)?;
+            if !(0. ..=32.).contains(&text_shadow_blur) {
+                return Err(source.error("text_shadow_blur must be 0..32"));
+            }
+            let text_shadow_y = number(p, "text_shadow_y", 0., source)?;
+            if !(-32. ..=32.).contains(&text_shadow_y) {
+                return Err(source.error("text_shadow_y must be -32..32"));
+            }
             let start_angle = number(p, "start_angle", -90., source)?;
             let sweep_angle = number(p, "sweep_angle", 360., source)?;
             let stroke_width = number(p, "stroke_width", 4., source)?;
@@ -844,6 +858,9 @@ impl ViewSpec {
                 shadow: boolean(p, "shadow", true, source)?,
                 font_size,
                 font_weight,
+                text_shadow_blur,
+                text_shadow_y,
+                text_shadow_color: p.get("text_shadow_color").cloned(),
                 family,
                 icon: p
                     .get("icon")
@@ -1221,6 +1238,20 @@ pub fn layout(
                 align: view.text_align,
                 size: view.font_size,
                 color: if input_empty { muted } else { foreground },
+                shadow: if view.text_shadow_blur > 0. {
+                    Some(bead_render::TextShadow {
+                        color: color(
+                            view.text_shadow_color.as_ref(),
+                            [0, 0, 0, 128],
+                            palette,
+                            source,
+                        )?,
+                        blur: view.text_shadow_blur,
+                        offset_y: view.text_shadow_y,
+                    })
+                } else {
+                    None
+                },
             });
         }
         if view.kind == Widget::Image {

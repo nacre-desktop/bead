@@ -177,6 +177,8 @@ pub enum Primitive {
         family: String,
         size: f32,
         color: [u8; 4],
+        #[serde(default)]
+        shadow: Option<TextShadow>,
     },
     Image {
         #[serde(default)]
@@ -193,6 +195,12 @@ pub enum Primitive {
         radius: f32,
         blur: f32,
     },
+}
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct TextShadow {
+    pub color: [u8; 4],
+    pub blur: f32,
+    pub offset_y: f32,
 }
 impl Primitive {
     fn translated(&self, x: f32, y: f32) -> Self {
@@ -1021,8 +1029,9 @@ fn key(p: &Primitive, scale: f32) -> String {
             color,
             weight,
             align,
+            shadow,
         } => format!(
-            "t:{scale}:{}:{}:{family}:{weight}:{size}:{color:?}:{align:?}:{text}",
+            "t:{scale}:{}:{}:{family}:{weight}:{size}:{color:?}:{align:?}:{shadow:?}:{text}",
             rect.w, rect.h
         ),
         Primitive::Image {
@@ -1050,6 +1059,59 @@ fn dimensions(rect: Rect, scale: f32) -> (u32, u32) {
         (rect.w * scale).ceil().max(1.) as u32,
         (rect.h * scale).ceil().max(1.) as u32,
     )
+}
+fn blur_text_shadow(pix: &mut Pixmap, shadow: TextShadow, scale: f32) {
+    let width = pix.width() as usize;
+    let height = pix.height() as usize;
+    let foreground = pix.data().to_vec();
+    let radius = (shadow.blur * scale).ceil().clamp(1., 64.) as isize;
+    let sigma = (shadow.blur * scale / 3.).max(0.5);
+    let mut kernel = (-radius..=radius)
+        .map(|step| (-(step * step) as f32 / (2. * sigma * sigma)).exp())
+        .collect::<Vec<_>>();
+    let total = kernel.iter().sum::<f32>();
+    kernel.iter_mut().for_each(|weight| *weight /= total);
+    let mut horizontal = vec![0f32; width * height];
+    for y in 0..height {
+        for x in 0..width {
+            horizontal[y * width + x] = (-radius..=radius)
+                .zip(&kernel)
+                .filter_map(|(step, weight)| {
+                    let sx = x as isize + step;
+                    (0..width as isize)
+                        .contains(&sx)
+                        .then(|| foreground[(y * width + sx as usize) * 4 + 3] as f32 * weight)
+                })
+                .sum();
+        }
+    }
+    let offset = (shadow.offset_y * scale).round() as isize;
+    let mut blurred = vec![0f32; width * height];
+    for y in 0..height {
+        for x in 0..width {
+            blurred[y * width + x] = (-radius..=radius)
+                .zip(&kernel)
+                .filter_map(|(step, weight)| {
+                    let sy = y as isize + step - offset;
+                    (0..height as isize)
+                        .contains(&sy)
+                        .then(|| horizontal[sy as usize * width + x] * weight)
+                })
+                .sum();
+        }
+    }
+    for (index, pixel) in pix.data_mut().as_chunks_mut::<4>().0.iter_mut().enumerate() {
+        let alpha = (blurred[index] * f32::from(shadow.color[3]) / 255.).round() as u8;
+        let inverse = 255 - alpha;
+        let original = &foreground[index * 4..index * 4 + 4];
+        for channel in 0..3 {
+            let under = u16::from(shadow.color[channel]) * u16::from(alpha) / 255;
+            pixel[channel] =
+                (u16::from(original[channel]) + under * u16::from(inverse) / 255).min(255) as u8;
+        }
+        pixel[3] =
+            (u16::from(original[3]) + u16::from(alpha) * u16::from(inverse) / 255).min(255) as u8;
+    }
 }
 fn apply_polygon_clip(pix: &mut Pixmap, points: &[[f32; 2]]) -> Result<()> {
     let mut path = tiny_skia::PathBuilder::new();
@@ -1135,6 +1197,7 @@ impl Renderer for CpuRenderer {
                     color,
                     weight,
                     align,
+                    shadow,
                 } => {
                     let (w, h) = dimensions(*rect, scale);
                     let mut pix = Pixmap::new(w, h).ok_or("text allocation")?;
@@ -1211,6 +1274,9 @@ impl Renderer for CpuRenderer {
                             }
                         },
                     );
+                    if let Some(shadow) = shadow {
+                        blur_text_shadow(&mut pix, *shadow, scale);
+                    }
                     pix
                 }
                 Primitive::Image {
@@ -2658,6 +2724,7 @@ mod tests {
                 color: [9, 9, 9, 255],
                 weight: 400,
                 align: None,
+                shadow: None,
             },
         ];
         scene.motion = Some(Motion {
@@ -2721,6 +2788,7 @@ mod tests {
                 weight: 400,
                 align: None,
                 color: [200, 0, 0, 255],
+                shadow: None,
             },
             Primitive::Arc {
                 rect: Rect::new(40., 80., 40., 40.),
@@ -2832,6 +2900,7 @@ mod tests {
                 color: [13, 27, 41, 255],
                 weight: 400,
                 align: None,
+                shadow: None,
             }],
         }
     }
@@ -2857,6 +2926,73 @@ mod tests {
             .max()
             .unwrap();
         assert!((100..=102).contains(&maximum), "alpha {maximum}");
+    }
+    #[test]
+    fn outfit_thin_digit_has_solid_ink_inside_the_stem() {
+        let font = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../nacre-shell/assets/fonts/Outfit-Variable.ttf");
+        let scene = Scene {
+            opacity: 1.,
+            motion: None,
+            resource_revision: 1,
+            asset_data: Default::default(),
+            clips: Default::default(),
+            layers: vec![],
+            prepared: Default::default(),
+            font_files: vec![font],
+            width: 240.,
+            slide: None,
+            offset: (0., 0.),
+            bounds: Rect::new(0., 0., 240., 180.),
+            primitives: vec![Primitive::Text {
+                rect: Rect::new(0., 0., 240., 180.),
+                text: "1".into(),
+                family: "Outfit".into(),
+                size: 120.,
+                color: [238, 246, 243, 255],
+                weight: 200,
+                align: Some(TextAlign::Center),
+                shadow: None,
+            }],
+        };
+        let mut renderer = CpuRenderer::default();
+        renderer.prepare(&scene, 1.).unwrap();
+        let pixmap = renderer
+            .textures
+            .get(&key(&scene.primitives[0], 1.))
+            .unwrap();
+        let pixels = pixmap.data().as_chunks::<4>().0;
+        let mut best = None;
+        for (y, row) in pixels.chunks_exact(pixmap.width() as usize).enumerate() {
+            let mut start = None;
+            for x in 0..=row.len() {
+                let ink = row.get(x).is_some_and(|pixel| pixel[3] > 220);
+                if ink && start.is_none() {
+                    start = Some(x);
+                } else if !ink && let Some(begin) = start.take() {
+                    let length = x - begin;
+                    if best.is_none_or(|(_, _, largest)| length > largest) {
+                        best = Some((begin, y, length));
+                    }
+                }
+            }
+        }
+        let (begin, y, run) = best.expect("the Outfit digit must contain fully covered pixels");
+        assert!(
+            run >= 2,
+            "digit has no solid interior scanline, longest run {run}"
+        );
+        let x = begin + run / 2;
+        let center = pixels[y * pixmap.width() as usize + x];
+        assert!(
+            center[3] > 220,
+            "digit center pixel ({x},{y}) alpha {}",
+            center[3]
+        );
+        assert!(
+            center[0] > 210 && center[1] > 220 && center[2] > 215,
+            "digit center pixel ({x},{y}) is not Outfit text color: {center:?}"
+        );
     }
     #[test]
     fn caret_uses_existing_font_pool_with_exact_advances() {
@@ -3068,6 +3204,7 @@ mod tests {
                             align: None,
                             size: 10.,
                             color: [20, 120, 210, 255],
+                            shadow: None,
                         },
                         Primitive::Image {
                             blur: 0.,

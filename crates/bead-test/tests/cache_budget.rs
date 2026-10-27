@@ -62,6 +62,7 @@ fn real_ui_and_legacy_rasters_remain_byte_bounded() -> Result<()> {
         family: "Bead Test Sans".into(),
         size: 16.,
         color: [255; 4],
+        shadow: None,
     }];
     let mut renderer = CpuRenderer::default();
     let mut high = 0;

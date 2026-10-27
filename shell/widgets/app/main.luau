@@ -363,29 +363,27 @@ local function form_action(widget,placement,group)
     end
 end
 local function style_tile(widget,placement,package,style_id,style,settings,is_selected)
-    local count=0
-    for _ in package.forms[placement].styles do count+=1 end
-    local columns=math.max(1,math.min(4,count))
-    local preview_width=math.max(76,math.min(240,(width-2*spacing.lg-(columns-1)*spacing.sm)/columns-2*spacing.xs))
-    local preview_height=placement=="desktop" and 80 or 44
-    local tile_height=preview_height+50
+    local preview_width=108
+    local preview_height=42
+    local tile_height=70
     local tile_preview=preview.render(widget,placement,style_id,settings,preview_width,preview_height)
     local tile_id="style-"..style_id..(placement=="desktop" and "-desktop" or "")
-    return ui.Button{id=tile_id,width="fill",height=tile_height,shrink=0,padding=spacing.xs,
+    return ui.Button{id=tile_id,width=120,height=tile_height,shrink=0,padding=spacing.xs,
         radius=kit.tokens.radii.small,fill=is_selected and ui.alpha("primary",.15) or "surfaceContainer",
+        border_width=is_selected and 1.5 or 0,border_color=is_selected and "primary" or nil,
         hover_fill="surfaceContainerHigh",selected=is_selected,focus_on_pointer=false,
         aria_label=style.title,on_activate=edit({op="style",widget=widget,form=placement,style=style_id}),
         ui.Column{id="style-card",width="fill",height="fill",gap=spacing.xs,align="center",
-            ui.Box{id="style-preview",width="fill",height=preview_height+10,align="center",justify="center",
-                radius=kit.tokens.radii.small,fill="surfaceContainerHighest",clip_children=false,tile_preview},
-            label("style-title",style.title,text.caption*4/3,"onSurface",{width="fill",height=18,text_align="center"})}}
+            ui.Box{id="style-preview",width=108,height=42,align="center",justify="center",
+                radius=kit.tokens.radii.small,fill="surfaceContainerHighest",clip_children=true,tile_preview},
+            label("style-title",style.title,text.caption*4/3,"onSurface",{width=108,height=14,text_align="center"})}}
 end
 local function style_tiles(widget,placement,package,style_id,settings)
     local forms=package.forms[placement]
     local keys={}
     for key,style in forms.styles do if not style.hidden then table.insert(keys,key) end end
     table.sort(keys)
-    local row_height=(placement=="desktop" and 80 or 44)+50
+    local row_height=70
     local tiles={id="style-tiles",width="fill",columns=math.max(1,math.min(4,#keys)),gap=spacing.sm,row_height=row_height,shrink=0}
     for _,key in keys do table.insert(tiles,style_tile(widget,placement,package,key,forms.styles[key],settings,key==style_id)) end
     return ui.Grid(tiles)

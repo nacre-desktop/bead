@@ -30,6 +30,7 @@ pub fn safe_bar(palette: &Palette) -> Scene {
                 color: palette.get("onSurface").unwrap_or([240, 240, 240, 255]),
                 weight: 400,
                 align: None,
+                shadow: None,
             },
         ],
     }

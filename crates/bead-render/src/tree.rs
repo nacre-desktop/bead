@@ -736,9 +736,17 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
             family,
             size,
             color,
+            shadow,
         } => {
             rect(r, hash);
-            (weight, align, text, family, size.to_bits(), color).hash(hash);
+            let shadow = shadow.map(|shadow| {
+                (
+                    shadow.color,
+                    shadow.blur.to_bits(),
+                    shadow.offset_y.to_bits(),
+                )
+            });
+            (weight, align, text, family, size.to_bits(), color, shadow).hash(hash);
         }
         Primitive::Image {
             blur,
@@ -3922,6 +3930,7 @@ mod tests {
                                 color: [40, 180, 90, 128],
                                 weight: 400,
                                 align: Some(crate::TextAlign::Left),
+                                shadow: None,
                             },
                             clip: Some(Rect::new(4., 3., 20., 14.)),
                             raster: Some(Arc::new(Raster {
@@ -4939,6 +4948,7 @@ mod tests {
             color: [255, 255, 255, 255],
             weight: 400,
             align: None,
+            shadow: None,
         };
         let mut other = text.clone();
         if let Primitive::Text { rect, .. } = &mut other {
@@ -5245,6 +5255,7 @@ mod tests {
             color: [255, 255, 255, 255],
             weight: 400,
             align: None,
+            shadow: None,
         });
         scene.clips.insert(count, Rect::new(0., 0., 24., 24.));
         let length = scene.primitives.len();
@@ -5663,6 +5674,7 @@ mod tests {
                 color: [240, 230, 210, 255],
                 weight: 400,
                 align: None,
+                shadow: None,
             },
             Primitive::Text {
                 rect: Rect::new(2., 2., 18., 8.),
@@ -5672,6 +5684,7 @@ mod tests {
                 color: [210, 220, 240, 255],
                 weight: 400,
                 align: None,
+                shadow: None,
             },
         ];
         source.font_files = vec![

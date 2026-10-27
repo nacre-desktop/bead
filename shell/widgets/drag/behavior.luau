@@ -33,7 +33,7 @@ return {stores={
     ["bead.desktop.bluetooth"]="bluetooth_disabled",["bead.desktop.tray"]={},
     ["bead.desktop.menu"]={},["bead.desktop.tray.tooltip"]="",
     ["bead.desktop.tray.tooltip.visible"]=false,
-    ["launcher.apps"]={},["bluetooth.devices"]={},["bluetooth.power_checked"]=false,
+        ["launcher.apps"]={},["dashboard.host"]={},["bluetooth.devices"]={},["bluetooth.power_checked"]=false,
     ["network.rows"]={},["network.wifi_enabled"]=false,["notifications.rows"]={},
     ["status.updates_checked"]="Never checked",["status.updates_can_open"]=false,["status.updates_can_refresh"]=false,
     ["session.enabled"]=false,["session.busy"]=false,["session.confirm"]="",["session.confirm_action"]="",["session.message"]="",

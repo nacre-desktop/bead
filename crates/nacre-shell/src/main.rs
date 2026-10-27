@@ -1309,6 +1309,7 @@ fn panel(p: &Palette, assets: &Path) -> Result<Scene, Box<dyn std::error::Error>
                 align: None,
                 size,
                 color,
+                shadow: None,
             })
         };
         text(202., 30., 860., 32., "Search applications…", 18., muted);

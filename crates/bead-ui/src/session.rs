@@ -520,6 +520,7 @@ impl Session {
                 align: None,
                 size: 14.,
                 color: [255, 225, 225, 255],
+                shadow: None,
             });
         }
         scene
