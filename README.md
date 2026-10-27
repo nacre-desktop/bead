@@ -1,129 +1,99 @@
-# Bead + Nacre Shell
+# Bead and Nacre Shell
 
-Feasibility experiment: a Rust Wayland shell framework with atomic hot
-reload, and the Nacre desktop shell rebuilt on it. Not a replacement for the
-installed Nacre shell.
+Bead is a Rust framework for building Wayland shells. It combines retained
+rendering and layout with Luau views, stable-ID state, reusable UI components,
+and atomic hot reload. The framework crates provide general Wayland, rendering,
+input, service, and UI primitives; they do not contain Nacre-specific view
+layout or policy.
 
-ADR 0001 is approved. Feature 2 now has retained CPU, femtovg/wgpu and Vello composition for comparison.
-Each feature is measured and reported before the next starts. See [current status](docs/STATUS.md) and
-[feasibility log](FEASIBILITY.md).
+Nacre Shell is Nacre's desktop shell built on Bead. It includes the bar,
+launcher, dashboard, control panel, notifications, OSD, wallpaper picker,
+Widgets (which can be dragged between the bar and desktop), AI panel, and the
+Settings, Colors, and Welcome apps. Bead is now the daily Nacre shell and is at
+parity with the QML shell for the migrated desktop workflow. Some migration
+work remains in progress; the current gaps and their evidence are tracked in
+the [core-switch review](docs/research/core-switch-gap-20261022.md) and
+[project status](docs/STATUS.md).
 
-Planned licensing: `crates/bead-*` is MIT OR Apache-2.0. `crates/nacre-shell`
-and `shell/` retain Nacre's GPL-3.0 terms. Each crate must set
-`publish = false`. Research tooling and measurement spikes are MIT OR Apache-2.0
-unless an upstream notice specifies otherwise. Framework code and shell assets have separate license boundaries.
+## How it fits Nacre
 
-The repository is public by owner request. Do not publish crates/packages/releases.
+The shell uses Nacre's daemon contracts for shared state and actions. Nacre
+owns shell selection and lifecycle: `nacre ui-shell bead` selects Bead, and
+`nacre ui-shell qml` returns to the QML/Quickshell fallback. The shells install
+side by side; installing the separate `bead-shell` package does not switch the
+active shell. See the [packaging and rollback spec](docs/specs/0029-packaging-coexistence-rollback.md).
 
-Foundation preview (bar, engine-backed launcher and private notifications):
+## Build and run
 
-```sh
-python3 scripts/try-bead.py --daemon /path/to/nacre-helper --bead /path/to/bead/target/release/nacre-shell
-```
-
-The core preview also opens calendar and sound panels, plus read-only network,
-Bluetooth and battery status from the bar. Panel modules and data load on demand
-and retire after 2.2 seconds closed; unused hover preparation expires after 2 seconds.
-Device actions still require the daemon service contracts.
-
-Run from a Wayland terminal with already built executables. It opens a separate
-niri window and builds or installs nothing. Click the bar's launcher icon/lip,
-type, and use Escape to close the panel; close the nested window or use Ctrl+C
-in the launching terminal to stop.
-Temporary HOME/XDG directories, compositor sockets, daemon and buses keep it
-separate from the daily session. The system application catalog is read-only;
-personal file/history data starts empty. Explicit binary paths avoid the existing
-`nacre-shell` control-script name clash.
-
-Launcher results and UI commands use the real standalone daemon. Notification
-hosting/history still use Bead's transitional service on its own private bus;
-notification controls travel through the daemon's UI-provider link. This preview
-does not claim daemon notification hosting or full Nacre parity. The automated
-`--headless-smoke` variant checks both compositors (Hyprland uses a virtual output);
-the interactive window uses niri. See [current status](docs/STATUS.md) for gates.
-
-Feature 2 development preview (from a Wayland terminal):
+Build the shell from this checkout with the pinned workspace dependencies:
 
 ```sh
-./scripts/dev.sh niri
+cargo build --release --locked -j2 -p nacre-shell
 ```
 
-A separate nested desktop opens with a launcher-sized drawing preview that
-slides open and closed. It demonstrates fonts/emoji, SVG/PNG/icons, rounded
-corners, a border and a cached shadow. It is not a working launcher. Close its window or
-press Ctrl+C to stop. For the other compositor use `./scripts/dev.sh hyprland`.
-Neither command replaces installed Nacre or changes session configuration.
-
-CI checks fmt, clippy, tests and cargo-deny. Framework dependency graphs use
-`deny-framework.toml`; the complete workspace, including GPL nacre-shell, uses
-`deny.toml`. No new dependency/license ledgers are maintained.
-
-The completed live 120 Hz stress is recorded in FEASIBILITY. Live benchmark
-panels were stopped at the owner's request; use nested displays for further
-checks. For a private nested loaded-font idle comparison:
-`python spikes/measure.py --panel --modes bead qml --runs 1`.
-An explicit `--palette PATH` reads an existing Orient format 1 JSON file. The
-checked-in preview palette contains colors/mode from an existing Orient output
-matching the active dark palette. The stress fixture preserves the measured light
-palette. Both omit wallpaper metadata and personal paths. No color engine is copied.
-
-Stateful hot-reload demo, safely inside a nested window:
+For an isolated interactive preview from a Wayland session, use the nested
+preview script. It starts a private compositor, daemon, bus, runtime directory,
+and HOME; it does not install or switch the running Nacre shell:
 
 ```sh
-./scripts/dev.sh niri --demo
+python3 scripts/try-bead.py --daemon /path/to/nacre-helper --bead target/release/nacre-shell
 ```
 
-Click Search and type; scroll the application rows; click Home to collapse/open.
-Every eight seconds the demo edits a temporary UI copy: valid change, syntax
-error, then recovery. Your input/scroll/open state should survive all three.
-Close the nested window or Ctrl+C to stop. Use `hyprland` for the other compositor.
-Without `--demo`, edit `shell/ui/*.luau` or the imported component files yourself while it runs.
+For the smaller framework development preview, `scripts/dev.sh` builds the
+shell and starts a nested niri session by default; choose Hyprland explicitly
+with `./scripts/dev.sh hyprland`. These previews require their compositor and
+Wayland tools to be installed.
 
-Bars use CPU rendering. The current sound/launcher panel specifications also
-choose CPU; explicit native GL companions can start lazily and release on idle.
-The policy is CPU for small panels and GL for large animated surfaces. Native
-contexts share their EGL transport, but Mesa can retain about20 MiB after teardown;
-closed-memory gates still apply. `BEAD_RENDERER=cpu` selects the no-GPU path;
-`femtovg` selects wgpu for comparison, and `vello` supports the retained stress
-fixture. The CPU-only build is `cargo build -j2 -p nacre-shell --no-default-features`.
-GPU content is CPU-baked and uploaded before GPU composition.
+Nacre's Arch package recipe is in [`packaging/arch/PKGBUILD`](packaging/arch/PKGBUILD).
+It builds `nacre-shell` and stages the executable and Luau shell bundle beside
+the QML shell. [`packaging/stage.sh`](packaging/stage.sh) also supports staging
+under a chosen prefix and `DESTDIR`; package selection remains the job of
+`nacre ui-shell`.
 
-The primary UI format is Luau markup (ADR0002); legacy JSON fixtures live in
-`shell/legacy-ui`. Taffy owns layout and repeaters use stable model keys. Stable
-node/store IDs, typed Luau stores/actions/computed bindings, included JSON and
-asset snapshots are staged before all configured surfaces swap. Failures show
-file/line/column and keep the previous UI; fixing the source clears the overlay.
-Store values (including input, open state, scroll and focused ID) outlive views.
-Computed bindings must be pure; state changes belong in named actions. Luau has
-an 8 MiB VM limit and a 50 ms action/binding-batch execution limit. Directory and
-source bounds prevent accidental unbounded bundles. Luau evaluation and baking
-run in workers; validated generations swap when ready. IME, accessibility and
-hardware parity remain open; current measurements and limits are in STATUS.
+## Architecture
 
-Private measurement round (no live desktop surfaces):
+- [`crates/`](crates/README.md) — Rust framework crates (`bead-wayland`,
+  `bead-render`, `bead-ui`, `bead-core`, `bead-services`, and related tools).
+- [`crates/nacre-shell/`](crates/nacre-shell/) — Nacre-specific adapters and
+  shell runtime, kept under the GPL boundary.
+- `shell/` — Luau views, reusable components, themes, and assets used by
+  Nacre Shell.
+- [`docs/specs/`](docs/specs/README.md) — numbered design and implementation
+  specifications; start with the [spec index](docs/specs/README.md).
+- [`spikes/`](spikes/) — research and measurement tools, fixtures, and proofs.
+- [`docs/STATUS.md`](docs/STATUS.md) — current milestone status and open gates.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — architecture direction and feature gates.
 
-```sh
-python spikes/measure.py --retained --compositor hyprland --virtual120 --runs 2 --seconds 60
-```
+Views describe presentation and behavior in Luau. Rust owns reusable platform
+and framework services. Nacre-specific daemon routes are adapted at the shell
+edge. Reload validates a complete new view generation before atomically
+switching it in; invalid changes leave the last working UI active and report a
+source location and error.
 
-This reuses the existing private compositor harness and a virtual output at
-2880×1800, scale 1.5, 120 Hz. It compares full/content surfaces and first/later
-launches. Raw logs stay ignored; summaries print to the terminal. The compositor
-schedules virtual frames; these are not physical scanout measurements. First
-launch has a fresh private shader cache per renderer/size; later reuses it.
-System font/filesystem caches are not cleared. Never use the live stress script
-without first asking the owner.
+## CI
 
-The immutable panel picture is CPU-baked once for all three variants, including
-text/emoji and a small Gaussian shadow template stretched along straight edges.
-GPU variants upload that picture once and composite position/opacity each frame;
-this round compares retained composition, not GPU text/vector generation.
-GPU draw times mean CPU encoding/submission time, exclude acquisition and do not
-measure asynchronous GPU execution. Callback timing measures client scheduling.
-Memory comparisons now use **PSS + DRM total**, with DRM descriptors deduplicated
-by client/region. This requested sum can overlap shared system-memory accounting
-and is not a measure of exclusive VRAM; component values are retained in FEASIBILITY.
+The [CI workflow](.github/workflows/ci.yml) checks formatting, warnings-denied
+Clippy, service boundaries, workspace tests, renderer configurations, Luau
+schemas, packaging and service lifecycle proofs, and dependency/license policy.
 
-Vello returns straight-alpha output; its existing transfer blit converts it to
-premultiplied alpha for Wayland. Private static screenshots match CPU/femtovg
-pixel for pixel after this conversion.
+## Contributing
+
+Changes follow the spec-driven workflow: agree the scope and acceptance gates,
+implement the smallest complete unit, record evidence and remaining gaps in its
+spec and `docs/STATUS.md`, then run the relevant checks and full CI. User-visible
+shell changes require matched QML/Bead review and appropriate nested-session
+evidence; the live desktop is not a test environment. See [the roadmap](docs/ROADMAP.md),
+[spec index](docs/specs/README.md), and repository [standing rules](AGENTS.md).
+
+## License and distribution
+
+- `crates/bead-*`: MIT OR Apache-2.0, with permissive dependencies only.
+- `crates/nacre-shell` and `shell/`: GPL-3.0, retaining Nacre's terms and notices.
+- Every crate sets `publish = false`. Do not publish crates, packages, or releases.
+
+See [LICENSE.md](LICENSE.md) for asset and research-material boundaries and the
+full license texts. Contributions must preserve these boundaries; GPL/LGPL
+implementation code does not belong in framework crates.
+
+For the detailed research and preview commands retained from the experiment
+README, see [docs/PREVIEW.md](docs/PREVIEW.md).
