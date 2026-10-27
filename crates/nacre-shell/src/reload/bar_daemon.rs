@@ -298,12 +298,20 @@ mod tests {
         );
 
         let battery_data = serde_json::json!({
-            "health":{"available":true,"stale":false}, "percentage":83.0, "charging":true,
+            "health":{"available":true,"stale":false}, "percentage":63.0, "charging":true,
             "state":1, "time_to_full_seconds":5400, "on_battery":false
         });
         assert_eq!(
             battery(&snapshot(battery_data.clone(), true))[KEYS[3]],
-            Value::Text("83".into())
+            Value::Text("63".into())
+        );
+        assert_eq!(
+            battery(&snapshot(battery_data.clone(), true))[KEYS[10]],
+            Value::Text("Charging".into())
+        );
+        assert_eq!(
+            battery(&snapshot(battery_data.clone(), true))[KEYS[11]],
+            Value::Text("1 h 30 min until full".into())
         );
         assert_eq!(
             battery(&snapshot(battery_data, false))[KEYS[2]],
