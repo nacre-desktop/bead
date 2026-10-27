@@ -631,6 +631,7 @@ impl App {
         match staged {
             Ok(Some(scene)) => {
                 if !canvas.source.commit() {
+                    self.canvas_schedule_wakeup(key);
                     return;
                 }
                 canvas.lifecycle.accept_scene(warmup_response);
