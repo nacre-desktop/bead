@@ -5384,7 +5384,9 @@ impl SceneSource for Runtime {
                 analog_layout,
                 self.smooth_frame_interval.as_secs_f64() * 1000.,
                 preview.map(|deadline| {
-                    deadline.saturating_duration_since(std::time::Instant::now()).as_secs_f64()
+                    deadline
+                        .saturating_duration_since(std::time::Instant::now())
+                        .as_secs_f64()
                         * 1000.
                 })
             );
