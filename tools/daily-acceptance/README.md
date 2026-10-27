@@ -28,11 +28,12 @@ The scope uses Bead's existing `spikes/capture_safety.py` guard for its memory
 rail, cgroup containment, and watchdog. The runner also gates host swap-in,
 process `SwapPss`, full-window screenshots, and the shell's `Pss_Anon` delta.
 
-Input is sent to the *parent* Labwc compositor through the `wlr-virtual-pointer`
-protocol, so the host pointer is never moved. Keyboard input uses `wtype` on the
-nested niri display, following the established input path in
-`spikes/measure.py`. `pointer.c` is compiled at runtime against the host's
-Wayland development packages; no generated protocol sources are vendored.
+Input is sent to the *parent* Labwc compositor: pointer events use the
+`wlr-virtual-pointer` protocol and keyboard events use `wtype` on Labwc's seat.
+The nested Niri receives those seat events as compositor input, so its global
+Super bindings are exercised; the host pointer is never moved. `pointer.c` is
+compiled at runtime against the host's Wayland development packages; no
+generated protocol sources are vendored.
 
 The acceptance profile is JSON because pixel coordinates depend on the staged
 user's own bar layout. `default-profile.json` provides a standard layout. Its

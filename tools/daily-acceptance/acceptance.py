@@ -181,6 +181,7 @@ class Runner:
         self.owned = []
         self.root = None
         self.env = None
+        self.key_env = None
         self.pointer = None
         self.shell = None
         self.guard = None
@@ -289,6 +290,8 @@ class Runner:
         self._spawn([shutil.which("labwc") or "labwc", "--config-dir", str(config)],
                     parent_env, self.evidence / "labwc.log")
         parent_sock = self._wait_wayland(parent_rt, "Labwc")
+        self.key_env = {**self.env, "XDG_RUNTIME_DIR": str(parent_rt),
+                        "WAYLAND_DISPLAY": str(parent_sock)}
         self.env["WAYLAND_DISPLAY"] = str(parent_sock)
         output_pixels(self.env, self.evidence)
         pointer_dir = self.root / "pointer-bin"
@@ -522,7 +525,7 @@ class Runner:
 
     def _key(self, *args):
         offset = self.log_path.stat().st_size if self.log_path and self.log_path.exists() else 0
-        run(["wtype", "-s", "20", *args], env=self.env, timeout=10)
+        run(["wtype", "-s", "20", *args], env=self.key_env or self.env, timeout=10)
         if args and all(not arg.startswith("-") for arg in args):
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline:
