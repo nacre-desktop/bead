@@ -122,23 +122,25 @@ local function desktop(props,_settings,_data)
         local second_angle=ui.animate("wall-clock-second",clock_seconds*6,1,"linear")
         local minute_angle=ui.animate("wall-clock-minute",clock_seconds*.1,1,"linear")
         local hour_angle=ui.animate("wall-clock-hour",clock_seconds/120,1,"linear")
-        local dial_left,dial_size=8,h-16
+        local dial_size=math.min(w,h)-16
+        local dial_left,dial_top=(w-dial_size)/2,(h-dial_size)/2
         local function hand(id,degrees,length,width,color)
             local radians=math.rad(degrees-90)
-            return ui.Polyline{id=id,position="absolute",left=dial_left,top=dial_left,width=dial_size,height=dial_size,
+            return ui.Polyline{id=id,position="absolute",left=dial_left,top=dial_top,width=dial_size,height=dial_size,
                 points={{.5,.5},{.5+math.cos(radians)*length,.5+math.sin(radians)*length}},
                 stroke_width=width,round_caps=true,color=color}
         end
-        return ui.Box{id="clock-analog",width=w,height=h,fill=visual.glass_fill,radius=h/2,
-            border_width=1,border_color=visual.glass_border,on_activate=action,
-            ui.Image{id="dial-ticks",position="absolute",left=dial_left,top=dial_left,width=dial_size,height=dial_size,path="widgets/clock/assets/analog-ticks.themed.svg"},
+        return ui.Box{id="clock-analog",width=w,height=h,fill="transparent",on_activate=action,
+            ui.Box{id="dial-glass",position="absolute",left=dial_left,top=dial_top,width=dial_size,height=dial_size,
+                fill=visual.glass_fill,radius=dial_size/2,border_width=1,border_color=visual.glass_border},
+            ui.Image{id="dial-ticks",position="absolute",left=dial_left,top=dial_top,width=dial_size,height=dial_size,path="widgets/clock/assets/analog-ticks.themed.svg"},
             hand("hour-hand",hour_angle,.26,7,"onSurface"),
             hand("minute-hand",minute_angle,.37,4.5,"onSurface"),
             hand("second-hand",second_angle,.42,2,"primary"),
-            ui.Box{id="hand-pin",position="absolute",left=h/2-5,top=h/2-5,width=10,height=10,radius=5,fill="primary"},
-            ui.Column{id="dial-caption",position="absolute",left=h+kit.tokens.spacing.lg,top=0,width=w-h-kit.tokens.spacing.lg,height=h,justify="center",gap=kit.tokens.spacing.sm,
-                ui.Text{id="weekday",text=day and (string.upper(string.sub(weekday,1,3)).." "..day) or date_line,width="fill",height=28,font_size=kit.tokens.text.title*4/3,color="primary"},
-                ui.Text{id="digital-time",text=visible_time,width="fill",height=56,font_size=kit.tokens.text.headline*2,color="onSurface"}}}
+            ui.Box{id="hand-pin",position="absolute",left=dial_left+dial_size/2-5,top=dial_top+dial_size/2-5,width=10,height=10,radius=5,fill="primary"},
+            ui.Text{id="dial-date",position="absolute",left=dial_left,top=dial_top+dial_size*.72,width=dial_size,height=24,
+                text=day and (string.upper(string.sub(weekday,1,3)).." "..day) or date_line,
+                font_size=kit.tokens.text.body*4/3,color="onSurfaceVariant",text_align="center"}}
     elseif style=="minimal" then
         local hour,minute=string.match(visible_time,"^(%d%d?):(%d%d)")
         return ui.Column{id="clock-minimal",width=w,height=h,justify="center",gap=kit.tokens.spacing.xs,on_activate=action,
