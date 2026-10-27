@@ -688,11 +688,6 @@ impl Preview {
             .clone()
     }
 
-    #[cfg(test)]
-    pub(crate) fn selected_id(&self) -> Option<String> {
-        self.selected().map(|selection| selection.id)
-    }
-
     fn remember_pair(&self, boot: &str, pair: &ActiveWallpaper, width: u32, height: u32) {
         if pair.validate().is_err() {
             return;
