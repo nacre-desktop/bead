@@ -64,3 +64,8 @@ the Overlay widget-drag canvas, or one duplicate Top layer beyond startup. The
 harness records only those exact identities when the closed screenshot matches
 pixel-for-pixel, then permits previously verified identities at idle; changed
 pixels, an unknown identity, or duplicate extras fail.
+
+`--quick --interaction[=title,switch,pill]` runs only the pointer regressions from the 2026-10-27 audit: hovering the
+bar title opens the dashboard, clicking a second bar icon while a dropdown is open opens its
+dropdown at once, and a pointer sweep along the status pill (`pill_sweep` = `[x0, x1, y, step]` in
+the profile) shows a hover background at every step, so the pill's hit areas have no gaps.

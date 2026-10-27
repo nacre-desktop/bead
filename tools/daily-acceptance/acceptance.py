@@ -212,12 +212,13 @@ class Runner:
             raise RuntimeError("profile must describe the 2880x1800 / scale 1.5 nested output")
         points = {**self.profile.get("bar_targets", {}),
                   "outside_target": self.profile.get("outside_target"),
+                  "title_target": self.profile.get("title_target"),
                   "left_edge_hover": self.profile.get("left_edge_hover"),
                   **{f"battery_gap_{index}": point for index, point in
                      enumerate(self.profile.get("battery_hover_gap_path", []))},
                   **{f"drag_{name}": point for name, point in self.profile.get("widget_drag", {}).items()}}
         required = {"updates", "audio", "network", "bluetooth", "battery", "notifications", "calendar", "power",
-                    "outside_target", "left_edge_hover", "drag_bar_start", "drag_desktop_drop", "drag_bar_drop"}
+                    "outside_target", "title_target", "left_edge_hover", "drag_bar_start", "drag_desktop_drop", "drag_bar_drop"}
         if not self.profile.get("battery_hover_gap_path"):
             required.add("battery_gap_path")
         if not required.issubset(points):
@@ -799,6 +800,96 @@ class Runner:
         if row["result"] != "PASS":
             self._shot(self.failures / "battery-gap-rearm.png")
 
+    def dropdown_switch(self, first, second):
+        """With `first` click-open, one click on `second` must open its dropdown at once."""
+        targets = self.profile["bar_targets"]
+        label = f"dropdown switch {first}->{second}"
+        self._reset_closed()
+        before = self.evidence / "current-before.png"
+        self._shot(before)
+        offset = self.log_path.stat().st_size
+        started_ns = time.monotonic_ns()
+        self._pointer("click", targets[first])
+        opened = self._open_latency(offset, self.profile["surface_names"].get(f"dropdown:{first}"),
+                                    started_ns, before, f"{label}-first")
+        time.sleep(.6)
+        self._shot(self.evidence / f"{first}-open.png")
+        offset = self.log_path.stat().st_size
+        started_ns = time.monotonic_ns()
+        self._pointer("click", targets[second])
+        switched = self._open_latency(offset, self.profile["surface_names"].get(f"dropdown:{second}"),
+                                      started_ns, before, f"{label}-second")
+        time.sleep(.8)
+        reference = self.evidence / f"{first}-to-{second}.png"
+        self._shot(reference)
+        self._reset_closed()
+        # The same two clicks 80 ms apart, as a fast user would: the second dropdown must still win.
+        self._pointer("click", targets[first])
+        time.sleep(.08)
+        self._pointer("click", targets[second])
+        time.sleep(1.2)
+        rapid = self.evidence / f"{first}-to-{second}-rapid.png"
+        self._shot(rapid)
+        rapid_same = self._diff(reference, rapid)
+        self._reset_closed()
+        passed = opened[1] is not None and switched[1] is not None and rapid_same
+        self.results.append({"check": label, "result": "PASS" if passed else "FAIL",
+                             "first_ms": opened[1], "second_ms": switched[1],
+                             "second_surface": switched[0], "rapid_switch_shows_second": rapid_same})
+        if not passed:
+            shutil.copy2(rapid, self.failures / f"{first}-to-{second}-rapid.png")
+
+    def title_hover_opens_dashboard(self):
+        """Hovering the bar's centre title (not only the screen edge) opens the dashboard."""
+        self._reset_closed()
+        offset = self.log_path.stat().st_size
+        self._pointer("move", self.profile["title_target"])
+        opened = False
+        deadline = time.monotonic() + 2.5
+        while time.monotonic() < deadline and not opened:
+            _, inventory = self._layer_count("title-hover")
+            opened = (self._opening_latency(offset)[1] is not None
+                      or (inventory is not None and inventory != self.closed_layer_inventory))
+            time.sleep(.05)
+        time.sleep(2.5)  # a cold dashboard needs its first content frame before the evidence shot
+        self._shot(self.evidence / "title-hover.png")
+        self._key("-k", "Escape")
+        self._pointer("move", self.profile["outside_target"])
+        self._wait_closed()
+        self.results.append({"check": "title hover opens dashboard",
+                             "result": "PASS" if opened else "FAIL"})
+
+    def pill_has_no_gaps(self):
+        """Sweeping the pointer along the pill must show a hover background at every step."""
+        x0, x1, y, step = self.profile["pill_sweep"]
+        height = 30
+        origin_x, origin_y = 1, 27  # parent pointer space to the nested screenshot
+        region = self.evidence / "pill-region.png"
+        base = self.evidence / "pill-base.png"
+        def crop(path):
+            self._shot(self.evidence / "pill-full.png")
+            run(["convert", str(self.evidence / "pill-full.png"), "-crop",
+                 f"{x1 - x0}x{height}+{x0 - origin_x}+{y - origin_y - height // 2}", "+repage", str(path)],
+                env=self.env, timeout=10)
+        self._reset_closed()
+        crop(base)
+        misses = []
+        self._pointer("move", (x0, y))  # the first hover after a reset needs a moment to settle
+        time.sleep(.3)
+        for x in range(x0 + step, x1, step):
+            self._pointer("move", (x, y))
+            time.sleep(.08)
+            crop(region)
+            same = subprocess.run(["compare", "-metric", "AE", str(base), str(region), "null:"],
+                                  env=self.env, capture_output=True, text=True, timeout=10)
+            if same.stderr.strip().split()[0] == "0":
+                misses.append(x)
+        self._pointer("move", self.profile["outside_target"])
+        self._key("-k", "Escape")
+        self._wait_closed()
+        self.results.append({"check": "status pill hit areas have no gaps",
+                             "result": "PASS" if not misses else "FAIL", "unhovered_x": misses})
+
     # Super chords from the parent seat do not reach nested niri's bindings, so
     # send the bound route straight to the shell's command socket instead.
     SUPER_ROUTES = {"space": ["nacre", "launcher", ""], "o": ["drawers", "toggle", "dashboard"],
@@ -948,6 +1039,17 @@ class Runner:
         if self.args.focus_dropdown:
             name = self.args.focus_dropdown
             self.click_dropdown(name, targets[name], 1)
+            self._shot(self.evidence / f"round-{round_no}-end.png")
+            return
+        if self.args.interaction:
+            cases = self.args.interaction.split(",")
+            if "title" in cases:
+                self.title_hover_opens_dashboard()
+            if "switch" in cases:
+                for first, second in self.profile["switch_pairs"]:
+                    self.dropdown_switch(first, second)
+            if "pill" in cases:
+                self.pill_has_no_gaps()
             self._shot(self.evidence / f"round-{round_no}-end.png")
             return
         for name, point in targets.items():
@@ -1117,6 +1219,9 @@ def main():
     parser.add_argument("--data", type=pathlib.Path,
                         default=pathlib.Path.home() / "nacre-lead/b0162-daily-acceptance/staged-data")
     parser.add_argument("--profile", type=pathlib.Path, default=HERE / "default-profile.json")
+    parser.add_argument("--interaction", nargs="?", const="title,switch,pill",
+                        help="with --quick, run only these comma-separated pointer cases "
+                             "(title, switch, pill)")
     parser.add_argument("--quick", action="store_true",
                         help="run one interaction round without the 120-second idle and final repeat")
     parser.add_argument("--focus-dropdown", choices=("updates", "audio", "network", "bluetooth",

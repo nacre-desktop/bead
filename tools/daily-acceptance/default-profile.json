@@ -2,14 +2,14 @@
   "profile": "standard-top-bar-2880x1800-scale-1.5",
   "output": { "width": 2880, "height": 1800, "scale": 1.5, "refresh_hz": 60 },
   "bar_targets": {
-    "updates": [2390, 53],
-    "audio": [2445, 53],
-    "network": [2490, 53],
-    "bluetooth": [2560, 53],
-    "battery": [2645, 53],
-    "notifications": [2705, 53],
-    "calendar": [2770, 53],
-    "power": [2840, 53]
+    "updates": [2514, 53],
+    "audio": [2566, 53],
+    "network": [2601, 53],
+    "bluetooth": [2631, 53],
+    "battery": [2660, 53],
+    "notifications": [2698, 53],
+    "calendar": [2742, 53],
+    "power": [2847, 53]
   },
   "surface_names": {
     "dropdown:updates": "panel",
@@ -29,6 +29,9 @@
     "notification list": "panel",
     "wallpaper picker": "picker"
   },
+  "switch_pairs": [["audio", "network"], ["battery", "bluetooth"], ["updates", "calendar"], ["calendar", "power"], ["power", "updates"]],
+  "pill_sweep": [2501, 2857, 65, 6],
+  "title_target": [1441, 53],
   "outside_target": [1451, 927],
   "left_edge_hover": [5, 927],
   "volatile_rectangles": [[2745, 20, 75, 32]],
