@@ -19,6 +19,13 @@ ms to 15.96/23.93 ms (GL/CPU), still above the 8.33 ms target; nested presented
 cadence was ~16 ms, so this is not a physical 120 Hz result. UI fixture input is
 capped at the published 64-message protocol limit. Docked candidate timing,
 momentum hit-testing, and 500-row UI timing remain open; see [B0159](specs/0159-chat-scroll.md).
+## 2026-10-27 — B0160 large CPU snapshot work bound (verification in progress)
+
+The CPU snapshot's optional sparse row compressor now skips frames above 4,194,304
+pixels, avoiding a full high-entropy scan and expanded temporary representation.
+A 4320×2700 CPU snapshot regression checks bounded completion and dense storage.
+The owner's one-thread spin and B0151 launcher behavior have not yet been attributed
+to a specific commit; see [B0160](specs/0160-launcher-stuck.md).
 
 ## 2026-10-27 — B0147 Spotlight overlay (implementation review; smoothness gates fail)
 

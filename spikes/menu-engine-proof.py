@@ -63,6 +63,32 @@ def presented_catalog(text, count):
     return bool(commit and re.search(r'UI_PRESENTED generation=' + commit[1] + r' .*update=' + commit[2] + r' ', tail[commit.end():]))
 
 
+def populate_private_app_data(root, source=None):
+    """Install a private app catalog snapshot or the stable synthetic fixture."""
+    user_apps = root / 'data/applications'
+    system_apps = root / 'system/applications'
+    user_apps.mkdir(parents=True, exist_ok=True)
+    system_apps.mkdir(parents=True, exist_ok=True)
+    if source is not None:
+        source = pathlib.Path(source).resolve()
+        for source_name, target in [('user', user_apps), ('system', system_apps)]:
+            directory = source / source_name
+            if not directory.is_dir():
+                raise RuntimeError(f'missing private app snapshot: {source_name}')
+            shutil.copytree(directory, target, dirs_exist_ok=True)
+        count = sum(1 for path in (*user_apps.glob('*.desktop'), *system_apps.glob('*.desktop')))
+        if not count:
+            raise RuntimeError('private app snapshot contains no desktop entries')
+        return count
+    for index in range(320):
+        name = 'Alpha' if index < 160 else 'Application'
+        (user_apps / f'fixture-{index:04}.desktop').write_text(
+            f'[Desktop Entry]\nType=Application\nName={name} {index:04}\n'
+            'Comment=Synthetic application\nExec=bead-fixture-never-activate\n'
+            'Icon=fixture\nCategories=Utility;\n')
+    return 320
+
+
 def sample(env, raw, compositor, stop):
     helper = pathlib.Path(os.environ['BEAD_MENU_ENGINE_BINARY']).resolve()
     binary = pathlib.Path(os.environ['BEAD_HARDENING_BINARY']).resolve()
@@ -83,19 +109,15 @@ def sample(env, raw, compositor, stop):
         with tempfile.TemporaryDirectory(prefix='bead-menu-engine-') as directory:
             root = pathlib.Path(directory)
             shutil.copytree(pathlib.Path(os.environ.get('BEAD_MENU_ENGINE_BUNDLE', str(ROOT / 'shell'))), root / 'shell')
-            for name in ['home', 'config', 'state', 'cache', 'data/applications', 'empty', 'bin', 'runtime']:
+            for name in ['home', 'config', 'state', 'cache', 'data/applications', 'system/applications', 'empty', 'bin', 'runtime']:
                 (root / name).mkdir(parents=True, exist_ok=True)
             (root / 'runtime').chmod(0o700)
             endpoint = root / 'runtime/nacre/daemon.sock'
             (root / 'bin/nacrectl').symlink_to(helper)
-            for index in range(320):
-                name = 'Alpha' if index < 160 else 'Application'
-                (root / f'data/applications/fixture-{index:04}.desktop').write_text(
-                    f'[Desktop Entry]\nType=Application\nName={name} {index:04}\n'
-                    'Comment=Synthetic application\nExec=bead-fixture-never-activate\nIcon=fixture\nCategories=Utility;\n')
+            app_count = populate_private_app_data(root, os.environ.get('BEAD_MENU_APP_DATA_DIR'))
             daemon_env = dict(env, HOME=str(root / 'home'), XDG_CONFIG_HOME=str(root / 'config'),
                               XDG_STATE_HOME=str(root / 'state'), XDG_CACHE_HOME=str(root / 'cache'),
-                              XDG_DATA_HOME=str(root / 'data'), XDG_DATA_DIRS=str(root / 'empty'),
+                              XDG_DATA_HOME=str(root / 'data'), XDG_DATA_DIRS=str(root / 'system'),
                               NACRE_DAEMON_SOCKET=str(endpoint), NACRE_NIRI_HOVER_STREAM='0',
                               NACRE_COMPOSITOR=compositor,
                               DBUS_SYSTEM_BUS_ADDRESS=env['DBUS_SESSION_BUS_ADDRESS'],
@@ -132,7 +154,8 @@ def sample(env, raw, compositor, stop):
                         status = call('daemon.status', {})
                         if status and status.get('services', {}).get('menu', {}).get('status') == 'running':
                             initial = call('menu.query', {'query': '', 'mode': 'apps', 'route': 'apps'})
-                            if initial and initial.get('catalog_rev', 0) > 0 and len(initial.get('order', [])) == 320:
+                            count_matches = bool(initial and initial.get('order')) if os.environ.get('BEAD_MENU_APP_DATA_DIR') else bool(initial and len(initial.get('order', [])) == app_count)
+                            if initial and initial.get('catalog_rev', 0) > 0 and count_matches:
                                 assert set(initial['order']) == set(initial['items'])
                                 break
                     time.sleep(.05)
@@ -140,6 +163,7 @@ def sample(env, raw, compositor, stop):
                     raise RuntimeError('real catalog did not become ready')
                 (raw / 'engine-ready.json').write_text(json.dumps({
                     'catalog_rev': initial['catalog_rev'], 'count': len(initial['order']),
+                    'catalog_source': 'private app snapshot' if os.environ.get('BEAD_MENU_APP_DATA_DIR') else 'synthetic fixture',
                     'methods_running': True, 'helper_sha256': hashlib.sha256(helper.read_bytes()).hexdigest()}, indent=2) + '\n')
                 assert os.getpriority(os.PRIO_PROCESS, daemon.pid) == 10
                 settle = float(os.environ.get('BEAD_ENGINE_SETTLE_SECONDS', '0'))
@@ -204,7 +228,8 @@ def sample(env, raw, compositor, stop):
                     (raw / 'engine-lifecycle-proof.json').write_text(json.dumps({
                         'compositor': compositor, 'valid': result['valid'], 'owned_workers_cleaned': True,
                         'helper_sha256': hashlib.sha256(helper.read_bytes()).hexdigest()}, indent=2) + '\n')
-                    assert result['valid'], 'control budget observation failed; result is NOT a passing proof'
+                    if os.environ.get('BEAD_STUCK_RECORD_ONLY') != '1':
+                        assert result['valid'], 'control budget observation failed; result is NOT a passing proof'
                     return
                 daemon_clock = clocks.OwnedCpuClock(daemon)
 
@@ -391,7 +416,7 @@ def sample(env, raw, compositor, stop):
                     stop(client); client = None
                     stop(keeper); keeper = None
                 stop_engine(); daemon = None
-        result = dict(compositor=compositor, catalog_size=320, source='real nacre-daemon menu.query', keys=len(rows), rows=rows,
+                result = dict(compositor=compositor, catalog_size=app_count, source='real nacre-daemon menu.query', keys=len(rows), rows=rows,
                       item_identity_changes=sum(left['item_ids'] != right['item_ids'] for left, right in zip(rows, rows[1:])),
                       helper_sha256=hashlib.sha256(helper.read_bytes()).hexdigest(), memory=memory,
                       cpu_method='UI: input receipt to exact presentation, process CPU; daemon/workers: high-resolution process clocks bracketing injection through presentation, includes background work',

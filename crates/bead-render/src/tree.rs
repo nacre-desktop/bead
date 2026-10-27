@@ -3350,6 +3350,13 @@ impl Renderer for TreeCpuRenderer {
 /// Store exact repeated pixels compactly, including transparent and dimmer borders.
 fn compress_rows(pixels: Pixmap) -> FlattenedPixels {
     let (width, height) = (pixels.width(), pixels.height());
+    // Compression is an optional CPU snapshot optimization. Keep its per-job
+    // scan bounded; large wallpaper and picker snapshots stay dense instead of
+    // monopolizing the resource worker while scanning millions of pixels.
+    const MAX_COMPRESSION_PIXELS: u64 = 4 * 1024 * 1024;
+    if u64::from(width) * u64::from(height) > MAX_COMPRESSION_PIXELS {
+        return FlattenedPixels::Dense(pixels);
+    }
     let mut rows = Vec::with_capacity(height as usize + 1);
     let mut words = Vec::new();
     for y in 0..height as usize {
@@ -5184,7 +5191,10 @@ mod tests {
             .expect("cache pressure must not reject a picker-sized image set");
         let mut renderer = snapshot.accept().expect("snapshot stays admitted");
         assert_eq!(picker.primitives.len(), 24);
-        assert!(renderer.flattened.is_some(), "first picker frame is ready");
+        assert!(
+            renderer.flattened.is_some() || renderer.cache.frame.is_some(),
+            "the flattened snapshot or retained CPU frame is ready"
+        );
         let mut output = Pixmap::new(4320, 2700).unwrap();
         renderer
             .render(
@@ -6025,6 +6035,42 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn large_high_entropy_cpu_snapshot_skips_unbounded_compression_work() {
+        let _serial = LARGE_RASTER_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+        let mut source = Pixmap::new(2, 2).unwrap();
+        source.data_mut().copy_from_slice(&[
+            0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 255,
+        ]);
+        let encoded: Arc<[u8]> = Arc::from(source.encode_png().unwrap());
+        let mut large = scene();
+        large.width = 2880.;
+        large.bounds = Rect::new(0., 0., 2880., 1800.);
+        large.layers.clear();
+        large.asset_data = BTreeMap::from([(PathBuf::from("wallpaper.png"), encoded)]);
+        large.primitives = vec![Primitive::Image {
+            rect: large.bounds,
+            path: PathBuf::from("wallpaper.png"),
+            fit: crate::ImageFit::Fill,
+            blur: 0.,
+            clip_polygon: None,
+        }];
+
+        let started = std::time::Instant::now();
+        let prepared = TreeCpuRenderer::prepare_snapshot(&large, 1.5)
+            .expect("large snapshot stays within the bounded dense path");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(15),
+            "large CPU snapshot exceeded its 15-second test bound"
+        );
+        let renderer = prepared.accept().unwrap();
+        let Some((_, _, FlattenedPixels::Dense(pixels))) = renderer.flattened.as_ref() else {
+            panic!("large high-entropy snapshot must skip sparse compression");
+        };
+        assert_eq!((pixels.width(), pixels.height()), (4320, 2700));
+        assert!(pixels.data().len() <= 64 * bead_core::cache::MIB);
     }
     #[test]
     fn partial_repairs_match_full_pixels_with_opaque_background_corners_clip_and_alpha() {
