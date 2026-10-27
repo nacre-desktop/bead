@@ -956,7 +956,11 @@ mod tests {
         let active = Arc::new(std::sync::atomic::AtomicBool::new(true));
         let source_active = active.clone();
         let mut source = Source::new(
-            Box::new(move || Ok(Box::new(Animated { active: source_active }))),
+            Box::new(move || {
+                Ok(Box::new(Animated {
+                    active: source_active,
+                }))
+            }),
             scene(),
         );
         let (sender, receiver) = mpsc::channel();
