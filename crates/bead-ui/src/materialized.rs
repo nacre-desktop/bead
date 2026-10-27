@@ -75,20 +75,62 @@ fn bindings(value: &serde_json::Value, out: &mut BTreeSet<String>) {
 }
 impl Cached {
     fn fixed_absolute_contents(node: &RawNode) -> bool {
+        let has_left = node
+            .props
+            .get("left")
+            .and_then(serde_json::Value::as_f64)
+            .is_some();
+        let has_right = node
+            .props
+            .get("right")
+            .and_then(serde_json::Value::as_f64)
+            .is_some();
+        let has_top = node
+            .props
+            .get("top")
+            .and_then(serde_json::Value::as_f64)
+            .is_some();
+        let has_bottom = node
+            .props
+            .get("bottom")
+            .and_then(serde_json::Value::as_f64)
+            .is_some();
         node.props
             .get("position")
             .and_then(serde_json::Value::as_str)
             == Some("absolute")
-            && ["left", "top", "width", "height"].iter().all(|name| {
+            && has_left != has_right
+            && has_top != has_bottom
+            && ["width", "height"].iter().all(|name| {
                 node.props
                     .get(*name)
                     .and_then(serde_json::Value::as_f64)
                     .is_some()
             })
+            && (!has_right || node.children.is_empty())
             && node.children.iter().all(Self::fixed_absolute_contents)
     }
 
-    fn retained_changes(old: &RawNode, new: &RawNode, out: &mut Vec<RetainedChange>) -> bool {
+    fn qualified_id(raw: &RawNode, scope: &str) -> (Option<String>, String) {
+        let scope = format!("{scope}{}", raw.scope.as_deref().unwrap_or(""));
+        let id = raw
+            .props
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .map(|local| format!("{scope}{local}"));
+        let child_scope = id
+            .as_ref()
+            .filter(|_| raw.kind != Widget::Group)
+            .map_or_else(|| scope.clone(), |id| format!("{id}."));
+        (id, child_scope)
+    }
+
+    fn retained_changes(
+        old: &RawNode,
+        new: &RawNode,
+        scope: &str,
+        out: &mut Vec<RetainedChange>,
+    ) -> bool {
         if old.kind != new.kind
             || old.source != new.source
             || old.scope != new.scope
@@ -125,11 +167,11 @@ impl Cached {
                     else {
                         return false;
                     };
-                    let Some(id) = old.props.get("id").and_then(serde_json::Value::as_str) else {
+                    let Some(id) = Self::qualified_id(old, scope).0 else {
                         return false;
                     };
                     out.push(RetainedChange::ClipWidth {
-                        id: id.to_owned(),
+                        id,
                         width: width as f32,
                     });
                 }
@@ -146,23 +188,24 @@ impl Cached {
                             .all(|change| !matches!(change, RetainedChange::Text { .. })) =>
                 {
                     let (Some(id), Some(text)) = (
-                        old.props.get("id").and_then(serde_json::Value::as_str),
+                        Self::qualified_id(old, scope).0,
                         next.as_str().filter(|text| text.len() <= 256),
                     ) else {
                         return false;
                     };
                     out.push(RetainedChange::Text {
-                        id: id.to_owned(),
+                        id,
                         text: text.to_owned(),
                     });
                 }
                 _ => return false,
             }
         }
+        let child_scope = Self::qualified_id(old, scope).1;
         old.children
             .iter()
             .zip(&new.children)
-            .all(|(old, new)| Self::retained_changes(old, new, out))
+            .all(|(old, new)| Self::retained_changes(old, new, &child_scope, out))
     }
 
     fn intersect(a: bead_render::Rect, b: bead_render::Rect) -> bead_render::Rect {
@@ -174,6 +217,16 @@ impl Cached {
             ((a.x + a.w).min(b.x + b.w) - x).max(0.),
             ((a.y + a.h).min(b.y + b.h) - y).max(0.),
         )
+    }
+
+    fn raw_node<'a>(raw: &'a RawNode, id: &str, scope: &str) -> Option<&'a RawNode> {
+        let (qualified, child_scope) = Self::qualified_id(raw, scope);
+        if qualified.as_deref() == Some(id) {
+            return Some(raw);
+        }
+        raw.children
+            .iter()
+            .find_map(|child| Self::raw_node(child, id, &child_scope))
     }
 
     pub fn new(
@@ -474,7 +527,7 @@ impl Cached {
             return Ok(None);
         }
         let mut retained = Vec::new();
-        if !Rc::ptr_eq(raw, &self.raw) && !Self::retained_changes(&self.raw, raw, &mut retained)
+        if !Rc::ptr_eq(raw, &self.raw) && !Self::retained_changes(&self.raw, raw, "", &mut retained)
             || viewport != self.viewport
         {
             if bead_core::profile::enabled() {
@@ -556,6 +609,55 @@ impl Cached {
                     };
                     layer.bounds.w = *width;
                     let clip = layer.bounds;
+                    let Some(raw_clip) = Self::raw_node(raw, id, "") else {
+                        return Ok(None);
+                    };
+                    for child in &raw_clip.children {
+                        let Some(right) =
+                            child.props.get("right").and_then(serde_json::Value::as_f64)
+                        else {
+                            continue;
+                        };
+                        let Some(child_id) = Self::qualified_id(child, &format!("{id}.")).0 else {
+                            return Ok(None);
+                        };
+                        let Some(child_layer) =
+                            scene.layers.iter_mut().find(|layer| layer.id == child_id)
+                        else {
+                            return Ok(None);
+                        };
+                        let dx = clip.x + *width
+                            - right as f32
+                            - child_layer.bounds.w
+                            - child_layer.bounds.x;
+                        if dx != 0. {
+                            child_layer.bounds.x += dx;
+                            let owned: Vec<_> = child_layer.own.clone().collect();
+                            for index in owned {
+                                let Some(primitive) = scene.primitives.get_mut(index) else {
+                                    return Ok(None);
+                                };
+                                match primitive {
+                                    Primitive::Arc { rect, .. }
+                                    | Primitive::Polyline { rect, .. }
+                                    | Primitive::Rounded { rect, .. }
+                                    | Primitive::Text { rect, .. }
+                                    | Primitive::Image { rect, .. }
+                                    | Primitive::Shadow { rect, .. } => rect.x += dx,
+                                }
+                            }
+                            if let Some(node) = nodes.iter_mut().find(|node| node.id == child_id) {
+                                match &mut node.draw {
+                                    Primitive::Arc { rect, .. }
+                                    | Primitive::Polyline { rect, .. }
+                                    | Primitive::Rounded { rect, .. }
+                                    | Primitive::Text { rect, .. }
+                                    | Primitive::Image { rect, .. }
+                                    | Primitive::Shadow { rect, .. } => rect.x += dx,
+                                }
+                            }
+                        }
+                    }
                     if let Some(region) =
                         self.clip_regions.iter_mut().find(|region| region.id == *id)
                     {
@@ -786,7 +888,11 @@ mod tests {
             serde_json::from_value(serde_json::json!({
                 "kind":"box",
                 "props":{"id":"window","position":"absolute","clip_children":true,"width":width},
-                "children":[{"kind":"text","props":{"id":"value","position":"absolute","left":0,"top":0,"width":64,"height":20,"text":text},"children":[],"source":{"file":"view.luau","line":2},"scope":null}],
+                "children":[
+                    {"kind":"box","props":{"id":"art","position":"absolute","left":0,"top":0,"width":100,"height":5,"fill":"surface"},"children":[],"source":{"file":"view.luau","line":2},"scope":null},
+                    {"kind":"box","props":{"id":"cap","position":"absolute","right":0,"top":0,"width":5,"height":5,"fill":"secondary"},"children":[],"source":{"file":"view.luau","line":3},"scope":null},
+                    {"kind":"text","props":{"id":"value","position":"absolute","left":0,"top":0,"width":64,"height":20,"text":text},"children":[],"source":{"file":"view.luau","line":4},"scope":null}
+                ],
                 "source":{"file":"view.luau","line":1},
                 "scope":null
             }))
@@ -799,10 +905,10 @@ mod tests {
         let old = tree(42., "42%");
         let new = tree(58., "58%");
         let mut changes = Vec::new();
-        assert!(Cached::retained_changes(&old, &new, &mut changes));
+        assert!(Cached::retained_changes(&old, &new, "", &mut changes));
         assert_eq!(changes.len(), 2);
         assert!(changes.iter().any(|change| matches!(change, RetainedChange::ClipWidth { id, width } if id == "window" && *width == 58.)));
-        assert!(changes.iter().any(|change| matches!(change, RetainedChange::Text { id, text } if id == "value" && text == "58%")));
+        assert!(changes.iter().any(|change| matches!(change, RetainedChange::Text { id, text } if id == "window.value" && text == "58%")));
     }
 
     #[test]
@@ -813,12 +919,22 @@ mod tests {
             .props
             .insert("clip_children".into(), serde_json::Value::Bool(false));
         let mut changes = Vec::new();
-        assert!(!Cached::retained_changes(&old, &unclipped, &mut changes));
+        assert!(!Cached::retained_changes(
+            &old,
+            &unclipped,
+            "",
+            &mut changes
+        ));
         let mut structural = (*tree(42., "42%")).clone();
         structural
             .props
             .insert("height".into(), serde_json::json!(8));
         let mut changes = Vec::new();
-        assert!(!Cached::retained_changes(&old, &structural, &mut changes));
+        assert!(!Cached::retained_changes(
+            &old,
+            &structural,
+            "",
+            &mut changes
+        ));
     }
 }

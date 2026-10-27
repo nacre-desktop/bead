@@ -2367,14 +2367,23 @@ fn animated_clipped_fill_and_value_text_patch_fixed_layout() {
         f.0.join("ui/main.luau"),
         r#"local ui=require("bead.ui")
 local level=ui.resolve_for_check(ui.bind("level"))
+local fill_value=ui.animate("fill",level,0,"out-cubic")
 return ui.Panel{id="panel",width=200,height=80,
- ui.Box{id="fill-window",position="absolute",left=8,top=8,width=100*ui.animate("fill",level,0,"out-cubic"),height=5,clip_children=true,fill="transparent",
-  ui.Box{id="fill-art",position="absolute",left=0,top=0,width=100,height=5,fill="surface"}},
+ ui.Box{id="fill-window",position="absolute",left=8,top=8,width=100*fill_value,height=5,clip_children=true,fill="transparent",
+  ui.Box{id="fill-art",position="absolute",left=0,top=0,width=100,height=5,fill="surface"},
+  ui.Box{id="fill-cap",position="absolute",right=0,top=0,width=5,height=5,radius=2.5,fill="surface"}},
  ui.Text{id="value",position="absolute",left=8,top=20,width=64,height=20,text=ui.resolve_for_check(ui.bind("label"))}}"#,
     )
     .unwrap();
     let mut s = session(&f);
     let old_clip = s.current.clips.values().next().copied().unwrap();
+    let old_cap_x = s
+        .current
+        .layers
+        .iter()
+        .find(|layer| layer.id == "panel.fill-window.fill-cap")
+        .map(|layer| layer.bounds.x)
+        .unwrap();
     let next = s
         .update(BTreeMap::from([
             ("level".into(), Value::Number(0.58)),
@@ -2383,6 +2392,12 @@ return ui.Panel{id="panel",width=200,height=80,
         .unwrap()
         .unwrap();
     let new_clip = next.clips.values().next().copied().unwrap();
+    let new_cap_x = next
+        .layers
+        .iter()
+        .find(|layer| layer.id == "panel.fill-window.fill-cap")
+        .map(|layer| layer.bounds.x)
+        .unwrap();
     assert!(
         new_clip.w > old_clip.w,
         "fill clip should grow with the scalar value"
@@ -2390,6 +2405,10 @@ return ui.Panel{id="panel",width=200,height=80,
     assert!(next.primitives.iter().any(
         |primitive| matches!(primitive,bead_render::Primitive::Text{text,..} if text == "58%")
     ));
+    assert!(
+        new_cap_x > old_cap_x,
+        "rounded cap tracks the fill endpoint"
+    );
 }
 
 #[test]

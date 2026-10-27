@@ -820,14 +820,12 @@ mod tests {
             let fill_width = |harness: &bead_test::Harness| {
                 harness
                     .scene()
-                    .primitives
+                    .layers
                     .iter()
-                    .find_map(|primitive| match primitive {
-                        bead::render::Primitive::Image { rect, .. } => Some(rect.w),
-                        _ => None,
-                    })
+                    .find(|layer| layer.id == "osd.track.fill-window")
+                    .map(|layer| layer.bounds.w)
             };
-            let initial = fill_width(&harness).expect("OSD fill image");
+            let initial = fill_width(&harness).expect("OSD fill window");
             harness.update(BTreeMap::from([("osd.value".into(), Value::Number(0.8))]))?;
             assert!(
                 harness.scene().primitives.iter().any(|primitive| matches!(
@@ -836,7 +834,7 @@ mod tests {
                 )),
                 "{kind}: percentage text should follow the latest value immediately"
             );
-            let at_input = fill_width(&harness).expect("OSD fill image");
+            let at_input = fill_width(&harness).expect("OSD fill window");
             assert!(
                 (at_input - initial).abs() < 0.01,
                 "{kind}: animation starts at prior fill"
@@ -845,14 +843,14 @@ mod tests {
 
             thread::sleep(Duration::from_millis(35));
             harness.update(BTreeMap::new())?;
-            let midway = fill_width(&harness).expect("OSD fill image");
+            let midway = fill_width(&harness).expect("OSD fill window");
             assert!(
                 midway > initial + 1. && midway < destination - 1.,
                 "{kind}: fill should advance smoothly, {initial} -> {midway} -> {destination}"
             );
 
             harness.update(BTreeMap::from([("osd.value".into(), Value::Number(0.4))]))?;
-            let retargeted = fill_width(&harness).expect("OSD fill image");
+            let retargeted = fill_width(&harness).expect("OSD fill window");
             assert!(
                 retargeted > initial + 1.
                     && retargeted < destination - 1.
