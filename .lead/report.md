@@ -1,5 +1,5 @@
-Status: two dropdown regressions fixed and pushed; focused matrix passes. Full sequential acceptance still has separate route/fixture gaps below.
-Commits pushed: `be031320` fix, `a76ac159` report (`[no-publish]`); prior B0161 report remains in parent `1f99b426`.
+Status: DONE for the two dropdown regressions; focused matrix passes. Full sequential acceptance still has separate route/fixture gaps below.
+Code fix `be031320` and report updates are pushed with `[no-publish]`; prior B0161 report remains in parent `1f99b426`.
 Measure: `PanelVisibility(true)` to first Wayland presentation feedback; calibrated 65 ms limit on nested 60 Hz TEST host.
 Baseline `900369fb`: seven available dropdowns, 21/21 closes PASS; p50/p99 64.200/64.746 ms. Bluetooth unavailable (no private service).
 Fixed main: eight dropdowns, 24/24 closes PASS; p50/p99 52.017/60.932 ms; all closed screenshots pixel-identical.
