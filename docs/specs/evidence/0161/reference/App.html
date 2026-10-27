@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Widgets app page</title>
+</head>
+<body>
+
+
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&amp;family=Outfit:wght@200;300;400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.wall{background-image:url(./wallpaper-nacre-forest.jpg);background-size:cover;background-position:center}
+</style>
+
+<div style="width: 1440px; height: 900px; box-sizing: border-box; padding: 28px; background: #0c1514; font-family: 'IBM Plex Sans', sans-serif; color: #eef6f3;">
+  <div style="width: 100%; height: 100%; border-radius: 28px; background: #121d1c; border: 1px solid rgba(255,255,255,0.06); display: flex; overflow: hidden;">
+
+    <!-- sidebar -->
+    <div style="width: 248px; flex-shrink: 0; padding: 22px 16px; box-sizing: border-box; border-right: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; gap: 6px;">
+      <div style="font-size: 20px; font-weight: 600; padding: 4px 10px 14px;">Widgets</div>
+      <label style="font-size: 12px; color: #a9bcb6; padding: 0 10px;" for="find">Find a widget</label>
+      <input id="find" placeholder="Clock, battery…" style="height: 38px; margin: 4px 0 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04); color: #eef6f3; padding: 0 12px; font: 14px 'IBM Plex Sans';">
+      <div style="padding: 9px 12px; border-radius: 12px; background: rgba(111,211,191,0.14); color: #9be4d4; font-weight: 500; font-size: 14px;">Clock</div>
+      <div style="padding: 9px 12px; font-size: 14px; color: #cfe3dd;">Battery</div>
+      <div style="padding: 9px 12px; font-size: 14px; color: #cfe3dd;">Sound</div>
+      <div style="padding: 9px 12px; font-size: 14px; color: #cfe3dd;">Power</div>
+      <div style="padding: 9px 12px; font-size: 14px; color: #cfe3dd;">Notifications</div>
+      <div style="padding: 9px 12px; font-size: 14px; color: #cfe3dd;">Bluetooth · Wi-Fi</div>
+      <div style="padding: 9px 12px; font-size: 14px; color: #cfe3dd;">Launcher · Updates</div>
+    </div>
+
+    <!-- main -->
+    <div style="flex-grow: 1; padding: 26px 30px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px; min-width: 0;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div><div style="font-size: 26px; font-weight: 500;">Clock</div><div style="font-size: 14px; color: #a9bcb6;">Drag it from the preview to the bar or the desktop, or pick styles below.</div></div>
+        <div style="display: flex; gap: 8px;"><button style="height: 36px; padding: 0 16px; border-radius: 18px; border: 1px solid rgba(255,255,255,0.12); background: transparent; color: #eef6f3; font: 500 13px 'IBM Plex Sans';">Undo</button><button style="height: 36px; padding: 0 16px; border-radius: 18px; border: 1px solid rgba(255,255,255,0.12); background: transparent; color: #eef6f3; font: 500 13px 'IBM Plex Sans';">Reset to Nacre default</button></div>
+      </div>
+
+      <!-- big live stage: real output aspect, bar + desktop, target highlighted -->
+      <div class="wall" style="height: 380px; border-radius: 20px; position: relative; overflow: hidden; flex-shrink: 0;">
+        <div style="position: absolute; left: 0; right: 0; top: 0; height: 30px; background: rgba(9,18,17,0.92); display: flex; align-items: center; justify-content: space-between; padding: 0 14px; font-size: 12px; color: #cfe3dd;">
+          <span>1 · 2 · 3</span><span style="color: #7fdcc8;">Desktop</span>
+          <span style="padding: 2px 8px; border-radius: 8px; outline: 2px solid #6fd3bf; outline-offset: 2px; color: #eef6f3;">10:42</span>
+        </div>
+        <div style="position: absolute; left: 44px; top: 70px; padding: 10px 14px; border-radius: 14px; outline: 2px dashed rgba(111,211,191,0.9); outline-offset: 6px; text-shadow: 0 2px 14px rgba(0,0,0,0.5);">
+          <div style="font-family: 'Outfit', sans-serif; font-weight: 200; font-size: 84px; line-height: 1; letter-spacing: -2px;">10:42</div>
+          <div style="font-size: 15px; margin-top: 6px; color: #e4f1ed;">Tuesday, 27 October</div>
+        </div>
+        <div style="position: absolute; right: 14px; bottom: 12px; font-size: 12px; background: rgba(0,0,0,0.45); padding: 4px 10px; border-radius: 8px;">Your screen · 2880 × 1800</div>
+      </div>
+
+      <!-- both forms side by side -->
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px;">
+        <div style="background: rgba(255,255,255,0.03); border-radius: 18px; padding: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;"><div style="font-size: 15px; font-weight: 600;">In the bar</div><div style="width: 40px; height: 24px; border-radius: 12px; background: #6fd3bf; position: relative;"><div style="position: absolute; right: 3px; top: 3px; width: 18px; height: 18px; border-radius: 9px; background: #0b1715;"></div></div></div>
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px;">
+            <div style="height: 70px; border-radius: 14px; background: rgba(255,255,255,0.05); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;"><span style="font-size: 15px;">10:42:07</span><span style="font-size: 11px; color: #a9bcb6;">Seconds</span></div>
+            <div style="height: 70px; border-radius: 14px; background: rgba(111,211,191,0.14); outline: 2px solid #6fd3bf; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;"><span style="font-size: 15px;">10:42</span><span style="font-size: 11px; color: #9be4d4;">Time</span></div>
+            <div style="height: 70px; border-radius: 14px; background: rgba(255,255,255,0.05); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;"><span style="font-size: 15px;">10:42 · Tue 27</span><span style="font-size: 11px; color: #a9bcb6;">Time + date</span></div>
+          </div>
+        </div>
+        <div style="background: rgba(255,255,255,0.03); border-radius: 18px; padding: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;"><div style="font-size: 15px; font-weight: 600;">On the desktop</div><div style="width: 40px; height: 24px; border-radius: 12px; background: #6fd3bf; position: relative;"><div style="position: absolute; right: 3px; top: 3px; width: 18px; height: 18px; border-radius: 9px; background: #0b1715;"></div></div></div>
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px;">
+            <div class="wall" style="height: 70px; border-radius: 14px; outline: 2px solid #6fd3bf; display: flex; align-items: center; justify-content: center; font-family: 'Outfit', sans-serif; font-weight: 200; font-size: 30px; text-shadow: 0 1px 8px rgba(0,0,0,0.6);">10:42</div>
+            <div class="wall" style="height: 70px; border-radius: 14px; display: flex; align-items: center; justify-content: center;"><svg width="54" height="54" viewBox="0 0 54 54" aria-hidden="true"><circle cx="27" cy="27" r="24" fill="rgba(10,22,20,0.6)"></circle><line x1="27" y1="27" x2="16" y2="21" stroke="#eef6f3" stroke-width="3" stroke-linecap="round"></line><line x1="27" y1="27" x2="19" y2="11" stroke="#eef6f3" stroke-width="2" stroke-linecap="round"></line><circle cx="27" cy="27" r="2.5" fill="#6fd3bf"></circle></svg></div>
+            <div class="wall" style="height: 70px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-family: 'Outfit', sans-serif; font-size: 26px; line-height: 0.9; text-shadow: 0 1px 8px rgba(0,0,0,0.6);">10<br>42</div>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 11px; color: #a9bcb6; margin-top: 6px; padding: 0 4px;"><span>Digital</span><span>Analog</span><span>Minimal</span></div>
+        </div>
+      </div>
+
+      <!-- settings as real segmented controls -->
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <div style="font-size: 14px; color: #cfe3dd;">Open its dropdown on</div>
+        <div style="display: flex; background: rgba(255,255,255,0.05); border-radius: 14px; padding: 4px;">
+          <button style="height: 32px; padding: 0 16px; border: 0; border-radius: 10px; background: #6fd3bf; color: #0b1715; font: 600 13px 'IBM Plex Sans';">Click</button>
+          <button style="height: 32px; padding: 0 16px; border: 0; border-radius: 10px; background: transparent; color: #cfe3dd; font: 500 13px 'IBM Plex Sans';">Hover</button>
+        </div>
+        <div style="margin-left: auto; font-size: 13px; color: #7fdcc8;">Advanced ›</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

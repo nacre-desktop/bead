@@ -41,31 +41,27 @@ local function desktop(props,_settings,_data)
     local slot=props.instance.slot or {w=360,h=184}
     local rows=ui.resolve_for_check(ui.bind("notifications.rows")) or {}
     local count=math.min(3,#rows)
-    local style=props.form_style or "stack"
     local notices={}
     for i=1,count do
         local n=rows[i]
-        table.insert(notices,ui.Row{id="notice-"..i,width="fill",height=46,gap=kit.tokens.spacing.sm,align="center",
-            radius=kit.tokens.radii.medium,padding_left=kit.tokens.spacing.sm,padding_right=kit.tokens.spacing.sm,
-            fill=i==1 and "surfaceContainerHigh" or "surfaceContainer",
-            n.icon_path and n.icon_path~="" and ui.Image{id="app-icon",icon=n.icon_path,width=30,height=30,aria_label=n.app} or
-                ui.Text{id="app-icon-fallback",text="notifications",family="Material Symbols Rounded",font_size=kit.tokens.icons.small,width=30,height=30,color="primary"},
-            ui.Column{id="copy",width=0,grow=1,justify="center",gap=2,
-                ui.Text{id="app",text=n.app or "Notification",width="fill",height=18,font_size=kit.tokens.text.caption*4/3,color="primary"},
-                ui.Text{id="summary",text=n.summary or "",width="fill",height=20,font_size=kit.tokens.text.body*4/3,color="onSurface"}},
-            kit.IconButton{id="dismiss",text="close",width=30,height=30,aria_label="Dismiss notification",
-                on_activate=ui.action("notifications.dismiss",n.key or n.id)}})
+        local latest=i==1
+        notices[#notices+1]=visual.glass("notice-"..i,"fill",latest and 76 or 52,
+            latest and kit.tokens.spacing.md or kit.tokens.spacing.sm,{
+                ui.Row{id="notice-content",width="fill",height="fill",gap=kit.tokens.spacing.sm,align="center",
+                    n.icon_path and n.icon_path~="" and ui.Image{id="app-icon",icon=n.icon_path,width=latest and 38 or 32,height=latest and 38 or 32,aria_label=n.app} or
+                        ui.Text{id="app-icon-fallback",text="notifications",family="Material Symbols Rounded",font_size=kit.tokens.icons.small,width=32,height=32,color="primary"},
+                    ui.Column{id="copy",width=0,grow=1,justify="center",gap=kit.tokens.spacing.xs,
+                        ui.Row{id="heading",width="fill",height=18,align="center",
+                            ui.Text{id="app",text=n.app or "",width=0,grow=1,height=18,font_size=kit.tokens.text.body*4/3,font_weight=600,color=visual.text},
+                            latest and ui.Text{id="age",text=n.time_str or "",width=36,height=18,font_size=kit.tokens.text.caption*4/3,color=visual.secondary} or nil},
+                        ui.Text{id="summary",text=(n.summary or "")..((n.body or "")~="" and " · "..n.body or ""),width="fill",height=latest and 36 or 20,font_size=latest and kit.tokens.text.body*4/3 or kit.tokens.text.caption*4/3,color=latest and "onSurfaceVariant" or visual.secondary}},
+                    latest and kit.IconButton{id="dismiss",text="close",width=30,height=30,aria_label=ui.tr("bead.notifications.dismiss"),
+                        on_activate=ui.action("notifications.dismiss",n.key or n.id)} or nil}
+            })
     end
-    if #notices==0 then table.insert(notices,ui.Text{id="empty",text="You're all caught up",width="fill",height=30,font_size=kit.tokens.text.body*4/3,color="onSurfaceVariant"}) end
-    local action=popouts and ui.action("status.pill.open","notifications") or nil
-    return ui.Box{id="notifications-desktop",width=slot.w,height=slot.h,padding=kit.tokens.spacing.md,radius=kit.tokens.radii.large,
-        fill=style=="pearl" and "surfaceContainerHigh" or "surfaceContainer",on_activate=action,
-        ui.Column{id="notification-stack",width="fill",height="fill",gap=kit.tokens.spacing.xs,
-            ui.Row{id="heading",width="fill",height=26,gap=kit.tokens.spacing.sm,align="center",
-                status_glyph("glyph","notifications","notifications"),
-                ui.Text{id="title",text="Recent notifications",width=0,grow=1,font_size=kit.tokens.text.title*4/3,color="onSurface"},
-                ui.Text{id="count",text=tostring(#rows),font_size=kit.tokens.text.caption*4/3,color="secondary"}},
-            table.unpack(notices)}}
+    if #notices==0 then notices[1]=ui.Text{id="empty",text="",width="fill",height=20} end
+    return ui.Column{id="notification-stack",width=slot.w,height=slot.h,gap=kit.tokens.spacing.sm,
+        table.unpack(notices)}
 end
 local function style(title,preferred,render) return {title=title,min_span=1,max_span=60,preferred_span=preferred,render=render} end
 local function count_style()
@@ -77,6 +73,6 @@ return {id="notifications",title="Notifications",icon="notifications",category="
     forms={bar={default_style="icon+value",styles={icon=style("Icon",1,bar),["icon+value"]=count_style(),["icon+text"]=style("Icon + text",3,bar)}},
         desktop={default_style="stack",styles={summary={title="Stored summary",min_span=1,max_span=1200,preferred_span=320,preferred_height=80,hidden=true,render=function(p,s,d) p.form_style="stack"; return desktop(p,s,d) end},
             stack={title="Notification stack",min_span=1,max_span=1200,preferred_span=360,preferred_height=184,render=function(p,s,d) p.form_style="stack"; return desktop(p,s,d) end},
-            pearl={title="Pearl stack",min_span=1,max_span=1200,preferred_span=360,preferred_height=184,render=function(p,s,d) p.form_style="pearl"; return desktop(p,s,d) end}}},
+            pearl={title="Legacy notification stack",min_span=1,max_span=1200,preferred_span=360,preferred_height=184,hidden=true,render=function(p,s,d) p.form_style="stack"; return desktop(p,s,d) end}}},
         panel={styles={notifications={view="notifications"}}}}
 }

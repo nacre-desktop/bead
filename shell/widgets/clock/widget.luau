@@ -9,6 +9,7 @@ local t=c.t
 local status_glyph=c.status_glyph
 local visual=require("../desktop-visuals")
 local clock_font="IBM Plex Sans"
+local display_font=visual.display_font
 local time_max=math.max(t.clock_min_width,ui.text_width("23:59",clock_font,t.clock_font),
     ui.text_width("11:59 PM",clock_font,t.clock_font),ui.text_width("12:59 PM",clock_font,t.clock_font))
 local seconds_max=math.max(ui.text_width("23:59:59",clock_font,t.clock_font),ui.text_width("12:59:59 PM",clock_font,t.clock_font))
@@ -95,6 +96,7 @@ local function desktop(props,_settings,_data)
         time=clock_with_seconds(ui.resolve_for_check(ui.bind("bar.clock.text")) or "",
             ui.resolve_for_check(ui.bind("bead.desktop.clock.seconds")) or "")
     end
+    local visible_time=tostring(ui.resolve_for_check(time) or "")
     local iso=ui.resolve_for_check(ui.bind("bead.desktop.clock.date")) or ""
     local year,month,day=string.match(iso,"^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
     local weekday=""
@@ -104,28 +106,58 @@ local function desktop(props,_settings,_data)
         local zeller=(day+math.floor(13*(month+1)/5)+year+math.floor(year/4)-math.floor(year/100)+math.floor(year/400))%7
         weekday=({[0]="Saturday",[1]="Sunday",[2]="Monday",[3]="Tuesday",[4]="Wednesday",[5]="Thursday",[6]="Friday"})[zeller]
     end
-    local date_line=weekday~="" and (weekday.." · "..iso) or iso
+    local _,month_text,day_text=string.match(iso,"^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+    local months={"January","February","March","April","May","June","July","August","September","October","November","December"}
+    local month=tonumber(month_text)
+    local date_line=weekday~="" and month and (weekday..", "..tonumber(day_text).." "..months[month]) or iso
     if style=="analog" then
         local seconds=ui.resolve_for_check(ui.bind("bead.desktop.clock.seconds")) or "00:00:00"
+        local hours,minutes=string.match(visible_time,"^(%d%d?):(%d%d)")
+        hours,minutes=tonumber(hours) or 0,tonumber(minutes) or 0
         local second=tonumber(string.match(seconds,"%d%d$")) or 0
-        local minute=tonumber(string.match(seconds,":(%d%d):")) or 0
-        local angle=ui.animate("wall-clock-second",second*6,1,"linear")
-        return ui.Box{id="clock-analog",width=w,height=h,fill="transparent",on_activate=action,
-            ui.Arc{id="dial",position="absolute",left=8,top=8,width=h-16,height=h-16,start_angle=-90,sweep_angle=360,stroke_width=3,color="primary",round_caps=true},
-            ui.Arc{id="minute-hand",position="absolute",left=h*.22,top=h*.22,width=h*.56,height=h*.56,start_angle=-90,sweep_angle=ui.animate("wall-clock-minute",minute*6+second/10,.12,"linear"),stroke_width=5,color="secondary",round_caps=true},
-            ui.Arc{id="second-hand",position="absolute",left=h*.32,top=h*.32,width=h*.36,height=h*.36,start_angle=-90,sweep_angle=angle,stroke_width=3,color="tertiary",round_caps=true},
+        local clock_seconds=hours*3600+minutes*60+second
+        local second_angle=ui.animate("wall-clock-second",clock_seconds*6,1,"linear")
+        local minute_angle=ui.animate("wall-clock-minute",clock_seconds*.1,1,"linear")
+        local hour_angle=ui.animate("wall-clock-hour",clock_seconds/120,1,"linear")
+        local dial_left,dial_size=8,h-16
+        local function hand(id,degrees,length,width,color)
+            local radians=math.rad(degrees-90)
+            return ui.Polyline{id=id,position="absolute",left=dial_left,top=dial_left,width=dial_size,height=dial_size,
+                points={{.5,.5},{.5+math.cos(radians)*length,.5+math.sin(radians)*length}},
+                stroke_width=width,round_caps=true,color=color}
+        end
+        local ticks={}
+        for index=0,59 do
+            local angle=math.rad(index*6-90)
+            local major=index%5==0
+            local outer=major and .46 or .465
+            local inner=major and .39 or .435
+            table.insert(ticks,ui.Polyline{id="tick-"..tostring(index),position="absolute",left=dial_left,top=dial_left,
+                width=dial_size,height=dial_size,points={{.5+math.cos(angle)*outer,.5+math.sin(angle)*outer},
+                    {.5+math.cos(angle)*inner,.5+math.sin(angle)*inner}},stroke_width=major and 4 or 2,
+                round_caps=true,color=major and ui.alpha("onSurface",.85) or ui.alpha("onSurface",.48)})
+        end
+        return ui.Box{id="clock-analog",width=w,height=h,fill=visual.glass_fill,radius=h/2,
+            border_width=1,border_color=visual.glass_border,on_activate=action,
+            table.unpack(ticks),
+            hand("hour-hand",hour_angle,.26,7,"onSurface"),
+            hand("minute-hand",minute_angle,.37,4.5,"onSurface"),
+            hand("second-hand",second_angle,.42,2,"primary"),
+            ui.Box{id="hand-pin",position="absolute",left=h/2-5,top=h/2-5,width=10,height=10,radius=5,fill="primary"},
             ui.Column{id="dial-caption",position="absolute",left=h+kit.tokens.spacing.lg,top=0,width=w-h-kit.tokens.spacing.lg,height=h,justify="center",gap=kit.tokens.spacing.sm,
                 ui.Text{id="weekday",text=date_line,width="fill",height=28,font_size=kit.tokens.text.title*4/3,color="primary"},
                 ui.Text{id="digital-time",text=time,width="fill",height=56,font_size=kit.tokens.text.headline*2,color="onSurface"}}}
     elseif style=="minimal" then
+        local hour,minute=string.match(visible_time,"^(%d%d?):(%d%d)")
         return ui.Column{id="clock-minimal",width=w,height=h,justify="center",gap=kit.tokens.spacing.xs,on_activate=action,
-            ui.Text{id="time",text=time,width="fill",height=h*.58,font_size=kit.tokens.text.headline*2,color="onSurface"},
-            ui.Text{id="date",text=date_line,width="fill",height=28,font_size=kit.tokens.text.title*4/3,color="primary"}}
+            visual.display("hour",hour or visible_time,"fill",h*.38,math.min(110,h*.42),"onSurface"),
+            visual.display("minute",minute or "","fill",h*.38,math.min(110,h*.42),"primary"),
+            ui.Text{id="date",text=weekday,width="fill",height=24,font_size=kit.tokens.text.body*4/3,color="secondary"}}
     end
-    return ui.Box{id="clock-desktop",width=w,height=h,padding=kit.tokens.spacing.lg,radius=kit.tokens.radii.large,fill="surfaceContainer",on_activate=action,
+    return ui.Box{id="clock-desktop",width=w,height=h,padding=kit.tokens.spacing.lg,radius=kit.tokens.radii.large,fill=visual.glass_fill,border_width=1,border_color=visual.glass_border,on_activate=action,
         ui.Column{id="clock-content",width="fill",height="fill",justify="center",gap=kit.tokens.spacing.xs,
             ui.Text{id="weekday",text=weekday,width="fill",height=26,font_size=kit.tokens.text.body*4/3,color="primary"},
-            ui.Text{id="time",text=time,width="fill",height=h*.52,font_size=kit.tokens.text.headline*2,color="onSurface"},
+            visual.display("time",time,"fill",h*.52,math.min(120,h*.6),"onSurface"),
             ui.Text{id="date",text=iso,width="fill",height=24,font_size=kit.tokens.text.body*4/3,color="onSurfaceVariant"}}}
 end
 local function bar_style(title,style,preferred,requires)
@@ -139,8 +171,8 @@ end
 local function preferred_span(width)
     return math.ceil(reserve_clock(width)/32)
 end
-local function desktop_style(title,style,preferred,requires)
-    return {title=title,min_span=1,max_span=1200,preferred_span=preferred,preferred_height=190,requires=requires,render=function(props,settings,data)
+local function desktop_style(title,style,preferred,requires,preferred_height)
+    return {title=title,min_span=1,max_span=1200,preferred_span=preferred,preferred_height=preferred_height or 190,requires=requires,render=function(props,settings,data)
         props.form_style=style
         return desktop(props,settings,data)
     end}
@@ -153,8 +185,8 @@ return {id="clock",title="Clock",icon="schedule",category="bar",data={topics={},
         time={title="Stored time",min_span=1,max_span=1200,preferred_span=220,preferred_height=92,hidden=true,render=function(p,s,d) p.form_style="digital"; return desktop(p,s,d) end},
         ["time+date"]={title="Stored time and date",min_span=1,max_span=1200,preferred_span=360,preferred_height=92,hidden=true,requires={"bead.desktop.clock.date"},render=function(p,s,d) p.form_style="digital"; return desktop(p,s,d) end},
         seconds={title="Stored seconds",min_span=1,max_span=1200,preferred_span=240,preferred_height=92,hidden=true,requires={"bead.desktop.clock.seconds"},render=function(p,s,d) p.form_style="seconds"; return desktop(p,s,d) end},
-        digital=desktop_style("Glass digital","digital",420,{"bead.desktop.clock.date"}),
-        analog=desktop_style("Analog dial","analog",420,{"bead.desktop.clock.seconds","bead.desktop.clock.date"}),
-        minimal=desktop_style("Minimal type","minimal",420,{"bead.desktop.clock.date"}),
+        digital=desktop_style("A · Digital","digital",420,{"bead.desktop.clock.date"}),
+        analog=desktop_style("B · Analog dial","analog",420,{"bead.desktop.clock.seconds","bead.desktop.clock.date"},300),
+        minimal=desktop_style("C · Minimal type","minimal",420,{"bead.desktop.clock.date"}),
     }},panel={styles={calendar={view="calendar"}}}}
 }

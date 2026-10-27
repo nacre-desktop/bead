@@ -1,3 +1,12 @@
+## 2026-10-27 — B0161 widget reference replacement (in progress)
+
+Rendered all six owner-approved HTML boards on the desktop test machine at their
+original 1440×520 CSS size with the supplied forest wallpaper. Replaced the first
+clock/battery desktop styles with shared palette glass/display treatment, and
+removed clipping from live style miniatures. Full Bead CI is running on dev-2.
+Bead board captures, QML parity, widget memory and 60/120 Hz timing remain open.
+[B0161 spec and evidence](specs/0161-widget-reference.md).
+
 ## 2026-10-27 — B0152 Widgets (design and private captures complete; performance and parity open)
 
 Desktop forms and the both-form Widgets gallery are implemented; 28 CPU captures

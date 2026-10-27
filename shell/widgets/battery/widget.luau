@@ -24,27 +24,35 @@ local function desktop(props,_settings,_data)
     local value=ui.resolve_for_check(ui.bind("bead.desktop.battery.value")) or "0%"
     local percent=tonumber(string.match(tostring(value),"%d+")) or 0
     local w,h=visual.slot(props.instance,320,190)
-    local gauge=visual.ring("battery-gauge",math.min(h-24,136),percent,"Battery",nil)
+    local gauge=visual.ring("battery-gauge",math.min(h,280),percent,"",nil)
     if style=="frameless" then
-        return ui.Row{id="battery-wallpaper",width=w,height=h,fill="transparent",align="center",gap=kit.tokens.spacing.lg,
-            gauge,ui.Column{id="battery-copy",width="fill",height="fill",justify="center",gap=kit.tokens.spacing.xs,
-                ui.Text{id="value",text=value,width="fill",height=66,font_size=kit.tokens.text.headline*2,color="onSurface"},
-                ui.Text{id="remaining",text="Power remaining",width="fill",height=24,font_size=kit.tokens.text.body*4/3,color="onSurfaceVariant"}}}
+        return ui.Column{id="battery-line",width=w,height=h,fill="transparent",justify="center",gap=kit.tokens.spacing.sm,
+            ui.Row{id="battery-reading",width="fill",height=104,align="baseline",gap=kit.tokens.spacing.sm,
+                visual.display("value",tostring(percent),108,104,96,"onSurface"),
+                ui.Text{id="suffix",text="% battery",font_size=kit.tokens.text.body*4/3,color="onSurface"}},
+            ui.Box{id="battery-track",width=300,height=4,fill=ui.alpha("onSurface",.25),radius=2,
+                ui.Box{id="battery-fill",position="absolute",left=0,top=0,width=300*percent/100,height=4,fill="primary",radius=2}}}
     end
-    return ui.Box{id="battery-desktop",width=w,height=h,padding=kit.tokens.spacing.md,radius=kit.tokens.radii.large,
-        fill=style=="pearl" and "surfaceContainerHigh" or "surfaceContainer",on_activate=popouts and ui.action("status.pill.open","battery") or nil,
-        ui.Row{id="content",width="fill",height="fill",gap=kit.tokens.spacing.md,align="center",gauge,
-            ui.Column{id="labels",width="fill",justify="center",gap=kit.tokens.spacing.sm,
-                ui.Text{id="title",text="Battery",font_size=kit.tokens.text.title*4/3,color="onSurface"},
-                ui.Text{id="value",text=value,font_size=kit.tokens.text.headline*4/3,color="primary"},
-                ui.Text{id="remaining",text="Time remaining",font_size=kit.tokens.text.body*4/3,color="onSurfaceVariant"}}}}
+    if style=="card" then
+        return visual.glass("battery-desktop",w,h,kit.tokens.spacing.lg,{
+            ui.Row{id="battery-heading",width="fill",height=24,align="center",justify="space-between",
+                ui.Text{id="title",text="Battery",font_size=kit.tokens.text.body*4/3,color="secondary"},
+                ui.Text{id="charging-note",text="",font_size=kit.tokens.text.caption*4/3,color="primary"}},
+            visual.display("value",value,"fill",96,72,"onSurface"),
+            ui.Box{id="battery-track",width="fill",height=12,fill=ui.alpha("onSurface",.12),radius=6,
+                ui.Box{id="battery-fill",position="absolute",left=0,top=0,width=(w-52)*percent/100,height=12,fill="primary",radius=6}},
+            ui.Text{id="charging-note",text="",width="fill",height=20,font_size=kit.tokens.text.caption*4/3,color="secondary"}})
+    end
+    return ui.Column{id="battery-ring-layout",width=w,height=h,fill="transparent",align="center",justify="center",
+            ui.Box{id="battery-ring",width=math.min(h,280),height=math.min(h,280),fill="transparent",gauge}}
 end
 local function style(title,preferred,render) return {title=title,min_span=1,max_span=60,preferred_span=preferred,render=render} end
 return {id="battery",title="Battery",icon="battery_full",category="bar",data={topics={},actions={}},settings={},defaults={},budget={fps_active=0,fps_idle=0,pause_on={"fullscreen","lock","battery_saver"}},
     forms={bar={default_style="icon+value",styles={icon=style("Icon",1,bar),["icon+value"]=style("Icon + value",2,bar),["icon+text"]=style("Icon + text",2,bar)}},
         desktop={default_style="ring",styles={status={title="Stored status",min_span=1,max_span=1200,preferred_span=300,preferred_height=120,hidden=true,render=function(p,s,d) p.form_style="ring"; return desktop(p,s,d) end},
-            ring={title="Orbit ring",min_span=1,max_span=1200,preferred_span=320,preferred_height=190,render=function(props,s,d) props.form_style="ring"; return desktop(props,s,d) end},
-            pearl={title="Pearl gauge",min_span=1,max_span=1200,preferred_span=320,preferred_height=190,render=function(props,s,d) props.form_style="pearl"; return desktop(props,s,d) end},
-            frameless={title="Wallpaper type",min_span=1,max_span=1200,preferred_span=420,preferred_height=190,render=function(props,s,d) props.form_style="frameless"; return desktop(props,s,d) end}}},
+            ring={title="A · Big ring",min_span=1,max_span=1200,preferred_span=320,preferred_height=300,render=function(props,s,d) props.form_style="ring"; return desktop(props,s,d) end},
+            card={title="B · Glass card",min_span=1,max_span=1200,preferred_span=360,preferred_height=220,render=function(props,s,d) props.form_style="card"; return desktop(props,s,d) end},
+            pearl={title="Legacy gauge alias",min_span=1,max_span=1200,preferred_span=320,preferred_height=220,hidden=true,render=function(props,s,d) props.form_style="card"; return desktop(props,s,d) end},
+            frameless={title="C · Minimal line",min_span=1,max_span=1200,preferred_span=420,preferred_height=190,render=function(props,s,d) props.form_style="frameless"; return desktop(props,s,d) end}}},
         panel={styles={battery={view="battery"}}}}
 }

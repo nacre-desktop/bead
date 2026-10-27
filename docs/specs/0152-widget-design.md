@@ -17,7 +17,7 @@ Memory budget: at most 2 MiB unreclaimable for the always-on widget system acros
 
 Saved legacy style IDs remain hidden aliases and map into the new desktop forms, so existing layouts continue to load without showing duplicate choices. The wallpaper preview resolves the `presentation.json` poster through the existing icon-thumbnail attachment path.
 
-Capture evidence: 28 Bead CPU screenshots at 2880×1800, scale 1.5, use the owner forest wallpaper; capture-safety completed with 76 watchdog samples, zero OOM events, and minimum `MemAvailable` 10,555,992 KiB. The gallery, each widget detail/style and Advanced page are in `docs/specs/evidence/0152/captures/bead/`; `captures/index.html` is the contact index. These are visual captures, not widget memory or frame-pacing measurements.
+Capture evidence: B0161 supersedes the rejected B0152 visuals. The 28 B0152 screenshots and contact sheet were deleted in B0161 to remove the rejected presentation; the historical capture-safety result above is retained as a record, not as design acceptance.
 
 Known source limits: battery data has no remaining-time estimate or charging pulse. The current desktop snapshot adapter does not populate Bluetooth devices/battery, Wi-Fi network/signal, notification rows or update details, so those forms render empty/default data until their published contracts supply it. The output source reports physical and logical dimensions but no fractional display-scale field. The selected style is outlined in the preview; niri owns the visible blue focus ring around the app and Bead cannot remove it.
 

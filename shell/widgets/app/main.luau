@@ -198,6 +198,7 @@ local categories={
     {id="containers",label="Containers"},
     {id="yours",label="Your widgets"},
 }
+local widget_nav_ids={"clock","battery","sound","power","notifications","bluetooth","wifi","launcher","updates"}
 local function in_document(widget)
     for group,entry in doc.widgets or {} do
         if entry.widget==widget then return true end
@@ -300,14 +301,7 @@ local function gallery()
             kit.TextInput{id="gallery-search",width="fill",height=spacing.huge+spacing.md,text=ui.bind("widgets.search"),
                 placeholder="Find a widget",fill="surface",border_width=1,border_color="outlineVariant",aria_label="Find a widget"},
             ui.Scroll{id="category-scroll",width="fill",grow=1,scroll=ui.bind("widgets.nav.scroll"),
-                ui.Column(category_nodes)},
-            ui.Column{id="dropdown-default",width="fill",shrink=0,gap=spacing.sm,
-                label("trigger-label","Default dropdown trigger",text.caption*4/3,"onSurfaceVariant",{height=20}),
-                ui.Row{id="trigger-choices",width="fill",height=spacing.huge+spacing.xs,gap=spacing.sm,
-                    button("trigger-click","Click",edit({op="default-trigger",value="click"}),{
-                        width=(RAIL-2*spacing.md-spacing.sm)/2,selected=(doc.dropdown_trigger or "click")=="click"}),
-                    button("trigger-hover","Hover",edit({op="default-trigger",value="hover"}),{
-                        width=(RAIL-2*spacing.md-spacing.sm)/2,selected=doc.dropdown_trigger=="hover"})}}},
+                ui.Column(category_nodes)}},
         ui.Column{id="gallery-content",width="fill",height="fill",grow=1,gap=spacing.md,
             ui.Row{id="gallery-title-row",width="fill",height=54,shrink=0,align="center",
                 ui.Column{id="gallery-title-copy",width=0,grow=1,gap=spacing.xs,
@@ -383,7 +377,7 @@ local function style_tile(widget,placement,package,style_id,style,settings,is_se
         aria_label=style.title,on_activate=edit({op="style",widget=widget,form=placement,style=style_id}),
         ui.Column{id="style-card",width="fill",height="fill",gap=spacing.xs,align="center",
             ui.Box{id="style-preview",width="fill",height=preview_height+10,align="center",justify="center",
-                radius=kit.tokens.radii.small,fill="surfaceContainerHighest",clip_children=true,tile_preview},
+                radius=kit.tokens.radii.small,fill="surfaceContainerHighest",clip_children=false,tile_preview},
             label("style-title",style.title,text.caption*4/3,"onSurface",{width="fill",height=18,text_align="center"})}}
 end
 local function style_tiles(widget,placement,package,style_id,settings)
@@ -412,7 +406,8 @@ local function detail()
     local instance_groups=groups_for(selected)
     local settings=active_settings(package,entry,instance)
     local desktop_available=package.forms.desktop~=nil
-    local stage_w=math.max(1,width-2*spacing.lg)
+    local detail_width=math.max(1,width-RAIL-spacing.xl)
+    local stage_w=math.max(1,detail_width-2*spacing.lg)
     local stage_h=math.min(stage_w*screen_h/screen_w,math.max(spacing.huge*4,height*.38))
     local stage_scale=math.min(stage_w/screen_w,stage_h/screen_h)
     local mini_w,mini_h=screen_w*stage_scale,screen_h*stage_scale
@@ -479,10 +474,20 @@ local function detail()
                 on_activate=edit({op="toggle-form",widget=selected,form="bar",enabled=not bar_enabled})},
             desktop_available and kit.ToggleRow{id="desktop-enabled",width="fill",label="Show on the desktop",checked=desktop_enabled,enabled=not busy,
                 on_activate=edit({op="toggle-form",widget=selected,form="desktop",enabled=not desktop_enabled})} or nil},
+        ui.Column{id="dropdown-trigger",width="fill",gap=spacing.xs,padding=spacing.md,
+            radius=kit.tokens.radii.medium,fill="surfaceContainer",
+            label("trigger-label","Open its dropdown on",text.body*4/3,"onSurface",{height=22}),
+            ui.Row{id="trigger-choices",width="fill",height=spacing.huge+spacing.xs,gap=spacing.xs,
+                button("trigger-click","Click",edit({op="default-trigger",value="click"}),{
+                    width=0,grow=1,selected=(doc.dropdown_trigger or "click")=="click"}),
+                button("trigger-hover","Hover",edit({op="default-trigger",value="hover"}),{
+                    width=0,grow=1,selected=doc.dropdown_trigger=="hover"})}},
         ui.Row{id="form-style-columns",width="fill",gap=spacing.md,
-            ui.Column{id="bar-style-section",width=0,grow=1,gap=spacing.sm,
+            ui.Column{id="bar-style-section",width=0,grow=1,gap=spacing.sm,padding=spacing.md,
+                radius=kit.tokens.radii.medium,fill="surfaceContainer",
                 label("bar-style-heading","Bar style",text.body*4/3,"onSurface",{height=22}),style_tiles(selected,"bar",package,bar_style,settings)},
-            desktop_available and ui.Column{id="desktop-style-section",width=0,grow=1,gap=spacing.sm,
+            desktop_available and ui.Column{id="desktop-style-section",width=0,grow=1,gap=spacing.sm,padding=spacing.md,
+                radius=kit.tokens.radii.medium,fill="surfaceContainer",
                 label("desktop-style-heading","Desktop style",text.body*4/3,"onSurface",{height=22}),style_tiles(selected,"desktop",package,desktop_style,settings)} or nil}}
     if #instance_groups>1 then
         local options={id="instance-options",width="fill",gap=spacing.sm}
@@ -501,12 +506,52 @@ local function detail()
             #advanced_fields.children>0 and ui.Column{id="advanced-fields",width="fill",gap=spacing.sm,
                 button("advanced-toggle",advanced_open and "Hide advanced" or "Advanced",ui.action("widgets.advanced.toggle"),{fill="transparent"}),
                 advanced_open and advanced_fields or nil} or nil})
+    else
+        local slot=instance and instance.slot or {}
+        table.insert(content_props,ui.Column{id="advanced-section",width="fill",gap=spacing.sm,padding=spacing.md,
+            radius=kit.tokens.radii.medium,fill="surfaceContainer",
+            button("advanced-toggle",advanced_open and "Hide advanced" or "Advanced",ui.action("widgets.advanced.toggle"),{fill="transparent"}),
+            advanced_open and ui.Grid{id="developer-fields",width="fill",columns=2,gap=spacing.md,row_height=38,
+                ui.Column{id="developer-widget",gap=spacing.xs,
+                    label("developer-widget-label","Widget identifier",text.caption*4/3,"onSurfaceVariant",{height=16}),
+                    label("developer-widget-value",selected,text.body*4/3,"onSurface",{height=18})},
+                ui.Column{id="developer-bar-style",gap=spacing.xs,
+                    label("developer-bar-label","Bar style",text.caption*4/3,"onSurfaceVariant",{height=16}),
+                    label("developer-bar-value",bar_style,text.body*4/3,"onSurface",{height=18})},
+                ui.Column{id="developer-desktop-style",gap=spacing.xs,
+                    label("developer-desktop-label","Desktop style",text.caption*4/3,"onSurfaceVariant",{height=16}),
+                    label("developer-desktop-value",desktop_style,text.body*4/3,"onSurface",{height=18})},
+                ui.Column{id="developer-canvas-slot",gap=spacing.xs,
+                    label("developer-slot-label","Desktop position",text.caption*4/3,"onSurfaceVariant",{height=16}),
+                    label("developer-slot-value",tostring(slot.x or 0)..", "..tostring(slot.y or 0),text.body*4/3,"onSurface",{height=18})}} or nil})
     end
     if error_message~="" or message~="" then
         table.insert(content_props,label("save-status",error_message~="" and error_message or message,
             text.caption*4/3,error_message~="" and "error" or "onSurfaceVariant",{width="fill",height=20}))
     end
-    return ui.Column{id="widget-detail",width="fill",height="fill",gap=spacing.md,padding=spacing.lg,
+    local nav={id="widget-list",width="fill",gap=spacing.xs}
+    local nav_query=string.lower(searching or "")
+    for _,id in widget_nav_ids do
+        local row=registry.catalogue[id]
+        local matches=row and (nav_query=="" or string.find(string.lower(row.title),nav_query,1,true)
+            or string.find(string.lower(id),nav_query,1,true))
+        if row and matches then
+            table.insert(nav,ui.Button{id="widget-nav-"..id,width="fill",height=spacing.huge+spacing.sm,padding_left=spacing.sm,
+                radius=kit.tokens.radii.small,fill=selected==id and ui.alpha("primary",.15) or "transparent",
+                hover_fill="surfaceContainerHigh",selected=selected==id,focus_on_pointer=false,
+                aria_label=row.title,on_activate=navigate("select",id),
+                ui.Row{id="widget-nav-content",width="fill",height="fill",align="center",gap=spacing.sm,
+                    ui.Text{id="widget-nav-icon",text=row.icon or "widgets",family="Material Symbols Rounded",font_size=kit.tokens.icons.small,width=22,height=22,color=selected==id and "primary" or "onSurfaceVariant"},
+                    label("widget-nav-title",row.title,text.body*4/3,selected==id and "onSurface" or "onSurfaceVariant",{grow=1,height=20})}})
+        end
+    end
+    return ui.Row{id="widget-detail-layout",width="fill",height="fill",gap=spacing.lg,padding=spacing.lg,
+        ui.Column{id="widget-detail-sidebar",width=RAIL,height="fill",shrink=0,gap=spacing.sm,padding=spacing.md,
+            radius=kit.tokens.radii.medium,fill="surfaceContainer",
+            kit.TextInput{id="widget-list-search",width="fill",height=spacing.huge+spacing.md,text=ui.bind("widgets.search"),
+                placeholder="Find a widget",fill="surface",border_width=1,border_color="outlineVariant",aria_label="Find a widget"},
+            ui.Scroll{id="widget-list-scroll",width="fill",grow=1,scroll=ui.bind("widgets.nav.scroll"),ui.Column(nav)}},
+        ui.Column{id="widget-detail",width=0,grow=1,height="fill",gap=spacing.md,
         ui.Row{id="detail-heading",width="fill",height=54,shrink=0,gap=spacing.md,align="center",
             button("back","arrow_back",navigate("back",selected),{width=spacing.huge+spacing.md,fill="transparent",font_size=kit.tokens.icons.medium,family="Material Symbols Rounded"}),
             ui.Text{id="detail-icon",text=package.icon or "widgets",family="Material Symbols Rounded",font_size=kit.tokens.icons.large,width=36,height=36,color="primary"},
@@ -514,7 +559,7 @@ local function detail()
                 label("detail-title",package.title,text.headline*4/3,"onSurface",{width="fill",height=28}),
                 label("detail-description","Choose a style for each place this widget can appear.",text.caption*4/3,"onSurfaceVariant",{height=18})}},
         ui.Scroll{id="detail-scroll",width="fill",grow=1,scroll=ui.bind("widgets.scroll"),ui.Column(content_props)}
-    }
+    }}
 end
 
 local function metadata()
@@ -523,7 +568,8 @@ local function metadata()
         viewport_width=width,viewport_height=height}}
 end
 
-local app_content=ui.Column{id="widgets-app",width="100%",height="100%",fill="surface",
+local app_content=ui.Column{id="widgets-app",width="100%",height="100%",fill="surface",radius=kit.tokens.radii.large,
+    border_width=1,border_color=ui.alpha("outlineVariant",.55),clip_children=true,
     ui.Column{id="app-header-box",width="fill",height=65,shrink=0,
         ui.Row{id="app-header",width="fill",height=64,shrink=0,align="center",gap=spacing.lg,padding_left=spacing.xl,padding_right=spacing.xl,
             ui.Text{id="app-mark",text="widgets",family="Material Symbols Rounded",font_size=kit.tokens.icons.hero,width=44,height=44,color="primary"},

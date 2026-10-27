@@ -205,6 +205,12 @@ function M.render_bar(document,width,height,factor,selected,style,settings,selec
         for key,value in item.settings or {} do values[key]=value end
         local node=variant.render({instance=item,catalogue=registry.catalogue,render=render,editing=false,
             local_layout=layout.mode=="tiles"},values,{})
+        if node and item.widget==selected and (selected_group==nil or (item.group or item.iid)==selected_group) then
+            node.props=node.props or {}
+            node.props.border_width=2
+            node.props.border_color="primary"
+            node.props.radius=kit.tokens.radii.small
+        end
         if node and entry_candidate and item.iid==entry_candidate.group and item.widget==entry_candidate.widget then
             local marker=node.kind=="group" and group_entry_target(node) or node.props
             if marker then marker.metadata={{widget_entry_source=true,group=entry_candidate.group,widget=item.widget,
@@ -253,12 +259,12 @@ function M.render(id,placement,style,settings,width,height,actual_size)
         local base_height=ui.resolve_for_check((node.props or {}).height) or context.t.status_height
         scale=math.min(1,height/math.max(1,base_height),width/math.max(1,natural))
         prepare(node,scale)
-        return ui.Box{id="preview-"..id,width=width,height=height,align="center",justify="center",clip_children=true,node}
+        return ui.Box{id="preview-"..id,width=width,height=height,align="center",justify="center",clip_children=false,node}
     end
     local instance={iid="preview-"..id,widget=id,host=host,style=style,settings=values,
         slot=placement=="desktop" and {x=0,y=0,w=logical_w,h=logical_h} or {region="left",start=0,span=variant.preferred_span},children={}}
     local node=render_item(package,instance,placement,values,scale)
-    return ui.Box{id="preview-"..id,width=width,height=height,align="center",justify="center",clip_children=true,node}
+    return ui.Box{id="preview-"..id,width=width,height=height,align="center",justify="center",clip_children=false,node}
 end
 
 return M

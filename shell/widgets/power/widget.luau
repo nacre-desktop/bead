@@ -14,31 +14,31 @@ local function bar(props,settings,_data)
     }
 end
 local function desktop(props,_settings,_data)
-    local w,h=visual.slot(props.instance,360,112)
-    local style=props.form_style or "actions"
+    local w,h=visual.slot(props.instance,320,292)
     local actions={{"lock","Lock","lock"},{"suspend","Sleep","bedtime"},{"reboot","Restart","restart_alt"},{"shutdown","Shut down","power_settings_new"}}
     local buttons={}
     local enabled=ui.resolve_for_check(ui.bind("session.enabled"))==true and ui.resolve_for_check(ui.bind("session.busy"))~=true
     local asking=ui.resolve_for_check(ui.bind("session.confirm_action")) or ""
     for _,item in actions do
-        table.insert(buttons,kit.Button{id=item[1],width=style=="compact" and 68 or 76,height=58,padding=kit.tokens.spacing.xs,
-            radius=kit.tokens.radii.medium,fill="surfaceContainerHigh",focus_on_pointer=false,
+        table.insert(buttons,kit.Button{id=item[1],width=0,grow=1,height=64,padding=kit.tokens.spacing.xs,
+            radius=kit.tokens.radii.medium,fill=item[1]=="shutdown" and ui.alpha("error",.2) or ui.alpha("onSurface",.07),focus_on_pointer=false,
             aria_label=item[2],on_activate=enabled and (asking==item[1] and ui.action("session.confirm") or ui.action("session.select",item[1])) or nil,
-            ui.Column{id="action",width="fill",height="fill",align="center",justify="center",gap=kit.tokens.spacing.xs,
-                ui.Text{id="icon",text=item[1],family="Material Symbols Rounded",font_size=kit.tokens.icons.medium,color="primary"},
-                ui.Text{id="label",text=item[2],width="fill",height=18,font_size=kit.tokens.text.caption*4/3,text_align="center",color="onSurface"}}})
+            ui.Text{id="label",text=item[2],width="fill",height=20,font_size=kit.tokens.text.body*4/3,text_align="center",color=item[1]=="shutdown" and "error" or visual.text}})
     end
-    return ui.Box{id="power-desktop",width=w,height=h,padding=kit.tokens.spacing.md,radius=kit.tokens.radii.large,
-        fill="surfaceContainer",ui.Column{id="power-layout",width="fill",height="fill",gap=kit.tokens.spacing.sm,
-            ui.Row{id="heading",width="fill",height=28,gap=kit.tokens.spacing.sm,align="center",
-                status_glyph("glyph","power_settings_new","power","error"),ui.Text{id="title",text="Power",font_size=kit.tokens.text.title*4/3,color="onSurface"}},
-            ui.Row{id="actions",width="fill",height="fill",gap=kit.tokens.spacing.xs,align="center",table.unpack(buttons)}}}
+    return visual.glass("power-desktop",w,h,kit.tokens.spacing.lg,{
+        ui.Column{id="power-layout",width="fill",height="fill",gap=kit.tokens.spacing.md,
+            ui.Row{id="heading",width="fill",height=40,align="center",
+                ui.Text{id="title",text="Power",font_size=kit.tokens.text.title*4/3,color=visual.text}},
+            ui.Column{id="actions",width="fill",height=0,grow=1,gap=kit.tokens.spacing.sm,
+                ui.Row{id="actions-top",width="fill",height=64,gap=kit.tokens.spacing.sm,table.unpack(buttons,1,2)},
+                ui.Row{id="actions-bottom",width="fill",height=64,gap=kit.tokens.spacing.sm,table.unpack(buttons,3,4)}},
+            ui.Text{id="confirm-note",text="Restart and Shut down ask to confirm.",width="fill",height=18,font_size=kit.tokens.text.caption*4/3,color="onSurfaceVariant"}}})
 end
 local function style(title,preferred,render) return {title=title,min_span=1,max_span=60,preferred_span=preferred,render=render} end
 return {id="power",title="Power",icon="power_settings_new",category="bar",data={topics={},actions={}},settings={},defaults={},budget={fps_active=0,fps_idle=0,pause_on={"fullscreen","lock","battery_saver"}},
     forms={bar={default_style="icon",styles={icon=style("Icon",1,bar),["icon+text"]=style("Icon + text",2,bar)}},
         desktop={default_style="actions",styles={button={title="Stored button",min_span=1,max_span=1200,preferred_span=220,preferred_height=92,hidden=true,render=function(p,s,d) p.form_style="actions"; return desktop(p,s,d) end},
-            actions={title="Action card",min_span=1,max_span=1200,preferred_span=360,preferred_height=112,render=function(p,s,d) p.form_style="actions"; return desktop(p,s,d) end},
-            compact={title="Quiet row",min_span=1,max_span=1200,preferred_span=320,preferred_height=92,render=function(p,s,d) p.form_style="compact"; return desktop(p,s,d) end}}},
+            actions={title="Actions card",min_span=1,max_span=1200,preferred_span=320,preferred_height=292,render=desktop},
+            compact={title="Quiet row",min_span=1,max_span=1200,preferred_span=320,preferred_height=92,hidden=true,render=function(p,s,d) p.form_style="compact"; return desktop(p,s,d) end}}},
         panel={styles={session={view="session"}}}}
 }

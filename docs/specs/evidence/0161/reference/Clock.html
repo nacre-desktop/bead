@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clock desktop styles</title>
+</head>
+<body>
+
+
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&amp;family=Outfit:wght@200;300;400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.wall{background-image:url(./wallpaper-nacre-forest.jpg);background-size:cover;background-position:center 40%}
+</style>
+
+<div class="wall" style="width: 1440px; height: 520px; box-sizing: border-box; padding: 48px 56px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; font-family: 'IBM Plex Sans', sans-serif; color: #eef6f3;">
+
+  <!-- A: Digital, frameless on the wallpaper -->
+  <div style="display: flex; flex-direction: column; gap: 14px;">
+    <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #ffffff; background: rgba(0,0,0,0.35); align-self: flex-start; padding: 4px 10px; border-radius: 8px;">A · Digital (frameless)</div>
+    <div style="margin-top: 40px; text-shadow: 0 2px 18px rgba(0,0,0,0.5);">
+      <div style="font-family: 'Outfit', sans-serif; font-weight: 200; font-size: 120px; line-height: 1; letter-spacing: -3px;">10:42</div>
+      <div style="font-size: 20px; margin-top: 8px; color: #e4f1ed;">Tuesday, 27 October</div>
+      <div style="width: 48px; height: 3px; border-radius: 2px; background: #6fd3bf; margin-top: 14px;"></div>
+    </div>
+  </div>
+
+  <!-- B: Analog dial, glass disc -->
+  <div style="display: flex; flex-direction: column; gap: 14px; align-items: center;">
+    <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #ffffff; background: rgba(0,0,0,0.35); align-self: flex-start; padding: 4px 10px; border-radius: 8px;">B · Analog dial</div>
+    <svg width="300" height="300" viewBox="0 0 300 300" role="img" aria-label="Analog clock showing 10:42">
+      <circle cx="150" cy="150" r="140" fill="rgba(10,22,20,0.55)" stroke="rgba(255,255,255,0.12)" stroke-width="1.5"></circle>
+      <g stroke="#e9f4f0" stroke-linecap="round">
+        <line x1="150" y1="22" x2="150" y2="42" stroke-width="4"></line>
+        <line x1="278" y1="150" x2="258" y2="150" stroke-width="4"></line>
+        <line x1="150" y1="278" x2="150" y2="258" stroke-width="4"></line>
+        <line x1="22" y1="150" x2="42" y2="150" stroke-width="4"></line>
+        <line x1="214" y1="39" x2="208" y2="49" stroke-width="2" opacity="0.6"></line>
+        <line x1="261" y1="86" x2="251" y2="92" stroke-width="2" opacity="0.6"></line>
+        <line x1="261" y1="214" x2="251" y2="208" stroke-width="2" opacity="0.6"></line>
+        <line x1="214" y1="261" x2="208" y2="251" stroke-width="2" opacity="0.6"></line>
+        <line x1="86" y1="261" x2="92" y2="251" stroke-width="2" opacity="0.6"></line>
+        <line x1="39" y1="214" x2="49" y2="208" stroke-width="2" opacity="0.6"></line>
+        <line x1="39" y1="86" x2="49" y2="92" stroke-width="2" opacity="0.6"></line>
+        <line x1="86" y1="39" x2="92" y2="49" stroke-width="2" opacity="0.6"></line>
+      </g>
+      <line x1="150" y1="150" x2="90" y2="120" stroke="#eef6f3" stroke-width="7" stroke-linecap="round"></line>
+      <line x1="150" y1="150" x2="104" y2="60" stroke="#eef6f3" stroke-width="4.5" stroke-linecap="round"></line>
+      <line x1="150" y1="170" x2="196" y2="60" stroke="#6fd3bf" stroke-width="2" stroke-linecap="round"></line>
+      <circle cx="150" cy="150" r="7" fill="#6fd3bf"></circle>
+      <text x="150" y="205" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="14" fill="#cfe3dd">TUE 27</text>
+    </svg>
+  </div>
+
+  <!-- C: Minimal large type, stacked -->
+  <div style="display: flex; flex-direction: column; gap: 14px;">
+    <div style="font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #ffffff; background: rgba(0,0,0,0.35); align-self: flex-start; padding: 4px 10px; border-radius: 8px;">C · Minimal type</div>
+    <div style="margin-top: 28px; font-family: 'Outfit', sans-serif; text-shadow: 0 2px 16px rgba(0,0,0,0.5); line-height: 0.92;">
+      <div style="font-size: 132px; font-weight: 300;">10</div>
+      <div style="font-size: 132px; font-weight: 200; color: #9be4d4;">42</div>
+      <div style="font-family: 'IBM Plex Sans', sans-serif; font-size: 16px; letter-spacing: 3px; text-transform: uppercase; margin-top: 12px; color: #e4f1ed;">Tuesday</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
