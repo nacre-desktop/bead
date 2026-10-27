@@ -52,7 +52,8 @@ return {id="title",title="Title",icon="title",category="bar",data={topics={},act
         },
     },
     ui.Button{id="title-band",position="absolute",left="28%",right="28%",top=(header-t.title_height)/2,height=t.title_height,direction="row",justify="center",align="center",fill="transparent",hover_fill="transparent",focus_ring=false,focus_on_pointer=false,activate_on_release=true,edge_hover=true,aria_label=ui.tr("bead.bar.active-window"),on_activate=ui.action("bar.title"),
-        ui.Row{id="title-content",width=animated_width+t.icon_width+t.title_gap,height=t.title_height,justify="center",align="center",gap=t.title_gap,drag_payload=props.instance.iid,
+        -- The drag handle covers the band; it must stay part of the edge-hover target.
+        ui.Row{id="title-content",width=animated_width+t.icon_width+t.title_gap,height=t.title_height,justify="center",align="center",gap=t.title_gap,drag_payload=props.instance.iid,edge_hover=true,
             centered_text{id="title-icon",visible=ui.bind("bead.desktop.titlevisible"),text="desktop_windows",width=t.icon_width,height=24,shrink=0,family="Material Symbols Rounded",font_size=20,color="primary"},
             centered_text{id="title",visible=ui.bind("bead.desktop.titlevisible"),text=shown,height=24,width=animated_width,max_width=t.title_max_width,family="IBM Plex Sans",font_size=t.title_font,text_align="center",color="primary"},
         },
@@ -99,7 +100,7 @@ return {id="title",title="Title",icon="title",category="bar",data={topics={},act
                         ui.Box{id="title-trace",position="absolute",left=7+(cue-10)*(1-dwell)/2,top=31,width=(cue-10)*dwell,height=t.title_trace_height,radius=1,fill=ui.alpha("primary",ui.bind("bar.title.cue.fade"))}}})
             end
             local content={id="title-content",width=content_width,height=t.title_height,gap=gap,align="center",justify="center",
-                drag_payload=props.instance.iid,clip_children=true}
+                drag_payload=props.instance.iid,edge_hover=behavior=="hover",clip_children=true}
             if show_icon then
                 table.insert(content,centered_text{id="title-icon",visible=ui.bind("bead.desktop.titlevisible"),text=glyph,width=icon_width,height=24,shrink=0,family="Material Symbols Rounded",font_size=20,color="primary"})
             end
