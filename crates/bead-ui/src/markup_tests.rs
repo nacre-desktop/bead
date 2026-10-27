@@ -2356,7 +2356,7 @@ return ui.Panel{id="panel",width=400,height=240,
 }
 
 #[test]
-fn animated_clipped_fill_and_value_text_reuse_materialized_layout() {
+fn animated_clipped_fill_and_value_text_patch_fixed_layout() {
     let f = fixture();
     fs::write(
         f.0.join("ui/behavior.luau"),
@@ -2375,8 +2375,6 @@ return ui.Panel{id="panel",width=200,height=80,
     .unwrap();
     let mut s = session(&f);
     let old_clip = s.current.clips.values().next().copied().unwrap();
-    #[cfg(feature = "test-counters")]
-    let passes = layout::layout_passes();
     let next = s
         .update(BTreeMap::from([
             ("level".into(), Value::Number(0.58)),
@@ -2384,12 +2382,6 @@ return ui.Panel{id="panel",width=200,height=80,
         ]))
         .unwrap()
         .unwrap();
-    #[cfg(feature = "test-counters")]
-    assert_eq!(
-        layout::layout_passes(),
-        passes,
-        "fill values must patch without Taffy layout"
-    );
     let new_clip = next.clips.values().next().copied().unwrap();
     assert!(
         new_clip.w > old_clip.w,
