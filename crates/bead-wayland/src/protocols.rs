@@ -124,7 +124,9 @@ mod closed_panel_unmap_tests {
             }
         }
         assert_eq!(frames, 1);
-        assert!(!should_draw_after_callback(false, false, redraw, false, false, false, false));
+        assert!(!should_draw_after_callback(
+            false, false, redraw, false, false, false, false
+        ));
     }
 }
 delegate_noop!(App: ignore ZwpRelativePointerManagerV1);
