@@ -1,6 +1,6 @@
 # B0177 Prepared panel reveals (2026-10-28)
 
-Status: implementation candidate; runtime acceptance is blocked by the private-capture swap gate. B0175 prevents the open pose from appearing before a reveal starts, but dense CPU reveals prepare content again on each slide frame. Prepared layers now retain that first-frame guarantee while reusing rendered content. Full Bead CI passed on code commit `ef2d873d`; control-centre warm-open and close-frame captures remain pending. No live laptop test is included in this unit.
+Status: implementation candidate; runtime acceptance is blocked by the private-capture swap gate. B0175 prevents the open pose from appearing before a reveal starts, but dense CPU reveals prepare content again on each slide frame. Prepared layers now retain that first-frame guarantee while reusing rendered content. Full Bead CI passed on code commit `ef2d873d`; control-centre warm-open and close-frame captures remain pending. QML/Bead motion parity is unverified. No live laptop test is included in this unit.
 
 | Measure | B0175/live reference | Target | Candidate |
 | --- | ---: | ---: | ---: |
