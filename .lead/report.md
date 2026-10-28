@@ -19,4 +19,4 @@ Visual comparison notes against `.lead/reference/App.dc.html` are in `docs/specs
 
 Checks: focused style-hit and unnamed-output fallback tests passed; Settings golden suite 47/47; status-view golden suite 4/4. Full Bead CI on dev-2, container `b0172-widgets-app-20261028-final-ci4`, exited 0; `acceptance.json` records the recipe and result.
 
-Product source lines: 453 added, 127 removed. Fifteen task commits including this report use `[no-publish]`, author/committer `siverteh <92440237+Siverteh@users.noreply.github.com>`, and the Codex Luna trailer.
+Product source lines: 453 added, 127 removed. Every task commit carries `[no-publish]`, the required author/committer identity, and the Codex Luna trailer.
