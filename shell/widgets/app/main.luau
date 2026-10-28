@@ -505,12 +505,12 @@ local function detail()
     local stage_props={id="preview-stage",width="fill",height=stage_h,shrink=0,clip_children=true,
         radius=kit.tokens.radii.medium,fill="surfaceContainerHigh"}
     for _,child in stage_children do table.insert(stage_props,child) end
-    local content_props={id="detail-content",width="fill",gap=spacing.md,
-        ui.Column{id="colour-role-section",width="fill",gap=spacing.sm,padding=spacing.md,
+    local content_props={id="detail-content",width="fill",shrink=0,gap=spacing.md,
+        ui.Column{id="colour-role-section",width="fill",shrink=0,gap=spacing.sm,padding=spacing.md,
             radius=kit.tokens.radii.medium,fill="surfaceContainer",colour_field},
-        label("drag-hint",ui.tr("bead.widgets.drag-hint"),text.caption*4/3,"onSurfaceVariant",{width="fill",height=18}),
+        label("drag-hint",ui.tr("bead.widgets.drag-hint"),text.caption*4/3,"onSurfaceVariant",{width="fill",height=18,shrink=0}),
         ui.Box(stage_props),
-        ui.Row{id="form-enable-row",width="fill",gap=spacing.md,
+        ui.Row{id="form-enable-row",width="fill",shrink=0,gap=spacing.md,
             ui.Column{id="bar-placement-actions",width=0,grow=1,gap=spacing.xs,padding=spacing.sm,
                 radius=kit.tokens.radii.medium,fill="surfaceContainer",
                 kit.ToggleRow{id="bar-enabled",width="fill",label=ui.tr("bead.widgets.in-bar"),checked=bar_enabled,enabled=not busy,
@@ -523,7 +523,7 @@ local function detail()
                     on_activate=edit({op="toggle-form",widget=selected,form="desktop",enabled=not desktop_enabled})},
                 button("desktop-placement",ui.tr(desktop_enabled and "bead.widgets.remove-desktop" or "bead.widgets.add-desktop"),
                     edit({op="toggle-form",widget=selected,form="desktop",enabled=not desktop_enabled}),{width="fill",enabled=not busy})} or nil},
-        ui.Column{id="dropdown-trigger",width="fill",gap=spacing.xs,padding=spacing.md,
+        ui.Column{id="dropdown-trigger",width="fill",shrink=0,gap=spacing.xs,padding=spacing.md,
             radius=kit.tokens.radii.medium,fill="surfaceContainer",
             label("trigger-label","Open its dropdown on",text.body*4/3,"onSurface",{height=22}),
             ui.Row{id="trigger-choices",width="fill",height=spacing.huge+spacing.xs,gap=spacing.xs,
@@ -544,11 +544,11 @@ local function detail()
             table.insert(options,button("instance-"..copy.id,copy.label,navigate("instance",copy.id),{
                 selected=copy.id==group,fill=copy.id==group and ui.alpha("primary",.15) or "surfaceContainer"}))
         end
-        table.insert(content_props,1,ui.Column{id="instance-picker",width="fill",gap=spacing.xs,
+        table.insert(content_props,1,ui.Column{id="instance-picker",width="fill",shrink=0,gap=spacing.xs,
             label("instance-heading","Choose a copy",text.caption*4/3,"onSurfaceVariant",{height=18}),ui.Row(options)})
     end
     if next(settings_package.settings)~=nil then
-        table.insert(content_props,ui.Column{id="settings-section",width="fill",gap=spacing.md,padding=spacing.md,
+        table.insert(content_props,ui.Column{id="settings-section",width="fill",shrink=0,gap=spacing.md,padding=spacing.md,
             radius=kit.tokens.radii.medium,fill="surfaceContainer",
             label("settings-title","Settings",text.title*4/3,"onSurface",{height=24}),
             #fields.children>0 and fields or nil,
@@ -557,7 +557,7 @@ local function detail()
                 advanced_open and advanced_fields or nil} or nil})
     else
         local slot=instance and instance.slot or {}
-        table.insert(content_props,ui.Column{id="advanced-section",width="fill",gap=spacing.sm,padding=spacing.md,
+        table.insert(content_props,ui.Column{id="advanced-section",width="fill",shrink=0,gap=spacing.sm,padding=spacing.md,
             radius=kit.tokens.radii.medium,fill="surfaceContainer",
             button("advanced-toggle",advanced_open and "Hide advanced" or "Advanced",ui.action("widgets.advanced.toggle"),{fill="transparent"}),
             advanced_open and ui.Grid{id="developer-fields",width="fill",columns=2,gap=spacing.md,row_height=38,
