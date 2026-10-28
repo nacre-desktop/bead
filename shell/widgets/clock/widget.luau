@@ -163,7 +163,7 @@ local function desktop(props,_settings,_data)
                 font_size=kit.tokens.text.body*4/3,color="onSurfaceVariant",text_align="center"}}
     elseif style=="minimal" then
         local hour,minute=string.match(visible_time,"^(%d%d?):(%d%d)")
-        local compact=h<120
+        local compact=h<=120
         local digit_size=preview and h*.25 or compact and h*.28 or math.min(110,h*.42)
         local digit_height=preview and digit_size*1.4 or compact and h*.4 or h*.38
         local date_height=compact and 12 or 24
@@ -178,7 +178,7 @@ local function desktop(props,_settings,_data)
             visual.display("minute",minute or "","fill",digit_height,digit_size,"primary",true),
             visual.shadow_text("date",weekday,"fill",date_height,date_size,"secondary")}
     end
-    local compact=h<120
+    local compact=h<=120
     local time_size=compact and h*.46 or math.min(148,h*.72)
     local time_height=compact and h*.5 or h*.62
     local date_height=compact and 12 or 28
