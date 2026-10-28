@@ -507,6 +507,11 @@ async fn wallpaper_catalogue_projects_and_selection_calls_revision_fenced_activa
     let wake: CallWake = Arc::new(|| {});
     let first = wallpaper.project(&stores, Some(wake.clone()));
     assert_eq!(first["extras.wallpaper.loading"], Value::Bool(true));
+    assert_eq!(
+        first["extras.available"],
+        Value::Bool(true),
+        "an admitted catalogue request renders the loading state instead of unavailable"
+    );
     assert!(
         wallpaper.content_ready(),
         "metadata loading cannot block the first frame"

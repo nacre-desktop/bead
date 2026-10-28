@@ -864,6 +864,13 @@ impl Extras {
                     .collect();
                 available = true;
             }
+            // A cache hit or in-flight refresh is usable picker content even if the
+            // active-wallpaper topic has not finished reporting its health yet.
+            if boot.is_some()
+                && (state.catalogue_boot == boot || state.catalogue.is_some())
+            {
+                available = true;
+            }
         }
         if self.kind == Kind::Keybindings && boot.is_some() && state.refreshed != boot {
             state.action = self.begin("shortcuts.refresh", json!({}), wake.clone());
