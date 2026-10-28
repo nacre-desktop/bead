@@ -13,7 +13,7 @@ General primitive: WindowSpec.on_resize reports committed logical size changes; 
 | Palette roles | Per-instance Colour choices map the widget’s existing accent role to Primary, Secondary, Tertiary or Neutral for bar and desktop forms. |
 | Settings cleanup | 35 Settings goldens were refreshed after removing the Widgets shortcut; the freed sidebar space now shows the Devices heading and Displays row. |
 | Drag/edit | The prior full-stage `stage-drag-source` was appended above both preview regions, so its transparent hit area intercepted drags and used the selected form's payload for every point on the stage. The fix gives the bar preview and desktop miniature separate drag sources. Nested tracing also found that fallback output geometry named no output; app drops were rejected by the terminal-drop guard. The fallback now uses the active output ID. |
-| Toggle | Shared kit switch hit background uses the track’s rounded ends, fixing the colored corner rim for all Bead switches. |
+| Toggle | The shared kit switch clips the full button hit background to the rounded track and removes the differently colored track stroke. Sixteen switch-bearing Settings goldens were refreshed for this shared-kit change. |
 | Visual evidence | docs/specs/evidence/0172/ — 2880×1800, scale-1.5 nested captures, 4× switch crop, input traces, and reference comparison notes. |
 | Validation | Full Bead CI and real-input persistence checks are recorded after execution. |
 

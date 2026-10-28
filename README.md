@@ -8,7 +8,7 @@ layout or policy.
 
 Nacre Shell is Nacre's desktop shell built on Bead. It includes the bar,
 launcher, dashboard, control panel, notifications, OSD, wallpaper picker,
-Widgets (which can be dragged between the bar and desktop), AI panel, and the
+standalone Widgets app (dragged between the bar and desktop), AI panel, and the
 Settings, Colors, and Welcome apps. Bead is now the daily Nacre shell and is at
 parity with the QML shell for the migrated desktop workflow. Some migration
 work remains in progress; the current gaps and their evidence are tracked in

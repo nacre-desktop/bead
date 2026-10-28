@@ -1,0 +1,124 @@
+{
+  "capture": {
+    "compositor": "headless labwc parent \u2192 nested niri",
+    "output_physical_px": [
+      2880,
+      1800
+    ],
+    "scale": 1.5,
+    "renderer": "CPU",
+    "app_stage_wallpaper": "private generated fixture"
+  },
+  "launch": {
+    "command": [
+      "nacre-shell",
+      "--app",
+      "widgets"
+    ],
+    "routed_via_parent_command_socket": true,
+    "single_instance_second_exit": 0,
+    "app_id": "nacre-widgets",
+    "floating_in_nested_niri": true,
+    "default_logical_size": [
+      1100,
+      800
+    ],
+    "size_cap_fraction": 0.7
+  },
+  "placement_buttons": {
+    "Remove from bar": {
+      "form": "bar",
+      "enabled_after_click": false,
+      "synthetic_pointer_screen_xy": [
+        881.0,
+        658.0
+      ],
+      "committed_draw_before": 8,
+      "committed_draw_after": 15
+    },
+    "Add to bar": {
+      "form": "bar",
+      "enabled_after_click": true,
+      "synthetic_pointer_screen_xy": [
+        881.0,
+        658.0
+      ],
+      "committed_draw_before": 6,
+      "committed_draw_after": 13
+    },
+    "Add to desktop": {
+      "form": "desktop",
+      "enabled_after_click": true,
+      "synthetic_pointer_screen_xy": [
+        1295.0,
+        658.0
+      ],
+      "committed_draw_before": 6,
+      "committed_draw_after": 14
+    },
+    "Remove from desktop": {
+      "form": "desktop",
+      "enabled_after_click": false,
+      "synthetic_pointer_screen_xy": [
+        1295.0,
+        658.0
+      ],
+      "committed_draw_before": 8,
+      "committed_draw_after": 15
+    }
+  },
+  "palette_roles": {
+    "primary": {
+      "saved_instance_role": "primary",
+      "screenshot": "colour-primary.png"
+    },
+    "secondary": {
+      "saved_instance_role": "secondary",
+      "screenshot": "colour-secondary.png"
+    },
+    "tertiary": {
+      "saved_instance_role": "tertiary",
+      "screenshot": "colour-tertiary.png"
+    },
+    "neutral": {
+      "saved_instance_role": "neutral",
+      "screenshot": "colour-neutral.png"
+    }
+  },
+  "desktop_drag": {
+    "source_region": "desktop-widget-preview",
+    "source_form": "desktop",
+    "destination": "desktop",
+    "pointer_motion_marks": 202,
+    "measured_input_duration_ms": 4121.26,
+    "saved_desktop_geometry": {
+      "h": 120,
+      "w": 220,
+      "x": 1700,
+      "y": 999.4105902777778
+    },
+    "edit_outline_screenshot": "desktop-edit-mode.png",
+    "drag_screenshot": "drag-in-progress.png",
+    "persisted_after_close_reopen": true,
+    "layout_sha256_before_and_after_reopen": "d96f9c3a3a44e16fe25ad08b06222a2ca7f85930c61459422c57985411aaaf05"
+  },
+  "bar_drag": {
+    "source_region": "stage-bar",
+    "widget": "power",
+    "destination": "bar",
+    "pointer_motion_marks": 202,
+    "measured_input_duration_ms": 5226.82,
+    "persisted_after_close_reopen": true,
+    "layout_sha256_before_and_after_reopen": "73000a035f98a2cbcfbb8c381f39b7bdaa3a8d2c31fc5dfdff9a3db57311df0d"
+  },
+  "root_cause": {
+    "previous_drag_source": "A transparent full-stage drag node sat above both preview targets and carried the currently selected form payload.",
+    "fix": "Separate stage-bar and desktop-widget-preview drag sources with form-specific payloads.",
+    "nested_output_fallback": "Unnamed output geometry now uses the active parent/app output ID; otherwise the terminal-drop guard rejects it."
+  },
+  "regression_tests": {
+    "reload::widget_app_tests::real_widgets_gallery_shows_descriptions_and_a_persistent_colour_role_control": "passed in focused prod-container run",
+    "widgets::widget_drag::tests::app_drop_fills_missing_output_name_from_the_active_parent_output": "passed in focused prod-container run",
+    "Settings golden suite": "47 passed; switch-track updates affected 16 Settings images"
+  }
+}
