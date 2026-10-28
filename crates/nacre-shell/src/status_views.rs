@@ -718,7 +718,7 @@ impl Status {
             return;
         };
         let status = client.status();
-        let Some(boot) = status.boot else {
+        let Some(boot) = status.boot.clone() else {
             return;
         };
         if let Ok(ticket) = client.begin_call(
@@ -1077,7 +1077,7 @@ impl Status {
             control.reopen(again);
         }
         let (can_connect, can_disconnect) = {
-            let methods = client.status().methods;
+            let methods = client.status().methods.clone();
             let has = |name: &str| methods.get(name).is_some_and(|m| m.v == 1);
             (has("network.connect"), has("network.disconnect"))
         };

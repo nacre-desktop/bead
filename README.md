@@ -21,6 +21,9 @@ the background. It does not restart the full catalogue scan on a cached reopen.
 See [B0173](docs/specs/0173-picker-cold-open.md) for the route timing and
 measured acceptance status.
 
+Idle shell profiling and the fixes for unchanged daemon snapshots, static
+wallpaper wakeups and minute-clock redraws are recorded in [B0179](docs/specs/0179-shell-idle-cost.md).
+
 ## How it fits Nacre
 
 The shell uses Nacre's daemon contracts for shared state and actions. Nacre

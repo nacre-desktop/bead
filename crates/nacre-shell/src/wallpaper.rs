@@ -953,7 +953,7 @@ impl Consumer {
         let state = self.state().ok()?;
         Some(Arc::new(PairToken {
             requested_at: None,
-            boot: self.client.status().boot?,
+            boot: self.client.status().boot.clone()?,
             pair: state.outputs.get(output)?.clone(),
             selection_generation: None,
             optimistic: false,

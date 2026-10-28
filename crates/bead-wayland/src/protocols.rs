@@ -15,9 +15,25 @@ fn closed_panel_ready_to_unmap(
     companion && !panel_target && !redraw && !animation_active && !already_unmapped
 }
 
+fn should_draw_after_callback(
+    animate: bool,
+    debug_continuous: bool,
+    redraw: bool,
+    companion: bool,
+    lazy_gl: bool,
+    needs_warmup: bool,
+    animation_active: bool,
+) -> bool {
+    animate
+        || debug_continuous
+        || redraw
+        || (companion && lazy_gl && needs_warmup)
+        || animation_active
+}
+
 #[cfg(test)]
 mod closed_panel_unmap_tests {
-    use super::closed_panel_ready_to_unmap;
+    use super::{closed_panel_ready_to_unmap, should_draw_after_callback};
 
     #[test]
     fn unmaps_only_after_the_close_frame_finishes() {
@@ -39,6 +55,23 @@ mod closed_panel_unmap_tests {
         assert!(!closed_panel_ready_to_unmap(
             true, false, false, false, true
         ));
+    }
+
+    #[test]
+    fn idle_minute_has_no_poll_redraws_and_only_one_changed_frame() {
+        let mut redraw = false;
+        let mut frames = 0;
+        for second in 0..60 {
+            if second == 59 {
+                redraw = true; // HH:MM changed at the next minute boundary.
+            }
+            if should_draw_after_callback(false, false, redraw, false, false, false, false) {
+                frames += 1;
+                redraw = false;
+            }
+        }
+        assert_eq!(frames, 1);
+        assert!(!should_draw_after_callback(false, false, redraw, false, false, false, false));
     }
 }
 delegate_noop!(App: ignore ZwpRelativePointerManagerV1);
@@ -208,14 +241,15 @@ impl CompositorHandler for App {
                 for index in dirty {
                     self.draw(index, qh);
                 }
-            } else if self.options.animate
-                || self.options.debug_continuous
-                || self.surfaces[i].redraw
-                || (self.surfaces[i].companion
-                    && self.options.lazy_gl
-                    && self.companion_policy.needs_warmup())
-                || animation_active
-            {
+            } else if should_draw_after_callback(
+                self.options.animate,
+                self.options.debug_continuous,
+                self.surfaces[i].redraw,
+                self.surfaces[i].companion,
+                self.options.lazy_gl,
+                self.companion_policy.needs_warmup(),
+                animation_active,
+            ) {
                 self.draw(i, qh);
             }
             self.pointer_visual_commit(i);

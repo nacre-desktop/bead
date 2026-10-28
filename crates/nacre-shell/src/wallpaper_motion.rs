@@ -186,19 +186,11 @@ impl Controller {
                 subscriptions.push(Box::new(sub));
             }
         }
-        if let Some(backend) = &deps.backend {
-            let poke = poke.clone();
-            subscriptions.push(Box::new(backend.subscribe(Box::new(move |_| poke()))));
-        }
-        if let Some(desktop) = &deps.desktop {
-            let poke = poke.clone();
-            subscriptions.push(Box::new(desktop.subscribe(move |_| poke())));
-        }
         let supervisor =
             supervisor::Supervisor::start(supervisor::Config::new(renderer), log_event);
         let thread = std::thread::Builder::new()
             .name("wallpaper-motion".into())
-            .spawn(move || run(deps, supervisor, receiver))
+            .spawn(move || run(deps, supervisor, receiver, sender.clone()))
             .ok()?;
         Some(Self {
             stop: sender,
@@ -229,12 +221,18 @@ fn log_event(event: Event) {
     }
 }
 
-fn run(deps: Deps, supervisor: supervisor::Supervisor, receiver: mpsc::Receiver<Msg>) {
+fn run(
+    deps: Deps,
+    supervisor: supervisor::Supervisor,
+    receiver: mpsc::Receiver<Msg>,
+    sender: mpsc::Sender<Msg>,
+) {
     let start = Instant::now();
     let mut group = Group::default();
     let mut source = None;
     let mut sent: Option<(Decoder, Vec<String>)> = None;
     let mut renderer_state = None;
+    let mut environment_subscriptions: Vec<Box<dyn std::any::Any + Send>> = Vec::new();
     loop {
         let prefs = deps
             .picker
@@ -248,6 +246,24 @@ fn run(deps: Deps, supervisor: supervisor::Supervisor, receiver: mpsc::Receiver<
             source = wanted;
             sent = None;
             group = Group::default();
+        }
+        if source.is_some() && environment_subscriptions.is_empty() {
+            if let Some(backend) = &deps.backend {
+                let sender = sender.clone();
+                environment_subscriptions.push(Box::new(backend.subscribe(Box::new(move |_| {
+                    let _ = sender.send(Msg::Poke);
+                }))));
+            }
+            if let Some(desktop) = &deps.desktop {
+                let sender = sender.clone();
+                environment_subscriptions.push(Box::new(desktop.subscribe(move |_| {
+                    let _ = sender.send(Msg::Poke);
+                })));
+            }
+        } else if source.is_none() {
+            // Window, battery and session updates cannot affect a static wallpaper.
+            // Keep only the wallpaper and preference watches that can start motion.
+            environment_subscriptions.clear();
         }
         let status = supervisor.status();
         let picker_open = PICKER_OPEN.load(Ordering::Acquire);

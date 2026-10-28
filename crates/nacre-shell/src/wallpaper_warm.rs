@@ -237,7 +237,7 @@ impl Warmer {
                         {
                             continue;
                         }
-                        let Some(boot) = client.status().boot else {
+                        let Some(boot) = client.status().boot.clone() else {
                             continue;
                         };
                         let active = source.snapshot();
