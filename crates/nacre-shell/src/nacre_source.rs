@@ -1180,8 +1180,10 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                                                 // explicitly unsupported version in Welcome.
                                                 session.advertised.entry(name.into()).or_insert(1);
                                             }
-                                            let mut status = shared.status.lock().unwrap_or_else(|p| p.into_inner());
-                                            Arc::make_mut(&mut *status).topics = session.advertised.clone();
+                                            {
+                                                let mut status = shared.status.lock().unwrap_or_else(|p| p.into_inner());
+                                                Arc::make_mut(&mut *status).topics = session.advertised.clone();
+                                            }
                                             if sync_leases(&shared, session, &mut mirrors).await.is_err() { break; }
                                             registry_ok = true;
                                             }
