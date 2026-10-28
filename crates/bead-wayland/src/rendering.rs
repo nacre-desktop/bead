@@ -1596,7 +1596,16 @@ impl App {
                 let _prepare = bead_core::profile::Span::new("present_prepare");
                 renderer.prepare_on_ui(scene, scale)?;
             }
-            let mut regions = {
+            let prepared_reveal = _kind == RendererKind::Cpu
+                && scene
+                    .motion
+                    .as_ref()
+                    .is_some_and(|motion| motion.reveal && motion.progress < 1.);
+            let mut regions = if prepared_reveal {
+                // The prepared reveal picture moves under a changing clip. Its
+                // source frame is immutable, so use full damage for each pose.
+                vec![Damage::full(w as u32, h as u32)]
+            } else {
                 let _damage = bead_core::profile::Span::new("visual_damage");
                 if self.options.damage {
                     if let Some(frame) = renderer.prepared_frame() {

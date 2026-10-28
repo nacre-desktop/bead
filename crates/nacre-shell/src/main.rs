@@ -37,6 +37,8 @@ mod prompt;
 mod reload;
 #[cfg(test)]
 mod route_coverage_tests;
+#[cfg(test)]
+mod b0177_cpu_bench;
 mod session_menu;
 mod settings;
 #[cfg(test)]
