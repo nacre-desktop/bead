@@ -3670,8 +3670,10 @@ impl Renderer for TreeCpuRenderer {
                     let end = (y as usize * width as usize
                         + frame_damage.x.saturating_add(frame_damage.w).min(width) as usize)
                         * 4;
-                    for channel in bytes[start..end].chunks_exact_mut(4).flatten() {
-                        *channel = (((u32::from(*channel) * alpha + 128) * 257) >> 16) as u8;
+                    for pixel in bytes[start..end].as_chunks_mut::<4>().0 {
+                        for channel in pixel {
+                            *channel = (((u32::from(*channel) * alpha + 128) * 257) >> 16) as u8;
+                        }
                     }
                 }
             }
