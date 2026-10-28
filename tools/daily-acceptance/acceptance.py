@@ -109,8 +109,6 @@ def output_pixels(env: dict[str, str], raw: pathlib.Path) -> None:
 
 def niri_config(path: pathlib.Path, ctl_path: pathlib.Path, route_log: pathlib.Path) -> None:
     ctl = f'NACRE_DAEMON_SOCKET="$XDG_RUNTIME_DIR/nacre/daemon.sock" {shlex.quote(str(ctl_path))} ui '
-    route_start = "python3 -c 'import time; print(\"NACRE_ROUTE_START monotonic_ns=%d\" % time.monotonic_ns())'"
-    route_end = "python3 -c 'import time; print(\"NACRE_ROUTE_END monotonic_ns=%d\" % time.monotonic_ns())'"
     routes = [("Mod+Space", 'nacre launcher ""'),
               ("Mod+O", "drawers toggle dashboard"),
               ("Mod+I", "nacre settings"),
@@ -121,9 +119,7 @@ def niri_config(path: pathlib.Path, ctl_path: pathlib.Path, route_log: pathlib.P
     lines = ["input { keyboard { xkb { layout \"us\"; }; }; }", "prefer-no-csd",
              "animations { off; }", "hotkey-overlay { skip-at-startup; }", "binds {"]
     for key, arguments in routes:
-        route = shlex.quote(str(route_log))
-        command = (f"{route_start} >> {route}; {ctl}{arguments} >> {route} 2>&1; "
-                   f"{route_end} >> {route}")
+        command = ctl + arguments + f" >> {shlex.quote(str(route_log))} 2>&1"
         lines.append(f"    {key} repeat=false {{ spawn-sh {json.dumps(command)}; }}")
     lines.append("}")
     pearls = ROOT / "shell/niri-pearls.kdl"
@@ -230,6 +226,7 @@ class Runner:
         self.wallpaper_route_count = 0
         self.last_wallpaper_route_log = None
         self.last_wallpaper_route_process = None
+        self.last_wallpaper_route_end_written = False
         self.layer_sample = 0
         self.last_pointer_location = None
         self.render_backend = args.panel_renderer or "CPU"
@@ -679,7 +676,7 @@ class Runner:
         self.last_panel_latency_ms = float(panel_value)
         self.last_first_feedback_ns = int(presented_ns) if presented_ns else None
         if started_ns is not None and self.last_first_feedback_ns is not None:
-            self.last_latency_source = "Super+W to wp_presentation_feedback"
+            self.last_latency_source = "nacrectl UI route invocation to wp_presentation_feedback"
             return (name, max(0., (self.last_first_feedback_ns - started_ns) / 1_000_000.))
         self.last_latency_source = "PanelVisibility to wp_presentation_feedback (legacy marker)"
         return (name, float(panel_value))
@@ -720,16 +717,38 @@ class Runner:
                 end = stat.rindex(")")
                 comm = stat[stat.index("(") + 1:end]
                 fields = stat[end + 2:].split()
-                ppid = int(fields[1])
                 nice = int(fields[16])
                 cmdline = (proc / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
-                rows.append({"pid": pid, "ppid": ppid, "nice": nice,
-                             "comm": comm, "cmdline": cmdline[:400]})
+                argv = shlex.split(cmdline)
+                safe_command = pathlib.Path(argv[0]).name if argv else comm
+                safe_args = ["<path>" if "/" in arg or "\\" in arg else arg
+                             for arg in argv[1:4]]
+                rows.append({"nice": nice, "comm": comm,
+                             "command": " ".join([safe_command, *safe_args])})
                 for children in (proc / "task").glob("*/children"):
                     pending.extend(int(value) for value in children.read_text().split())
             except (OSError, ValueError, IndexError):
                 continue
         return rows
+
+    def _finish_wallpaper_route_if_exited(self):
+        process = self.last_wallpaper_route_process
+        if (
+            process is None
+            or process.poll() is None
+            or self.last_wallpaper_route_end_written
+        ):
+            return process.poll() if process is not None else None
+        stream = getattr(process, "_daily_log", None)
+        if stream and not stream.closed:
+            stream.write(
+                f"NACRE_ROUTE_END monotonic_ns={time.monotonic_ns()} "
+                f"exit_code={process.returncode}\n"
+            )
+            stream.flush()
+            stream.close()
+        self.last_wallpaper_route_end_written = True
+        return process.returncode
 
     def _open_latency(self, offset, expected_name=None, started_ns=None, before=None, label="open"):
         self.last_latency_source = None
@@ -739,6 +758,7 @@ class Runner:
         next_process_sample = time.monotonic()
         self.last_open_process_samples = []
         while time.monotonic() < deadline:
+            self._finish_wallpaper_route_if_exited()
             latency = self._opening_latency(offset, expected_name, started_ns)
             if latency[1] is not None:
                 self._layer_count(f"{label}-opened")
@@ -1076,21 +1096,20 @@ class Runner:
             route_log = self.evidence / f"wallpaper-route-{self.wallpaper_route_count}.log"
             self.wallpaper_route_count += 1
             self.last_wallpaper_route_log = route_log
-            route_start = "/usr/bin/python3 -c " + shlex.quote(
-                'import time; print("NACRE_ROUTE_START monotonic_ns=%d" % time.monotonic_ns())'
+            route_log.write_text(f"NACRE_ROUTE_START monotonic_ns={time.monotonic_ns()}\n")
+            stream = route_log.open("a")
+            process = subprocess.Popen(
+                [str(self.args.ctl.resolve()), "ui", "nacre", "launcher", ">wallpaper "],
+                env=self.env,
+                stdin=subprocess.DEVNULL,
+                stdout=stream,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
             )
-            route_end = "/usr/bin/python3 -c " + shlex.quote(
-                'import time; print("NACRE_ROUTE_END monotonic_ns=%d" % time.monotonic_ns())'
-            )
-            ctl = shlex.quote(str(self.args.ctl.resolve()))
-            command = (
-                f"{route_start}; {ctl} ui nacre launcher {shlex.quote('>wallpaper ')}; "
-                "status=$?; "
-                f"{route_end}; exit $status"
-            )
-            self.last_wallpaper_route_process = self._spawn(
-                ["/bin/sh", "-c", command], self.env, route_log
-            )
+            process._daily_log = stream
+            self.owned.append(process)
+            self.last_wallpaper_route_process = process
+            self.last_wallpaper_route_end_written = False
             return
         socket = pathlib.Path(self.env["XDG_RUNTIME_DIR"]) / "nacre/bead-command.sock"
         deadline = time.monotonic() + 5
@@ -1195,10 +1214,19 @@ class Runner:
             latency_source = self.last_latency_source
             panel_latency = self.last_panel_latency_ms
             route_process = self.last_wallpaper_route_process
+            route_cancelled = False
             if route_process is not None:
-                route_deadline = time.monotonic() + 12
+                route_deadline = time.monotonic() + 2
                 while route_process.poll() is None and time.monotonic() < route_deadline:
                     time.sleep(.01)
+                route_cancelled = route_process.poll() is None
+                if route_cancelled:
+                    route_process.terminate()
+                    try:
+                        route_process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        pass
+                    self._finish_wallpaper_route_if_exited()
             phases = self._open_route_phases(shell_offset, 0)
             if latency is not None:
                 self._shot(first_frame)
@@ -1222,11 +1250,15 @@ class Runner:
             rows.append({
                 "open": index + 1,
                 "surface_name": name,
-                "first_content_frame_ms_from_super_w": latency,
+                "first_content_frame_ms_from_route_invocation": latency,
                 "panel_start_to_frame_ms": panel_latency,
                 "nacrectl_route_ms": route_ms,
                 "nacrectl_exit_code": route_process.poll() if route_process else None,
-                "nacrectl_route_log": str(self.last_wallpaper_route_log),
+                "nacrectl_cancelled_after_timeout": route_cancelled,
+                "nacrectl_route_log": (
+                    self.last_wallpaper_route_log.name
+                    if self.last_wallpaper_route_log else None
+                ),
                 "latency_source": latency_source,
                 "panel_phases_monotonic_ns": phases,
                 "process_samples": self.last_open_process_samples,
@@ -1234,27 +1266,33 @@ class Runner:
                 "closed_after_escape": closed,
                 "closed_layer_count": count,
                 "baseline_layer_count": self.initial_layer_count,
-                "first_frame_screenshot": str(first_frame) if first_frame.exists() else None,
-                "same_shell_pid": self.shell.pid,
-                "same_daemon_pid": self.daemon.pid if self.daemon else None,
+                "first_frame_screenshot": first_frame.name if first_frame.exists() else None,
+                "same_shell_instance": self.shell.poll() is None,
+                "same_daemon_instance": self.daemon is not None and self.daemon.poll() is None,
             })
+            if route_cancelled:
+                break
         passed = (len(rows) == self.args.wallpaper_opens and all(
-            row["surface_name"] == expected
-            and row["first_content_frame_ms_from_super_w"] is not None
-            and row["first_content_frame_ms_from_super_w"] < limit
+            self._surface_name_matches(row["surface_name"], expected)
+            and row["first_content_frame_ms_from_route_invocation"] is not None
+            and row["first_content_frame_ms_from_route_invocation"] < limit
             and row["nacrectl_exit_code"] == 0
+            and not row["nacrectl_cancelled_after_timeout"]
             and row["closed_after_escape"]
             and row["slide_visible"]
             for row in rows
         ))
         self.results.append({
-            "check": f"wallpaper repeated open; {self.args.wallpaper_opens} Super+W opens in one shell/daemon session",
+            "check": (
+                f"wallpaper repeated open; {self.args.wallpaper_opens} nacrectl "
+                "Super+W routes in one shell/daemon session"
+            ),
             "result": "PASS" if passed else "FAIL",
             "expected_surface_name": expected,
             "open_limit_ms_exclusive": limit,
             "selection_count": 0,
-            "same_shell_pid": self.shell.pid,
-            "same_daemon_pid": self.daemon.pid if self.daemon else None,
+            "same_shell_instance": self.shell.poll() is None,
+            "same_daemon_instance": self.daemon is not None and self.daemon.poll() is None,
             "opens": rows,
         })
 
