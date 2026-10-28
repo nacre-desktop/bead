@@ -48,7 +48,7 @@ function M.row(item,key,schema,value,action_factory)
             table.insert(options,{id=choice,label=tostring(choice):gsub("^%l",string.upper),selected=choice==value})
         end
         local control
-        if #options<=3 then
+        if #options<=3 or schema.segmented==true then
             control=kit.SegmentedControl{id="control-"..key,value=value,on_change="widgets.choice",items=options}
         else
             control=kit.SelectRow{id="control-"..key,label=label,text=tostring(value or ""),options=options,
@@ -56,7 +56,7 @@ function M.row(item,key,schema,value,action_factory)
                 on_toggle=action_factory("menu",{key=key}),width=sp.huge*9,on_change="widgets.choice"}
         end
         wire_control(control,"widgets.choice",action_factory,item,key)
-        if #options<=3 then
+        if #options<=3 or schema.segmented==true then
             return ui.Column{id="choice-"..key,width="fill",shrink=0,gap=sp.xs,text("label",label),control}
         end
         return control

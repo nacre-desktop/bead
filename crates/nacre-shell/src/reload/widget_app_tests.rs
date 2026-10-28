@@ -44,8 +44,9 @@ fn catalogue() -> Json {
         "id":"clock",
         "title":"Clock",
         "category":"bar",
-        "defaults":{"format":"24"},
-        "settings":{"format":{"type":"choice","options":["24","12"]}},
+        "defaults":{"format":"24","colour_role":"primary"},
+        "settings":{"format":{"type":"choice","options":["24","12"]},
+            "colour_role":{"type":"choice","options":["primary","secondary","tertiary","neutral"]}},
         "forms":{
             "bar":{"default_style":"time","styles":{"time":{"min_span":1,"max_span":4,"preferred_span":1}}},
             "desktop":{"default_style":"card","styles":{"card":{"min_span":160,"max_span":500,"preferred_span":240}}}
@@ -148,6 +149,40 @@ fn form_toggle_shared_settings_undo_and_unknown_json_round_trip() {
 }
 
 #[test]
+fn colour_role_is_saved_per_widget_instance_and_shared_by_its_forms() {
+    let (mut harness, _root) = model_harness();
+    let original = document();
+    act(
+        &mut harness,
+        json!({"op":"toggle-form","widget":"clock","form":"desktop","enabled":true}),
+        &original,
+    );
+    let Value::List(draft) = harness.session.stores.get("widgets.draft").unwrap() else {
+        panic!("draft missing")
+    };
+    let doc = draft[0].clone();
+    act(
+        &mut harness,
+        json!({"op":"setting","widget":"clock","group":"clock","form":"bar",
+            "key":"colour_role","value":"secondary"}),
+        &doc,
+    );
+    let Value::List(draft) = harness.session.stores.get("widgets.draft").unwrap() else {
+        panic!("draft missing")
+    };
+    let doc = &draft[0];
+    assert_eq!(doc["widgets"]["clock"]["settings"]["colour_role"], "secondary");
+    assert_eq!(
+        doc["hosts"]["top_bar"]["instances"][0]["settings"]["colour_role"],
+        "secondary"
+    );
+    assert_eq!(
+        doc["hosts"]["canvas"]["instances"][0]["settings"]["colour_role"],
+        "secondary"
+    );
+}
+
+#[test]
 fn display_preview_uses_primary_output_logical_dimensions() {
     let source = bead_test::source::FakeSource::new(json!({
         "health":{"available":true},
@@ -207,6 +242,7 @@ fn late_widget_write_ack_preserves_newer_canonical_edits_and_reports_errors() {
 
 #[test]
 fn real_widgets_gallery_starts_with_content_and_a_style_click_updates_the_preview() {
+    crate::i18n::init();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
     let mut values = crate::desktop::values(&Default::default(), "");
     values.insert("bead.desktop.audio".into(), Value::Text("volume_up".into()));
@@ -292,6 +328,31 @@ fn real_widgets_gallery_starts_with_content_and_a_style_click_updates_the_previe
             Value::Text("clock".into()),
         )]))
         .unwrap();
+    for (suffix, form) in [("stage-bar", "bar"), ("desktop-widget-preview", "desktop")] {
+        let source = harness
+            .session
+            .view_nodes()
+            .iter()
+            .find(|node| node.drag_action.as_deref() == Some("widgets.drag") && node.id.ends_with(suffix))
+            .unwrap_or_else(|| panic!("{suffix} has an independent widget drag source"));
+        let rect = bead::ui::rect(&source.draw);
+        let candidate = harness
+            .session
+            .transfer_candidate_at(rect.x + rect.w / 2., rect.y + rect.h / 2.)
+            .expect("the visible preview accepts a real pointer drag");
+        let Value::List(payload) = candidate.payload else {
+            panic!("preview drag payload is a widget record list")
+        };
+        assert_eq!(payload[0]["widget"], "clock");
+        assert_eq!(payload[0]["form"], form);
+        assert_eq!(payload[0]["settings"]["colour_role"], "tertiary");
+    }
+    for expected in ["Colour", "Primary", "Secondary", "Tertiary", "Neutral"] {
+        assert!(
+            has_text(&harness, expected),
+            "clock detail must show the per-instance colour-role choice {expected}"
+        );
+    }
     let button = harness
         .session
         .view_nodes()
@@ -311,6 +372,30 @@ fn real_widgets_gallery_starts_with_content_and_a_style_click_updates_the_previe
     assert_eq!(
         draft[0]["hosts"]["top_bar"]["instances"][3]["children"][6]["style"],
         "seconds"
+    );
+    let role_button = harness
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| node.label == "Secondary")
+        .expect("the colour-role segmented control exposes Secondary");
+    let rect = bead::ui::rect(&role_button.draw);
+    harness
+        .script([bead_test::Input::Click {
+            x: rect.x + rect.w / 2.,
+            y: rect.y + rect.h / 2.,
+        }])
+        .unwrap();
+    let Value::List(draft) = harness.session.stores.get("widgets.draft").unwrap() else {
+        panic!("draft missing after colour-role selection")
+    };
+    assert_eq!(
+        draft[0]["widgets"]["clock"]["settings"]["colour_role"],
+        "secondary"
+    );
+    assert_eq!(
+        draft[0]["hosts"]["top_bar"]["instances"][3]["children"][6]["settings"]["colour_role"],
+        "secondary"
     );
 }
 

@@ -78,6 +78,7 @@ After Bead's core switch on Nacre, plan support for:
 
 ## Generalization list (framework pieces added by feature work)
 
+- B0172: `WindowSpec.on_resize` reports committed logical toplevel size changes to an optional product callback; persistence remains in the product adapter.
 - B0163: `bead-ui::status_pill::KeepOpenZone` joins panel bounds, a bar band and its owner slot with a small tolerance; shell code supplies the route-specific geometry.
 
 - B0146: `WallpaperProvider::uploaded` reports that a wallpaper buffer has been attached immediately before surface commit, giving host adapters a neutral upload phase hook.

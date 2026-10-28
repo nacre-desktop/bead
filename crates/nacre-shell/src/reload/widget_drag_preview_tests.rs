@@ -660,7 +660,7 @@ fn floating_policy_targets_the_unique_active_widgets_window_only_once() {
         capabilities,
         windows: vec![bead::backends::Window {
             id: window_id.clone(),
-            title: "Widgets".into(),
+            title: "Nacre Widgets".into(),
             app_id: "nacre-widgets".into(),
             workspace: None,
             output: None,

@@ -44,10 +44,10 @@ local function desktop(props,_settings,_data)
             ui.Row{id="battery-value-row",width="fill",height=80,align="center",gap=2,
                 visual.display("value",tostring(percent),ui.text_width(tostring(percent),visual.display_font,64),78,64,"onSurface"),
                 ui.Text{id="percent",text="%",width=20,height=42,font_size=26,font_weight=300,family=visual.display_font,color="onSurface"}},
-            ui.Box{id="battery-track",width="fill",height=8,fill={25,43,39,230},radius=4,
-                ui.Box{id="battery-fill",position="absolute",left=0,top=0,width=(w-52)*percent/100*.55,height=8,fill={63,196,168,255},radius=4},
-                ui.Box{id="battery-fill-mid",position="absolute",left=(w-52)*percent/100*.55,top=0,width=(w-52)*percent/100*.25,height=8,fill={91,211,186,255},radius=4},
-                ui.Box{id="battery-fill-end",position="absolute",left=(w-52)*percent/100*.80,top=0,width=(w-52)*percent/100*.20,height=8,fill={130,226,202,255},radius=4}},
+            ui.Box{id="battery-track",width="fill",height=8,fill=ui.alpha("onSurface",.14),radius=4,
+                ui.Box{id="battery-fill",position="absolute",left=0,top=0,width=(w-52)*percent/100*.55,height=8,fill="primary",radius=4},
+                ui.Box{id="battery-fill-mid",position="absolute",left=(w-52)*percent/100*.55,top=0,width=(w-52)*percent/100*.25,height=8,fill=ui.tint("primary","secondary",.4),radius=4},
+                ui.Box{id="battery-fill-end",position="absolute",left=(w-52)*percent/100*.80,top=0,width=(w-52)*percent/100*.20,height=8,fill=ui.tint("secondary","tertiary",.3),radius=4}},
             ui.Text{id="charging-note",text="The fill pulses softly while charging.",width="fill",height=20,font_size=kit.tokens.text.caption*4/3,color="secondary"}})
     end
     return ui.Column{id="battery-ring-layout",width=w,height=h,fill="transparent",align="center",justify="center",

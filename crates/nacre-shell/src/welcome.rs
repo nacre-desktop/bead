@@ -280,6 +280,7 @@ pub fn window_spec(
         title: crate::i18n::tr("bead.welcome.title", &[]),
         size: (1100, 800),
         size_for_output: None,
+        on_resize: None,
         min_size: (1100, 800),
         fallback,
         factory: Arc::new(move |_| {

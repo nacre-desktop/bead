@@ -22,6 +22,8 @@ pub type WindowModel = Arc<
 >;
 
 pub type WindowSizing = Arc<dyn Fn((u32, u32)) -> (u32, u32) + Send + Sync>;
+/// Optional product callback when the compositor commits a new logical window size.
+pub type WindowResize = Arc<dyn Fn((u32, u32)) + Send + Sync>;
 
 #[derive(Clone)]
 pub struct WindowSpec {
@@ -34,6 +36,8 @@ pub struct WindowSpec {
     pub min_size: (u32, u32),
     /// Optional product sizing policy, evaluated against the selected logical output.
     pub size_for_output: Option<WindowSizing>,
+    /// Optional product callback for remembering a user's resized window.
+    pub on_resize: Option<WindowResize>,
     pub fallback: Scene,
     pub factory: WindowFactory,
     pub model: WindowModel,
@@ -177,6 +181,9 @@ impl WindowHandler for App {
         win.size = (width, height);
         win.configured = true;
         if changed {
+            if let Some(on_resize) = spec.and_then(|spec| spec.on_resize.as_ref()) {
+                on_resize((width, height));
+            }
             if let Some(v) = &win.viewport {
                 v.set_destination(width as i32, height as i32);
             }

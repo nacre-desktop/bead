@@ -26,6 +26,46 @@ local function settings(schema,values)
         end
     end
 end
+local colour_fields={fill=true,color=true,border_color=true,hover_fill=true,selected_fill=true,
+    focus_color=true,shadow_color=true,from=true,to=true}
+local function map_role(role,from,to)
+    if type(role)~="string" then return role end
+    local from_cap=from:sub(1,1):upper()..from:sub(2)
+    local to_cap=to~="neutral" and to:sub(1,1):upper()..to:sub(2) or ""
+    if role==from then return to=="neutral" and "surfaceVariant" or to end
+    if role=="on"..from_cap then return to=="neutral" and "onSurfaceVariant" or "on"..to_cap end
+    if role==from_cap.."Container" then return to=="neutral" and "surfaceContainerHigh" or to_cap.."Container" end
+    if role=="on"..from_cap.."Container" then return to=="neutral" and "onSurface" or "on"..to_cap.."Container" end
+    return role
+end
+local function map_colour(value,from,to)
+    if type(value)=="string" then return map_role(value,from,to) end
+    if type(value)~="table" then return value end
+    local copy=table.clone(value)
+    for key,item in copy do
+        if key=="role" or key=="base" or key=="over" or key=="from" or key=="to" then
+            copy[key]=map_colour(item,from,to)
+        elseif type(item)=="table" then
+            copy[key]=map_colour(item,from,to)
+        end
+    end
+    return copy
+end
+local function map_widget_colour(node,from,to)
+    if type(node)~="table" then return node end
+    local props=node.props
+    if type(props)=="table" then
+        for key in colour_fields do
+            if props[key]~=nil then props[key]=map_colour(props[key],from,to) end
+        end
+        if type(props.render)=="function" then
+            local render=props.render
+            props.render=function(...) return map_widget_colour(render(...),from,to) end
+        end
+    end
+    for _,child in node.children or {} do map_widget_colour(child,from,to) end
+    return node
+end
 local function make_variant(package,placement,form)
     assert(type(form)=="table" and type(form.styles)=="table" and type(form.default_style)=="string",
         "invalid "..placement.." forms: "..package.id)
@@ -71,7 +111,12 @@ local function make_variant(package,placement,form)
             assert(selected,"unknown "..placement.." style "..tostring(name).." for "..package.id)
             local styled=table.clone(props)
             styled.form_style=name
-            return selected.render(styled,settings,data)
+            local node=selected.render(styled,settings,data)
+            local colour_role=settings.colour_role or package.accent_role
+            if node and package.accent_role and colour_role~=package.accent_role then
+                node=map_widget_colour(node,package.accent_role,colour_role)
+            end
+            return node
         end,
     }
 end
@@ -96,6 +141,20 @@ local function install_variants(package)
     if package.forms.desktop then package.variants.canvas=make_variant(package,"desktop",package.forms.desktop) end
 end
 local measured_width=require("measure").width
+local translations={
+    battery={title="bead.widgets.battery-title",description="bead.widgets.battery-description"},
+    bluetooth={title="bead.widgets.bluetooth-title",description="bead.widgets.bluetooth-description"},
+    clock={title="bead.widgets.clock-title",description="bead.widgets.clock-description"},
+    launcher={title="bead.widgets.launcher-title",description="bead.widgets.launcher-description"},
+    notifications={title="bead.widgets.notifications-title",description="bead.widgets.notifications-description"},
+    pill={title="bead.widgets.pill-title",description="bead.widgets.pill-description"},
+    power={title="bead.widgets.power-title",description="bead.widgets.power-description"},
+    sound={title="bead.widgets.sound-title",description="bead.widgets.sound-description"},
+    title={title="bead.widgets.window-title",description="bead.widgets.window-title-description"},
+    updates={title="bead.widgets.updates-title",description="bead.widgets.updates-description"},
+    wifi={title="bead.widgets.wifi-title",description="bead.widgets.wifi-description"},
+    workspaces={title="bead.widgets.workspaces-title",description="bead.widgets.workspaces-description"},
+}
 local function validate_style(package,item,placement,span)
     local form=package.forms[placement]
     assert(form,"widget "..package.id.." has no "..placement.." form")
@@ -113,6 +172,12 @@ local function validate_style(package,item,placement,span)
 end
 for _,id in ids do
     local package=require(id.."/widget")
+    package.accent_role=({clock="tertiary",sound="secondary",wifi="secondary"})[id] or "primary"
+    package.title=ui.tr(translations[id].title)
+    package.description=ui.tr(translations[id].description)
+    package.settings.colour_role={type="choice",options={"primary","secondary","tertiary","neutral"},
+        segmented=true,label=ui.tr("bead.widgets.colour")}
+    package.defaults.colour_role=package.accent_role
     if table.find({"updates","sound","wifi","bluetooth","battery","notifications","clock","power"},id) then
         package.settings.dropdown_trigger={type="choice",options={"default","click","hover"}}
         package.defaults.dropdown_trigger="default"

@@ -18,7 +18,7 @@ pub fn tr_n(id: &str, count: u64, args: &[(&str, &str)]) -> String {
 mod tests {
     use std::{collections::BTreeSet, fs, path::Path};
 
-    const SURFACES: [&str; 11] = [
+    const SURFACES: [&str; 12] = [
         "bar",
         "panel",
         "dashboard",
@@ -29,6 +29,7 @@ mod tests {
         "colors",
         "welcome",
         "prompt",
+        "widgets",
         "common",
     ];
     fn sources(dir: &Path, out: &mut Vec<std::path::PathBuf>) {

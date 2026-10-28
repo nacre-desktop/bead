@@ -28,6 +28,7 @@ return function(ui, tokens)
         local checked=value(p.checked,false)
         local opacity=p.on_activate~=nil and 1 or .4
         local out=props(p,{width=46,height=32,padding=0,fill="transparent",
+            radius=16,hover_fill="transparent",selected_fill="transparent",clip_children=true,
             aria_label=checked and "On" or "Off"},{checked=true})
         out[1]=ui.Box{id="track",position="absolute",left=4,top=5,width=38,height=22,radius=11,
             fill=ui.alpha(checked and "primaryContainer" or "surfaceContainerHighest",opacity),

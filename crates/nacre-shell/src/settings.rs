@@ -1242,6 +1242,7 @@ pub fn window_spec(
                     .min(size.1),
             )
         })),
+        on_resize: None,
         fallback,
         factory: Arc::new(move |_| {
             let session = bead::ui::Session::new(

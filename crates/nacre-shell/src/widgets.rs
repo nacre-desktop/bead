@@ -5,6 +5,43 @@ use std::collections::BTreeMap;
 
 pub const TOPIC: &str = "settings.store.widgets";
 
+fn window_state_path() -> Option<std::path::PathBuf> {
+    std::env::var_os("XDG_STATE_HOME")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(std::path::PathBuf::from)
+                .map(|home| home.join(".local/state"))
+        })
+        .map(|state| state.join("nacre/widgets-window.json"))
+}
+
+fn restored_window_size(path: &std::path::Path) -> Option<(u32, u32)> {
+    let value: serde_json::Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+    if value.get("version")?.as_u64()? != 1 {
+        return None;
+    }
+    let width = u32::try_from(value.get("width")?.as_u64()?).ok()?;
+    let height = u32::try_from(value.get("height")?.as_u64()?).ok()?;
+    ((420..=4096).contains(&width) && (360..=4096).contains(&height))
+        .then_some((width, height))
+}
+
+fn save_window_size(path: &std::path::Path, (width, height): (u32, u32)) -> std::io::Result<()> {
+    if !(420..=4096).contains(&width) || !(360..=4096).contains(&height) {
+        return Err(std::io::Error::other("invalid Widgets window size"));
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| std::io::Error::other("window size needs a parent"))?;
+    std::fs::create_dir_all(parent)?;
+    let bytes = serde_json::to_vec(&serde_json::json!({
+        "version":1,"width":width,"height":height
+    }))
+    .map_err(std::io::Error::other)?;
+    atomic_replace(path, &bytes)
+}
+
 /// Read the active presentation poster for the Widgets app's wallpaper preview fallback.
 pub(crate) fn presentation_wallpaper_path() -> Option<String> {
     let state = std::env::var_os("XDG_STATE_HOME")
@@ -48,12 +85,13 @@ pub fn window_spec(
             _ => Err(format!("invalid Widgets app dimension: {key}").into()),
         }
     };
-    let size = (number("window.width")?, number("window.height")?);
+    let default_size = (number("window.width")?, number("window.height")?);
+    let state_path = window_state_path();
+    let size = state_path
+        .as_deref()
+        .and_then(restored_window_size)
+        .unwrap_or(default_size);
     let min_size = (number("window.min_width")?, number("window.min_height")?);
-    let preferred_min = (
-        number("window.preferred_min_width")?,
-        number("window.preferred_min_height")?,
-    );
     let fraction = match (
         schema.get("window.width_fraction"),
         schema.get("window.height_fraction"),
@@ -114,19 +152,42 @@ pub fn window_spec(
     Ok(bead::wayland::WindowSpec {
         command_targets: vec!["bead.widgets".into()],
         app_id: "nacre-widgets".into(),
-        title: "Widgets".into(),
+        title: "Nacre Widgets".into(),
         size,
         min_size,
         size_for_output: Some(Arc::new(move |output| {
             (
                 ((f64::from(output.0) * fraction.0) as u32)
-                    .max(preferred_min.0)
+                    .max(min_size.0)
                     .min(size.0),
                 ((f64::from(output.1) * fraction.1) as u32)
-                    .max(preferred_min.1)
+                    .max(min_size.1)
                     .min(size.1),
             )
         })),
+        on_resize: state_path.map(|path| {
+            let (sender, receiver) = std::sync::mpsc::channel();
+            std::thread::Builder::new()
+                .name("nacre-widgets-size-save".into())
+                .spawn(move || {
+                    while let Ok(mut size) = receiver.recv() {
+                        loop {
+                            match receiver.recv_timeout(std::time::Duration::from_millis(300)) {
+                                Ok(next) => size = next,
+                                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => break,
+                                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                            }
+                        }
+                        if let Err(error) = save_window_size(&path, size) {
+                            eprintln!("WIDGET_WINDOW_SIZE_SAVE_ERROR {error}");
+                        }
+                    }
+                })
+                .expect("Widgets window size writer starts");
+            Arc::new(move |size| {
+                let _ = sender.send(size);
+            }) as Arc<dyn Fn((u32, u32)) + Send + Sync>
+        }),
         fallback,
         factory,
         model: Arc::new(|args| {
@@ -590,6 +651,32 @@ mod file_tests {
         assert!(file_values(&path).is_empty());
         std::fs::write(&path, b"[]").unwrap();
         assert!(file_values(&path).is_empty());
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn widget_window_size_restore_accepts_only_bounded_versioned_dimensions() {
+        let path = std::env::temp_dir().join(format!(
+            "bead-widget-window-{}-{}.json",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(
+            &path,
+            br#"{"version":1,"width":1080,"height":760}"#,
+        )
+        .unwrap();
+        assert_eq!(restored_window_size(&path), Some((1080, 760)));
+        std::fs::write(&path, br#"{"version":2,"width":1080,"height":760}"#).unwrap();
+        assert_eq!(restored_window_size(&path), None);
+        std::fs::write(&path, br#"{"version":1,"width":9000,"height":760}"#).unwrap();
+        assert_eq!(restored_window_size(&path), None);
+        save_window_size(&path, (960, 700)).unwrap();
+        assert_eq!(restored_window_size(&path), Some((960, 700)));
+        assert!(save_window_size(&path, (400, 300)).is_err());
         std::fs::remove_file(path).unwrap();
     }
 

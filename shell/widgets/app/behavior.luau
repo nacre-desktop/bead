@@ -1230,9 +1230,8 @@ end
 return {
     stores={
         ["window.floating"]=true,
-        ["window.width"]=1200,["window.height"]=800,["window.min_width"]=760,["window.min_height"]=540,
-        ["window.preferred_min_width"]=800,["window.preferred_min_height"]=600,
-        ["window.width_fraction"]=0.88,["window.height_fraction"]=0.86,
+        ["window.width"]=1100,["window.height"]=800,["window.min_width"]=420,["window.min_height"]=360,
+        ["window.width_fraction"]=0.7,["window.height_fraction"]=0.7,
         ["widgets.layout"]={},["widgets.rev"]=0,["widgets.category"]="all",["widgets.search"]="",
         ["widgets.selected"]="",["widgets.group"]="",["widgets.form"]="bar",["widgets.advanced.open"]=false,["widgets.scroll"]=0,["widgets.nav.scroll"]=0,
         ["widgets.screen_width"]=1920,["widgets.screen_height"]=1080,

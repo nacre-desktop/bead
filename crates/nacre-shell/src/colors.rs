@@ -1244,6 +1244,7 @@ pub fn window_spec(
         title: tr("bead.colors.title", &[]),
         size: (1100, 760),
         size_for_output: None,
+        on_resize: None,
         min_size: (760, 560),
         fallback,
         factory: Arc::new(move |_| {

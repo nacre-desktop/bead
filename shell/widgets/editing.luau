@@ -126,13 +126,15 @@ local function nested_widget_hovered(item,hover)
     end
     return false
 end
-local function decorate_target(document,item,target,host,hovered)
+local function decorate_target(document,item,target,host,hovered,outlined)
     local p=target.props
     p.fill=hovered and ui.alpha("primary",.025) or p.fill
-    p.selected=hovered or p.selected==true
-    if hovered then
+    p.selected=outlined or p.selected==true
+    if outlined then
         p.border_width=sp.hairline*1.5
         p.border_color="primary"
+    end
+    if hovered then
         target.children=target.children or {}
         table.insert(target.children,kit.IconButton{id="remove",position="absolute",right=-sp.xs,top=0,
             width=sp.md,height=sp.md,padding=0,font_size=sp.md,text="close",focus_on_pointer=false,
@@ -149,17 +151,18 @@ function M.decorate(document,item,node)
     local matched=string.find(hover,key,1,true)~=nil or string.find(hover,tostring(item.iid),1,true)~=nil
     local hovered=matched and not nested_widget_hovered(item,hover)
     local host=item.host=="canvas" and "desktop" or "bar"
+    local outlined=hovered or host=="desktop" and ui.resolve_for_check(ui.bind("widgets.app.open"))==true
     if node.kind=="group" then
         local target=marked_drag_target(node)
         if target then
-            decorate_target(document,item,target,host,hovered)
+            decorate_target(document,item,target,host,hovered,outlined)
             return node
         elseif type(p.width)~="number" or type(p.height)~="number" then
             return node
         end
     end
     local props={id=key,padding=0,fill=hovered and ui.alpha("primary",.025) or "transparent",
-        selected=hovered,border_width=hovered and sp.hairline*1.5 or 0,border_color="primary",radius=kit.tokens.radii.small,node}
+        selected=outlined,border_width=outlined and sp.hairline*1.5 or 0,border_color="primary",radius=kit.tokens.radii.small,node}
     if p.width~=nil then props.width=p.width end
     if p.height~=nil then props.height=p.height end
     if p.shrink~=nil then props.shrink=p.shrink end

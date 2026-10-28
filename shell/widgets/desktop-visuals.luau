@@ -25,7 +25,7 @@ end
 
 function M.reference_glass(id,width,height,padding,children)
     local props={id=id,width=width,height=height,padding=padding or sp.lg,
-        radius=M.radius,fill={10,22,20,158},border_width=1,border_color=ui.alpha("onSurface",.08)}
+        radius=M.radius,fill=ui.alpha("surfaceContainer",.72),border_width=1,border_color=ui.alpha("outlineVariant",.35)}
     for _,child in children do table.insert(props,child) end
     return ui.Box(props)
 end
@@ -62,7 +62,7 @@ function M.ring(id,diameter,value,caption,detail)
     local reading=tostring(value or 0).."%"
     return ui.Box{id=id,width=diameter,height=diameter,fill="transparent",
         ui.Box{id="inner-disc",position="absolute",left=8,top=8,width=diameter-16,height=diameter-16,
-            radius=(diameter-16)/2,fill={10,22,20,150}},
+            radius=(diameter-16)/2,fill=ui.alpha("surfaceContainer",.88)},
         ui.Arc{id="track",position="absolute",left=8,top=8,width=diameter-16,height=diameter-16,
             start_angle=-90,sweep_angle=360,stroke_width=16,color=ui.alpha("onSurface",.16),round_caps=true},
         ui.Arc{id="value",position="absolute",left=8,top=8,width=diameter-16,height=diameter-16,
