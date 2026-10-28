@@ -1,12 +1,9 @@
-Status: DONE for the two dropdown regressions; focused matrix passes. Full sequential acceptance still has separate route/fixture gaps below.
-Code fix `be031320` and report updates are pushed with `[no-publish]`; prior B0161 report remains in parent `1f99b426`.
-Measure: `PanelVisibility(true)` to first Wayland presentation feedback; calibrated 65 ms limit on nested 60 Hz TEST host.
-Baseline `900369fb`: seven available dropdowns, 21/21 closes PASS; p50/p99 64.200/64.746 ms. Bluetooth unavailable (no private service).
-Fixed main: eight dropdowns, 24/24 closes PASS; all-widget p50/p99 52.154/60.932 ms (matched seven: 52.017/60.932); all closed screenshots pixel-identical.
-Memory, CPU and swap: baseline/fixed full arms pass; fixed Pss_Anon +13.758 MiB after idle and +18.723 MiB after repeat (<20 MiB limit).
-Bisect: `ec6cd311` first bad; parent `860aa794` passes. Reveal ticks reshaped saved primitives, invalidating CPU snapshots; canonical open-state content reuse removes repeated ~270 ms opens and stale pixels.
-Blank layer calibration accepts only known Top/Background/Overlay identities with pixel-identical closes; post-idle inventory returns to six layers.
-Full sequential arm still has launcher/dashboard/control/wallpaper route and AI-hover fixture gaps on both revisions; these remain unverified, not passes.
-Remote Bead full-CI recipe on exact code passed: `BEAD_CI_AND_RELEASE_ARMS_PASS` (exit 0).
-Official GitHub CI run `40568352722` passed pushed HEAD `a76ac159`; remote dev-2 full CI also passed the exact code and report commit.
-No laptop build, test, install or configuration changes.
+status: failed — cadence and adaptive scrim acceptance remain unmet.
+HEAD: ac96bc01; pushed safely to `task/b0167-widget-polish-20261027`; no main integration while acceptance fails.
+Commits use siverteh <92440237+Siverteh@users.noreply.github.com>; every task commit has `[no-publish]`.
+CI: Ubuntu 24.04 full Bead recipe on dev-2, `bash /ci.sh` → `B0167_FULL_CI_PASS` (exit 0).
+Captures: `bash .lead/capture-wrapper.sh` on desktop; seven states complete, rc=0, OOM=0, swap=0, min MemAvailable 10.5 GiB.
+Cadence: final CPU 60/120 Hz sweep, five repeats; 2 commits each; presentation p99 1256/1258 ms at 60 Hz, 1253/1241 ms at 120 Hz; drop rate 98.7–99.3%.
+Render p99 0.138–0.167 ms; physical refresh timestamp unavailable. Adaptive scrim needs a radial renderer and wallpaper sampling API; paired HTML is not QML parity.
+removed: 36 tracked text lines (net `origin/main...HEAD`, binaries excluded).
+Remote B0167 CI and desktop task directories and sessions cleaned; no laptop builds/tests/captures.
