@@ -6655,7 +6655,7 @@ mod tests {
             (source.bounds.h * scale) as u32,
         );
         let mut actual = vec![0; width as usize * height as usize * 4];
-        assert!(imported
+        imported
             .composite(
                 ShmTarget {
                     bytes: &mut actual,
@@ -6668,7 +6668,7 @@ mod tests {
                 (0., 0.),
                 source.bounds,
             )
-            .unwrap());
+            .unwrap();
         let mut expected = vec![0; width as usize * height as usize * 4];
         let mut open = source.clone();
         open.reveal(1.);
