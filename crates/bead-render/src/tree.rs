@@ -5071,182 +5071,6 @@ mod tests {
     }
 
     #[test]
-    fn ui_cpu_dense_reveal_prepares_the_pose_without_a_flattened_worker_snapshot() {
-        let mut scene = scene();
-        scene.width = 160.;
-        scene.bounds = Rect::new(0., 0., 160., 160.);
-        scene.asset_data.clear();
-        scene.primitives = vec![
-            Primitive::Rounded {
-                rect: Rect::new(32., 32., 96., 96.),
-                radius: 4.,
-                fill: [10, 20, 30, 255],
-                border: None,
-            },
-            Primitive::Rounded {
-                rect: Rect::new(40., 40., 10., 10.),
-                radius: 2.,
-                fill: [200, 0, 0, 255],
-                border: None,
-            },
-            Primitive::Rounded {
-                rect: Rect::new(60., 60., 10., 10.),
-                radius: 2.,
-                fill: [0, 200, 0, 160],
-                border: None,
-            },
-            Primitive::Rounded {
-                rect: Rect::new(40., 110., 10., 10.),
-                radius: 2.,
-                fill: [0, 0, 200, 255],
-                border: None,
-            },
-        ];
-        scene.layers[0].own = 0..4;
-        scene.layers[0].subtree_end = 4;
-        scene.layers[0].bounds = scene.bounds;
-        scene.motion = Some(crate::Motion {
-            id: "reveal-test".into(),
-            open: true,
-            duration: 0.2,
-            return_duration: None,
-            return_curve: None,
-            spring: false,
-            curve: None,
-            edge: bead_core::Edge::Top,
-            slide_distance: Some(40.),
-            fade: false,
-            reveal: true,
-            progress: 0.2,
-            parts: Vec::new(),
-            art: None,
-        });
-        scene.reveal(0.2);
-        let mut expected = TreeCache::default();
-        expected.prepare(&scene, 1.).unwrap();
-        let expected_key = expected.frame.as_ref().unwrap().key;
-
-        let mut renderer = TreeCpuRenderer::default();
-        renderer.prepare_on_ui(&scene, 1.).unwrap();
-
-        assert!(renderer.cpu_preparation.is_none());
-        assert_eq!(renderer.opaque_composition, OpaqueComposition::Direct);
-        assert_eq!(renderer.cache.frame.as_ref().unwrap().key, expected_key);
-        let frame = renderer.prepared_frame().unwrap();
-        assert_eq!(frame.items.len(), 2, "body plus one prepared content layer");
-        let content = frame.items[1].raster.as_ref().unwrap().clone();
-        scene.reveal(0.45);
-        renderer.prepare_on_ui(&scene, 1.).unwrap();
-        assert!(
-            Arc::ptr_eq(
-                &content,
-                renderer.prepared_frame().unwrap().items[1]
-                    .raster
-                    .as_ref()
-                    .unwrap()
-            ),
-            "dense reveal ticks reuse their prepared content layer"
-        );
-    }
-
-    #[test]
-    fn ui_cpu_prepare_reuses_content_across_reveal_progress() {
-        let mut scene = scene();
-        scene.width = 160.;
-        scene.bounds = Rect::new(0., 0., 160., 160.);
-        let square = |x: f32, y: f32, fill: [u8; 4]| Primitive::Rounded {
-            rect: Rect::new(x, y, 10., 10.),
-            radius: 2.,
-            fill,
-            border: None,
-        };
-        scene.primitives = vec![
-            Primitive::Rounded {
-                rect: Rect::new(32., 32., 96., 96.),
-                radius: 4.,
-                fill: [10, 20, 30, 255],
-                border: None,
-            },
-            square(40., 40., [200, 0, 0, 255]),
-            Primitive::Image {
-                blur: 0.,
-                fit: crate::ImageFit::Fill,
-                clip_polygon: None,
-                rect: Rect::new(80., 40., 10., 10.),
-                path: "proof.png".into(),
-            },
-            square(60., 60., [0, 200, 0, 160]),
-        ];
-        scene.layers[0].own = 0..4;
-        scene.layers[0].subtree_end = 4;
-        scene.layers[0].bounds = scene.bounds;
-        let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
-        worker.prepare(&scene, 1.).unwrap();
-        scene
-            .prepared
-            .insert(1.0f32.to_bits(), worker.frame.clone().unwrap());
-        scene.motion = Some(crate::Motion {
-            id: "reveal-test".into(),
-            open: true,
-            duration: 0.2,
-            return_duration: None,
-            return_curve: None,
-            spring: false,
-            curve: None,
-            edge: bead_core::Edge::Top,
-            slide_distance: None,
-            fade: false,
-            reveal: true,
-            progress: 0.2,
-            parts: vec![(0, scene.primitives[0].clone())],
-            art: None,
-        });
-        scene.reveal(0.2);
-
-        let mut renderer = TreeCpuRenderer::default();
-        renderer.prepare_on_ui(&scene, 1.).unwrap();
-        assert!(renderer.cpu_preparation.is_none());
-        assert_eq!(renderer.opaque_composition, OpaqueComposition::Direct);
-        let initial = renderer.prepared_frame().unwrap();
-        assert_eq!(initial.items.len(), 2);
-        let content_layer = initial.items[1].raster.as_ref().unwrap().clone();
-        let mut expected = TreeCache::default();
-        expected.prepare(&scene, 1.).unwrap();
-        assert_eq!(
-            initial.key,
-            expected.frame.as_ref().unwrap().key,
-            "the first frame uses the current reveal pose"
-        );
-
-        scene.reveal(0.45);
-        expected = TreeCache::default();
-        expected.prepare(&scene, 1.).unwrap();
-        let expected_key = expected.frame.as_ref().unwrap().key;
-        renderer.prepare_on_ui(&scene, 1.).unwrap();
-        assert_eq!(renderer.cache.frame.as_ref().unwrap().key, expected_key);
-        let pose = renderer.prepared_frame().unwrap();
-        assert!(
-            Arc::ptr_eq(&content_layer, pose.items[1].raster.as_ref().unwrap()),
-            "content layer is reused between reveal poses"
-        );
-
-        scene.reveal(0.7);
-        renderer.prepare_on_ui(&scene, 1.).unwrap();
-        // The reused content still takes each frame's reveal pose.
-        assert!(!Arc::ptr_eq(&renderer.prepared_frame().unwrap(), &pose));
-        assert!(
-            Arc::ptr_eq(
-                &content_layer,
-                renderer.prepared_frame().unwrap().items[1]
-                    .raster
-                    .as_ref()
-                    .unwrap()
-            ),
-            "later reveal poses reuse the accepted content layer"
-        );
-        assert_eq!(renderer.opaque_composition, OpaqueComposition::Direct);
-    }
-    #[test]
     fn compact_svg_upload_reconstructs_exact_dense_pixels() {
         let mut scene = scene();
         scene.asset_data.clear();
@@ -6722,15 +6546,17 @@ mod tests {
             "prepared open pixels remain pose-independent"
         );
 
+        let mut worker_cache = TreeCache::default();
+        worker_cache.prepare(&source, scale).unwrap();
+        worker_cache.attach_reveal_artifact(&source, scale).unwrap();
+        let prepared = worker_cache.frame.clone().unwrap();
+        assert!(prepared.reveal_artifact.is_some());
+
         let mut pose = source.clone();
+        pose.prepared.insert(scale.to_bits(), prepared);
         pose.reveal(0.4);
         pose.offset = (3., 4.);
         let mut renderer = TreeCpuRenderer {
-            active_reveal: Some(ActiveReveal {
-                motion_id: "prepared-artifact".into(),
-                open: true,
-                artifact: Arc::new(imported.clone()),
-            }),
             cache: TreeCache {
                 builds: 17,
                 ..TreeCache::default()
