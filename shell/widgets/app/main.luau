@@ -372,7 +372,7 @@ local function style_tile(widget,placement,package,style_id,style,settings,is_se
     local tile_height=STYLE_TILE_HEIGHT
     local tile_preview=preview.render(widget,placement,style_id,settings,preview_width,preview_height)
     local tile_id="style-"..style_id..(placement=="desktop" and "-desktop" or "")
-    return ui.Button{id=tile_id,width=tile_width,height=tile_height,shrink=0,padding=spacing.xs,
+    return ui.Button{id=tile_id,width=tile_width,height=tile_height,shrink=0,
         radius=kit.tokens.radii.small,fill=is_selected and ui.alpha("primary",.15) or "surfaceContainer",
         border_width=is_selected and 1.5 or 0,border_color=is_selected and "primary" or nil,
         hover_fill="surfaceContainerHigh",selected=is_selected,focus_on_pointer=false,
@@ -387,8 +387,8 @@ local function style_tiles(widget,placement,package,style_id,settings)
     local keys={}
     for key,style in forms.styles do if not style.hidden then table.insert(keys,key) end end
     table.sort(keys)
-    local row_height=STYLE_TILE_HEIGHT
-    local tiles={id="style-tiles",width="fill",height=row_height,columns=math.max(1,math.min(4,#keys)),gap=spacing.sm,row_height=row_height,shrink=0}
+    local tiles={id="style-tiles",width="fill",height=STYLE_TILE_HEIGHT,columns=math.max(1,math.min(4,#keys)),
+        gap=spacing.sm,row_height=STYLE_TILE_HEIGHT,shrink=0}
     for _,key in keys do table.insert(tiles,style_tile(widget,placement,package,key,forms.styles[key],settings,key==style_id)) end
     return ui.Grid(tiles)
 end
@@ -531,11 +531,11 @@ local function detail()
                     width=0,grow=1,selected=(doc.dropdown_trigger or "click")=="click"}),
                 button("trigger-hover","Hover",edit({op="default-trigger",value="hover"}),{
                     width=0,grow=1,selected=doc.dropdown_trigger=="hover"})}},
-        ui.Row{id="form-style-columns",width="fill",height=STYLE_SECTION_HEIGHT,gap=spacing.md,
-            ui.Column{id="bar-style-section",width=0,grow=1,height=STYLE_SECTION_HEIGHT,gap=spacing.sm,padding=spacing.md,
+        ui.Row{id="form-style-columns",width="fill",height=STYLE_SECTION_HEIGHT,shrink=0,gap=spacing.md,
+            ui.Column{id="bar-style-section",width=0,grow=1,height=STYLE_SECTION_HEIGHT,shrink=0,gap=spacing.sm,padding=spacing.md,
                 radius=kit.tokens.radii.medium,fill="surfaceContainer",
                 label("bar-style-heading","Bar style",text.body*4/3,"onSurface",{height=22}),style_tiles(selected,"bar",package,bar_style,settings)},
-            desktop_available and ui.Column{id="desktop-style-section",width=0,grow=1,height=STYLE_SECTION_HEIGHT,gap=spacing.sm,padding=spacing.md,
+            desktop_available and ui.Column{id="desktop-style-section",width=0,grow=1,height=STYLE_SECTION_HEIGHT,shrink=0,gap=spacing.sm,padding=spacing.md,
                 radius=kit.tokens.radii.medium,fill="surfaceContainer",
                 label("desktop-style-heading","Desktop style",text.body*4/3,"onSurface",{height=22}),style_tiles(selected,"desktop",package,desktop_style,settings)} or nil}}
     if #instance_groups>1 then

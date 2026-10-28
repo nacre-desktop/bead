@@ -382,6 +382,53 @@ fn real_widgets_gallery_shows_descriptions_and_a_persistent_colour_role_control(
         draft[0]["hosts"]["top_bar"]["instances"][3]["children"][6]["settings"]["colour_role"],
         "secondary"
     );
+    let detail_scroll = harness
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| node.scroll_store.as_deref() == Some("widgets.scroll"))
+        .expect("widget details expose their content scroll region");
+    let rect = bead::ui::rect(&detail_scroll.draw);
+    harness
+        .script([bead_test::Input::Scroll {
+            x: rect.x + rect.w / 2.,
+            y: rect.y + rect.h / 2.,
+            delta: 900.,
+        }])
+        .unwrap();
+    assert!(
+        matches!(harness.session.stores.get("widgets.scroll"), Some(Value::Number(value)) if *value > 0.),
+        "scrolling reveals the lower style controls"
+    );
+    let button = harness
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| node.id.ends_with("style-seconds") && node.action.as_deref() == Some("widgets.edit"))
+        .expect("clock style tile must be present");
+    let rect = bead::ui::rect(&button.draw);
+    let rect = button.clip.map_or(rect, |clip| rect.intersect(clip));
+    let (x, y) = (rect.x + rect.w / 2., rect.y + rect.h / 2.);
+    harness.script([bead_test::Input::Pointer { x, y }]).unwrap();
+    assert!(
+        matches!(harness.session.stores.get("bead.hovered"), Some(Value::Text(value)) if value.contains("style-seconds")),
+        "style tile receives pointer hover; hovered={:?}, rect={:?}, advanced={:?}",
+        harness.session.stores.get("bead.hovered"),
+        rect,
+        harness.session.view_nodes().iter().filter(|node| node.id.contains("advanced-toggle"))
+            .map(|node| (node.id.clone(), bead::ui::rect(&node.draw)))
+            .collect::<Vec<_>>()
+    );
+    harness
+        .script([bead_test::Input::Click { x, y }])
+        .unwrap();
+    let Value::List(draft) = harness.session.stores.get("widgets.draft").unwrap() else {
+        panic!("draft missing after style selection")
+    };
+    assert_eq!(
+        draft[0]["hosts"]["top_bar"]["instances"][3]["children"][6]["style"],
+        "seconds"
+    );
 }
 
 #[test]
