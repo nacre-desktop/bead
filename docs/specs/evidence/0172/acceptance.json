@@ -102,6 +102,16 @@
     "persisted_after_close_reopen": true,
     "layout_sha256_before_and_after_reopen": "d96f9c3a3a44e16fe25ad08b06222a2ca7f85930c61459422c57985411aaaf05"
   },
+  "desktop_move": {
+    "input": "synthetic-pointer drag on the placed canvas widget while the app remains open",
+    "source_center": [1810.0, 1059.0],
+    "target": [192.0, 420.0],
+    "slot_before": {"x": 1700, "y": 999.4106, "w": 220, "h": 120},
+    "slot_after": {"x": 82, "y": 360.3359, "w": 220, "h": 120},
+    "screenshot": "desktop-move-edit-mode.png",
+    "persisted_after_close_reopen": true,
+    "layout_sha256_after_reopen": "80cd5fa9677cd78ee62bd7e7ff295ff36c94eb046549bdbf59fda2bacd272e25"
+  },
   "bar_drag": {
     "source_region": "stage-bar",
     "widget": "power",
@@ -119,6 +129,15 @@
   "regression_tests": {
     "reload::widget_app_tests::real_widgets_gallery_shows_descriptions_and_a_persistent_colour_role_control": "passed in focused prod-container run",
     "widgets::widget_drag::tests::app_drop_fills_missing_output_name_from_the_active_parent_output": "passed in focused prod-container run",
-    "Settings golden suite": "47 passed; switch-track updates affected 16 Settings images"
+    "reload::widget_app_tests::clock_detail_stage_and_style_previews_keep_all_content_inside_their_clips": "passed after scrolling the style controls into view",
+    "Settings golden suite": "47 passed; switch-track updates affected 16 Settings images",
+    "Status-view golden suite": "4 passed; updated the 12 switch-bearing network, Bluetooth, and sound images"
+  },
+  "full_bead_ci": {
+    "host": "dev-2",
+    "container": "b0172-widgets-app-20261028-final-ci3",
+    "recipe": "B0172-ci-inner.sh, based on bead-full-ci-b0156.sh.txt",
+    "exit_code": 0,
+    "result": "cargo fmt, clippy, workspace tests, feature checks, Luau analyzer, packaging tests, wallpaper/services checks, and cargo-deny passed"
   }
 }

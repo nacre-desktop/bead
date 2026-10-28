@@ -16,6 +16,7 @@ All captures use a private headless labwc parent and nested Niri at 2880×1800 p
 | `add-to-bar.png`, `add-to-desktop.png`, `remove-from-bar.png`, `remove-from-desktop.png` | Each placement button after a synthetic pointer click |
 | `drag-in-progress.png` | App-origin drag while the pointer is moving |
 | `desktop-edit-mode.png` | Clock placed on the desktop with its edit outline while the app is open |
+| `desktop-move-edit-mode.png` | Placed clock moved by synthetic pointer while the app stays open, with its edit outline |
 | `app-to-bar.png` | Power preview dropped onto the bar |
 | `desktop-reopened.png`, `bar-reopened.png` | App reopened after each drop; canonical layout hashes match |
 | `acceptance.json` | Sanitized parent-socket launch, pointer-input, placement-button, role-store, and persistence proof |
