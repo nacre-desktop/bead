@@ -8,6 +8,7 @@ import collections
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import pathlib
 import re
@@ -41,11 +42,11 @@ def run(argv, *, env, timeout=15, check=True, text=True):
                          check=check, text=text)
 
 
-def process_cpu_ticks(pid: int) -> int:
-    """Return a process's user+system CPU ticks from /proc, excluding comm spaces."""
+def process_cpu_ticks(pid: int) -> tuple[int, int]:
+    """Return user and system CPU ticks from /proc, excluding comm spaces."""
     stat = pathlib.Path(f"/proc/{pid}/stat").read_text()
     fields = stat[stat.rfind(")") + 2:].split()
-    return int(fields[11]) + int(fields[12])
+    return int(fields[11]), int(fields[12])
 
 
 def output_pixels(env: dict[str, str], raw: pathlib.Path) -> None:
@@ -354,6 +355,7 @@ class Runner:
         (self.evidence / "niri-outputs.json").write_text(json.dumps(outputs, indent=2) + "\n")
         if self.args.tools:
             self.env["NACRE_HELPER_TOOLS"] = str(self.args.tools.resolve())
+            self.env["NACRE_HELPER_BINARY"] = str(self.args.daemon.resolve())
         daemon_env = {**self.env, "WAYLAND_DISPLAY": str(child_sock), "NIRI_SOCKET": str(niri_sockets[0])}
         self._spawn([str(self.args.daemon), "daemon"], daemon_env, self.evidence / "daemon.log")
         daemon_cli = [str(self.args.ctl), "call", "--timeout", "2000", "daemon.status", "{}"]
@@ -1032,58 +1034,83 @@ class Runner:
                 shell=True, capture_output=True, text=True).stdout
             (self.evidence / f"wallpaper-live-{cycle}.ps").write_text(snapshot)
             text = self.log_path.read_text(errors="replace")[sel_offset:]
-            switches = re.findall(r"WALLPAPER_SWITCH_LATENCY [^\n]*ms=([0-9.]+)", text)
+            switches = [float(value) for value in
+                        re.findall(r"WALLPAPER_SWITCH_LATENCY [^\n]*ms=([0-9.]+)", text)]
+            switch_p95 = None
+            if switches:
+                ordered_switches = sorted(switches)
+                switch_p95 = ordered_switches[max(0, math.ceil(.95 * len(ordered_switches)) - 1)]
             phases = re.findall(r"WALLPAPER_SWITCH_PHASE [^\n]*", text)
             (self.evidence / f"wallpaper-live-{cycle}.log").write_text(text)
-            rounds.append({"cycle": cycle, "open_ms": latency[1], "switch_ms": [float(v) for v in switches],
+            rounds.append({"cycle": cycle, "open_ms": latency[1], "switch_ms": switches,
+                           "switch_count": len(switches), "switch_p95_ms": switch_p95,
                            "phases": len(phases)})
             self._key("-k", "Escape")
             self._wait_closed()
             cpu_start = time.monotonic()
             try:
                 cpu_initial = process_cpu_ticks(self.shell.pid)
-                samples = [(0.0, cpu_initial)]
-                for sample in range(1, 9):
+                samples = [(0.0, cpu_initial[0], cpu_initial[1])]
+                anon_after_close = None
+                for sample in range(1, 13):
                     time.sleep(.25)
-                    samples.append((time.monotonic() - cpu_start,
-                                    process_cpu_ticks(self.shell.pid)))
+                    user_ticks, system_ticks = process_cpu_ticks(self.shell.pid)
+                    samples.append((time.monotonic() - cpu_start, user_ticks, system_ticks))
+                    if sample == 10:
+                        anon_after_close = measure.memory(self.shell.pid)["pss_anon_mib"]
                 zero_windows = []
                 for index in range(4, len(samples)):
                     elapsed = samples[index][0] - samples[index - 4][0]
-                    ticks = samples[index][1] - samples[index - 4][1]
+                    user_ticks = samples[index][1] - samples[index - 4][1]
+                    system_ticks = samples[index][2] - samples[index - 4][2]
+                    ticks = user_ticks + system_ticks
                     percent = ticks / os.sysconf("SC_CLK_TCK") / elapsed * 100
-                    zero_windows.append({"end_s": round(samples[index][0], 3),
+                    zero_windows.append({"start_s": round(samples[index - 4][0], 3),
+                                         "end_s": round(samples[index][0], 3),
                                          "window_s": round(elapsed, 3),
+                                         "user_ticks": user_ticks,
+                                         "system_ticks": system_ticks,
+                                         "total_ticks": ticks,
                                          "cpu_percent": round(percent, 3)})
                 zero_by_two = any(row["window_s"] >= .9 and row["cpu_percent"] == 0
                                   and row["end_s"] <= 2.05 for row in zero_windows)
-            except (OSError, IndexError, ValueError) as exc:
+                post_two = next((row for row in zero_windows
+                                 if row["start_s"] >= 1.95 and row["end_s"] <= 3.05), None)
+                post_two_zero = post_two is not None and post_two["total_ticks"] == 0
+            except (OSError, IndexError, KeyError, ValueError) as exc:
                 zero_windows = []
                 zero_by_two = False
+                post_two = None
+                post_two_zero = False
                 cpu_error = f"{type(exc).__name__}: {exc}"
             else:
                 cpu_error = ""
-            time.sleep(.5)
-            try:
-                anon_after_close = measure.memory(self.shell.pid)["pss_anon_mib"]
-            except (OSError, KeyError, ValueError) as exc:
-                anon_after_close = None
-                cpu_error = (cpu_error + "; " if cpu_error else "") + f"memory: {type(exc).__name__}: {exc}"
+            criterion_passed = zero_by_two
             self.results.append({
-                "check": f"shell CPU returns to 0% within 2s after wallpaper close (cycle {cycle})",
-                "result": "PASS" if zero_by_two else "FAIL",
+                "check": f"shell records a zero-tick 1s window within 2s after wallpaper close (cycle {cycle})",
+                "result": "PASS" if criterion_passed else "FAIL",
                 "pid": self.shell.pid,
                 "windows": zero_windows,
-                "pss_anon_after_close_plus_2_5s_mib": (
-                    round(anon_after_close, 3) if anon_after_close is not None else None
-                ),
+                "zero_window_after_2s": post_two,
+                "post_2s_window_zero_ticks": post_two_zero,
+                "pss_anon_after_close_plus_2_5s_mib": round(anon_after_close, 3) if anon_after_close is not None else None,
                 "pss_anon_delta_from_start_mib": (
                     round(anon_after_close - self.baseline_mem, 3)
                     if anon_after_close is not None else None
                 ),
                 "error": cpu_error,
             })
-        self.results.append({"check": "wallpaper live set", "result": "PASS", "rounds": json.dumps(rounds)})
+        switch_acceptance = all(
+            row["switch_count"] >= 5 and row["switch_p95_ms"] is not None and row["switch_p95_ms"] < 120
+            for row in rounds
+        )
+        self.results.append({
+            "check": "wallpaper live set; at least 5 presented selections per cycle, p95 <120ms",
+            "result": "PASS" if switch_acceptance else "FAIL",
+            "expected_presented_selections_per_cycle": 5,
+            "p95_limit_ms": 120,
+            "rounds": json.dumps(rounds),
+        })
 
     def widget_drag(self):
         drag = self.profile["widget_drag"]
@@ -1176,7 +1203,7 @@ class Runner:
         if self.args.wallpaper_live:
             self.wallpaper_live()
             self.write_report()
-            return 0
+            return 1 if any(row["result"] == "FAIL" for row in self.results) else 0
         if self.args.quick:
             self.one_round(1)
             self._record_memory("quick round end")

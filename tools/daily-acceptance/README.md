@@ -42,6 +42,11 @@ Per-widget focused arms run Escape and outside before click, so the click-to-clo
 path is exercised after the lazy view has been exercised once. Each method still
 has its own open, latency, close, and pixel-diff assertion.
 
+When `--tools` is supplied, the runner points `NACRE_HELPER_BINARY` at the
+matching `--daemon` executable so private `cli-bridge.sh` calls use that same
+task-local helper rather than expecting an installed helper under the temporary
+HOME.
+
 Pointer input is sent to the *parent* Labwc compositor through
 `wlr-virtual-pointer`, so the host pointer is never moved. Modifier chords use
 `wtype` on the parent seat to reach nested Niri; typed text and Escape use the
