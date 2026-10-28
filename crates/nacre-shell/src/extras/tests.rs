@@ -1221,13 +1221,16 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
     );
     runtime.services(Box::new(|_| {}));
     assert!(runtime.viewport(1920, 1200));
+    let loading_scene = runtime
+        .stage(UiEvent::Reload)
+        .unwrap()
+        .expect("cold catalogue loading must publish its loading scene immediately");
     assert!(
-        runtime.stage(UiEvent::Reload).unwrap().is_some(),
-        "cold catalogue loading must publish its loading scene immediately"
-    );
-    assert_eq!(
-        runtime.session.stores.get("extras.empty_message"),
-        Some(&Value::Text("Loading wallpapers…".into()))
+        loading_scene.primitives.iter().any(|primitive| matches!(
+            primitive,
+            bead::render::Primitive::Text { text, .. } if text == "Loading wallpapers…"
+        )),
+        "the first cold frame must show the loading message"
     );
     assert!(runtime.commit());
     let mut first_content = None;
