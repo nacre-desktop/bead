@@ -15,11 +15,13 @@ local function fit_count(value,width)
     return measure.ellipsize(value,math.min(count_max,width or count_max),font,t.clock_font)
 end
 local function count_reservation()
-    return t.status_padding+t.status_count_padding+t.status_ink.package+t.item_gap+count_max
+    local hit_pad=popouts and t.status_hit_pad or 0
+    return t.status_padding+t.status_count_padding+2*hit_pad+t.status_ink.package+t.item_gap+count_max
 end
 local function bar(props,settings,_data)
+    local hit_pad=popouts and t.status_hit_pad or 0
     local style=props.form_style
-    local available=props.available_width and math.max(0,props.available_width-t.status_padding-t.status_count_padding
+    local available=props.available_width and math.max(0,props.available_width-t.status_padding-t.status_count_padding-2*hit_pad
         -(t.status_symbol_ink.package_2 or t.status_ink.package)-t.item_gap)
     local count_capacity=math.min(count_max,available or count_max)
     local text_capacity=available or ui.text_width("Updates",font,t.clock_font)
@@ -36,7 +38,7 @@ local function bar(props,settings,_data)
         width=math.min(width,content_capacity)
     end
     local action=popouts and ui.action("status.pill.open","updates") or nil
-    return updates_on and kit.Button{id="updates",width=content and props.available_width or nil,direction="row",padding=0,fill="transparent",hover_fill="surfaceContainerHigh",on_activate=action,height=t.status_height,radius=t.status_radius,gap=t.item_gap,shrink=0,padding_left=t.status_padding,padding_right=t.status_count_padding,align="center",justify=content and "start" or "center",
+    return updates_on and kit.Button{id="updates",width=content and props.available_width or nil,direction="row",padding=0,fill="transparent",hover_fill="surfaceContainerHigh",on_activate=action,height=t.status_height,radius=t.status_radius,gap=t.item_gap,shrink=0,padding_left=t.status_padding+hit_pad,padding_right=t.status_count_padding+hit_pad,align="center",justify=content and "start" or "center",
         status_glyph("package","package_2","package","primary"),
         content and status_text{id="count",text=content,width=width,max_width=content_capacity,font_size=t.clock_font,color="primary"} or nil,
     } or ui.Box{id="updates",width=0,height=0,shrink=0,visible=false}

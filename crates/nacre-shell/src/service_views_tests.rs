@@ -603,48 +603,107 @@ fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
             h.session.preview_deadline().is_none(),
             "bar geometry must be at its authored animation endpoint before golden capture"
         );
-        // The pill's buttons tile it edge to edge: every point between two icons
-        // belongs to one of them, and the area outside the pill is inert.
+        // The pill's buttons tile its full width, while their glyphs retain the old inset.
         let mut targets: Vec<_> = h
             .session
             .view_nodes()
             .iter()
-            .filter(|node| {
-                node.id.contains("system-pill")
-                    && node.action.as_deref() == Some("status.pill.open")
-            })
+            .filter(|node| node.id.contains("system-pill") && node.action.is_some())
             .filter_map(|node| {
                 let rect = bead::ui::rect(&node.draw);
+                let expected_action = node.action.as_deref()?;
                 h.session
                     .action_at(rect.x + rect.w / 2., rect.y + rect.h / 2.)
-                    .filter(|(_, action, _)| action == "status.pill.open")
+                    .filter(|(_, action, _)| action == expected_action)
                     .map(|(_, _, argument)| {
                         assert!(
                             !crate::widgets::dropdown_hover(&argument),
                             "click is the default"
                         );
-                        rect
+                        (argument, rect)
                     })
             })
             .collect();
-        targets.sort_by(|a, b| a.x.total_cmp(&b.x));
-        targets.dedup_by(|a, b| a.x == b.x);
+        targets.sort_by(|a, b| a.1.x.total_cmp(&b.1.x));
+        targets.dedup_by(|a, b| a.1.x == b.1.x);
         assert_eq!(targets.len(), 8, "every status widget owns one hit target");
+        let pill = h
+            .scene()
+            .layers
+            .iter()
+            .find(|layer| layer.id.ends_with("system-pill"))
+            .ok_or("status pill layer missing")?;
+        let pill_rect = h.scene().primitives[pill.own.clone()]
+            .iter()
+            .find_map(|p| match p {
+                bead::render::Primitive::Rounded { rect, .. } => Some(*rect),
+                _ => None,
+            })
+            .ok_or("status pill background missing")?;
+        assert!(
+            (targets[0].1.x - pill_rect.x).abs() < 0.01,
+            "first hit area starts at pill left edge"
+        );
+        let last = targets.last().ok_or("status targets missing")?.1;
+        assert!(
+            (last.x + last.w - (pill_rect.x + pill_rect.w)).abs() < 0.01,
+            "last hit area ends at pill right edge"
+        );
         {
             for pair in targets.windows(2) {
                 assert!(
-                    (pair[0].x + pair[0].w - pair[1].x).abs() < 0.01,
+                    (pair[0].1.x + pair[0].1.w - pair[1].1.x).abs() < 0.01,
                     "pill buttons must not leave a gap: {pair:?}"
                 );
-                let x = pair[1].x;
+                let x = pair[1].1.x;
                 assert!(
                     h.session.action_at(x, 25.).is_some(),
                     "the seam between two pill buttons is a hit target"
                 );
             }
             assert!(
-                h.session.action_at(targets[0].x - 2., 25.).is_none(),
-                "pill padding is inert"
+                h.session.action_at(pill_rect.x - 2., 25.).is_none(),
+                "space outside the pill is inert"
+            );
+        }
+        // Old glyph x = old target x + 3 px padding + optical-centering offset.
+        // New hit targets start 6 px earlier, with 9 px padding, so this is the
+        // same position while the hit rect grows over the old gap/end inset.
+        let optical_width = |text: &str| match text {
+            "package_2" | "volume_up" | "volume_mute" | "volume_off" | "calendar_month" => {
+                Some(44. / 3.)
+            }
+            "wifi" => Some(16.),
+            "wifi_off" => Some(56. / 3.),
+            "bluetooth" | "bluetooth_disabled" => Some(10.),
+            "battery_5_bar" | "battery_full" | "battery_charging_full" => Some(8.),
+            "battery_unknown" => Some(16.),
+            "notifications" => Some(40. / 3.),
+            "power_settings_new" => Some(52. / 3.),
+            _ => None,
+        };
+        let mut status_glyphs = Vec::new();
+        for layer in &h.scene().layers {
+            for primitive in &h.scene().primitives[layer.own.clone()] {
+                if let bead::render::Primitive::Text {
+                    rect: glyph, text, ..
+                } = primitive
+                    && optical_width(text).is_some()
+                {
+                    status_glyphs.push((text.clone(), *glyph));
+                }
+            }
+        }
+        status_glyphs.sort_by(|a, b| a.1.x.total_cmp(&b.1.x));
+        assert_eq!(status_glyphs.len(), 8, "every status glyph is present");
+        for ((text, glyph), (_, target)) in status_glyphs.iter().zip(&targets) {
+            let ink = optical_width(text).expect("recognized status glyph");
+            let hit_inset = 9.;
+            let expected = target.x + hit_inset + (ink - 24.) / 2.;
+            assert!(
+                (glyph.x - expected).abs() < 1.,
+                "status glyph {text} moved from its pre-648f0dd6 x position: expected {expected}, got {}",
+                glyph.x,
             );
         }
         for (suffix, action) in [
@@ -723,6 +782,24 @@ fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
             &golden,
             bead_test::Tolerance::default(),
             &std::env::temp_dir().join(format!("bead-bar-hover-{scale}")),
+        )?;
+
+        let first = targets[0].1;
+        h.script([Input::Pointer {
+            x: first.x + first.w / 2.,
+            y: first.y + first.h / 2.,
+        }])?;
+        let status_hover = h.pose((0., 0.), 1.)?;
+        let golden = root()
+            .join("tests/goldens")
+            .join(format!("status-pill-hover-{scale}.png"));
+        if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+            status_hover.save(&golden)?;
+        }
+        status_hover.compare(
+            &golden,
+            bead_test::Tolerance::default(),
+            &std::env::temp_dir().join(format!("bead-status-pill-hover-{scale}")),
         )?;
     }
     Ok(())

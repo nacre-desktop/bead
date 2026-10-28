@@ -13,7 +13,8 @@ local function bar(props,settings,_data)
     local content=style=="icon+value" and value or style=="icon+text" and "Battery" or nil
     local current=ui.resolve_for_check(value) or ""
     local width=content and ui.text_width(style=="icon+value" and current or content,"IBM Plex Sans",t.detail_font) or 0
-    return (popouts and kit.StatusIcon or ui.Row){id="battery",direction="row",height=t.status_height,radius=t.status_radius,gap=style~="icon" and t.item_gap or 0,padding=0,padding_left=t.status_padding,padding_right=t.status_count_padding,fill="transparent",hover_fill="surfaceContainerHigh",align="center",justify="center",
+    local hit_pad=popouts and t.status_hit_pad or 0
+    return (popouts and kit.StatusIcon or ui.Row){id="battery",direction="row",height=t.status_height,radius=t.status_radius,gap=style~="icon" and t.item_gap or 0,padding=0,padding_left=t.status_padding+hit_pad,padding_right=t.status_count_padding+hit_pad,fill="transparent",hover_fill="surfaceContainerHigh",align="center",justify="center",
         aria_label=ui.tr("bead.bar.open-battery"),on_activate=popouts and ui.action("status.pill.open","battery") or nil,
         status_glyph("glyph",ui.bind("bead.desktop.battery"),"battery"),
         content and status_text{id="battery-value",text=content,width=width,font_size=t.detail_font,color="secondary"} or nil,
