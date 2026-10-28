@@ -18,3 +18,9 @@ General primitive: WindowSpec.on_resize reports committed logical size changes; 
 | Validation | Full Bead CI and real-input persistence checks are recorded after execution. |
 
 The owner-approved `.lead/reference/App.dc.html` is the visual reference. The app follows its stable widget sidebar, compact descriptions, large wallpaper stage, paired form controls and three-column style previews; the Bead app adds the four-role color selector and accessible add/remove buttons requested by the owner. No matching QML Widgets editor exists.
+
+## B0176 — visual review fixes
+
+The widget-list icons now match Settings sizing and center against the complete two-line row; descriptions fit without truncation in [app-home.png](evidence/0172/b0176/app-home.png) and [choose-list.png](evidence/0172/b0176/choose-list.png). The stage now uses the output's logical 1920×1200 dimensions and centers that aspect in [battery-page.png](evidence/0172/b0176/battery-page.png). Clock content has room inside its outline, compact 120px widgets fit their text, and the analog and minimal miniatures use simplified, legible forms; [style-tiles.png](evidence/0172/b0176/style-tiles.png) shows each inside its cell. The settled bottom-right edit capture shows the clock within its outline and no separate guide rectangle: [desktop-edit-mode.png](evidence/0172/b0176/desktop-edit-mode.png). The switch hover and 4× detail are recaptured in [battery-toggle-hover.png](evidence/0172/b0176/battery-toggle-hover.png) and [toggle-close-up-4x.png](evidence/0172/b0176/toggle-close-up-4x.png).
+
+All five captures are private nested-session screenshots at 2880×1800 physical pixels, scale 1.5, using Bead's CPU renderer. No goldens were changed. Capture metadata and state notes are in [the B0176 evidence README](evidence/0172/b0176/README.md).
