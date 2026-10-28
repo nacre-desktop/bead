@@ -1,0 +1,14 @@
+{
+  "bead": {
+    "artifact": "nacre-shell",
+    "sha256": "efa86dd182e42a668cbee4a36d968e533569e21ab8eca0123d04bfbe7337e131"
+  },
+  "daemon": {
+    "artifact": "nacre-helper",
+    "sha256": "a94bf715ffc667af4f5303f6b49754f73de8496e6dc8410ea7ace7b86d63a8df"
+  },
+  "panel_renderer_override": "default",
+  "renderer_override": "default-auto",
+  "render_backend": "CPU",
+  "latency_boundary": "PanelVisibility(true) to first wp_presentation_feedback"
+}

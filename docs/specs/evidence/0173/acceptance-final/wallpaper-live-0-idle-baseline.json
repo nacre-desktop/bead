@@ -1,0 +1,88 @@
+{
+  "window_s": 5.0,
+  "thread_deltas": [
+    {
+      "start_s": 0.0,
+      "end_s": 0.5,
+      "thread_deltas": [
+        {
+          "tid": 3935882,
+          "comm": "nacre-shell",
+          "user_ticks": 0,
+          "system_ticks": 1
+        },
+        {
+          "tid": 3935888,
+          "comm": "nacre-link",
+          "user_ticks": 1,
+          "system_ticks": 0
+        },
+        {
+          "tid": 3935901,
+          "comm": "nacre-shell",
+          "user_ticks": 8,
+          "system_ticks": 42
+        }
+      ]
+    },
+    {
+      "start_s": 0.5,
+      "end_s": 1.0,
+      "thread_deltas": [
+        {
+          "tid": 3935901,
+          "comm": "nacre-shell",
+          "user_ticks": 6,
+          "system_ticks": 30
+        }
+      ]
+    },
+    {
+      "start_s": 1.0,
+      "end_s": 1.5,
+      "thread_deltas": []
+    },
+    {
+      "start_s": 1.5,
+      "end_s": 2.0,
+      "thread_deltas": []
+    },
+    {
+      "start_s": 2.0,
+      "end_s": 2.5,
+      "thread_deltas": []
+    },
+    {
+      "start_s": 2.5,
+      "end_s": 3.0,
+      "thread_deltas": [
+        {
+          "tid": 3935888,
+          "comm": "nacre-link",
+          "user_ticks": 1,
+          "system_ticks": 0
+        }
+      ]
+    },
+    {
+      "start_s": 3.0,
+      "end_s": 3.5,
+      "thread_deltas": []
+    },
+    {
+      "start_s": 3.5,
+      "end_s": 4.0,
+      "thread_deltas": []
+    },
+    {
+      "start_s": 4.0,
+      "end_s": 4.5,
+      "thread_deltas": []
+    },
+    {
+      "start_s": 4.5,
+      "end_s": 5.0,
+      "thread_deltas": []
+    }
+  ]
+}

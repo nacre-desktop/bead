@@ -1,0 +1,55 @@
+{
+  "window_s": 5.0,
+  "thread_deltas": [
+    {
+      "start_s": 0.0,
+      "end_s": 0.5,
+      "thread_deltas": []
+    },
+    {
+      "start_s": 0.5,
+      "end_s": 1.0,
+      "thread_deltas": []
+    },
+    {
+      "start_s": 1.0,
+      "end_s": 1.5,
+      "thread_deltas": []
+    },
+    {
+      "start_s": 1.5,
+      "end_s": 2.0,
+      "thread_deltas": []
+    },
+    {
+      "start_s": 2.0,
+      "end_s": 2.5,
+      "thread_deltas": []
+    },
+    {
+      "start_s": 2.5,
+      "end_s": 3.0,
+      "thread_deltas": []
+    },
+    {
+      "start_s": 3.0,
+      "end_s": 3.5,
+      "thread_deltas": []
+    },
+    {
+      "start_s": 3.5,
+      "end_s": 4.0,
+      "thread_deltas": []
+    },
+    {
+      "start_s": 4.0,
+      "end_s": 4.5,
+      "thread_deltas": []
+    },
+    {
+      "start_s": 4.5,
+      "end_s": 5.0,
+      "thread_deltas": []
+    }
+  ]
+}

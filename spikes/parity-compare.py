@@ -354,6 +354,7 @@ class Arm:
         self.logs.mkdir(exist_ok=True)
         self.runtime = self.root / 'r'
         self.env = None
+        self.wallpaper_fixture_reset = None
 
     def spawn(self, command, name, env=None, cwd=None):
         process = subprocess.Popen(command, env=env or self.env, cwd=cwd or self.root,
@@ -509,9 +510,15 @@ class Arm:
             folder = home / 'Pictures/Wallpapers/Dynamic'
             folder.mkdir(parents=True, exist_ok=True)
             for index in range(a.wallpaper_videos):
-                self.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
-                          f'testsrc2=size=640x360:rate=12:duration=2', '-an', '-c:v', 'libx264',
-                          '-threads', '1', '-pix_fmt', 'yuv420p', '-y', str(folder / f'motion-{index + 1}.mp4')], timeout=30)
+                output = str(folder / f'motion-{index + 1}.mp4')
+                if a.wallpaper_video_static:
+                    self.run(['ffmpeg', '-v', 'error', '-loop', '1', '-framerate', '12', '-i',
+                              str(home / 'Pictures/Wallpapers/generated-1.png'), '-t', '2', '-an', '-c:v', 'libx264',
+                              '-threads', '1', '-pix_fmt', 'yuv420p', '-y', output], timeout=30)
+                else:
+                    self.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
+                              'testsrc2=size=640x360:rate=12:duration=2', '-an', '-c:v', 'libx264',
+                              '-threads', '1', '-pix_fmt', 'yuv420p', '-y', output], timeout=30)
         if a.wallpaper_fixture:
             helper = str(Path(a.bead_bin).resolve() / 'nacre-helper')
             fixture_image = home / 'Pictures/Wallpapers/generated-1.png'
@@ -984,6 +991,20 @@ os.execv(real, [real, *args])
                 time.sleep(0.3)
             elif kind == 'wallpaper-pref':
                 helper = str(Path(self.args.bead_bin).resolve() / 'nacre-helper')
+                if self.args.wallpaper_fixture:
+                    fixture_image = self.root / 'home/Pictures/Wallpapers/generated-1.png'
+                    self.run([helper, 'wallpaper-media', 'select', str(fixture_image)], timeout=30)
+                    deadline = time.monotonic() + 10
+                    active = []
+                    while time.monotonic() < deadline:
+                        catalogue = self.call('wallpaper.catalogue', {}, timeout=30)
+                        active = sorted(Path(row['id']).name for row in catalogue['entries'] if row['active'])
+                        if active == ['generated-1.png']:
+                            break
+                        time.sleep(.1)
+                    if active != ['generated-1.png']:
+                        raise RuntimeError('wallpaper parity fixture reset did not activate generated-1.png: ' + repr(active))
+                    self.wallpaper_fixture_reset = {'selected': 'generated-1.png', 'active': active}
                 result = subprocess.run([helper, 'wallpaper-media', 'preferences'], input=json.dumps({'kind': step[1], 'layout': step[2]}),
                                         env=self.env, capture_output=True, text=True, timeout=30)
                 result.check_returncode()
@@ -1178,6 +1199,9 @@ os.execv(real, [real, *args])
             opens, closes, seconds = STATES[name]
             self.errors = []
             info = {}
+            self.wallpaper_fixture_reset = None
+            if name.startswith('wallpaper-') and self.args.wallpaper_video_static:
+                info['wallpaper_video_fixture'] = 'still frame from generated-1.png'
             self.dispatch_trace = []
             self.state_start = time.monotonic()
             try:
@@ -1188,6 +1212,8 @@ os.execv(real, [real, *args])
                     # idle retirement so query/index state cannot leak between states.
                     time.sleep(5.5)
                 self.steps(STATE_PREPARE.get(name, []))
+                if name.startswith('wallpaper-') and self.wallpaper_fixture_reset:
+                    info['wallpaper_fixture_reset'] = self.wallpaper_fixture_reset
                 if name.endswith('-warm'):
                     self.steps(opens)
                     time.sleep(2.5)
@@ -1196,7 +1222,16 @@ os.execv(real, [real, *args])
                 if seconds and opens:
                     info['open_ms'] = self.sequence(name + '-open', lambda: self.steps(opens), seconds)
                 else:
-                    self.steps(opens)
+                    if name.startswith('wallpaper-'):
+                        for step in opens:
+                            if step[0] in ('pointer', 'press', 'pointer-fast', 'pointer-target', 'press-target'):
+                                before = self.dispatch('nacre', 'state')
+                                info['ui_state_before_pointer'] = json.loads(before) if isinstance(before, str) else before
+                                info['layers_before_pointer'] = self.run(['niri', 'msg', 'layers'], check=False).stdout
+                                self.grab(shots / (name + '-before-pointer.png'))
+                            self.steps([step])
+                    else:
+                        self.steps(opens)
                 time.sleep(STATE_SETTLE.get(name, self.args.settle))
                 if name.startswith('launcher'):
                     state = self.dispatch('nacre', 'state')
@@ -1210,6 +1245,7 @@ os.execv(real, [real, *args])
                     if isinstance(state, str):
                         state = json.loads(state)
                     info['ui_state'] = state
+                    info['layers_at_capture'] = self.run(['niri', 'msg', 'layers'], check=False).stdout
                     if not isinstance(state, dict) or state.get('launcher') is not True or state.get('launcherMode') != 'wallpaper':
                         raise RuntimeError('wallpaper capture is not an open wallpaper picker')
                 if name in ('wallpaper-activated', 'wallpaper-video-activated'):
@@ -1258,6 +1294,8 @@ os.execv(real, [real, *args])
                     self.steps(closes)
                 self.steps(STATE_CLEANUP.get(name, []))
                 time.sleep(self.args.closed_settle)
+                if name.startswith('wallpaper-'):
+                    info['layers_after_close'] = self.run(['niri', 'msg', 'layers'], check=False).stdout
                 info['rss_closed_kib'] = self.rss()
                 info['rss_apps_closed_kib'] = self.app_rss()
                 if name == 'sidebar-pinned':
@@ -1297,7 +1335,7 @@ os.execv(real, [real, *args])
         for process in reversed(self.procs):
             stop(process)
         # Keep the shell log with the captures (frame/motion traces, errors).
-        for name in ('shell', 'fake-nm', 'fake-sni', 'tray-snapshot'):
+        for name in ('shell', 'fake-nm', 'fake-sni', 'fake-power', 'fake-bluez', 'tray-snapshot'):
             try:
                 shutil.copy(self.logs / f'{name}.log', self.out / f'{name}.log')
             except OSError:
@@ -1528,6 +1566,8 @@ def main():
     parser.add_argument('--scale', type=float, default=1.5)
     parser.add_argument('--wallpapers', type=int, default=0, help='generate N gradient wallpapers into the private HOME (Colors app library)')
     parser.add_argument('--wallpaper-videos', type=int, default=0, help='B0100: generate N short video wallpapers in each private library')
+    parser.add_argument('--wallpaper-video-static', action='store_true',
+                        help='use a static image clip for timestamp-stable wallpaper layout parity')
     parser.add_argument('--wallpaper-fixture', action='store_true', help='B0100: derive the matching private presentation from the first generated wallpaper')
     parser.add_argument('--presentation', default='~/.local/state/nacre/presentation.json',
                         help='record copied read-only into both private states (wallpaper + palette); empty for none')
@@ -1622,7 +1662,7 @@ def main():
                              'release_proof_mode']:
                     value = getattr(args, flag)
                     command += ['--' + flag.replace('_', '-'), 'x'.join(map(str, value)) if flag == 'size' else str(value)]
-                command += ['--states', ','.join(args.states)] + (['--cpu'] if args.cpu else []) + (['--wallpaper-fixture'] if args.wallpaper_fixture else []) + (['--shortcut-fixture'] if args.shortcut_fixture else []) + (['--fake-nm'] if args.fake_nm else []) + (['--fake-wifi'] if args.fake_wifi else [])
+                command += ['--states', ','.join(args.states)] + (['--cpu'] if args.cpu else []) + (['--wallpaper-fixture'] if args.wallpaper_fixture else []) + (['--wallpaper-video-static'] if args.wallpaper_video_static else []) + (['--shortcut-fixture'] if args.shortcut_fixture else []) + (['--fake-nm'] if args.fake_nm else []) + (['--fake-wifi'] if args.fake_wifi else [])
                 log(f'arm {arm} starting')
                 child = subprocess.Popen(command, env=env, start_new_session=True)
                 try:

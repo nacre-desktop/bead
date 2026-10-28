@@ -1,0 +1,15 @@
+2026-10-28T14:13:35.682852Z  WARN Session legacy UI state is unavailable
+nacre-helper updates: starting checkupdates for dashboard update count
+2026-10-28T14:13:35.743232Z  INFO Daemon ready
+Desktop setting shadow unavailable: Unknown compositor action: get_desktop_option
+Desktop setting followMouse unavailable: Unknown compositor action: get_desktop_option
+Desktop setting borderSize unavailable: Unknown compositor action: get_desktop_option
+Desktop setting rounding unavailable: Unknown compositor action: get_desktop_option
+Desktop setting gapsIn unavailable: Unknown compositor action: get_desktop_option
+Desktop setting naturalScroll unavailable: Unknown compositor action: get_desktop_option
+Desktop setting blur unavailable: Unknown compositor action: get_desktop_option
+Desktop setting animations unavailable: Unknown compositor action: get_desktop_option
+2026-10-28T14:13:35.760412Z  WARN Session wallet is unavailable
+Menu unit state nacre-stay-awake.service: org.freedesktop.DBus.Error.Spawn.ChildExited: Process org.freedesktop.systemd1 exited with status 1
+Menu unit state nacre-screen-recording.service: org.freedesktop.DBus.Error.Spawn.ChildExited: Process org.freedesktop.systemd1 exited with status 1
+2026-10-28T14:16:21.995480Z  INFO Daemon stopped

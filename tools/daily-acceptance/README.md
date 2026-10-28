@@ -15,9 +15,17 @@ the private `NACRE_DAEMON_SOCKET` environment. The control executable must be
 `nacrectl` (a symlink to that same multi-call binary). The staged-data directory must contain `wallpapers/`,
 `applications/`, `icons/`, and `state/nacre/presentation.json`. The one-command
 wrapper takes the desktop heavy lock for the full acceptance arm; it never
-uses the host Wayland socket. Data is copied to a mode-0700
-temporary HOME (`Pictures/Wallpapers`, `XDG_DATA_HOME/applications`,
-`XDG_DATA_HOME/icons`, and private Nacre state) and removed on exit. Run artifacts and failure screenshots are
+uses the host Wayland socket. Applications, icons, and private Nacre state are
+staged into a mode-0700 private HOME/XDG tree. By default it is temporary and
+removed on exit. For a normal-day cache prime followed by fresh shell/daemon
+measurement, set `BEAD_DAILY_HOME_ROOT` to a task-private directory; config,
+cache, data, state, and HOME persist between runs while compositor/runtime
+sockets and every shell/daemon process are recreated. `BEAD_DAILY_RUNTIME_ROOT`
+can select a short ephemeral runtime path when the task directory would make
+UNIX socket paths too long. The wallpaper directory stays at the stable
+task-private `--data/wallpapers` path and is selected through that arm's private
+`config/nacre/cli.json`; this preserves wallpaper file identity across runs
+without using host user data. Run artifacts and failure screenshots are
 written to the selected private evidence directory. The wrapper caps the run
 with a user systemd scope (`MemoryMax=12G`, no swap) and holds the desktop heavy
 lock for the arm.
@@ -45,7 +53,18 @@ has its own open, latency, close, and pixel-diff assertion.
 When `--tools` is supplied, the runner points `NACRE_HELPER_BINARY` at the
 matching `--daemon` executable so private `cli-bridge.sh` calls use that same
 task-local helper rather than expecting an installed helper under the temporary
-HOME.
+HOME. It sets the daemon/shell `PATH` to the task-local binary directory plus
+`/usr/bin:/bin`, ensuring asynchronous helper children launched by name resolve
+deterministically. Each evidence arm records HOME, XDG roots, PATH, and helper
+paths in `acceptance-environment.json`.
+`wallpaper-library-identities.json` records the stable staged input paths and
+file identity (size, mtime, inode, device) used by display-raster cache keys.
+The wallpaper-live arm also snapshots the private wallpaper selection-generation
+file per cycle; this distinguishes a queued RPC ACK from a child selection that
+actually ran. Selection-to-presentation samples use the first presentation
+feedback per output revision, so a repaint of one wallpaper is not counted as a
+second selection. It reports per-cycle counts/p95/max and gates the combined
+three-cycle p95, with at least five distinct presented revisions in each cycle.
 
 Pointer input is sent to the *parent* Labwc compositor through
 `wlr-virtual-pointer`, so the host pointer is never moved. Modifier chords use
@@ -76,9 +95,26 @@ dropdown at once, and a pointer sweep along the status pill (`pill_sweep` = `[x0
 the profile) shows a hover background at every step, so the pill's hit areas have no gaps.
 
 For cache-state comparisons, set `BEAD_DAILY_CACHE_SNAPSHOT` to a private
-task-owned directory. The runner seeds its fresh per-arm XDG cache from that
-directory and saves the arm's resulting cache before deleting the private HOME.
-The shell and daemon remain fresh on every run; omit or clear the snapshot for a
-fully cold-cache arm. `--wallpaper-live` also samples the shell process's
-`/proc/<pid>/stat` CPU ticks for two seconds and `Pss_Anon` at 2.5 seconds
-after each picker close.
+task-owned directory. The runner seeds the arm's XDG cache from that directory
+and saves the resulting cache on exit. Use this with `BEAD_DAILY_HOME_ROOT` to
+prime matching preview/palette keys and active wallpaper state, then measure
+with a fresh shell and daemon against the same private roots. Omit the snapshot
+and use a new HOME root (or the default temporary HOME) for a fully cold-cache
+arm. `--wallpaper-live` always runs three selection cycles and a two-minute idle
+sample, even when `--quick` is supplied. It samples process and per-thread
+`/proc/<pid>/stat` CPU ticks through three seconds after close, with 20 ms samples
+around the two-second deadline (the kernel clock is 100 Hz), plus `Pss_Anon` at
+2.5 seconds. It reports the last nonzero sample interval and one-second rolling
+windows so sub-10 ms tick resolution and any residual tick are explicit. Each
+cycle also captures a five-second pre-open thread baseline and the shell log
+after close to correlate late link or wallpaper events with CPU ticks. A
+post-two-second thread tick is reported raw and compared by TID/name with that
+cycle's baseline; only ticks beyond the observed baseline count as continuing
+picker work.
+
+Use `--wallpaper-open-only --latency-limit-ms 300` with a fresh HOME root and no
+cache snapshot to measure one fully cold picker first frame without selections,
+the general dropdown suite, image-diff conversion, or the two-minute idle. It
+opens with the actual Super+W virtual key chord, captures the first presented
+frame, closes with Escape, and records the closed layer inventory.
+`--wallpaper-live` remains the warm-cache selection and post-close CPU gate.

@@ -1,0 +1,8 @@
+SERVICE_AUDIO disconnected: Creation failed
+PANEL_SNAPSHOT_TRIGGER monotonic_ns=1066476343827432 epoch=1 close_epoch=8
+PANEL_CPU_SNAPSHOT_BEGIN monotonic_ns=1066476343877772 epoch=1 close_epoch=8 ui_serial=213
+CPU_SNAPSHOT full_bytes=4921344 retained_bytes=1437284
+PANEL_CPU_SNAPSHOT_COMPLETE monotonic_ns=1066476352246588 elapsed_ms=8.369 epoch=1 close_epoch=8
+GL_CACHE_RELEASE images=17 image_bytes=6725088 composite_bytes=4921344
+PANEL_GPU_SUSPENDED shared_context_retained=false monotonic_ns=1066476357606705
+SERVICE_AUDIO disconnected: Creation failed

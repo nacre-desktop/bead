@@ -1,0 +1,1296 @@
+WALLPAPER_SWITCH_PHASE revision=11 phase=selection ms_since_selection=0.035 file_bytes=11354264 source_width=4000 source_height=2250
+WALLPAPER_SWITCH_PHASE revision=11 phase=request_sent ms_since_selection=1.179 file_bytes=11354264 source_width=4000 source_height=2250
+PROFILE stage=font_select ms=0.970 files=2 faces=2
+PROFILE stage=resources text_ms=0.309 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.367 builds=88
+WORKER_PREPARE token=239 reload=false total_ms=8.097 builds=88
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=9360 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=204721 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=368801 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.077 monotonic_ns=1066484790164468 update=218 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=11 phase=daemon_ack ms_since_selection=7.522 file_bytes=11354264 source_width=4000 source_height=2250
+UI_PRESENTED generation=1 monotonic_ns=1066484791761927 refresh_ns=0 companion=true update=218 cpu_ns=0
+PROFILE stage=resources text_ms=0.000 images_ms=2.788 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-16.thumbnail/image/0 total_ms=3.086 builds=89
+PROFILE stage=resources text_ms=0.000 images_ms=2.697 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-17.thumbnail/image/0 total_ms=2.898 builds=90
+PROFILE stage=resources text_ms=0.000 images_ms=0.350 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 total_ms=0.369 builds=91
+WORKER_PREPARE token=240 reload=false total_ms=9.451 builds=91
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-16.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-17.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189233 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=348541 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.081 monotonic_ns=1066484812729015 update=219 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066484814106944 refresh_ns=0 companion=true update=219 cpu_ns=0
+WORKER_PREPARE token=241 reload=false total_ms=2.801 builds=91
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=987920 markup_compiled_bytes=127409 markup_values_bytes=189233 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=348541 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.062 monotonic_ns=1066484822005000 update=220 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066484823626619 refresh_ns=0 companion=true update=220 cpu_ns=0
+PROFILE stage=resources text_ms=0.000 images_ms=3.132 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 total_ms=3.345 builds=92
+PROFILE stage=resources text_ms=0.000 images_ms=2.842 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 total_ms=3.034 builds=93
+PROFILE stage=resources text_ms=0.000 images_ms=2.607 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 total_ms=2.765 builds=94
+PROFILE stage=resources text_ms=0.000 images_ms=0.294 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 total_ms=0.434 builds=95
+WORKER_PREPARE token=242 reload=false total_ms=12.338 builds=95
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-16.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=987920 markup_compiled_bytes=127409 markup_values_bytes=189233 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=348541 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.079 monotonic_ns=1066484849225724 update=221 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066484850600653 refresh_ns=0 companion=true update=221 cpu_ns=0
+WORKER_PREPARE token=243 reload=false total_ms=3.159 builds=95
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-17.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=987920 markup_compiled_bytes=127409 markup_values_bytes=189233 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=348541 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.059 monotonic_ns=1066484855994960 update=222 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066484857060100 refresh_ns=0 companion=true update=222 cpu_ns=0
+WORKER_PREPARE token=244 reload=false total_ms=2.567 builds=95
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-16.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-17.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=987920 markup_compiled_bytes=127409 markup_values_bytes=189233 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=348541 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.057 monotonic_ns=1066484872432981 update=223 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066484873546180 refresh_ns=0 companion=true update=223 cpu_ns=0
+WORKER_PREPARE token=245 reload=false total_ms=2.406 builds=95
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=987920 markup_compiled_bytes=127409 markup_values_bytes=189233 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=348541 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.062 monotonic_ns=1066484888255022 update=224 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066484889600171 refresh_ns=0 companion=true update=224 cpu_ns=0
+WORKER_PREPARE token=246 reload=false total_ms=2.452 builds=95
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=1004280 markup_compiled_bytes=127409 markup_values_bytes=189233 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=348541 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.075 monotonic_ns=1066484905464412 update=225 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066484907548171 refresh_ns=0 companion=true update=225 cpu_ns=0
+WORKER_PREPARE token=247 reload=false total_ms=2.797 builds=95
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=1004280 markup_compiled_bytes=127409 markup_values_bytes=189233 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=348541 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.060 monotonic_ns=1066484921976703 update=226 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066484924521541 refresh_ns=0 companion=true update=226 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=11 phase=selection ms_since_selection=0.024 file_bytes=11354264 source_width=4000 source_height=2250
+WALLPAPER_SWITCH_PHASE revision=11 phase=request_sent ms_since_selection=0.639 file_bytes=11354264 source_width=4000 source_height=2250
+WALLPAPER_SWITCH_PHASE revision=11 phase=daemon_ack ms_since_selection=6.610 file_bytes=11354264 source_width=4000 source_height=2250
+WORKER_PREPARE token=249 reload=false total_ms=2.203 builds=95
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-16.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-17.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=1004280 markup_compiled_bytes=127409 markup_values_bytes=189233 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=348541 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.078 monotonic_ns=1066484938607603 update=227 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066484940588782 refresh_ns=0 companion=true update=227 cpu_ns=0
+WORKER_PREPARE token=250 reload=false total_ms=2.489 builds=95
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=1004280 markup_compiled_bytes=127409 markup_values_bytes=189233 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=348541 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.065 monotonic_ns=1066484954999254 update=228 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066484957515143 refresh_ns=0 companion=true update=228 cpu_ns=0
+WORKER_PREPARE token=251 reload=false total_ms=2.308 builds=95
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-17.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=1004280 markup_compiled_bytes=127409 markup_values_bytes=189233 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=348541 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.067 monotonic_ns=1066484972081474 update=229 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066484973739503 refresh_ns=0 companion=true update=229 cpu_ns=0
+WORKER_PREPARE token=252 reload=false total_ms=2.484 builds=95
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=1020640 markup_compiled_bytes=127409 markup_values_bytes=189233 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=348541 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.052 monotonic_ns=1066484988507445 update=230 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066484990577294 refresh_ns=0 companion=true update=230 cpu_ns=0
+WORKER_PREPARE token=253 reload=false total_ms=2.447 builds=95
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=1020640 markup_compiled_bytes=127409 markup_values_bytes=189233 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=348541 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.065 monotonic_ns=1066485004974076 update=231 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485007505654 refresh_ns=0 companion=true update=231 cpu_ns=0
+WORKER_PREPARE token=254 reload=false total_ms=2.425 builds=95
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-17.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=1004280 markup_compiled_bytes=127409 markup_values_bytes=189233 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=348541 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.073 monotonic_ns=1066485022034226 update=232 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485023814115 refresh_ns=0 companion=true update=232 cpu_ns=0
+WORKER_PREPARE token=255 reload=false total_ms=2.504 builds=95
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-17.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=987920 markup_compiled_bytes=127409 markup_values_bytes=189233 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=348541 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.057 monotonic_ns=1066485038836566 update=233 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485040723295 refresh_ns=0 companion=true update=233 cpu_ns=0
+WORKER_PREPARE token=256 reload=false total_ms=2.722 builds=95
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189233 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=348541 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.084 monotonic_ns=1066485055622497 update=234 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485057637996 refresh_ns=0 companion=true update=234 cpu_ns=0
+WORKER_PREPARE token=257 reload=false total_ms=2.296 builds=95
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=922480 markup_compiled_bytes=127409 markup_values_bytes=189233 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=348541 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.065 monotonic_ns=1066485071996217 update=235 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485073716196 refresh_ns=0 companion=true update=235 cpu_ns=0
+WORKER_PREPARE token=258 reload=false total_ms=2.495 builds=95
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=889760 markup_compiled_bytes=127409 markup_values_bytes=204772 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=391867 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.082 monotonic_ns=1066485088368468 update=236 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485090631777 refresh_ns=0 companion=true update=236 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=11 phase=selection ms_since_selection=0.364 file_bytes=941763 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=11 phase=request_sent ms_since_selection=2.078 file_bytes=941763 source_width=3840 source_height=2160
+PROFILE stage=font_select ms=0.986 files=2 faces=2
+PROFILE stage=resources text_ms=0.184 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.240 builds=96
+WORKER_PREPARE token=259 reload=false total_ms=8.094 builds=96
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=6400 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=204769 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=391867 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.061 monotonic_ns=1066485212346018 update=237 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=11 phase=daemon_ack ms_since_selection=8.037 file_bytes=941763 source_width=3840 source_height=2160
+UI_PRESENTED generation=1 monotonic_ns=1066485214752256 refresh_ns=0 companion=true update=237 cpu_ns=0
+PROFILE stage=resources text_ms=0.000 images_ms=0.282 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 total_ms=0.316 builds=97
+WORKER_PREPARE token=260 reload=false total_ms=3.168 builds=97
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-17.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.084 monotonic_ns=1066485230011198 update=238 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485231992217 refresh_ns=0 companion=true update=238 cpu_ns=0
+WORKER_PREPARE token=261 reload=false total_ms=2.875 builds=97
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.071 monotonic_ns=1066485246066729 update=239 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485247891817 refresh_ns=0 companion=true update=239 cpu_ns=0
+WORKER_PREPARE token=262 reload=false total_ms=2.387 builds=97
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.055 monotonic_ns=1066485261957580 update=240 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485264520308 refresh_ns=0 companion=true update=240 cpu_ns=0
+PROFILE stage=resources text_ms=0.000 images_ms=0.266 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 total_ms=0.449 builds=98
+WORKER_PREPARE token=263 reload=false total_ms=2.867 builds=98
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-17.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.065 monotonic_ns=1066485279937749 update=241 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485281790588 refresh_ns=0 companion=true update=241 cpu_ns=0
+WORKER_PREPARE token=264 reload=false total_ms=2.680 builds=98
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-17.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.066 monotonic_ns=1066485296080110 update=242 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485297837199 refresh_ns=0 companion=true update=242 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=12 phase=decode_start ms_since_selection=96.890 file_bytes=941763 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=12 phase=decode_end ms_since_selection=97.032 file_bytes=941763 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=12 phase=scale_end ms_since_selection=97.036 file_bytes=941763 source_width=3840 source_height=2160
+PROFILE stage=resources text_ms=0.000 images_ms=0.332 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.brand._layout0/image/0 total_ms=0.360 builds=181
+WORKER_PREPARE token=265 reload=false total_ms=4.352 builds=98
+PROFILE stage=resources text_ms=0.000 images_ms=0.137 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.capsule.workspaces.k6e6972693a3233353033383435333136313836373a776f726b73706163653a31.cell.workspace.enamel-gradient/image/0 total_ms=0.158 builds=182
+PROFILE stage=resources text_ms=0.061 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title-icon/text/0 total_ms=0.075 builds=183
+PROFILE stage=resources text_ms=0.021 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title/text/0 total_ms=0.039 builds=184
+PROFILE stage=resources text_ms=0.023 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.package.ink/text/0 total_ms=0.035 builds=185
+PROFILE stage=resources text_ms=0.006 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.count/text/0 total_ms=0.017 builds=186
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.audio.glyph.ink/text/0 total_ms=0.022 builds=187
+PROFILE stage=resources text_ms=0.016 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.network.glyph.ink/text/0 total_ms=0.032 builds=188
+PROFILE stage=resources text_ms=0.016 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-17.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_bake id=bar.right.system-pill.status.bluetooth.glyph.ink/text/0 total_ms=0.029 builds=189
+PROFILE stage=resources text_ms=0.016 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.battery.glyph.ink/text/0 total_ms=0.028 builds=190
+PROFILE stage=resources text_ms=0.015 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.glyph.ink/text/0 total_ms=0.027 builds=191
+PROFILE stage=resources text_ms=0.006 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.notifications-count/text/0 total_ms=0.017 builds=192
+PROFILE stage=resources text_ms=0.016 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.calendar.ink/text/0 total_ms=0.029 builds=193
+PROFILE stage=resources text_ms=0.017 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.time/text/0 total_ms=0.034 builds=194
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=resources text_ms=0.013 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.power.glyph.ink/text/0 total_ms=0.026 builds=195
+WORKER_PREPARE token=60 reload=false total_ms=3.013 builds=195
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.141 monotonic_ns=1066485307098414 update=243 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=131 nodes=15 watchers=1 subscriptions=1 bindings=13 sources=31 luau_bytes=606352 markup_compiled_bytes=237697 markup_values_bytes=208656 markup_vm_build_bytes=1587644 source_bytes=178054 layers=46 gpu_images=0 surfaces=2 output=winit
+UI_COMMIT generation=3 reload=false prepare_ms=0.075 monotonic_ns=1066485307205744 update=18 companion=false source_error=false output=winit wallpaper_palette=true
+PROFILE stage=resources text_ms=0.222 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.search/text/0 total_ms=0.256 builds=99
+PROFILE stage=resources text_ms=0.073 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.media.dynamic._layout0/text/0 total_ms=0.087 builds=100
+PROFILE stage=resources text_ms=0.052 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 total_ms=0.066 builds=101
+PROFILE stage=resources text_ms=0.046 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 total_ms=0.059 builds=102
+PROFILE stage=resources text_ms=0.021 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout0/text/0 total_ms=0.030 builds=103
+PROFILE stage=resources text_ms=0.023 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout1/text/0 total_ms=0.032 builds=104
+PROFILE stage=resources text_ms=0.014 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 total_ms=0.022 builds=105
+PROFILE stage=resources text_ms=0.040 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.076 builds=106
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.next._layout0._layout0/text/0 total_ms=0.019 builds=107
+WORKER_PREPARE token=266 reload=false total_ms=2.693 builds=107
+PROFILE stage=layer_upload id=extras.search/text/0 pixels=4508 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.media.dynamic._layout0/text/0 pixels=1463 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 pixels=1539 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 pixels=1566 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout0/text/0 pixels=196 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout1/text/0 pixels=525 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 pixels=84 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=6400 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.next._layout0._layout0/text/0 pixels=84 region=partial
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.300 monotonic_ns=1066485310374772 update=244 companion=true source_error=false output=shared wallpaper_palette=true
+WALLPAPER_WARM ready=true rasters=9 requested=9 cache_bytes=6596702 cache_limit=23068672 layout=carousel viewport=1920x1200 size=1900x1140 scale=1.500
+WALLPAPER_SWITCH_PHASE revision=12 phase=upload_end ms_since_selection=108.469 file_bytes=941763 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=12 phase=commit ms_since_selection=109.729 file_bytes=941763 source_width=3840 source_height=2160
+WALLPAPER_SURFACE_COMMITTED output=winit revision=12 width=2880 height=1800 transition=false
+UI_PRESENTED generation=3 monotonic_ns=1066485319560837 refresh_ns=0 companion=false update=18 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=12 phase=presented ms_since_selection=116.589 file_bytes=941763 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_LATENCY output=winit revision=12 path=static-to-static request=selection endpoint=presentation-feedback ms=116.596
+WALLPAPER_PRESENTED output=winit revision=12 monotonic_ns=1066485319560837 refresh_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066485321517605 refresh_ns=0 companion=true update=244 cpu_ns=0
+PROFILE stage=resources text_ms=0.000 images_ms=16.862 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras/image/0 total_ms=18.728 builds=108
+WORKER_PREPARE token=267 reload=false total_ms=24.111 builds=108
+PROFILE stage=layer_upload id=extras/image/0 pixels=1059456 region=partial
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-17.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.292 monotonic_ns=1066485337388847 update=245 companion=true source_error=false output=shared wallpaper_palette=false
+WORKER_PREPARE token=268 reload=false total_ms=3.844 builds=108
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-17.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.065 monotonic_ns=1066485341565364 update=246 companion=true source_error=false output=shared wallpaper_palette=false
+WORKER_PREPARE token=269 reload=false total_ms=2.483 builds=108
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-17.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.053 monotonic_ns=1066485345813182 update=247 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485352181288 refresh_ns=0 companion=true update=245 cpu_ns=0
+WORKER_PREPARE token=270 reload=false total_ms=2.254 builds=108
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.053 monotonic_ns=1066485361815763 update=248 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485368273509 refresh_ns=0 companion=true update=247 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=12 phase=selection ms_since_selection=0.575 file_bytes=941763 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=12 phase=request_sent ms_since_selection=1.647 file_bytes=941763 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=12 phase=decode_start ms_since_selection=2.015 file_bytes=941763 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=12 phase=daemon_ack ms_since_selection=4.719 file_bytes=941763 source_width=3840 source_height=2160
+WORKER_PREPARE token=272 reload=false total_ms=2.666 builds=108
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-17.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.083 monotonic_ns=1066485379620853 update=249 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485384508810 refresh_ns=0 companion=true update=248 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=12 phase=decode_end ms_since_selection=19.635 file_bytes=941763 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=12 phase=scale_end ms_since_selection=19.642 file_bytes=941763 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=12 phase=upload_end ms_since_selection=23.052 file_bytes=941763 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=12 phase=commit ms_since_selection=24.711 file_bytes=941763 source_width=3840 source_height=2160
+WORKER_PREPARE token=273 reload=false total_ms=3.590 builds=108
+WALLPAPER_SURFACE_COMMITTED output=winit revision=12 width=2880 height=1800 transition=false
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.072 monotonic_ns=1066485397099123 update=250 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485400661771 refresh_ns=0 companion=true update=249 cpu_ns=0
+WORKER_PREPARE token=274 reload=false total_ms=2.880 builds=108
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.079 monotonic_ns=1066485412984104 update=251 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=12 phase=presented ms_since_selection=46.549 file_bytes=941763 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_LATENCY output=winit revision=12 path=static-to-static request=selection endpoint=presentation-feedback ms=46.555
+WALLPAPER_PRESENTED output=winit revision=12 monotonic_ns=1066485416737401 refresh_ns=0
+WORKER_PREPARE token=275 reload=false total_ms=2.519 builds=108
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.058 monotonic_ns=1066485428758935 update=252 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SURFACE_COMMITTED output=winit revision=12 width=2880 height=1800 transition=false
+UI_PRESENTED generation=1 monotonic_ns=1066485432869692 refresh_ns=0 companion=true update=250 cpu_ns=0
+WORKER_PREPARE token=276 reload=false total_ms=2.928 builds=108
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=922480 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.077 monotonic_ns=1066485446278775 update=253 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_PRESENTED output=winit revision=12 monotonic_ns=1066485448947933 refresh_ns=0
+SERVICE_AUDIO disconnected: Creation failed
+WORKER_PREPARE token=277 reload=false total_ms=2.668 builds=108
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=873400 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.068 monotonic_ns=1066485462788745 update=254 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485465043994 refresh_ns=0 companion=true update=252 cpu_ns=0
+WORKER_PREPARE token=278 reload=false total_ms=2.596 builds=108
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=857040 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.072 monotonic_ns=1066485479100906 update=255 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485481164485 refresh_ns=0 companion=true update=254 cpu_ns=0
+WORKER_PREPARE token=279 reload=false total_ms=2.702 builds=108
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=824320 markup_compiled_bytes=127409 markup_values_bytes=189293 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=375829 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.059 monotonic_ns=1066485495993916 update=256 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485497214976 refresh_ns=0 companion=true update=255 cpu_ns=0
+WORKER_PREPARE token=280 reload=false total_ms=2.235 builds=108
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=791600 markup_compiled_bytes=127409 markup_values_bytes=204828 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=433104 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.049 monotonic_ns=1066485511783107 update=257 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485513279866 refresh_ns=0 companion=true update=256 cpu_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066485529348808 refresh_ns=0 companion=true update=257 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=12 phase=selection ms_since_selection=0.025 file_bytes=131609 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_PHASE revision=12 phase=request_sent ms_since_selection=0.774 file_bytes=131609 source_width=1920 source_height=1080
+PROFILE stage=font_select ms=0.862 files=2 faces=2
+PROFILE stage=resources text_ms=0.165 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.209 builds=109
+WORKER_PREPARE token=281 reload=false total_ms=6.928 builds=109
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=7540 region=full
+SHM_POOL_COMPACT output=winit
+BUFFER output=11 logical=1920x50 physical=2880x75 scale=1.5 format=Rgba allocation_count=39 pool_bytes=2592000 buffer_bytes=864000
+WALLPAPER_SWITCH_PHASE revision=12 phase=daemon_ack ms_since_selection=7.671 file_bytes=131609 source_width=1920 source_height=1080
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=204825 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=433104 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.151 monotonic_ns=1066485671211107 update=258 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485675426584 refresh_ns=0 companion=true update=258 cpu_ns=0
+PROFILE stage=resources text_ms=0.000 images_ms=0.300 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 total_ms=0.328 builds=110
+WORKER_PREPARE token=282 reload=false total_ms=3.234 builds=110
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.071 monotonic_ns=1066485684849819 update=259 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485688118987 refresh_ns=0 companion=true update=259 cpu_ns=0
+WORKER_PREPARE token=283 reload=false total_ms=2.561 builds=110
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.068 monotonic_ns=1066485700580200 update=260 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485704196728 refresh_ns=0 companion=true update=260 cpu_ns=0
+PROFILE stage=resources text_ms=0.000 images_ms=2.507 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 total_ms=2.710 builds=111
+WORKER_PREPARE token=284 reload=false total_ms=4.975 builds=111
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.078 monotonic_ns=1066485720071039 update=261 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485722394108 refresh_ns=0 companion=true update=261 cpu_ns=0
+WORKER_PREPARE token=285 reload=false total_ms=2.420 builds=111
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.055 monotonic_ns=1066485734215611 update=262 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485736414870 refresh_ns=0 companion=true update=262 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=13 phase=decode_start ms_since_selection=84.566 file_bytes=131609 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_PHASE revision=13 phase=decode_end ms_since_selection=84.715 file_bytes=131609 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_PHASE revision=13 phase=scale_end ms_since_selection=84.719 file_bytes=131609 source_width=1920 source_height=1080
+WORKER_PREPARE token=286 reload=false total_ms=4.680 builds=111
+PROFILE stage=resources text_ms=0.000 images_ms=0.230 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.brand._layout0/image/0 total_ms=0.252 builds=196
+PROFILE stage=resources text_ms=0.000 images_ms=0.095 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.capsule.workspaces.k6e6972693a3233353033383435333136313836373a776f726b73706163653a31.cell.workspace.enamel-gradient/image/0 total_ms=0.104 builds=197
+PROFILE stage=resources text_ms=0.050 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title-icon/text/0 total_ms=0.061 builds=198
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=resources text_ms=0.014 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title/text/0 total_ms=0.026 builds=199
+PROFILE stage=resources text_ms=0.014 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.package.ink/text/0 total_ms=0.023 builds=200
+PROFILE stage=resources text_ms=0.004 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.count/text/0 total_ms=0.011 builds=201
+PROFILE stage=resources text_ms=0.008 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_bake id=bar.right.system-pill.status.audio.glyph.ink/text/0 total_ms=0.017 builds=202
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.network.glyph.ink/text/0 total_ms=0.028 builds=203
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.bluetooth.glyph.ink/text/0 total_ms=0.018 builds=204
+PROFILE stage=resources text_ms=0.010 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.battery.glyph.ink/text/0 total_ms=0.017 builds=205
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.glyph.ink/text/0 total_ms=0.016 builds=206
+PROFILE stage=resources text_ms=0.003 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.notifications-count/text/0 total_ms=0.011 builds=207
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.calendar.ink/text/0 total_ms=0.020 builds=208
+PROFILE stage=resources text_ms=0.017 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.time/text/0 total_ms=0.027 builds=209
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=resources text_ms=0.007 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.power.glyph.ink/text/0 total_ms=0.015 builds=210
+WORKER_PREPARE token=61 reload=false total_ms=2.360 builds=210
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.129 monotonic_ns=1066485750775192 update=263 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=131 nodes=15 watchers=1 subscriptions=1 bindings=13 sources=31 luau_bytes=606352 markup_compiled_bytes=237697 markup_values_bytes=208656 markup_vm_build_bytes=1587644 source_bytes=178054 layers=46 gpu_images=0 surfaces=2 output=winit
+UI_COMMIT generation=3 reload=false prepare_ms=0.060 monotonic_ns=1066485750842082 update=19 companion=false source_error=false output=winit wallpaper_palette=true
+PROFILE stage=resources text_ms=0.048 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.search/text/0 total_ms=0.076 builds=112
+PROFILE stage=resources text_ms=0.010 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.media.dynamic._layout0/text/0 total_ms=0.022 builds=113
+PROFILE stage=resources text_ms=0.013 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 total_ms=0.032 builds=114
+PROFILE stage=resources text_ms=0.013 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 total_ms=0.024 builds=115
+PROFILE stage=resources text_ms=0.015 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout0/text/0 total_ms=0.022 builds=116
+PROFILE stage=resources text_ms=0.006 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout1/text/0 total_ms=0.014 builds=117
+PROFILE stage=resources text_ms=0.008 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 total_ms=0.015 builds=118
+PROFILE stage=resources text_ms=0.036 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.066 builds=119
+PROFILE stage=resources text_ms=0.006 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.next._layout0._layout0/text/0 total_ms=0.013 builds=120
+WORKER_PREPARE token=287 reload=false total_ms=2.254 builds=120
+PROFILE stage=layer_upload id=extras.search/text/0 pixels=4508 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.media.dynamic._layout0/text/0 pixels=1463 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 pixels=1539 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 pixels=1566 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout0/text/0 pixels=196 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout1/text/0 pixels=525 region=partial
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 pixels=84 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=7540 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.next._layout0._layout0/text/0 pixels=84 region=partial
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.076 monotonic_ns=1066485753512470 update=264 companion=true source_error=false output=shared wallpaper_palette=true
+WALLPAPER_WARM ready=true rasters=9 requested=9 cache_bytes=6596702 cache_limit=23068672 layout=carousel viewport=1920x1200 size=1900x1140 scale=1.500
+WALLPAPER_SWITCH_PHASE revision=13 phase=upload_end ms_since_selection=92.813 file_bytes=131609 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_PHASE revision=13 phase=commit ms_since_selection=93.923 file_bytes=131609 source_width=1920 source_height=1080
+WALLPAPER_SURFACE_COMMITTED output=winit revision=13 width=2880 height=1800 transition=false
+UI_PRESENTED generation=3 monotonic_ns=1066485760376826 refresh_ns=0 companion=false update=19 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=13 phase=presented ms_since_selection=99.910 file_bytes=131609 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_LATENCY output=winit revision=13 path=static-to-static request=selection endpoint=presentation-feedback ms=99.914
+WALLPAPER_PRESENTED output=winit revision=13 monotonic_ns=1066485760376826 refresh_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066485768693412 refresh_ns=0 companion=true update=264 cpu_ns=0
+PROFILE stage=resources text_ms=0.000 images_ms=12.583 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras/image/0 total_ms=14.175 builds=121
+WORKER_PREPARE token=288 reload=false total_ms=16.757 builds=121
+PROFILE stage=layer_upload id=extras/image/0 pixels=1059456 region=partial
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.326 monotonic_ns=1066485783900263 update=265 companion=true source_error=false output=shared wallpaper_palette=false
+WORKER_PREPARE token=289 reload=false total_ms=4.214 builds=121
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.056 monotonic_ns=1066485787962991 update=266 companion=true source_error=false output=shared wallpaper_palette=false
+WORKER_PREPARE token=290 reload=false total_ms=2.328 builds=121
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.069 monotonic_ns=1066485800820083 update=267 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485800933293 refresh_ns=0 companion=true update=265 cpu_ns=0
+WORKER_PREPARE token=291 reload=false total_ms=2.035 builds=121
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-1.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.064 monotonic_ns=1066485817020144 update=268 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485817017054 refresh_ns=0 companion=true update=267 cpu_ns=0
+WORKER_PREPARE token=292 reload=false total_ms=1.863 builds=121
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+UI_PRESENTED generation=1 monotonic_ns=1066485833094755 refresh_ns=0 companion=true update=268 cpu_ns=0
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.073 monotonic_ns=1066485833493585 update=269 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=13 phase=selection ms_since_selection=0.026 file_bytes=131609 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_PHASE revision=13 phase=request_sent ms_since_selection=1.307 file_bytes=131609 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_PHASE revision=13 phase=decode_start ms_since_selection=2.032 file_bytes=131609 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_PHASE revision=13 phase=daemon_ack ms_since_selection=4.763 file_bytes=131609 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_PHASE revision=13 phase=decode_end ms_since_selection=10.141 file_bytes=131609 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_PHASE revision=13 phase=scale_end ms_since_selection=10.149 file_bytes=131609 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_PHASE revision=13 phase=upload_end ms_since_selection=13.441 file_bytes=131609 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_PHASE revision=13 phase=commit ms_since_selection=15.116 file_bytes=131609 source_width=1920 source_height=1080
+WORKER_PREPARE token=294 reload=false total_ms=3.409 builds=121
+WALLPAPER_SURFACE_COMMITTED output=winit revision=13 width=2880 height=1800 transition=false
+UI_PRESENTED generation=1 monotonic_ns=1066485849361396 refresh_ns=0 companion=true update=269 cpu_ns=0
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.121 monotonic_ns=1066485852194524 update=270 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=13 phase=presented ms_since_selection=30.786 file_bytes=131609 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_LATENCY output=winit revision=13 path=static-to-static request=selection endpoint=presentation-feedback ms=30.797
+WALLPAPER_PRESENTED output=winit revision=13 monotonic_ns=1066485865466456 refresh_ns=0
+WORKER_PREPARE token=295 reload=false total_ms=2.836 builds=121
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.107 monotonic_ns=1066485868292425 update=271 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SURFACE_COMMITTED output=winit revision=13 width=2880 height=1800 transition=false
+UI_PRESENTED generation=1 monotonic_ns=1066485881588687 refresh_ns=0 companion=true update=270 cpu_ns=0
+WORKER_PREPARE token=296 reload=false total_ms=4.643 builds=121
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.067 monotonic_ns=1066485886304135 update=272 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_PRESENTED output=winit revision=13 monotonic_ns=1066485897680368 refresh_ns=0
+WORKER_PREPARE token=297 reload=false total_ms=2.621 builds=121
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=987920 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.051 monotonic_ns=1066485901114806 update=273 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485913776779 refresh_ns=0 companion=true update=271 cpu_ns=0
+WORKER_PREPARE token=298 reload=false total_ms=3.453 builds=121
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=987920 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.067 monotonic_ns=1066485918607826 update=274 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485929913630 refresh_ns=0 companion=true update=273 cpu_ns=0
+WORKER_PREPARE token=299 reload=false total_ms=2.731 builds=121
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=987920 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.055 monotonic_ns=1066485934449457 update=275 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485945981311 refresh_ns=0 companion=true update=274 cpu_ns=0
+WORKER_PREPARE token=300 reload=false total_ms=2.841 builds=121
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189361 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=413057 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.062 monotonic_ns=1066485951250658 update=276 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485962055661 refresh_ns=0 companion=true update=275 cpu_ns=0
+WORKER_PREPARE token=301 reload=false total_ms=2.733 builds=121
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=204868 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=463625 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.054 monotonic_ns=1066485967387868 update=277 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066485978141742 refresh_ns=0 companion=true update=276 cpu_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066485994205123 refresh_ns=0 companion=true update=277 cpu_ns=0
+SHM_POOL_COMPACT output=winit
+BUFFER output=11 logical=1920x50 physical=2880x75 scale=1.5 format=Rgba allocation_count=42 pool_bytes=2592000 buffer_bytes=864000
+WALLPAPER_SWITCH_PHASE revision=13 phase=selection ms_since_selection=1.813 file_bytes=5109902 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=13 phase=request_sent ms_since_selection=2.805 file_bytes=5109902 source_width=3840 source_height=2160
+PROFILE stage=font_select ms=0.844 files=2 faces=2
+PROFILE stage=resources text_ms=0.124 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.166 builds=122
+WORKER_PREPARE token=302 reload=false total_ms=8.745 builds=122
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=6960 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=204865 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=463625 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.078 monotonic_ns=1066486133099854 update=278 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=13 phase=daemon_ack ms_since_selection=8.597 file_bytes=5109902 source_width=3840 source_height=2160
+UI_PRESENTED generation=1 monotonic_ns=1066486135595773 refresh_ns=0 companion=true update=278 cpu_ns=0
+PROFILE stage=resources text_ms=0.000 images_ms=0.318 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-7.thumbnail/image/0 total_ms=0.352 builds=123
+WORKER_PREPARE token=303 reload=false total_ms=3.163 builds=123
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-7.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.082 monotonic_ns=1066486151116494 update=279 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486152980403 refresh_ns=0 companion=true update=279 cpu_ns=0
+PROFILE stage=resources text_ms=0.000 images_ms=2.670 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-7.thumbnail/image/0 total_ms=2.872 builds=124
+WORKER_PREPARE token=304 reload=false total_ms=5.378 builds=124
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-7.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.073 monotonic_ns=1066486169958073 update=280 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486171929062 refresh_ns=0 companion=true update=280 cpu_ns=0
+WORKER_PREPARE token=305 reload=false total_ms=2.665 builds=124
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.069 monotonic_ns=1066486183352596 update=281 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486185766884 refresh_ns=0 companion=true update=281 cpu_ns=0
+WORKER_PREPARE token=306 reload=false total_ms=2.557 builds=124
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.069 monotonic_ns=1066486200184276 update=282 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486202593795 refresh_ns=0 companion=true update=282 cpu_ns=0
+WORKER_PREPARE token=307 reload=false total_ms=2.710 builds=124
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.080 monotonic_ns=1066486217258966 update=283 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486219157655 refresh_ns=0 companion=true update=283 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=14 phase=decode_start ms_since_selection=93.663 file_bytes=5109902 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=14 phase=decode_end ms_since_selection=94.185 file_bytes=5109902 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=14 phase=scale_end ms_since_selection=94.190 file_bytes=5109902 source_width=3840 source_height=2160
+PROFILE stage=resources text_ms=0.000 images_ms=0.234 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.brand._layout0/image/0 total_ms=0.288 builds=211
+WORKER_PREPARE token=308 reload=false total_ms=6.002 builds=124
+PROFILE stage=resources text_ms=0.000 images_ms=0.096 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.capsule.workspaces.k6e6972693a3233353033383435333136313836373a776f726b73706163653a31.cell.workspace.enamel-gradient/image/0 total_ms=0.105 builds=212
+PROFILE stage=resources text_ms=0.051 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title-icon/text/0 total_ms=0.061 builds=213
+PROFILE stage=resources text_ms=0.018 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title/text/0 total_ms=0.030 builds=214
+PROFILE stage=resources text_ms=0.012 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.package.ink/text/0 total_ms=0.021 builds=215
+PROFILE stage=resources text_ms=0.005 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.count/text/0 total_ms=0.013 builds=216
+PROFILE stage=resources text_ms=0.008 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.audio.glyph.ink/text/0 total_ms=0.016 builds=217
+PROFILE stage=resources text_ms=0.012 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.network.glyph.ink/text/0 total_ms=0.027 builds=218
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.bluetooth.glyph.ink/text/0 total_ms=0.033 builds=219
+PROFILE stage=resources text_ms=0.024 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.battery.glyph.ink/text/0 total_ms=0.034 builds=220
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.glyph.ink/text/0 total_ms=0.020 builds=221
+PROFILE stage=resources text_ms=0.004 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.notifications-count/text/0 total_ms=0.013 builds=222
+PROFILE stage=resources text_ms=0.010 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.calendar.ink/text/0 total_ms=0.020 builds=223
+PROFILE stage=resources text_ms=0.013 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.time/text/0 total_ms=0.023 builds=224
+PROFILE stage=resources text_ms=0.007 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.power.glyph.ink/text/0 total_ms=0.015 builds=225
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+WORKER_PREPARE token=62 reload=false total_ms=2.564 builds=225
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-7.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=922480 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.124 monotonic_ns=1066486224613982 update=284 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=131 nodes=15 watchers=1 subscriptions=1 bindings=13 sources=31 luau_bytes=606352 markup_compiled_bytes=237697 markup_values_bytes=208656 markup_vm_build_bytes=1587644 source_bytes=178054 layers=46 gpu_images=0 surfaces=2 output=winit
+UI_COMMIT generation=3 reload=false prepare_ms=0.065 monotonic_ns=1066486224708142 update=20 companion=false source_error=false output=winit wallpaper_palette=true
+PROFILE stage=resources text_ms=0.063 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.search/text/0 total_ms=0.092 builds=125
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.media.dynamic._layout0/text/0 total_ms=0.028 builds=126
+PROFILE stage=resources text_ms=0.010 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 total_ms=0.022 builds=127
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 total_ms=0.020 builds=128
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout0/text/0 total_ms=0.018 builds=129
+PROFILE stage=resources text_ms=0.006 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout1/text/0 total_ms=0.014 builds=130
+PROFILE stage=resources text_ms=0.008 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 total_ms=0.015 builds=131
+PROFILE stage=resources text_ms=0.031 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.055 builds=132
+PROFILE stage=resources text_ms=0.008 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.next._layout0._layout0/text/0 total_ms=0.014 builds=133
+WORKER_PREPARE token=309 reload=false total_ms=2.240 builds=133
+PROFILE stage=layer_upload id=extras.search/text/0 pixels=4508 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.media.dynamic._layout0/text/0 pixels=1463 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 pixels=1539 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 pixels=1566 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout0/text/0 pixels=196 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout1/text/0 pixels=525 region=partial
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-7.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 pixels=84 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=6960 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.next._layout0._layout0/text/0 pixels=84 region=partial
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.060 monotonic_ns=1066486227417601 update=285 companion=true source_error=false output=shared wallpaper_palette=true
+WALLPAPER_WARM ready=true rasters=9 requested=9 cache_bytes=6596702 cache_limit=23068672 layout=carousel viewport=1920x1200 size=1900x1140 scale=1.500
+WALLPAPER_SWITCH_PHASE revision=14 phase=upload_end ms_since_selection=102.377 file_bytes=5109902 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=14 phase=commit ms_since_selection=103.250 file_bytes=5109902 source_width=3840 source_height=2160
+WALLPAPER_SURFACE_COMMITTED output=winit revision=14 width=2880 height=1800 transition=false
+UI_PRESENTED generation=3 monotonic_ns=1066486233930237 refresh_ns=0 companion=false update=20 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=14 phase=presented ms_since_selection=109.486 file_bytes=5109902 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_LATENCY output=winit revision=14 path=static-to-static request=selection endpoint=presentation-feedback ms=109.491
+WALLPAPER_PRESENTED output=winit revision=14 monotonic_ns=1066486233930237 refresh_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066486236813025 refresh_ns=0 companion=true update=285 cpu_ns=0
+PROFILE stage=resources text_ms=0.000 images_ms=13.915 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras/image/0 total_ms=15.533 builds=134
+WORKER_PREPARE token=310 reload=false total_ms=18.330 builds=134
+PROFILE stage=layer_upload id=extras/image/0 pixels=1059456 region=partial
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-7.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.274 monotonic_ns=1066486251368147 update=286 companion=true source_error=false output=shared wallpaper_palette=false
+WORKER_PREPARE token=311 reload=false total_ms=4.086 builds=134
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.058 monotonic_ns=1066486255326595 update=287 companion=true source_error=false output=shared wallpaper_palette=false
+WORKER_PREPARE token=312 reload=false total_ms=2.339 builds=134
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.048 monotonic_ns=1066486266500978 update=288 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486269012257 refresh_ns=0 companion=true update=286 cpu_ns=0
+WORKER_PREPARE token=313 reload=false total_ms=2.468 builds=134
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.068 monotonic_ns=1066486283135659 update=289 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486285096388 refresh_ns=0 companion=true update=288 cpu_ns=0
+WORKER_PREPARE token=314 reload=false total_ms=2.245 builds=134
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-2.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-7.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.050 monotonic_ns=1066486299824030 update=290 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486301170689 refresh_ns=0 companion=true update=289 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=14 phase=selection ms_since_selection=2.631 file_bytes=5109902 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=14 phase=request_sent ms_since_selection=3.427 file_bytes=5109902 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=14 phase=decode_start ms_since_selection=3.712 file_bytes=5109902 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=14 phase=daemon_ack ms_since_selection=7.065 file_bytes=5109902 source_width=3840 source_height=2160
+WORKER_PREPARE token=316 reload=false total_ms=2.509 builds=134
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.078 monotonic_ns=1066486317157720 update=291 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486317443610 refresh_ns=0 companion=true update=290 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=14 phase=decode_end ms_since_selection=26.711 file_bytes=5109902 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=14 phase=scale_end ms_since_selection=26.722 file_bytes=5109902 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=14 phase=upload_end ms_since_selection=33.639 file_bytes=5109902 source_width=3840 source_height=2160
+WORKER_PREPARE token=317 reload=false total_ms=6.373 builds=134
+WALLPAPER_SWITCH_PHASE revision=14 phase=commit ms_since_selection=34.844 file_bytes=5109902 source_width=3840 source_height=2160
+WALLPAPER_SURFACE_COMMITTED output=winit revision=14 width=2880 height=1800 transition=false
+UI_PRESENTED generation=1 monotonic_ns=1066486333519510 refresh_ns=0 companion=true update=291 cpu_ns=0
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-7.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.198 monotonic_ns=1066486340464296 update=292 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=14 phase=presented ms_since_selection=46.722 file_bytes=5109902 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_LATENCY output=winit revision=14 path=static-to-static request=selection endpoint=presentation-feedback ms=46.729
+WALLPAPER_PRESENTED output=winit revision=14 monotonic_ns=1066486349643901 refresh_ns=0
+WORKER_PREPARE token=318 reload=false total_ms=2.645 builds=134
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.058 monotonic_ns=1066486349963381 update=293 companion=true source_error=false output=shared wallpaper_palette=false
+WORKER_PREPARE token=319 reload=false total_ms=5.906 builds=134
+WALLPAPER_SURFACE_COMMITTED output=winit revision=14 width=2880 height=1800 transition=false
+UI_PRESENTED generation=1 monotonic_ns=1066486365735302 refresh_ns=0 companion=true update=292 cpu_ns=0
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.111 monotonic_ns=1066486371795119 update=294 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_PRESENTED output=winit revision=14 monotonic_ns=1066486381860633 refresh_ns=0
+WORKER_PREPARE token=320 reload=false total_ms=2.648 builds=134
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.064 monotonic_ns=1066486383613362 update=295 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486397969254 refresh_ns=0 companion=true update=293 cpu_ns=0
+WORKER_PREPARE token=321 reload=false total_ms=2.708 builds=134
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.067 monotonic_ns=1066486400317992 update=296 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486414125435 refresh_ns=0 companion=true update=295 cpu_ns=0
+WORKER_PREPARE token=322 reload=false total_ms=3.471 builds=134
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-7.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=189333 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=405947 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.110 monotonic_ns=1066486418361872 update=297 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486430205595 refresh_ns=0 companion=true update=296 cpu_ns=0
+WORKER_PREPARE token=323 reload=false total_ms=2.471 builds=134
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=971560 markup_compiled_bytes=127409 markup_values_bytes=204836 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=427098 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.092 monotonic_ns=1066486433181984 update=298 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486446272656 refresh_ns=0 companion=true update=297 cpu_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066486462334707 refresh_ns=0 companion=true update=298 cpu_ns=0
+SHM_POOL_COMPACT output=winit
+BUFFER output=11 logical=1920x50 physical=2880x75 scale=1.5 format=Rgba allocation_count=45 pool_bytes=2592000 buffer_bytes=864000
+WALLPAPER_SWITCH_PHASE revision=14 phase=selection ms_since_selection=0.024 file_bytes=2189150 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=14 phase=request_sent ms_since_selection=0.990 file_bytes=2189150 source_width=3840 source_height=2160
+PROFILE stage=font_select ms=0.874 files=2 faces=2
+PROFILE stage=resources text_ms=0.135 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.177 builds=135
+WORKER_PREPARE token=324 reload=false total_ms=7.071 builds=135
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=8060 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=922480 markup_compiled_bytes=127409 markup_values_bytes=204845 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=427098 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.081 monotonic_ns=1066486599679749 update=299 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486602532067 refresh_ns=0 companion=true update=299 cpu_ns=0
+PROFILE stage=resources text_ms=0.000 images_ms=2.568 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-8.thumbnail/image/0 total_ms=2.595 builds=136
+WORKER_PREPARE token=325 reload=false total_ms=4.636 builds=136
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-8.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=922480 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.078 monotonic_ns=1066486619074338 update=300 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486620882427 refresh_ns=0 companion=true update=300 cpu_ns=0
+PROFILE stage=resources text_ms=0.000 images_ms=0.216 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-8.thumbnail/image/0 total_ms=0.406 builds=137
+WORKER_PREPARE token=326 reload=false total_ms=2.277 builds=137
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-8.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.054 monotonic_ns=1066486633297670 update=301 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486635684599 refresh_ns=0 companion=true update=301 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=14 phase=daemon_ack ms_since_selection=50.350 file_bytes=2189150 source_width=3840 source_height=2160
+WORKER_PREPARE token=327 reload=false total_ms=2.455 builds=137
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-8.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.062 monotonic_ns=1066486649922601 update=302 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486651830019 refresh_ns=0 companion=true update=302 cpu_ns=0
+WORKER_PREPARE token=328 reload=false total_ms=2.704 builds=137
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-8.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.086 monotonic_ns=1066486666919741 update=303 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486668817360 refresh_ns=0 companion=true update=303 cpu_ns=0
+WORKER_PREPARE token=329 reload=false total_ms=2.579 builds=137
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-8.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.053 monotonic_ns=1066486683752661 update=304 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486685679770 refresh_ns=0 companion=true update=304 cpu_ns=0
+WORKER_PREPARE token=330 reload=false total_ms=2.330 builds=137
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.051 monotonic_ns=1066486699466732 update=305 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486701700541 refresh_ns=0 companion=true update=305 cpu_ns=0
+WORKER_PREPARE token=331 reload=false total_ms=2.532 builds=137
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955200 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.079 monotonic_ns=1066486716672453 update=306 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486718694111 refresh_ns=0 companion=true update=306 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=15 phase=decode_start ms_since_selection=133.809 file_bytes=2189150 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=15 phase=decode_end ms_since_selection=134.001 file_bytes=2189150 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=15 phase=scale_end ms_since_selection=134.008 file_bytes=2189150 source_width=3840 source_height=2160
+PROFILE stage=resources text_ms=0.000 images_ms=0.252 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.brand._layout0/image/0 total_ms=0.279 builds=226
+PROFILE stage=resources text_ms=0.000 images_ms=0.094 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.capsule.workspaces.k6e6972693a3233353033383435333136313836373a776f726b73706163653a31.cell.workspace.enamel-gradient/image/0 total_ms=0.102 builds=227
+PROFILE stage=resources text_ms=0.044 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title-icon/text/0 total_ms=0.057 builds=228
+PROFILE stage=resources text_ms=0.013 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title/text/0 total_ms=0.026 builds=229
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.package.ink/text/0 total_ms=0.020 builds=230
+PROFILE stage=resources text_ms=0.004 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.count/text/0 total_ms=0.011 builds=231
+PROFILE stage=resources text_ms=0.007 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.audio.glyph.ink/text/0 total_ms=0.014 builds=232
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.network.glyph.ink/text/0 total_ms=0.018 builds=233
+PROFILE stage=resources text_ms=0.008 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.bluetooth.glyph.ink/text/0 total_ms=0.016 builds=234
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.battery.glyph.ink/text/0 total_ms=0.016 builds=235
+PROFILE stage=resources text_ms=0.008 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.glyph.ink/text/0 total_ms=0.016 builds=236
+PROFILE stage=resources text_ms=0.003 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.notifications-count/text/0 total_ms=0.010 builds=237
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.calendar.ink/text/0 total_ms=0.017 builds=238
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.time/text/0 total_ms=0.019 builds=239
+PROFILE stage=resources text_ms=0.007 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.power.glyph.ink/text/0 total_ms=0.015 builds=240
+WORKER_PREPARE token=332 reload=false total_ms=3.968 builds=137
+WORKER_PREPARE token=63 reload=false total_ms=2.321 builds=240
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.113 monotonic_ns=1066486731958794 update=307 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=131 nodes=15 watchers=1 subscriptions=1 bindings=13 sources=31 luau_bytes=606352 markup_compiled_bytes=237697 markup_values_bytes=208656 markup_vm_build_bytes=1587644 source_bytes=178054 layers=46 gpu_images=0 surfaces=2 output=winit
+UI_COMMIT generation=3 reload=false prepare_ms=0.070 monotonic_ns=1066486732055634 update=21 companion=false source_error=false output=winit wallpaper_palette=true
+PROFILE stage=resources text_ms=0.059 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.search/text/0 total_ms=0.088 builds=138
+PROFILE stage=resources text_ms=0.010 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.media.dynamic._layout0/text/0 total_ms=0.022 builds=139
+PROFILE stage=resources text_ms=0.010 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 total_ms=0.021 builds=140
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 total_ms=0.019 builds=141
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout0/text/0 total_ms=0.018 builds=142
+PROFILE stage=resources text_ms=0.005 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout1/text/0 total_ms=0.013 builds=143
+PROFILE stage=resources text_ms=0.007 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 total_ms=0.014 builds=144
+PROFILE stage=resources text_ms=0.035 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.060 builds=145
+PROFILE stage=resources text_ms=0.006 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.next._layout0._layout0/text/0 total_ms=0.013 builds=146
+WORKER_PREPARE token=333 reload=false total_ms=2.121 builds=146
+PROFILE stage=layer_upload id=extras.search/text/0 pixels=4508 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.media.dynamic._layout0/text/0 pixels=1463 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 pixels=1539 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 pixels=1566 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout0/text/0 pixels=196 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout1/text/0 pixels=525 region=partial
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-8.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 pixels=84 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=8060 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.next._layout0._layout0/text/0 pixels=84 region=partial
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.072 monotonic_ns=1066486734729762 update=308 companion=true source_error=false output=shared wallpaper_palette=true
+WALLPAPER_SWITCH_PHASE revision=15 phase=upload_end ms_since_selection=141.592 file_bytes=2189150 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=15 phase=commit ms_since_selection=142.873 file_bytes=2189150 source_width=3840 source_height=2160
+WALLPAPER_SURFACE_COMMITTED output=winit revision=15 width=2880 height=1800 transition=false
+WALLPAPER_WARM ready=true rasters=9 requested=9 cache_bytes=6596702 cache_limit=23068672 layout=carousel viewport=1920x1200 size=1900x1140 scale=1.500
+UI_PRESENTED generation=3 monotonic_ns=1066486740416179 refresh_ns=0 companion=false update=21 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=15 phase=presented ms_since_selection=148.285 file_bytes=2189150 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_LATENCY output=winit revision=15 path=static-to-static request=selection endpoint=presentation-feedback ms=148.288
+WALLPAPER_PRESENTED output=winit revision=15 monotonic_ns=1066486740416179 refresh_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066486743195567 refresh_ns=0 companion=true update=308 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=15 phase=selection ms_since_selection=0.023 file_bytes=2189150 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=15 phase=decode_start ms_since_selection=1.130 file_bytes=2189150 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=15 phase=request_sent ms_since_selection=1.755 file_bytes=2189150 source_width=3840 source_height=2160
+PROFILE stage=resources text_ms=0.000 images_ms=13.541 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras/image/0 total_ms=15.130 builds=147
+WORKER_PREPARE token=334 reload=false total_ms=22.000 builds=147
+PROFILE stage=layer_upload id=extras/image/0 pixels=1059456 region=partial
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-3.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-8.thumbnail/image/0 pixels=86505 region=full
+WALLPAPER_SWITCH_PHASE revision=15 phase=daemon_ack ms_since_selection=22.060 file_bytes=2189150 source_width=3840 source_height=2160
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.432 monotonic_ns=1066486767911524 update=309 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=15 phase=decode_end ms_since_selection=25.938 file_bytes=2189150 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=15 phase=scale_end ms_since_selection=25.943 file_bytes=2189150 source_width=3840 source_height=2160
+WORKER_PREPARE token=335 reload=false total_ms=4.045 builds=147
+WALLPAPER_SWITCH_PHASE revision=15 phase=upload_end ms_since_selection=29.835 file_bytes=2189150 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=15 phase=commit ms_since_selection=30.886 file_bytes=2189150 source_width=3840 source_height=2160
+WALLPAPER_SURFACE_COMMITTED output=winit revision=15 width=2880 height=1800 transition=false
+UI_PRESENTED generation=1 monotonic_ns=1066486772921210 refresh_ns=0 companion=true update=309 cpu_ns=0
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.132 monotonic_ns=1066486777453968 update=310 companion=true source_error=false output=shared wallpaper_palette=false
+WORKER_PREPARE token=336 reload=false total_ms=3.532 builds=147
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-8.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.072 monotonic_ns=1066486784432134 update=311 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=15 phase=presented ms_since_selection=43.724 file_bytes=2189150 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_LATENCY output=winit revision=15 path=static-to-static request=selection endpoint=presentation-feedback ms=43.730
+WALLPAPER_PRESENTED output=winit revision=15 monotonic_ns=1066486789067641 refresh_ns=0
+WORKER_PREPARE token=337 reload=false total_ms=2.676 builds=147
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-8.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.060 monotonic_ns=1066486800143985 update=312 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SURFACE_COMMITTED output=winit revision=15 width=2880 height=1800 transition=false
+UI_PRESENTED generation=1 monotonic_ns=1066486805217992 refresh_ns=0 companion=true update=310 cpu_ns=0
+WORKER_PREPARE token=338 reload=false total_ms=2.574 builds=147
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.094 monotonic_ns=1066486816446436 update=313 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_PRESENTED output=winit revision=15 monotonic_ns=1066486821282963 refresh_ns=0
+WORKER_PREPARE token=339 reload=false total_ms=2.251 builds=147
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-7.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-8.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.058 monotonic_ns=1066486833181696 update=314 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486837379334 refresh_ns=0 companion=true update=312 cpu_ns=0
+WORKER_PREPARE token=340 reload=false total_ms=2.214 builds=147
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-4.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-7.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-8.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.070 monotonic_ns=1066486849814817 update=315 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486853477335 refresh_ns=0 companion=true update=314 cpu_ns=0
+WORKER_PREPARE token=341 reload=false total_ms=2.440 builds=147
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86505 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.067 monotonic_ns=1066486866506077 update=316 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486869583476 refresh_ns=0 companion=true update=315 cpu_ns=0
+WORKER_PREPARE token=342 reload=false total_ms=2.918 builds=147
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-5.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-6.thumbnail/image/0 pixels=86742 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-7.thumbnail/image/0 pixels=86505 region=full
+PROFILE stage=layer_upload id=extras.carousel-strip.wallpaper-8.thumbnail/image/0 pixels=86742 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=189370 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=363867 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.080 monotonic_ns=1066486883808588 update=317 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486885692066 refresh_ns=0 companion=true update=316 cpu_ns=0
+WORKER_PREPARE token=343 reload=false total_ms=2.528 builds=147
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=938840 markup_compiled_bytes=127409 markup_values_bytes=204862 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=435659 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.045 monotonic_ns=1066486899652839 update=318 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066486901749297 refresh_ns=0 companion=true update=317 cpu_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066486917821808 refresh_ns=0 companion=true update=318 cpu_ns=0
+SERVICE_AUDIO disconnected: Creation failed
+SHM_POOL_COMPACT output=winit
+BUFFER output=11 logical=1920x50 physical=2880x75 scale=1.5 format=Rgba allocation_count=48 pool_bytes=2592000 buffer_bytes=864000
+SERVICE_AUDIO disconnected: Creation failed
+WALLPAPER_BUFFER_RETAINED output=winit compositor=niri reason=no_release

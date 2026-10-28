@@ -1,0 +1,14 @@
+{
+  "HOME": "<TASK>/acceptance-home-warm/home",
+  "XDG_CONFIG_HOME": "<TASK>/acceptance-home-warm/config",
+  "XDG_CACHE_HOME": "<TASK>/acceptance-home-warm/cache",
+  "XDG_DATA_HOME": "<TASK>/acceptance-home-warm/data",
+  "XDG_STATE_HOME": "<TASK>/acceptance-home-warm/state",
+  "PATH": "<TASK>/bin:/usr/bin:/bin",
+  "NACRE_HELPER_BINARY": "<TASK>/bin/nacre-helper",
+  "NACRE_HELPER_TOOLS": "<TASK>/source/nacre/shell-tools",
+  "persistent_private_home_root": "<TASK>/acceptance-home-warm",
+  "ephemeral_runtime_root": "<PRIVATE_RUNTIME>/b0173-20261028-warm",
+  "fresh_shell_and_daemon": true,
+  "WALLPAPER_LIBRARY": "<TASK>/staged-data/wallpapers"
+}

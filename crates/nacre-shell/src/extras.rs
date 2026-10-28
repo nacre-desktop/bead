@@ -1330,10 +1330,10 @@ impl Extras {
                 .map(|(path, bytes)| bytes.len() + path.capacity() + 128)
                 .sum();
         }
-        // Palette preparation is required even when the advertised thumbnails
-        // are already cached. It must not hold back that ready first frame.
-        let request_handles: std::collections::BTreeSet<String> = state
-            .catalogue_visible_handles
+        // Persisted visible thumbnails are already usable content. Request
+        // catalogue/palette work only for visible assets that missed the local
+        // cache, so a normal cache-hit open does not start helper children.
+        let request_handles: std::collections::BTreeSet<String> = visible_handles
             .difference(&state.catalogue_settled_handles)
             .cloned()
             .collect();

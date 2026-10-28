@@ -1,0 +1,59 @@
+PANEL_SNAPSHOT_TRIGGER monotonic_ns=1066461112238902 epoch=1 close_epoch=4
+PANEL_CPU_SNAPSHOT_BEGIN monotonic_ns=1066461112287031 epoch=1 close_epoch=4 ui_serial=105
+PROFILE stage=resources text_ms=0.000 images_ms=14.538 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={}
+PROFILE stage=layer_bake id=extras/image/0 total_ms=14.561 builds=1
+PROFILE stage=resources text_ms=0.200 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.search/text/0 total_ms=0.245 builds=2
+PROFILE stage=resources text_ms=0.065 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.media.static._layout0/text/0 total_ms=0.076 builds=3
+PROFILE stage=resources text_ms=0.051 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.media.dynamic._layout0/text/0 total_ms=0.062 builds=4
+PROFILE stage=resources text_ms=0.041 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.carousel._layout0/text/0 total_ms=0.051 builds=5
+PROFILE stage=resources text_ms=0.044 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 total_ms=0.055 builds=6
+PROFILE stage=resources text_ms=0.043 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 total_ms=0.054 builds=7
+PROFILE stage=resources text_ms=0.025 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout0/text/0 total_ms=0.033 builds=8
+PROFILE stage=resources text_ms=0.023 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout1/text/0 total_ms=0.032 builds=9
+PROFILE stage=resources text_ms=0.000 images_ms=0.328 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-11.thumbnail/image/0 total_ms=0.351 builds=10
+PROFILE stage=resources text_ms=0.000 images_ms=0.340 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-12.thumbnail/image/0 total_ms=0.358 builds=11
+PROFILE stage=resources text_ms=0.000 images_ms=2.903 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-13.thumbnail/image/0 total_ms=2.924 builds=12
+PROFILE stage=resources text_ms=0.000 images_ms=0.316 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-14.thumbnail/image/0 total_ms=0.333 builds=13
+PROFILE stage=resources text_ms=0.000 images_ms=0.329 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.carousel-strip.wallpaper-15.thumbnail/image/0 total_ms=0.346 builds=14
+PROFILE stage=resources text_ms=0.022 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 total_ms=0.030 builds=15
+PROFILE stage=resources text_ms=0.156 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.175 builds=16
+PROFILE stage=resources text_ms=0.012 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.next._layout0._layout0/text/0 total_ms=0.023 builds=17
+CPU_SNAPSHOT full_bytes=4921344 retained_bytes=1686408
+PANEL_CPU_SNAPSHOT_COMPLETE monotonic_ns=1066461140595445 elapsed_ms=28.308 epoch=1 close_epoch=4
+GL_CACHE_RELEASE images=17 image_bytes=2911744 composite_bytes=4921344
+PANEL_GPU_SUSPENDED shared_context_retained=false monotonic_ns=1066461146129092
+SERVICE_AUDIO disconnected: Creation failed
+SERVICE_AUDIO disconnected: Creation failed

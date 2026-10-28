@@ -125,6 +125,14 @@ fn inputs(windows: &Windows, services: &Services, prefs: Prefs) -> BTreeMap<Stri
         .collect()
 }
 
+fn event_wait(wait: Duration, source_active: bool) -> Duration {
+    if source_active {
+        wait.min(Duration::from_millis(250))
+    } else {
+        wait
+    }
+}
+
 enum Msg {
     Poke,
     Stop,
@@ -288,8 +296,7 @@ fn run(deps: Deps, supervisor: supervisor::Supervisor, receiver: mpsc::Receiver<
                 wait = Duration::from_millis(deadline.saturating_sub(now) + 1);
             }
         }
-        wait = wait.min(Duration::from_millis(250));
-        match receiver.recv_timeout(wait) {
+        match receiver.recv_timeout(event_wait(wait, source.is_some())) {
             Ok(Msg::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
             Ok(Msg::Poke) | Err(mpsc::RecvTimeoutError::Timeout) => {}
         }
@@ -382,6 +389,13 @@ mod tests {
             .pause_on_battery
         );
         assert!(!Prefs::default().policy().pause_on_battery);
+    }
+
+    #[test]
+    fn static_idle_waits_for_events_instead_of_polling() {
+        let idle = Duration::from_secs(3600);
+        assert_eq!(event_wait(idle, false), idle);
+        assert_eq!(event_wait(idle, true), Duration::from_millis(250));
     }
 
     #[test]

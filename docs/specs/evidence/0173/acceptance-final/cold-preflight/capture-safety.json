@@ -1,0 +1,83 @@
+{
+  "baseline_scope_peak_bytes": null,
+  "capture_returncode": 2,
+  "cgroup_final_or_last_available": {
+    "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+    "memory.max": "12884901888",
+    "memory.peak": "29782016",
+    "memory.swap.max": "0"
+  },
+  "cgroup_initial": {
+    "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+    "memory.max": "12884901888",
+    "memory.peak": "11870208",
+    "memory.swap.max": "0"
+  },
+  "cgroup_pre_release": {
+    "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+    "memory.max": "12884901888",
+    "memory.peak": "11870208",
+    "memory.swap.max": "0"
+  },
+  "child_cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-b0162d1a1e6f.scope",
+  "child_membership_verified": true,
+  "child_pid": 50051,
+  "child_start_ticks": 99464,
+  "control_group": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-b0162d1a1e6f.scope",
+  "effective_memory_max": "12884901888",
+  "effective_memory_swap_max": "0",
+  "final_cgroup_read_while_scope_held": true,
+  "final_scope_verification": {
+    "child_cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-b0162d1a1e6f.scope",
+    "child_membership_verified": true,
+    "child_pid": 50051,
+    "child_start_ticks": 99464,
+    "control_group": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-b0162d1a1e6f.scope",
+    "effective_memory_max": "12884901888",
+    "effective_memory_swap_max": "0"
+  },
+  "memory_max_bytes": 12884901888,
+  "memory_swap_max_bytes": 0,
+  "minimum_memavailable_kib": 9084968,
+  "oom_delta": {
+    "oom": 0,
+    "oom_kill": 0
+  },
+  "oom_final_or_last_available": {
+    "oom": 0,
+    "oom_kill": 0
+  },
+  "oom_initial": {
+    "oom": 0,
+    "oom_kill": 0
+  },
+  "pre_release_verification": {
+    "child_cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-b0162d1a1e6f.scope",
+    "child_membership_verified": true,
+    "child_pid": 50051,
+    "child_start_ticks": 99464,
+    "control_group": "/user.slice/user-1000.slice/user@1000.service/app.slice/bead-capture-b0162d1a1e6f.scope",
+    "effective_memory_max": "12884901888",
+    "effective_memory_swap_max": "0"
+  },
+  "reason": "capture command returned 2; scope runner returned 2",
+  "release_memavailable_kib": 9087496,
+  "scope": "bead-capture-b0162d1a1e6f.scope",
+  "scope_runner_returncode": 2,
+  "start_memavailable_kib": 9089712,
+  "status": "aborted",
+  "watchdog_events": [
+    {
+      "available_kib": 9084968,
+      "cgroup": {
+        "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+        "memory.max": "12884901888",
+        "memory.peak": "11870208",
+        "memory.swap.max": "0"
+      },
+      "kind": "memory"
+    }
+  ],
+  "watchdog_first_sample_kib": 9084968,
+  "watchdog_samples": 1
+}

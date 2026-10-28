@@ -1,0 +1,10 @@
+{
+  "idle_started_monotonic_ns": 1066493534201710,
+  "requested_idle_seconds": 120,
+  "measured_idle_seconds": 120.0,
+  "shell_alive": true,
+  "render_backend": "CPU",
+  "baseline_pss_anon_mib": 57.41,
+  "pss_anon_mib_after_idle": 59.996,
+  "delta_from_baseline_mib": 2.586
+}

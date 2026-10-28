@@ -3,6 +3,12 @@
 use super::*;
 /// A closed panel stays built for this long, so reopening it shows prepared content on its first frame.
 const PANEL_KEEP_ALIVE: Duration = Duration::from_secs(120);
+fn panel_surface_missing_for_open(
+    open: bool,
+    mut mapped_companions: impl Iterator<Item = bool>,
+) -> bool {
+    open && !mapped_companions.any(|mapped| mapped)
+}
 fn should_stop_app_after_panel_release(
     app_mode: bool,
     pending: bool,
@@ -717,7 +723,17 @@ impl App {
         if self.panel_runtime.is_some() {
             if self.panel_output.as_ref() != Some(&output)
                 || ((spec.keyboard_focus && self.pearl.is_none()) != self.dismiss.is_some())
-                || (open && !self.surfaces.iter().any(|surface| surface.companion))
+                // A retained panel whose layer role was unmapped at close is
+                // still present in `surfaces`, but cannot accept buffers until
+                // it receives a new configure. Recreate that role on reopen so
+                // the first visible frame is mapped and presented.
+                || panel_surface_missing_for_open(
+                    open,
+                    self.surfaces
+                        .iter()
+                        .filter(|surface| surface.companion)
+                        .map(|surface| !surface.panel_unmapped),
+                )
             {
                 drop(self.dismiss.take());
                 self.surfaces.retain(|s| !s.companion);
@@ -1069,14 +1085,24 @@ impl App {
             {
                 let epoch = self.panel_epoch;
                 if let Err(error) = self.loop_handle.insert_source(
-                    Timer::from_duration(Duration::from_secs(2)),
+                    // Finish the retained-panel CPU snapshot before the two-second
+                    // post-close idle boundary; layer/view release keeps its own timer.
+                    Timer::from_duration(Duration::from_millis(1500)),
                     move |_, _, app| {
                         if !app.panel_target
                             && app.panel_epoch == epoch
-                            && app.panel_close_epoch == token
-                            && let Err(error) = app.start_panel_snapshot()
                         {
-                            app.fail(error);
+                            if app.panel_close_epoch == token {
+                                bead_core::vprintln!(
+                                    "PANEL_SNAPSHOT_TRIGGER monotonic_ns={} epoch={} close_epoch={}",
+                                    monotonic_ns(),
+                                    epoch,
+                                    token
+                                );
+                                if let Err(error) = app.start_panel_snapshot() {
+                                    app.fail(error);
+                                }
+                            }
                         }
                         TimeoutAction::Drop
                     },
@@ -1438,5 +1464,13 @@ mod placement_tests {
         assert!(!should_stop_app_after_panel_release(
             false, false, false, false
         ));
+    }
+
+    #[test]
+    fn unmapped_retained_panel_requires_a_fresh_surface_on_reopen() {
+        assert!(panel_surface_missing_for_open(true, [false].into_iter()));
+        assert!(panel_surface_missing_for_open(true, [].into_iter()));
+        assert!(!panel_surface_missing_for_open(true, [true].into_iter()));
+        assert!(!panel_surface_missing_for_open(false, [false].into_iter()));
     }
 }

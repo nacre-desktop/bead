@@ -1,0 +1,1334 @@
+WALLPAPER_SWITCH_PHASE revision=1 phase=selection ms_since_selection=0.497 file_bytes=1644496 source_width=4193 source_height=2795
+WALLPAPER_SWITCH_PHASE revision=1 phase=request_sent ms_since_selection=1.282 file_bytes=1644496 source_width=4193 source_height=2795
+PROFILE stage=font_select ms=0.956 files=2 faces=2
+PROFILE stage=resources text_ms=0.252 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.301 builds=12
+WORKER_PREPARE token=12 reload=false total_ms=7.934 builds=12
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=6880 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955776 markup_compiled_bytes=127409 markup_values_bytes=204785 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=473944 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.070 monotonic_ns=1066454368756900 update=7 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=1 phase=daemon_ack ms_since_selection=7.352 file_bytes=1644496 source_width=4193 source_height=2795
+UI_PRESENTED generation=1 monotonic_ns=1066454370549439 refresh_ns=0 companion=true update=7 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+WORKER_PREPARE token=13 reload=false total_ms=5.527 builds=12
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955776 markup_compiled_bytes=127409 markup_values_bytes=189270 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=453768 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.082 monotonic_ns=1066454387377049 update=8 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066454388574588 refresh_ns=0 companion=true update=8 cpu_ns=0
+WORKER_PREPARE token=14 reload=false total_ms=2.630 builds=12
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955776 markup_compiled_bytes=127409 markup_values_bytes=189270 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=453768 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.083 monotonic_ns=1066454400936991 update=9 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066454402351581 refresh_ns=0 companion=true update=9 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=2110424238127143405
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=5025156306661234302
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+WORKER_PREPARE token=15 reload=false total_ms=10.666 builds=12
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955776 markup_compiled_bytes=127409 markup_values_bytes=189270 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=453768 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.065 monotonic_ns=1066454426078047 update=10 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066454427375456 refresh_ns=0 companion=true update=10 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=2167771897101019414
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=11420865652862271060
+PROFILE stage=image_bake_scratch reserved_bytes=2613936 retained_pixel_bytes=346968 key=12365667140745224614
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+WORKER_PREPARE token=16 reload=false total_ms=16.194 builds=12
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955776 markup_compiled_bytes=127409 markup_values_bytes=189270 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=453768 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.253 monotonic_ns=1066454448611874 update=11 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066454450037953 refresh_ns=0 companion=true update=11 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=2110424238127143405
+WALLPAPER_SWITCH_PHASE revision=2 phase=decode_start ms_since_selection=93.626 file_bytes=1644496 source_width=4193 source_height=2795
+WALLPAPER_SWITCH_PHASE revision=2 phase=decode_end ms_since_selection=93.687 file_bytes=1644496 source_width=4193 source_height=2795
+WALLPAPER_SWITCH_PHASE revision=2 phase=scale_end ms_since_selection=93.690 file_bytes=1644496 source_width=4193 source_height=2795
+bead-wallpaper-video: compositor lacks alpha-modifier-v1; GL opacity fallback will be used when available
+WALLPAPER_VIDEO_READY pid=3936082
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14040879488052735958
+PROFILE stage=resources text_ms=0.000 images_ms=0.229 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.brand._layout0/image/0 total_ms=0.255 builds=32
+PROFILE stage=resources text_ms=0.000 images_ms=0.104 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.capsule.workspaces.k6e6972693a3233353033383435333136313836373a776f726b73706163653a31.cell.workspace.enamel-gradient/image/0 total_ms=0.114 builds=33
+PROFILE stage=resources text_ms=0.050 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title-icon/text/0 total_ms=0.062 builds=34
+PROFILE stage=resources text_ms=0.020 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title/text/0 total_ms=0.036 builds=35
+PROFILE stage=resources text_ms=0.013 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.package.ink/text/0 total_ms=0.024 builds=36
+PROFILE stage=resources text_ms=0.005 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.count/text/0 total_ms=0.014 builds=37
+PROFILE stage=resources text_ms=0.012 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.audio.glyph.ink/text/0 total_ms=0.024 builds=38
+PROFILE stage=resources text_ms=0.015 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.network.glyph.ink/text/0 total_ms=0.026 builds=39
+PROFILE stage=resources text_ms=0.010 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.bluetooth.glyph.ink/text/0 total_ms=0.020 builds=40
+PROFILE stage=resources text_ms=0.010 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.battery.glyph.ink/text/0 total_ms=0.019 builds=41
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.glyph.ink/text/0 total_ms=0.019 builds=42
+PROFILE stage=resources text_ms=0.004 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.notifications-count/text/0 total_ms=0.013 builds=43
+PROFILE stage=resources text_ms=0.010 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.calendar.ink/text/0 total_ms=0.021 builds=44
+PROFILE stage=resources text_ms=0.010 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.time/text/0 total_ms=0.021 builds=45
+PROFILE stage=resources text_ms=0.030 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.power.glyph.ink/text/0 total_ms=0.045 builds=46
+WORKER_PREPARE token=41 reload=false total_ms=1.885 builds=46
+PROFILE stage=image_bake_scratch reserved_bytes=2612040 retained_pixel_bytes=346020 key=17186007473499906987
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=131 nodes=15 watchers=1 subscriptions=1 bindings=13 sources=31 luau_bytes=589992 markup_compiled_bytes=237697 markup_values_bytes=208656 markup_vm_build_bytes=1587644 source_bytes=178054 layers=46 gpu_images=0 surfaces=2 output=winit
+UI_COMMIT generation=3 reload=false prepare_ms=0.087 monotonic_ns=1066454463300546 update=7 companion=false source_error=false output=winit wallpaper_palette=true
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+WORKER_PREPARE token=17 reload=false total_ms=16.984 builds=12
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955776 markup_compiled_bytes=127409 markup_values_bytes=189270 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=453768 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.240 monotonic_ns=1066454466397064 update=12 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=2167771897101019414
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=11420865652862271060
+PROFILE stage=image_bake_scratch reserved_bytes=2613936 retained_pixel_bytes=346968 key=12365667140745224614
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+WORKER_PREPARE token=18 reload=false total_ms=17.061 builds=12
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955776 markup_compiled_bytes=127409 markup_values_bytes=189270 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=453768 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.136 monotonic_ns=1066454484381554 update=13 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=resources text_ms=0.187 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.search/text/0 total_ms=0.223 builds=13
+PROFILE stage=resources text_ms=0.071 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.media.dynamic._layout0/text/0 total_ms=0.086 builds=14
+PROFILE stage=resources text_ms=0.055 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 total_ms=0.068 builds=15
+PROFILE stage=resources text_ms=0.046 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 total_ms=0.059 builds=16
+PROFILE stage=resources text_ms=0.024 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout0/text/0 total_ms=0.032 builds=17
+PROFILE stage=resources text_ms=0.023 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout1/text/0 total_ms=0.032 builds=18
+PROFILE stage=resources text_ms=0.015 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 total_ms=0.027 builds=19
+PROFILE stage=resources text_ms=0.033 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.067 builds=20
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.next._layout0._layout0/text/0 total_ms=0.019 builds=21
+WORKER_PREPARE token=19 reload=false total_ms=2.784 builds=21
+PROFILE stage=layer_upload id=extras.search/text/0 pixels=4508 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.media.dynamic._layout0/text/0 pixels=1463 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 pixels=1520 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 pixels=1566 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout0/text/0 pixels=196 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout1/text/0 pixels=525 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 pixels=84 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=6860 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.next._layout0._layout0/text/0 pixels=84 region=partial
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=955776 markup_compiled_bytes=127409 markup_values_bytes=189270 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=453768 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.063 monotonic_ns=1066454487423672 update=14 companion=true source_error=false output=shared wallpaper_palette=true
+WALLPAPER_SWITCH_PHASE revision=2 phase=upload_end ms_since_selection=126.770 file_bytes=1644496 source_width=4193 source_height=2795
+WALLPAPER_WARM ready=true rasters=9 requested=9 cache_bytes=6249108 cache_limit=23068672 layout=carousel viewport=1920x1200 size=1900x1140 scale=1.500
+WALLPAPER_SWITCH_PHASE revision=2 phase=commit ms_since_selection=127.791 file_bytes=1644496 source_width=4193 source_height=2795
+WALLPAPER_SURFACE_COMMITTED output=winit revision=2 width=2880 height=1800 transition=false
+WALLPAPER_VIDEO_RENDERER state=warm reason=picker_open
+UI_PRESENTED generation=3 monotonic_ns=1066454509887109 refresh_ns=0 companion=false update=7 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=2 phase=presented ms_since_selection=148.109 file_bytes=1644496 source_width=4193 source_height=2795
+WALLPAPER_SWITCH_LATENCY output=winit revision=2 path=static-to-static request=selection endpoint=presentation-feedback ms=148.114
+WALLPAPER_PRESENTED output=winit revision=2 monotonic_ns=1066454509887109 refresh_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066454512659528 refresh_ns=0 companion=true update=14 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=9842688 retained_pixel_bytes=1109760 key=7263367683456396137
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=2110424238127143405
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14040879488052735958
+PROFILE stage=image_bake_scratch reserved_bytes=2612040 retained_pixel_bytes=346020 key=17186007473499906987
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+WORKER_PREPARE token=20 reload=false total_ms=24.782 builds=21
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=972136 markup_compiled_bytes=127409 markup_values_bytes=189270 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=453768 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.133 monotonic_ns=1066454524416131 update=15 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066454526307200 refresh_ns=0 companion=true update=15 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=2 phase=selection ms_since_selection=0.657 file_bytes=1644496 source_width=4193 source_height=2795
+WALLPAPER_SWITCH_PHASE revision=2 phase=request_sent ms_since_selection=1.749 file_bytes=1644496 source_width=4193 source_height=2795
+WALLPAPER_SWITCH_PHASE revision=2 phase=decode_start ms_since_selection=2.403 file_bytes=1644496 source_width=4193 source_height=2795
+WALLPAPER_SWITCH_PHASE revision=2 phase=daemon_ack ms_since_selection=5.014 file_bytes=1644496 source_width=4193 source_height=2795
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=11420865652862271060
+PROFILE stage=image_bake_scratch reserved_bytes=2613936 retained_pixel_bytes=346968 key=12365667140745224614
+WORKER_PREPARE token=21 reload=false total_ms=12.936 builds=21
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=972136 markup_compiled_bytes=127409 markup_values_bytes=189270 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=453768 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.276 monotonic_ns=1066454538045513 update=16 companion=true source_error=false output=shared wallpaper_palette=false
+WORKER_PREPARE token=22 reload=false total_ms=3.544 builds=21
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=1003136 markup_compiled_bytes=127409 markup_values_bytes=189270 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=453768 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.070 monotonic_ns=1066454541506071 update=17 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066454542492470 refresh_ns=0 companion=true update=16 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=2 phase=decode_end ms_since_selection=27.066 file_bytes=1644496 source_width=4193 source_height=2795
+WALLPAPER_SWITCH_PHASE revision=2 phase=scale_end ms_since_selection=27.076 file_bytes=1644496 source_width=4193 source_height=2795
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+WORKER_PREPARE token=23 reload=false total_ms=6.404 builds=21
+WALLPAPER_SWITCH_PHASE revision=2 phase=upload_end ms_since_selection=30.426 file_bytes=1644496 source_width=4193 source_height=2795
+WALLPAPER_SWITCH_PHASE revision=2 phase=commit ms_since_selection=31.517 file_bytes=1644496 source_width=4193 source_height=2795
+WALLPAPER_SURFACE_COMMITTED output=winit revision=2 width=2880 height=1800 transition=false
+UI_PRESENTED generation=1 monotonic_ns=1066454558747041 refresh_ns=0 companion=true update=17 cpu_ns=0
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=1003136 markup_compiled_bytes=127409 markup_values_bytes=189270 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=453768 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.198 monotonic_ns=1066454560555410 update=18 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14040879488052735958
+PROFILE stage=image_bake_scratch reserved_bytes=2612040 retained_pixel_bytes=346020 key=17186007473499906987
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+WORKER_PREPARE token=24 reload=false total_ms=6.856 builds=21
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=1003136 markup_compiled_bytes=127409 markup_values_bytes=189270 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=453768 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.078 monotonic_ns=1066454572404913 update=19 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=2 phase=presented ms_since_selection=48.191 file_bytes=1644496 source_width=4193 source_height=2795
+WALLPAPER_SWITCH_LATENCY output=winit revision=2 path=static-to-static request=selection endpoint=presentation-feedback ms=48.197
+WALLPAPER_PRESENTED output=winit revision=2 monotonic_ns=1066454574836782 refresh_ns=0
+WORKER_PREPARE token=25 reload=false total_ms=2.633 builds=21
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=970416 markup_compiled_bytes=127409 markup_values_bytes=189270 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=453768 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.059 monotonic_ns=1066454584246277 update=20 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SURFACE_COMMITTED output=winit revision=2 width=2880 height=1800 transition=false
+UI_PRESENTED generation=1 monotonic_ns=1066454590939883 refresh_ns=0 companion=true update=18 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=13399699369483743185
+PROFILE stage=image_bake_scratch reserved_bytes=2613936 retained_pixel_bytes=346968 key=12365667140745224614
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+WALLPAPER_PRESENTED output=winit revision=2 monotonic_ns=1066454607035784 refresh_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+WORKER_PREPARE token=26 reload=false total_ms=9.203 builds=21
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=954056 markup_compiled_bytes=127409 markup_values_bytes=189270 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=453768 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.146 monotonic_ns=1066454608570543 update=21 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=5025156306661234302
+UI_PRESENTED generation=1 monotonic_ns=1066454623171744 refresh_ns=0 companion=true update=20 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=11420865652862271060
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+WORKER_PREPARE token=27 reload=false total_ms=11.871 builds=21
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=921336 markup_compiled_bytes=127409 markup_values_bytes=189270 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=453768 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.073 monotonic_ns=1066454627444012 update=22 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14040879488052735958
+PROFILE stage=image_bake_scratch reserved_bytes=2612040 retained_pixel_bytes=346020 key=17186007473499906987
+WORKER_PREPARE token=28 reload=false total_ms=3.195 builds=21
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=888616 markup_compiled_bytes=127409 markup_values_bytes=189270 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=453768 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.069 monotonic_ns=1066454635239648 update=23 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066454639326275 refresh_ns=0 companion=true update=21 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=11420865652862271060
+UI_PRESENTED generation=1 monotonic_ns=1066454655374316 refresh_ns=0 companion=true update=23 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2613936 retained_pixel_bytes=346968 key=12365667140745224614
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+WORKER_PREPARE token=29 reload=false total_ms=11.602 builds=21
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=872256 markup_compiled_bytes=127409 markup_values_bytes=189270 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=453768 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.071 monotonic_ns=1066454660386973 update=24 companion=true source_error=false output=shared wallpaper_palette=false
+WORKER_PREPARE token=30 reload=false total_ms=3.023 builds=21
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=823176 markup_compiled_bytes=127409 markup_values_bytes=204746 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=503735 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.053 monotonic_ns=1066454667938309 update=25 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066454671481757 refresh_ns=0 companion=true update=24 cpu_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066454687552458 refresh_ns=0 companion=true update=25 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=2 phase=selection ms_since_selection=0.236 file_bytes=585278 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_PHASE revision=2 phase=request_sent ms_since_selection=0.972 file_bytes=585278 source_width=1920 source_height=1080
+PROFILE stage=font_select ms=1.006 files=2 faces=2
+PROFILE stage=resources text_ms=0.195 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.243 builds=22
+WORKER_PREPARE token=31 reload=false total_ms=7.736 builds=22
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=6380 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=972360 markup_compiled_bytes=127409 markup_values_bytes=204743 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=503735 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.074 monotonic_ns=1066454797638975 update=26 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=2 phase=daemon_ack ms_since_selection=7.123 file_bytes=585278 source_width=1920 source_height=1080
+UI_PRESENTED generation=1 monotonic_ns=1066454800410813 refresh_ns=0 companion=true update=26 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=13399699369483743185
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14040879488052735958
+PROFILE stage=image_bake_scratch reserved_bytes=2612040 retained_pixel_bytes=346020 key=17186007473499906987
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+WORKER_PREPARE token=32 reload=false total_ms=4.596 builds=22
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=972360 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.082 monotonic_ns=1066454816553114 update=27 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066454818466393 refresh_ns=0 companion=true update=27 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=5025156306661234302
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=11420865652862271060
+PROFILE stage=image_bake_scratch reserved_bytes=2613936 retained_pixel_bytes=346968 key=12365667140745224614
+SHM_POOL_COMPACT output=winit
+BUFFER output=11 logical=1920x50 physical=2880x75 scale=1.5 format=Rgba allocation_count=9 pool_bytes=2592000 buffer_bytes=864000
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+WORKER_PREPARE token=33 reload=false total_ms=18.098 builds=22
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.336 monotonic_ns=1066454847004337 update=28 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066454849890955 refresh_ns=0 companion=true update=28 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=13399699369483743185
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14040879488052735958
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+WORKER_PREPARE token=34 reload=false total_ms=5.685 builds=22
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=939640 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.064 monotonic_ns=1066454852899453 update=29 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066454861722758 refresh_ns=0 companion=true update=29 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=5025156306661234302
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=11420865652862271060
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+WORKER_PREPARE token=35 reload=false total_ms=15.066 builds=22
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=939640 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.097 monotonic_ns=1066454876963340 update=30 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066454878887348 refresh_ns=0 companion=true update=30 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=13399699369483743185
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14040879488052735958
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+WORKER_PREPARE token=36 reload=false total_ms=7.897 builds=22
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=939640 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.066 monotonic_ns=1066454886388944 update=31 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066454893908290 refresh_ns=0 companion=true update=31 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2612040 retained_pixel_bytes=346020 key=17186007473499906987
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+WORKER_PREPARE token=37 reload=false total_ms=3.100 builds=22
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=939640 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.066 monotonic_ns=1066454897972277 update=32 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066454909985581 refresh_ns=0 companion=true update=32 cpu_ns=0
+WORKER_PREPARE token=38 reload=false total_ms=2.567 builds=22
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=939640 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.216 monotonic_ns=1066454913969268 update=33 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=3 phase=decode_start ms_since_selection=122.926 file_bytes=585278 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_PHASE revision=3 phase=decode_end ms_since_selection=123.031 file_bytes=585278 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_PHASE revision=3 phase=scale_end ms_since_selection=123.035 file_bytes=585278 source_width=1920 source_height=1080
+PROFILE stage=resources text_ms=0.000 images_ms=0.322 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.brand._layout0/image/0 total_ms=0.381 builds=47
+PROFILE stage=resources text_ms=0.000 images_ms=0.132 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.capsule.workspaces.k6e6972693a3233353033383435333136313836373a776f726b73706163653a31.cell.workspace.enamel-gradient/image/0 total_ms=0.142 builds=48
+PROFILE stage=resources text_ms=0.066 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title-icon/text/0 total_ms=0.079 builds=49
+PROFILE stage=resources text_ms=0.024 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title/text/0 total_ms=0.039 builds=50
+PROFILE stage=resources text_ms=0.015 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.package.ink/text/0 total_ms=0.026 builds=51
+PROFILE stage=resources text_ms=0.005 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.count/text/0 total_ms=0.014 builds=52
+PROFILE stage=resources text_ms=0.010 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.audio.glyph.ink/text/0 total_ms=0.019 builds=53
+PROFILE stage=resources text_ms=0.014 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.network.glyph.ink/text/0 total_ms=0.024 builds=54
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.bluetooth.glyph.ink/text/0 total_ms=0.021 builds=55
+PROFILE stage=resources text_ms=0.012 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.battery.glyph.ink/text/0 total_ms=0.021 builds=56
+PROFILE stage=resources text_ms=0.013 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.glyph.ink/text/0 total_ms=0.023 builds=57
+PROFILE stage=resources text_ms=0.004 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.notifications-count/text/0 total_ms=0.014 builds=58
+PROFILE stage=resources text_ms=0.016 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.calendar.ink/text/0 total_ms=0.028 builds=59
+PROFILE stage=resources text_ms=0.018 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.time/text/0 total_ms=0.034 builds=60
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.power.glyph.ink/text/0 total_ms=0.023 builds=61
+WORKER_PREPARE token=42 reload=false total_ms=3.007 builds=61
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=131 nodes=15 watchers=1 subscriptions=1 bindings=13 sources=31 luau_bytes=589992 markup_compiled_bytes=237697 markup_values_bytes=208656 markup_vm_build_bytes=1587644 source_bytes=178054 layers=46 gpu_images=0 surfaces=2 output=winit
+UI_COMMIT generation=3 reload=false prepare_ms=0.067 monotonic_ns=1066454919262695 update=8 companion=false source_error=false output=winit wallpaper_palette=true
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=5025156306661234302
+WALLPAPER_WARM ready=true rasters=9 requested=9 cache_bytes=6249108 cache_limit=23068672 layout=carousel viewport=1920x1200 size=1900x1140 scale=1.500
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=11420865652862271060
+UI_PRESENTED generation=1 monotonic_ns=1066454926206891 refresh_ns=0 companion=true update=33 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2613936 retained_pixel_bytes=346968 key=12365667140745224614
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+WORKER_PREPARE token=39 reload=false total_ms=19.935 builds=22
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=874200 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.151 monotonic_ns=1066454934599307 update=34 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=resources text_ms=0.061 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.search/text/0 total_ms=0.096 builds=23
+PROFILE stage=resources text_ms=0.013 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.media.dynamic._layout0/text/0 total_ms=0.027 builds=24
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 total_ms=0.025 builds=25
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 total_ms=0.024 builds=26
+PROFILE stage=resources text_ms=0.016 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout0/text/0 total_ms=0.024 builds=27
+PROFILE stage=resources text_ms=0.006 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout1/text/0 total_ms=0.016 builds=28
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=resources text_ms=0.022 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 total_ms=0.033 builds=29
+PROFILE stage=resources text_ms=0.039 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.078 builds=30
+PROFILE stage=resources text_ms=0.008 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.next._layout0._layout0/text/0 total_ms=0.016 builds=31
+WORKER_PREPARE token=40 reload=false total_ms=5.917 builds=31
+PROFILE stage=layer_upload id=extras.search/text/0 pixels=4508 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.media.dynamic._layout0/text/0 pixels=1463 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 pixels=1539 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 pixels=1566 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout0/text/0 pixels=196 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout1/text/0 pixels=525 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 pixels=84 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=6380 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.next._layout0._layout0/text/0 pixels=84 region=partial
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=890560 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.122 monotonic_ns=1066454941068183 update=35 companion=true source_error=false output=shared wallpaper_palette=true
+WALLPAPER_SWITCH_PHASE revision=3 phase=upload_end ms_since_selection=153.222 file_bytes=585278 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_PHASE revision=3 phase=selection ms_since_selection=0.814 file_bytes=585278 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_PHASE revision=3 phase=commit ms_since_selection=154.376 file_bytes=585278 source_width=1920 source_height=1080
+WALLPAPER_SURFACE_COMMITTED output=winit revision=3 width=2880 height=1800 transition=false
+WALLPAPER_SWITCH_PHASE revision=3 phase=request_sent ms_since_selection=2.919 file_bytes=585278 source_width=1920 source_height=1080
+UI_PRESENTED generation=3 monotonic_ns=1066454951169357 refresh_ns=0 companion=false update=8 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=3 phase=presented ms_since_selection=161.830 file_bytes=585278 source_width=1920 source_height=1080
+WALLPAPER_SWITCH_LATENCY output=winit revision=3 path=static-to-static request=selection endpoint=presentation-feedback ms=161.836
+WALLPAPER_PRESENTED output=winit revision=3 monotonic_ns=1066454951169357 refresh_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066454958426903 refresh_ns=0 companion=true update=35 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=3 phase=daemon_ack ms_since_selection=13.699 file_bytes=585278 source_width=1920 source_height=1080
+PROFILE stage=image_bake_scratch reserved_bytes=9842688 retained_pixel_bytes=1109760 key=15063844759414557684
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+WORKER_PREPARE token=41 reload=false total_ms=31.123 builds=31
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=890560 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.247 monotonic_ns=1066454973174125 update=36 companion=true source_error=false output=shared wallpaper_palette=false
+WORKER_PREPARE token=42 reload=false total_ms=4.082 builds=31
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=890560 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.057 monotonic_ns=1066454977174942 update=37 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14040879488052735958
+PROFILE stage=image_bake_scratch reserved_bytes=2612040 retained_pixel_bytes=346020 key=17186007473499906987
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+WORKER_PREPARE token=43 reload=false total_ms=3.789 builds=31
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=890560 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.073 monotonic_ns=1066454982307649 update=38 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066454990636865 refresh_ns=0 companion=true update=36 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=11420865652862271060
+PROFILE stage=image_bake_scratch reserved_bytes=2613936 retained_pixel_bytes=346968 key=12365667140745224614
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+UI_PRESENTED generation=1 monotonic_ns=1066455006718896 refresh_ns=0 companion=true update=38 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+WORKER_PREPARE token=44 reload=false total_ms=14.366 builds=31
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=890560 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.067 monotonic_ns=1066455009434114 update=39 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14040879488052735958
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+WORKER_PREPARE token=45 reload=false total_ms=3.178 builds=31
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=906920 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.064 monotonic_ns=1066455014756161 update=40 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455022810776 refresh_ns=0 companion=true update=39 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=11420865652862271060
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+SERVICE_AUDIO disconnected: Creation failed
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+UI_PRESENTED generation=1 monotonic_ns=1066455038930767 refresh_ns=0 companion=true update=40 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+WORKER_PREPARE token=46 reload=false total_ms=11.743 builds=31
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=906920 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.076 monotonic_ns=1066455040330996 update=41 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14040879488052735958
+PROFILE stage=image_bake_scratch reserved_bytes=2612040 retained_pixel_bytes=346020 key=17186007473499906987
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+WORKER_PREPARE token=47 reload=false total_ms=3.981 builds=31
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=906920 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.068 monotonic_ns=1066455049207991 update=42 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455055036728 refresh_ns=0 companion=true update=41 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2613936 retained_pixel_bytes=346968 key=12365667140745224614
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+WORKER_PREPARE token=48 reload=false total_ms=8.440 builds=31
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=906920 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.079 monotonic_ns=1066455070069819 update=43 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455071131729 refresh_ns=0 companion=true update=42 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2612040 retained_pixel_bytes=346020 key=17186007473499906987
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+WORKER_PREPARE token=49 reload=false total_ms=9.252 builds=31
+UI_PRESENTED generation=1 monotonic_ns=1066455087209300 refresh_ns=0 companion=true update=43 cpu_ns=0
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=906920 markup_compiled_bytes=127409 markup_values_bytes=189240 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=418275 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.072 monotonic_ns=1066455087739519 update=44 companion=true source_error=false output=shared wallpaper_palette=false
+WORKER_PREPARE token=50 reload=false total_ms=2.468 builds=31
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=923280 markup_compiled_bytes=127409 markup_values_bytes=204728 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=438535 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.071 monotonic_ns=1066455097067924 update=45 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455103309110 refresh_ns=0 companion=true update=44 cpu_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066455119393911 refresh_ns=0 companion=true update=45 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=3 phase=selection ms_since_selection=0.022 file_bytes=9201169 source_width=7680 source_height=4320
+WALLPAPER_SWITCH_PHASE revision=3 phase=request_sent ms_since_selection=0.700 file_bytes=9201169 source_width=7680 source_height=4320
+PROFILE stage=font_select ms=0.988 files=2 faces=2
+PROFILE stage=resources text_ms=0.168 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.212 builds=32
+WORKER_PREPARE token=51 reload=false total_ms=6.926 builds=32
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=5680 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=204727 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=438535 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.066 monotonic_ns=1066455219378814 update=46 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455222064313 refresh_ns=0 companion=true update=46 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=3 phase=daemon_ack ms_since_selection=12.352 file_bytes=9201169 source_width=7680 source_height=4320
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=11559273735514364809
+WORKER_PREPARE token=52 reload=false total_ms=5.104 builds=32
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.068 monotonic_ns=1066455238675883 update=47 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455240419822 refresh_ns=0 companion=true update=47 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+WORKER_PREPARE token=53 reload=false total_ms=3.062 builds=32
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.073 monotonic_ns=1066455253418625 update=48 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455255325254 refresh_ns=0 companion=true update=48 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+WORKER_PREPARE token=54 reload=false total_ms=7.393 builds=32
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.066 monotonic_ns=1066455274365063 update=49 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455276227441 refresh_ns=0 companion=true update=49 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2613936 retained_pixel_bytes=346968 key=12365667140745224614
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+WORKER_PREPARE token=55 reload=false total_ms=7.912 builds=32
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.078 monotonic_ns=1066455291770363 update=50 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455293509722 refresh_ns=0 companion=true update=50 cpu_ns=0
+SHM_POOL_COMPACT output=winit
+BUFFER output=11 logical=1920x50 physical=2880x75 scale=1.5 format=Rgba allocation_count=12 pool_bytes=2592000 buffer_bytes=864000
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=11420865652862271060
+WALLPAPER_SWITCH_PHASE revision=4 phase=decode_start ms_since_selection=93.621 file_bytes=9201169 source_width=7680 source_height=4320
+WALLPAPER_SWITCH_PHASE revision=4 phase=decode_end ms_since_selection=93.692 file_bytes=9201169 source_width=7680 source_height=4320
+WALLPAPER_SWITCH_PHASE revision=4 phase=scale_end ms_since_selection=93.696 file_bytes=9201169 source_width=7680 source_height=4320
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=12481586404924041826
+WORKER_PREPARE token=56 reload=false total_ms=11.295 builds=32
+PROFILE stage=resources text_ms=0.000 images_ms=0.205 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.brand._layout0/image/0 total_ms=0.228 builds=62
+PROFILE stage=resources text_ms=0.000 images_ms=0.092 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.capsule.workspaces.k6e6972693a3233353033383435333136313836373a776f726b73706163653a31.cell.workspace.enamel-gradient/image/0 total_ms=0.100 builds=63
+PROFILE stage=resources text_ms=0.044 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title-icon/text/0 total_ms=0.056 builds=64
+PROFILE stage=resources text_ms=0.020 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title/text/0 total_ms=0.033 builds=65
+PROFILE stage=resources text_ms=0.014 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.package.ink/text/0 total_ms=0.023 builds=66
+PROFILE stage=resources text_ms=0.004 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.count/text/0 total_ms=0.015 builds=67
+PROFILE stage=resources text_ms=0.007 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.audio.glyph.ink/text/0 total_ms=0.015 builds=68
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.network.glyph.ink/text/0 total_ms=0.018 builds=69
+PROFILE stage=resources text_ms=0.008 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.bluetooth.glyph.ink/text/0 total_ms=0.016 builds=70
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.battery.glyph.ink/text/0 total_ms=0.017 builds=71
+PROFILE stage=resources text_ms=0.008 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.glyph.ink/text/0 total_ms=0.016 builds=72
+PROFILE stage=resources text_ms=0.003 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.notifications-count/text/0 total_ms=0.010 builds=73
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.calendar.ink/text/0 total_ms=0.018 builds=74
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.time/text/0 total_ms=0.018 builds=75
+PROFILE stage=resources text_ms=0.007 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.power.glyph.ink/text/0 total_ms=0.015 builds=76
+WORKER_PREPARE token=43 reload=false total_ms=3.174 builds=76
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=972360 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.212 monotonic_ns=1066455312769451 update=51 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=131 nodes=15 watchers=1 subscriptions=1 bindings=13 sources=31 luau_bytes=589992 markup_compiled_bytes=237697 markup_values_bytes=208656 markup_vm_build_bytes=1587644 source_bytes=178054 layers=46 gpu_images=0 surfaces=2 output=winit
+UI_COMMIT generation=3 reload=false prepare_ms=0.149 monotonic_ns=1066455313336870 update=9 companion=false source_error=false output=winit wallpaper_palette=true
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14040879488052735958
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+WALLPAPER_WARM ready=true rasters=9 requested=9 cache_bytes=6249108 cache_limit=23068672 layout=carousel viewport=1920x1200 size=1900x1140 scale=1.500
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=11559273735514364809
+WORKER_PREPARE token=57 reload=false total_ms=6.507 builds=32
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=939640 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.081 monotonic_ns=1066455319613587 update=52 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=resources text_ms=0.076 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.search/text/0 total_ms=0.109 builds=33
+PROFILE stage=resources text_ms=0.013 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.media.dynamic._layout0/text/0 total_ms=0.026 builds=34
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 total_ms=0.025 builds=35
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 total_ms=0.024 builds=36
+PROFILE stage=resources text_ms=0.013 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout0/text/0 total_ms=0.022 builds=37
+PROFILE stage=resources text_ms=0.006 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout1/text/0 total_ms=0.016 builds=38
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=11420865652862271060
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=12481586404924041826
+PROFILE stage=resources text_ms=0.017 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 total_ms=0.027 builds=39
+PROFILE stage=resources text_ms=0.028 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.055 builds=40
+PROFILE stage=resources text_ms=0.007 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.next._layout0._layout0/text/0 total_ms=0.013 builds=41
+WORKER_PREPARE token=58 reload=false total_ms=9.827 builds=41
+PROFILE stage=layer_upload id=extras.search/text/0 pixels=4508 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.media.dynamic._layout0/text/0 pixels=1463 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 pixels=1539 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 pixels=1566 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout0/text/0 pixels=196 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout1/text/0 pixels=525 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 pixels=84 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=5680 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.next._layout0._layout0/text/0 pixels=84 region=partial
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=939640 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.070 monotonic_ns=1066455330013221 update=53 companion=true source_error=false output=shared wallpaper_palette=true
+WALLPAPER_SWITCH_PHASE revision=4 phase=upload_end ms_since_selection=117.106 file_bytes=9201169 source_width=7680 source_height=4320
+WALLPAPER_SWITCH_PHASE revision=4 phase=commit ms_since_selection=117.956 file_bytes=9201169 source_width=7680 source_height=4320
+WALLPAPER_SURFACE_COMMITTED output=winit revision=4 width=2880 height=1800 transition=false
+UI_PRESENTED generation=3 monotonic_ns=1066455336218107 refresh_ns=0 companion=false update=9 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=4 phase=presented ms_since_selection=123.654 file_bytes=9201169 source_width=7680 source_height=4320
+WALLPAPER_SWITCH_LATENCY output=winit revision=4 path=static-to-static request=selection endpoint=presentation-feedback ms=123.658
+WALLPAPER_PRESENTED output=winit revision=4 monotonic_ns=1066455336218107 refresh_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066455338780186 refresh_ns=0 companion=true update=53 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=9842688 retained_pixel_bytes=1109760 key=1169731559296399099
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14040879488052735958
+PROFILE stage=image_bake_scratch reserved_bytes=2612040 retained_pixel_bytes=346020 key=17186007473499906987
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=11559273735514364809
+WORKER_PREPARE token=59 reload=false total_ms=23.532 builds=41
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=939640 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.288 monotonic_ns=1066455358045185 update=54 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+WORKER_PREPARE token=60 reload=false total_ms=3.801 builds=41
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=939640 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.061 monotonic_ns=1066455361994623 update=55 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455368706599 refresh_ns=0 companion=true update=54 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=11420865652862271060
+PROFILE stage=image_bake_scratch reserved_bytes=2613936 retained_pixel_bytes=346968 key=12365667140745224614
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=12481586404924041826
+WORKER_PREPARE token=61 reload=false total_ms=14.683 builds=41
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=939640 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.064 monotonic_ns=1066455381808931 update=56 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455384828760 refresh_ns=0 companion=true update=55 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14040879488052735958
+PROFILE stage=image_bake_scratch reserved_bytes=2612040 retained_pixel_bytes=346020 key=17186007473499906987
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=11559273735514364809
+WORKER_PREPARE token=62 reload=false total_ms=6.201 builds=41
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.090 monotonic_ns=1066455389893257 update=57 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=4 phase=selection ms_since_selection=0.020 file_bytes=9201169 source_width=7680 source_height=4320
+WALLPAPER_SWITCH_PHASE revision=4 phase=request_sent ms_since_selection=0.904 file_bytes=9201169 source_width=7680 source_height=4320
+WALLPAPER_SWITCH_PHASE revision=4 phase=decode_start ms_since_selection=1.083 file_bytes=9201169 source_width=7680 source_height=4320
+WALLPAPER_SWITCH_PHASE revision=4 phase=daemon_ack ms_since_selection=4.341 file_bytes=9201169 source_width=7680 source_height=4320
+UI_PRESENTED generation=1 monotonic_ns=1066455401121690 refresh_ns=0 companion=true update=56 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2613936 retained_pixel_bytes=346968 key=12365667140745224614
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+WORKER_PREPARE token=64 reload=false total_ms=8.735 builds=41
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.081 monotonic_ns=1066455409287916 update=58 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=4 phase=decode_end ms_since_selection=22.094 file_bytes=9201169 source_width=7680 source_height=4320
+WALLPAPER_SWITCH_PHASE revision=4 phase=scale_end ms_since_selection=22.100 file_bytes=9201169 source_width=7680 source_height=4320
+WALLPAPER_SWITCH_PHASE revision=4 phase=upload_end ms_since_selection=25.320 file_bytes=9201169 source_width=7680 source_height=4320
+WALLPAPER_SWITCH_PHASE revision=4 phase=commit ms_since_selection=26.887 file_bytes=9201169 source_width=7680 source_height=4320
+WALLPAPER_SURFACE_COMMITTED output=winit revision=4 width=2880 height=1800 transition=false
+UI_PRESENTED generation=1 monotonic_ns=1066455417338051 refresh_ns=0 companion=true update=57 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=12481586404924041826
+WORKER_PREPARE token=65 reload=false total_ms=9.038 builds=41
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.094 monotonic_ns=1066455426049606 update=59 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=4 phase=presented ms_since_selection=41.834 file_bytes=9201169 source_width=7680 source_height=4320
+WALLPAPER_SWITCH_LATENCY output=winit revision=4 path=static-to-static request=selection endpoint=presentation-feedback ms=41.840
+WALLPAPER_PRESENTED output=winit revision=4 monotonic_ns=1066455433426432 refresh_ns=0
+WORKER_PREPARE token=66 reload=false total_ms=3.597 builds=41
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.058 monotonic_ns=1066455436898400 update=60 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SURFACE_COMMITTED output=winit revision=4 width=2880 height=1800 transition=false
+UI_PRESENTED generation=1 monotonic_ns=1066455449562833 refresh_ns=0 companion=true update=58 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2612040 retained_pixel_bytes=346020 key=17186007473499906987
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=11559273735514364809
+WORKER_PREPARE token=67 reload=false total_ms=10.295 builds=41
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.081 monotonic_ns=1066455460754496 update=61 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_PRESENTED output=winit revision=4 monotonic_ns=1066455465648904 refresh_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2613936 retained_pixel_bytes=346968 key=12365667140745224614
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=12481586404924041826
+WORKER_PREPARE token=68 reload=false total_ms=10.387 builds=41
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=972360 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.078 monotonic_ns=1066455477541847 update=62 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455481739924 refresh_ns=0 companion=true update=60 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+WORKER_PREPARE token=69 reload=false total_ms=5.662 builds=41
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=972360 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.066 monotonic_ns=1066455489245050 update=63 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455497853325 refresh_ns=0 companion=true update=62 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=11559273735514364809
+WORKER_PREPARE token=70 reload=false total_ms=8.291 builds=41
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=972360 markup_compiled_bytes=127409 markup_values_bytes=189188 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=395209 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.060 monotonic_ns=1066455508691199 update=64 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455513955266 refresh_ns=0 companion=true update=63 cpu_ns=0
+WORKER_PREPARE token=71 reload=false total_ms=2.749 builds=41
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=972360 markup_compiled_bytes=127409 markup_values_bytes=204664 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=411247 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.054 monotonic_ns=1066455519372023 update=65 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455530016607 refresh_ns=0 companion=true update=64 cpu_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066455546088428 refresh_ns=0 companion=true update=65 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=4 phase=selection ms_since_selection=1.315 file_bytes=2165493 source_width=3840 source_height=2160
+SHM_POOL_COMPACT output=winit
+BUFFER output=11 logical=1920x50 physical=2880x75 scale=1.5 format=Rgba allocation_count=15 pool_bytes=2592000 buffer_bytes=864000
+WALLPAPER_SWITCH_PHASE revision=4 phase=request_sent ms_since_selection=4.692 file_bytes=2165493 source_width=3840 source_height=2160
+PROFILE stage=font_select ms=1.478 files=2 faces=2
+PROFILE stage=resources text_ms=0.230 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.291 builds=42
+WORKER_PREPARE token=72 reload=false total_ms=15.073 builds=42
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=6880 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=939640 markup_compiled_bytes=127409 markup_values_bytes=204667 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=411247 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.073 monotonic_ns=1066455692265104 update=66 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455693804963 refresh_ns=0 companion=true update=66 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=12481586404924041826
+PROFILE stage=image_bake_scratch reserved_bytes=2066096 retained_pixel_bytes=346968 key=754678209962353188
+WORKER_PREPARE token=73 reload=false total_ms=10.226 builds=42
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=939640 markup_compiled_bytes=127409 markup_values_bytes=189132 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=353972 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.065 monotonic_ns=1066455715519721 update=67 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455717326300 refresh_ns=0 companion=true update=67 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=4 phase=daemon_ack ms_since_selection=42.622 file_bytes=2165493 source_width=3840 source_height=2160
+PROFILE stage=image_bake_scratch reserved_bytes=2612040 retained_pixel_bytes=346020 key=17186007473499906987
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=11559273735514364809
+PROFILE stage=image_bake_scratch reserved_bytes=2064200 retained_pixel_bytes=346020 key=2455510870721515757
+WORKER_PREPARE token=74 reload=false total_ms=6.232 builds=42
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=939640 markup_compiled_bytes=127409 markup_values_bytes=189132 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=353972 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.098 monotonic_ns=1066455728612483 update=68 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455730562252 refresh_ns=0 companion=true update=68 cpu_ns=0
+WORKER_PREPARE token=75 reload=false total_ms=3.025 builds=42
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=939640 markup_compiled_bytes=127409 markup_values_bytes=189132 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=353972 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.060 monotonic_ns=1066455741299986 update=69 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455743508785 refresh_ns=0 companion=true update=69 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2613936 retained_pixel_bytes=346968 key=12365667140745224614
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2066096 retained_pixel_bytes=346968 key=754678209962353188
+WORKER_PREPARE token=76 reload=false total_ms=9.229 builds=42
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=939640 markup_compiled_bytes=127409 markup_values_bytes=189132 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=353972 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.067 monotonic_ns=1066455764532933 update=70 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455766429602 refresh_ns=0 companion=true update=70 cpu_ns=0
+WORKER_PREPARE token=77 reload=false total_ms=2.077 builds=42
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189132 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=353972 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.064 monotonic_ns=1066455773649808 update=71 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455775167797 refresh_ns=0 companion=true update=71 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=12481586404924041826
+WORKER_PREPARE token=78 reload=false total_ms=10.047 builds=42
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189132 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=353972 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.083 monotonic_ns=1066455798885963 update=72 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455800049433 refresh_ns=0 companion=true update=72 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=5 phase=decode_start ms_since_selection=127.048 file_bytes=2165493 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=5 phase=decode_end ms_since_selection=127.146 file_bytes=2165493 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=5 phase=scale_end ms_since_selection=127.149 file_bytes=2165493 source_width=3840 source_height=2160
+PROFILE stage=resources text_ms=0.000 images_ms=0.263 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.brand._layout0/image/0 total_ms=0.306 builds=77
+PROFILE stage=resources text_ms=0.000 images_ms=0.114 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.capsule.workspaces.k6e6972693a3233353033383435333136313836373a776f726b73706163653a31.cell.workspace.enamel-gradient/image/0 total_ms=0.122 builds=78
+PROFILE stage=resources text_ms=0.049 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title-icon/text/0 total_ms=0.058 builds=79
+PROFILE stage=resources text_ms=0.016 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title/text/0 total_ms=0.029 builds=80
+PROFILE stage=resources text_ms=0.013 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.package.ink/text/0 total_ms=0.023 builds=81
+PROFILE stage=resources text_ms=0.004 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.count/text/0 total_ms=0.011 builds=82
+PROFILE stage=resources text_ms=0.007 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.audio.glyph.ink/text/0 total_ms=0.020 builds=83
+PROFILE stage=resources text_ms=0.010 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.network.glyph.ink/text/0 total_ms=0.019 builds=84
+PROFILE stage=resources text_ms=0.008 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.bluetooth.glyph.ink/text/0 total_ms=0.016 builds=85
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.battery.glyph.ink/text/0 total_ms=0.016 builds=86
+PROFILE stage=resources text_ms=0.008 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.glyph.ink/text/0 total_ms=0.016 builds=87
+PROFILE stage=resources text_ms=0.003 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.notifications-count/text/0 total_ms=0.010 builds=88
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.calendar.ink/text/0 total_ms=0.017 builds=89
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.time/text/0 total_ms=0.018 builds=90
+PROFILE stage=resources text_ms=0.007 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.power.glyph.ink/text/0 total_ms=0.016 builds=91
+WORKER_PREPARE token=44 reload=false total_ms=2.293 builds=91
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=131 nodes=15 watchers=1 subscriptions=1 bindings=13 sources=31 luau_bytes=589992 markup_compiled_bytes=237697 markup_values_bytes=208656 markup_vm_build_bytes=1587644 source_bytes=178054 layers=46 gpu_images=0 surfaces=2 output=winit
+UI_COMMIT generation=3 reload=false prepare_ms=0.055 monotonic_ns=1066455809725947 update=10 companion=false source_error=false output=winit wallpaper_palette=true
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=11559273735514364809
+WALLPAPER_WARM ready=true rasters=9 requested=9 cache_bytes=6249108 cache_limit=23068672 layout=carousel viewport=1920x1200 size=1900x1140 scale=1.500
+WORKER_PREPARE token=79 reload=false total_ms=10.033 builds=42
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=923280 markup_compiled_bytes=127409 markup_values_bytes=189132 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=353972 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.220 monotonic_ns=1066455815688234 update=73 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=resources text_ms=0.036 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.search/text/0 total_ms=0.066 builds=43
+PROFILE stage=resources text_ms=0.010 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.media.dynamic._layout0/text/0 total_ms=0.021 builds=44
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 total_ms=0.021 builds=45
+PROFILE stage=resources text_ms=0.008 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 total_ms=0.019 builds=46
+PROFILE stage=resources text_ms=0.012 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout0/text/0 total_ms=0.019 builds=47
+PROFILE stage=resources text_ms=0.005 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout1/text/0 total_ms=0.012 builds=48
+PROFILE stage=image_bake_scratch reserved_bytes=2612040 retained_pixel_bytes=346020 key=17186007473499906987
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+PROFILE stage=image_bake_scratch reserved_bytes=2064200 retained_pixel_bytes=346020 key=2455510870721515757
+PROFILE stage=resources text_ms=0.016 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 total_ms=0.026 builds=49
+PROFILE stage=resources text_ms=0.032 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.061 builds=50
+PROFILE stage=resources text_ms=0.006 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.next._layout0._layout0/text/0 total_ms=0.013 builds=51
+WORKER_PREPARE token=81 reload=false total_ms=7.937 builds=51
+PROFILE stage=layer_upload id=extras.search/text/0 pixels=4508 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.media.dynamic._layout0/text/0 pixels=1463 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 pixels=1539 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 pixels=1566 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout0/text/0 pixels=196 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout1/text/0 pixels=525 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 pixels=84 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=6880 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.next._layout0._layout0/text/0 pixels=84 region=partial
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=923280 markup_compiled_bytes=127409 markup_values_bytes=189132 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=353972 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.119 monotonic_ns=1066455825199928 update=74 companion=true source_error=false output=shared wallpaper_palette=true
+WALLPAPER_SWITCH_PHASE revision=5 phase=upload_end ms_since_selection=150.234 file_bytes=2165493 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=5 phase=commit ms_since_selection=151.224 file_bytes=2165493 source_width=3840 source_height=2160
+WALLPAPER_SURFACE_COMMITTED output=winit revision=5 width=2880 height=1800 transition=false
+WALLPAPER_SWITCH_PHASE revision=5 phase=selection ms_since_selection=1.509 file_bytes=2165493 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=5 phase=request_sent ms_since_selection=2.459 file_bytes=2165493 source_width=3840 source_height=2160
+UI_PRESENTED generation=3 monotonic_ns=1066455835133232 refresh_ns=0 companion=false update=10 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=5 phase=presented ms_since_selection=157.744 file_bytes=2165493 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_LATENCY output=winit revision=5 path=static-to-static request=selection endpoint=presentation-feedback ms=157.748
+WALLPAPER_PRESENTED output=winit revision=5 monotonic_ns=1066455835133232 refresh_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066455837497961 refresh_ns=0 companion=true update=74 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=5 phase=decode_start ms_since_selection=8.860 file_bytes=2165493 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=5 phase=daemon_ack ms_since_selection=9.805 file_bytes=2165493 source_width=3840 source_height=2160
+PROFILE stage=image_bake_scratch reserved_bytes=9842688 retained_pixel_bytes=1109760 key=11971845847223509992
+PROFILE stage=image_bake_scratch reserved_bytes=2613936 retained_pixel_bytes=346968 key=12365667140745224614
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+PROFILE stage=image_bake_scratch reserved_bytes=2066096 retained_pixel_bytes=346968 key=754678209962353188
+WORKER_PREPARE token=82 reload=false total_ms=37.111 builds=51
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=923280 markup_compiled_bytes=127409 markup_values_bytes=189132 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=353972 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.274 monotonic_ns=1066455863852296 update=75 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=5 phase=decode_end ms_since_selection=37.559 file_bytes=2165493 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=5 phase=scale_end ms_since_selection=37.566 file_bytes=2165493 source_width=3840 source_height=2160
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+WALLPAPER_SWITCH_PHASE revision=5 phase=upload_end ms_since_selection=40.901 file_bytes=2165493 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_PHASE revision=5 phase=commit ms_since_selection=41.974 file_bytes=2165493 source_width=3840 source_height=2160
+WALLPAPER_SURFACE_COMMITTED output=winit revision=5 width=2880 height=1800 transition=false
+UI_PRESENTED generation=1 monotonic_ns=1066455867849444 refresh_ns=0 companion=true update=75 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=12481586404924041826
+WORKER_PREPARE token=83 reload=false total_ms=11.746 builds=51
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=923280 markup_compiled_bytes=127409 markup_values_bytes=189132 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=353972 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.200 monotonic_ns=1066455876301219 update=76 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=11559273735514364809
+PROFILE stage=image_bake_scratch reserved_bytes=2064200 retained_pixel_bytes=346020 key=2455510870721515757
+WORKER_PREPARE token=84 reload=false total_ms=5.646 builds=51
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=923280 markup_compiled_bytes=127409 markup_values_bytes=189132 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=353972 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.061 monotonic_ns=1066455882184936 update=77 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+WALLPAPER_SWITCH_PHASE revision=5 phase=presented ms_since_selection=61.622 file_bytes=2165493 source_width=3840 source_height=2160
+WALLPAPER_SWITCH_LATENCY output=winit revision=5 path=static-to-static request=selection endpoint=presentation-feedback ms=61.627
+WALLPAPER_PRESENTED output=winit revision=5 monotonic_ns=1066455891036701 refresh_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+WORKER_PREPARE token=85 reload=false total_ms=3.180 builds=51
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=923280 markup_compiled_bytes=127409 markup_values_bytes=189132 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=353972 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.062 monotonic_ns=1066455891793680 update=78 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SURFACE_COMMITTED output=winit revision=5 width=2880 height=1800 transition=false
+UI_PRESENTED generation=1 monotonic_ns=1066455900300976 refresh_ns=0 companion=true update=76 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+WORKER_PREPARE token=86 reload=false total_ms=8.361 builds=51
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=923280 markup_compiled_bytes=127409 markup_values_bytes=189132 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=353972 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.078 monotonic_ns=1066455913644978 update=79 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_PRESENTED output=winit revision=5 monotonic_ns=1066455916344906 refresh_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=12481586404924041826
+PROFILE stage=image_bake_scratch reserved_bytes=2066096 retained_pixel_bytes=346968 key=754678209962353188
+WORKER_PREPARE token=87 reload=false total_ms=9.694 builds=51
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=923280 markup_compiled_bytes=127409 markup_values_bytes=189132 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=353972 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.066 monotonic_ns=1066455931720638 update=80 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455932415037 refresh_ns=0 companion=true update=78 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=11559273735514364809
+PROFILE stage=image_bake_scratch reserved_bytes=2064200 retained_pixel_bytes=346020 key=2455510870721515757
+WORKER_PREPARE token=88 reload=false total_ms=7.273 builds=51
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=923280 markup_compiled_bytes=127409 markup_values_bytes=189132 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=353972 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.060 monotonic_ns=1066455945982259 update=81 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455948482088 refresh_ns=0 companion=true update=80 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+WORKER_PREPARE token=89 reload=false total_ms=3.065 builds=51
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=923280 markup_compiled_bytes=127409 markup_values_bytes=189132 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=353972 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.059 monotonic_ns=1066455958297812 update=82 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455964599739 refresh_ns=0 companion=true update=81 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+UI_PRESENTED generation=1 monotonic_ns=1066455980785390 refresh_ns=0 companion=true update=82 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=12481586404924041826
+PROFILE stage=image_bake_scratch reserved_bytes=2066096 retained_pixel_bytes=346968 key=754678209962353188
+WORKER_PREPARE token=90 reload=false total_ms=11.472 builds=51
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=923280 markup_compiled_bytes=127409 markup_values_bytes=189132 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=353972 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.073 monotonic_ns=1066455983593478 update=83 companion=true source_error=false output=shared wallpaper_palette=false
+WORKER_PREPARE token=91 reload=false total_ms=2.633 builds=51
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=923280 markup_compiled_bytes=127409 markup_values_bytes=204596 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=374019 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.064 monotonic_ns=1066455990880654 update=84 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066455996851440 refresh_ns=0 companion=true update=83 cpu_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066456012917001 refresh_ns=0 companion=true update=84 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=5 phase=selection ms_since_selection=0.025 file_bytes=9501497 source_width=3440 source_height=1935
+WALLPAPER_SWITCH_PHASE revision=5 phase=request_sent ms_since_selection=0.780 file_bytes=9501497 source_width=3440 source_height=1935
+PROFILE stage=font_select ms=0.921 files=2 faces=2
+PROFILE stage=resources text_ms=0.121 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.161 builds=52
+WORKER_PREPARE token=92 reload=false total_ms=6.829 builds=52
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=5360 region=full
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=906920 markup_compiled_bytes=127409 markup_values_bytes=204590 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=374019 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.081 monotonic_ns=1066456107880817 update=85 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=5 phase=daemon_ack ms_since_selection=6.896 file_bytes=9501497 source_width=3440 source_height=1935
+UI_PRESENTED generation=1 monotonic_ns=1066456110386745 refresh_ns=0 companion=true update=85 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=11559273735514364809
+PROFILE stage=image_bake_scratch reserved_bytes=2064200 retained_pixel_bytes=346020 key=2455510870721515757
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14480962532739686311
+WORKER_PREPARE token=93 reload=false total_ms=6.322 builds=52
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=906920 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.078 monotonic_ns=1066456128920975 update=86 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066456130657014 refresh_ns=0 companion=true update=86 cpu_ns=0
+WORKER_PREPARE token=94 reload=false total_ms=2.292 builds=52
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=906920 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.073 monotonic_ns=1066456140882438 update=87 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066456143313987 refresh_ns=0 companion=true update=87 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2066096 retained_pixel_bytes=346968 key=754678209962353188
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=13978104880317013444
+WORKER_PREPARE token=95 reload=false total_ms=9.165 builds=52
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=906920 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.064 monotonic_ns=1066456164788054 update=88 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066456166488703 refresh_ns=0 companion=true update=88 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+PROFILE stage=image_bake_scratch reserved_bytes=2064200 retained_pixel_bytes=346020 key=2455510870721515757
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14480962532739686311
+WORKER_PREPARE token=96 reload=false total_ms=8.462 builds=52
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=906920 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.072 monotonic_ns=1066456180934325 update=89 companion=true source_error=false output=shared wallpaper_palette=false
+SHM_POOL_COMPACT output=winit
+BUFFER output=11 logical=1920x50 physical=2880x75 scale=1.5 format=Rgba allocation_count=18 pool_bytes=2592000 buffer_bytes=864000
+UI_PRESENTED generation=1 monotonic_ns=1066456182735614 refresh_ns=0 companion=true update=89 cpu_ns=0
+WORKER_PREPARE token=97 reload=false total_ms=2.784 builds=52
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=923280 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.083 monotonic_ns=1066456191378759 update=90 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=6 phase=decode_start ms_since_selection=95.211 file_bytes=9501497 source_width=3440 source_height=1935
+WALLPAPER_SWITCH_PHASE revision=6 phase=decode_end ms_since_selection=95.299 file_bytes=9501497 source_width=3440 source_height=1935
+WALLPAPER_SWITCH_PHASE revision=6 phase=scale_end ms_since_selection=95.302 file_bytes=9501497 source_width=3440 source_height=1935
+PROFILE stage=resources text_ms=0.000 images_ms=0.308 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.brand._layout0/image/0 total_ms=0.356 builds=92
+PROFILE stage=resources text_ms=0.000 images_ms=0.125 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.left.capsule.workspaces.k6e6972693a3233353033383435333136313836373a776f726b73706163653a31.cell.workspace.enamel-gradient/image/0 total_ms=0.135 builds=93
+PROFILE stage=resources text_ms=0.110 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title-icon/text/0 total_ms=0.125 builds=94
+PROFILE stage=resources text_ms=0.031 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.title-band.title-content.title/text/0 total_ms=0.056 builds=95
+PROFILE stage=resources text_ms=0.023 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.package.ink/text/0 total_ms=0.034 builds=96
+PROFILE stage=resources text_ms=0.006 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.updates.count/text/0 total_ms=0.014 builds=97
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.audio.glyph.ink/text/0 total_ms=0.020 builds=98
+PROFILE stage=resources text_ms=0.012 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.network.glyph.ink/text/0 total_ms=0.024 builds=99
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.bluetooth.glyph.ink/text/0 total_ms=0.021 builds=100
+PROFILE stage=resources text_ms=0.010 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.battery.glyph.ink/text/0 total_ms=0.018 builds=101
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.glyph.ink/text/0 total_ms=0.018 builds=102
+PROFILE stage=resources text_ms=0.003 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.status.notifications.notifications-count/text/0 total_ms=0.010 builds=103
+UI_PRESENTED generation=1 monotonic_ns=1066456199213725 refresh_ns=0 companion=true update=90 cpu_ns=0
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.calendar.ink/text/0 total_ms=0.019 builds=104
+PROFILE stage=resources text_ms=0.009 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=bar.right.system-pill.clock.time/text/0 total_ms=0.018 builds=105
+WORKER_PREPARE token=45 reload=false total_ms=3.020 builds=105
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=131 nodes=15 watchers=1 subscriptions=1 bindings=13 sources=31 luau_bytes=589992 markup_compiled_bytes=237697 markup_values_bytes=208656 markup_vm_build_bytes=1587644 source_bytes=178054 layers=46 gpu_images=0 surfaces=2 output=winit
+UI_COMMIT generation=3 reload=false prepare_ms=0.055 monotonic_ns=1066456202205523 update=11 companion=false source_error=false output=winit wallpaper_palette=true
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+WORKER_PREPARE token=98 reload=false total_ms=5.502 builds=52
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.123 monotonic_ns=1066456202998162 update=91 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=resources text_ms=0.039 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.search/text/0 total_ms=0.067 builds=53
+PROFILE stage=resources text_ms=0.010 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.media.dynamic._layout0/text/0 total_ms=0.022 builds=54
+PROFILE stage=resources text_ms=0.012 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 total_ms=0.023 builds=55
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 total_ms=0.021 builds=56
+PROFILE stage=resources text_ms=0.011 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout0/text/0 total_ms=0.018 builds=57
+PROFILE stage=resources text_ms=0.005 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-controls.add._layout0._layout1/text/0 total_ms=0.013 builds=58
+WALLPAPER_WARM ready=true rasters=9 requested=9 cache_bytes=6249108 cache_limit=23068672 layout=carousel viewport=1920x1200 size=1900x1140 scale=1.500
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=12481586404924041826
+PROFILE stage=image_bake_scratch reserved_bytes=2066096 retained_pixel_bytes=346968 key=754678209962353188
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=13978104880317013444
+PROFILE stage=resources text_ms=0.021 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 total_ms=0.032 builds=59
+PROFILE stage=resources text_ms=0.031 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.selected-title/text/0 total_ms=0.057 builds=60
+PROFILE stage=resources text_ms=0.007 images_ms=0.000 shadow_ms=0.000
+RESOURCES scale=1.5 textures=1 color_glyphs=0 fonts={"IBM Plex Sans", "Material Symbols Rounded"}
+PROFILE stage=layer_bake id=extras.wallpaper-navigation.next._layout0._layout0/text/0 total_ms=0.014 builds=61
+WORKER_PREPARE token=99 reload=false total_ms=13.870 builds=61
+PROFILE stage=layer_upload id=extras.search/text/0 pixels=4508 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.media.dynamic._layout0/text/0 pixels=1463 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.spotlight._layout0/text/0 pixels=1539 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.layouts.hexagons._layout0/text/0 pixels=1566 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout0/text/0 pixels=196 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-controls.add._layout0._layout1/text/0 pixels=525 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.previous._layout0._layout0/text/0 pixels=84 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.selected-title/text/0 pixels=5340 region=partial
+PROFILE stage=layer_upload id=extras.wallpaper-navigation.next._layout0._layout0/text/0 pixels=84 region=partial
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.309 monotonic_ns=1066456217920694 update=92 companion=true source_error=false output=shared wallpaper_palette=true
+WALLPAPER_SWITCH_PHASE revision=6 phase=upload_end ms_since_selection=119.437 file_bytes=9501497 source_width=3440 source_height=1935
+WALLPAPER_SWITCH_PHASE revision=6 phase=commit ms_since_selection=120.417 file_bytes=9501497 source_width=3440 source_height=1935
+WALLPAPER_SURFACE_COMMITTED output=winit revision=6 width=2880 height=1800 transition=false
+UI_PRESENTED generation=3 monotonic_ns=1066456226959859 refresh_ns=0 companion=false update=11 cpu_ns=0
+WALLPAPER_SWITCH_PHASE revision=6 phase=presented ms_since_selection=127.377 file_bytes=9501497 source_width=3440 source_height=1935
+WALLPAPER_SWITCH_LATENCY output=winit revision=6 path=static-to-static request=selection endpoint=presentation-feedback ms=127.385
+WALLPAPER_PRESENTED output=winit revision=6 monotonic_ns=1066456226959859 refresh_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066456231434756 refresh_ns=0 companion=true update=92 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=9842688 retained_pixel_bytes=1109760 key=8360827338944599796
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=11559273735514364809
+PROFILE stage=image_bake_scratch reserved_bytes=2064200 retained_pixel_bytes=346020 key=2455510870721515757
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14480962532739686311
+WORKER_PREPARE token=100 reload=false total_ms=26.619 builds=61
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.280 monotonic_ns=1066456245535428 update=93 companion=true source_error=false output=shared wallpaper_palette=false
+WORKER_PREPARE token=101 reload=false total_ms=4.068 builds=61
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.070 monotonic_ns=1066456249504426 update=94 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=15008688750470438440
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=12481586404924041826
+UI_PRESENTED generation=1 monotonic_ns=1066456263662478 refresh_ns=0 companion=true update=93 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2066096 retained_pixel_bytes=346968 key=754678209962353188
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=13978104880317013444
+WORKER_PREPARE token=102 reload=false total_ms=11.734 builds=61
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.077 monotonic_ns=1066456267568706 update=95 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=7341945962555939390
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14480962532739686311
+WORKER_PREPARE token=103 reload=false total_ms=5.628 builds=61
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=18 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.063 monotonic_ns=1066456277914670 update=96 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066456279770489 refresh_ns=0 companion=true update=94 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=11559273735514364809
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=13978104880317013444
+WORKER_PREPARE token=104 reload=false total_ms=7.290 builds=61
+UI_PRESENTED generation=1 monotonic_ns=1066456295879329 refresh_ns=0 companion=true update=96 cpu_ns=0
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.095 monotonic_ns=1066456296470879 update=97 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=6 phase=selection ms_since_selection=0.041 file_bytes=9501497 source_width=3440 source_height=1935
+WALLPAPER_SWITCH_PHASE revision=6 phase=request_sent ms_since_selection=1.367 file_bytes=9501497 source_width=3440 source_height=1935
+WALLPAPER_SWITCH_PHASE revision=6 phase=decode_start ms_since_selection=1.671 file_bytes=9501497 source_width=3440 source_height=1935
+WALLPAPER_SWITCH_PHASE revision=6 phase=daemon_ack ms_since_selection=9.028 file_bytes=9501497 source_width=3440 source_height=1935
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+UI_PRESENTED generation=1 monotonic_ns=1066456312160220 refresh_ns=0 companion=true update=97 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=12481586404924041826
+WORKER_PREPARE token=106 reload=false total_ms=7.800 builds=61
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.089 monotonic_ns=1066456313784519 update=98 companion=true source_error=false output=shared wallpaper_palette=false
+WORKER_PREPARE token=107 reload=false total_ms=2.882 builds=61
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=956000 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.073 monotonic_ns=1066456324828773 update=99 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SWITCH_PHASE revision=6 phase=decode_end ms_since_selection=29.648 file_bytes=9501497 source_width=3440 source_height=1935
+WALLPAPER_SWITCH_PHASE revision=6 phase=scale_end ms_since_selection=29.655 file_bytes=9501497 source_width=3440 source_height=1935
+WALLPAPER_SWITCH_PHASE revision=6 phase=upload_end ms_since_selection=32.898 file_bytes=9501497 source_width=3440 source_height=1935
+WALLPAPER_SWITCH_PHASE revision=6 phase=commit ms_since_selection=33.968 file_bytes=9501497 source_width=3440 source_height=1935
+WALLPAPER_SURFACE_COMMITTED output=winit revision=6 width=2880 height=1800 transition=false
+UI_PRESENTED generation=1 monotonic_ns=1066456328341841 refresh_ns=0 companion=true update=98 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=14158555570522363468
+WALLPAPER_SWITCH_PHASE revision=6 phase=presented ms_since_selection=46.311 file_bytes=9501497 source_width=3440 source_height=1935
+WALLPAPER_SWITCH_LATENCY output=winit revision=6 path=static-to-static request=selection endpoint=presentation-feedback ms=46.321
+WALLPAPER_PRESENTED output=winit revision=6 monotonic_ns=1066456344434022 refresh_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=11559273735514364809
+PROFILE stage=image_bake_scratch reserved_bytes=2064200 retained_pixel_bytes=346020 key=2455510870721515757
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14480962532739686311
+WORKER_PREPARE token=108 reload=false total_ms=8.566 builds=61
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=972360 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.093 monotonic_ns=1066456347798640 update=100 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14182068044722038140
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+PROFILE stage=image_bake_scratch reserved_bytes=2066096 retained_pixel_bytes=346968 key=754678209962353188
+UI_PRESENTED generation=1 monotonic_ns=1066456360565503 refresh_ns=0 companion=true update=99 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=13978104880317013444
+WORKER_PREPARE token=109 reload=false total_ms=7.312 builds=61
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=972360 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.194 monotonic_ns=1066456365821500 update=101 companion=true source_error=false output=shared wallpaper_palette=false
+WALLPAPER_SURFACE_COMMITTED output=winit revision=6 width=2880 height=1800 transition=false
+UI_PRESENTED generation=1 monotonic_ns=1066456376797713 refresh_ns=0 companion=true update=100 cpu_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=10283948851385411398
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=12481586404924041826
+WORKER_PREPARE token=110 reload=false total_ms=7.989 builds=61
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=972360 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.140 monotonic_ns=1066456380475051 update=102 companion=true source_error=false output=shared wallpaper_palette=false
+PROFILE stage=image_bake_scratch reserved_bytes=2535240 retained_pixel_bytes=346020 key=17596745055814235451
+WALLPAPER_PRESENTED output=winit revision=6 monotonic_ns=1066456392901474 refresh_ns=0
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=11559273735514364809
+PROFILE stage=image_bake_scratch reserved_bytes=2064200 retained_pixel_bytes=346020 key=2455510870721515757
+PROFILE stage=image_bake_scratch reserved_bytes=2537136 retained_pixel_bytes=346968 key=14480962532739686311
+WORKER_PREPARE token=111 reload=false total_ms=6.030 builds=61
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=18 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=972360 markup_compiled_bytes=127409 markup_values_bytes=189083 markup_vm_build_bytes=1359568 source_bytes=50429 extras_images_bytes=323451 layers=55 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.083 monotonic_ns=1066456395372573 update=103 companion=true source_error=false output=shared wallpaper_palette=false
+WORKER_PREPARE token=112 reload=false total_ms=2.640 builds=61
+UI_PLATFORM a11y_adapters=1 ime_objects=1 ui_channels=2
+UI_RESOURCES stores=100 nodes=19 watchers=1 subscriptions=1 bindings=11 sources=8 luau_bytes=972360 markup_compiled_bytes=127409 markup_values_bytes=204615 markup_vm_build_bytes=1408672 source_bytes=50429 extras_images_bytes=381129 layers=58 gpu_images=17 surfaces=2 output=shared
+UI_COMMIT generation=1 reload=false prepare_ms=0.060 monotonic_ns=1066456407870505 update=104 companion=true source_error=false output=shared wallpaper_palette=false
+UI_PRESENTED generation=1 monotonic_ns=1066456408992825 refresh_ns=0 companion=true update=101 cpu_ns=0
+UI_PRESENTED generation=1 monotonic_ns=1066456425070246 refresh_ns=0 companion=true update=104 cpu_ns=0
+SHM_POOL_COMPACT output=winit
+BUFFER output=11 logical=1920x50 physical=2880x75 scale=1.5 format=Rgba allocation_count=21 pool_bytes=2592000 buffer_bytes=864000
+SERVICE_AUDIO disconnected: Creation failed
+SERVICE_AUDIO disconnected: Creation failed
+WALLPAPER_BUFFER_RETAINED output=winit compositor=niri reason=no_release

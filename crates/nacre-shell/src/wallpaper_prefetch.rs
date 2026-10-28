@@ -26,7 +26,9 @@ impl Prefetch {
             .name("wallpaper-prefetch".into())
             .spawn(move || {
                 unsafe {
-                    libc::setpriority(libc::PRIO_PROCESS, libc::gettid() as u32, 10);
+                    // Wallpaper activation runs at nice 10; let that foreground
+                    // selection finish before this cancellable raster worker.
+                    libc::setpriority(libc::PRIO_PROCESS, libc::gettid() as u32, 19);
                 }
                 // Give the newly populated picker scene a frame before background decoding.
                 std::thread::sleep(std::time::Duration::from_millis(100));

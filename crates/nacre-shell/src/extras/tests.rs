@@ -873,6 +873,22 @@ async fn wallpaper_refreshes_deleted_cache_paths_and_settles_still_broken_paths(
         bounds: Rect::new(0., 0., 8., 6.),
     };
 
+    let cached = lab.dir.join("cached.png");
+    image::RgbaImage::from_pixel(8, 6, image::Rgba([40, 70, 90, 255]))
+        .save(&cached)
+        .unwrap();
+    wallpaper.state.borrow_mut().catalogue_result.push(json!({
+        "id":"/fixture/cached.jpg","kind":"image","title":"Cached",
+        "thumbnail":cached.to_string_lossy(),"preview":"","active":false
+    }));
+    let mut cached_scene = scene_for("/fixture/cached.jpg");
+    wallpaper.attach_images(&mut cached_scene, Some(wake.clone()));
+    assert!(cached_scene.asset_data.contains_key(&cached.canonicalize().unwrap()));
+    assert!(
+        lab.calls.try_recv().is_err(),
+        "a valid persisted thumbnail is ready without a catalogue/prewarm request"
+    );
+
     let mut scene = scene_for("/fixture/current.jpg");
     wallpaper.attach_images(&mut scene, Some(wake.clone()));
     assert!(
@@ -955,9 +971,9 @@ async fn wallpaper_refreshes_deleted_cache_paths_and_settles_still_broken_paths(
         lab.calls.recv().await.unwrap(),
         (
             "wallpaper.catalogue".into(),
-            json!({"ids":["/fixture/broken.jpg","/fixture/current.jpg"]})
+            json!({"ids":["/fixture/broken.jpg"]})
         ),
-        "a changed visible set retries its broken image and prewarms cached visible images"
+        "a changed visible set requests only the image missing from the local cache"
     );
     for _ in 0..200 {
         wallpaper.project(&open, Some(wake.clone()));

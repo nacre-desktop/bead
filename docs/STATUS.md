@@ -34,6 +34,17 @@ ceiling. Full Bead CI passes. See [B0157](specs/0157-picker-errors.md).
 
 # Status
 
+## 2026-10-28 — B0173 wallpaper picker cold open (implementation and parity complete; acceptance gates open)
+
+The Bead catalogue snapshot, progressive visible-thumbnail hydration, lazy
+wallpaper raster prefetch, retained-panel reopen, and idle snapshot changes are
+implemented. Twenty paired QML/Bead states pass. Final warm first frames are
+80.650/49.456/49.226 ms, but no-shim selection p95 is 161.836 ms (14 samples,
+cycle 2 has 4/5) and a baseline-unmatched `nacre-link` tick occurs at 2.201–2.301
+s after cycle 2 closes. The cold first frame is unmeasured: desktop preflight
+rejected the run while host swap use was ≥64 MiB. Full Bead CI is still pending;
+see [B0173](specs/0173-picker-cold-open.md).
+
 ## 2026-10-27 — B0162 daily acceptance (dropdown regressions fixed; broad fixture gaps remain)
 
 Using one `PanelVisibility` to first Wayland presentation-feedback boundary, the 900369fb baseline focused dropdown matrix is 64.20/64.75 ms p50/p99; fixed main is 52.02/60.93 ms. All 21 closes on each matched seven-widget matrix are pixel-identical. `ec6cd311` is the first bad commit: reveal ticks reshaped primitives that the CPU snapshot fingerprint treated as new content, rebuilding the panel snapshot and retaining stale pixels after the surface unmapped. The fix fingerprints and prepares canonical open-state content. The baseline Bluetooth service is unavailable in the private TEST session. Full sequential launcher/dashboard/control/wallpaper and AI-hover coverage still has fixture/route gaps; see [B0162](specs/0162-daily-acceptance.md) and `.lead/report.md`.

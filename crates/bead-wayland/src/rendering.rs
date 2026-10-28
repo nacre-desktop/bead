@@ -465,6 +465,14 @@ impl App {
             .find(|surface| surface.companion)
             .map_or(1., |surface| surface.scale120 as f32 / 120.);
         let (sender, receiver) = std::sync::mpsc::channel();
+        let snapshot_started_ns = monotonic_ns();
+        bead_core::vprintln!(
+            "PANEL_CPU_SNAPSHOT_BEGIN monotonic_ns={} epoch={} close_epoch={} ui_serial={}",
+            snapshot_started_ns,
+            epoch,
+            close_epoch,
+            ui_serial
+        );
         let worker = std::thread::Builder::new()
             .name("bead-panel-cpu-snapshot".into())
             .spawn(move || {
@@ -483,6 +491,15 @@ impl App {
                 }
                 result => {
                     let joined = worker.join().is_some_and(|result| result.is_ok());
+                    let snapshot_completed_ns = monotonic_ns();
+                    bead_core::vprintln!(
+                        "PANEL_CPU_SNAPSHOT_COMPLETE monotonic_ns={} elapsed_ms={:.3} epoch={} close_epoch={}",
+                        snapshot_completed_ns,
+                        (snapshot_completed_ns.saturating_sub(snapshot_started_ns)) as f64
+                            / 1_000_000.0,
+                        epoch,
+                        close_epoch
+                    );
                     app.panel_snapshot_pending = false;
                     if !joined {
                         app.fail("panel CPU snapshot worker panicked");
@@ -678,8 +695,9 @@ impl App {
                 libc::malloc_trim(0);
             }
             println!(
-                "PANEL_GPU_SUSPENDED shared_context_retained={}",
-                self.gl.is_some()
+                "PANEL_GPU_SUSPENDED shared_context_retained={} monotonic_ns={}",
+                self.gl.is_some(),
+                monotonic_ns()
             );
         }
         Ok(())
