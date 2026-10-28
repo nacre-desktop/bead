@@ -188,9 +188,10 @@ impl Controller {
         }
         let supervisor =
             supervisor::Supervisor::start(supervisor::Config::new(renderer), log_event);
+        let thread_sender = sender.clone();
         let thread = std::thread::Builder::new()
             .name("wallpaper-motion".into())
-            .spawn(move || run(deps, supervisor, receiver, sender.clone()))
+            .spawn(move || run(deps, supervisor, receiver, thread_sender))
             .ok()?;
         Some(Self {
             stop: sender,
