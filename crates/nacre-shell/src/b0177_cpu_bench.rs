@@ -49,8 +49,7 @@ fn dashboard_scene() -> Result<bead::render::Scene, Box<dyn std::error::Error>> 
     )?)?;
     let calendar_source: std::sync::Arc<dyn Source> =
         std::sync::Arc::new(FakeSource::new(calendar)?);
-    let weather_source: std::sync::Arc<dyn Source> =
-        std::sync::Arc::new(FakeSource::new(weather)?);
+    let weather_source: std::sync::Arc<dyn Source> = std::sync::Arc::new(FakeSource::new(weather)?);
     let colors = bead::render::Palette::read(&palette_path)?;
     let mut runtime = crate::reload::Runtime::new(harness.session)
         .with_dashboard_view(crate::dashboard::Dashboard::new(
@@ -77,9 +76,9 @@ fn dashboard_scene() -> Result<bead::render::Scene, Box<dyn std::error::Error>> 
 }
 
 fn fixture(root: &Path, name: &str) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    Ok(serde_json::from_slice(&std::fs::read(
-        root.join(format!("tests/fixtures/dashboard-extras/{name}.json")),
-    )?)?)
+    Ok(serde_json::from_slice(&std::fs::read(root.join(
+        format!("tests/fixtures/dashboard-extras/{name}.json"),
+    ))?)?)
 }
 
 fn control_center_scene() -> Result<bead::render::Scene, Box<dyn std::error::Error>> {
@@ -89,10 +88,7 @@ fn control_center_scene() -> Result<bead::render::Scene, Box<dyn std::error::Err
         &root,
         Path::new("control/main.luau"),
         &palette_path,
-        BTreeMap::from([(
-            "cc.page".into(),
-            bead::core::Value::Text("home".into()),
-        )]),
+        BTreeMap::from([("cc.page".into(), bead::core::Value::Text("home".into()))]),
         Config {
             width: LOGICAL_WIDTH,
             height: LOGICAL_HEIGHT,

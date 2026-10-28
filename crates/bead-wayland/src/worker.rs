@@ -247,9 +247,11 @@ fn bake(
     cache.retain_scales(scales);
     for &scale in scales {
         cache.prepare(scene, scale).map_err(|e| e.to_string())?;
-        if scene.motion.as_ref().is_some_and(|motion| {
-            motion.reveal && motion.open && motion.progress >= 1.
-        }) {
+        if scene
+            .motion
+            .as_ref()
+            .is_some_and(|motion| motion.reveal && motion.open && motion.progress >= 1.)
+        {
             cache
                 .attach_reveal_artifact(scene, scale)
                 .map_err(|e| e.to_string())?;

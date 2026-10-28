@@ -351,9 +351,8 @@ pub struct PreparedReveal {
 }
 impl PreparedReveal {
     fn cache() -> &'static std::sync::Mutex<VecDeque<((u64, u32), Arc<PreparedReveal>)>> {
-        static CACHE: OnceLock<
-            std::sync::Mutex<VecDeque<((u64, u32), Arc<PreparedReveal>)>>,
-        > = OnceLock::new();
+        static CACHE: OnceLock<std::sync::Mutex<VecDeque<((u64, u32), Arc<PreparedReveal>)>>> =
+            OnceLock::new();
         CACHE.get_or_init(|| std::sync::Mutex::new(VecDeque::new()))
     }
 
@@ -381,7 +380,12 @@ impl PreparedReveal {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         frame.key.hash(&mut hasher);
         scale.to_bits().hash(&mut hasher);
-        for value in [scene.bounds.x, scene.bounds.y, scene.bounds.w, scene.bounds.h] {
+        for value in [
+            scene.bounds.x,
+            scene.bounds.y,
+            scene.bounds.w,
+            scene.bounds.h,
+        ] {
             value.to_bits().hash(&mut hasher);
         }
         static REVEAL_ARTIFACT_BUDGET: OnceLock<bead_core::cache::Budget> = OnceLock::new();
@@ -3543,10 +3547,22 @@ impl TreeCpuRenderer {
         self.active_reveal = None;
         let prepared = scene.prepared.get(&scale.to_bits());
         let candidate = prepared
-            .and_then(|frame| frame.reveal_artifact.as_ref().map(|artifact| (frame.key, artifact.clone())))
-            .or_else(|| self.cache.frame.as_ref().and_then(|frame| frame.reveal_artifact.as_ref().map(|artifact| (frame.key, artifact.clone()))));
-        if let Some((frame_key, artifact)) = candidate
-            .filter(|(_, artifact)| artifact.scale().to_bits() == scale.to_bits())
+            .and_then(|frame| {
+                frame
+                    .reveal_artifact
+                    .as_ref()
+                    .map(|artifact| (frame.key, artifact.clone()))
+            })
+            .or_else(|| {
+                self.cache.frame.as_ref().and_then(|frame| {
+                    frame
+                        .reveal_artifact
+                        .as_ref()
+                        .map(|artifact| (frame.key, artifact.clone()))
+                })
+            });
+        if let Some((frame_key, artifact)) =
+            candidate.filter(|(_, artifact)| artifact.scale().to_bits() == scale.to_bits())
         {
             self.warm_reveal = Some((frame_key, artifact.clone()));
             self.active_reveal = Some(ActiveReveal {
@@ -3556,7 +3572,9 @@ impl TreeCpuRenderer {
             });
             return true;
         }
-        let frame_key = prepared.map(|frame| frame.key).or_else(|| self.cache.frame.as_ref().map(|frame| frame.key));
+        let frame_key = prepared
+            .map(|frame| frame.key)
+            .or_else(|| self.cache.frame.as_ref().map(|frame| frame.key));
         if let Some(frame_key) = frame_key
             && let Some((warm_key, artifact)) = &self.warm_reveal
             && *warm_key == frame_key
@@ -3588,7 +3606,10 @@ impl TreeCpuRenderer {
         open.reveal(1.);
         let mut cache = TreeCache::default();
         cache.prepare(&open, scale)?;
-        let frame = cache.frame.as_ref().ok_or("prepared reveal frame missing")?;
+        let frame = cache
+            .frame
+            .as_ref()
+            .ok_or("prepared reveal frame missing")?;
         PreparedReveal::from_frame(frame, &open, scale)
     }
 
@@ -3747,12 +3768,19 @@ impl Renderer for TreeCpuRenderer {
         Ok(false)
     }
     fn prepare_on_ui(&mut self, scene: &Scene, scale: f32) -> Result<()> {
-        let revealing = scene.motion.as_ref().is_some_and(|motion| motion.reveal && motion.progress < 1.);
+        let revealing = scene
+            .motion
+            .as_ref()
+            .is_some_and(|motion| motion.reveal && motion.progress < 1.);
         if revealing {
             if self.pin_reveal(scene, scale) {
                 return Ok(());
             }
-        } else if scene.motion.as_ref().is_none_or(|motion| !motion.reveal || motion.progress >= 1.) {
+        } else if scene
+            .motion
+            .as_ref()
+            .is_none_or(|motion| !motion.reveal || motion.progress >= 1.)
+        {
             self.active_reveal = None;
         }
         if self.reusable_scene(scene, scale)? {
@@ -6674,10 +6702,23 @@ mod tests {
         open.reveal(1.);
         let mut cache = TreeCache::default();
         cache.prepare(&open, scale).unwrap();
-        paint(cache.frame.as_ref().unwrap(), (0., 0.), ShmTarget {
-            bytes: &mut expected, width, height, scale, format: PixelFormat::Rgba,
-        }, Damage::full(width, height)).unwrap();
-        assert_eq!(actual, expected, "prepared open pixels remain pose-independent");
+        paint(
+            cache.frame.as_ref().unwrap(),
+            (0., 0.),
+            ShmTarget {
+                bytes: &mut expected,
+                width,
+                height,
+                scale,
+                format: PixelFormat::Rgba,
+            },
+            Damage::full(width, height),
+        )
+        .unwrap();
+        assert_eq!(
+            actual, expected,
+            "prepared open pixels remain pose-independent"
+        );
 
         let mut pose = source.clone();
         pose.reveal(0.4);
@@ -6690,19 +6731,49 @@ mod tests {
         });
         renderer.cache.builds = 17;
         renderer.prepare_on_ui(&pose, scale).unwrap();
-        assert_eq!(renderer.cache.builds, 17, "reveal pose does not rebuild the tree");
+        assert_eq!(
+            renderer.cache.builds, 17,
+            "reveal pose does not rebuild the tree"
+        );
         let mut rendered = vec![255; width as usize * height as usize * 4];
-        renderer.render(&pose, ShmTarget {
-            bytes: &mut rendered, width, height, scale, format: PixelFormat::Rgba,
-        }, Damage::full(width, height)).unwrap();
+        renderer
+            .render(
+                &pose,
+                ShmTarget {
+                    bytes: &mut rendered,
+                    width,
+                    height,
+                    scale,
+                    format: PixelFormat::Rgba,
+                },
+                Damage::full(width, height),
+            )
+            .unwrap();
         let mut expected_pose = vec![0; width as usize * height as usize * 4];
         let slide_offset = pose.content_offset(usize::MAX);
-        imported.composite(ShmTarget {
-            bytes: &mut expected_pose, width, height, scale, format: PixelFormat::Rgba,
-        }, Damage::full(width, height),
-            (pose.offset.0 + slide_offset.0, pose.offset.1 + slide_offset.1),
-            pose.reveal_window().unwrap().translated(pose.offset.0, pose.offset.1)).unwrap();
-        assert_eq!(rendered, expected_pose, "render clears before offset/clip composition");
+        imported
+            .composite(
+                ShmTarget {
+                    bytes: &mut expected_pose,
+                    width,
+                    height,
+                    scale,
+                    format: PixelFormat::Rgba,
+                },
+                Damage::full(width, height),
+                (
+                    pose.offset.0 + slide_offset.0,
+                    pose.offset.1 + slide_offset.1,
+                ),
+                pose.reveal_window()
+                    .unwrap()
+                    .translated(pose.offset.0, pose.offset.1),
+            )
+            .unwrap();
+        assert_eq!(
+            rendered, expected_pose,
+            "render clears before offset/clip composition"
+        );
     }
 
     #[test]

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 mod app;
+#[cfg(test)]
+mod b0177_cpu_bench;
 mod backends;
 mod bar_routes;
 mod bar_updates;
@@ -37,8 +39,6 @@ mod prompt;
 mod reload;
 #[cfg(test)]
 mod route_coverage_tests;
-#[cfg(test)]
-mod b0177_cpu_bench;
 mod session_menu;
 mod settings;
 #[cfg(test)]
