@@ -34,13 +34,13 @@ ceiling. Full Bead CI passes. See [B0157](specs/0157-picker-errors.md).
 
 # Status
 
-## 2026-10-28 — B0179 shell idle cost (implementation in progress)
+## 2026-10-29 — B0179 shell idle cost (CPU and redraw gates pass; wakeup gate open)
 
-Repeated identical source snapshots now have an unchanged path that advances
-revision state without restaging subscribers; static wallpaper no longer keeps
-compositor and desktop watches active; the frame callback gate is covered for a
-minute of HH:MM idle. Before: 3.9% core and 30 wakeups/s over 60 s from the
-provided profile. Private idle capture and full CI are pending. See [B0179](specs/0179-shell-idle-cost.md).
+Repeated identical snapshots advance revision state without restaging subscribers;
+static wallpaper drops irrelevant compositor/desktop watches. The private release
+bar capture measured 0.033% CPU over 60 s and showed only the HH:MM boundary update.
+Full Bead CI passes. The all-thread context-switch proxy is 3.30/s; direct scheduler
+wakeups were unavailable, so the <3/s gate remains open. See [B0179](specs/0179-shell-idle-cost.md).
 
 ## 2026-10-28 — B0173 wallpaper picker cold open (implementation and parity complete; acceptance gates open)
 
