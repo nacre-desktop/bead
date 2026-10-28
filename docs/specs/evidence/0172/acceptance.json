@@ -135,9 +135,11 @@
   },
   "full_bead_ci": {
     "host": "dev-2",
-    "container": "b0172-widgets-app-20261028-final-ci3",
+    "container": "b0172-widgets-app-20261028-final-ci4",
+    "limits": "8 CPUs, 12 GiB",
     "recipe": "B0172-ci-inner.sh, based on bead-full-ci-b0156.sh.txt",
     "exit_code": 0,
-    "result": "cargo fmt, clippy, workspace tests, feature checks, Luau analyzer, packaging tests, wallpaper/services checks, and cargo-deny passed"
+    "result": "cargo fmt, clippy, workspace tests, feature checks, Luau analyzer, packaging tests, wallpaper/services checks, and cargo-deny passed",
+    "warnings": "cargo-deny reported existing duplicate lockfile entries and allowlisted advisories not encountered; no checks failed"
   }
 }
