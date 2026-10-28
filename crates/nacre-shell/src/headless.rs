@@ -489,7 +489,7 @@ mod tests {
     #[ignore = "manual panel slide CPU benchmark; no compositor needed"]
     fn panel_slide_tick_measurement() -> Result<(), Box<dyn std::error::Error>> {
         use bead::render::{
-            Damage, PixelFormat, Renderer, ShmTarget,
+            PixelFormat, Renderer, ShmTarget,
             tree::{CpuResourcesPending, TreeCpuRenderer},
         };
         for (entry, logical) in [
