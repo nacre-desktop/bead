@@ -555,6 +555,23 @@ async fn wallpaper_catalogue_projects_and_selection_calls_revision_fenced_activa
             json!({"revision":17,"id":"/fixture/next.mp4"})
         )
     );
+
+    let closed = stores
+        .reconcile(&BTreeMap::from([("panel.open".into(), Value::Bool(false))]))
+        .unwrap();
+    wallpaper.project(&closed, Some(Arc::new(|| {})));
+    let reopened = closed
+        .reconcile(&BTreeMap::from([("panel.open".into(), Value::Bool(true))]))
+        .unwrap();
+    let reopened_model = wallpaper.project(&reopened, Some(Arc::new(|| {})));
+    assert!(matches!(
+        &reopened_model["extras.rows"],
+        Value::List(entries) if entries.len() == 4
+    ), "a valid catalogue remains available when the panel reopens");
+    assert!(
+        lab.calls.try_recv().is_err(),
+        "a reopen with cached catalogue rows must not respawn the full catalogue scan"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

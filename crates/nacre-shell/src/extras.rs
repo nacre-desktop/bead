@@ -662,6 +662,8 @@ impl Extras {
                 && boot.is_some()
                 && state.catalogue.is_none()
                 && !state.catalogue_preloaded
+                && state.catalogue_result.is_empty()
+                && state.catalogue_boot != boot
                 && (wallpaper_opened || state.catalogue_request_boot != boot)
             {
                 if state.catalogue_boot != boot {
@@ -671,8 +673,8 @@ impl Extras {
                 state.catalogue_request_handles.clear();
                 state.catalogue =
                     self.begin("wallpaper.catalogue", json!({"ids": []}), wake.clone());
-                // A missing capability can be retried on the next registry wake. An admitted
-                // request (including an error reply) is attempted once per opening/daemon boot.
+                // Keep the last valid snapshot across closes. Only an empty/missing catalogue
+                // needs a full refresh; otherwise every reopen would respawn the ID scan.
                 if state.catalogue.is_some() {
                     state.catalogue_request_boot = boot.clone();
                 }
