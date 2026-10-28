@@ -1382,6 +1382,11 @@ impl TreeCache {
         first: usize,
     ) -> Result<Arc<[ContentRun]>> {
         let bounds = scene.bounds;
+        let normalize_geometry = |index: usize, primitive: &Primitive| {
+            let source = rect(primitive);
+            let open = rect(&scene.primitives[index]);
+            primitive.translated(open.x - source.x, open.y - source.y)
+        };
         let mut content_hash = std::collections::hash_map::DefaultHasher::new();
         frame.scale.to_bits().hash(&mut content_hash);
         first.hash(&mut content_hash);
@@ -1390,7 +1395,8 @@ impl TreeCache {
         }
         for (index, item) in frame.items.iter().enumerate().skip(first) {
             item.id.hash(&mut content_hash);
-            hash_primitive(&item.primitive, false, &mut content_hash);
+            let primitive = normalize_geometry(index, &item.primitive);
+            hash_primitive(&primitive, false, &mut content_hash);
             let own_clip = scene.clips.get(&index).copied();
             own_clip.is_some().hash(&mut content_hash);
             if let Some(clip) = own_clip {
@@ -1433,7 +1439,9 @@ impl TreeCache {
                 .map_or(frame.items.len(), |n| start + n);
             let mut run_items = frame.items[start..end].to_vec();
             for (offset, item) in run_items.iter_mut().enumerate() {
-                item.clip = scene.clips.get(&(start + offset)).copied();
+                let index = start + offset;
+                item.primitive = normalize_geometry(index, &item.primitive);
+                item.clip = scene.clips.get(&index).copied();
             }
             let run = Frame {
                 items: run_items,
@@ -4741,7 +4749,7 @@ mod tests {
             spring: false,
             curve: None,
             edge: bead_core::Edge::Top,
-            slide_distance: None,
+            slide_distance: Some(40.),
             fade: false,
             reveal: true,
             progress: 0.2,
@@ -6171,7 +6179,7 @@ mod tests {
             curve: None,
             return_curve: None,
             edge: bead_core::Edge::Top,
-            slide_distance: None,
+            slide_distance: Some(40.),
             fade: false,
             reveal: true,
             progress: 1.,
@@ -6185,29 +6193,41 @@ mod tests {
         dense_scene.prepared.clear();
         let mut dense_cache = TreeCache::default();
         dense_cache.prepare(&dense_scene, scale).unwrap();
-        let open_pixels = frame_pixels(dense_cache.frame.as_ref().unwrap(), &dense_scene, scale);
+        let dense_open_frame = dense_cache.frame.as_ref().unwrap().clone();
         scene.prepared.insert(scale.to_bits(), open);
         scene.reveal(0.5);
         dense_scene.reveal(0.5);
         cache.prepare(&scene, scale).unwrap();
         dense_scene.prepared.clear();
         dense_cache.prepare(&dense_scene, scale).unwrap();
+        let mut imported_scene = dense_scene.clone();
+        imported_scene
+            .prepared
+            .insert(scale.to_bits(), dense_open_frame);
+        let mut imported_cache = TreeCache::default();
+        imported_cache.prepare(&imported_scene, scale).unwrap();
         let half = cache.frame.as_ref().unwrap().clone();
         // Content before and after the native image is grouped in paint order.
         assert_eq!(half.items.len(), 4);
         assert!(half.items[1].raster.is_some());
         assert!(half.items[2].image.is_some());
         assert!(half.items[3].raster.is_some());
+        assert_eq!(rect(&half.items[1].primitive).y, -20.);
         let layer = half.items[1].raster.clone().unwrap();
         let dense_half = dense_cache.frame.as_ref().unwrap();
         let pixels = frame_pixels(dense_half, &dense_scene, scale);
+        let imported_pixels = frame_pixels(
+            imported_cache.frame.as_ref().unwrap(),
+            &imported_scene,
+            scale,
+        );
         let row = (160. * scale) as usize * 4;
-        // Above the growing edge the reveal equals the open panel; below the window nothing is drawn.
+        // Generated and imported open frames agree after the same nonzero slide offset.
         let edge = ((32. + 48.) * scale) as usize;
         let visible_len = (edge - 8) * row;
         let max_error = pixels[..visible_len]
             .iter()
-            .zip(&open_pixels[..visible_len])
+            .zip(&imported_pixels[..visible_len])
             .map(|(actual, expected)| actual.abs_diff(*expected))
             .max()
             .unwrap_or(0);
