@@ -1,5 +1,5 @@
 status: failed — cadence and adaptive scrim acceptance remain unmet.
-HEAD: 45a5bce2; pushed safely to `task/b0167-widget-polish-20261027`; no main integration while acceptance fails.
+Feature/evidence snapshot: ac96bc01 (report-only commits follow); pushed safely to `task/b0167-widget-polish-20261027`; no main integration while acceptance fails.
 Commits use siverteh <92440237+Siverteh@users.noreply.github.com>; every task commit has `[no-publish]`.
 CI: Ubuntu 24.04 full Bead recipe on dev-2, `bash /ci.sh` → `B0167_FULL_CI_PASS` (exit 0).
 Captures: `bash .lead/capture-wrapper.sh` on desktop; seven states complete, rc=0, OOM=0, swap=0, min MemAvailable 10.5 GiB.
