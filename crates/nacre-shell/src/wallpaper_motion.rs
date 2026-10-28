@@ -410,7 +410,10 @@ mod tests {
     #[test]
     fn static_idle_waits_for_events_instead_of_polling() {
         let idle = Duration::from_secs(3600);
-        assert_eq!(event_wait(idle, false), idle);
+        let wait = event_wait(idle, false);
+        assert_eq!(wait, idle);
+        let wakeups = Duration::from_secs(60).as_nanos() / wait.as_nanos();
+        assert_eq!(wakeups, 0, "static wallpaper has no timeout wakeup in 60 s");
         assert_eq!(event_wait(idle, true), Duration::from_millis(250));
     }
 
