@@ -126,13 +126,21 @@ local function desktop(props,_settings,_data)
         local second_angle=ui.animate("wall-clock-second",clock_seconds*6,1,"linear")
         local minute_angle=ui.animate("wall-clock-minute",clock_seconds*.1,1,"linear")
         local hour_angle=ui.animate("wall-clock-hour",clock_seconds/120,1,"linear")
-        local dial_size=math.min(w,h)-16
+        local dial_size=math.min(w,h)-(preview and 0 or 16)
         local dial_left,dial_top=(w-dial_size)/2,(h-dial_size)/2
         local function hand(id,degrees,length,width,color)
             local radians=math.rad(degrees-90)
             return ui.Polyline{id=id,position="absolute",left=dial_left,top=dial_top,width=dial_size,height=dial_size,
                 points={{.5,.5},{.5+math.cos(radians)*length,.5+math.sin(radians)*length}},
                 stroke_width=width,round_caps=true,color=color}
+        end
+        if preview then
+            return ui.Box{id="clock-analog-preview",width=w,height=h,fill="transparent",
+                ui.Box{id="dial-glass",position="absolute",left=dial_left,top=dial_top,width=dial_size,height=dial_size,
+                    fill=visual.glass_fill,radius=dial_size/2,border_width=2,border_color=visual.glass_border},
+                hand("hour-hand",hour_angle,.27,8,"onSurface"),
+                hand("minute-hand",minute_angle,.42,5,"primary"),
+                ui.Box{id="hand-pin",position="absolute",left=dial_left+dial_size/2-5,top=dial_top+dial_size/2-5,width=10,height=10,radius=5,fill="primary"}}
         end
         return ui.Box{id="clock-analog",width=w,height=h,fill="transparent",on_activate=action,
             ui.Box{id="dial-glass",position="absolute",left=dial_left,top=dial_top,width=dial_size,height=dial_size,
@@ -153,22 +161,21 @@ local function desktop(props,_settings,_data)
         local date_height=compact and 12 or 24
         local date_size=compact and kit.tokens.text.caption*4/3 or kit.tokens.text.body*4/3
         if preview then
-            return ui.Column{id="clock-minimal-preview",width=w,height=h,justify="center",gap=kit.tokens.spacing.xs,
-                ui.Text{id="hour",text=hour or visible_time,width="fill",height=digit_height,font_size=digit_size,font_weight=visual.display_weight,family=visual.display_font,color="onSurface",text_align="center"},
-                ui.Text{id="minute",text=minute or "",width="fill",height=digit_height,font_size=digit_size,font_weight=visual.display_weight,family=visual.display_font,color="primary",text_align="center"},
-                ui.Text{id="date",text=weekday,width="fill",height=date_height,font_size=date_size,family=visual.body_font,color="secondary",text_align="center"}}
+            return ui.Box{id="clock-minimal-preview",width=w,height=h,align="center",justify="center",
+                ui.Text{id="time",text=(hour or visible_time)..(minute and ":"..minute or ""),width="fill",height=math.min(h,84),
+                    font_size=56,font_weight=visual.display_weight,family=visual.display_font,color="onSurface",text_align="center"}}
         end
-        return ui.Column{id="clock-minimal",width=w,height=h,justify="center",gap=compact and 0 or kit.tokens.spacing.xs,on_activate=action,
+        return ui.Column{id="clock-minimal",width=w,height=h,padding=kit.tokens.spacing.md,justify="center",gap=compact and 0 or kit.tokens.spacing.xs,on_activate=action,
             visual.display("hour",hour or visible_time,"fill",digit_height,digit_size,"onSurface",true),
             visual.display("minute",minute or "","fill",digit_height,digit_size,"primary",true),
             visual.shadow_text("date",weekday,"fill",date_height,date_size,"secondary")}
     end
     local compact=h<120
     local time_size=compact and h*.46 or math.min(148,h*.72)
-    local time_height=h*.62
-    local date_height=compact and 14 or 28
+    local time_height=compact and h*.5 or h*.62
+    local date_height=compact and 12 or 28
     local date_size=compact and kit.tokens.text.caption*4/3 or kit.tokens.text.body*4/3
-    return ui.Column{id="clock-desktop",width=w,height=h,fill="transparent",justify="center",gap=kit.tokens.spacing.xs,on_activate=action,
+    return ui.Column{id="clock-desktop",width=w,height=h,padding=kit.tokens.spacing.md,fill="transparent",justify="center",gap=kit.tokens.spacing.sm,on_activate=action,
         visual.display("time",visible_time,"fill",time_height,time_size,"onSurface",true),
         visual.shadow_text("date",date_line,"fill",date_height,date_size,"onSurface"),
         ui.Box{id="accent-rule",width=48,height=compact and 2 or 3,fill="primary",radius=1.5}}

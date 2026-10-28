@@ -242,7 +242,8 @@ function M.render(id,placement,style,settings,width,height,actual_size)
         local definition=form.styles[style or form.default_style]
         logical_w=definition.preferred_span
         logical_h=definition.preferred_height or kit.tokens.spacing.huge*3
-        scale=math.min(1,width/logical_w,height/logical_h)
+        local inset=kit.tokens.spacing.xs
+        scale=math.min(1,math.max(1,width-2*inset)/logical_w,math.max(1,height-2*inset)/logical_h)
     elseif placement=="desktop" then
         scale=1
     else
@@ -257,14 +258,16 @@ function M.render(id,placement,style,settings,width,height,actual_size)
                 or definition.preferred_span*32
         end
         local base_height=ui.resolve_for_check((node.props or {}).height) or context.t.status_height
-        scale=math.min(1,height/math.max(1,base_height),width/math.max(1,natural))
+        local inset=kit.tokens.spacing.xs
+        scale=math.min(1,math.max(1,height-2*inset)/math.max(1,base_height),
+            math.max(1,width-2*inset)/math.max(1,natural))
         prepare(node,scale)
-        return ui.Box{id="preview-"..id,width=width,height=height,align="center",justify="center",clip_children=false,node}
+        return ui.Box{id="preview-"..id,width=width,height=height,align="center",justify="center",clip_children=true,node}
     end
     local instance={iid="preview-"..id,widget=id,host=host,style=style,settings=values,
         slot=placement=="desktop" and {x=0,y=0,w=logical_w,h=logical_h} or {region="left",start=0,span=variant.preferred_span},children={}}
     local node=render_item(package,instance,placement,values,scale)
-    return ui.Box{id="preview-"..id,width=width,height=height,align="center",justify="center",clip_children=false,node}
+    return ui.Box{id="preview-"..id,width=width,height=height,align="center",justify="center",clip_children=true,node}
 end
 
 return M

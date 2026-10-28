@@ -55,8 +55,8 @@ local output_w,output_h=screen_w,screen_h
 local output_id=get("widgets.screen_id","")
 for _,output in get("widgets.outputs",{}) do
     if output.name==output_id then
-        output_w=math.max(1,tonumber(output.width) or screen_w)
-        output_h=math.max(1,tonumber(output.height) or screen_h)
+        output_w=math.max(1,tonumber(output.logical_width) or screen_w)
+        output_h=math.max(1,tonumber(output.logical_height) or screen_h)
         break
     end
 end
@@ -365,7 +365,7 @@ local function style_tile(widget,placement,package,style_id,style,settings,is_se
     for _ in package.forms[placement].styles do count+=1 end
     local columns=math.max(1,math.min(4,count))
     local panel_width=(width-RAIL-3*spacing.lg)/2-2*spacing.md
-    local preview_width=math.max(spacing.xxl*2,math.min(spacing.huge*4,
+    local preview_width=math.max(spacing.xxl*2,math.min(spacing.huge*3+spacing.xl,
         (panel_width-(columns-1)*spacing.sm)/columns-2*spacing.xs))
     local tile_width=preview_width+2*spacing.sm
     local preview_height=STYLE_PREVIEW_HEIGHT
@@ -397,16 +397,16 @@ local function widget_sidebar()
     local nav={id="widget-list",width="fill",gap=spacing.xs}
     local nav_query=string.lower(searching or "")
     local function row(id,title,description,icon,active,action)
-        return ui.Button{id="widget-nav-"..id,width="fill",height=spacing.huge+spacing.xl,shrink=0,
+        return ui.Button{id="widget-nav-"..id,width="fill",height=spacing.huge+spacing.xxl,shrink=0,
             padding_left=spacing.sm,padding_right=spacing.xs,radius=kit.tokens.radii.small,
             fill=active and ui.alpha("primary",.15) or "transparent",hover_fill="surfaceContainerHigh",
             selected=active,focus_on_pointer=false,aria_label=title,on_activate=action,
             ui.Row{id="widget-nav-content",width="fill",height="fill",align="center",gap=spacing.sm,
                 ui.Text{id="widget-nav-icon",text=icon or "widgets",family="Material Symbols Rounded",
-                    font_size=kit.tokens.icons.small,width=22,height=24,color=active and "primary" or "onSurfaceVariant"},
+                    font_size=kit.tokens.icons.large*4/3,width=24,height=28,color=active and "primary" or "onSurfaceVariant"},
                 ui.Column{id="widget-nav-copy",width=0,grow=1,height="fill",justify="center",gap=spacing.hairline,
                     label("widget-nav-title",title,text.body*4/3,active and "onSurface" or "onSurfaceVariant",{width="fill",height=18}),
-                    label("widget-nav-description",description or "",text.caption*4/3,"onSurfaceVariant",{width="fill",height=16})}}}
+                    label("widget-nav-description",description or "",text.caption*4/3,"onSurfaceVariant",{width="fill",height=30})}}}
     end
     table.insert(nav,row("overview",ui.tr("bead.widgets.overview"),"","widgets",selected=="",navigate("back",selected)))
     for _,id in widget_nav_ids do
@@ -443,15 +443,15 @@ local function detail()
     local desktop_available=package.forms.desktop~=nil
     local detail_width=math.max(1,width-RAIL-3*spacing.lg)
     local stage_w=math.max(1,detail_width-2*spacing.lg)
-    local stage_h=math.min(stage_w*screen_h/screen_w,math.max(spacing.huge*4,height*.38))
-    local stage_scale=math.min(stage_w/screen_w,stage_h/screen_h)
-    local mini_w,mini_h=screen_w*stage_scale,screen_h*stage_scale
+    local stage_h=math.min(stage_w*output_h/output_w,math.max(spacing.huge*4,height*.38))
+    local stage_scale=math.min(stage_w/output_w,stage_h/output_h)
+    local mini_w,mini_h=output_w*stage_scale,output_h*stage_scale
     local mini_left,mini_top=(stage_w-mini_w)/2,(stage_h-mini_h)/2
     local bar_h=math.max(1,get("bar.height",50))
     local entry_candidate=not bar_enabled and {
         widget=selected,group=bar_group,style=bar_style,settings=settings,placement=bar_config.placement,
     } or nil
-    local bar_node=preview.render_bar(doc,screen_w,bar_h,stage_scale,
+    local bar_node=preview.render_bar(doc,output_w,bar_h,stage_scale,
         bar_enabled and selected or nil,bar_style,settings,bar_group,entry_candidate)
     local stage_bar_height=bar_h*stage_scale
     local desktop_descriptor=package.forms.desktop and package.forms.desktop.styles[desktop_style]
