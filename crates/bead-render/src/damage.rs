@@ -326,6 +326,7 @@ mod tests {
                     key: 0,
                     layer_count: 0,
                     layers: vec![],
+                    reveal_artifact: None,
                     _accounting: None,
                 };
                 let old = frame(vec![
@@ -475,6 +476,7 @@ mod tests {
             key: 0,
             layer_count: 0,
             layers: vec![],
+            reveal_artifact: None,
         };
         let bar = item("bar", Rect::new(0., 90., 100., 20.));
         let tail = |width| item("tail", Rect::new(110., 90., width, 20.));
@@ -538,6 +540,7 @@ mod tests {
             key: 0,
             layer_count: 1,
             layers: vec![],
+            reveal_artifact: None,
         };
         let mut damage = FrameDamage::default();
         assert_eq!(
@@ -592,6 +595,7 @@ mod tests {
             key: 0,
             layer_count: 0,
             layers: vec![],
+            reveal_artifact: None,
             _accounting: None,
         };
         let before = frame(arc(20., true));
