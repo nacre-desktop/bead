@@ -652,6 +652,13 @@ impl App {
     }
     pub(super) fn start_panel(&mut self, output: Option<&str>, open: bool) -> Result<(), String> {
         bead_core::profile::mark("panel_admission");
+        if open && self.panel_name.as_deref() == Some("wallpaper") {
+            eprintln!(
+                "WALLPAPER_OPEN_PANEL_START monotonic_ns={} retained_runtime={}",
+                monotonic_ns(),
+                self.panel_runtime.is_some()
+            );
+        }
         let mut spec = self
             .options
             .panel_spec

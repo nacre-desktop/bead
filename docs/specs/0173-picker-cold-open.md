@@ -1,10 +1,15 @@
 # B0173 — Wallpaper picker cold open
 
-Status: implementation and paired QML/Bead parity are complete. The final
-no-shim warm arm FAILS the selection and CPU gates. The cold first-frame gate is
-UNMEASURED because desktop safety preflight rejected it while host swap use was
-above 64 MiB. Full Bead CI is pending. Nacre desktop CI for helper 71b1ff35
-passed as reported by the lead. No push is authorized for this candidate.
+Status: implementation and paired QML/Bead parity are complete. New lead live
+evidence on the owner laptop shows every Super+W open taking 4.0–4.6 s and
+popping in without a slide on stable Bead 900369fb and 86efa7e8. The earlier
+acceptance arm measured from `PanelVisibility`, and its open trigger used the
+Bead command socket; it therefore did not cover the `nacrectl ui` route or the
+delay before panel admission. The corrected three-open same-session route test
+and source fix are pending. The final no-shim selection and CPU gates also
+failed; the cold first-frame gate remains unmeasured after desktop preflight
+rejected it for host swap use above 64 MiB. Full Bead CI and both pushes remain
+pending.
 
 ## Problem and baseline
 
@@ -15,6 +20,12 @@ separate warmer issued the same full-catalogue request during shell startup.
 B0171 selection-to-presented was 61 ms p50, 89 ms p95, 206 ms max across three
 cycles of five selections; the max was the first click 1.5 s after a cold open,
 before prefetch completed.
+
+The lead's 2026-10-28 screen recording establishes a separate regression: with
+stable Bead 900369fb and 86efa7e8, Super+W shows the wallpaper picker after
+4.0–4.6 s on every open and it appears in one frame. Earlier task measurements
+started at panel visibility and opened through Bead's private command socket,
+so those results cannot be used as evidence for this end-to-end route.
 
 ## Implementation
 
@@ -114,9 +125,11 @@ presentation adds about 20–30 ms. Bead waits for the matching active wallpaper
 state, which the Nacre helper publishes after its asynchronous selection child
 completes. The remaining delay is upstream of Bead's cached-raster upload.
 
-The warm first-frame boundary is `PanelVisibility(true)` to the first matching
-Wayland presentation-feedback callback; the <150 ms target passes at
-80.650/49.456/49.226 ms. The empty-cache target remains unmeasured. The first
+The earlier warm first-frame boundary was `PanelVisibility(true)` to the first
+matching Wayland presentation-feedback callback; it passed at 80.650/49.456/49.226
+ms but omitted the route-to-panel delay. The new boundary is Super+W's
+`nacrectl ui nacre launcher ">wallpaper "` invocation to the first matching
+presentation feedback; its three-open measurement is pending. The empty-cache target remains unmeasured. The first
 cold attempt was interrupted when the desktop powered off after a short
 power-key press. A later general acceptance run failed in the unrelated
 dropdown/image-diff phase before reaching wallpaper. A dedicated open-only mode
@@ -151,7 +164,8 @@ from the same wallpaper, so animated-video playback timing is not claimed.
 
 | Check | Result |
 | --- | --- |
-| Warm normal-day first content frame <150 ms | PASS: 80.650 / 49.456 / 49.226 ms |
+| Warm repeated opens in one session, each <150 ms from `nacrectl ui` invocation | PENDING: corrected route boundary |
+| Earlier warm `PanelVisibility`-to-frame sample | 80.650 / 49.456 / 49.226 ms; superseded for end-to-end latency |
 | Fully-cold first content frame <300 ms | UNMEASURED: desktop safety preflight rejected swap use ≥64 MiB |
 | Warm selection-to-presented p95 <120 ms | FAIL: 161.836 ms; 14 samples, cycle 2 has 4/5 |
 | Shell picker work idle by 2 s after close | FAIL: cycle 2 one `nacre-link` tick at 2.201–2.301 s, absent from 5 s baseline |

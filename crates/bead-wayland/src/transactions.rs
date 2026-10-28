@@ -237,6 +237,12 @@ impl App {
             center,
         } = event
         {
+            if view == "wallpaper" {
+                eprintln!(
+                    "WALLPAPER_OPEN_COMPANION_SELECT monotonic_ns={}",
+                    monotonic_ns()
+                );
+            }
             if let Some(epoch) = self.panel_canvas_owner.take()
                 && let Some(sender) = &self.event_sender
             {

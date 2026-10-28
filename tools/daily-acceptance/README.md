@@ -112,9 +112,19 @@ post-two-second thread tick is reported raw and compared by TID/name with that
 cycle's baseline; only ticks beyond the observed baseline count as continuing
 picker work.
 
-Use `--wallpaper-open-only --latency-limit-ms 300` with a fresh HOME root and no
-cache snapshot to measure one fully cold picker first frame without selections,
-the general dropdown suite, image-diff conversion, or the two-minute idle. It
-opens with the actual Super+W virtual key chord, captures the first presented
-frame, closes with Escape, and records the closed layer inventory.
+Wallpaper opens use the same `nacrectl ui nacre launcher ">wallpaper "` route
+as the Super+W binding. The acceptance clock starts before that route is issued
+and ends at the first Wayland presentation feedback; the shell log separately
+records UI receipt/enqueue, panel admission, and panel-start-to-frame timing.
+This includes daemon/UI dispatch time that a `PanelVisibility`-only interval
+would miss. A process-tree sample records any catalogue, prewarm, or image
+children during a delayed open.
+
+Use `--wallpaper-open-only --wallpaper-opens 3 --latency-limit-ms 150` with a
+normal-day cache snapshot to measure three repeated opens in one shell/daemon
+session, without selections. Use the same command with a fresh HOME root and no
+cache snapshot plus `--latency-limit-ms 300` for the fully-cold first frame. The
+isolated mode skips general dropdown checks and the two-minute idle phase,
+captures first, mid-slide, and settled frames, closes each open with Escape,
+and records the closed layer inventory.
 `--wallpaper-live` remains the warm-cache selection and post-close CPU gate.

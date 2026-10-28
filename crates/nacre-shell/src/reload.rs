@@ -8439,6 +8439,16 @@ impl SceneSource for Runtime {
             }
             UiEvent::Remote(request) => {
                 let call = &request.call;
+                let wallpaper_open_route = call.target == "nacre"
+                    && call.method == "launcher"
+                    && call.args.first().and_then(serde_json::Value::as_str)
+                        .is_some_and(|query| query.starts_with(">wallpaper"));
+                if wallpaper_open_route {
+                    eprintln!(
+                        "WALLPAPER_OPEN_REMOTE_RECEIVED monotonic_ns={}",
+                        bead_core::profile::monotonic_ns()
+                    );
+                }
                 let private_widget_feedback = self.widget_app
                     && call.target == "bead.widgets"
                     && call.method == "drag-feedback";
@@ -8777,6 +8787,8 @@ impl SceneSource for Runtime {
                                             .as_deref()
                                             .unwrap_or("launcher")
                                             == launch.target_view.as_deref().unwrap_or("launcher");
+                                    let wallpaper_open = launch.target_view.as_deref()
+                                        == Some("wallpaper");
                                     if launch.toggle
                                         && showing
                                         && (launch.target_view.is_some()
@@ -8814,6 +8826,12 @@ impl SceneSource for Runtime {
                                             wakeup(UiEvent::CompanionVisibility(true));
                                             wakeup(UiEvent::CompanionModel(values));
                                         }
+                                    }
+                                    if wallpaper_open {
+                                        eprintln!(
+                                            "WALLPAPER_OPEN_REMOTE_ENQUEUED monotonic_ns={}",
+                                            bead_core::profile::monotonic_ns()
+                                        );
                                     }
                                     bead::services::ipc::Reply::ok(call.id, serde_json::Value::Null)
                                 }
@@ -9638,9 +9656,10 @@ impl SceneSource for Runtime {
         let name = self.smooth_surface();
         if let Some(started) = self.smooth_open_started.take() {
             eprintln!(
-                "PANEL_OPEN_LATENCY name={} ms_to_first_content_frame={:.3}",
+                "PANEL_OPEN_LATENCY name={} ms_to_first_content_frame={:.3} monotonic_ns={}",
                 name,
-                now.duration_since(started).as_secs_f64() * 1000.
+                now.duration_since(started).as_secs_f64() * 1000.,
+                bead_core::profile::monotonic_ns()
             );
         }
         while let Some((started, surface)) = self.smooth_key_starts.pop_front() {

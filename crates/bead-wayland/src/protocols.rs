@@ -445,8 +445,9 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
         {
             state.acceptance_panel_open_started = None;
             eprintln!(
-                "PANEL_OPEN_LATENCY name=panel ms_to_first_content_frame={:.3}",
-                started.elapsed().as_secs_f64() * 1000.
+                "PANEL_OPEN_LATENCY name=panel ms_to_first_content_frame={:.3} monotonic_ns={}",
+                started.elapsed().as_secs_f64() * 1000.,
+                super::monotonic_ns()
             );
         }
         let mut frame_interval_update = None;
