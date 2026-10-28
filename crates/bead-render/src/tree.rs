@@ -520,6 +520,18 @@ pub struct TreeCache {
     edges: Vec<(u64, Option<EdgeTemplate>)>,
     /// The last frame derived for a reveal pose (frame key, progress bits, scale bits): an unchanged pose is not rebuilt.
     revealed_pose: Option<((u64, u32, u32), Arc<Frame>)>,
+    /// Uncomposited generated frame retained while reveal poses use cached content runs.
+    reveal_source: Option<Arc<Frame>>,
+    /// B0174: revealing content as prepared layers (content key, scale bits), composed with each pose's
+    /// slide offset and reveal clip instead of re-painting every item.
+    reveal_content: Option<(u64, u32, Arc<[ContentRun]>)>,
+}
+/// One piece of a revealing panel's content, in paint order.
+enum ContentRun {
+    /// A run of items painted once into one trimmed raster (None: fully transparent).
+    Layer(usize, Option<Arc<Raster>>),
+    /// An item that keeps its own GPU image payload.
+    Item(usize),
 }
 
 /// Exact content identity for worker-prepared or frozen CPU panel content.
@@ -635,9 +647,10 @@ impl SnapshotFingerprint {
     }
 
     fn matches_snapshot(&self, scene: &Scene, scale: f32) -> Result<bool> {
-        // A flattened closed snapshot cannot substitute for a moving reveal
-        // edge; keep the original frame path for those scenes. Snapshot reuse
-        // also preserves resource-revision invalidation for unresolved assets.
+        // A flattened closed snapshot has lost the body/content item boundary
+        // needed to derive reveal poses. Route reveals through worker preparation
+        // and retain that frame; TreeCache then reuses its prepared content runs.
+        // Snapshot reuse also preserves resource-revision invalidation for unresolved assets.
         if scene.motion.as_ref().is_some_and(|motion| motion.reveal)
             || self.resource_revision != scene.resource_revision
         {
@@ -946,6 +959,8 @@ impl TreeCache {
             self.frame = None;
             self.edges.clear();
             self.revealed_pose = None;
+            self.reveal_content = None;
+            self.reveal_source = None;
         }
         if discarded {
             let fonts = self.raster.fonts.take();
@@ -986,6 +1001,8 @@ impl TreeCache {
         self.font_files.clear();
         self.edges.clear();
         self.revealed_pose = None;
+        self.reveal_content = None;
+        self.reveal_source = None;
     }
     fn evict_previous_variant(&mut self) -> bool {
         let victim = self
@@ -1356,6 +1373,115 @@ impl TreeCache {
             charge,
         }))
     }
+    /// B0174: paint the content items of `frame` from `first` once per prepared frame. Each run without
+    /// a GPU image payload becomes one raster trimmed to its ink in scene `bounds` space.
+    fn reveal_content(
+        &mut self,
+        frame: &Frame,
+        bounds: Rect,
+        first: usize,
+    ) -> Result<Arc<[ContentRun]>> {
+        let mut content_hash = std::collections::hash_map::DefaultHasher::new();
+        frame.scale.to_bits().hash(&mut content_hash);
+        first.hash(&mut content_hash);
+        for value in [bounds.x, bounds.y, bounds.w, bounds.h] {
+            value.to_bits().hash(&mut content_hash);
+        }
+        for item in frame.items.iter().skip(first) {
+            item.id.hash(&mut content_hash);
+            hash_primitive(&item.primitive, false, &mut content_hash);
+            item.clip.is_some().hash(&mut content_hash);
+            if let Some(clip) = item.clip {
+                for value in [clip.x, clip.y, clip.w, clip.h] {
+                    value.to_bits().hash(&mut content_hash);
+                }
+            }
+            item.raster
+                .as_ref()
+                .map(|raster| raster.key)
+                .hash(&mut content_hash);
+            item.image
+                .as_ref()
+                .map(|image| image.key)
+                .hash(&mut content_hash);
+        }
+        let content_key = content_hash.finish();
+        if let Some((key, scale, runs)) = &self.reveal_content
+            && *key == content_key
+            && *scale == frame.scale.to_bits()
+        {
+            return Ok(runs.clone());
+        }
+        let _profile = bead_core::profile::Span::new("reveal_content_build");
+        let (w, h) = (
+            (bounds.w * frame.scale).ceil() as u32,
+            (bounds.h * frame.scale).ceil() as u32,
+        );
+        let mut runs = Vec::new();
+        let mut start = first;
+        while start < frame.items.len() {
+            if frame.items[start].image.is_some() {
+                runs.push(ContentRun::Item(start));
+                start += 1;
+                continue;
+            }
+            let end = frame.items[start..]
+                .iter()
+                .position(|item| item.image.is_some())
+                .map_or(frame.items.len(), |n| start + n);
+            let run = Frame {
+                items: frame.items[start..end].to_vec(),
+                scale: frame.scale,
+                key: 0,
+                native_resource_budget: None,
+                _assets: Vec::new(),
+                layer_count: 0,
+                layers: Vec::new(),
+                _accounting: None,
+            };
+            let (w, h) = (w.max(1), h.max(1));
+            let mut pixels = Pixmap::new(w, h).ok_or("reveal content layer")?;
+            paint(
+                &run,
+                (-bounds.x, -bounds.y),
+                ShmTarget {
+                    bytes: pixels.data_mut(),
+                    width: w,
+                    height: h,
+                    scale: frame.scale,
+                    format: PixelFormat::Rgba,
+                },
+                Damage::full(w, h),
+            )?;
+            let raster = match ink_bounds(&pixels) {
+                None => None,
+                Some(ink) => {
+                    let trimmed = crop_pixmap(&pixels, ink).ok_or("reveal content crop")?;
+                    let charge = self
+                        .raster_budget
+                        .get_or_insert_with(|| {
+                            bead_core::cache::Budget::new("retained-cpu-rasters", LIVE_RASTER_LIMIT)
+                        })
+                        .reserve(trimmed.data().len() + 192)?;
+                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                    ("reveal-content", content_key, start).hash(&mut hasher);
+                    Some(Arc::new(Raster {
+                        changed: Damage::full(trimmed.width(), trimmed.height()),
+                        pixels: Arc::new(trimmed),
+                        origin: (ink.x, ink.y),
+                        key: hasher.finish(),
+                        base_key: None,
+                        _charge: charge,
+                    }))
+                }
+            };
+            runs.push(ContentRun::Layer(start, raster));
+            start = end;
+        }
+        let runs: Arc<[ContentRun]> = runs.into();
+        self.reveal_content = Some((content_key, frame.scale.to_bits(), runs.clone()));
+        Ok(runs)
+    }
     /// B0067: a worker-prepared frame of a panel that is still growing out of its edge. The prepared items keep their
     /// open-state clips and shapes, so the presenter derives the frame for this progress: the body fill and its
     /// shadow take the reshaped primitives of `Scene::reveal` (the shadow gets a raster of its new size), everything
@@ -1379,9 +1505,11 @@ impl TreeCache {
         if frame.items.len() != scene.primitives.len() {
             return Ok(None);
         }
+        // Everything above the body parts is content; it is composited from prepared layers.
+        let first_content = motion.parts.iter().map(|(i, _)| i + 1).max().unwrap_or(0);
         let mut items = frame.items.clone();
         let mut edge_pieces = Vec::new();
-        for (index, item) in items.iter_mut().enumerate() {
+        for (index, item) in items.iter_mut().enumerate().take(first_content) {
             if motion.parts.iter().any(|(i, _)| *i == index) {
                 let kind = match (&item.primitive, motion.art.as_ref()) {
                     (_, Some(art)) if art.index == index => Some(EdgeKind::Art(art)),
@@ -1474,12 +1602,42 @@ impl TreeCache {
                     }));
                 }
                 item.primitive = shaped;
-            } else {
+            } else if index < first_content {
                 let (dx, dy) = scene.content_offset(index);
                 item.primitive = scene.primitives[index].translated(dx, dy);
                 item.clip = scene.clip_at(index);
             }
         }
+        // The content slides as prepared layers under the reveal window (B0174).
+        let (dx, dy) = scene.content_offset(first_content);
+        let window = scene.reveal_window();
+        let content = self.reveal_content(frame, scene.bounds, first_content)?;
+        let mut composed = Vec::with_capacity(content.len());
+        for run in content.iter() {
+            match run {
+                ContentRun::Layer(_, None) => {}
+                ContentRun::Layer(start, Some(raster)) => composed.push(Item {
+                    id: format!("reveal-content/{start}"),
+                    primitive: Primitive::Rounded {
+                        rect: scene.bounds.translated(dx, dy),
+                        radius: 0.,
+                        fill: [0; 4],
+                        border: None,
+                    },
+                    clip: window,
+                    raster: Some(raster.clone()),
+                    image: None,
+                }),
+                ContentRun::Item(index) => {
+                    let mut item = items[*index].clone();
+                    item.primitive = scene.primitives[*index].translated(dx, dy);
+                    item.clip = scene.clip_at(*index);
+                    composed.push(item);
+                }
+            }
+        }
+        items.truncate(first_content);
+        items.extend(composed);
         for (at, piece) in edge_pieces.into_iter().rev() {
             items.insert(at, piece);
         }
@@ -1498,6 +1656,16 @@ impl TreeCache {
         }))
     }
     pub fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
+        let revealing = scene
+            .motion
+            .as_ref()
+            .is_some_and(|motion| motion.reveal && motion.progress < 1.);
+        if let Some(source) = self.reveal_source.take() {
+            self.frame = Some(source);
+        }
+        if !revealing {
+            self.reveal_content = None;
+        }
         if self.image_policy != ImagePolicy::Dense && self.resource_budget.is_none() {
             let budget = bead_core::cache::Budget::new(
                 "retained-view-resources",
@@ -1573,6 +1741,7 @@ impl TreeCache {
                 self.font_files.clear();
             }
             self.frame = Some(candidate);
+            self.reveal_source = None;
             self.revealed_pose = pose.zip(self.frame.clone());
             return Ok(());
         }
@@ -2135,6 +2304,15 @@ impl TreeCache {
             },
             layers,
         });
+        let frame = if revealing {
+            self.reveal_source = Some(frame.clone());
+            match self.revealed_frame(scene, &frame, scale)? {
+                Some(revealed) => Arc::new(revealed),
+                None => frame,
+            }
+        } else {
+            frame
+        };
         self.frame = Some(frame);
         // A scroll source already materializes its visible rows and a small
         // neighbour window. Keeping every previously visited row here defeats
@@ -2291,6 +2469,47 @@ impl RepairScratch {
     }
 }
 
+/// The smallest pixel rectangle holding non-transparent pixels, or None if all pixels are transparent.
+fn ink_bounds(pixels: &Pixmap) -> Option<Damage> {
+    let (w, h) = (pixels.width() as usize, pixels.height() as usize);
+    let data = pixels.data();
+    let row_ink = |y: usize| {
+        data[y * w * 4..(y + 1) * w * 4]
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .position(|p| p[3] != 0)
+            .map(|left| {
+                let right = data[y * w * 4..(y + 1) * w * 4]
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .rposition(|p| p[3] != 0)
+                    .unwrap_or(left);
+                (left, right)
+            })
+    };
+    let top = (0..h).find(|&y| row_ink(y).is_some())?;
+    let bottom = (top..h).rev().find(|&y| row_ink(y).is_some())?;
+    let (left, right) = (top..=bottom)
+        .filter_map(row_ink)
+        .fold((w, 0), |(l, r), (a, b)| (l.min(a), r.max(b)));
+    Some(Damage {
+        x: left as u32,
+        y: top as u32,
+        w: (right - left + 1) as u32,
+        h: (bottom - top + 1) as u32,
+    })
+}
+fn crop_pixmap(pixels: &Pixmap, area: Damage) -> Option<Pixmap> {
+    let mut out = Pixmap::new(area.w, area.h)?;
+    let (sw, row) = (pixels.width() as usize, area.w as usize * 4);
+    for y in 0..area.h as usize {
+        let from = ((area.y as usize + y) * sw + area.x as usize) * 4;
+        out.data_mut()[y * row..(y + 1) * row].copy_from_slice(&pixels.data()[from..from + row]);
+    }
+    Some(out)
+}
 /// B0117: the artwork of a small reveal without rasterising its whole length across the growth axis. Both ends
 /// (corners, joins) are drawn, the middle stays uniform along that length and is one drawn line stretched
 /// across. None when the artwork is too short for that or its middle is not uniform (the caller draws the
@@ -3207,19 +3426,10 @@ impl Renderer for TreeCpuRenderer {
         Ok(false)
     }
     fn prepare_on_ui(&mut self, scene: &Scene, scale: f32) -> Result<()> {
-        let motion = scene.motion.as_ref().filter(|motion| motion.reveal);
-        let native_images = scene
-            .prepared
-            .get(&scale.to_bits())
-            .is_some_and(|frame| frame.items.iter().any(|item| item.image.is_some()));
-        if motion.is_some_and(|motion| !motion.open || motion.progress < 1.) && !native_images {
-            // Dense CPU scenes already have their source assets. Prepare the
-            // reveal pose directly instead of flattening a second worker snapshot.
-            self.cpu_preparation = None;
-            self.prepare(scene, scale)?;
-            self.opaque_composition = OpaqueComposition::Direct;
-            return Ok(());
-        }
+        let dense_reveal = scene
+            .motion
+            .as_ref()
+            .is_some_and(|motion| motion.reveal && (!motion.open || motion.progress < 1.));
         if self.reusable_scene(scene, scale)? {
             // Worker-prepared content is reused across a reveal; each frame only
             // derives its pose (clip and growing edge) from the retained frame.
@@ -3247,6 +3457,17 @@ impl Renderer for TreeCpuRenderer {
                     .any(|(_, primitive)| matches!(primitive, Primitive::Image { .. }))
         });
         if dense {
+            return self.prepare(scene, scale);
+        }
+        if dense_reveal
+            && self.snapshot_fingerprint.is_none()
+            && self.worker_fingerprint.is_none()
+            && self.cache.image_policy == ImagePolicy::Dense
+        {
+            // Dense CPU sources already own decoded pixels. Prepare the current
+            // pose in the retained tree; its content runs are reused on later ticks.
+            self.cpu_preparation = None;
+            self.opaque_composition = OpaqueComposition::Direct;
             return self.prepare(scene, scale);
         }
         if self.snapshot_fingerprint.is_none()
@@ -4473,6 +4694,38 @@ mod tests {
     #[test]
     fn ui_cpu_dense_reveal_prepares_the_pose_without_a_flattened_worker_snapshot() {
         let mut scene = scene();
+        scene.width = 160.;
+        scene.bounds = Rect::new(0., 0., 160., 160.);
+        scene.asset_data.clear();
+        scene.primitives = vec![
+            Primitive::Rounded {
+                rect: Rect::new(32., 32., 96., 96.),
+                radius: 4.,
+                fill: [10, 20, 30, 255],
+                border: None,
+            },
+            Primitive::Rounded {
+                rect: Rect::new(40., 40., 10., 10.),
+                radius: 2.,
+                fill: [200, 0, 0, 255],
+                border: None,
+            },
+            Primitive::Rounded {
+                rect: Rect::new(60., 60., 10., 10.),
+                radius: 2.,
+                fill: [0, 200, 0, 160],
+                border: None,
+            },
+            Primitive::Rounded {
+                rect: Rect::new(40., 110., 10., 10.),
+                radius: 2.,
+                fill: [0, 0, 200, 255],
+                border: None,
+            },
+        ];
+        scene.layers[0].own = 0..4;
+        scene.layers[0].subtree_end = 4;
+        scene.layers[0].bounds = scene.bounds;
         scene.motion = Some(crate::Motion {
             id: "reveal-test".into(),
             open: true,
@@ -4486,7 +4739,7 @@ mod tests {
             fade: false,
             reveal: true,
             progress: 0.2,
-            parts: vec![(1, scene.primitives[1].clone())],
+            parts: Vec::new(),
             art: None,
         });
         scene.reveal(0.2);
@@ -4500,11 +4753,54 @@ mod tests {
         assert!(renderer.cpu_preparation.is_none());
         assert_eq!(renderer.opaque_composition, OpaqueComposition::Direct);
         assert_eq!(renderer.cache.frame.as_ref().unwrap().key, expected_key);
+        let frame = renderer.prepared_frame().unwrap();
+        assert_eq!(frame.items.len(), 2, "body plus one prepared content layer");
+        let content = frame.items[1].raster.as_ref().unwrap().clone();
+        scene.reveal(0.45);
+        renderer.prepare_on_ui(&scene, 1.).unwrap();
+        assert!(
+            Arc::ptr_eq(
+                &content,
+                renderer.prepared_frame().unwrap().items[1]
+                    .raster
+                    .as_ref()
+                    .unwrap()
+            ),
+            "dense reveal ticks reuse their prepared content layer"
+        );
     }
 
     #[test]
     fn ui_cpu_prepare_reuses_content_across_reveal_progress() {
         let mut scene = scene();
+        scene.width = 160.;
+        scene.bounds = Rect::new(0., 0., 160., 160.);
+        let square = |x: f32, y: f32, fill: [u8; 4]| Primitive::Rounded {
+            rect: Rect::new(x, y, 10., 10.),
+            radius: 2.,
+            fill,
+            border: None,
+        };
+        scene.primitives = vec![
+            Primitive::Rounded {
+                rect: Rect::new(32., 32., 96., 96.),
+                radius: 4.,
+                fill: [10, 20, 30, 255],
+                border: None,
+            },
+            square(40., 40., [200, 0, 0, 255]),
+            Primitive::Image {
+                blur: 0.,
+                fit: crate::ImageFit::Fill,
+                clip_polygon: None,
+                rect: Rect::new(80., 40., 10., 10.),
+                path: "proof.png".into(),
+            },
+            square(60., 60., [0, 200, 0, 160]),
+        ];
+        scene.layers[0].own = 0..4;
+        scene.layers[0].subtree_end = 4;
+        scene.layers[0].bounds = scene.bounds;
         let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
         worker.prepare(&scene, 1.).unwrap();
         scene
@@ -4523,7 +4819,7 @@ mod tests {
             fade: false,
             reveal: true,
             progress: 0.2,
-            parts: vec![(1, scene.primitives[1].clone())],
+            parts: vec![(0, scene.primitives[0].clone())],
             art: None,
         });
         scene.reveal(0.2);
@@ -4556,6 +4852,10 @@ mod tests {
         renderer.prepare_on_ui(&scene, 1.).unwrap();
         assert_eq!(renderer.cache.frame.as_ref().unwrap().key, expected_key);
         assert_eq!(renderer.opaque_composition, OpaqueComposition::Direct);
+        let accepted_layer = renderer.prepared_frame().unwrap().items[1]
+            .raster
+            .clone()
+            .expect("non-body reveal content is prepared as a layer");
         let builds = renderer.opacity_builds;
 
         let pose = renderer.prepared_frame().unwrap();
@@ -4567,6 +4867,16 @@ mod tests {
         assert_eq!(renderer.opacity_builds, builds);
         // The reused content still takes each frame's reveal pose.
         assert!(!Arc::ptr_eq(&renderer.prepared_frame().unwrap(), &pose));
+        assert!(
+            Arc::ptr_eq(
+                &accepted_layer,
+                renderer.prepared_frame().unwrap().items[1]
+                    .raster
+                    .as_ref()
+                    .unwrap()
+            ),
+            "later reveal poses reuse the accepted content layer"
+        );
         assert_eq!(renderer.opaque_composition, OpaqueComposition::Direct);
 
         scene.reveal(1.);
@@ -5837,6 +6147,126 @@ mod tests {
                     .any(|pixel| pixel[3] != 0)
             );
         }
+    }
+
+    #[test]
+    fn reveal_composites_prepared_content_instead_of_painting_each_item() {
+        let scale = 1.5;
+        let mut scene = scene();
+        scene.width = 160.;
+        scene.bounds = Rect::new(0., 0., 160., 160.);
+        let square = |x: f32, y: f32, fill: [u8; 4]| Primitive::Rounded {
+            rect: Rect::new(x, y, 10., 10.),
+            radius: 2.,
+            fill,
+            border: None,
+        };
+        scene.primitives = vec![
+            Primitive::Rounded {
+                rect: Rect::new(32., 32., 96., 96.),
+                radius: 4.,
+                fill: [10, 20, 30, 255],
+                border: None,
+            },
+            square(40., 40., [200, 0, 0, 255]),
+            Primitive::Image {
+                blur: 0.,
+                fit: crate::ImageFit::Fill,
+                clip_polygon: None,
+                rect: Rect::new(80., 40., 10., 10.),
+                path: "proof.png".into(),
+            },
+            square(60., 60., [0, 200, 0, 160]),
+            square(40., 110., [0, 0, 200, 255]),
+        ];
+        scene.layers[0].own = 0..5;
+        scene.layers[0].subtree_end = 5;
+        scene.layers[0].bounds = scene.bounds;
+        scene.motion = Some(crate::Motion {
+            id: "reveal".into(),
+            open: true,
+            duration: 0.3,
+            return_duration: None,
+            spring: false,
+            curve: None,
+            return_curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            fade: false,
+            reveal: true,
+            progress: 1.,
+            parts: vec![(0, scene.primitives[0].clone())],
+            art: None,
+        });
+        let mut cache = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+        cache.prepare(&scene, scale).unwrap();
+        let open = cache.frame.as_ref().unwrap().clone();
+        let open_pixels = frame_pixels(&open, &scene, scale);
+        scene.prepared.insert(scale.to_bits(), open);
+        scene.reveal(0.5);
+        cache.prepare(&scene, scale).unwrap();
+        let half = cache.frame.as_ref().unwrap().clone();
+        // Content before and after the native image is grouped in paint order.
+        assert_eq!(half.items.len(), 4);
+        assert!(half.items[1].raster.is_some());
+        assert!(half.items[2].image.is_some());
+        assert!(half.items[3].raster.is_some());
+        let layer = half.items[1].raster.clone().unwrap();
+        let pixels = frame_pixels(&half, &scene, scale);
+        let row = (160. * scale) as usize * 4;
+        // Above the growing edge the reveal equals the open panel; below the window nothing is drawn.
+        let edge = ((32. + 48.) * scale) as usize;
+        let visible_len = (edge - 8) * row;
+        let max_error = pixels[..visible_len]
+            .iter()
+            .zip(&open_pixels[..visible_len])
+            .map(|(actual, expected)| actual.abs_diff(*expected))
+            .max()
+            .unwrap_or(0);
+        assert!(
+            max_error <= 1,
+            "prepared reveal layer differs from open pixels by {max_error}/255"
+        );
+        assert!(pixels[(edge + 2) * row..].iter().all(|byte| *byte == 0));
+        scene.motion.as_mut().unwrap().slide_distance = Some(96.);
+        scene.reveal(0.75);
+        cache.prepare(&scene, scale).unwrap();
+        let later = cache.frame.as_ref().unwrap().clone();
+        let (dx, dy) = scene.content_offset(1);
+        assert!(
+            dx.abs() > 0. || dy.abs() > 0.,
+            "content follows the slide offset"
+        );
+        let Primitive::Rounded { rect, .. } = &later.items[1].primitive else {
+            panic!("prepared content layer keeps its translated scene bounds");
+        };
+        assert_eq!(*rect, scene.bounds.translated(dx, dy));
+        assert!(
+            Arc::ptr_eq(&layer, later.items[1].raster.as_ref().unwrap()),
+            "a later pose reuses the prepared content layer"
+        );
+        assert!(
+            later.items[2].image.is_some(),
+            "native image keeps its paint slot"
+        );
+        assert!(
+            Arc::ptr_eq(
+                half.items[3].raster.as_ref().unwrap(),
+                later.items[3].raster.as_ref().unwrap()
+            ),
+            "content after the native image is reused in order"
+        );
+        let old_layer = later.items[1].raster.as_ref().unwrap().clone();
+        if let Primitive::Rounded { fill, .. } = &mut scene.primitives[1] {
+            *fill = [180, 30, 20, 255];
+        }
+        scene.prepared.clear();
+        cache.prepare(&scene, scale).unwrap();
+        let changed = cache.frame.as_ref().unwrap();
+        assert!(
+            !Arc::ptr_eq(&old_layer, changed.items[1].raster.as_ref().unwrap()),
+            "content edits invalidate prepared reveal layers"
+        );
     }
 
     #[test]
