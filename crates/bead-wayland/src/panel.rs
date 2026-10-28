@@ -1098,17 +1098,16 @@ impl App {
                     move |_, _, app| {
                         if !app.panel_target
                             && app.panel_epoch == epoch
+                            && app.panel_close_epoch == token
                         {
-                            if app.panel_close_epoch == token {
-                                bead_core::vprintln!(
-                                    "PANEL_SNAPSHOT_TRIGGER monotonic_ns={} epoch={} close_epoch={}",
-                                    monotonic_ns(),
-                                    epoch,
-                                    token
-                                );
-                                if let Err(error) = app.start_panel_snapshot() {
-                                    app.fail(error);
-                                }
+                            bead_core::vprintln!(
+                                "PANEL_SNAPSHOT_TRIGGER monotonic_ns={} epoch={} close_epoch={}",
+                                monotonic_ns(),
+                                epoch,
+                                token
+                            );
+                            if let Err(error) = app.start_panel_snapshot() {
+                                app.fail(error);
                             }
                         }
                         TimeoutAction::Drop
