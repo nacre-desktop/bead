@@ -99,6 +99,16 @@ impl Drop for Lab {
         let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
+fn start_with_empty_wallpaper_catalogue(extras: &Extras) {
+    let mut state = extras.state.borrow_mut();
+    state.catalogue = None;
+    state.catalogue_boot = None;
+    state.catalogue_request_boot = None;
+    state.catalogue_request_ids.clear();
+    state.catalogue_request_handles.clear();
+    state.catalogue_result.clear();
+    state.catalogue_preloaded = false;
+}
 async fn lab_with_topics(requested_topics: Vec<String>) -> Lab {
     lab_with_activation_behavior(requested_topics, false, false).await
 }
@@ -493,6 +503,7 @@ async fn palette_activates_a_typed_row_with_its_own_ticket() {
 async fn wallpaper_catalogue_projects_and_selection_calls_revision_fenced_activate() {
     let mut lab = lab_with_topics(vec!["wallpaper.active".into()]).await;
     let wallpaper = Extras::new(Kind::Wallpaper, lab.client.clone()).unwrap();
+    start_with_empty_wallpaper_catalogue(&wallpaper);
     let stores = Stores::default()
         .reconcile(&BTreeMap::from([
             ("panel.open".into(), Value::Bool(true)),
@@ -582,6 +593,7 @@ async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_previe
     use bead::render::{ImageFit, Primitive, Rect, Scene};
     let mut lab = lab_with_topics(vec!["wallpaper.active".into()]).await;
     let wallpaper = Extras::new(Kind::Wallpaper, lab.client.clone()).unwrap();
+    start_with_empty_wallpaper_catalogue(&wallpaper);
     let open = Stores::default()
         .reconcile(&BTreeMap::from([
             ("panel.open".into(), Value::Bool(true)),
@@ -798,6 +810,7 @@ async fn wallpaper_close_discards_an_inflight_hydration_ticket_and_cache() {
     use bead::render::{ImageFit, Primitive, Rect, Scene};
     let mut lab = lab_with_topics(vec!["wallpaper.active".into()]).await;
     let wallpaper = Extras::new(Kind::Wallpaper, lab.client.clone()).unwrap();
+    start_with_empty_wallpaper_catalogue(&wallpaper);
     let open = Stores::default()
         .reconcile(&BTreeMap::from([
             ("panel.open".into(), Value::Bool(true)),
@@ -1026,6 +1039,7 @@ async fn wallpaper_latest_activation_survives_view_retirement() {
     use bead::render::{Rect, Scene};
     let mut lab = lab_with_activation_gate(vec!["wallpaper.active".into()], true).await;
     let extras = Extras::new(Kind::Wallpaper, lab.client.clone()).unwrap();
+    start_with_empty_wallpaper_catalogue(&extras);
     let queue = extras.wallpaper_actions.as_ref().unwrap().clone();
     let open = Stores::default()
         .reconcile(&BTreeMap::from([
@@ -1134,6 +1148,7 @@ async fn wallpaper_latest_activation_survives_view_retirement() {
 async fn wallpaper_activation_error_is_reported_without_retry_and_boot_change_clears_state() {
     let mut lab = lab_with_activation_behavior(vec!["wallpaper.active".into()], true, true).await;
     let extras = Extras::new(Kind::Wallpaper, lab.client.clone()).unwrap();
+    start_with_empty_wallpaper_catalogue(&extras);
     let queue = extras.wallpaper_actions.as_ref().unwrap().clone();
     let open = Stores::default()
         .reconcile(&BTreeMap::from([
@@ -1195,6 +1210,7 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
     use bead::wayland::{SceneSource, UiEvent};
     let mut lab = lab_with_topics(vec!["wallpaper.active".into()]).await;
     let extras = Extras::new(Kind::Wallpaper, lab.client.clone()).unwrap();
+    start_with_empty_wallpaper_catalogue(&extras);
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
     let colors = bead::render::Palette::read(&root.join("palette.json")).unwrap();
     let cold = crate::sound::fallback(colors.get("surface").unwrap());
