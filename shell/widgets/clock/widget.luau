@@ -170,8 +170,8 @@ local function desktop(props,_settings,_data)
         local date_size=compact and kit.tokens.text.caption*4/3 or kit.tokens.text.body*4/3
         if preview then
             return ui.Box{id="clock-minimal-preview",width=w,height=h,align="center",justify="center",
-                ui.Text{id="time",text=(hour or visible_time)..(minute and ":"..minute or ""),width="fill",height=math.min(h,84),
-                    font_size=56,font_weight=visual.display_weight,family=visual.display_font,color="onSurface",text_align="center"}}
+                ui.Text{id="time",text=(hour or visible_time)..(minute and ":"..minute or ""),width="fill",height=math.min(h,100),
+                    font_size=80,font_weight=visual.display_weight,family=visual.display_font,color="onSurface",text_align="center"}}
         end
         return ui.Column{id="clock-minimal",width=w,height=h,padding=kit.tokens.spacing.md,justify="center",gap=compact and 0 or kit.tokens.spacing.xs,on_activate=action,
             visual.display("hour",hour or visible_time,"fill",digit_height,digit_size,"onSurface",true),
