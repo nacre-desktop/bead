@@ -17,6 +17,16 @@ use tiny_skia::{
 // The 136 MiB per-owner overlap cap leaves the independent process-wide cap unchanged.
 pub(crate) const STEADY_RASTER_LIMIT: usize = 68 * bead_core::cache::MIB;
 const LIVE_RASTER_LIMIT: usize = 2 * STEADY_RASTER_LIMIT;
+const REVEAL_ART_CACHE_LIMIT: usize = 8 * bead_core::cache::MIB;
+
+struct RevealArtRaster {
+    svg: Arc<[u8]>,
+    scale_bits: u32,
+    width: u32,
+    height: u32,
+    pixels: Arc<Pixmap>,
+    _charge: bead_core::cache::Charge,
+}
 
 fn validate_frame_rasters(items: &[Item]) -> Result<()> {
     let bytes = items
@@ -84,6 +94,12 @@ fn validate_frame_rasters(items: &[Item]) -> Result<()> {
         .into());
     }
     Ok(())
+}
+
+fn hash_rect_bits(rect: Rect, hash: &mut impl Hasher) {
+    for value in [rect.x, rect.y, rect.w, rect.h] {
+        value.to_bits().hash(hash);
+    }
 }
 
 /// Only immutable image/text rasters wholly outside a persistent clip are omitted.
@@ -520,6 +536,10 @@ pub struct TreeCache {
     edges: Vec<(u64, Option<EdgeTemplate>)>,
     /// The last frame derived for a reveal pose (frame key, progress bits, scale bits): an unchanged pose is not rebuilt.
     revealed_pose: Option<((u64, u32, u32), Arc<Frame>)>,
+    /// Repeated reveal slices retain their exact SVG input and raster to avoid
+    /// hash-collision reuse and keep cached pixels within the normal raster budget.
+    reveal_art_rasters: Vec<RevealArtRaster>,
+    reveal_art_raster_bytes: usize,
 }
 
 /// Exact content identity for worker-prepared or frozen CPU panel content.
@@ -942,6 +962,10 @@ impl TreeCache {
         let discarded = stale_frame || self.entries.keys().any(|(_, bits)| !current(*bits));
         self.entries.retain(|(_, bits), _| current(*bits));
         self.nodes.retain(|(_, bits), _| current(*bits));
+        if discarded {
+            self.reveal_art_rasters.clear();
+            self.reveal_art_raster_bytes = 0;
+        }
         if stale_frame {
             self.frame = None;
             self.edges.clear();
@@ -964,6 +988,8 @@ impl TreeCache {
             entry.previous = None;
         }
         self.nodes.retain(|_, (_, touched)| *touched > serial);
+        self.reveal_art_rasters.clear();
+        self.reveal_art_raster_bytes = 0;
         // Finished rasters own their pixels. The baker's fonts, decoded textures
         // and glyph scratch must not keep a replaced view resident.
         self.raster = CpuRenderer::default();
@@ -986,6 +1012,8 @@ impl TreeCache {
         self.font_files.clear();
         self.edges.clear();
         self.revealed_pose = None;
+        self.reveal_art_rasters.clear();
+        self.reveal_art_raster_bytes = 0;
     }
     fn evict_previous_variant(&mut self) -> bool {
         let victim = self
@@ -1356,6 +1384,62 @@ impl TreeCache {
             charge,
         }))
     }
+    fn reveal_art_raster(
+        &mut self,
+        svg: Arc<[u8]>,
+        width: u32,
+        height: u32,
+        scale_bits: u32,
+        rasterize: impl FnOnce(&[u8], u32, u32) -> Result<Pixmap>,
+    ) -> Result<Arc<Pixmap>> {
+        if let Some(entry) = self.reveal_art_rasters.iter().find(|entry| {
+            entry.scale_bits == scale_bits
+                && entry.width == width
+                && entry.height == height
+                && entry.svg.as_ref() == svg.as_ref()
+        }) {
+            return Ok(entry.pixels.clone());
+        }
+        let pixels = Arc::new(rasterize(&svg, width, height)?);
+        let bytes = pixels
+            .data()
+            .len()
+            .saturating_add(svg.len())
+            .saturating_add(192);
+        if bytes > REVEAL_ART_CACHE_LIMIT {
+            return Ok(pixels);
+        }
+        while self.reveal_art_raster_bytes.saturating_add(bytes) > REVEAL_ART_CACHE_LIMIT {
+            let Some(old) = self.reveal_art_rasters.first() else {
+                break;
+            };
+            self.reveal_art_raster_bytes = self
+                .reveal_art_raster_bytes
+                .saturating_sub(
+                    old.pixels
+                        .data()
+                        .len()
+                        .saturating_add(old.svg.len())
+                        .saturating_add(192),
+                );
+            self.reveal_art_rasters.remove(0);
+        }
+        let budget = self.raster_budget.get_or_insert_with(|| {
+            bead_core::cache::Budget::new("retained-cpu-rasters", LIVE_RASTER_LIMIT)
+        });
+        if let Ok(charge) = budget.reserve(bytes) {
+            self.reveal_art_raster_bytes += bytes;
+            self.reveal_art_rasters.push(RevealArtRaster {
+                svg,
+                scale_bits,
+                width,
+                height,
+                pixels: pixels.clone(),
+                _charge: charge,
+            });
+        }
+        Ok(pixels)
+    }
     /// B0067: a worker-prepared frame of a panel that is still growing out of its edge. The prepared items keep their
     /// open-state clips and shapes, so the presenter derives the frame for this progress: the body fill and its
     /// shadow take the reshaped primitives of `Scene::reveal` (the shadow gets a raster of its new size), everything
@@ -1425,9 +1509,9 @@ impl TreeCache {
                             let open = Scene::revealed(art.body, motion.edge, motion.progress);
                             if open.w.min(open.h) < 1. {
                                 // The closing tail: under a pixel of panel shows nothing (a blank pixel).
-                                Pixmap::new(1, 1)
+                                Pixmap::new(1, 1).map(Arc::new)
                             } else {
-                                sliced_art(art, motion.edge, motion.progress, *rect, scale)
+                                sliced_art(self, art, motion.edge, motion.progress, *rect, scale)
                             }
                         }
                         _ => None,
@@ -1453,7 +1537,7 @@ impl TreeCache {
                             .textures
                             .remove(&texture)
                             .ok_or("missing prepared reveal raster")?;
-                        (pixels, key)
+                        (Arc::new(pixels), key)
                     };
                     drop(raster_profile);
                     let bytes = pixels.data().len() + 192;
@@ -1466,7 +1550,7 @@ impl TreeCache {
                     item.image = None;
                     item.raster = Some(Arc::new(Raster {
                         changed: Damage::full(pixels.width(), pixels.height()),
-                        pixels: Arc::new(pixels),
+                        pixels,
                         origin: (0, 0),
                         key,
                         base_key: None,
@@ -1617,7 +1701,7 @@ impl TreeCache {
         let mut frame_hash = std::collections::hash_map::DefaultHasher::new();
         let mut raster_scene = None;
         let mut fresh_rasters: BTreeMap<u64, (Arc<Pixmap>, (u32, u32))> = BTreeMap::new();
-        serde_json::to_vec(&scene.bounds)?.hash(&mut frame_hash);
+        hash_rect_bits(scene.bounds, &mut frame_hash);
         for (index, primitive) in scene.primitives.iter().enumerate() {
             let kind = match primitive {
                 Primitive::Arc { .. } => "arc",
@@ -2296,12 +2380,13 @@ impl RepairScratch {
 /// across. None when the artwork is too short for that or its middle is not uniform (the caller draws the
 /// whole crop).
 fn sliced_art(
+    cache: &mut TreeCache,
     art: &crate::RevealArt,
     edge: bead_core::Edge,
     progress: f32,
     crop: Rect,
     scale: f32,
-) -> Option<Pixmap> {
+) -> Option<Arc<Pixmap>> {
     const END: f32 = 96.;
     const MID: f32 = 16.;
     // Vertical growth leaves the width as the long side; horizontal growth the height.
@@ -2319,7 +2404,7 @@ fn sliced_art(
         return None;
     }
     let revealed = Scene::revealed(art.body, edge, progress);
-    let slice = |at: u32, size: u32| {
+    let slice = |cache: &mut TreeCache, at: u32, size: u32| {
         let rect = if across {
             Rect::new(
                 crop.x + at as f32 / scale,
@@ -2337,9 +2422,15 @@ fn sliced_art(
         };
         let (_, bytes) = (art.draw)(revealed, Some(rect));
         let (sw, sh) = if across { (size, h) } else { (w, size) };
-        crate::svg_pixmap(&bytes, sw, sh).ok()
+        cache
+            .reveal_art_raster(bytes, sw, sh, scale.to_bits(), |svg, w, h| {
+                crate::svg_pixmap(svg, w, h)
+            })
+            .ok()
     };
-    let (first, last, middle) = (slice(0, end)?, slice(long - end, end)?, slice(end, mid)?);
+    let first = slice(cache, 0, end)?;
+    let last = slice(cache, long - end, end)?;
+    let middle = slice(cache, end, mid)?;
     let pixel = |p: &Pixmap, x: u32, y: u32| {
         let i = (y * p.width() + x) as usize * 4;
         [
@@ -2385,7 +2476,7 @@ fn sliced_art(
             data[y * stride..(y + 1) * stride].copy_from_slice(line);
         }
     }
-    Some(out)
+    Some(Arc::new(out))
 }
 /// Premultiplied source-over of a raster into a damage strip (identical results to tiny-skia's pipeline); opaque and empty source pixels short-circuit, which is most of a panel artwork.
 fn blend_over(
@@ -3633,6 +3724,59 @@ mod tests {
         assert!(renderer.group_charge.is_none());
         assert!(renderer.cache.frame.is_some());
         assert!(renderer.snapshot_fingerprint.is_none());
+    }
+
+    #[test]
+    fn rect_signature_hashes_exact_float_bits() {
+        let hash = |rect| {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            hash_rect_bits(rect, &mut hasher);
+            hasher.finish()
+        };
+        let bounds = Rect::new(1.25, -2.5, 80., 48.);
+        assert_eq!(hash(bounds), hash(bounds));
+        assert_ne!(hash(bounds), hash(Rect::new(1.5, -2.5, 80., 48.)));
+        assert_ne!(hash(Rect::new(0., 0., 1., 1.)), hash(Rect::new(-0., 0., 1., 1.)));
+    }
+
+    #[test]
+    fn reveal_art_raster_cache_reuses_exact_input_and_separates_variants() {
+        let mut cache = TreeCache::default();
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let rasterizer = || {
+            let calls = calls.clone();
+            move |_: &[u8], width, height| {
+                calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                Pixmap::new(width, height).ok_or_else(|| "empty test raster".into())
+            }
+        };
+        let svg: Arc<[u8]> = Arc::from(&b"<svg fill='red'/>"[..]);
+        let first = cache
+            .reveal_art_raster(svg.clone(), 8, 4, 1.5f32.to_bits(), rasterizer())
+            .unwrap();
+        let repeated = cache
+            .reveal_art_raster(svg.clone(), 8, 4, 1.5f32.to_bits(), rasterizer())
+            .unwrap();
+        assert!(Arc::ptr_eq(&first, &repeated));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 1);
+
+        cache
+            .reveal_art_raster(
+                Arc::from(&b"<svg fill='blue'/>"[..]),
+                8,
+                4,
+                1.5f32.to_bits(),
+                rasterizer(),
+            )
+            .unwrap();
+        cache
+            .reveal_art_raster(svg.clone(), 9, 4, 1.5f32.to_bits(), rasterizer())
+            .unwrap();
+        cache
+            .reveal_art_raster(svg, 8, 4, 2.0f32.to_bits(), rasterizer())
+            .unwrap();
+        assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 4);
+        assert!(cache.reveal_art_raster_bytes <= REVEAL_ART_CACHE_LIMIT);
     }
 
     #[test]
