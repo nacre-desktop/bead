@@ -3646,7 +3646,7 @@ impl Renderer for TreeCpuRenderer {
                     width,
                     height,
                     overlay_damage,
-                    pixels.as_ref(),
+                    pixels,
                     origin,
                     format == PixelFormat::Bgra,
                 ),
