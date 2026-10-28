@@ -4,7 +4,7 @@ use crate::{
     CpuRenderer, Damage, PixelFormat, Primitive, Rect, Renderer, Result, Scene, ShmTarget,
 };
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     hash::{Hash, Hasher},
     path::PathBuf,
     sync::{Arc, OnceLock, Weak},
@@ -3867,7 +3867,7 @@ impl Renderer for TreeCpuRenderer {
         }
         self.cache.prepare(scene, scale)
     }
-    fn render(&mut self, scene: &Scene, mut target: ShmTarget<'_>, damage: Damage) -> Result<()> {
+    fn render(&mut self, scene: &Scene, target: ShmTarget<'_>, damage: Damage) -> Result<()> {
         if damage
             .x
             .checked_add(damage.w)
