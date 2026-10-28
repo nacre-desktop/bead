@@ -75,4 +75,5 @@ task-owned directory. The runner seeds its fresh per-arm XDG cache from that
 directory and saves the arm's resulting cache before deleting the private HOME.
 The shell and daemon remain fresh on every run; omit or clear the snapshot for a
 fully cold-cache arm. `--wallpaper-live` also samples the shell process's
-`/proc/<pid>/stat` CPU ticks for two seconds after each picker close.
+`/proc/<pid>/stat` CPU ticks for two seconds and `Pss_Anon` at 2.5 seconds
+after each picker close.
