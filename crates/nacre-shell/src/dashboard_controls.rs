@@ -34,7 +34,7 @@ impl Controls {
             return None;
         }
         let timeout = Duration::from_millis(u64::from(advertised.timeout).clamp(1, 10_000));
-        Some((status.boot?, timeout))
+        Some((status.boot.clone()?, timeout))
     }
     fn busy(&self) -> bool {
         self.state.borrow().pending.is_some()

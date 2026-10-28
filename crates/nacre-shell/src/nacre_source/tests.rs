@@ -631,7 +631,7 @@ async fn fresh_lease(topic: &LeasedTopic, value: &str) {
 async fn connected_client(client: &Client) -> String {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            if let Some(boot) = client.status().boot
+            if let Some(boot) = client.status().boot.clone()
                 && client.snapshot().connected
             {
                 break boot;

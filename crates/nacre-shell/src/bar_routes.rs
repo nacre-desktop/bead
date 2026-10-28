@@ -112,7 +112,7 @@ fn ready(client: &Client, method: &str) -> Option<(String, Duration)> {
         return None;
     }
     Some((
-        status.boot?,
+        status.boot.clone()?,
         Duration::from_millis(u64::from(advertised.timeout).clamp(1, 30_000)),
     ))
 }

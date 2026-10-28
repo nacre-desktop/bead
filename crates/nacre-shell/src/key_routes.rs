@@ -196,7 +196,7 @@ impl Brightness {
         if !self.client.snapshot().connected {
             return Err("brightness control is unavailable");
         }
-        let boot = status.boot.ok_or("brightness control is unavailable")?;
+        let boot = status.boot.clone().ok_or("brightness control is unavailable")?;
         let mut pending = self
             .pending
             .lock()

@@ -532,7 +532,7 @@ impl Extras {
                 params,
                 Duration::from_millis(u64::from(advertised.timeout).clamp(1, 30_000)),
                 CallGuard {
-                    boot: status.boot?,
+                    boot: status.boot.clone()?,
                     version: 1,
                 },
                 wake,

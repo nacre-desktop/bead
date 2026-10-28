@@ -1175,6 +1175,7 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                                                 let mut next = (**status).clone();
                                                 next.methods = methods;
                                                 *status = Arc::new(next);
+                                                drop(status);
                                                 let _ = shared.link.publish(serde_json::json!({"boot":session.boot,"methods":session.methods}));
                                             }
                                             if let Some(topics) = ok.get("topics").and_then(Value::as_array)
@@ -1188,6 +1189,7 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                                             let mut next = (**status).clone();
                                             next.topics = session.advertised.clone();
                                             *status = Arc::new(next);
+                                            drop(status);
                                             if sync_leases(&shared, session, &mut mirrors).await.is_err() { break; }
                                             registry_ok = true;
                                             }

@@ -382,7 +382,7 @@ impl Colors {
             return None;
         }
         Some((
-            status.boot?,
+            status.boot.clone()?,
             Duration::from_millis(u64::from(advertised.timeout).clamp(1, 60_000)),
         ))
     }
