@@ -275,19 +275,13 @@ impl Warmer {
                             continue;
                         }
 
-                        let Ok(reply) = runtime.block_on(client.call(
-                            "wallpaper.catalogue".into(),
-                            json!({"ids": []}),
-                            Duration::from_secs(2),
-                        )) else {
+                        // The UI adapter owns refreshes and persists the catalogue snapshot.
+                        // Never start a second catalogue-id scan from this background warmer.
+                        let Some(entries) = crate::wallpaper_catalogue_cache::load() else {
                             warmed = None;
                             continue;
                         };
-                        let Some(entries) = reply["entries"].as_array() else {
-                            warmed = None;
-                            continue;
-                        };
-                        let mut catalogue = entries.clone();
+                        let mut catalogue = entries;
                         let Some(mut result) = warm_catalogue(
                             &root,
                             &palette,

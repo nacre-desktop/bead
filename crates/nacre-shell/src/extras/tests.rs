@@ -508,8 +508,8 @@ async fn wallpaper_catalogue_projects_and_selection_calls_revision_fenced_activa
     let first = wallpaper.project(&stores, Some(wake.clone()));
     assert_eq!(first["extras.wallpaper.loading"], Value::Bool(true));
     assert!(
-        !wallpaper.content_ready(),
-        "metadata loading is not first content"
+        wallpaper.content_ready(),
+        "metadata loading cannot block the first frame"
     );
     assert_eq!(
         tokio::time::timeout(Duration::from_secs(2), lab.calls.recv())
@@ -600,8 +600,8 @@ async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_previe
     };
     wallpaper.attach_images(&mut scene, Some(wake.clone()));
     assert!(
-        !wallpaper.content_ready(),
-        "unhydrated thumbnails cannot be presented"
+        wallpaper.content_ready(),
+        "visible thumbnails hydrate progressively"
     );
     assert_eq!(
         lab.calls.recv().await.unwrap(),

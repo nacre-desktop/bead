@@ -382,6 +382,14 @@ impl Extras {
         };
         let mut state = State::default();
         if kind == Kind::Wallpaper
+            && let Some(boot) = client.status().boot.filter(|_| client.snapshot().connected)
+            && let Some(entries) = crate::wallpaper_catalogue_cache::load()
+        {
+            state.catalogue_result = entries;
+            state.catalogue_boot = Some(boot.clone());
+            state.wallpaper_boot = Some(boot);
+        }
+        if kind == Kind::Wallpaper
             && let (Some(topic), Some(settings), Some(boot)) = (
                 topic.as_ref(),
                 wallpaper_settings.as_ref(),
@@ -609,6 +617,12 @@ impl Extras {
                 state.images.clear();
                 state.image_bytes = 0;
                 state.image_revision = state.image_revision.wrapping_add(1);
+                if let Some(boot) = boot.as_ref()
+                    && let Some(entries) = crate::wallpaper_catalogue_cache::load()
+                {
+                    state.catalogue_result = entries;
+                    state.catalogue_boot = Some(boot.clone());
+                }
             }
             if let Some(topic) = &self.topic {
                 let active = topic.snapshot();
@@ -708,7 +722,7 @@ impl Extras {
                     let mut resources_changed =
                         request_ids.is_empty() || !state.catalogue_pending_handles.is_empty();
                     let mut seen = std::collections::BTreeSet::new();
-                    let incoming: Vec<Json> = catalogue
+                    let mut incoming: Vec<Json> = catalogue
                         .entries
                         .into_iter()
                         .filter(|entry| seen.insert(entry.id.clone()))
@@ -726,6 +740,26 @@ impl Extras {
                         })
                         .collect();
                     if request_ids.is_empty() {
+                        for entry in &mut incoming {
+                            let Some(id) = entry["id"].as_str() else {
+                                continue;
+                            };
+                            if let Some(previous) = state
+                                .catalogue_result
+                                .iter()
+                                .find(|row| row["id"].as_str() == Some(id))
+                            {
+                                for field in ["thumbnail", "preview", "palette"] {
+                                    if (entry[field].is_null()
+                                        || entry[field].as_str() == Some(""))
+                                        && !previous[field].is_null()
+                                        && previous[field].as_str() != Some("")
+                                    {
+                                        entry[field] = previous[field].clone();
+                                    }
+                                }
+                            }
+                        }
                         state.catalogue_result = incoming;
                         state.catalogue_boot = boot.clone();
                     } else {
@@ -761,6 +795,7 @@ impl Extras {
                         state.catalogue_settled_handles.extend(request_handles);
                     }
                     trim_catalogue_palette_cache(&mut state.catalogue_result, &request_ids);
+                    crate::wallpaper_catalogue_cache::store(&state.catalogue_result);
                     if resources_changed {
                         state.image_revision = state.image_revision.wrapping_add(1);
                     }
@@ -1339,13 +1374,10 @@ impl Extras {
         }
     }
     pub fn content_ready(&self) -> bool {
-        let state = self.state.borrow();
-        self.kind != Kind::Wallpaper
-            || !state.wallpaper_open
-            || !state.message.is_empty()
-            || (state.catalogue_boot == state.wallpaper_boot
-                && state.catalogue_boot.is_some()
-                && state.catalogue_pending_handles.is_empty())
+        // Wallpaper metadata and thumbnails arrive progressively. Never hold the
+        // panel's first commit on catalogue or image work; loading/empty states are
+        // valid content while the asynchronous requests run.
+        true
     }
 
     pub fn image_bytes(&self) -> usize {

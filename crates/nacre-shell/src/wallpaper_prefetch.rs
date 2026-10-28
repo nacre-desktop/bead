@@ -28,6 +28,8 @@ impl Prefetch {
                 unsafe {
                     libc::setpriority(libc::PRIO_PROCESS, libc::gettid() as u32, 10);
                 }
+                // Give the newly populated picker scene a frame before background decoding.
+                std::thread::sleep(std::time::Duration::from_millis(100));
                 for pair in pairs {
                     if epoch.load(Ordering::Acquire) != mine {
                         return;

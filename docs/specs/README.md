@@ -12,6 +12,7 @@ acceptance remains open. The dated transfer and execution receipts below remain 
 
 2026-10-28: [B0171 wallpaper picker live](0171-wallpaper-picker-live.md) — lost selections (daemon flock, N0089), display-size prefetch + single-flight decode; cold first open still 2.6 s (open).
 2026-10-28: [B0172 Widgets app usability](0172-widgets-app-usability.md) — standalone app entry, consistent widget list, explicit placement controls, per-instance palette role and drag editing.
+2026-10-28: [B0173 wallpaper picker cold open](0173-picker-cold-open.md) — panel commits cached/loading content immediately; catalogue refresh and visible thumbnails are asynchronous. Desktop acceptance and CI pending.
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
