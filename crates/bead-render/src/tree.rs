@@ -6725,13 +6725,18 @@ mod tests {
         let mut pose = source.clone();
         pose.reveal(0.4);
         pose.offset = (3., 4.);
-        let mut renderer = TreeCpuRenderer::default();
-        renderer.active_reveal = Some(ActiveReveal {
-            motion_id: "prepared-artifact".into(),
-            open: true,
-            artifact: Arc::new(imported.clone()),
-        });
-        renderer.cache.builds = 17;
+        let mut renderer = TreeCpuRenderer {
+            active_reveal: Some(ActiveReveal {
+                motion_id: "prepared-artifact".into(),
+                open: true,
+                artifact: Arc::new(imported.clone()),
+            }),
+            cache: TreeCache {
+                builds: 17,
+                ..TreeCache::default()
+            },
+            ..TreeCpuRenderer::default()
+        };
         renderer.prepare_on_ui(&pose, scale).unwrap();
         assert_eq!(
             renderer.cache.builds, 17,
