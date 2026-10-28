@@ -1142,6 +1142,7 @@ fn unchanged_source_and_store_revisions_do_not_reproject_dashboard_over_animatio
     }
     assert_eq!(project_calls.load(Ordering::Relaxed), 2);
     assert_eq!(chrome_calls.load(Ordering::Relaxed), 2);
+    runtime.presented(0);
     let held_until = runtime
         .wakeup_at()
         .expect("panel slide holds scalar animation wakeup");
