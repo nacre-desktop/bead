@@ -1063,11 +1063,26 @@ class Runner:
                 cpu_error = f"{type(exc).__name__}: {exc}"
             else:
                 cpu_error = ""
-            self.results.append({"check": f"shell CPU returns to 0% within 2s after wallpaper close (cycle {cycle})",
-                                 "result": "PASS" if zero_by_two else "FAIL",
-                                 "pid": self.shell.pid,
-                                 "windows": zero_windows,
-                                 "error": cpu_error})
+            time.sleep(.5)
+            try:
+                anon_after_close = measure.memory(self.shell.pid)["pss_anon_mib"]
+            except (OSError, KeyError, ValueError) as exc:
+                anon_after_close = None
+                cpu_error = (cpu_error + "; " if cpu_error else "") + f"memory: {type(exc).__name__}: {exc}"
+            self.results.append({
+                "check": f"shell CPU returns to 0% within 2s after wallpaper close (cycle {cycle})",
+                "result": "PASS" if zero_by_two else "FAIL",
+                "pid": self.shell.pid,
+                "windows": zero_windows,
+                "pss_anon_after_close_plus_2_5s_mib": (
+                    round(anon_after_close, 3) if anon_after_close is not None else None
+                ),
+                "pss_anon_delta_from_start_mib": (
+                    round(anon_after_close - self.baseline_mem, 3)
+                    if anon_after_close is not None else None
+                ),
+                "error": cpu_error,
+            })
         self.results.append({"check": "wallpaper live set", "result": "PASS", "rounds": json.dumps(rounds)})
 
     def widget_drag(self):
