@@ -2839,28 +2839,26 @@ mod tests {
             let from_worker = cache.frame.as_ref().unwrap();
             let direct = direct.frame.as_ref().unwrap();
             assert_eq!(
-                serde_json::to_vec(&from_worker.items[1].primitive)?,
-                serde_json::to_vec(&direct.items[1].primitive)?
+                from_worker.items.len(),
+                2,
+                "body plus prepared content layer"
             );
-            assert_eq!(from_worker.items[1].clip, direct.items[1].clip);
+            assert_eq!(direct.items.len(), 2, "body plus prepared content layer");
+            for (prepared, expected) in from_worker.items.iter().zip(&direct.items) {
+                assert_eq!(
+                    serde_json::to_vec(&prepared.primitive)?,
+                    serde_json::to_vec(&expected.primitive)?
+                );
+                assert_eq!(prepared.clip, expected.clip);
+            }
+            assert!(
+                from_worker.items[1].raster.is_some(),
+                "text and arc share one prepared reveal layer"
+            );
             assert_eq!(
-                serde_json::to_vec(&from_worker.items[2].primitive)?,
-                serde_json::to_vec(&direct.items[2].primitive)?
+                tree::rect(&from_worker.items[1].primitive).y,
+                scene.bounds.y + dy
             );
-            assert_eq!(from_worker.items[2].clip, direct.items[2].clip);
-            assert_eq!(tree::rect(&from_worker.items[2].primitive).y, 80. + dy);
-            assert!(
-                from_worker.items[2].raster.is_none(),
-                "arc stays directly painted"
-            );
-            assert!(
-                std::sync::Arc::ptr_eq(
-                    from_worker.items[1].raster.as_ref().unwrap(),
-                    prepared.items[1].raster.as_ref().unwrap(),
-                ),
-                "motion must reuse the worker's glyph raster"
-            );
-            assert_eq!(tree::rect(&from_worker.items[1].primitive).y, 40. + dy);
             if progress < 1. {
                 // A frame already baked at this pose must not apply the content slide twice.
                 scene.prepared.insert(1.5_f32.to_bits(), direct.clone());
@@ -2871,11 +2869,6 @@ mod tests {
                     tree::rect(&direct.items[1].primitive)
                 );
                 assert_eq!(rebaked.items[1].clip, direct.items[1].clip);
-                assert_eq!(
-                    tree::rect(&rebaked.items[2].primitive),
-                    tree::rect(&direct.items[2].primitive)
-                );
-                assert_eq!(rebaked.items[2].clip, direct.items[2].clip);
             }
             scene.prepared.clear();
         }

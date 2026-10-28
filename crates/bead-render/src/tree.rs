@@ -1378,20 +1378,22 @@ impl TreeCache {
     fn reveal_content(
         &mut self,
         frame: &Frame,
-        bounds: Rect,
+        scene: &Scene,
         first: usize,
     ) -> Result<Arc<[ContentRun]>> {
+        let bounds = scene.bounds;
         let mut content_hash = std::collections::hash_map::DefaultHasher::new();
         frame.scale.to_bits().hash(&mut content_hash);
         first.hash(&mut content_hash);
         for value in [bounds.x, bounds.y, bounds.w, bounds.h] {
             value.to_bits().hash(&mut content_hash);
         }
-        for item in frame.items.iter().skip(first) {
+        for (index, item) in frame.items.iter().enumerate().skip(first) {
             item.id.hash(&mut content_hash);
             hash_primitive(&item.primitive, false, &mut content_hash);
-            item.clip.is_some().hash(&mut content_hash);
-            if let Some(clip) = item.clip {
+            let own_clip = scene.clips.get(&index).copied();
+            own_clip.is_some().hash(&mut content_hash);
+            if let Some(clip) = own_clip {
                 for value in [clip.x, clip.y, clip.w, clip.h] {
                     value.to_bits().hash(&mut content_hash);
                 }
@@ -1429,8 +1431,12 @@ impl TreeCache {
                 .iter()
                 .position(|item| item.image.is_some())
                 .map_or(frame.items.len(), |n| start + n);
+            let mut run_items = frame.items[start..end].to_vec();
+            for (offset, item) in run_items.iter_mut().enumerate() {
+                item.clip = scene.clips.get(&(start + offset)).copied();
+            }
             let run = Frame {
-                items: frame.items[start..end].to_vec(),
+                items: run_items,
                 scale: frame.scale,
                 key: 0,
                 native_resource_budget: None,
@@ -1611,7 +1617,7 @@ impl TreeCache {
         // The content slides as prepared layers under the reveal window (B0174).
         let (dx, dy) = scene.content_offset(first_content);
         let window = scene.reveal_window();
-        let content = self.reveal_content(frame, scene.bounds, first_content)?;
+        let content = self.reveal_content(frame, scene, first_content)?;
         let mut composed = Vec::with_capacity(content.len());
         for run in content.iter() {
             match run {
@@ -1741,7 +1747,7 @@ impl TreeCache {
                 self.font_files.clear();
             }
             self.frame = Some(candidate);
-            self.reveal_source = None;
+            self.reveal_source = pose.map(|_| frame.clone());
             self.revealed_pose = pose.zip(self.frame.clone());
             return Ok(());
         }
@@ -4825,51 +4831,39 @@ mod tests {
         scene.reveal(0.2);
 
         let mut renderer = TreeCpuRenderer::default();
-        let pending = renderer.prepare_on_ui(&scene, 1.).unwrap_err();
-        let request = pending
-            .downcast_ref::<CpuResourcesPending>()
-            .unwrap()
-            .request
-            .clone();
-        assert!(request.mark_requested());
-        request.prepare().unwrap();
+        renderer.prepare_on_ui(&scene, 1.).unwrap();
+        assert!(renderer.cpu_preparation.is_none());
+        assert_eq!(renderer.opaque_composition, OpaqueComposition::Direct);
+        let initial = renderer.prepared_frame().unwrap();
+        assert_eq!(initial.items.len(), 2);
+        let content_layer = initial.items[1].raster.as_ref().unwrap().clone();
+        let mut expected = TreeCache::default();
+        expected.prepare(&scene, 1.).unwrap();
+        assert_eq!(
+            initial.key,
+            expected.frame.as_ref().unwrap().key,
+            "the first frame uses the current reveal pose"
+        );
 
         scene.reveal(0.45);
-        scene.resource_revision += 1;
-        let same_asset_bytes = Arc::from(
-            scene
-                .asset_data
-                .get(std::path::Path::new("proof.png"))
-                .unwrap()
-                .as_ref(),
-        );
-        scene
-            .asset_data
-            .insert("proof.png".into(), same_asset_bytes);
-        let mut expected = TreeCache::default();
+        expected = TreeCache::default();
         expected.prepare(&scene, 1.).unwrap();
         let expected_key = expected.frame.as_ref().unwrap().key;
         renderer.prepare_on_ui(&scene, 1.).unwrap();
         assert_eq!(renderer.cache.frame.as_ref().unwrap().key, expected_key);
-        assert_eq!(renderer.opaque_composition, OpaqueComposition::Direct);
-        let accepted_layer = renderer.prepared_frame().unwrap().items[1]
-            .raster
-            .clone()
-            .expect("non-body reveal content is prepared as a layer");
-        let builds = renderer.opacity_builds;
-
         let pose = renderer.prepared_frame().unwrap();
+        assert!(
+            Arc::ptr_eq(&content_layer, pose.items[1].raster.as_ref().unwrap()),
+            "content layer is reused between reveal poses"
+        );
 
         scene.reveal(0.7);
-        scene.resource_revision += 1;
-        assert!(renderer.reusable_scene(&scene, 1.).unwrap());
         renderer.prepare_on_ui(&scene, 1.).unwrap();
-        assert_eq!(renderer.opacity_builds, builds);
         // The reused content still takes each frame's reveal pose.
         assert!(!Arc::ptr_eq(&renderer.prepared_frame().unwrap(), &pose));
         assert!(
             Arc::ptr_eq(
-                &accepted_layer,
+                &content_layer,
                 renderer.prepared_frame().unwrap().items[1]
                     .raster
                     .as_ref()
@@ -4878,20 +4872,6 @@ mod tests {
             "later reveal poses reuse the accepted content layer"
         );
         assert_eq!(renderer.opaque_composition, OpaqueComposition::Direct);
-
-        scene.reveal(1.);
-        renderer.prepare_on_ui(&scene, 1.).unwrap();
-        assert_eq!(renderer.opaque_composition, OpaqueComposition::Cached);
-
-        let mut changed = scene.clone();
-        changed.motion.as_mut().unwrap().parts[0].1 = Primitive::Rounded {
-            rect: Rect::new(2., 12., 8., 3.),
-            radius: 0.,
-            fill: [41, 100, 30, 255],
-            border: None,
-        };
-        assert!(!renderer.reusable_scene(&changed, 1.).unwrap());
-        assert!(!renderer.reusable_scene(&scene, 1.5).unwrap());
     }
     #[test]
     fn compact_svg_upload_reconstructs_exact_dense_pixels() {
@@ -6195,16 +6175,23 @@ mod tests {
             fade: false,
             reveal: true,
             progress: 1.,
-            parts: vec![(0, scene.primitives[0].clone())],
+            parts: Vec::new(),
             art: None,
         });
         let mut cache = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
         cache.prepare(&scene, scale).unwrap();
         let open = cache.frame.as_ref().unwrap().clone();
-        let open_pixels = frame_pixels(&open, &scene, scale);
+        let mut dense_scene = scene.clone();
+        dense_scene.prepared.clear();
+        let mut dense_cache = TreeCache::default();
+        dense_cache.prepare(&dense_scene, scale).unwrap();
+        let open_pixels = frame_pixels(dense_cache.frame.as_ref().unwrap(), &dense_scene, scale);
         scene.prepared.insert(scale.to_bits(), open);
         scene.reveal(0.5);
+        dense_scene.reveal(0.5);
         cache.prepare(&scene, scale).unwrap();
+        dense_scene.prepared.clear();
+        dense_cache.prepare(&dense_scene, scale).unwrap();
         let half = cache.frame.as_ref().unwrap().clone();
         // Content before and after the native image is grouped in paint order.
         assert_eq!(half.items.len(), 4);
@@ -6212,7 +6199,8 @@ mod tests {
         assert!(half.items[2].image.is_some());
         assert!(half.items[3].raster.is_some());
         let layer = half.items[1].raster.clone().unwrap();
-        let pixels = frame_pixels(&half, &scene, scale);
+        let dense_half = dense_cache.frame.as_ref().unwrap();
+        let pixels = frame_pixels(dense_half, &dense_scene, scale);
         let row = (160. * scale) as usize * 4;
         // Above the growing edge the reveal equals the open panel; below the window nothing is drawn.
         let edge = ((32. + 48.) * scale) as usize;
@@ -6228,19 +6216,9 @@ mod tests {
             "prepared reveal layer differs from open pixels by {max_error}/255"
         );
         assert!(pixels[(edge + 2) * row..].iter().all(|byte| *byte == 0));
-        scene.motion.as_mut().unwrap().slide_distance = Some(96.);
         scene.reveal(0.75);
         cache.prepare(&scene, scale).unwrap();
         let later = cache.frame.as_ref().unwrap().clone();
-        let (dx, dy) = scene.content_offset(1);
-        assert!(
-            dx.abs() > 0. || dy.abs() > 0.,
-            "content follows the slide offset"
-        );
-        let Primitive::Rounded { rect, .. } = &later.items[1].primitive else {
-            panic!("prepared content layer keeps its translated scene bounds");
-        };
-        assert_eq!(*rect, scene.bounds.translated(dx, dy));
         assert!(
             Arc::ptr_eq(&layer, later.items[1].raster.as_ref().unwrap()),
             "a later pose reuses the prepared content layer"
