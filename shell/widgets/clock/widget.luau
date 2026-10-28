@@ -137,7 +137,15 @@ local function desktop(props,_settings,_data)
         if preview then
             return ui.Box{id="clock-analog-preview",width=w,height=h,fill="transparent",
                 ui.Box{id="dial-glass",position="absolute",left=dial_left,top=dial_top,width=dial_size,height=dial_size,
-                    fill=visual.glass_fill,radius=dial_size/2,border_width=2,border_color=visual.glass_border},
+                    fill=ui.alpha("surfaceContainerHighest",.86),radius=dial_size/2,border_width=4,border_color="outlineVariant"},
+                ui.Polyline{id="dial-tick-top",position="absolute",left=dial_left,top=dial_top,width=dial_size,height=dial_size,
+                    points={{.5,.06},{.5,.17}},stroke_width=4,color="onSurfaceVariant"},
+                ui.Polyline{id="dial-tick-right",position="absolute",left=dial_left,top=dial_top,width=dial_size,height=dial_size,
+                    points={{.83,.5},{.94,.5}},stroke_width=4,color="onSurfaceVariant"},
+                ui.Polyline{id="dial-tick-bottom",position="absolute",left=dial_left,top=dial_top,width=dial_size,height=dial_size,
+                    points={{.5,.83},{.5,.94}},stroke_width=4,color="onSurfaceVariant"},
+                ui.Polyline{id="dial-tick-left",position="absolute",left=dial_left,top=dial_top,width=dial_size,height=dial_size,
+                    points={{.06,.5},{.17,.5}},stroke_width=4,color="onSurfaceVariant"},
                 hand("hour-hand",hour_angle,.27,8,"onSurface"),
                 hand("minute-hand",minute_angle,.42,5,"primary"),
                 ui.Box{id="hand-pin",position="absolute",left=dial_left+dial_size/2-5,top=dial_top+dial_size/2-5,width=10,height=10,radius=5,fill="primary"}}
@@ -206,7 +214,7 @@ return {id="clock",title="Clock",icon="schedule",category="bar",data={topics={},
         ["time+date"]={title="Stored time and date",min_span=1,max_span=1200,preferred_span=360,preferred_height=92,hidden=true,requires={"bead.desktop.clock.date"},render=function(p,s,d) p.form_style="digital"; return desktop(p,s,d) end},
         seconds={title="Stored seconds",min_span=1,max_span=1200,preferred_span=240,preferred_height=92,hidden=true,requires={"bead.desktop.clock.seconds"},render=function(p,s,d) p.form_style="seconds"; return desktop(p,s,d) end},
         digital=desktop_style("A · Digital","digital",420,{"bead.desktop.clock.date"}),
-        analog=desktop_style("B · Analog dial","analog",420,{"bead.desktop.clock.seconds","bead.desktop.clock.date"},300),
-        minimal=desktop_style("C · Minimal type","minimal",420,{"bead.desktop.clock.date"}),
+        analog=desktop_style("B · Analog","analog",420,{"bead.desktop.clock.seconds","bead.desktop.clock.date"},300),
+        minimal=desktop_style("C · Minimal","minimal",420,{"bead.desktop.clock.date"}),
     }},panel={styles={calendar={view="calendar"}}}}
 }
