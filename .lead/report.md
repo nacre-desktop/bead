@@ -1,6 +1,6 @@
 # B0172 report
 
-Status: done; ready to push to `main`.
+Status: done; pushed to `main` at `08661b52`.
 
 Root cause: the old app used a transparent full-stage drag source appended above the bar and desktop previews, so it intercepted both hit areas and carried the selected form's payload. The live nested trace found a second drop blocker: fallback screen geometry had an empty output ID, which failed the terminal-drop guard. Both are fixed and covered by `acceptance.json`.
 
@@ -19,4 +19,4 @@ Visual comparison notes against `.lead/reference/App.dc.html` are in `docs/specs
 
 Checks: focused style-hit and unnamed-output fallback tests passed; Settings golden suite 47/47; status-view golden suite 4/4. Full Bead CI on dev-2, container `b0172-widgets-app-20261028-final-ci4`, exited 0; `acceptance.json` records the recipe and result.
 
-Product source lines: 453 added, 127 removed. Commits: 12 task commits, each with `[no-publish]`, author/committer `siverteh <92440237+Siverteh@users.noreply.github.com>`, and Codex Luna trailer.
+Product source lines: 453 added, 127 removed. Fourteen task commits including this report use `[no-publish]`, author/committer `siverteh <92440237+Siverteh@users.noreply.github.com>`, and the Codex Luna trailer.
