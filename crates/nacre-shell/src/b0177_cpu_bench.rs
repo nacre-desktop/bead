@@ -222,6 +222,11 @@ fn benchmark(scene_name: &str, mut open: bead::render::Scene) -> bead::render::R
             .prepared_frame()
             .expect("worker renderer must publish its prepared frame"),
     );
+    let artifact_bytes = open
+        .prepared
+        .get(&SCALE.to_bits())
+        .and_then(|frame| frame.reveal_artifact.as_ref())
+        .map_or(0, |artifact| artifact.retained_bytes());
     let mut pixels = vec![0; SURFACE_WIDTH as usize * SURFACE_HEIGHT as usize * 4];
     let full_damage = Damage::full(SURFACE_WIDTH, SURFACE_HEIGHT);
 
@@ -276,7 +281,7 @@ fn benchmark(scene_name: &str, mut open: bead::render::Scene) -> bead::render::R
     let (prep50, prep95, prep99, prep_mean) = summarize(&prepare_samples);
     let (draw50, draw95, draw99, draw_mean) = summarize(&render_samples);
     println!(
-        "B0177_CPU_BENCH scene={scene_name} logical={LOGICAL_WIDTH}x{LOGICAL_HEIGHT} surface_px={SURFACE_WIDTH}x{SURFACE_HEIGHT} scale={SCALE:.1} backend=bead-render-cpu iterations={ITERATIONS} warmups={WARMUPS} prepare_p50_ns={prep50} prepare_p95_ns={prep95} prepare_p99_ns={prep99} prepare_mean_ns={prep_mean} render_p50_ns={draw50} render_p95_ns={draw95} render_p99_ns={draw99} render_mean_ns={draw_mean}"
+        "B0177_CPU_BENCH scene={scene_name} logical={LOGICAL_WIDTH}x{LOGICAL_HEIGHT} surface_px={SURFACE_WIDTH}x{SURFACE_HEIGHT} scale={SCALE:.1} backend=bead-render-cpu iterations={ITERATIONS} warmups={WARMUPS} artifact_bytes={artifact_bytes} prepare_p50_ns={prep50} prepare_p95_ns={prep95} prepare_p99_ns={prep99} prepare_mean_ns={prep_mean} render_p50_ns={draw50} render_p95_ns={draw95} render_p99_ns={draw99} render_mean_ns={draw_mean}"
     );
     Ok(())
 }
