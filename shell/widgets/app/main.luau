@@ -442,7 +442,7 @@ local function detail()
     local settings=active_settings(package,entry,instance)
     local desktop_available=package.forms.desktop~=nil
     local detail_width=math.max(1,width-RAIL-3*spacing.lg)
-    local stage_w=math.max(1,detail_width-2*spacing.lg)
+    local stage_w=math.max(1,detail_width)
     local stage_h=math.min(stage_w*output_h/output_w,math.max(spacing.huge*4,height*.38))
     local stage_scale=math.min(stage_w/output_w,stage_h/output_h)
     local mini_w,mini_h=output_w*stage_scale,output_h*stage_scale
