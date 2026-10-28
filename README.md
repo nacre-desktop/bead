@@ -37,6 +37,12 @@ Build the shell from this checkout with the pinned workspace dependencies:
 cargo build --release --locked -j2 -p nacre-shell
 ```
 
+For a release-optimized binary with symbols and frame pointers for live `perf` call stacks:
+
+```sh
+RUSTFLAGS="-C force-frame-pointers=yes" cargo build -p nacre-shell --profile profiling --locked -j2
+```
+
 For an isolated interactive preview from a Wayland session, use the nested
 preview script. It starts a private compositor, daemon, bus, runtime directory,
 and HOME; it does not install or switch the running Nacre shell:
@@ -103,3 +109,4 @@ implementation code does not belong in framework crates.
 
 For the detailed research and preview commands retained from the experiment
 README, see [docs/PREVIEW.md](docs/PREVIEW.md).
+# Live perf profiling build: `RUSTFLAGS="-C force-frame-pointers=yes" cargo build -p nacre-shell --profile profiling --locked -j2`; this keeps release optimization and debuginfo for `perf report`.

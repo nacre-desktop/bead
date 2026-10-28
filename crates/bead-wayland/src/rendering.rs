@@ -163,25 +163,90 @@ pub(super) fn copy_outside_repairs(
     repairs: &[Damage],
     zero_target: bool,
 ) {
-    let mut ordered = repairs.iter().collect::<Vec<_>>();
-    ordered.sort_unstable_by_key(|r| r.x);
     for y in 0..height {
         let row = y as usize * width as usize * 4;
         let mut x = 0;
-        for r in &ordered {
-            if y < r.y || y >= r.y.saturating_add(r.h) || r.w == 0 {
+        loop {
+            // Repair history is bounded and tiny. Find/merge the next horizontal
+            // interval in place instead of allocating and sorting a Vec per frame.
+            let next = repairs
+                .iter()
+                .filter(|r| y >= r.y && y < r.y.saturating_add(r.h) && r.w != 0)
+                .map(|r| (r.x.min(width), r.x.saturating_add(r.w).min(width)))
+                .filter(|(left, right)| *right > x && *left <= x)
+                .map(|(_, right)| right)
+                .max();
+            if let Some(right) = next {
+                x = right;
                 continue;
             }
-            let left = r.x.min(width);
-            if left > x {
-                let range = row + x as usize * 4..row + left as usize * 4;
+            let next_left = repairs
+                .iter()
+                .filter(|r| y >= r.y && y < r.y.saturating_add(r.h) && r.w != 0)
+                .map(|r| r.x.min(width))
+                .filter(|left| *left > x)
+                .min()
+                .unwrap_or(width);
+            if next_left > x {
+                let range = row + x as usize * 4..row + next_left as usize * 4;
                 copy_adopted_span(&source[range.clone()], &mut target[range], zero_target);
             }
-            x = x.max(r.x.saturating_add(r.w).min(width));
+            if next_left == width {
+                break;
+            }
+            x = next_left;
         }
-        if x < width {
-            let range = row + x as usize * 4..row + width as usize * 4;
-            copy_adopted_span(&source[range.clone()], &mut target[range], zero_target);
+    }
+}
+
+#[cfg(test)]
+mod repair_copy_tests {
+    use super::*;
+
+    #[test]
+    fn copies_only_the_complement_of_unsorted_overlapping_repairs() {
+        let width = 8;
+        let height = 3;
+        let source: Vec<u8> = (0..width * height * 4).map(|n| n as u8).collect();
+        let mut target = vec![0; source.len()];
+        let repairs = [
+            Damage {
+                x: 4,
+                y: 0,
+                w: 2,
+                h: 3,
+            },
+            Damage {
+                x: 1,
+                y: 1,
+                w: 3,
+                h: 1,
+            },
+            Damage {
+                x: 2,
+                y: 1,
+                w: 4,
+                h: 1,
+            },
+        ];
+
+        copy_outside_repairs(&source, &mut target, width, height, &repairs, false);
+
+        for y in 0..height {
+            for x in 0..width {
+                let at = ((y * width + x) * 4) as usize;
+                let repaired =
+                    (y == 0 || y == 2) && (4..6).contains(&x) || y == 1 && (1..6).contains(&x);
+                assert_eq!(
+                    &target[at..at + 4],
+                    if repaired {
+                        &[0; 4]
+                    } else {
+                        &source[at..at + 4]
+                    },
+                    "pixel ({x},{y})"
+                );
+            }
         }
     }
 }

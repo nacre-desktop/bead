@@ -1020,3 +1020,6 @@ Core forecast stays 40–81 eight-hour agent-days (320–648 task hours), practi
 3–8 calendar weeks at 16–20 task hours/day availability plus contract/hardware
 gates. Full-core idle 90–150 MiB is an estimate. Further IME/reader work and live
 validation remain deferred/held; the 25 MiB ceiling / 24.5 MiB stop are unchanged.
+# B0178 — 2026-10-28
+
+Started the panel slide frame-cost investigation. The first source change removes heap allocation and sorting from stale-buffer adoption damage copying, with coverage for unsorted overlapping rectangles. Full tick benchmarks, per-tick model-work removal, prepared panel art and warm-open remain outstanding; laptop live acceptance is lead-owned.
