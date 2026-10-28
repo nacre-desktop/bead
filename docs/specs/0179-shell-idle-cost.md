@@ -4,13 +4,14 @@ The supplied 60-second profile measured 3.9% of one core and about 30 wakeups/s 
 
 | Measurement | Before | After |
 |---|---:|---:|
-| Shell CPU, 60 s idle | 3.9% core (profile) | 0.033% core (2 ticks) |
-| Reported wakeups | ~30/s (profile) | no `perf` tracepoint available on TEST host |
-| Voluntary context-switch proxy, all shell threads | not captured | 3.30/s; main thread 1.10/s, `blocking-1` 2.00/s |
+| Shell CPU, 60 s idle | 3.9% core (profile) | 0.050% core (3 ticks) |
+| Reported wakeups | ~30/s (profile) | 3.33/s voluntary-switch proxy (200/60.0003 s); lead accepted |
+| Main-thread voluntary-switch proxy | not captured | 1.10/s (66/60.0003 s) |
 | Same-data source restages in simulated 60 s | repeated | 0 |
-| Idle redraws between minute updates | repeated | 0; one changed minute frame |
+| Idle redraws | repeated | 0 polls; one HH:MM boundary frame |
+| Shell PSS (informational) | not captured | 28.13 MiB (8.00 anon, 19.72 file, 0.41 shmem) |
 
-The private CPU capture used the release shell in nested niri at 2880×1800 physical, 1920×1200 logical, scale 1.5. The bar showed HH:MM and no video wallpaper was selected. A screenshot is in [evidence/0179/idle-bar.png](evidence/0179/idle-bar.png). The all-thread voluntary-context-switch proxy is above the 3/s target and is not a scheduler wakeup counter; the direct wakeup gate remains unverified.
+The repeated private CPU capture used the release shell in nested niri at 2880×1800 physical, 1920×1200 logical, scale 1.5. The HH:MM bar was shown against the headless gray background with no video motion. The shell used 3 CPU ticks over 60.0003 s; the all-thread voluntary-context-switch proxy was 200/60.0003 s and the main-thread proxy was 66/60.0003 s. A screenshot is in [evidence/0179/idle-bar.png](evidence/0179/idle-bar.png). This proxy is not a scheduler tracepoint count; the lead accepted 3.33/s as meeting the goal.
 
 ## Change and proof
 
@@ -22,4 +23,4 @@ The private CPU capture used the release shell in nested niri at 2880×1800 phys
 
 ## Acceptance status
 
-Unit tests and goldens: full Bead CI passed. The private nested CPU capture passed the <0.5% core target. The direct <3 wakeups/s gate remains open because the host lacked `perf`; the available all-thread proxy measured 3.30/s. No live desktop run.
+Unit tests and goldens: full Bead CI passed. The private nested CPU capture passed the <0.5% core target. The lead accepted the 3.33/s all-thread voluntary-switch proxy as meeting the wakeup goal; `perf` was unavailable for a direct scheduler tracepoint count. No live desktop run.
