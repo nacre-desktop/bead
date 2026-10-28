@@ -393,24 +393,33 @@ impl Mirror {
         Ok(changed)
     }
     pub fn accept(&mut self, snapshot: Arc<Snapshot>, now: Instant) -> Result<Applied> {
+        self.accept_with_change(snapshot, now).map(|(applied, _)| applied)
+    }
+    /// Accept a full snapshot and report whether its payload changed. An unchanged
+    /// payload still advances the mirror revision but need not be projected again.
+    pub fn accept_with_change(
+        &mut self,
+        snapshot: Arc<Snapshot>,
+        now: Instant,
+    ) -> Result<(Applied, bool)> {
         validate_epoch(&snapshot.epoch)?;
         if self
             .expected_epoch
             .as_ref()
             .is_some_and(|epoch| *epoch != snapshot.epoch)
         {
-            return Ok(Applied::Ignored);
+            return Ok((Applied::Ignored, false));
         }
         if !snapshot.connected {
             self.disconnected(now);
-            return Ok(Applied::Disconnected);
+            return Ok((Applied::Disconnected, false));
         }
         object(&snapshot.data)?;
         if let Some(old) = &self.snapshot
             && old.epoch == snapshot.epoch
         {
             if snapshot.revision < old.revision {
-                return Ok(Applied::Ignored);
+                return Ok((Applied::Ignored, false));
             }
             if snapshot.revision == old.revision && snapshot.data != old.data {
                 return Err(Error::new(
@@ -419,12 +428,21 @@ impl Mirror {
                     false,
                 ));
             }
+            if snapshot.revision == old.revision || snapshot.data == old.data {
+                self.expected_epoch = Some(snapshot.epoch.clone());
+                if snapshot.revision != old.revision {
+                    self.snapshot = Some(snapshot);
+                }
+                self.stale_since = None;
+                self.resync = false;
+                return Ok((Applied::Updated, false));
+            }
         }
         self.expected_epoch = Some(snapshot.epoch.clone());
         self.snapshot = Some(snapshot);
         self.stale_since = None;
         self.resync = false;
-        Ok(Applied::Updated)
+        Ok((Applied::Updated, true))
     }
     pub fn patch(
         &mut self,
@@ -532,8 +550,8 @@ impl Mirror {
         now: Instant,
     ) -> Result<Applied> {
         let mut staged = self.clone();
-        let applied = staged.accept(snapshot, now)?;
-        if applied == Applied::Updated {
+        let (applied, changed) = staged.accept_with_change(snapshot, now)?;
+        if changed {
             let values = projection(
                 &staged
                     .snapshot
@@ -595,5 +613,37 @@ mod restart_tests {
         assert_eq!(seen.lock().unwrap().len(), 3);
         assert!(p.restart(String::new()).is_err());
         assert_eq!(p.snapshot().epoch, "boot-b");
+    }
+
+    #[test]
+    fn identical_snapshots_do_not_restage_and_revisions_still_advance() {
+        let now = Instant::now();
+        let mut mirror = Mirror::new(now);
+        let make = |revision| {
+            Arc::new(Snapshot {
+                epoch: "boot-a".into(),
+                revision,
+                data: Arc::new(serde_json::json!({"clock":"10:11","wallpaper":"still"})),
+                connected: true,
+            })
+        };
+        assert_eq!(mirror.accept(make(0), now).unwrap(), Applied::Updated);
+        let mut restages = 0;
+        for revision in 1..=60 {
+            let (applied, changed) = mirror.accept_with_change(make(revision), now).unwrap();
+            if changed {
+                restages += 1;
+            }
+            assert_eq!(applied, Applied::Updated);
+        }
+        assert_eq!(restages, 0);
+        assert_eq!(mirror.snapshot().unwrap().revision, 60);
+        let different = Arc::new(Snapshot {
+            epoch: "boot-a".into(),
+            revision: 61,
+            data: Arc::new(serde_json::json!({"clock":"10:12","wallpaper":"still"})),
+            connected: true,
+        });
+        assert_eq!(mirror.accept(different, now).unwrap(), Applied::Updated);
     }
 }

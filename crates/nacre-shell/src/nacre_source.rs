@@ -862,7 +862,9 @@ fn apply_snapshot(
             data: Arc::new(data),
             connected: true,
         });
-        if mirror.accept(snapshot, Instant::now())? == Applied::Updated
+        let (applied, changed) = mirror.accept_with_change(snapshot, Instant::now())?;
+        if applied == Applied::Updated
+            && changed
             && let Some(snapshot) = mirror.snapshot()
             && let Some(publisher) = shared.publisher(topic)
         {
