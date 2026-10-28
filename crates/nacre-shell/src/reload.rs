@@ -8449,7 +8449,7 @@ impl SceneSource for Runtime {
                 if wallpaper_open_route {
                     eprintln!(
                         "WALLPAPER_OPEN_REMOTE_RECEIVED monotonic_ns={}",
-                        bead_core::profile::monotonic_ns()
+                        bead::core::profile::monotonic_ns()
                     );
                 }
                 let private_widget_feedback = self.widget_app
@@ -8833,7 +8833,7 @@ impl SceneSource for Runtime {
                                     if wallpaper_open {
                                         eprintln!(
                                             "WALLPAPER_OPEN_REMOTE_ENQUEUED monotonic_ns={}",
-                                            bead_core::profile::monotonic_ns()
+                                            bead::core::profile::monotonic_ns()
                                         );
                                     }
                                     bead::services::ipc::Reply::ok(call.id, serde_json::Value::Null)
@@ -9662,7 +9662,7 @@ impl SceneSource for Runtime {
                 "PANEL_OPEN_LATENCY name={} ms_to_first_content_frame={:.3} monotonic_ns={}",
                 name,
                 now.duration_since(started).as_secs_f64() * 1000.,
-                bead_core::profile::monotonic_ns()
+                bead::core::profile::monotonic_ns()
             );
         }
         while let Some((started, surface)) = self.smooth_key_starts.pop_front() {
