@@ -316,9 +316,7 @@ impl IconPathCache {
 
 fn icon_theme() -> String {
     ICON_THEME
-        .get_or_init(|| {
-            Mutex::new(freedesktop_icons::default_theme_gtk().unwrap_or_default())
-        })
+        .get_or_init(|| Mutex::new(freedesktop_icons::default_theme_gtk().unwrap_or_default()))
         .lock()
         .unwrap_or_else(|poison| poison.into_inner())
         .clone()
@@ -356,7 +354,10 @@ mod icon_cache_tests {
         for _ in 0..40 {
             let _ = cache.theme_icon("two", "same-icon", 48);
         }
-        assert_eq!(cache.lookup_count, 2, "negative results are cached per theme too");
+        assert_eq!(
+            cache.lookup_count, 2,
+            "negative results are cached per theme too"
+        );
     }
 
     #[test]
@@ -375,15 +376,17 @@ mod icon_cache_tests {
             );
         }
         assert!(cache.queries.len() <= 1024);
-        assert!(cache
-            .query(&IconQueryKey {
-                theme: "theme".into(),
-                icon: "icon-0".into(),
-                desktop_entry: String::new(),
-                image_path: String::new(),
-                size: 48,
-            })
-            .is_none());
+        assert!(
+            cache
+                .query(&IconQueryKey {
+                    theme: "theme".into(),
+                    icon: "icon-0".into(),
+                    desktop_entry: String::new(),
+                    image_path: String::new(),
+                    size: 48,
+                })
+                .is_none()
+        );
     }
 }
 fn row(id: &str, n: &Notification, expanded: bool, history: bool, now: u64) -> Json {

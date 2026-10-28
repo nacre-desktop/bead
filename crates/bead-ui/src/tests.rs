@@ -133,7 +133,11 @@ fn forty_unchanged_projection_wakeups_do_not_materialize_or_build_luau() {
     generation::reset_materialize_calls();
     frontend::reset_build_calls();
     let mut session = fixture.session();
-    assert_eq!(generation::materialize_calls(), 1, "first frame materializes once");
+    assert_eq!(
+        generation::materialize_calls(),
+        1,
+        "first frame materializes once"
+    );
     assert_eq!(frontend::build_calls(), 1, "first frame builds Luau once");
     let calls = std::rc::Rc::new(std::cell::Cell::new(0));
     let projected = calls.clone();

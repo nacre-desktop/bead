@@ -924,21 +924,14 @@ mod panel_animation_wakeup_tests {
         let mut stage_wakeups = 0;
         for frame in 0..40 {
             let now = start + Duration::from_millis(frame * 8);
-            let next = animation_wakeup_after_panel_hold(
-                now,
-                Some(hold_until),
-                Some(scalar_deadline),
-            );
+            let next =
+                animation_wakeup_after_panel_hold(now, Some(hold_until), Some(scalar_deadline));
             assert_eq!(next, Some(hold_until));
             stage_wakeups += usize::from(next.is_some_and(|deadline| deadline <= now));
         }
         assert_eq!(stage_wakeups, 0);
         assert_eq!(
-            animation_wakeup_after_panel_hold(
-                hold_until,
-                Some(hold_until),
-                Some(scalar_deadline),
-            ),
+            animation_wakeup_after_panel_hold(hold_until, Some(hold_until), Some(scalar_deadline),),
             Some(scalar_deadline),
             "one catch-up update may run after the independent slide completes"
         );
@@ -9749,8 +9742,7 @@ impl SceneSource for Runtime {
     fn presented(&mut self, revision: u64) {
         let now = std::time::Instant::now();
         if let Some(duration) = self.pending_panel_animation_duration.take() {
-            self.panel_animation_hold_until =
-                Some(now + duration + self.smooth_frame_interval);
+            self.panel_animation_hold_until = Some(now + duration + self.smooth_frame_interval);
         }
         let name = self.smooth_surface();
         if let Some(started) = self.smooth_open_started.take() {

@@ -1096,8 +1096,8 @@ fn dashboard_source_wakes_keep_last_good_data_and_drop_with_page() -> Result<()>
 }
 
 #[test]
-fn unchanged_source_and_store_revisions_do_not_reproject_dashboard_over_animation_ticks() -> Result<()>
-{
+fn unchanged_source_and_store_revisions_do_not_reproject_dashboard_over_animation_ticks()
+-> Result<()> {
     use bead::wayland::{SceneSource, UiEvent};
     use std::{
         sync::{atomic::Ordering, mpsc},
@@ -1118,7 +1118,8 @@ fn unchanged_source_and_store_revisions_do_not_reproject_dashboard_over_animatio
     harness.render()?;
     let dashboard = Dashboard::new(Page::Today, source, None, true);
     let (project_calls, chrome_calls) = dashboard.test_projection_counters();
-    let mut runtime = crate::reload::Runtime::new(harness.session).with_dashboard_view(dashboard)?;
+    let mut runtime =
+        crate::reload::Runtime::new(harness.session).with_dashboard_view(dashboard)?;
     let (tx, rx) = mpsc::channel();
     runtime.services(Box::new(move |event| {
         let _ = tx.send(event);
@@ -1127,13 +1128,19 @@ fn unchanged_source_and_store_revisions_do_not_reproject_dashboard_over_animatio
         runtime.session.commit(scene);
     }
     let _ = rx.recv_timeout(Duration::from_millis(200))?;
-    assert_eq!(runtime.test_reload_events(), 1, "only the explicit first build reloads");
+    assert_eq!(
+        runtime.test_reload_events(),
+        1,
+        "only the explicit first build reloads"
+    );
     if let Some(scene) = runtime.stage(UiEvent::PanelVisibility(true))? {
         runtime.session.commit(scene);
     }
     assert_eq!(project_calls.load(Ordering::Relaxed), 2);
     assert_eq!(chrome_calls.load(Ordering::Relaxed), 2);
-    let held_until = runtime.wakeup_at().expect("panel slide holds scalar animation wakeup");
+    let held_until = runtime
+        .wakeup_at()
+        .expect("panel slide holds scalar animation wakeup");
     assert!(held_until > std::time::Instant::now());
 
     for _ in 0..40 {
