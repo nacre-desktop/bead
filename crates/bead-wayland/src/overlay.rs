@@ -71,6 +71,12 @@ impl Drop for Overlay {
     }
 }
 
+/// One journal line per finished slide, so a live session shows what the user saw (B0170).
+pub(super) fn log_slide(id: &str, slide: Option<bead_core::animation::Slide>) {
+    if let Some(slide) = slide {
+        eprintln!("PANEL_SLIDE name={id} {slide}");
+    }
+}
 /// Logical surface size for a content-sized scene (same rule as a panel's).
 fn content_size(scene: &Scene) -> (u32, u32) {
     let height = scene.bounds.y + scene.bounds.h + scene.offset.1;
@@ -564,9 +570,9 @@ impl App {
         let scene = &mut o.scene;
         let mut animating = false;
         if let Some(motion) = &scene.motion {
-            o.animations.target(
+            o.animations.open_to(
                 &motion.id,
-                if o.open { 1. } else { 0. },
+                o.open,
                 now,
                 motion.duration,
                 motion.curve.unwrap_or(if motion.spring {
@@ -649,9 +655,18 @@ impl App {
             w as u32,
             h as u32,
         )?;
+        let motion_id = scene.motion.as_ref().map(|motion| motion.id.clone());
         if o.damage.surface.w == 0 || o.damage.surface.h == 0 {
             if let Some(revision) = o.damage.identical_generation(scene.resource_revision) {
                 o.source.presented(revision);
+            }
+            // The pose is already on screen.
+            if let Some(id) = &motion_id {
+                log_slide(
+                    id,
+                    o.animations
+                        .committed(id, now, started.elapsed().as_secs_f64()),
+                );
             }
             return Ok(animating);
         }
@@ -709,6 +724,13 @@ impl App {
         }
         o.buffers[slot].attach_to(surface)?;
         o.layer.commit();
+        if let Some(id) = &motion_id {
+            log_slide(
+                id,
+                o.animations
+                    .committed(id, now, started.elapsed().as_secs_f64()),
+            );
+        }
         o.damage.committed(slot, o.ui_serial);
         o.last_draw = Some(frame_started);
         if bead_core::profile::frame_trace() {

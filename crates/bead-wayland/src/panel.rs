@@ -701,14 +701,9 @@ impl App {
         if let Some(m) = spec.fallback.motion.as_ref().filter(|m| m.reveal) {
             let now = self.started.elapsed().as_secs_f64();
             let curve = m.curve.unwrap_or(bead_core::animation::Curve::EaseOut);
-            if self.panel_animations.value(&m.id, now).is_none() {
-                self.panel_animations
-                    .target(&m.id, 0., now, m.duration, curve);
-            }
-            // Visibility starts the reveal clock, including prepared/reopened views.
-            // Worker preparation and configure advance it; draw() keeps the target.
+            // The reveal holds its first pose until the first frame that shows it is committed.
             self.panel_animations
-                .target(&m.id, if open { 1. } else { 0. }, now, m.duration, curve);
+                .open_to(&m.id, open, now, m.duration, curve);
             bead_core::profile::mark("reveal_admitted");
         }
         self.edges_panel_changed(false);
@@ -982,7 +977,7 @@ impl App {
             self.draw(i, &qh);
         }
     }
-    /// The first real scene of a panel has arrived: its reveal starts now, not while a blank fallback was all there was.
+    /// The first real scene of a panel has arrived: its reveal restarts from closed, never from a blank fallback's pose.
     pub(super) fn panel_content_ready(&mut self) {
         self.panel_ready = true;
         self.panel_animations = Default::default();
@@ -996,14 +991,8 @@ impl App {
         if let Some((id, duration, curve)) = reveal {
             let now = self.started.elapsed().as_secs_f64();
             let curve = curve.unwrap_or(bead_core::animation::Curve::EaseOut);
-            self.panel_animations.target(&id, 0., now, duration, curve);
-            self.panel_animations.target(
-                &id,
-                if self.panel_target { 1. } else { 0. },
-                now,
-                duration,
-                curve,
-            );
+            self.panel_animations
+                .open_to(&id, self.panel_target, now, duration, curve);
         }
     }
     pub(super) fn close_panel(&mut self) {

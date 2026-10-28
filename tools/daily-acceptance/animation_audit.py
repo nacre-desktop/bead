@@ -33,6 +33,7 @@ ap.ANIMS.update({
     'popout-battery': ([], [('ui', 'nacre', 'popout', 'battery', '1640')], [('ui', 'nacre', 'close')], 1.2),
     'popout-calendar': ([], [('ui', 'nacre', 'popout', 'calendar', '1700')], [('ui', 'nacre', 'close')], 1.2),
     'menu-power': ([], [('ui', 'nacre', 'menu', 'power', '')], [('ui', 'nacre', 'close')], 1.2),
+    'popout-updates': ([], [('ui', 'nacre', 'controls', 'updates')], [('ui', 'nacre', 'close')], 1.2),
 })
 SURFACES = os.environ.get('AUDIT_SURFACES') or ('dashboard,control-centre,sidebar,launcher,popout-network,popout-audio,'
     'popout-bluetooth,popout-battery,popout-calendar,menu-power,notification,wallpaper-carousel,osd')

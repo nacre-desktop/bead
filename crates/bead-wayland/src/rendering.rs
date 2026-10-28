@@ -1247,7 +1247,7 @@ impl App {
         }
         let previous_frames = self.surfaces[index].frames;
         let mut busy = false;
-        // (motion id, clock of this frame) once this frame is the first to show a motion.
+        // The motion this frame shows and the clock of its pose; a committed frame starts a held clock.
         let mut motion_clock: Option<(String, f64)> = None;
         let result = (|| -> Result<(), Box<dyn Error>> {
             #[cfg(feature = "native-gl")]
@@ -1388,20 +1388,10 @@ impl App {
                 } else {
                     motion.open
                 };
-                // B0067: a panel opens from closed. A fresh animation set would take the first target as where the
-                // panel already is and show it fully open at once (the cold open never animated).
-                if open && self.animations.value(&motion.id, now).is_none() {
-                    self.animations.target(
-                        &motion.id,
-                        0.,
-                        now,
-                        0.001,
-                        motion.curve.unwrap_or(bead_core::animation::Curve::EaseOut),
-                    );
-                }
-                self.animations.target(
+                // A panel opens from closed (B0067); the clock starts at the first committed frame (B0170).
+                self.animations.open_to(
                     &motion.id,
-                    if open { 1. } else { 0. },
+                    open,
                     now,
                     if self.options.animate {
                         1.
@@ -2306,11 +2296,13 @@ impl App {
         }
         if let Some((id, drawn)) = motion_clock
             && self.surfaces[index].frames > previous_frames
-            && frame_started.elapsed() > Duration::from_millis(4)
         {
-            // Baking textures for a motion's first frame can take several frames' time.
-            self.animations
-                .rebase_fresh(&id, drawn, self.started.elapsed().as_secs_f64());
+            // The first committed frame of a motion starts its clock: preparation, configure and
+            // a slow first frame never spend the slide (B0170).
+            let slide = self
+                .animations
+                .committed(&id, drawn, self.started.elapsed().as_secs_f64());
+            super::overlay::log_slide(&id, slide);
         }
         // A pending frame callback already supplies the retry wakeup.
         if busy && !self.surfaces[index].callbacks.pending {
