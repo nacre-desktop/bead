@@ -453,7 +453,10 @@ impl Settings {
         let mut state = self.state.borrow_mut();
         let boot = self.client.as_ref().and_then(|client| {
             let snapshot = client.snapshot();
-            snapshot.connected.then(|| client.status().boot.clone()).flatten()
+            snapshot
+                .connected
+                .then(|| client.status().boot.clone())
+                .flatten()
         });
         if state.wallpaper_boot != boot {
             state.wallpaper_catalogue = None;

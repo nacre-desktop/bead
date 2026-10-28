@@ -2370,7 +2370,10 @@ impl Runtime {
                     .get("settings.set")
                     .filter(|method| method.v == 1)
                     .ok_or("Widget settings are unavailable")?;
-                let boot = status.boot.clone().ok_or("Widget settings are disconnected")?;
+                let boot = status
+                    .boot
+                    .clone()
+                    .ok_or("Widget settings are disconnected")?;
                 let wakeup = self
                     .wakeup
                     .clone()
@@ -7073,7 +7076,10 @@ impl SceneSource for Runtime {
                             .get("settings.set")
                             .filter(|method| method.v == 1)
                             .ok_or("Widget settings are unavailable")?;
-                        let boot = status.boot.clone().ok_or("Widget settings are disconnected")?;
+                        let boot = status
+                            .boot
+                            .clone()
+                            .ok_or("Widget settings are disconnected")?;
                         let rev = match self.session.stores.get("widgets.rev") {
                             Some(bead::core::Value::Number(rev)) => *rev as u64,
                             _ => 0,
@@ -7169,7 +7175,10 @@ impl SceneSource for Runtime {
                             .get("settings.set")
                             .filter(|method| method.v == 1)
                             .ok_or("Widget settings are unavailable")?;
-                        let boot = status.boot.clone().ok_or("Widget settings are disconnected")?;
+                        let boot = status
+                            .boot
+                            .clone()
+                            .ok_or("Widget settings are disconnected")?;
                         let rev = match changes.get("widgets.base_rev") {
                             Some(bead::core::Value::Number(rev)) => *rev as u64,
                             _ => 0,

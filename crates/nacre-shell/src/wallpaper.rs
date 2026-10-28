@@ -1013,7 +1013,10 @@ impl Consumer {
         if !state.available || state.stale {
             return Err("wallpaper is stale".into());
         }
-        let boot = status.boot.clone().ok_or("wallpaper daemon boot unavailable")?;
+        let boot = status
+            .boot
+            .clone()
+            .ok_or("wallpaper daemon boot unavailable")?;
         bead::core::profile::mark("wallpaper_decode_started");
         let pair = Arc::new(
             state

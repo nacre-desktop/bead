@@ -382,7 +382,11 @@ impl Extras {
         };
         let mut state = State::default();
         if kind == Kind::Wallpaper
-            && let Some(boot) = client.status().boot.clone().filter(|_| client.snapshot().connected)
+            && let Some(boot) = client
+                .status()
+                .boot
+                .clone()
+                .filter(|_| client.snapshot().connected)
             && let Some(entries) = crate::wallpaper_catalogue_cache::load()
         {
             state.catalogue_result = entries;
@@ -393,7 +397,11 @@ impl Extras {
             && let (Some(topic), Some(settings), Some(boot)) = (
                 topic.as_ref(),
                 wallpaper_settings.as_ref(),
-                client.status().boot.clone().filter(|_| client.snapshot().connected),
+                client
+                    .status()
+                    .boot
+                    .clone()
+                    .filter(|_| client.snapshot().connected),
             )
         {
             let active = topic.snapshot();

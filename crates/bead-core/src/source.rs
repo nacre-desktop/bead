@@ -393,7 +393,8 @@ impl Mirror {
         Ok(changed)
     }
     pub fn accept(&mut self, snapshot: Arc<Snapshot>, now: Instant) -> Result<Applied> {
-        self.accept_with_change(snapshot, now).map(|(applied, _)| applied)
+        self.accept_with_change(snapshot, now)
+            .map(|(applied, _)| applied)
     }
     /// Accept a full snapshot and report whether its payload changed. An unchanged
     /// payload still advances the mirror revision but need not be projected again.
