@@ -186,7 +186,8 @@ mod tests {
                 entries: vec![entry()],
             })
             .unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         assert!(load_at(&path, &directory).is_none());
         fs::write(
             &path,
@@ -195,7 +196,8 @@ mod tests {
                 entries: vec![json!({"id":"x","kind":"other"})],
             })
             .unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         assert!(load_at(&path, &directory).is_none());
         fs::remove_dir_all(directory).unwrap();
     }
@@ -204,7 +206,10 @@ mod tests {
     fn snapshot_rejects_oversize_files_and_symlinks() {
         let directory = temp_dir();
         let oversized = directory.join("oversized.json");
-        fs::File::create(&oversized).unwrap().set_len(LIMIT + 1).unwrap();
+        fs::File::create(&oversized)
+            .unwrap()
+            .set_len(LIMIT + 1)
+            .unwrap();
         assert!(load_at(&oversized, &directory).is_none());
         #[cfg(unix)]
         {

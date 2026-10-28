@@ -883,7 +883,11 @@ async fn wallpaper_refreshes_deleted_cache_paths_and_settles_still_broken_paths(
     }));
     let mut cached_scene = scene_for("/fixture/cached.jpg");
     wallpaper.attach_images(&mut cached_scene, Some(wake.clone()));
-    assert!(cached_scene.asset_data.contains_key(&cached.canonicalize().unwrap()));
+    assert!(
+        cached_scene
+            .asset_data
+            .contains_key(&cached.canonicalize().unwrap())
+    );
     assert!(
         lab.calls.try_recv().is_err(),
         "a valid persisted thumbnail is ready without a catalogue/prewarm request"

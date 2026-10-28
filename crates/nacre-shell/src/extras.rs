@@ -750,8 +750,7 @@ impl Extras {
                                 .find(|row| row["id"].as_str() == Some(id))
                             {
                                 for field in ["thumbnail", "preview", "palette"] {
-                                    if (entry[field].is_null()
-                                        || entry[field].as_str() == Some(""))
+                                    if (entry[field].is_null() || entry[field].as_str() == Some(""))
                                         && !previous[field].is_null()
                                         && previous[field].as_str() != Some("")
                                     {
@@ -866,9 +865,7 @@ impl Extras {
             }
             // A cache hit or in-flight refresh is usable picker content even if the
             // active-wallpaper topic has not finished reporting its health yet.
-            if boot.is_some()
-                && (state.catalogue_boot == boot || state.catalogue.is_some())
-            {
+            if boot.is_some() && (state.catalogue_boot == boot || state.catalogue.is_some()) {
                 available = true;
             }
         }

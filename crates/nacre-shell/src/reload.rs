@@ -8441,7 +8441,10 @@ impl SceneSource for Runtime {
                 let call = &request.call;
                 let wallpaper_open_route = call.target == "nacre"
                     && call.method == "launcher"
-                    && call.args.first().and_then(serde_json::Value::as_str)
+                    && call
+                        .args
+                        .first()
+                        .and_then(serde_json::Value::as_str)
                         .is_some_and(|query| query.starts_with(">wallpaper"));
                 if wallpaper_open_route {
                     eprintln!(
@@ -8787,8 +8790,8 @@ impl SceneSource for Runtime {
                                             .as_deref()
                                             .unwrap_or("launcher")
                                             == launch.target_view.as_deref().unwrap_or("launcher");
-                                    let wallpaper_open = launch.target_view.as_deref()
-                                        == Some("wallpaper");
+                                    let wallpaper_open =
+                                        launch.target_view.as_deref() == Some("wallpaper");
                                     if launch.toggle
                                         && showing
                                         && (launch.target_view.is_some()
