@@ -5457,6 +5457,13 @@ mod tests {
         assert_eq!(renderer.slide_content_preparations, 1);
         assert_eq!(renderer.slide_content_composites, 3);
         assert_eq!(renderer.opacity_builds, 1);
+        println!(
+            "SLIDE_CACHE bytes={} preparations={} composites={} opaque_builds={}",
+            renderer.reveal_content_bytes,
+            renderer.slide_content_preparations,
+            renderer.slide_content_composites,
+            renderer.opacity_builds,
+        );
     }
 
     #[test]
