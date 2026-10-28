@@ -1116,6 +1116,10 @@ fn unchanged_source_and_store_revisions_do_not_reproject_dashboard_over_animatio
         },
     )?;
     harness.render()?;
+    harness
+        .session
+        .stores
+        .commit(BTreeMap::from([("panel.open".into(), Value::Bool(false))]))?;
     let dashboard = Dashboard::new(Page::Today, source, None, true);
     let (project_calls, chrome_calls) = dashboard.test_projection_counters();
     let mut runtime =
