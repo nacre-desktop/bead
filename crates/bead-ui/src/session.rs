@@ -536,6 +536,17 @@ impl Session {
             .and_then(Generation::animation_deadline);
         [preview, animation].into_iter().flatten().min()
     }
+    /// Duration of the current panel pose transition, used by hosts to keep
+    /// view-local scalar animation timers out of compositor-driven slide frames.
+    pub fn motion_duration(&self, opening: bool) -> Option<std::time::Duration> {
+        let motion = self.current.motion.as_ref()?;
+        let seconds = if opening {
+            motion.duration
+        } else {
+            motion.return_duration.unwrap_or(motion.duration)
+        };
+        Some(std::time::Duration::from_secs_f64(seconds.max(0.)))
+    }
     fn animation_checkpoint(&self) -> Option<frontend::AnimationSnapshot> {
         self.pending
             .as_ref()

@@ -752,6 +752,9 @@ pub struct Runtime {
     pending_dashboard: Option<PendingDashboard>,
     dashboard_pearl_animation: Option<DashboardPearlAnimation>,
     dashboard_pearl_deadline: Option<std::time::Instant>,
+    /// Scalar view animations wait for the panel's independent compositor slide.
+    panel_animation_hold_until: Option<std::time::Instant>,
+    pending_panel_animation_duration: Option<std::time::Duration>,
     pending_panel_navigation: Option<String>,
     dashboard_subscription: Vec<bead::core::source::Subscription>,
     slider_sent: Option<std::time::Instant>,
@@ -882,6 +885,8 @@ pub struct Runtime {
     smooth_started_at: std::time::Instant,
     smooth_user_interacted: bool,
     smooth_bar_startup_animation: bool,
+    #[cfg(test)]
+    reload_events: usize,
 }
 #[derive(Clone)]
 struct DashboardPearlAnimation {
@@ -896,6 +901,48 @@ struct PendingDashboard {
     subscriptions: Vec<bead::core::source::Subscription>,
     animation: Option<DashboardPearlAnimation>,
     deadline: Option<std::time::Instant>,
+}
+
+fn animation_wakeup_after_panel_hold(
+    now: std::time::Instant,
+    hold_until: Option<std::time::Instant>,
+    animation: Option<std::time::Instant>,
+) -> Option<std::time::Instant> {
+    hold_until.filter(|until| *until > now).or(animation)
+}
+
+#[cfg(test)]
+mod panel_animation_wakeup_tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn forty_slide_frames_do_not_wake_the_script_stage_for_scalar_animation() {
+        let start = std::time::Instant::now();
+        let hold_until = start + Duration::from_millis(336);
+        let scalar_deadline = start + Duration::from_millis(8);
+        let mut stage_wakeups = 0;
+        for frame in 0..40 {
+            let now = start + Duration::from_millis(frame * 8);
+            let next = animation_wakeup_after_panel_hold(
+                now,
+                Some(hold_until),
+                Some(scalar_deadline),
+            );
+            assert_eq!(next, Some(hold_until));
+            stage_wakeups += usize::from(next.is_some_and(|deadline| deadline <= now));
+        }
+        assert_eq!(stage_wakeups, 0);
+        assert_eq!(
+            animation_wakeup_after_panel_hold(
+                hold_until,
+                Some(hold_until),
+                Some(scalar_deadline),
+            ),
+            Some(scalar_deadline),
+            "one catch-up update may run after the independent slide completes"
+        );
+    }
 }
 impl Drop for Runtime {
     fn drop(&mut self) {
@@ -2370,7 +2417,10 @@ impl Runtime {
                     .get("settings.set")
                     .filter(|method| method.v == 1)
                     .ok_or("Widget settings are unavailable")?;
-                let boot = status.boot.ok_or("Widget settings are disconnected")?;
+                let boot = status
+                    .boot
+                    .clone()
+                    .ok_or("Widget settings are disconnected")?;
                 let wakeup = self
                     .wakeup
                     .clone()
@@ -2966,6 +3016,8 @@ impl Runtime {
             pending_dashboard: None,
             dashboard_pearl_animation: None,
             dashboard_pearl_deadline: None,
+            panel_animation_hold_until: None,
+            pending_panel_animation_duration: None,
             pending_panel_navigation: None,
             dashboard_subscription: Vec::new(),
             slider_sent: None,
@@ -3096,6 +3148,8 @@ impl Runtime {
             smooth_started_at: std::time::Instant::now(),
             smooth_user_interacted: false,
             smooth_bar_startup_animation: false,
+            #[cfg(test)]
+            reload_events: 0,
         }
     }
     pub fn with_connection_status(
@@ -4134,7 +4188,14 @@ impl Runtime {
         }
         let dashboard = std::rc::Rc::new(std::cell::RefCell::new(dashboard));
         let projector = dashboard.clone();
+        let projected_revision = std::rc::Rc::new(std::cell::Cell::new(None));
+        let cached_revision = projected_revision.clone();
         self.session.set_projector(Box::new(move |stores| {
+            let revision = projector.borrow().projection_revision(stores);
+            if cached_revision.get() == Some(revision) {
+                return Ok(BTreeMap::new());
+            }
+            cached_revision.set(Some(revision));
             Ok(projector.borrow().project_with_stores(stores))
         }));
         self.actions.register("view.open", "ui.popouts")?;
@@ -4148,6 +4209,10 @@ impl Runtime {
         }
         self.dashboard = Some(dashboard);
         Ok(self)
+    }
+    #[cfg(test)]
+    pub(crate) fn test_reload_events(&self) -> usize {
+        self.reload_events
     }
     pub fn with_dashboard_factory(
         mut self,
@@ -5354,6 +5419,12 @@ impl SceneSource for Runtime {
     }
 
     fn wakeup_at(&self) -> Option<std::time::Instant> {
+        let now = std::time::Instant::now();
+        let view_animation = animation_wakeup_after_panel_hold(
+            now,
+            self.panel_animation_hold_until,
+            self.session.preview_deadline(),
+        );
         let send = self
             .slider_pending
             .as_ref()
@@ -5372,7 +5443,7 @@ impl SceneSource for Runtime {
         [
             send,
             hover,
-            self.session.preview_deadline(),
+            view_animation,
             self.session.hover_close_deadline(),
             self.dashboard_pearl_deadline,
         ]
@@ -5980,6 +6051,21 @@ impl SceneSource for Runtime {
     }
     fn stage(&mut self, mut event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
         let now = std::time::Instant::now();
+        if let UiEvent::PanelVisibility(open) = &event
+            && let Some(duration) = self.session.motion_duration(*open)
+        {
+            self.pending_panel_animation_duration = Some(duration);
+        }
+        if matches!(&event, UiEvent::Reload) {
+            #[cfg(test)]
+            {
+                self.reload_events += 1;
+            }
+            crate::notice_service::refresh_icon_theme();
+            if let Some(dashboard) = &self.dashboard {
+                dashboard.borrow().invalidate_projection();
+            }
+        }
         if matches!(
             &event,
             UiEvent::Key { .. }
@@ -7073,7 +7159,10 @@ impl SceneSource for Runtime {
                             .get("settings.set")
                             .filter(|method| method.v == 1)
                             .ok_or("Widget settings are unavailable")?;
-                        let boot = status.boot.ok_or("Widget settings are disconnected")?;
+                        let boot = status
+                            .boot
+                            .clone()
+                            .ok_or("Widget settings are disconnected")?;
                         let rev = match self.session.stores.get("widgets.rev") {
                             Some(bead::core::Value::Number(rev)) => *rev as u64,
                             _ => 0,
@@ -7169,7 +7258,10 @@ impl SceneSource for Runtime {
                             .get("settings.set")
                             .filter(|method| method.v == 1)
                             .ok_or("Widget settings are unavailable")?;
-                        let boot = status.boot.ok_or("Widget settings are disconnected")?;
+                        let boot = status
+                            .boot
+                            .clone()
+                            .ok_or("Widget settings are disconnected")?;
                         let rev = match changes.get("widgets.base_rev") {
                             Some(bead::core::Value::Number(rev)) => *rev as u64,
                             _ => 0,
@@ -9656,6 +9748,10 @@ impl SceneSource for Runtime {
     }
     fn presented(&mut self, revision: u64) {
         let now = std::time::Instant::now();
+        if let Some(duration) = self.pending_panel_animation_duration.take() {
+            self.panel_animation_hold_until =
+                Some(now + duration + self.smooth_frame_interval);
+        }
         let name = self.smooth_surface();
         if let Some(started) = self.smooth_open_started.take() {
             eprintln!(

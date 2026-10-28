@@ -1,6 +1,20 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Tracked source loading and format-independent generation materialization.
 use super::*;
+#[cfg(test)]
+thread_local! {
+    static MATERIALIZE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(super) fn reset_materialize_calls() {
+    MATERIALIZE_CALLS.set(0);
+}
+
+#[cfg(test)]
+pub(super) fn materialize_calls() -> usize {
+    MATERIALIZE_CALLS.get()
+}
 struct WeakAsset {
     data: std::sync::Weak<[u8]>,
     charge: bead_core::cache::Charge,
@@ -616,6 +630,8 @@ impl Generation {
         palette: &Palette,
         viewport: (f32, f32),
     ) -> Result<(Scene, Vec<Node>), Diagnostic> {
+        #[cfg(test)]
+        MATERIALIZE_CALLS.set(MATERIALIZE_CALLS.get() + 1);
         let (mut scene, nodes) = self.materialize_view(stores, palette, viewport)?;
         for primitive in &mut scene.primitives {
             if let Primitive::Image { path, .. } = primitive

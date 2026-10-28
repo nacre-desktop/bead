@@ -1096,6 +1096,64 @@ fn dashboard_source_wakes_keep_last_good_data_and_drop_with_page() -> Result<()>
 }
 
 #[test]
+fn unchanged_source_and_store_revisions_do_not_reproject_dashboard_over_animation_ticks() -> Result<()>
+{
+    use bead::wayland::{SceneSource, UiEvent};
+    use std::{
+        sync::{atomic::Ordering, mpsc},
+        time::Duration,
+    };
+    let source = Arc::new(FakeSource::new(fixture("today"))?);
+    let mut harness = Harness::load(
+        &root(),
+        Path::new("dashboard/today/main.luau"),
+        &root().join("palette.json"),
+        BTreeMap::new(),
+        Config {
+            width: 1048,
+            height: 714,
+            scale: 1.5,
+        },
+    )?;
+    harness.render()?;
+    let dashboard = Dashboard::new(Page::Today, source, None, true);
+    let (project_calls, chrome_calls) = dashboard.test_projection_counters();
+    let mut runtime = crate::reload::Runtime::new(harness.session).with_dashboard_view(dashboard)?;
+    let (tx, rx) = mpsc::channel();
+    runtime.services(Box::new(move |event| {
+        let _ = tx.send(event);
+    }));
+    if let Some(scene) = runtime.stage(UiEvent::Reload)? {
+        runtime.session.commit(scene);
+    }
+    let _ = rx.recv_timeout(Duration::from_millis(200))?;
+    assert_eq!(runtime.test_reload_events(), 1, "only the explicit first build reloads");
+    if let Some(scene) = runtime.stage(UiEvent::PanelVisibility(true))? {
+        runtime.session.commit(scene);
+    }
+    assert_eq!(project_calls.load(Ordering::Relaxed), 2);
+    assert_eq!(chrome_calls.load(Ordering::Relaxed), 2);
+    let held_until = runtime.wakeup_at().expect("panel slide holds scalar animation wakeup");
+    assert!(held_until > std::time::Instant::now());
+
+    for _ in 0..40 {
+        assert!(runtime.stage(UiEvent::Model(BTreeMap::new()))?.is_none());
+    }
+    assert_eq!(
+        project_calls.load(Ordering::Relaxed),
+        2,
+        "the 40 slide wakeups must not rebuild dashboard projection"
+    );
+    assert_eq!(
+        chrome_calls.load(Ordering::Relaxed),
+        2,
+        "the 40 slide wakeups must not rebuild dashboard chrome"
+    );
+    assert_eq!(runtime.test_reload_events(), 1);
+    Ok(())
+}
+
+#[test]
 fn today_uses_published_calendar_identity_and_keeps_unknown_and_empty_distinct() -> Result<()> {
     let mut data = fixture("calendar");
     let original = data["events"]["order"].as_array().unwrap().clone();

@@ -1023,3 +1023,6 @@ validation remain deferred/held; the 25 MiB ceiling / 24.5 MiB stop are unchange
 # B0178 — 2026-10-28
 
 Started the panel slide frame-cost investigation. The first source change removes heap allocation and sorting from stale-buffer adoption damage copying, with coverage for unsorted overlapping rectangles. Full tick benchmarks, per-tick model-work removal, prepared panel art and warm-open remain outstanding; laptop live acceptance is lead-owned.
+# B0178 — 2026-10-28 continuation
+
+The owner profile identified worker deadlines as the repeated stage source: `wakeup_at` was dispatching empty model events for Luau animation deadlines during Wayland panel motion. The candidate now holds those deadlines until after the authored panel transition. Dashboard input revisions, icon lookup queries, and daemon status are cached/shared; regression tests count unchanged frames. The matched stage+draw benchmark and lead live audit remain outstanding.

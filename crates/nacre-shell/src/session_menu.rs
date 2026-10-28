@@ -125,7 +125,7 @@ impl SessionMenu {
             return None;
         }
         Some((
-            status.boot?,
+            status.boot.clone()?,
             Duration::from_millis(u64::from(method.timeout).clamp(1, 10_000)),
         ))
     }

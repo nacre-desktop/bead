@@ -16,7 +16,10 @@ use std::{
     collections::BTreeMap,
     io::Read,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -535,9 +538,14 @@ pub struct Dashboard {
     controls: Option<controls::Controls>,
     client: Option<crate::nacre_source::Client>,
     notify: std::cell::RefCell<Option<Notify>>,
+    projection_epoch: Arc<AtomicU64>,
     ticker: std::cell::RefCell<Option<Ticker>>,
     now: fn() -> u64,
     preview: bool,
+    #[cfg(test)]
+    project_calls: Arc<std::sync::atomic::AtomicUsize>,
+    #[cfg(test)]
+    chrome_calls: Arc<std::sync::atomic::AtomicUsize>,
 }
 pub type Factory = Arc<dyn Fn(Page) -> Result<Dashboard, String> + Send + Sync>;
 impl Dashboard {
@@ -571,10 +579,24 @@ impl Dashboard {
             controls: None,
             client: None,
             notify: Default::default(),
+            projection_epoch: Arc::new(AtomicU64::new(0)),
             ticker: Default::default(),
             now: now_ms,
             preview,
+            #[cfg(test)]
+            project_calls: Arc::default(),
+            #[cfg(test)]
+            chrome_calls: Arc::default(),
         }
+    }
+    #[cfg(test)]
+    pub(crate) fn test_projection_counters(
+        &self,
+    ) -> (
+        Arc<std::sync::atomic::AtomicUsize>,
+        Arc<std::sync::atomic::AtomicUsize>,
+    ) {
+        (self.project_calls.clone(), self.chrome_calls.clone())
     }
     pub fn with_controls(
         mut self,
@@ -687,10 +709,32 @@ impl Dashboard {
         }
         values
     }
+    pub(crate) fn projection_revision(
+        &self,
+        stores: &bead::core::Stores,
+    ) -> DashboardProjectionRevision {
+        DashboardProjectionRevision {
+            external: self.projection_epoch.load(Ordering::Acquire),
+            open: stores.version("panel.open"),
+            hero_width: stores.version("dashboard.hero.width"),
+            hero_height: stores.version("dashboard.hero.height"),
+        }
+    }
+    pub(crate) fn invalidate_projection(&self) {
+        self.projection_epoch.fetch_add(1, Ordering::AcqRel);
+    }
     pub fn subscribe(
         &self,
         notify: Arc<dyn Fn(bead::wayland::UiEvent) + Send + Sync>,
     ) -> source::Result<Vec<Subscription>> {
+        let notify: Notify = {
+            let notify = notify.clone();
+            let epoch = self.projection_epoch.clone();
+            Arc::new(move |event| {
+                epoch.fetch_add(1, Ordering::AcqRel);
+                notify(event);
+            })
+        };
         *self.notify.borrow_mut() = Some(notify.clone());
         let callback: Callback = {
             let notify = notify.clone();
@@ -728,6 +772,8 @@ impl Dashboard {
         Ok(subscriptions)
     }
     pub fn project(&self) -> BTreeMap<String, Value> {
+        #[cfg(test)]
+        self.project_calls.fetch_add(1, Ordering::Relaxed);
         let mut out = self.project_page();
         self.chrome(&mut out);
         out
@@ -1304,6 +1350,14 @@ impl Dashboard {
         }
         out
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct DashboardProjectionRevision {
+    external: u64,
+    open: Option<u64>,
+    hero_width: Option<u64>,
+    hero_height: Option<u64>,
 }
 /// "Secured" or "Open", then the radio frequency when the daemon reports one.
 fn access_detail(ap: &nacre_protocol::core_services::AccessPoint) -> String {

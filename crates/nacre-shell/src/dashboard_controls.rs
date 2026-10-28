@@ -34,7 +34,7 @@ impl Controls {
             return None;
         }
         let timeout = Duration::from_millis(u64::from(advertised.timeout).clamp(1, 10_000));
-        Some((status.boot?, timeout))
+        Some((status.boot.clone()?, timeout))
     }
     fn busy(&self) -> bool {
         self.state.borrow().pending.is_some()
@@ -119,6 +119,11 @@ impl Dashboard {
     /// One host action `dashboard.do`, argument `op[:id]`. Row ids are re-resolved
     /// against the current topic; callers never construct them.
     pub fn act(&self, arg: &str, wake: CallWake) {
+        let epoch = self.projection_epoch.clone();
+        let wake: CallWake = Arc::new(move || {
+            epoch.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            wake();
+        });
         let (op, id) = arg.split_once(':').unwrap_or((arg, ""));
         let page = self.page;
         // The photo credit opens the published Commons page; it needs no daemon call.
@@ -427,6 +432,9 @@ impl Dashboard {
     }
     /// Stores shared by every page: navigation and call state.
     pub(super) fn chrome(&self, out: &mut BTreeMap<String, Value>) {
+        #[cfg(test)]
+        self.chrome_calls
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let (busy, message, confirm) = self
             .controls
             .as_ref()

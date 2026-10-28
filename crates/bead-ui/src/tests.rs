@@ -126,6 +126,29 @@ fn external_projector_refreshes_without_local_edits_and_keeps_atomic_failure() {
     );
     assert!(session.pending.is_none());
 }
+
+#[test]
+fn forty_unchanged_projection_wakeups_do_not_materialize_or_build_luau() {
+    let fixture = Fixture::new();
+    generation::reset_materialize_calls();
+    frontend::reset_build_calls();
+    let mut session = fixture.session();
+    assert_eq!(generation::materialize_calls(), 1, "first frame materializes once");
+    assert_eq!(frontend::build_calls(), 1, "first frame builds Luau once");
+    let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+    let projected = calls.clone();
+    session.set_projector(Box::new(move |_| {
+        projected.set(projected.get() + 1);
+        Ok(BTreeMap::new())
+    }));
+    for _ in 0..40 {
+        assert!(session.update(BTreeMap::new()).unwrap().is_none());
+    }
+
+    assert_eq!(calls.get(), 40);
+    assert_eq!(generation::materialize_calls(), 1);
+    assert_eq!(frontend::build_calls(), 1);
+}
 #[test]
 fn coalesced_projection_is_bounded_and_rejects_a_failed_final_reply_atomically() {
     for fail in [false, true] {

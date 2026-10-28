@@ -60,6 +60,15 @@ fn fixture(name: &str) -> Vec<Message> {
         .collect()
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn status_reads_share_the_published_maps_instead_of_cloning_them() {
+    let lab = Lab::new();
+    let client = Client::start(Config::new(lab.socket(), Vec::new())).unwrap();
+    let a = client.status();
+    let b = client.status();
+    assert!(Arc::ptr_eq(&a, &b));
+}
+
 /// Exercise the shared link used by every daemon-backed surface, including leases
 /// acquired before the socket exists and while it is down between daemon boots.
 #[tokio::test(flavor = "current_thread")]
@@ -631,7 +640,7 @@ async fn fresh_lease(topic: &LeasedTopic, value: &str) {
 async fn connected_client(client: &Client) -> String {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            if let Some(boot) = client.status().boot
+            if let Some(boot) = client.status().boot.clone()
                 && client.snapshot().connected
             {
                 break boot;
@@ -2030,7 +2039,10 @@ async fn published_rpc_events_and_deadlines_use_the_same_client_link() {
     );
     let link = Source::snapshot(&client);
     assert!(link.connected);
-    assert_eq!(link.data["boot"], serde_json::json!(client.status().boot));
+    assert_eq!(
+        link.data["boot"],
+        serde_json::json!(client.status().boot.clone())
+    );
     // Match the no-explicit-deadline golden semantically; the adapter always sends
     // its remaining caller deadline, which the old transcript permits optionally.
     let error = client

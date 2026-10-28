@@ -57,7 +57,7 @@ struct Shared {
     connection: connection::Connection,
     topics: BTreeMap<String, Publisher>,
     leases: leases::Registry,
-    status: Mutex<Status>,
+    status: Mutex<Arc<Status>>,
     stop: AtomicBool,
     notify: Notify,
     ended: AtomicBool,
@@ -83,7 +83,7 @@ struct OnExit(Arc<Shared>);
 impl Drop for OnExit {
     fn drop(&mut self) {
         if let Ok(mut status) = self.0.status.lock() {
-            *status = Status::default();
+            *status = Arc::new(Status::default());
         }
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.0.link.disconnect()));
         for publisher in self.0.publishers() {
@@ -431,7 +431,7 @@ impl Client {
             connection,
             topics,
             leases: leases::Registry::default(),
-            status: Mutex::new(Status::default()),
+            status: Mutex::new(Arc::new(Status::default())),
             stop: AtomicBool::new(false),
             notify: Notify::new(),
             ended: AtomicBool::new(false),
@@ -494,7 +494,7 @@ impl Client {
             Err(error) => Err(error),
         }
     }
-    pub fn status(&self) -> Status {
+    pub fn status(&self) -> Arc<Status> {
         self.0
             .shared
             .status
@@ -673,7 +673,7 @@ fn disconnect(shared: &Shared) {
     let _ = shared.link.disconnect();
     shared.transport_generation.fetch_add(1, Ordering::AcqRel);
     if let Ok(mut status) = shared.status.lock() {
-        *status = Status::default();
+        *status = Arc::new(Status::default());
     }
     for publisher in shared.publishers() {
         let _ = publisher.disconnect();
@@ -986,11 +986,11 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
         if let Some(ref mut session) = session {
             backoff.reset();
             if let Ok(mut status) = shared.status.lock() {
-                *status = Status {
+                *status = Arc::new(Status {
                     boot: Some(session.boot.clone()),
                     methods: session.methods.clone(),
                     topics: session.advertised.clone(),
-                };
+                });
             }
             for topic in shared.publishers() {
                 if topic.restart(session.boot.clone()).is_err() {
@@ -1169,7 +1169,8 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                                                     methods: methods.clone(), topics: session.advertised.clone(), frame_ms: None,
                                                 }).is_ok() {
                                                 session.methods = methods.clone();
-                                                shared.status.lock().unwrap_or_else(|p| p.into_inner()).methods = methods;
+                                                let mut status = shared.status.lock().unwrap_or_else(|p| p.into_inner());
+                                                Arc::make_mut(&mut *status).methods = methods;
                                                 let _ = shared.link.publish(serde_json::json!({"boot":session.boot,"methods":session.methods}));
                                             }
                                             if let Some(topics) = ok.get("topics").and_then(Value::as_array)
@@ -1179,7 +1180,8 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                                                 // explicitly unsupported version in Welcome.
                                                 session.advertised.entry(name.into()).or_insert(1);
                                             }
-                                            shared.status.lock().unwrap_or_else(|p| p.into_inner()).topics = session.advertised.clone();
+                                            let mut status = shared.status.lock().unwrap_or_else(|p| p.into_inner());
+                                            Arc::make_mut(&mut *status).topics = session.advertised.clone();
                                             if sync_leases(&shared, session, &mut mirrors).await.is_err() { break; }
                                             registry_ok = true;
                                             }
@@ -1325,7 +1327,7 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     }
     println!(
         "{}",
-        serde_json::json!({"connected":snapshot.connected,"boot":status.boot,"method_count":status.methods.len(),"rendered_pixels":rendered,"daemon_boot":result.get("boot"),"available":snapshot.data.get("available"),"output_count":snapshot.data.get("outputs").and_then(Value::as_object).map(|v|v.len()),"workspace_count":snapshot.data.get("workspaces").and_then(Value::as_object).map(|v|v.len())})
+        serde_json::json!({"connected":snapshot.connected,"boot":status.boot.clone(),"method_count":status.methods.len(),"rendered_pixels":rendered,"daemon_boot":result.get("boot"),"available":snapshot.data.get("available"),"output_count":snapshot.data.get("outputs").and_then(Value::as_object).map(|v|v.len()),"workspace_count":snapshot.data.get("workspaces").and_then(Value::as_object).map(|v|v.len())})
     );
     runtime.block_on(topic.stop())?;
     Ok(())

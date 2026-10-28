@@ -382,7 +382,7 @@ impl Extras {
         };
         let mut state = State::default();
         if kind == Kind::Wallpaper
-            && let Some(boot) = client.status().boot.filter(|_| client.snapshot().connected)
+            && let Some(boot) = client.status().boot.clone().filter(|_| client.snapshot().connected)
             && let Some(entries) = crate::wallpaper_catalogue_cache::load()
         {
             state.catalogue_result = entries;
@@ -393,7 +393,7 @@ impl Extras {
             && let (Some(topic), Some(settings), Some(boot)) = (
                 topic.as_ref(),
                 wallpaper_settings.as_ref(),
-                client.status().boot.filter(|_| client.snapshot().connected),
+                client.status().boot.clone().filter(|_| client.snapshot().connected),
             )
         {
             let active = topic.snapshot();
@@ -532,7 +532,7 @@ impl Extras {
                 params,
                 Duration::from_millis(u64::from(advertised.timeout).clamp(1, 30_000)),
                 CallGuard {
-                    boot: status.boot?,
+                    boot: status.boot.clone()?,
                     version: 1,
                 },
                 wake,
@@ -1045,7 +1045,7 @@ impl Extras {
         if self.kind == Kind::Wallpaper
             && let Some(id) = request.strip_prefix("wallpaper:activate:")
         {
-            let boot = self.client.status().boot;
+            let boot = self.client.status().boot.clone();
             let state = self.state.borrow();
             if state.catalogue_boot != boot {
                 return;

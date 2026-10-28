@@ -1,17 +1,17 @@
 # B0178: panel slide frame cost
 
-The laptop profile attributes substantial time to libc copies and allocations, buffer repair, and repainting. Existing animated surfaces already use three reusable SHM buffers and per-buffer damage history. This change removes an allocation and sort from stale-buffer adoption; it does not change which pixels are repaired or rendered.
+The owner profile shows full source work is being scheduled from view animation deadlines even though Wayland already re-poses panel slides from frame callbacks. The candidate defers those view timers through the configured panel transition, then allows one catch-up update. Real source notifications remain immediate.
 
-| Check | Result |
+| Cause | Change / evidence |
 |---|---|
-| SHM pool | Existing three-slot reusable pool retained |
-| Adoption copy setup | Per-call `Vec` allocation and sort removed |
-| Damage behavior | Unsorted and overlapping repair rectangles covered by a unit test |
-| Full slide tick benchmark | Not yet measured |
+| Animation timer stages | `Runtime::wakeup_at` holds scalar view animation deadlines through panel motion; 40-frame scheduler test expects 0 stage wakeups |
+| Dashboard project/chrome | Memoized by external notification epoch and the store revisions it actually reads; unit test counts 1 initial build + 1 open update, then 0 across 40 unchanged wakeups |
+| Luau materialize/build | Session unit test counts 1 initial materialize/build and 0 across 40 unchanged model wakeups |
+| Icon lookup/stat | 512-entry LRU caches full icon queries and `(theme,name,size)` lookups; cache clears when `Reload` observes a changed GTK theme; test counts 1 lookup across 40 calls and checks negative caching/theme change |
+| Daemon status clones | `Client::status` shares immutable `Arc<Status>`; copy-on-write only on status updates; pointer identity test covers repeated reads |
+| Full stage+draw CPU benchmark | Pending |
 | Laptop slide acceptance | Lead-owned live audit pending |
 
 The profiling profile inherits release optimization and keeps debuginfo. Build with `RUSTFLAGS="-C force-frame-pointers=yes" cargo build -p nacre-shell --profile profiling --locked -j2`.
 
-Remaining work before B0178 acceptance: full 2880×1800 scale-1.5 tick benchmarks for control centre, sound, and dashboard; prepared panel/contour rasterization; removal of model work from animation ticks; idle warmup; first-open and close artifact checks. Live laptop results remain the lead's gate.
-
-General renderer primitive: none added. No temporary duplicate implementation introduced.
+Remaining: CPU stage+draw benchmark before/after at 2880×1800 scale 1.5, prepared panel/contour rasterization, and idle warmup. The previous buffer-copy allocation reduction remains in the branch. No temporary duplicate implementation introduced.

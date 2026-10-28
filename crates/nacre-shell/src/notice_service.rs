@@ -25,8 +25,9 @@ use nacre_protocol::{
 };
 use serde_json::{Value as Json, json};
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::{Arc, Condvar, Mutex, MutexGuard, Weak},
+    collections::{BTreeMap, BTreeSet, HashMap},
+    hash::Hash,
+    sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, Weak},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -189,26 +190,264 @@ pub(crate) fn icon_fields(
     desktop_entry: Option<&str>,
     image_path: Option<&str>,
 ) -> Json {
-    let path = choose_icon_path(
-        icon,
-        desktop_entry,
-        image_path,
-        |path| std::path::Path::new(path).is_file(),
-        |name| {
-            freedesktop_icons::lookup(name)
-                .with_size(48)
-                .find()
-                .map(|p| p.to_string_lossy().into_owned())
-        },
-        crate::workspace_rows::desktop_icon_name,
-        "",
-    );
+    let theme = icon_theme();
+    let key = IconQueryKey {
+        theme: theme.clone(),
+        icon: icon.unwrap_or_default().to_owned(),
+        desktop_entry: desktop_entry.unwrap_or_default().to_owned(),
+        image_path: image_path.unwrap_or_default().to_owned(),
+        size: 48,
+    };
+    let cache = ICON_PATHS.get_or_init(|| Mutex::new(IconPathCache::new(theme.clone())));
+    let path = {
+        let mut cache = cache.lock().unwrap_or_else(|poison| poison.into_inner());
+        cache.set_theme(theme.clone());
+        if let Some(path) = cache.query(&key) {
+            path
+        } else {
+            let path = choose_icon_path(
+                icon,
+                desktop_entry,
+                image_path,
+                |path| std::path::Path::new(path).is_file(),
+                |name| cache.theme_icon(&theme, name, key.size),
+                crate::workspace_rows::desktop_icon_name,
+                "",
+            );
+            cache.insert_query(key, path.clone());
+            path
+        }
+    };
     json!({
         "icon": icon.unwrap_or_default(),
         "icon_path": path,
         "desktop_entry": desktop_entry.unwrap_or_default(),
         "image_path": image_path.unwrap_or_default(),
     })
+}
+
+const ICON_CACHE_LIMIT: usize = 512;
+static ICON_PATHS: OnceLock<Mutex<IconPathCache>> = OnceLock::new();
+static ICON_THEME: OnceLock<Mutex<String>> = OnceLock::new();
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct IconKey {
+    theme: String,
+    name: String,
+    size: u16,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct IconQueryKey {
+    theme: String,
+    icon: String,
+    desktop_entry: String,
+    image_path: String,
+    size: u16,
+}
+
+struct Lru<K: Eq + Hash + Clone, V: Clone> {
+    values: HashMap<K, (V, u64)>,
+    clock: u64,
+}
+impl<K: Eq + Hash + Clone, V: Clone> Default for Lru<K, V> {
+    fn default() -> Self {
+        Self {
+            values: HashMap::new(),
+            clock: 0,
+        }
+    }
+}
+impl<K: Eq + Hash + Clone, V: Clone> Lru<K, V> {
+    fn get(&mut self, key: &K) -> Option<V> {
+        self.clock = self.clock.wrapping_add(1);
+        let (value, used) = self.values.get_mut(key)?;
+        *used = self.clock;
+        Some(value.clone())
+    }
+    fn insert(&mut self, key: K, value: V) {
+        self.clock = self.clock.wrapping_add(1);
+        if !self.values.contains_key(&key) && self.values.len() >= ICON_CACHE_LIMIT {
+            if let Some(oldest) = self
+                .values
+                .iter()
+                .min_by_key(|(_, (_, used))| *used)
+                .map(|(key, _)| key.clone())
+            {
+                self.values.remove(&oldest);
+            }
+        }
+        self.values.insert(key, (value, self.clock));
+    }
+    fn clear(&mut self) {
+        self.values.clear();
+    }
+}
+
+struct IconPathCache {
+    theme: String,
+    lookups: Lru<IconKey, Option<String>>,
+    queries: Lru<IconQueryKey, String>,
+}
+impl IconPathCache {
+    fn new(theme: String) -> Self {
+        Self {
+            theme,
+            lookups: Lru::default(),
+            queries: Lru::default(),
+        }
+    }
+    fn set_theme(&mut self, theme: String) {
+        if self.theme != theme {
+            self.theme = theme;
+            self.lookups.clear();
+            self.queries.clear();
+        }
+    }
+    fn theme_icon(&mut self, theme: &str, name: &str, size: u16) -> Option<String> {
+        let key = IconKey {
+            theme: theme.to_owned(),
+            name: name.to_owned(),
+            size,
+        };
+        self.lookup_or_insert(key, || {
+            if theme.is_empty() {
+                freedesktop_icons::lookup(name).with_size(size).find()
+            } else {
+                freedesktop_icons::lookup(name)
+                    .with_theme(theme)
+                    .with_size(size)
+                    .find()
+            }
+            .map(|path| path.to_string_lossy().into_owned())
+        })
+    }
+    fn lookup_or_insert(
+        &mut self,
+        key: IconKey,
+        resolve: impl FnOnce() -> Option<String>,
+    ) -> Option<String> {
+        if let Some(path) = self.lookups.get(&key) {
+            return path;
+        }
+        let path = resolve();
+        self.lookups.insert(key, path.clone());
+        path
+    }
+    fn query(&mut self, key: &IconQueryKey) -> Option<String> {
+        self.queries.get(key)
+    }
+    fn insert_query(&mut self, key: IconQueryKey, path: String) {
+        self.queries.insert(key, path);
+    }
+}
+
+fn icon_theme() -> String {
+    ICON_THEME
+        .get_or_init(|| {
+            Mutex::new(freedesktop_icons::default_theme_gtk().unwrap_or_default())
+        })
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+        .clone()
+}
+
+/// Re-read the effective icon theme only on a shell reload; a changed theme
+/// invalidates both positive and negative icon lookup results.
+pub(crate) fn refresh_icon_theme() {
+    let next = freedesktop_icons::default_theme_gtk().unwrap_or_default();
+    let current = ICON_THEME.get_or_init(|| Mutex::new(next.clone()));
+    let mut current = current.lock().unwrap_or_else(|poison| poison.into_inner());
+    if *current != next {
+        *current = next.clone();
+        if let Some(cache) = ICON_PATHS.get() {
+            cache
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner())
+                .set_theme(next);
+        }
+    }
+}
+
+#[cfg(test)]
+mod icon_cache_tests {
+    use super::*;
+    use std::cell::Cell;
+
+    #[test]
+    fn lookup_cache_hits_for_each_theme_name_size_and_invalidates_on_theme_change() {
+        let mut cache = IconPathCache::new("one".into());
+        let calls = Cell::new(0);
+        for _ in 0..40 {
+            assert_eq!(
+                cache.lookup_or_insert(
+                    IconKey {
+                        theme: "one".into(),
+                        name: "same-icon".into(),
+                        size: 48,
+                    },
+                    || {
+                        calls.set(calls.get() + 1);
+                        Some("/icons/same-icon.svg".into())
+                    },
+                ),
+                Some("/icons/same-icon.svg".into())
+            );
+        }
+        assert_eq!(calls.get(), 1);
+        cache.set_theme("two".into());
+        cache.lookup_or_insert(
+            IconKey {
+                theme: "two".into(),
+                name: "same-icon".into(),
+                size: 48,
+            },
+            || {
+                calls.set(calls.get() + 1);
+                None
+            },
+        );
+        assert_eq!(calls.get(), 2, "negative results are cached per theme too");
+        cache.lookup_or_insert(
+            IconKey {
+                theme: "two".into(),
+                name: "same-icon".into(),
+                size: 48,
+            },
+            || {
+                calls.set(calls.get() + 1);
+                Some("unexpected".into())
+            },
+        );
+        assert_eq!(calls.get(), 2);
+    }
+
+    #[test]
+    fn icon_path_queries_are_bounded_lru_entries() {
+        let mut cache = IconPathCache::new("theme".into());
+        for i in 0..ICON_CACHE_LIMIT + 1 {
+            cache.insert_query(
+                IconQueryKey {
+                    theme: "theme".into(),
+                    icon: format!("icon-{i}"),
+                    desktop_entry: String::new(),
+                    image_path: String::new(),
+                    size: 48,
+                },
+                String::new(),
+            );
+        }
+        assert_eq!(cache.queries.values.len(), ICON_CACHE_LIMIT);
+        assert!(cache
+            .query(&IconQueryKey {
+                theme: "theme".into(),
+                icon: "icon-0".into(),
+                desktop_entry: String::new(),
+                image_path: String::new(),
+                size: 48,
+            })
+            .is_none());
+    }
 }
 fn row(id: &str, n: &Notification, expanded: bool, history: bool, now: u64) -> Json {
     let rev = n.revision.unwrap_or(0);

@@ -13,6 +13,20 @@ use std::{
     sync::{Arc, Mutex, Weak},
     time::{Duration, Instant},
 };
+#[cfg(test)]
+thread_local! {
+    static BUILD_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(super) fn reset_build_calls() {
+    BUILD_CALLS.set(0);
+}
+
+#[cfg(test)]
+pub(super) fn build_calls() -> usize {
+    BUILD_CALLS.get()
+}
 pub type Sources = BTreeMap<PathBuf, Vec<u8>>;
 pub type Resolve<'a> = dyn Fn(&str) -> Result<Value, Diagnostic> + 'a;
 
@@ -523,6 +537,8 @@ impl FrontEnd for LuauFrontEnd {
         entry: &Path,
         resolve: &Resolve<'_>,
     ) -> Result<std::rc::Rc<RawNode>, Diagnostic> {
+        #[cfg(test)]
+        BUILD_CALLS.set(BUILD_CALLS.get() + 1);
         if self.animation_deadline().is_none()
             && let Some(cached) = &*self.materialized.borrow()
             && cached
