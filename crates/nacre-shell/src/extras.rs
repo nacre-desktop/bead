@@ -553,6 +553,7 @@ impl Extras {
             .client
             .status()
             .boot
+            .clone()
             .filter(|_| self.client.snapshot().connected);
         let mut rows = Vec::new();
         let mut windows = Vec::new();
