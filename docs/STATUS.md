@@ -1,6 +1,6 @@
 # 2026-10-28 — B0177 prepared panel reveals (implementation candidate; runtime acceptance blocked)
 
-Dense CPU reveal content now composites from reusable prepared layers, with open-pose geometry and persistent clips kept separate from each animated window. The first-frame reveal path remains covered by tests, including generated and imported frames at a nonzero offset. Full Bead CI passed on code commit `ef2d873d`. Performance, warm-open memory and close-frame captures remain unmeasured: the private test host has 3.3 GiB swap used and 2.3 GiB MemAvailable, below the authorized reset condition. See [B0177](specs/0177-prepared-reveal.md).
+Dense CPU reveal content now composites from reusable prepared layers, with open-pose geometry and persistent clips kept separate from each animated window. The first-frame reveal path remains covered by tests, including generated and imported frames at a nonzero offset. Full Bead CI passed on code commit `ef2d873d`. Performance, warm-open memory, QML/Bead motion parity and close-frame captures remain unmeasured: the private test host has 3.3 GiB swap used and 2.2 GiB MemAvailable, below the authorized reset condition. See [B0177](specs/0177-prepared-reveal.md).
 
 ## 2026-10-27 — B0161 widget reference replacement (review fixes and captures complete; acceptance gates open)
 
