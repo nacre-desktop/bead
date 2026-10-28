@@ -12,7 +12,7 @@ acceptance remains open. The dated transfer and execution receipts below remain 
 
 2026-10-28: [B0171 wallpaper picker live](0171-wallpaper-picker-live.md) — lost selections (daemon flock, N0089), display-size prefetch + single-flight decode; cold first open still 2.6 s (open).
 2026-10-28: [B0172 Widgets app usability](0172-widgets-app-usability.md) — standalone app entry, consistent widget list, explicit placement controls, per-instance palette role and drag editing.
-2026-10-28: [B0177 Prepared panel reveals](0177-prepared-reveal.md) — reuse prepared content during slides; control-centre warm opens and close-frame investigation in progress.
+2026-10-28: [B0177 Prepared panel reveals](0177-prepared-reveal.md) — implementation candidate with full CI passing; nested frame-rate, warm-open and ghost-bar acceptance blocked by the private-capture swap gate.
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |

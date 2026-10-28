@@ -1,6 +1,6 @@
 # B0177 Prepared panel reveals (2026-10-28)
 
-Status: in progress. B0175 prevents the open pose from appearing before a reveal starts, but dense CPU reveals prepare content again on each slide frame. The prepared-layer change will keep that first-frame guarantee while reusing rendered content. Control-centre warm-open and close-frame captures are pending on the private desktop TEST host. No live laptop test is included in this unit.
+Status: implementation candidate; runtime acceptance is blocked by the private-capture swap gate. B0175 prevents the open pose from appearing before a reveal starts, but dense CPU reveals prepare content again on each slide frame. Prepared layers now retain that first-frame guarantee while reusing rendered content. Full Bead CI passed on code commit `ef2d873d`; control-centre warm-open and close-frame captures remain pending. No live laptop test is included in this unit.
 
 | Measure | B0175/live reference | Target | Candidate |
 | --- | ---: | ---: | ---: |
@@ -11,7 +11,7 @@ Status: in progress. B0175 prevents the open pose from appearing before a reveal
 | First vs later open frames and max gap | pending | within 10% | pending |
 | Reveal flash, dashboard / launcher / control-centre / session | B0175 0/3 dashboard and launcher | 0/3 each | pending |
 
-The reference markers were recorded at 2880×1800, 120 Hz, scale 1.5, CPU renderer. Capture evidence and per-frame CPU will be stored with this spec after the desktop host meets the private-capture swap gate. The close-frame sequences will identify the lingering surface or pixels before the source fix is chosen.
+The reference markers were recorded at 2880×1800, 120 Hz, scale 1.5, CPU renderer. At the last host check, swap use was 3.3 GiB and MemAvailable was 2.3 GiB; the reset rule requires more than swap use plus 8 GiB, so no capture ran. Capture evidence and per-frame CPU will be stored here after that gate passes. Close-frame sequences will identify the lingering surface or pixels before a source fix is chosen.
 
 | Additional resource | Budget / treatment |
 | --- | --- |
