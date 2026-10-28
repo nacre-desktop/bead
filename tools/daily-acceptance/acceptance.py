@@ -41,6 +41,13 @@ def run(argv, *, env, timeout=15, check=True, text=True):
                          check=check, text=text)
 
 
+def process_cpu_ticks(pid: int) -> int:
+    """Return a process's user+system CPU ticks from /proc, excluding comm spaces."""
+    stat = pathlib.Path(f"/proc/{pid}/stat").read_text()
+    fields = stat[stat.rfind(")") + 2:].split()
+    return int(fields[11]) + int(fields[12])
+
+
 def output_pixels(env: dict[str, str], raw: pathlib.Path) -> None:
     """Set Labwc's private headless output to the pointer's declared pixel space."""
     listing = run(["wlr-randr", "--json"], env=env).stdout
@@ -180,6 +187,8 @@ class Runner:
         self.layer_results = []
         self.owned = []
         self.root = None
+        cache_snapshot = os.environ.get("BEAD_DAILY_CACHE_SNAPSHOT")
+        self.cache_snapshot = pathlib.Path(cache_snapshot).expanduser() if cache_snapshot else None
         self.env = None
         self.key_env = None
         self.pointer = None
@@ -258,6 +267,8 @@ class Runner:
         rt.mkdir(mode=0o700)
         for name in ("config", "cache", "data", "state", "home", "tools"):
             (self.root / name).mkdir(mode=0o700)
+        if self.cache_snapshot and self.cache_snapshot.is_dir():
+            shutil.copytree(self.cache_snapshot, self.root / "cache", dirs_exist_ok=True)
         base_env = {key: value for key, value in os.environ.items()
                     if not key.startswith(("BEAD_", "NACRE_"))
                     and (not key.startswith("DBUS_") or key == "DBUS_SESSION_BUS_ADDRESS")
@@ -1028,7 +1039,35 @@ class Runner:
                            "phases": len(phases)})
             self._key("-k", "Escape")
             self._wait_closed()
-            time.sleep(1)
+            cpu_start = time.monotonic()
+            try:
+                cpu_initial = process_cpu_ticks(self.shell.pid)
+                samples = [(0.0, cpu_initial)]
+                for sample in range(1, 9):
+                    time.sleep(.25)
+                    samples.append((time.monotonic() - cpu_start,
+                                    process_cpu_ticks(self.shell.pid)))
+                zero_windows = []
+                for index in range(4, len(samples)):
+                    elapsed = samples[index][0] - samples[index - 4][0]
+                    ticks = samples[index][1] - samples[index - 4][1]
+                    percent = ticks / os.sysconf("SC_CLK_TCK") / elapsed * 100
+                    zero_windows.append({"end_s": round(samples[index][0], 3),
+                                         "window_s": round(elapsed, 3),
+                                         "cpu_percent": round(percent, 3)})
+                zero_by_two = any(row["window_s"] >= .9 and row["cpu_percent"] == 0
+                                  and row["end_s"] <= 2.05 for row in zero_windows)
+            except (OSError, IndexError, ValueError) as exc:
+                zero_windows = []
+                zero_by_two = False
+                cpu_error = f"{type(exc).__name__}: {exc}"
+            else:
+                cpu_error = ""
+            self.results.append({"check": f"shell CPU returns to 0% within 2s after wallpaper close (cycle {cycle})",
+                                 "result": "PASS" if zero_by_two else "FAIL",
+                                 "pid": self.shell.pid,
+                                 "windows": zero_windows,
+                                 "error": cpu_error})
         self.results.append({"check": "wallpaper live set", "result": "PASS", "rounds": json.dumps(rounds)})
 
     def widget_drag(self):
@@ -1246,6 +1285,12 @@ class Runner:
             if stream:
                 stream.close()
         if self.root:
+            if self.cache_snapshot and (self.root / "cache").is_dir():
+                self.cache_snapshot.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                if self.cache_snapshot.exists():
+                    shutil.rmtree(self.cache_snapshot)
+                shutil.copytree(self.root / "cache", self.cache_snapshot)
+                os.chmod(self.cache_snapshot, 0o700)
             shutil.rmtree(self.root, ignore_errors=True)
 
 

@@ -1,6 +1,6 @@
 # B0173 — Wallpaper picker cold open
 
-Status: implementation candidate; cold-open acceptance and full CI are pending the shared heavy slot.
+Status: implementation candidate; desktop acceptance and full CI are running after the shared heavy slot was released.
 
 ## Problem and baseline
 
@@ -11,10 +11,11 @@ The B0171 selection numbers remain the only measured switch baseline: with prefe
 ## Implementation
 
 - Wallpaper content no longer gates the panel commit. The loading state is renderable immediately, so the panel can slide while catalogue and image work runs.
-- The shell keeps a bounded, versioned JSON metadata snapshot at `$XDG_CACHE_HOME/bead/wallpaper-catalogue-v1.json` (or the standard cache fallback). Writes use a same-directory temporary file and atomic rename; reads reject oversized, malformed, wrong-version, or invalid-entry files. A stale snapshot is a fast first-frame fallback while the daemon refreshes it.
+- The shell keeps a bounded, versioned JSON metadata snapshot at `$XDG_CACHE_HOME/bead/wallpaper-catalogue-v1.json` (or the standard cache fallback). Writes use a same-directory temporary file and atomic rename; reads reject oversized, malformed, wrong-version, or invalid-entry files. A stale snapshot is a fast first-frame fallback while the daemon refreshes it. Cached Nacre wallpaper-media paths are rebased to the current cache root so private fresh-HOME runs can reuse their copied thumbnail files.
 - Thumbnail files remain generated and persisted by Nacre's existing wallpaper-media service; the snapshot reuses those paths across picker opens and shell restarts. The first scene includes a centered loading message when neither metadata nor thumbnails are ready, then replaces it with rows and fills visible thumbnails through bounded ID hydration.
 - A full refresh merges previously known thumbnail, preview, and palette paths for matching IDs so a metadata-only reply cannot blank thumbnails already on disk. Successful full and visible-ID replies refresh the snapshot.
 - `wallpaper_warm` consumes the shell's saved snapshot instead of issuing a second full-catalogue query. With no snapshot it waits for the UI adapter's refresh to populate one. Visible IDs continue to hydrate from the current scene; other entries are deferred.
+- The daily-acceptance runner can seed and preserve only a task-private XDG cache snapshot across arms while creating a fresh shell, daemon, and HOME each time. Its wallpaper-live arm records shell `/proc` CPU ticks for two seconds after close.
 - The B0171 display-raster prefetch remains one-decode-at-a-time at nice 10, is cancelled on close, and waits 100 ms after scheduling to allow the populated picker frame to be committed first. Persistent display rasters remain under the existing 512 MiB cache cap.
 
 Generic addition: a bounded persistent wallpaper-catalogue metadata snapshot; no engine primitive or Nacre-specific engine dependency was added.

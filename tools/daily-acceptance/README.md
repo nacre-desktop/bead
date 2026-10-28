@@ -69,3 +69,10 @@ pixels, an unknown identity, or duplicate extras fail.
 bar title opens the dashboard, clicking a second bar icon while a dropdown is open opens its
 dropdown at once, and a pointer sweep along the status pill (`pill_sweep` = `[x0, x1, y, step]` in
 the profile) shows a hover background at every step, so the pill's hit areas have no gaps.
+
+For cache-state comparisons, set `BEAD_DAILY_CACHE_SNAPSHOT` to a private
+task-owned directory. The runner seeds its fresh per-arm XDG cache from that
+directory and saves the arm's resulting cache before deleting the private HOME.
+The shell and daemon remain fresh on every run; omit or clear the snapshot for a
+fully cold-cache arm. `--wallpaper-live` also samples the shell process's
+`/proc/<pid>/stat` CPU ticks for two seconds after each picker close.
