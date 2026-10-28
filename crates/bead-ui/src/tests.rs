@@ -130,9 +130,18 @@ fn external_projector_refreshes_without_local_edits_and_keeps_atomic_failure() {
 #[test]
 fn forty_unchanged_projection_wakeups_do_not_materialize_or_build_luau() {
     let fixture = Fixture::new();
+    let mut session = fixture.session();
+    fs::create_dir_all(fixture.0.join("ui")).unwrap();
+    fs::write(
+        fixture.0.join("ui/main.luau"),
+        "local ui=require('bead.ui')\nreturn ui.Box{id='panel',width=100,height=40,ui.Text{id='label',text='fixed'}}",
+    )
+    .unwrap();
+    session.entry = "ui/main.luau".into();
     generation::reset_materialize_calls();
     frontend::reset_build_calls();
-    let mut session = fixture.session();
+    let first = session.reload().unwrap();
+    session.commit(first);
     assert_eq!(
         generation::materialize_calls(),
         1,
