@@ -13,11 +13,11 @@ acceptance remains open. The dated transfer and execution receipts below remain 
 2026-10-28: [B0171 wallpaper picker live](0171-wallpaper-picker-live.md) — lost selections (daemon flock, N0089), display-size prefetch + single-flight decode; cold first open still 2.6 s (open).
 2026-10-28: [B0172 Widgets app usability](0172-widgets-app-usability.md) — standalone app entry, consistent widget list, explicit placement controls, per-instance palette role and drag editing.
 2026-10-28: [B0173 wallpaper picker cold open](0173-picker-cold-open.md) — immediate loading/cached panel and progressive thumbnails; paired QML/Bead parity passes, warm first frame passes, selection p95/idle fail, cold first frame unmeasured at swap preflight, full Bead CI pending.
-2026-10-28: [B0179 shell idle cost](0179-shell-idle-cost.md) — unchanged-source restaging and static wallpaper wakeups addressed; private idle capture and full CI pending.
+2026-10-29: [B0179 shell idle cost](0179-shell-idle-cost.md) — unchanged-source restaging and static wallpaper subscriptions addressed; CPU and redraw gates pass, direct wakeup gate remains unverified.
 
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
-| 0 | [B0179 Shell idle cost](0179-shell-idle-cost.md) | Implementation candidate — no restages for same-data snapshots; static wallpaper unsubscribes irrelevant environment events; minute callback gate tested | Private nested 60 s idle capture, full Bead CI, and golden verification. |
+| 0 | [B0179 Shell idle cost](0179-shell-idle-cost.md) | CPU/redraw candidate — 0.033% core over 60 s, one minute update, zero same-data restages; direct wakeup gate unresolved | Verify scheduler wakeups below 3/s; `perf` was unavailable on TEST host. |
 | 0 | [B0170 Live panel slides](0170-live-panel-slides.md) | Clock rule fixed; live GL path unverified | Slides start at the first committed frame (`Animations::open_to`/`committed`), toast now slides; nested 2880x1800@120 Hz scale 1.5: every listed panel 20-42 frames per open/close. Verify live via `PANEL_SLIDE` journal lines, also after the CPU-to-GL panel promotion. |
 | 0 | B0169 status-pill hit areas | Restore the original icon spacing while tiling clickable areas across the pill | Full CI and unchanged non-hover goldens required |
 | 0 | [B0162 Daily-use acceptance](0162-daily-acceptance.md) | Dropdown regressions fixed; broad fixture gaps remain | Common presentation-feedback boundary: matched seven-widget focused matrix 900369fb p50/p99 64.20/64.75 ms vs fixed main 52.02/60.93 ms; 21/21 close pixels pass each. First bad `ec6cd311`; baseline Bluetooth service absent in TEST. Full sequential launcher/dashboard/control/wallpaper and AI-hover routes remain unverified. |
