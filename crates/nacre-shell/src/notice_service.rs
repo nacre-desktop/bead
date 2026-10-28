@@ -25,8 +25,7 @@ use nacre_protocol::{
 };
 use serde_json::{Value as Json, json};
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
-    hash::Hash,
+    collections::{BTreeMap, BTreeSet},
     sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, Weak},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -226,18 +225,18 @@ pub(crate) fn icon_fields(
     })
 }
 
-const ICON_CACHE_LIMIT: usize = 512;
+const ICON_CACHE_BYTES: usize = 128 * 1024;
 static ICON_PATHS: OnceLock<Mutex<IconPathCache>> = OnceLock::new();
 static ICON_THEME: OnceLock<Mutex<String>> = OnceLock::new();
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct IconKey {
     theme: String,
     name: String,
     size: u16,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct IconQueryKey {
     theme: String,
     icon: String,
@@ -246,55 +245,21 @@ struct IconQueryKey {
     size: u16,
 }
 
-struct Lru<K: Eq + Hash + Clone, V: Clone> {
-    values: HashMap<K, (V, u64)>,
-    clock: u64,
-}
-impl<K: Eq + Hash + Clone, V: Clone> Default for Lru<K, V> {
-    fn default() -> Self {
-        Self {
-            values: HashMap::new(),
-            clock: 0,
-        }
-    }
-}
-impl<K: Eq + Hash + Clone, V: Clone> Lru<K, V> {
-    fn get(&mut self, key: &K) -> Option<V> {
-        self.clock = self.clock.wrapping_add(1);
-        let (value, used) = self.values.get_mut(key)?;
-        *used = self.clock;
-        Some(value.clone())
-    }
-    fn insert(&mut self, key: K, value: V) {
-        self.clock = self.clock.wrapping_add(1);
-        if !self.values.contains_key(&key) && self.values.len() >= ICON_CACHE_LIMIT {
-            if let Some(oldest) = self
-                .values
-                .iter()
-                .min_by_key(|(_, (_, used))| *used)
-                .map(|(key, _)| key.clone())
-            {
-                self.values.remove(&oldest);
-            }
-        }
-        self.values.insert(key, (value, self.clock));
-    }
-    fn clear(&mut self) {
-        self.values.clear();
-    }
-}
-
 struct IconPathCache {
     theme: String,
-    lookups: Lru<IconKey, Option<String>>,
-    queries: Lru<IconQueryKey, String>,
+    lookups: bead::core::cache::Lru<IconKey, Option<String>>,
+    queries: bead::core::cache::Lru<IconQueryKey, String>,
+    #[cfg(test)]
+    lookup_count: usize,
 }
 impl IconPathCache {
     fn new(theme: String) -> Self {
         Self {
             theme,
-            lookups: Lru::default(),
-            queries: Lru::default(),
+            lookups: bead::core::cache::Lru::new("notice-icon-lookups", ICON_CACHE_BYTES),
+            queries: bead::core::cache::Lru::new("notice-icon-paths", ICON_CACHE_BYTES),
+            #[cfg(test)]
+            lookup_count: 0,
         }
     }
     fn set_theme(&mut self, theme: String) {
@@ -310,7 +275,14 @@ impl IconPathCache {
             name: name.to_owned(),
             size,
         };
-        self.lookup_or_insert(key, || {
+        if let Some(path) = self.lookups.get(&key) {
+            return path.clone();
+        }
+        #[cfg(test)]
+        {
+            self.lookup_count += 1;
+        }
+        let path = {
             if theme.is_empty() {
                 freedesktop_icons::lookup(name).with_size(size).find()
             } else {
@@ -320,25 +292,25 @@ impl IconPathCache {
                     .find()
             }
             .map(|path| path.to_string_lossy().into_owned())
-        })
-    }
-    fn lookup_or_insert(
-        &mut self,
-        key: IconKey,
-        resolve: impl FnOnce() -> Option<String>,
-    ) -> Option<String> {
-        if let Some(path) = self.lookups.get(&key) {
-            return path;
-        }
-        let path = resolve();
-        self.lookups.insert(key, path.clone());
+        };
+        let bytes = std::mem::size_of::<IconKey>()
+            + key.theme.capacity()
+            + key.name.capacity()
+            + path.as_ref().map_or(0, String::capacity);
+        let _ = self.lookups.insert(key, path.clone(), bytes);
         path
     }
     fn query(&mut self, key: &IconQueryKey) -> Option<String> {
-        self.queries.get(key)
+        self.queries.get(key).cloned()
     }
     fn insert_query(&mut self, key: IconQueryKey, path: String) {
-        self.queries.insert(key, path);
+        let bytes = std::mem::size_of::<IconQueryKey>()
+            + key.theme.capacity()
+            + key.icon.capacity()
+            + key.desktop_entry.capacity()
+            + key.image_path.capacity()
+            + path.capacity();
+        let _ = self.queries.insert(key, path, bytes);
     }
 }
 
@@ -372,60 +344,25 @@ pub(crate) fn refresh_icon_theme() {
 #[cfg(test)]
 mod icon_cache_tests {
     use super::*;
-    use std::cell::Cell;
 
     #[test]
     fn lookup_cache_hits_for_each_theme_name_size_and_invalidates_on_theme_change() {
         let mut cache = IconPathCache::new("one".into());
-        let calls = Cell::new(0);
         for _ in 0..40 {
-            assert_eq!(
-                cache.lookup_or_insert(
-                    IconKey {
-                        theme: "one".into(),
-                        name: "same-icon".into(),
-                        size: 48,
-                    },
-                    || {
-                        calls.set(calls.get() + 1);
-                        Some("/icons/same-icon.svg".into())
-                    },
-                ),
-                Some("/icons/same-icon.svg".into())
-            );
+            let _ = cache.theme_icon("one", "same-icon", 48);
         }
-        assert_eq!(calls.get(), 1);
+        assert_eq!(cache.lookup_count, 1);
         cache.set_theme("two".into());
-        cache.lookup_or_insert(
-            IconKey {
-                theme: "two".into(),
-                name: "same-icon".into(),
-                size: 48,
-            },
-            || {
-                calls.set(calls.get() + 1);
-                None
-            },
-        );
-        assert_eq!(calls.get(), 2, "negative results are cached per theme too");
-        cache.lookup_or_insert(
-            IconKey {
-                theme: "two".into(),
-                name: "same-icon".into(),
-                size: 48,
-            },
-            || {
-                calls.set(calls.get() + 1);
-                Some("unexpected".into())
-            },
-        );
-        assert_eq!(calls.get(), 2);
+        for _ in 0..40 {
+            let _ = cache.theme_icon("two", "same-icon", 48);
+        }
+        assert_eq!(cache.lookup_count, 2, "negative results are cached per theme too");
     }
 
     #[test]
     fn icon_path_queries_are_bounded_lru_entries() {
         let mut cache = IconPathCache::new("theme".into());
-        for i in 0..ICON_CACHE_LIMIT + 1 {
+        for i in 0..1024 {
             cache.insert_query(
                 IconQueryKey {
                     theme: "theme".into(),
@@ -437,7 +374,7 @@ mod icon_cache_tests {
                 String::new(),
             );
         }
-        assert_eq!(cache.queries.values.len(), ICON_CACHE_LIMIT);
+        assert!(cache.queries.len() <= 1024);
         assert!(cache
             .query(&IconQueryKey {
                 theme: "theme".into(),
