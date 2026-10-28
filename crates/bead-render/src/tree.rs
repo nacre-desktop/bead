@@ -3198,8 +3198,11 @@ pub struct TreeCpuRenderer {
     /// During a reveal, the open-pose non-contour content is a retained picture;
     /// `cache.frame` contains only the changing contour/body primitives.
     reveal_content: bool,
+    slide_content: bool,
     pub reveal_content_preparations: usize,
     pub reveal_content_composites: usize,
+    pub slide_content_preparations: usize,
+    pub slide_content_composites: usize,
     pub reveal_content_bytes: usize,
 }
 enum FlattenedPixels {
@@ -3221,6 +3224,69 @@ impl FlattenedPixels {
     }
 }
 impl TreeCpuRenderer {
+    fn prepare_slide_content(&mut self, scene: &Scene, scale: f32) -> Result<()> {
+        let content = cpu_content_scene(scene);
+        if self
+            .worker_fingerprint
+            .as_ref()
+            .is_some_and(|fingerprint| fingerprint.matches_content(&content, scale).unwrap_or(false))
+        {
+            self.cache.prepare(scene, scale)?;
+            self.slide_content = true;
+            self.reveal_content = false;
+            self.opaque_composition = OpaqueComposition::Cached;
+            return Ok(());
+        }
+        if self.cpu_preparation.as_ref().is_none_or(|request| {
+            !request
+                .fingerprint
+                .matches_content(&content, scale)
+                .unwrap_or(false)
+        }) {
+            self.cpu_preparation = Some(Arc::new(CpuPreparation {
+                scene: content.clone(),
+                scale,
+                fingerprint: SnapshotFingerprint::new(&content, scale)?,
+                sparse_snapshot: true,
+                queued: Default::default(),
+                result: Default::default(),
+            }));
+        }
+        let request = self.cpu_preparation.as_ref().unwrap().clone();
+        let prepared = {
+            let mut result = request
+                .result
+                .lock()
+                .map_err(|_| "CPU preparation poisoned")?;
+            match result.as_ref() {
+                Some(Err(error)) => return Err(Box::new(ResourcePreparationFailed(error.clone()))),
+                Some(Ok(_)) => result.take(),
+                None => None,
+            }
+        };
+        if let Some(Ok(mut prepared)) = prepared {
+            prepared.release_cache = true;
+            let mut renderer = prepared.accept()?;
+            renderer.snapshot_fingerprint = None;
+            renderer.worker_fingerprint = Some(SnapshotFingerprint::new(&content, scale)?);
+            renderer.cpu_preparation = None;
+            renderer.cache = TreeCache::default();
+            renderer.cache.prepare(scene, scale)?;
+            renderer.slide_content = true;
+            renderer.reveal_content = false;
+            renderer.slide_content_preparations =
+                self.slide_content_preparations.saturating_add(1);
+            renderer.reveal_content_bytes = renderer
+                .flattened
+                .as_ref()
+                .map_or(0, |(_, _, pixels)| pixels.bytes());
+            renderer.opaque_composition = OpaqueComposition::Cached;
+            *self = renderer;
+            return Ok(());
+        }
+        Err(Box::new(CpuResourcesPending { request }))
+    }
+
     fn prepare_reveal_content(&mut self, scene: &Scene, scale: f32, prefix: usize) -> Result<()> {
         let content = reveal_content_scene(scene, prefix);
         if self.worker_fingerprint.as_ref().is_some_and(|fingerprint| {
@@ -3437,6 +3503,14 @@ impl Renderer for TreeCpuRenderer {
         Ok(false)
     }
     fn prepare_on_ui(&mut self, scene: &Scene, scale: f32) -> Result<()> {
+        if scene
+            .motion
+            .as_ref()
+            .is_some_and(|motion| !motion.reveal)
+        {
+            return self.prepare_slide_content(scene, scale);
+        }
+        self.slide_content = false;
         if let Some(prefix) = reveal_parts_prefix(scene) {
             let native_images = scene
                 .prepared
@@ -3589,6 +3663,46 @@ impl Renderer for TreeCpuRenderer {
                 .is_none_or(|y| y > target.height)
         {
             return Err("damage outside SHM".into());
+        }
+        if self.slide_content {
+            let ShmTarget {
+                bytes,
+                width,
+                height,
+                scale,
+                format,
+            } = target;
+            let Some((_, content_scale, pixels)) = self.flattened.as_ref() else {
+                return Err("slide content picture missing".into());
+            };
+            if content_scale.to_bits() != scale.to_bits() {
+                return Err("slide content scale changed without preparation".into());
+            }
+            let origin = (
+                ((scene.offset.0 + scene.bounds.x) * scale).round() as i32,
+                ((scene.offset.1 + scene.bounds.y) * scale).round() as i32,
+            );
+            match pixels {
+                FlattenedPixels::Dense(pixels) => blit_with_opacity(
+                    bytes,
+                    (width, height),
+                    damage,
+                    pixels.as_ref(),
+                    origin,
+                    scene.opacity.clamp(0., 1.),
+                    format == PixelFormat::Bgra,
+                ),
+                FlattenedPixels::Sparse(pixels) => pixels.blit(
+                    bytes,
+                    (width, height),
+                    damage,
+                    origin,
+                    scene.opacity.clamp(0., 1.),
+                    format == PixelFormat::Bgra,
+                ),
+            }
+            self.slide_content_composites += 1;
+            return Ok(());
         }
         if self.reveal_content {
             let ShmTarget {
@@ -5249,6 +5363,105 @@ mod tests {
                 "pixels differ by {max_delta} at progress={progress}"
             );
         }
+    }
+
+    #[test]
+    fn sliding_panel_reuses_one_prepared_picture_at_fractional_scale() {
+        let mut scene = scene();
+        scene.asset_data.clear();
+        scene.layers.clear();
+        scene.clips.clear();
+        scene.primitives = vec![
+            Primitive::Rounded {
+                rect: Rect::new(0., 0., 24., 20.),
+                radius: 8.,
+                fill: [20, 30, 40, 255],
+                border: None,
+            },
+            Primitive::Rounded {
+                rect: Rect::new(6., 6., 8., 8.),
+                radius: 2.,
+                fill: [220, 40, 30, 180],
+                border: None,
+            },
+        ];
+        scene.motion = Some(crate::Motion {
+            id: "slide-picture".into(),
+            open: true,
+            duration: 0.24,
+            return_duration: None,
+            return_curve: None,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Right,
+            slide_distance: Some(24.),
+            fade: true,
+            reveal: false,
+            progress: 0.,
+            parts: vec![],
+            art: None,
+        });
+        let mut renderer = TreeCpuRenderer::default();
+        let pending = renderer.prepare_on_ui(&scene, 1.5).unwrap_err();
+        pending
+            .downcast_ref::<CpuResourcesPending>()
+            .unwrap()
+            .request
+            .prepare()
+            .unwrap();
+        renderer.prepare_on_ui(&scene, 1.5).unwrap();
+        assert!(renderer.slide_content);
+        assert_eq!(renderer.slide_content_preparations, 1);
+
+        let mut direct = TreeCpuRenderer::with_opaque_composition(OpaqueComposition::Direct);
+        let mut expected_scene = scene.clone();
+        direct.prepare(&expected_scene, 1.5).unwrap();
+        let (width, height) = (48, 36);
+        let mut actual = vec![0; width as usize * height as usize * 4];
+        let mut expected = actual.clone();
+        for (offset, opacity) in [((0., 0.), 1.), ((0.667, 0.), 1.), ((1.333, 0.), 0.45)] {
+            scene.offset = offset;
+            expected_scene.offset = offset;
+            scene.opacity = opacity;
+            expected_scene.opacity = opacity;
+            renderer.prepare_on_ui(&scene, 1.5).unwrap();
+            renderer
+                .render(
+                    &scene,
+                    ShmTarget {
+                        bytes: &mut actual,
+                        width,
+                        height,
+                        scale: 1.5,
+                        format: PixelFormat::Rgba,
+                    },
+                    Damage::full(width, height),
+                )
+                .unwrap();
+            direct
+                .render(
+                    &expected_scene,
+                    ShmTarget {
+                        bytes: &mut expected,
+                        width,
+                        height,
+                        scale: 1.5,
+                        format: PixelFormat::Rgba,
+                    },
+                    Damage::full(width, height),
+                )
+                .unwrap();
+            let max_delta = actual
+                .iter()
+                .zip(&expected)
+                .map(|(actual, expected)| actual.abs_diff(*expected))
+                .max()
+                .unwrap_or_default();
+            assert!(max_delta <= 1, "slide pixels differ by {max_delta}");
+        }
+        assert_eq!(renderer.slide_content_preparations, 1);
+        assert_eq!(renderer.slide_content_composites, 3);
+        assert_eq!(renderer.opacity_builds, 1);
     }
 
     #[test]
