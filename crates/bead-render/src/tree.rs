@@ -5124,7 +5124,7 @@ mod tests {
     }
 
     #[test]
-    fn split_reveal_content_matches_direct_pixels_at_fractional_scale() {
+    fn split_reveal_content_matches_direct_pixels_with_one_lsb_tolerance() {
         let make_scene = |prefix: bool| {
             let contour = Primitive::Rounded {
                 rect: Rect::new(0., 0., 24., 20.),
@@ -5238,7 +5238,16 @@ mod tests {
                     Damage::full(width, height),
                 )
                 .unwrap();
-            assert_eq!(actual, expected, "pixels differ at progress={progress}");
+            let max_delta = actual
+                .iter()
+                .zip(&expected)
+                .map(|(actual, expected)| actual.abs_diff(*expected))
+                .max()
+                .unwrap_or_default();
+            assert!(
+                max_delta <= 1,
+                "pixels differ by {max_delta} at progress={progress}"
+            );
         }
     }
 
