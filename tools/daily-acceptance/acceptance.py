@@ -1280,6 +1280,8 @@ class Runner:
             and not row["nacrectl_cancelled_after_timeout"]
             and row["closed_after_escape"]
             and row["slide_visible"]
+            and row["same_shell_instance"]
+            and row["same_daemon_instance"]
             for row in rows
         ))
         self.results.append({
@@ -1916,8 +1918,8 @@ def main():
     args = parser.parse_args()
     if args.latency_limit_ms is not None and args.latency_limit_ms <= 0:
         parser.error("--latency-limit-ms must be positive")
-    if not 1 <= args.wallpaper_opens <= 10:
-        parser.error("--wallpaper-opens must be between 1 and 10")
+    if args.wallpaper_open_only and args.wallpaper_opens != 3:
+        parser.error("--wallpaper-open-only requires exactly three opens")
     for path in (args.bead, args.shell, args.daemon, args.ctl):
         if not path.exists() or (path.is_file() and path in (args.bead, args.daemon, args.ctl)
                                  and not os.access(path, os.X_OK)):

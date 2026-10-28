@@ -5,8 +5,10 @@ evidence on the owner laptop shows every Super+W open taking 4.0–4.6 s and
 popping in without a slide on stable Bead 900369fb and 86efa7e8. The earlier
 acceptance arm measured from `PanelVisibility`, and its open trigger used the
 Bead command socket; it therefore did not cover the `nacrectl ui` route or the
-delay before panel admission. The corrected three-open same-session route test
-and source fix are pending. The final no-shim selection and CPU gates also
+delay before panel admission. Source inspection found a full-catalogue request
+on every reopen despite valid cached rows; the guard now skips that child when
+the current daemon boot already has a catalogue. The three-open same-session
+route measurement is pending. The final no-shim selection and CPU gates also
 failed; the cold first-frame gate remains unmeasured after desktop preflight
 rejected it for host swap use above 64 MiB. Full Bead CI and both pushes remain
 pending.
@@ -37,6 +39,11 @@ so those results cannot be used as evidence for this end-to-end route.
   same-directory temporary file and rename; reads reject oversized, malformed,
   wrong-version, symlink, and invalid-entry files. Cached Nacre thumbnail and
   preview paths are rebased to the active XDG cache root.
+- A full catalogue scan is now requested only when the current daemon boot has
+  no cached rows. Previously, every reopen set `wallpaper_opened=true` and
+  respawned `wallpaper-media catalog --catalogue-ids` despite the retained
+  catalogue; a close/reopen regression check asserts that valid rows do not
+  issue another `wallpaper.catalogue {ids:[]}` call.
 - Nacre's existing `wallpaper-media` service stores the thumbnail and preview
   image bytes. The Bead snapshot stores metadata and those paths, not image
   bytes. A valid locally loaded visible raster skips catalogue/prewarm RPCs;
