@@ -363,7 +363,7 @@ mod icon_cache_tests {
     #[test]
     fn icon_path_queries_are_bounded_lru_entries() {
         let mut cache = IconPathCache::new("theme".into());
-        for i in 0..1024 {
+        for i in 0..4096 {
             cache.insert_query(
                 IconQueryKey {
                     theme: "theme".into(),
@@ -375,7 +375,7 @@ mod icon_cache_tests {
                 String::new(),
             );
         }
-        assert!(cache.queries.len() <= 1024);
+        assert!(cache.queries.len() <= 4096);
         assert!(
             cache
                 .query(&IconQueryKey {

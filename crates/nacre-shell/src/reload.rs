@@ -4188,8 +4188,13 @@ impl Runtime {
             if cached_revision.get() == Some(revision) {
                 return Ok(BTreeMap::new());
             }
-            cached_revision.set(Some(revision));
-            Ok(projector.borrow().project_with_stores(stores))
+            let changes = projector.borrow().project_with_stores(stores);
+            cached_revision.set(Some(
+                projector
+                    .borrow()
+                    .projection_revision_after(stores, revision, &changes),
+            ));
+            Ok(changes)
         }));
         self.actions.register("view.open", "ui.popouts")?;
         self.actions.grant("ui.popouts");

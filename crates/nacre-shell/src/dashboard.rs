@@ -715,9 +715,21 @@ impl Dashboard {
     ) -> DashboardProjectionRevision {
         DashboardProjectionRevision {
             external: self.projection_epoch.load(Ordering::Acquire),
-            open: stores.version("panel.open"),
-            hero_width: stores.version("dashboard.hero.width"),
-            hero_height: stores.version("dashboard.hero.height"),
+            stores: stores.revision(),
+        }
+    }
+    pub(crate) fn projection_revision_after(
+        &self,
+        stores: &bead::core::Stores,
+        revision: DashboardProjectionRevision,
+        changes: &BTreeMap<String, Value>,
+    ) -> DashboardProjectionRevision {
+        let changed = changes
+            .iter()
+            .any(|(id, value)| stores.get(id) != Some(value));
+        DashboardProjectionRevision {
+            external: revision.external,
+            stores: stores.revision() + u64::from(changed),
         }
     }
     pub(crate) fn invalidate_projection(&self) {
@@ -1355,9 +1367,7 @@ impl Dashboard {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct DashboardProjectionRevision {
     external: u64,
-    open: Option<u64>,
-    hero_width: Option<u64>,
-    hero_height: Option<u64>,
+    stores: u64,
 }
 /// "Secured" or "Open", then the radio frequency when the daemon reports one.
 fn access_detail(ap: &nacre_protocol::core_services::AccessPoint) -> String {
