@@ -349,10 +349,12 @@ pub struct PreparedReveal {
     key: u64,
     _charge: bead_core::cache::Charge,
 }
+type PreparedRevealCacheEntry = ((u64, u32), Arc<PreparedReveal>);
+type PreparedRevealCache = std::sync::Mutex<VecDeque<PreparedRevealCacheEntry>>;
+
 impl PreparedReveal {
-    fn cache() -> &'static std::sync::Mutex<VecDeque<((u64, u32), Arc<PreparedReveal>)>> {
-        static CACHE: OnceLock<std::sync::Mutex<VecDeque<((u64, u32), Arc<PreparedReveal>)>>> =
-            OnceLock::new();
+    fn cache() -> &'static PreparedRevealCache {
+        static CACHE: OnceLock<PreparedRevealCache> = OnceLock::new();
         CACHE.get_or_init(|| std::sync::Mutex::new(VecDeque::new()))
     }
 
@@ -487,8 +489,8 @@ impl PreparedReveal {
                 }
                 let opacity = opacity.clamp(0., 1.);
                 if opacity < 1. {
-                    for channel in 0..4 {
-                        pixel[channel] = (f32::from(pixel[channel]) * opacity + 0.5) as u8;
+                    for channel in &mut pixel {
+                        *channel = (f32::from(*channel) * opacity + 0.5) as u8;
                     }
                 }
                 match pixel[3] {
@@ -3536,13 +3538,12 @@ impl TreeCpuRenderer {
             self.active_reveal = None;
             return false;
         };
-        if let Some(active) = &self.active_reveal {
-            if active.motion_id == motion.id
-                && active.open == motion.open
-                && active.artifact.scale().to_bits() == scale.to_bits()
-            {
-                return true;
-            }
+        if let Some(active) = &self.active_reveal
+            && active.motion_id == motion.id
+            && active.open == motion.open
+            && active.artifact.scale().to_bits() == scale.to_bits()
+        {
+            return true;
         }
         self.active_reveal = None;
         let prepared = scene.prepared.get(&scale.to_bits());
@@ -3853,10 +3854,11 @@ impl Renderer for TreeCpuRenderer {
             let mut renderer = prepared.accept()?;
             renderer.snapshot_fingerprint = None;
             renderer.worker_fingerprint = Some(SnapshotFingerprint::new(scene, scale)?);
-            if let Some(motion) = scene.motion.as_ref().filter(|motion| motion.reveal) {
-                if motion.progress < 1. && !renderer.pin_reveal(scene, scale) {
-                    return Err("worker reveal artifact missing".into());
-                }
+            if let Some(motion) = scene.motion.as_ref().filter(|motion| motion.reveal)
+                && motion.progress < 1.
+                && !renderer.pin_reveal(scene, scale)
+            {
+                return Err("worker reveal artifact missing".into());
             }
             *self = renderer;
             return Ok(());
