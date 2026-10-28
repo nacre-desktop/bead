@@ -605,7 +605,6 @@ fn reveal_content_scene(scene: &Scene, prefix: usize) -> Scene {
     content
         .asset_data
         .retain(|path, _| needed_assets.contains(path));
-    content.prepared.clear();
     content
 }
 
@@ -3439,7 +3438,13 @@ impl Renderer for TreeCpuRenderer {
     }
     fn prepare_on_ui(&mut self, scene: &Scene, scale: f32) -> Result<()> {
         if let Some(prefix) = reveal_parts_prefix(scene) {
-            return self.prepare_reveal_content(scene, scale, prefix);
+            let native_images = scene
+                .prepared
+                .get(&scale.to_bits())
+                .is_some_and(|frame| frame.items.iter().any(|item| item.image.is_some()));
+            if !native_images {
+                return self.prepare_reveal_content(scene, scale, prefix);
+            }
         }
         self.reveal_content = false;
         let motion = scene.motion.as_ref().filter(|motion| motion.reveal);
