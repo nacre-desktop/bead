@@ -3,13 +3,17 @@
 use nacre_protocol::wallpaper::ActiveWallpaper;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::{
+    collections::HashMap,
     fs::{self, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
+    sync::{Arc, Condvar, Mutex},
     time::SystemTime,
 };
 
-pub(crate) const CACHE_LIMIT: u64 = 144 * 1024 * 1024;
+/// Disk budget (B0171: raised from 144 MiB so the whole picker set stays cached: 17 owner
+/// wallpapers at 2880x1800 need about 120-170 MiB and LRU churn made selections miss).
+pub(crate) const CACHE_LIMIT: u64 = 512 * 1024 * 1024;
 const MAGIC: &[u8; 8] = b"BWRGZ001";
 const HEADER: usize = 8 + 4 + 4 + 8 + 8 + 4 + 4 + 4;
 type CacheIdentity = (u64, i64, u32, u32, u32);
@@ -149,6 +153,25 @@ fn load_cached_at(root: &Path, pair: &ActiveWallpaper, width: u32, height: u32) 
     load_from(root, pair, width, height)
 }
 
+/// A decode of one cache entry that other callers (the selection predecode, the synchronous
+/// prepare, the picker prefetch) join instead of decoding the same image again.
+#[derive(Default)]
+struct Flight {
+    result: Mutex<Option<Result<Arc<Vec<u8>>, String>>>,
+    done: Condvar,
+}
+
+fn flights() -> &'static Mutex<HashMap<PathBuf, Arc<Flight>>> {
+    static FLIGHTS: std::sync::OnceLock<Mutex<HashMap<PathBuf, Arc<Flight>>>> =
+        std::sync::OnceLock::new();
+    FLIGHTS.get_or_init(Default::default)
+}
+
+/// True when a display-sized entry for `pair` is already on disk (no decompression).
+pub(crate) fn is_cached(pair: &ActiveWallpaper, width: u32, height: u32) -> bool {
+    entry_path(&cache_root(), pair, width, height).is_ok_and(|(path, _)| path.is_file())
+}
+
 fn load_or_decode_async_at(
     root: &Path,
     pair: &ActiveWallpaper,
@@ -159,7 +182,47 @@ fn load_or_decode_async_at(
     if let Some(rgba) = load_from(root, pair, width, height) {
         return Ok(rgba);
     }
-    let rgba = decode()?;
+    let key = entry_path(root, pair, width, height)?.0;
+    let (flight, leader) = {
+        let mut map = flights().lock().unwrap_or_else(|p| p.into_inner());
+        match map.get(&key) {
+            Some(flight) => (flight.clone(), false),
+            None => {
+                let flight = Arc::new(Flight::default());
+                map.insert(key.clone(), flight.clone());
+                (flight, true)
+            }
+        }
+    };
+    if !leader {
+        let mut result = flight.result.lock().unwrap_or_else(|p| p.into_inner());
+        while result.is_none() {
+            result = flight.done.wait(result).unwrap_or_else(|p| p.into_inner());
+        }
+        return result
+            .as_ref()
+            .expect("finished flight")
+            .clone()
+            .map(|rgba| rgba.to_vec());
+    }
+    // Finish the flight even if `decode` panics, so followers never wait forever.
+    struct Finish(PathBuf, Arc<Flight>);
+    impl Drop for Finish {
+        fn drop(&mut self) {
+            flights()
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .remove(&self.0);
+            let mut result = self.1.result.lock().unwrap_or_else(|p| p.into_inner());
+            result.get_or_insert_with(|| Err("wallpaper decode abandoned".into()));
+            self.1.done.notify_all();
+        }
+    }
+    let finish = Finish(key, flight.clone());
+    let decoded = decode().map(Arc::new);
+    *flight.result.lock().unwrap_or_else(|p| p.into_inner()) = Some(decoded.clone());
+    drop(finish);
+    let rgba = decoded?;
     let root = root.to_path_buf();
     let pair = pair.clone();
     let write_rgba = rgba.clone();
@@ -172,7 +235,7 @@ fn load_or_decode_async_at(
             }
             store_at(&root, &pair, width, height, &write_rgba, CACHE_LIMIT);
         });
-    Ok(rgba)
+    Ok(rgba.to_vec())
 }
 
 #[cfg(test)]
@@ -333,6 +396,30 @@ mod tests {
         assert!(total <= 110);
         assert!(load_from(&cache, &pair, 3, 2).is_some());
         assert!(load_from(&cache, &pair, 2, 2).is_none());
+        let _ = fs::remove_dir_all(root);
+    }
+    #[test]
+    fn concurrent_requests_for_one_entry_decode_it_once() {
+        let (root, pair) = fixture();
+        let cache = root.join("cache");
+        let decodes = std::sync::atomic::AtomicUsize::new(0);
+        std::thread::scope(|scope| {
+            let handles = (0..4)
+                .map(|_| {
+                    scope.spawn(|| {
+                        load_or_decode_async_at(&cache, &pair, 2, 2, || {
+                            decodes.fetch_add(1, Ordering::SeqCst);
+                            std::thread::sleep(std::time::Duration::from_millis(150));
+                            Ok(vec![3; 16])
+                        })
+                    })
+                })
+                .collect::<Vec<_>>();
+            for handle in handles {
+                assert_eq!(handle.join().unwrap(), Ok(vec![3; 16]));
+            }
+        });
+        assert_eq!(decodes.load(Ordering::SeqCst), 1);
         let _ = fs::remove_dir_all(root);
     }
     #[test]

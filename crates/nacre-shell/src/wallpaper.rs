@@ -534,14 +534,43 @@ fn catalogue_pair(
     .then_some(pair)
 }
 
+/// A still-image pair whose only purpose is its display-size raster (the cache key is the
+/// file and output size, so the palette of `template` is irrelevant).
+fn raster_pair(template: &ActiveWallpaper, id: &str) -> Option<ActiveWallpaper> {
+    let identity = local_file_identity(id)?;
+    let mut pair = template.clone();
+    pair.path = id.into();
+    pair.file_identity = identity;
+    pair.motion = None;
+    pair.validate().is_ok().then_some(pair)
+}
+
 /// One shared pending selection fence. Never display its image with the previous palette.
 #[derive(Default)]
 pub(crate) struct Preview {
     state: Mutex<PreviewState>,
     predecode: Predecoder,
+    prefetch: crate::wallpaper_prefetch::Prefetch,
     changed: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 impl Preview {
+    /// B0171: decode the catalogue's still images to display size in the background.
+    /// Returns false while no output size is known yet (the caller retries on a later wake).
+    pub(crate) fn prefetch(&self, ids: &[String], active: Option<usize>) -> bool {
+        let Some(target) = self.predecode.target() else {
+            return false;
+        };
+        let pairs = crate::wallpaper_prefetch::nearest_first(ids, active)
+            .iter()
+            .filter_map(|id| raster_pair(&target.pair, id))
+            .collect();
+        self.prefetch.start(pairs, target.width, target.height);
+        true
+    }
+    pub(crate) fn cancel_prefetch(&self) {
+        self.prefetch.cancel();
+    }
+
     fn set_changed(&self, changed: Arc<dyn Fn() + Send + Sync>) {
         let repaint = changed.clone();
         *self.changed.lock().unwrap_or_else(|p| p.into_inner()) = Some(changed);
@@ -2202,6 +2231,63 @@ mod tests {
             "reconnect repaints"
         );
         drop(subscription);
+    }
+
+    #[test]
+    fn rapid_selections_end_on_the_last_click_and_older_generations_are_dead() {
+        let root =
+            std::env::temp_dir().join(format!("bead-wallpaper-latest-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let ids: Vec<String> = ["a", "b", "c"]
+            .iter()
+            .map(|name| {
+                let path = root.join(format!("{name}.jpg"));
+                image::RgbImage::from_pixel(2, 1, image::Rgb([1, 2, 3]))
+                    .save(&path)
+                    .unwrap();
+                path.to_string_lossy().into_owned()
+            })
+            .collect();
+        let preview = Preview::default();
+        let generations: Vec<u64> = ids
+            .iter()
+            .map(|id| preview.select("boot".into(), id.clone(), "image".into(), None))
+            .collect();
+        assert!(generations.windows(2).all(|pair| pair[0] < pair[1]));
+        assert_eq!(preview.selected().unwrap().id, ids[2]);
+        assert_eq!(preview.generation_for("boot", &ids[0]), None);
+        assert_eq!(
+            preview.generation_for("boot", &ids[2]),
+            Some(generations[2])
+        );
+        // A late failure of an older click must not cancel the newest selection.
+        assert!(!preview.cancel(generations[0]));
+        assert_eq!(preview.selected().unwrap().id, ids[2]);
+        // Repeating the active click (navigate then Enter) keeps one generation.
+        assert_eq!(
+            preview.select("boot".into(), ids[2].clone(), "image".into(), None),
+            generations[2]
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn raster_pair_keeps_the_cache_key_inputs_of_the_selected_file_only() {
+        let root =
+            std::env::temp_dir().join(format!("bead-wallpaper-raster-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("x.jpg");
+        image::RgbImage::from_pixel(2, 1, image::Rgb([9, 9, 9]))
+            .save(&path)
+            .unwrap();
+        let id = path.to_string_lossy().into_owned();
+        let template = pair(5);
+        let raster = raster_pair(&template, &id).unwrap();
+        assert_eq!(raster.path, id);
+        assert!(raster.motion.is_none());
+        assert!(identity_matches_path(&raster.path, &raster.file_identity));
+        assert!(raster_pair(&template, "/nonexistent/wallpaper.png").is_none());
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

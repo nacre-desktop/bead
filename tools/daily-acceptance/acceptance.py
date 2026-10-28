@@ -989,6 +989,48 @@ class Runner:
                              "result": "PASS" if alive and closed and closed_again else "FAIL",
                              "shell_alive": alive, "closed": closed, "closed_after_reopen": closed_again})
 
+    def wallpaper_live(self):
+        """B0171: the owner's real wallpaper set. Open the picker, step and select five
+        wallpapers quickly in a row, close, reopen; report open latency, per-selection
+        latency and whether the last selection won."""
+        rounds = []
+        for cycle in range(self.args.wallpaper_cycles):
+            self._reset_closed()
+            offset = self.log_path.stat().st_size
+            started_ns = time.monotonic_ns()
+            self._super("w")
+            if self.args.wallpaper_stacks and cycle == 0:
+                for sample in range(12):
+                    time.sleep(.2)
+                    threads = subprocess.run(
+                        f"ps -L -p {self.shell.pid} -o tid,comm,pcpu,stat,wchan:22 --sort=-pcpu | head -8; "
+                        "ps -eo pid,pcpu,stat,args --sort=-pcpu | head -6 | cut -c1-160",
+                        shell=True, capture_output=True, text=True).stdout
+                    (self.evidence / f"open-stack-{sample}.txt").write_text(threads)
+            latency = self._open_latency(offset, None, started_ns, None, f"wl{cycle}")
+            time.sleep(1.5 if cycle == 0 else .8)
+            sel_offset = self.log_path.stat().st_size
+            for _ in range(5):
+                self._key("-k", "Down")
+                time.sleep(.12)
+                self._key("-k", "Return")
+                time.sleep(self.args.wallpaper_gap)
+            time.sleep(3)
+            snapshot = subprocess.run(
+                "ps -eo pid,ppid,etime,stat,wchan:22,args --sort=start_time | grep -E 'nacre-helper|orient|nacre-wallpaper' | grep -v grep",
+                shell=True, capture_output=True, text=True).stdout
+            (self.evidence / f"wallpaper-live-{cycle}.ps").write_text(snapshot)
+            text = self.log_path.read_text(errors="replace")[sel_offset:]
+            switches = re.findall(r"WALLPAPER_SWITCH_LATENCY [^\n]*ms=([0-9.]+)", text)
+            phases = re.findall(r"WALLPAPER_SWITCH_PHASE [^\n]*", text)
+            (self.evidence / f"wallpaper-live-{cycle}.log").write_text(text)
+            rounds.append({"cycle": cycle, "open_ms": latency[1], "switch_ms": [float(v) for v in switches],
+                           "phases": len(phases)})
+            self._key("-k", "Escape")
+            self._wait_closed()
+            time.sleep(1)
+        self.results.append({"check": "wallpaper live set", "result": "PASS", "rounds": json.dumps(rounds)})
+
     def widget_drag(self):
         drag = self.profile["widget_drag"]
         before = self.evidence / "widget-drag-before.png"
@@ -1077,6 +1119,10 @@ class Runner:
 
     def run(self):
         self.start()
+        if self.args.wallpaper_live:
+            self.wallpaper_live()
+            self.write_report()
+            return 0
         if self.args.quick:
             self.one_round(1)
             self._record_memory("quick round end")
@@ -1222,6 +1268,13 @@ def main():
     parser.add_argument("--interaction", nargs="?", const="title,switch,pill",
                         help="with --quick, run only these comma-separated pointer cases "
                              "(title, switch, pill)")
+    parser.add_argument("--wallpaper-live", action="store_true",
+                        help="B0171: only run the real-wallpaper picker open/select/close/reopen cycles")
+    parser.add_argument("--wallpaper-stacks", action="store_true",
+                        help="sample the shell's thread stacks during the first picker open")
+    parser.add_argument("--wallpaper-cycles", type=int, default=3)
+    parser.add_argument("--wallpaper-gap", type=float, default=.25,
+                        help="seconds between selections in the rapid sequence")
     parser.add_argument("--quick", action="store_true",
                         help="run one interaction round without the 120-second idle and final repeat")
     parser.add_argument("--focus-dropdown", choices=("updates", "audio", "network", "bluetooth",

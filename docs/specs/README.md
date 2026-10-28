@@ -10,6 +10,8 @@ B0019 adds serial query/order identity and RPC RTT evidence; typing target
 acceptance remains open. The dated transfer and execution receipts below remain historical records.
 [Standing rules](https://github.com/nacre-desktop/nacre/blob/main/docs/architecture/standing-rules.md) apply.
 
+2026-10-28: [B0171 wallpaper picker live](0171-wallpaper-picker-live.md) — lost selections (daemon flock, N0089), display-size prefetch + single-flight decode; cold first open still 2.6 s (open).
+
 | Order | Spec | Status | Eligible work |
 | --- | --- | --- | --- |
 | 0 | [B0170 Live panel slides](0170-live-panel-slides.md) | Clock rule fixed; live GL path unverified | Slides start at the first committed frame (`Animations::open_to`/`committed`), toast now slides; nested 2880x1800@120 Hz scale 1.5: every listed panel 20-42 frames per open/close. Verify live via `PANEL_SLIDE` journal lines, also after the CPU-to-GL panel promotion. |

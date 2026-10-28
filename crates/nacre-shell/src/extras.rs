@@ -71,6 +71,7 @@ struct State {
     catalogue_visible_handles: std::collections::BTreeSet<String>,
     catalogue_settled_handles: std::collections::BTreeSet<String>,
     wallpaper_open: bool,
+    wallpaper_prefetched: bool,
     wallpaper_boot: Option<String>,
     images: BTreeMap<std::path::PathBuf, Arc<[u8]>>,
     image_bytes: usize,
@@ -269,7 +270,13 @@ impl WallpaperActivationQueue {
                     }
                     _ => state.error = Some("Wallpaper selection response was invalid".into()),
                 },
-                Err(_) => state.error = Some("Wallpaper selection failed".into()),
+                Err(error) => {
+                    println!(
+                        "WALLPAPER_ACTIVATE_ERROR revision={} code={}",
+                        selection.revision, error.code
+                    );
+                    state.error = Some("Wallpaper selection failed".into());
+                }
             }
         }
         if !confirmed && let Some(generation) = preview_generation {
@@ -423,6 +430,14 @@ impl Extras {
             wallpaper_settings,
             wallpaper_actions,
         })
+    }
+    fn wallpaper_preview(&self) -> Option<Arc<crate::wallpaper::Preview>> {
+        self.wallpaper_actions
+            .as_ref()?
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .preview
+            .clone()
     }
     fn with_wallpaper_actions(
         mut self,
@@ -768,6 +783,29 @@ impl Extras {
                         entry["active"] = (entry["id"].as_str() == Some(id)).into();
                     }
                 }
+            }
+            // B0171: display-size rasters for every still, so any first selection is a cache hit.
+            if !open {
+                if std::mem::take(&mut state.wallpaper_prefetched)
+                    && let Some(preview) = self.wallpaper_preview()
+                {
+                    preview.cancel_prefetch();
+                }
+            } else if !state.wallpaper_prefetched
+                && !state.catalogue_result.is_empty()
+                && let Some(preview) = self.wallpaper_preview()
+            {
+                let images: Vec<&Json> = state
+                    .catalogue_result
+                    .iter()
+                    .filter(|entry| entry["kind"] == "image")
+                    .collect();
+                let ids: Vec<String> = images
+                    .iter()
+                    .filter_map(|entry| entry["id"].as_str().map(str::to_owned))
+                    .collect();
+                let active = images.iter().position(|entry| entry["active"] == true);
+                state.wallpaper_prefetched = preview.prefetch(&ids, active);
             }
             if boot.is_some() && state.catalogue_boot == boot {
                 rows = state
