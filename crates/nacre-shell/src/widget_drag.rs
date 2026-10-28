@@ -182,8 +182,35 @@ pub fn prepare_event(
                     }
                 })
                 .unwrap_or(0.);
-            outputs.push((String::new(), x, y, width, height));
+            let output_name = if source_output.is_empty() {
+                event["app_output_id"].as_str().unwrap_or_default()
+            } else {
+                source_output
+            };
+            outputs.push((output_name.to_owned(), x, y, width, height));
         }
+    }
+    let active_output = if source_output.is_empty() {
+        event["app_output_id"]
+            .as_str()
+            .filter(|name| !name.is_empty())
+            .or_else(|| {
+                stores.get("widgets.drag.app_output_id").and_then(|value| {
+                    if let Value::Text(name) = value {
+                        (!name.is_empty()).then_some(name.as_str())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .unwrap_or_default()
+    } else {
+        source_output
+    };
+    if !active_output.is_empty() && !outputs.iter().any(|output| output.0 == active_output)
+        && let Some((name, ..)) = outputs.iter_mut().find(|output| output.0.is_empty())
+    {
+        *name = active_output.to_owned();
     }
     let pointer = |key: &str| event[key].as_f64().filter(|n| n.is_finite()).unwrap_or(0.);
     let has_global = event["global_x"].as_f64().is_some() && event["global_y"].as_f64().is_some();
@@ -1204,6 +1231,29 @@ mod tests {
         assert_eq!(event["destination_y"], json!(60.));
         assert_eq!(event["destination"], json!("desktop"));
         assert_eq!(source_record(event).unwrap()["group"], json!("clock-main"));
+    }
+
+    #[test]
+    fn app_drop_fills_missing_output_name_from_the_active_parent_output() {
+        let stores=bead::core::Stores::default().reconcile(&BTreeMap::from([
+            ("bar.height".into(),Value::Number(50.)),
+            ("widgets.screen_width".into(),Value::Number(1920.)),
+            ("widgets.screen_height".into(),Value::Number(1080.)),
+            ("widgets.drag.app_origin_x".into(),Value::Number(410.)),
+            ("widgets.drag.app_origin_y".into(),Value::Number(220.)),
+            ("widgets.drag.app_origin_valid".into(),Value::Bool(true)),
+            ("widgets.drag.app_output_id".into(),Value::Text("winit".into())),
+            ("widgets.outputs".into(),Value::list(vec![json!({"name":"","x":0.,"y":0.,"width":1920.,"height":1080.,"scale":1.})])),
+        ])).unwrap();
+        let request=Value::list(vec![json!({"phase":"drop","x":1484.,"y":838.,
+            "source_origin_valid":true,"source":[{"app":true,"widget":"clock","form":"desktop"}]})]);
+        let Value::List(records)=prepare_event(&request,&stores,true,"") else {
+            panic!("expected one app drag record")
+        };
+        assert_eq!(records[0]["global_x"],json!(1894.));
+        assert_eq!(records[0]["global_y"],json!(1058.));
+        assert_eq!(records[0]["destination"],json!("desktop"));
+        assert_eq!(records[0]["target_output_id"],json!("winit"));
     }
 
     #[test]

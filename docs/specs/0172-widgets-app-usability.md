@@ -12,9 +12,9 @@ General primitive: WindowSpec.on_resize reports committed logical size changes; 
 | Sidebar and descriptions | One widget list stays visible across overview and detail; all twelve descriptions have English i18n entries. |
 | Palette roles | Per-instance Colour choices map the widget’s existing accent role to Primary, Secondary, Tertiary or Neutral for bar and desktop forms. |
 | Settings cleanup | 35 Settings goldens were refreshed after removing the Widgets shortcut; the freed sidebar space now shows the Devices heading and Displays row. |
-| Drag/edit | Parent relay and floating-window behavior are checked in the nested session; desktop widgets show an outline and accept move drags while the app is open. |
+| Drag/edit | The prior full-stage `stage-drag-source` was appended above both preview regions, so its transparent hit area intercepted drags and used the selected form's payload for every point on the stage. The fix gives the bar preview and desktop miniature separate drag sources. Nested tracing also found that fallback output geometry named no output; app drops were rejected by the terminal-drop guard. The fallback now uses the active output ID. |
 | Toggle | Shared kit switch hit background uses the track’s rounded ends, fixing the colored corner rim for all Bead switches. |
-| Visual evidence | docs/specs/evidence/0172/ — paired 2880×1800, scale-1.5 nested captures and comparisons to the owner-approved App design. |
+| Visual evidence | docs/specs/evidence/0172/ — 2880×1800, scale-1.5 nested captures, 4× switch crop, input traces, and reference comparison notes. |
 | Validation | Full Bead CI and real-input persistence checks are recorded after execution. |
 
-No matching QML Widgets editor exists, so QML surface parity is not applicable. The owner-approved design boards remain the visual reference.
+The owner-approved `.lead/reference/App.dc.html` is the visual reference. The app follows its stable widget sidebar, compact descriptions, large wallpaper stage, paired form controls and three-column style previews; the Bead app adds the four-role color selector and accessible add/remove buttons requested by the owner. No matching QML Widgets editor exists.

@@ -32,7 +32,6 @@ return function(ui, tokens)
             aria_label=checked and "On" or "Off"},{checked=true})
         out[1]=ui.Box{id="track",position="absolute",left=4,top=5,width=38,height=22,radius=11,
             fill=ui.alpha(checked and "primaryContainer" or "surfaceContainerHighest",opacity),
-            border_width=1,border_color=ui.alpha("outline",.4*opacity),
             ui.Box{id="thumb",position="absolute",left=checked and 19 or 3,top=3,width=16,height=16,radius=8,
                 fill=ui.alpha(checked and "onPrimaryContainer" or "onSurfaceVariant",opacity)}}
         return kit.Button(out)
