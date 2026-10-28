@@ -357,16 +357,19 @@ local function form_action(widget,placement,group)
         return edit(request)
     end
 end
+local STYLE_PREVIEW_HEIGHT=spacing.huge*2
+local STYLE_TILE_HEIGHT=STYLE_PREVIEW_HEIGHT+text.caption+spacing.md
+local STYLE_SECTION_HEIGHT=2*spacing.md+22+spacing.sm+STYLE_TILE_HEIGHT
 local function style_tile(widget,placement,package,style_id,style,settings,is_selected)
     local count=0
     for _ in package.forms[placement].styles do count+=1 end
     local columns=math.max(1,math.min(4,count))
     local panel_width=(width-RAIL-3*spacing.lg)/2-2*spacing.md
-    local preview_width=math.max(72,math.min(108,
+    local preview_width=math.max(spacing.xxl*2,math.min(spacing.huge*4,
         (panel_width-(columns-1)*spacing.sm)/columns-2*spacing.xs))
-    local tile_width=preview_width+12
-    local preview_height=54
-    local tile_height=84
+    local tile_width=preview_width+2*spacing.sm
+    local preview_height=STYLE_PREVIEW_HEIGHT
+    local tile_height=STYLE_TILE_HEIGHT
     local tile_preview=preview.render(widget,placement,style_id,settings,preview_width,preview_height)
     local tile_id="style-"..style_id..(placement=="desktop" and "-desktop" or "")
     return ui.Button{id=tile_id,width=tile_width,height=tile_height,shrink=0,padding=spacing.xs,
@@ -384,8 +387,8 @@ local function style_tiles(widget,placement,package,style_id,settings)
     local keys={}
     for key,style in forms.styles do if not style.hidden then table.insert(keys,key) end end
     table.sort(keys)
-    local row_height=84
-    local tiles={id="style-tiles",width="fill",columns=math.max(1,math.min(4,#keys)),gap=spacing.sm,row_height=row_height,shrink=0}
+    local row_height=STYLE_TILE_HEIGHT
+    local tiles={id="style-tiles",width="fill",height=row_height,columns=math.max(1,math.min(4,#keys)),gap=spacing.sm,row_height=row_height,shrink=0}
     for _,key in keys do table.insert(tiles,style_tile(widget,placement,package,key,forms.styles[key],settings,key==style_id)) end
     return ui.Grid(tiles)
 end
@@ -428,8 +431,8 @@ local function detail()
     if not package then return gallery() end
     local placement=package.forms[form] and form or package.forms.bar and "bar" or "desktop"
     local group,entry,instance=form_state(selected,placement,package,selected_group)
-    local bar_group,bar_entry,bar_instance,bar_config,bar_enabled,bar_style=form_state(selected,"bar",package,selected_group)
-    local desktop_group,desktop_entry,desktop_instance,desktop_config,desktop_enabled,desktop_style
+    local bar_group,_bar_entry,_bar_instance,bar_config,bar_enabled,bar_style=form_state(selected,"bar",package,selected_group)
+    local desktop_group,_desktop_entry,_desktop_instance,_desktop_config,desktop_enabled,desktop_style
     if package.forms.desktop then
         desktop_group,desktop_entry,desktop_instance,desktop_config,desktop_enabled,desktop_style=form_state(selected,"desktop",package,selected_group)
     else
@@ -528,11 +531,11 @@ local function detail()
                     width=0,grow=1,selected=(doc.dropdown_trigger or "click")=="click"}),
                 button("trigger-hover","Hover",edit({op="default-trigger",value="hover"}),{
                     width=0,grow=1,selected=doc.dropdown_trigger=="hover"})}},
-        ui.Row{id="form-style-columns",width="fill",gap=spacing.md,
-            ui.Column{id="bar-style-section",width=0,grow=1,gap=spacing.sm,padding=spacing.md,
+        ui.Row{id="form-style-columns",width="fill",height=STYLE_SECTION_HEIGHT,gap=spacing.md,
+            ui.Column{id="bar-style-section",width=0,grow=1,height=STYLE_SECTION_HEIGHT,gap=spacing.sm,padding=spacing.md,
                 radius=kit.tokens.radii.medium,fill="surfaceContainer",
                 label("bar-style-heading","Bar style",text.body*4/3,"onSurface",{height=22}),style_tiles(selected,"bar",package,bar_style,settings)},
-            desktop_available and ui.Column{id="desktop-style-section",width=0,grow=1,gap=spacing.sm,padding=spacing.md,
+            desktop_available and ui.Column{id="desktop-style-section",width=0,grow=1,height=STYLE_SECTION_HEIGHT,gap=spacing.sm,padding=spacing.md,
                 radius=kit.tokens.radii.medium,fill="surfaceContainer",
                 label("desktop-style-heading","Desktop style",text.body*4/3,"onSurface",{height=22}),style_tiles(selected,"desktop",package,desktop_style,settings)} or nil}}
     if #instance_groups>1 then

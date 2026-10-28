@@ -23,8 +23,7 @@ fn restored_window_size(path: &std::path::Path) -> Option<(u32, u32)> {
     }
     let width = u32::try_from(value.get("width")?.as_u64()?).ok()?;
     let height = u32::try_from(value.get("height")?.as_u64()?).ok()?;
-    ((420..=4096).contains(&width) && (360..=4096).contains(&height))
-        .then_some((width, height))
+    ((420..=4096).contains(&width) && (360..=4096).contains(&height)).then_some((width, height))
 }
 
 fn save_window_size(path: &std::path::Path, (width, height): (u32, u32)) -> std::io::Result<()> {
@@ -664,11 +663,7 @@ mod file_tests {
                 .unwrap()
                 .as_nanos()
         ));
-        std::fs::write(
-            &path,
-            br#"{"version":1,"width":1080,"height":760}"#,
-        )
-        .unwrap();
+        std::fs::write(&path, br#"{"version":1,"width":1080,"height":760}"#).unwrap();
         assert_eq!(restored_window_size(&path), Some((1080, 760)));
         std::fs::write(&path, br#"{"version":2,"width":1080,"height":760}"#).unwrap();
         assert_eq!(restored_window_size(&path), None);

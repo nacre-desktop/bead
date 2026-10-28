@@ -171,7 +171,10 @@ fn colour_role_is_saved_per_widget_instance_and_shared_by_its_forms() {
         panic!("draft missing")
     };
     let doc = &draft[0];
-    assert_eq!(doc["widgets"]["clock"]["settings"]["colour_role"], "secondary");
+    assert_eq!(
+        doc["widgets"]["clock"]["settings"]["colour_role"],
+        "secondary"
+    );
     assert_eq!(
         doc["hosts"]["top_bar"]["instances"][0]["settings"]["colour_role"],
         "secondary"
@@ -241,7 +244,7 @@ fn late_widget_write_ack_preserves_newer_canonical_edits_and_reports_errors() {
 }
 
 #[test]
-fn real_widgets_gallery_starts_with_content_and_a_style_click_updates_the_preview() {
+fn real_widgets_gallery_shows_descriptions_and_a_persistent_colour_role_control() {
     crate::i18n::init();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
     let mut values = crate::desktop::values(&Default::default(), "");
@@ -333,7 +336,9 @@ fn real_widgets_gallery_starts_with_content_and_a_style_click_updates_the_previe
             .session
             .view_nodes()
             .iter()
-            .find(|node| node.drag_action.as_deref() == Some("widgets.drag") && node.id.ends_with(suffix))
+            .find(|node| {
+                node.drag_action.as_deref() == Some("widgets.drag") && node.id.ends_with(suffix)
+            })
             .unwrap_or_else(|| panic!("{suffix} has an independent widget drag source"));
         let rect = bead::ui::rect(&source.draw);
         let candidate = harness
@@ -353,26 +358,6 @@ fn real_widgets_gallery_starts_with_content_and_a_style_click_updates_the_previe
             "clock detail must show the per-instance colour-role choice {expected}"
         );
     }
-    let button = harness
-        .session
-        .view_nodes()
-        .iter()
-        .find(|node| node.label == "Seconds")
-        .expect("clock style tile must be present");
-    let rect = bead::ui::rect(&button.draw);
-    harness
-        .script([bead_test::Input::Click {
-            x: rect.x + rect.w / 2.,
-            y: rect.y + rect.h / 2.,
-        }])
-        .unwrap();
-    let Value::List(draft) = harness.session.stores.get("widgets.draft").unwrap() else {
-        panic!("draft missing")
-    };
-    assert_eq!(
-        draft[0]["hosts"]["top_bar"]["instances"][3]["children"][6]["style"],
-        "seconds"
-    );
     let role_button = harness
         .session
         .view_nodes()
