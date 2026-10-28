@@ -170,6 +170,10 @@ impl DeferredRefresh {
             _ => false,
         }
     }
+
+    fn defer_presented(&mut self, revision: u64) {
+        self.presented = Some(self.presented.map_or(revision, |old| old.max(revision)));
+    }
 }
 // Pointer positions are replaceable only within the same gesture. Every other
 // job is an ordering barrier (especially press, release and model updates).
@@ -289,10 +293,6 @@ impl Drop for Source {
         if let Some(worker) = self.thread.take() {
             let _ = worker.join();
         }
-    }
-
-    fn defer_presented(&mut self, revision: u64) {
-        self.presented = Some(self.presented.map_or(revision, |old| old.max(revision)));
     }
 }
 fn bake(
