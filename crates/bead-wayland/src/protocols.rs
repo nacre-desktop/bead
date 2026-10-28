@@ -37,9 +37,7 @@ fn should_draw_after_callback(
 
 #[cfg(test)]
 mod closed_panel_unmap_tests {
-    use super::{
-        closed_panel_ready_to_unmap, companion_frame_active, should_draw_after_callback,
-    };
+    use super::{closed_panel_ready_to_unmap, companion_frame_active, should_draw_after_callback};
 
     #[test]
     fn unmaps_only_after_the_close_frame_finishes() {
@@ -96,12 +94,11 @@ mod closed_panel_unmap_tests {
             .windows(2)
             .map(|pair| pair[1] - pair[0])
             .fold(0_f64, f64::max);
+        assert_eq!(committed.len(), 37, "committed frames over 300 ms");
         assert!(
-            committed.len() >= 34,
-            "committed {} frames",
-            committed.len()
+            max_gap <= frame_period + 1e-9,
+            "maximum frame gap {max_gap:.9}s exceeds 120 Hz"
         );
-        assert!(max_gap <= 0.012, "maximum frame gap {max_gap:.6}s");
         assert_eq!((stage, materialize, build), (0, 0, 0));
         // B0170's marker is emitted by the same committed-motion path after a frame.
         let marker = marker.expect("terminal pose emits B0170 slide marker");
