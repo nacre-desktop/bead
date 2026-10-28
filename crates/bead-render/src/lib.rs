@@ -2827,50 +2827,40 @@ mod tests {
         let mut cache = tree::TreeCache::default();
         cache.prepare(&scene, 1.5)?;
         let prepared = cache.frame.clone().unwrap();
+        let mut reveal_layer = None;
         for progress in [0.25, 0.75, 0.5, 1.] {
             scene.reveal(progress);
             let (dx, dy) = scene.content_offset(1);
             assert_eq!((dx, dy), (0., 200. * (1. - progress)));
             assert_eq!(scene.content_offset(0), (0., 0.), "body stays joined");
-            let mut direct = tree::TreeCache::default();
-            direct.prepare(&scene, 1.5)?;
             scene.prepared.insert(1.5_f32.to_bits(), prepared.clone());
             cache.prepare(&scene, 1.5)?;
             let from_worker = cache.frame.as_ref().unwrap();
-            let direct = direct.frame.as_ref().unwrap();
-            assert_eq!(
-                from_worker.items.len(),
-                2,
-                "body plus prepared content layer"
-            );
-            assert_eq!(direct.items.len(), 2, "body plus prepared content layer");
-            for (prepared, expected) in from_worker.items.iter().zip(&direct.items) {
-                assert_eq!(
-                    serde_json::to_vec(&prepared.primitive)?,
-                    serde_json::to_vec(&expected.primitive)?
-                );
-                assert_eq!(prepared.clip, expected.clip);
-            }
-            assert!(
-                from_worker.items[1].raster.is_some(),
-                "text and arc share one prepared reveal layer"
-            );
-            assert_eq!(
-                tree::rect(&from_worker.items[1].primitive).y,
-                scene.bounds.y + dy
-            );
             if progress < 1. {
-                // A frame already baked at this pose must not apply the content slide twice.
-                scene.prepared.insert(1.5_f32.to_bits(), direct.clone());
-                cache.prepare(&scene, 1.5)?;
-                let rebaked = cache.frame.as_ref().unwrap();
                 assert_eq!(
-                    tree::rect(&rebaked.items[1].primitive),
-                    tree::rect(&direct.items[1].primitive)
+                    from_worker.items.len(),
+                    2,
+                    "body plus prepared content layer"
                 );
-                assert_eq!(rebaked.items[1].clip, direct.items[1].clip);
+                let content = &from_worker.items[1];
+                assert!(content.raster.is_some(), "text and arc share one layer");
+                assert_eq!(content.clip, scene.reveal_window());
+                assert_eq!(tree::rect(&content.primitive).y, scene.bounds.y + dy);
+                if let Some(previous) = &reveal_layer {
+                    assert!(
+                        std::sync::Arc::ptr_eq(previous, content.raster.as_ref().unwrap()),
+                        "slide poses reuse one prepared content layer"
+                    );
+                } else {
+                    reveal_layer = content.raster.clone();
+                }
+            } else {
+                assert_eq!(
+                    from_worker.items.len(),
+                    3,
+                    "open pose restores source items"
+                );
             }
-            scene.prepared.clear();
         }
         assert_eq!(serde_json::to_vec(&scene.primitives)?, original);
         Ok(())
