@@ -21,6 +21,10 @@ the background. It does not restart the full catalogue scan on a cached reopen.
 See [B0173](docs/specs/0173-picker-cold-open.md) for the route timing and
 measured acceptance status.
 
+Panel slides use a worker-prepared open-pose picture, so animation frames can
+move and clip finished content. See [B0177](docs/specs/0177-prepared-reveal.md)
+for CPU timings and the remaining compositor checks.
+
 ## How it fits Nacre
 
 The shell uses Nacre's daemon contracts for shared state and actions. Nacre

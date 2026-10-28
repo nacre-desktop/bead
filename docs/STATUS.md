@@ -1,6 +1,6 @@
-# 2026-10-28 — B0177 prepared panel reveals (implementation candidate; runtime acceptance blocked)
+# 2026-10-28 — B0177 prepared panel reveals (r2 candidate; compositor gate pending)
 
-Dense CPU reveal content now composites from reusable prepared layers, with open-pose geometry and persistent clips kept separate from each animated window. The first-frame reveal path remains covered by tests, including generated and imported frames at a nonzero offset. Full Bead CI passed on code commit `ef2d873d`. Performance, warm-open memory, QML/Bead motion parity and close-frame captures remain unmeasured: the private test host has 3.3 GiB swap used and 2.2 GiB MemAvailable, below the authorized reset condition. See [B0177](specs/0177-prepared-reveal.md).
+The resource worker now attaches a complete open-pose raster before publishing the scene. Slide frames pin that raster and only clear damage and composite it at the current offset and clip; repeated opens reuse a two-entry cache. On the development host, release CPU-only runs at 2880×1800 / scale 1.5 measured dashboard render p50/p99 1.857/3.311 ms and control-centre 1.852/2.066 ms; baseline 4756b652 was 1.905/3.336 and 1.797/2.044 ms. Warm raster sizes were 6.73 MB and 3.53 MB. Full Bead CI, open-latency measurements, presentation gaps, QML parity and close-frame captures remain pending. The private desktop was left untouched at the owner’s request. See [B0177](specs/0177-prepared-reveal.md).
 
 ## 2026-10-27 — B0161 widget reference replacement (review fixes and captures complete; acceptance gates open)
 

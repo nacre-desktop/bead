@@ -1,20 +1,19 @@
 # B0177 Prepared panel reveals (2026-10-28)
 
-Status: implementation candidate; runtime acceptance is blocked by the private-capture swap gate. B0175 prevents the open pose from appearing before a reveal starts, but dense CPU reveals prepare content again on each slide frame. Prepared layers now retain that first-frame guarantee while reusing rendered content. Full Bead CI passed on code commit `ef2d873d`; control-centre warm-open and close-frame captures remain pending. QML/Bead motion parity is unverified. No live laptop test is included in this unit.
+Status: r2 candidate. The resource worker now bakes the complete open-pose picture before publishing the prepared scene; repeated frames only clear damage and composite that picture at the animated offset and clip. The artifact stays in a two-entry shared cache for warm reopens. Release CPU timings are below; the owner’s private desktop visual gate remains pending, so no live opening-latency or close-frame claim is made.
 
-| Measure | B0175/live reference | Target | Candidate |
-| --- | ---: | ---: | ---: |
-| Dashboard / control-centre frames per slide | 36–43 / 16–22 | control-centre at least dashboard-like | pending |
-| Control-centre first content frame on repeat opens | 120–160 ms | <60 ms | pending |
-| Dashboard / control-centre slide CPU | pending per-frame samples | at most half of 1fe079e0 | pending |
-| Ghost-bar frames on close, control-centre / launcher | reported; not isolated | 0/5 each | pending |
-| First vs later open frames and max gap | pending | within 10% | pending |
-| Reveal flash, dashboard / launcher / control-centre / session | B0175 0/3 dashboard and launcher | 0/3 each | pending |
+| Scene, CPU renderer at 2880×1800 / scale 1.5 | Baseline 4756b652 prepare p50 / p99 | r2 prepare p50 / p99 | Baseline compose p50 / p99 | r2 compose p50 / p99 | r2 artifact |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Dashboard Today | 110 ns / 350 ns | 110 ns / 480 ns | 1.905 / 3.336 ms | 1.857 / 3.311 ms | 6,734,640 B |
+| Control centre Home | 40 ns / 320 ns | 40 ns / 330 ns | 1.797 / 2.044 ms | 1.852 / 2.066 ms | 3,531,360 B |
 
-The reference markers were recorded at 2880×1800, 120 Hz, scale 1.5, CPU renderer. At the last host check, swap use was 3.3 GiB and MemAvailable was 2.3 GiB; the reset rule requires more than swap use plus 8 GiB, so no capture ran. Capture evidence and per-frame CPU will be stored here after that gate passes. Close-frame sequences will identify the lingering surface or pixels before a source fix is chosen.
+Numbers are p50 and p99 from 240 timed frames after 24 warmups using `cargo test --release -p nacre-shell --no-default-features b0177_cpu_bench --locked -j2 -- --ignored --nocapture`, CPU-only `TreeCpuRenderer`, full 2880×1800 damage, and identical shell fixtures overlaid on 4756b652 and r2 (the baseline harness omits the candidate-only artifact attach). The table reports measured UI preparation and rendering separately; it does not include worker bake time or measure presentation gaps. Render p95s were 3.162 / 3.175 ms (dashboard baseline / r2) and 2.009 / 2.013 ms (control centre). The isolated compositor results are similar, so this benchmark does not claim a CPU win over the baseline. The debug-profile full-damage runs were about 25–26 ms and are not representative of the release path.
 
-| Additional resource | Budget / treatment |
+| Owner target | Evidence |
 | --- | --- |
-| Warm prepared control-centre content | record candidate unreclaimable memory and clean-file PSS separately; task permits memory for smooth repeat opens |
+| Complete open picture before slide frame 1; no per-pose rebuild | Worker attaches the artifact before publishing `scene.prepared`; `prepare_on_ui` pins it by motion and scale. Renderer test checks open-pose pixel equivalence, zero tree builds during a reveal, offset/clip output and clearing. |
+| Repeat-open warmth | Two-entry LRU keyed by prepared-frame identity and scale. Retained raster bytes are measured above. |
+| ≤12 ms every slide gap; no increase in open latency | Not measured on a compositor. The requested private desktop was occupied by the owner; the lead will gate these results on the laptop. |
+| No ghost bars on close (control centre, launcher, wallpaper picker) | Close-frame captures not run; the desktop was left untouched. |
 
-No temporary duplicate implementation is planned. The general prepared reveal primitive belongs to the renderer; panel-specific layout and behavior remain in shell Luau.
+QML/Bead motion parity also remains unverified. No temporary duplicate implementation is retained. The reusable reveal raster is a renderer primitive; panel layout and behavior stay in shell Luau.
