@@ -1029,4 +1029,8 @@ The owner profile identified worker deadlines as the repeated stage source: `wak
 
 # B0180 — 2026-10-29
 
-Panel motion now coalesces service/model refreshes, reload notifications and recovery checkpoints until the slide settles. CPU reveals with a contiguous contour prefix prepare the remaining open-pose content once and composite it through the current clip; frame-bound and scene fingerprints no longer serialize JSON. Dynamic `RevealArt` contours still rasterize as their SVG changes with progress. Remote before/after tick measurements and full CI are pending.
+Panel motion coalesces model/service refreshes, reload notifications, internal timer wakeups and presentation checkpoints until the pose settles. CPU scenes with a contiguous contour prefix prepare the remaining open-pose content once; non-reveal slides reuse one flattened picture at the animated offset. Per-pose frame artwork remains on the existing dynamic `RevealArt` path.
+
+Matched headless CPU tick benchmarks at 2880×1800/1.5 (Cargo `test` profile) improve dashboard p50/p99 from 454.6/728.8 to 394.6/606.6 ms, control centre from 282.3/414.3 to 236.3/381.9 ms, and sound from 40.9/41.9 to 1.60/1.66 ms. First-content wall time grows from 213.5 to 262.2 ms (dashboard), 140.4 to 152.2 ms (control), and 41.3 to 62.0 ms (sound). The retained-layer fixtures use 153,184 / 211,464 / 181,768 bytes. This debug benchmark does not establish release-profile 120 Hz performance or physical scanout timing.
+
+Full Bead CI passes on pushed HEAD `a372a4bf` (783 passed, 3 ignored; all remaining workflow steps passed). The fractional-scale direct-render comparison allows at most one 8-bit channel step. Startup-idle warming for every panel and a release-profile matched benchmark remain open; the current benchmark fixtures also do not include Nacre `Chrome::svg` artwork, so their zero SVG-rasterization count does not establish production contour behavior.
