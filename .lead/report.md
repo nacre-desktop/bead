@@ -6,4 +6,6 @@ Fix: record a companion motion deadline when its first frame commits; keep sched
 
 Regression test `companion_slide_callbacks_at_120_hz_keep_committing_without_staging`: fake callbacks at 120 Hz for 300 ms produced 37 commits, max gap 8.33 ms, and B0170 `PANEL_SLIDE` marker `frames=37`. Existing counter tests passed: 0 stage wakeups in 40 held ticks; 0 Luau materialize/build calls in 40 unchanged ticks after the initial build. Existing icon test counts one lookup per key across repeated requests.
 
-Full Bead CI: `bash /ci.sh` in the task Ubuntu 24.04 container; `FULL_CI_PASS`, exit 0. Profiling build pending final report commit; it will be at `.lead/profiling/nacre-shell`.
+Full Bead CI: `bash /ci.sh` in the task Ubuntu 24.04 container; `FULL_CI_PASS`, exit 0.
+
+Profiling ELF: `.lead/profiling/nacre-shell`, 399,061,536 bytes, x86-64 with `.debug_info` and `.eh_frame`. Arch build command: `RUSTFLAGS='-C force-frame-pointers=yes' cargo build -p nacre-shell --bin nacre-shell --profile profiling --locked -j2`.
