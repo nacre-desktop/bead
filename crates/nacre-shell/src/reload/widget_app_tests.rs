@@ -453,7 +453,7 @@ fn clock_detail_stage_and_style_previews_keep_all_content_inside_their_clips() {
         "bead.desktop.clock.date".into(),
         Value::Text("2026-10-25".into()),
     );
-    let harness = Harness::load(
+    let mut harness = Harness::load(
         &root,
         Path::new("widgets/app/main.luau"),
         &root.join("palette.json"),
@@ -465,6 +465,20 @@ fn clock_detail_stage_and_style_previews_keep_all_content_inside_their_clips() {
         },
     )
     .unwrap();
+    let detail_scroll = harness
+        .session
+        .view_nodes()
+        .iter()
+        .find(|node| node.scroll_store.as_deref() == Some("widgets.scroll"))
+        .map(|node| bead::ui::rect(&node.draw))
+        .expect("widget detail exposes its scroll region");
+    harness
+        .script([bead_test::Input::Scroll {
+            x: detail_scroll.x + detail_scroll.w / 2.,
+            y: detail_scroll.y + detail_scroll.h / 2.,
+            delta: 900.,
+        }])
+        .unwrap();
     let scene = harness.scene();
     let text = |expected: &str| {
         scene.primitives.iter().any(
