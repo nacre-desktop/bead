@@ -137,6 +137,11 @@ fn forty_unchanged_projection_wakeups_do_not_materialize_or_build_luau() {
         "local ui=require('bead.ui')\nreturn ui.Box{id='panel',width=100,height=40,ui.Text{id='label',text='fixed'}}",
     )
     .unwrap();
+    fs::write(
+        fixture.0.join("ui/behavior.luau"),
+        "return {stores={},actions={},computed={}}",
+    )
+    .unwrap();
     session.entry = "ui/main.luau".into();
     generation::reset_materialize_calls();
     frontend::reset_build_calls();
