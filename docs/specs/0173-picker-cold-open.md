@@ -178,7 +178,7 @@ from the same wallpaper, so animated-video playback timing is not claimed.
 | Shell picker work idle by 2 s after close | FAIL: cycle 2 one `nacre-link` tick at 2.201–2.301 s, absent from 5 s baseline |
 | QML/Bead paired states | PASS: 20 matched states |
 | Full Bead CI | PASS: `B0173_BEAD_CI_OK` on `c36d64681f0ccf2028bdd2a5a1be6c66ef6460df`, exit 0 |
-| Nacre desktop CI for N0089/N0091 | In progress on `71b1ff35` |
+| Nacre desktop CI for N0089/N0091 | PASS: `N0091_DESKTOP_CI_OK` on `71b1ff35037d7f67d5ff29b7283d54ad176cbc3a` |
 
 The final warm raw report, shell/daemon logs, per-cycle phase logs, five-second
 idle baselines, close-event logs, build hashes, and cache identity are in
