@@ -1026,3 +1026,7 @@ Started the panel slide frame-cost investigation. The first source change remove
 # B0178 — 2026-10-28 continuation
 
 The owner profile identified worker deadlines as the repeated stage source: `wakeup_at` was dispatching empty model events for Luau animation deadlines during Wayland panel motion. The candidate now holds those deadlines until after the authored panel transition. Dashboard input revisions, icon lookup queries, and daemon status are cached/shared; regression tests count unchanged frames. The matched stage+draw benchmark and lead live audit remain outstanding.
+
+# B0180 — 2026-10-29
+
+Panel motion now coalesces service/model refreshes, reload notifications and recovery checkpoints until the slide settles. CPU reveals with a contiguous contour prefix prepare the remaining open-pose content once and composite it through the current clip; frame-bound and scene fingerprints no longer serialize JSON. Dynamic `RevealArt` contours still rasterize as their SVG changes with progress. Remote before/after tick measurements and full CI are pending.

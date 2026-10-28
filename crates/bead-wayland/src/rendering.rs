@@ -1332,6 +1332,7 @@ impl App {
         let mut busy = false;
         // The motion this frame shows and the clock of its pose; a committed frame starts a held clock.
         let mut motion_clock: Option<(String, f64, f64)> = None;
+        let mut presentation_motion_active = None;
         let result = (|| -> Result<(), Box<dyn Error>> {
             #[cfg(feature = "native-gl")]
             if self.surfaces[index].companion
@@ -1488,6 +1489,9 @@ impl App {
                     }),
                 );
                 let (progress, active) = self.animations.value(&motion.id, now).unwrap();
+                if s.companion {
+                    presentation_motion_active = Some(active);
+                }
                 motion_clock = Some((
                     motion.id.clone(),
                     now,
@@ -1687,6 +1691,23 @@ impl App {
                     vec![Damage::full(w as u32, h as u32)]
                 }
             };
+            if scene.motion.as_ref().is_some_and(|motion| motion.reveal) {
+                let window = scene
+                    .reveal_window()
+                    .unwrap_or(scene.bounds)
+                    .translated(scene.offset.0, scene.offset.1)
+                    .pixels(scale, w as u32, h as u32);
+                let damage = s
+                    .previous_reveal_window
+                    .filter(|(old_w, old_h, _)| *old_w == w as u32 && *old_h == h as u32)
+                    .map_or(window, |(_, _, old)| old.union(window));
+                s.pending_reveal_window = Some((w as u32, h as u32, window));
+                regions = vec![regions
+                    .into_iter()
+                    .fold(damage, |current, region| current.union(region))];
+            } else {
+                s.pending_reveal_window = None;
+            }
             // A replacement is only useful when newer UI content changes pixels.
             // In particular, do not turn animation ticks into extra commits while
             // the original frame callback is outstanding.
@@ -2343,9 +2364,15 @@ impl App {
             }
             b.pending.clear();
             s.previous = Some(current);
+            s.previous_reveal_window = s.pending_reveal_window.take();
             s.frames += 1;
             Ok(())
         })();
+        if let Some(active) = presentation_motion_active
+            && let Some(source) = &mut self.panel_runtime
+        {
+            source.presentation_motion(active);
+        }
         if result.is_ok()
             && self.surfaces[index].companion
             && self.panel_target

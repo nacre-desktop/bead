@@ -2420,6 +2420,8 @@ impl App {
                 format: PixelFormat::Bgra,
                 previous: None,
                 visual_damage: Default::default(),
+                previous_reveal_window: None,
+                pending_reveal_window: None,
                 allocations: 0,
                 shm_trim_pending: false,
                 heap_trimmed_ui_serial: u64::MAX,

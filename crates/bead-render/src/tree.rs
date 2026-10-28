@@ -517,6 +517,7 @@ struct Entry {
 pub struct TreeCache {
     pub frame: Option<Arc<Frame>>,
     pub builds: usize,
+    pub reveal_svg_rasterizations: usize,
     image_policy: ImagePolicy,
     image_payloads: BTreeMap<u64, Weak<ImagePayload>>,
     asset_leases: BTreeMap<(usize, usize), Weak<AssetLease>>,
@@ -548,7 +549,7 @@ pub struct TreeCache {
 struct SnapshotFingerprint {
     scale_bits: u32,
     resource_revision: u64,
-    metadata: Vec<u8>,
+    metadata: u64,
     assets: Vec<(PathBuf, Weak<[u8]>)>,
 }
 
@@ -570,88 +571,98 @@ fn cpu_content_scene(scene: &Scene) -> Scene {
     content
 }
 
+/// The split compositor preserves painter order when contour/body primitives
+/// form a contiguous prefix. Other authored scenes keep the existing renderer.
+fn reveal_parts_prefix(scene: &Scene) -> Option<usize> {
+    let motion = scene.motion.as_ref().filter(|motion| motion.reveal)?;
+    let indices = motion
+        .parts
+        .iter()
+        .map(|(index, _)| *index)
+        .collect::<BTreeSet<_>>();
+    let last = *indices.iter().next_back()?;
+    let prefix = last.checked_add(1)?;
+    (indices.len() == prefix && indices.iter().copied().eq(0..prefix)).then_some(prefix)
+}
+
+fn reveal_content_scene(scene: &Scene, prefix: usize) -> Scene {
+    let mut content = cpu_content_scene(scene);
+    content.motion = None;
+    let mut index = 0;
+    content.retain_primitives(|_| {
+        let keep = index >= prefix;
+        index += 1;
+        keep
+    });
+    let needed_assets = content
+        .primitives
+        .iter()
+        .filter_map(|primitive| match primitive {
+            Primitive::Image { path, .. } => Some(path.clone()),
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>();
+    content.asset_data.retain(|path, _| needed_assets.contains(path));
+    content.prepared.clear();
+    content
+}
+
+fn reveal_parts_scene(scene: &Scene, prefix: usize) -> Scene {
+    let mut parts = scene.clone();
+    let mut index = 0;
+    parts.retain_primitives(|_| {
+        let keep = index < prefix;
+        index += 1;
+        keep
+    });
+    parts.prepared.clear();
+    parts
+}
+
 impl SnapshotFingerprint {
     fn new(scene: &Scene, scale: f32) -> Result<Self> {
         if !scale.is_finite() || scale <= 0. {
             return Err("invalid layer scale".into());
         }
-        let content = cpu_content_scene(scene);
-        let layers = content
-            .layers
-            .iter()
-            .map(|layer| {
-                (
-                    &layer.id,
-                    &layer.parent,
-                    layer.own.start,
-                    layer.own.end,
-                    layer.subtree_end,
-                    [
-                        layer.bounds.x.to_bits(),
-                        layer.bounds.y.to_bits(),
-                        layer.bounds.w.to_bits(),
-                        layer.bounds.h.to_bits(),
-                    ],
-                )
-            })
-            .collect::<Vec<_>>();
-        let clips = content
-            .clips
-            .iter()
-            .map(|(index, clip)| {
-                (
-                    *index,
-                    [
-                        clip.x.to_bits(),
-                        clip.y.to_bits(),
-                        clip.w.to_bits(),
-                        clip.h.to_bits(),
-                    ],
-                )
-            })
-            .collect::<Vec<_>>();
-        let metadata = serde_json::to_vec(&(
-            scale.to_bits(),
-            content.width.to_bits(),
-            [
-                content.bounds.x.to_bits(),
-                content.bounds.y.to_bits(),
-                content.bounds.w.to_bits(),
-                content.bounds.h.to_bits(),
-            ],
-            &content.font_files,
-            layers,
-            clips,
-            &content.primitives,
-        ))?;
-        let assets = content
+        let assets = scene
             .asset_data
             .iter()
+            .filter(|(path, _)| !reveal_art_asset(scene, path))
             .map(|(path, bytes)| (path.clone(), Arc::downgrade(bytes)))
             .collect();
         Ok(Self {
             scale_bits: scale.to_bits(),
             resource_revision: scene.resource_revision,
-            metadata,
+            metadata: snapshot_metadata(scene, scale),
             assets,
         })
     }
 
     fn matches_content(&self, scene: &Scene, scale: f32) -> Result<bool> {
-        if self.scale_bits != scale.to_bits() {
+        if self.scale_bits != scale.to_bits() || !scale.is_finite() || scale <= 0. {
             return Ok(false);
         }
-        let current = Self::new(scene, scale)?;
-        Ok(self.metadata == current.metadata
-            && self.assets.len() == current.assets.len()
-            && self.assets.iter().zip(&current.assets).all(
-                |((old_path, old_bytes), (path, bytes))| {
-                    old_path == path
-                        && (Weak::ptr_eq(old_bytes, bytes)
-                            || matches!((old_bytes.upgrade(), bytes.upgrade()),
-                                (Some(old), Some(current)) if old.as_ref() == current.as_ref()))
-                },
-            ))
+        if self.metadata != snapshot_metadata(scene, scale) {
+            return Ok(false);
+        }
+        let mut current_assets = 0;
+        for (path, bytes) in &scene.asset_data {
+            if reveal_art_asset(scene, path) {
+                continue;
+            }
+            let Some((old_path, old_bytes)) = self.assets.get(current_assets) else {
+                return Ok(false);
+            };
+            if old_path != path
+                || !old_bytes.upgrade().is_some_and(|old| {
+                    Arc::ptr_eq(&old, bytes) || old.as_ref() == bytes.as_ref()
+                })
+            {
+                return Ok(false);
+            }
+            current_assets += 1;
+        }
+        Ok(current_assets == self.assets.len())
     }
 
     fn matches_snapshot(&self, scene: &Scene, scale: f32) -> Result<bool> {
@@ -665,6 +676,44 @@ impl SnapshotFingerprint {
         }
         self.matches_content(scene, scale)
     }
+}
+
+fn reveal_art_asset(scene: &Scene, path: &std::path::Path) -> bool {
+    scene.motion.as_ref().is_some_and(|motion| motion.art.is_some())
+        && path.to_string_lossy().starts_with("@reveal-art-")
+}
+
+fn snapshot_metadata(scene: &Scene, scale: f32) -> u64 {
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    scale.to_bits().hash(&mut hash);
+    scene.width.to_bits().hash(&mut hash);
+    hash_rect_bits(scene.bounds, &mut hash);
+    scene.font_files.hash(&mut hash);
+    scene.layers.len().hash(&mut hash);
+    for layer in &scene.layers {
+        layer.id.hash(&mut hash);
+        layer.parent.hash(&mut hash);
+        layer.own.start.hash(&mut hash);
+        layer.own.end.hash(&mut hash);
+        layer.subtree_end.hash(&mut hash);
+        hash_rect_bits(layer.bounds, &mut hash);
+    }
+    scene.clips.len().hash(&mut hash);
+    for (index, clip) in &scene.clips {
+        index.hash(&mut hash);
+        hash_rect_bits(*clip, &mut hash);
+    }
+    scene.primitives.len().hash(&mut hash);
+    for (index, primitive) in scene.primitives.iter().enumerate() {
+        let open = scene
+            .motion
+            .as_ref()
+            .filter(|motion| motion.reveal)
+            .and_then(|motion| motion.parts.iter().find(|(part, _)| *part == index))
+            .map_or(primitive, |(_, original)| original);
+        hash_primitive(open, false, &mut hash);
+    }
+    hash.finish()
 }
 /// The artwork's growing edge, rasterised once per size and scale and slid along the growth axis every frame.
 struct EdgeTemplate {
@@ -1400,6 +1449,7 @@ impl TreeCache {
         }) {
             return Ok(entry.pixels.clone());
         }
+        self.reveal_svg_rasterizations = self.reveal_svg_rasterizations.saturating_add(1);
         let pixels = Arc::new(rasterize(&svg, width, height)?);
         let bytes = pixels
             .data()
@@ -1527,6 +1577,10 @@ impl TreeCache {
                             .hash(&mut hasher);
                         (pixels, hasher.finish())
                     } else {
+                        if matches!(shaped, Primitive::Image { .. }) && motion.art.is_some() {
+                            self.reveal_svg_rasterizations =
+                                self.reveal_svg_rasterizations.saturating_add(1);
+                        }
                         self.raster.prepare(&content, scale)?;
                         let texture = crate::key(&content.primitives[0], scale);
                         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -3042,6 +3096,7 @@ pub struct CpuPreparation {
     scene: Scene,
     scale: f32,
     fingerprint: SnapshotFingerprint,
+    sparse_snapshot: bool,
     queued: std::sync::atomic::AtomicBool,
     result: std::sync::Mutex<Option<std::result::Result<PreparedCpuSnapshot, String>>>,
 }
@@ -3050,8 +3105,12 @@ impl CpuPreparation {
         !self.queued.swap(true, std::sync::atomic::Ordering::AcqRel)
     }
     pub fn prepare(&self) -> std::result::Result<(), String> {
-        let result = TreeCpuRenderer::prepare_snapshot(&self.scene, self.scale)
-            .map_err(|error| error.to_string());
+        let result = TreeCpuRenderer::prepare_snapshot_with_storage(
+            &self.scene,
+            self.scale,
+            self.sparse_snapshot,
+        )
+        .map_err(|error| error.to_string());
         let status = result.as_ref().map(|_| ()).map_err(Clone::clone);
         *self.result.lock().map_err(|_| "CPU preparation poisoned")? = Some(result);
         status
@@ -3134,6 +3193,12 @@ pub struct TreeCpuRenderer {
     snapshot_layers: usize,
     cpu_preparation: Option<Arc<CpuPreparation>>,
     worker_fingerprint: Option<SnapshotFingerprint>,
+    /// During a reveal, the open-pose non-contour content is a retained picture;
+    /// `cache.frame` contains only the changing contour/body primitives.
+    reveal_content: bool,
+    pub reveal_content_preparations: usize,
+    pub reveal_content_composites: usize,
+    pub reveal_content_bytes: usize,
 }
 enum FlattenedPixels {
     Dense(Pixmap),
@@ -3154,16 +3219,87 @@ impl FlattenedPixels {
     }
 }
 impl TreeCpuRenderer {
+    fn prepare_reveal_content(&mut self, scene: &Scene, scale: f32, prefix: usize) -> Result<()> {
+        let content = reveal_content_scene(scene, prefix);
+        if self
+            .worker_fingerprint
+            .as_ref()
+            .is_some_and(|fingerprint| fingerprint.matches_content(&content, scale).unwrap_or(false))
+        {
+            self.cache.prepare(&reveal_parts_scene(scene, prefix), scale)?;
+            self.reveal_content = true;
+            self.opaque_composition = OpaqueComposition::Cached;
+            return Ok(());
+        }
+        if self.cpu_preparation.as_ref().is_none_or(|request| {
+            !request
+                .fingerprint
+                .matches_content(&content, scale)
+                .unwrap_or(false)
+        }) {
+            self.cpu_preparation = Some(Arc::new(CpuPreparation {
+                scene: content.clone(),
+                scale,
+                fingerprint: SnapshotFingerprint::new(&content, scale)?,
+                sparse_snapshot: true,
+                queued: Default::default(),
+                result: Default::default(),
+            }));
+        }
+        let request = self.cpu_preparation.as_ref().unwrap().clone();
+        let prepared = {
+            let mut result = request
+                .result
+                .lock()
+                .map_err(|_| "CPU preparation poisoned")?;
+            match result.as_ref() {
+                Some(Err(error)) => return Err(Box::new(ResourcePreparationFailed(error.clone()))),
+                Some(Ok(_)) => result.take(),
+                None => None,
+            }
+        };
+        if let Some(Ok(mut prepared)) = prepared {
+            // A flat reveal content layer must remain dense for alpha-over on
+            // each pose. Its contour frame is prepared independently below.
+            prepared.release_cache = true;
+            let mut renderer = prepared.accept()?;
+            renderer.snapshot_fingerprint = None;
+            renderer.worker_fingerprint = Some(SnapshotFingerprint::new(&content, scale)?);
+            renderer.cpu_preparation = None;
+            renderer.reveal_content = true;
+            renderer.reveal_content_preparations =
+                self.reveal_content_preparations.saturating_add(1);
+            renderer.reveal_content_bytes = renderer
+                .flattened
+                .as_ref()
+                .map_or(0, |(_, _, pixels)| pixels.bytes());
+            renderer.cache = TreeCache::default();
+            renderer
+                .cache
+                .prepare(&reveal_parts_scene(scene, prefix), scale)?;
+            renderer.opaque_composition = OpaqueComposition::Cached;
+            *self = renderer;
+            return Ok(());
+        }
+        Err(Box::new(CpuResourcesPending { request }))
+    }
     /// Freeze prepared CPU content for immediate painting after retiring a GPU backend.
     /// Position and opacity remain live; the cached group also survives the hidden pose.
     pub fn snapshot(scene: &Scene, scale: f32) -> Result<Self> {
         Self::prepare_snapshot(scene, scale)?.accept()
     }
     pub fn prepare_snapshot(scene: &Scene, scale: f32) -> Result<PreparedCpuSnapshot> {
+        Self::prepare_snapshot_with_storage(scene, scale, true)
+    }
+    fn prepare_snapshot_with_storage(
+        scene: &Scene,
+        scale: f32,
+        sparse_snapshot: bool,
+    ) -> Result<PreparedCpuSnapshot> {
         let content = cpu_content_scene(scene);
         let mut renderer = Self::with_opaque_composition(OpaqueComposition::Cached);
         renderer.keep_hidden_group = true;
-        renderer.sparse_snapshot = true;
+        renderer.sparse_snapshot = sparse_snapshot;
         // Dense intermediates live only on this worker until the flat snapshot
         // is complete; the finished allocation rejoins the native view ceiling.
         let native_budget = scene
@@ -3298,6 +3434,10 @@ impl Renderer for TreeCpuRenderer {
         Ok(false)
     }
     fn prepare_on_ui(&mut self, scene: &Scene, scale: f32) -> Result<()> {
+        if let Some(prefix) = reveal_parts_prefix(scene) {
+            return self.prepare_reveal_content(scene, scale, prefix);
+        }
+        self.reveal_content = false;
         let motion = scene.motion.as_ref().filter(|motion| motion.reveal);
         let native_images = scene
             .prepared
@@ -3359,6 +3499,7 @@ impl Renderer for TreeCpuRenderer {
                 scene: scene.clone(),
                 scale,
                 fingerprint: SnapshotFingerprint::new(scene, scale)?,
+                sparse_snapshot: true,
                 queued: Default::default(),
                 result: Default::default(),
             }));
@@ -3439,6 +3580,93 @@ impl Renderer for TreeCpuRenderer {
                 .is_none_or(|y| y > target.height)
         {
             return Err("damage outside SHM".into());
+        }
+        if self.reveal_content {
+            let ShmTarget {
+                bytes,
+                width,
+                height,
+                scale: target_scale,
+                format,
+            } = target;
+            let frame_damage = damage;
+            let frame = self.cache.frame.as_ref().ok_or("unprepared reveal contour")?;
+            paint_with_scratch(
+                frame,
+                scene.offset,
+                ShmTarget {
+                    bytes: &mut *bytes,
+                    width,
+                    height,
+                    scale: target_scale,
+                    format,
+                },
+                damage,
+                &mut self.repair_scratch,
+            )?;
+            let Some((_, content_scale, content_pixels)) = self.flattened.as_ref() else {
+                return Err("dense reveal content missing".into());
+            };
+            if content_scale.to_bits() != target_scale.to_bits() {
+                return Err("reveal content scale changed without preparation".into());
+            }
+            let (content_dx, content_dy) = scene
+                .motion
+                .as_ref()
+                .filter(|motion| motion.reveal)
+                .and_then(|motion| {
+                    motion.slide_distance.map(|distance| {
+                        motion.edge.closed_offset(distance, distance, motion.progress)
+                    })
+                })
+                .unwrap_or((0., 0.));
+            let clip = scene
+                .reveal_window()
+                .unwrap_or(scene.bounds)
+                .translated(scene.offset.0, scene.offset.1)
+                .pixels(target_scale, width, height);
+            let overlay_damage = intersection(frame_damage, clip);
+            let origin = (
+                ((scene.bounds.x + scene.offset.0 + content_dx) * target_scale).round() as i64,
+                ((scene.bounds.y + scene.offset.1 + content_dy) * target_scale).round() as i64,
+            );
+            match content_pixels {
+                FlattenedPixels::Dense(pixels) => blend_reveal_content(
+                    bytes,
+                    width,
+                    height,
+                    overlay_damage,
+                    pixels.as_ref(),
+                    origin,
+                    format == PixelFormat::Bgra,
+                ),
+                FlattenedPixels::Sparse(pixels) => blend_reveal_sparse(
+                    bytes,
+                    width,
+                    height,
+                    overlay_damage,
+                    pixels,
+                    origin,
+                    format == PixelFormat::Bgra,
+                ),
+            }
+            let alpha = u32::from((scene.opacity.clamp(0., 1.) * 255.).round() as u8);
+            if alpha < 255 {
+                for y in frame_damage.y.min(height)
+                    ..frame_damage.y.saturating_add(frame_damage.h).min(height)
+                {
+                    let start =
+                        (y as usize * width as usize + frame_damage.x.min(width) as usize) * 4;
+                    let end = (y as usize * width as usize
+                        + frame_damage.x.saturating_add(frame_damage.w).min(width) as usize)
+                        * 4;
+                    for channel in bytes[start..end].chunks_exact_mut(4).flatten() {
+                        *channel = (((u32::from(*channel) * alpha + 128) * 257) >> 16) as u8;
+                    }
+                }
+            }
+            self.reveal_content_composites += 1;
+            return Ok(());
         }
         let frozen_snapshot = self.snapshot_fingerprint.is_some();
         let frame = if frozen_snapshot {
@@ -3700,6 +3928,146 @@ fn blit_with_opacity(
     }
 }
 
+/// Source-over the retained open-pose content inside the current reveal clip.
+fn blend_reveal_content(
+    bytes: &mut [u8],
+    width: u32,
+    height: u32,
+    damage: Damage,
+    pixels: &Pixmap,
+    origin: (i64, i64),
+    swap_red_blue: bool,
+) {
+    let right = damage.x.saturating_add(damage.w).min(width);
+    let bottom = damage.y.saturating_add(damage.h).min(height);
+    let source = pixels.data();
+    let source_width = pixels.width() as i64;
+    let source_height = pixels.height() as i64;
+    let left = i64::from(damage.x.min(width)).max(origin.0).max(0);
+    let right = i64::from(right).min(origin.0 + source_width).min(i64::from(width));
+    if left >= right {
+        return;
+    }
+    for y in damage.y.min(height)..bottom {
+        let sy = i64::from(y) - origin.1;
+        if sy < 0 || sy >= source_height {
+            continue;
+        }
+        let source_index = ((sy * source_width + left - origin.0) * 4) as usize;
+        let target_index = (y as usize * width as usize + left as usize) * 4;
+        let len = (right - left) as usize * 4;
+        let (source_row, target_row) = (
+            &source[source_index..source_index + len],
+            &mut bytes[target_index..target_index + len],
+        );
+        for (src, dst) in source_row
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(target_row.as_chunks_mut::<4>().0)
+        {
+            blend_reveal_pixel(dst, *src, swap_red_blue);
+        }
+    }
+}
+
+fn blend_reveal_pixel(dst: &mut [u8], source: [u8; 4], swap_red_blue: bool) {
+    let [red, green, blue, alpha] = source;
+    if alpha == 0 {
+        return;
+    }
+    let (red, blue) = if swap_red_blue {
+        (blue, red)
+    } else {
+        (red, blue)
+    };
+    if alpha == 255 {
+        dst.copy_from_slice(&[red, green, blue, 255]);
+        return;
+    }
+    let inverse = 1. - f32::from(alpha) / 255.;
+    dst[0] = (f32::from(dst[0]) * inverse + f32::from(red) + 0.5) as u8;
+    dst[1] = (f32::from(dst[1]) * inverse + f32::from(green) + 0.5) as u8;
+    dst[2] = (f32::from(dst[2]) * inverse + f32::from(blue) + 0.5) as u8;
+    dst[3] = (f32::from(dst[3]) * inverse + f32::from(alpha) + 0.5) as u8;
+}
+
+fn blend_reveal_sparse(
+    bytes: &mut [u8],
+    width: u32,
+    height: u32,
+    damage: Damage,
+    pixels: &SparsePixels,
+    origin: (i64, i64),
+    swap_red_blue: bool,
+) {
+    let right = damage.x.saturating_add(damage.w).min(width);
+    let bottom = damage.y.saturating_add(damage.h).min(height);
+    let left = i64::from(damage.x.min(width)).max(origin.0).max(0);
+    let right = i64::from(right).min(origin.0 + i64::from(pixels.width)).min(i64::from(width));
+    let source_left = (left - origin.0).max(0);
+    let source_right = (right - origin.0).min(i64::from(pixels.width));
+    if source_left >= source_right {
+        return;
+    }
+    for y in damage.y.min(height)..bottom {
+        let source_y = i64::from(y) - origin.1;
+        if source_y < 0 || source_y >= i64::from(pixels.height) {
+            continue;
+        }
+        let mut x = 0_i64;
+        let mut index = pixels.rows[source_y as usize];
+        let row_end = pixels.rows[source_y as usize + 1];
+        while index < row_end {
+            let command = pixels.words[index];
+            let repeated = command & 0x8000_0000 != 0;
+            let len = i64::from(command & 0x7fff_ffff);
+            let start = x.max(source_left);
+            let end = (x + len).min(source_right);
+            if start < end {
+                if repeated {
+                    let color = pixels.words[index + 1].to_ne_bytes();
+                    if color[3] == 255 {
+                        let [red, green, blue, _] = color;
+                        let pixel = if swap_red_blue {
+                            [blue, green, red, 255]
+                        } else {
+                            [red, green, blue, 255]
+                        };
+                        let from =
+                            (y as usize * width as usize + (origin.0 + start) as usize) * 4;
+                        let to = from + (end - start) as usize * 4;
+                        bytes[from..to].as_chunks_mut::<4>().0.fill(pixel);
+                    } else if color[3] != 0 {
+                        for source_x in start..end {
+                            let target_x = (origin.0 + source_x) as usize;
+                            let target_index = (y as usize * width as usize + target_x) * 4;
+                            blend_reveal_pixel(
+                                &mut bytes[target_index..target_index + 4],
+                                color,
+                                swap_red_blue,
+                            );
+                        }
+                    }
+                } else {
+                    for source_x in start..end {
+                        let color = pixels.words[index + 1 + (source_x - x) as usize].to_ne_bytes();
+                        let target_x = (origin.0 + source_x) as usize;
+                        let target_index = (y as usize * width as usize + target_x) * 4;
+                        blend_reveal_pixel(
+                            &mut bytes[target_index..target_index + 4],
+                            color,
+                            swap_red_blue,
+                        );
+                    }
+                }
+            }
+            index += if repeated { 2 } else { 1 + len as usize };
+            x += len;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3776,6 +4144,7 @@ mod tests {
             .reveal_art_raster(svg, 8, 4, 2.0f32.to_bits(), rasterizer())
             .unwrap();
         assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 4);
+        assert_eq!(cache.reveal_svg_rasterizations, 4);
         assert!(cache.reveal_art_raster_bytes <= REVEAL_ART_CACHE_LIMIT);
     }
 
@@ -4644,6 +5013,203 @@ mod tests {
         assert!(renderer.cpu_preparation.is_none());
         assert_eq!(renderer.opaque_composition, OpaqueComposition::Direct);
         assert_eq!(renderer.cache.frame.as_ref().unwrap().key, expected_key);
+    }
+
+    #[test]
+    fn ui_cpu_reveal_prepares_contiguous_content_once_and_composites_each_pose() {
+        let mut scene = scene();
+        scene.asset_data.clear();
+        scene.layers.clear();
+        scene.clips.clear();
+        scene.primitives = vec![
+            Primitive::Rounded {
+                rect: Rect::new(0., 0., 24., 20.),
+                radius: 8.,
+                fill: [20, 30, 40, 255],
+                border: None,
+            },
+            Primitive::Rounded {
+                rect: Rect::new(6., 6., 8., 8.),
+                radius: 2.,
+                fill: [220, 40, 30, 255],
+                border: None,
+            },
+        ];
+        scene.motion = Some(crate::Motion {
+            id: "prepared-reveal".into(),
+            open: true,
+            duration: 0.24,
+            return_duration: None,
+            return_curve: None,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            fade: false,
+            reveal: true,
+            progress: 0.,
+            parts: vec![(0, scene.primitives[0].clone())],
+            art: None,
+        });
+        scene.reveal(0.15);
+
+        let mut renderer = TreeCpuRenderer::default();
+        let pending = renderer.prepare_on_ui(&scene, 1.).unwrap_err();
+        let request = pending
+            .downcast_ref::<CpuResourcesPending>()
+            .unwrap()
+            .request
+            .clone();
+        request.prepare().unwrap();
+        renderer.prepare_on_ui(&scene, 1.).unwrap();
+        assert!(renderer.reveal_content);
+        assert_eq!(renderer.reveal_content_preparations, 1);
+        assert!(renderer.reveal_content_bytes <= 64 * bead_core::cache::MIB);
+        println!("REVEAL_CONTENT_BYTES bytes={}", renderer.reveal_content_bytes);
+        assert_eq!(renderer.opacity_builds, 1, "open-pose content is flattened once");
+
+        let mut pixels = vec![0; 24 * 20 * 4];
+        for tick in 0..40 {
+            let progress = (tick + 10) as f32 / 50.;
+            scene.reveal(progress);
+            renderer.prepare_on_ui(&scene, 1.).unwrap();
+            renderer.render(
+                &scene,
+                ShmTarget {
+                    bytes: &mut pixels,
+                    width: 24,
+                    height: 20,
+                    scale: 1.,
+                    format: PixelFormat::Rgba,
+                },
+                Damage::full(24, 20),
+            )
+            .unwrap();
+        }
+        assert_eq!(renderer.reveal_content_preparations, 1);
+        assert_eq!(renderer.opacity_builds, 1);
+        assert_eq!(renderer.reveal_content_composites, 40);
+        assert_eq!(renderer.cache.reveal_svg_rasterizations, 0);
+        assert_eq!(renderer.direct_composites, 0);
+    }
+
+    #[test]
+    fn split_reveal_content_matches_direct_pixels_at_fractional_scale() {
+        let make_scene = |prefix: bool| {
+            let contour = Primitive::Rounded {
+                rect: Rect::new(0., 0., 24., 20.),
+                radius: 8.,
+                fill: [20, 30, 40, 255],
+                border: None,
+            };
+            let content = Primitive::Rounded {
+                rect: Rect::new(6., 6., 8., 8.),
+                radius: 2.,
+                fill: [220, 40, 30, 180],
+                border: None,
+            };
+            let primitives = if prefix {
+                vec![contour.clone(), content.clone()]
+            } else {
+                vec![
+                    Primitive::Rounded {
+                        rect: Rect::new(0., 0., 0., 0.),
+                        radius: 0.,
+                        fill: [0, 0, 0, 0],
+                        border: None,
+                    },
+                    contour.clone(),
+                    content.clone(),
+                ]
+            };
+            let part = if prefix { 0 } else { 1 };
+            let mut scene = Scene {
+                opacity: 1.,
+                motion: None,
+                resource_revision: 1,
+                asset_data: BTreeMap::new(),
+                clips: BTreeMap::new(),
+                layers: vec![],
+                prepared: BTreeMap::new(),
+                font_files: vec![],
+                width: 24.,
+                slide: None,
+                primitives,
+                offset: (0., 0.),
+                bounds: Rect::new(0., 0., 24., 20.),
+            };
+            scene.motion = Some(crate::Motion {
+                id: "pixel-equivalent-reveal".into(),
+                open: true,
+                duration: 0.24,
+                return_duration: None,
+                return_curve: None,
+                spring: false,
+                curve: None,
+                edge: bead_core::Edge::Top,
+                slide_distance: None,
+                fade: false,
+                reveal: true,
+                progress: 1.,
+                parts: vec![(part, contour)],
+                art: None,
+            });
+            scene
+        };
+        let mut split = make_scene(true);
+        let mut reference = make_scene(false);
+        let mut renderer = TreeCpuRenderer::default();
+        let pending = renderer.prepare_on_ui(&split, 1.5).unwrap_err();
+        pending
+            .downcast_ref::<CpuResourcesPending>()
+            .unwrap()
+            .request
+            .prepare()
+            .unwrap();
+        renderer.prepare_on_ui(&split, 1.5).unwrap();
+        assert!(matches!(
+            renderer.flattened.as_ref().map(|(_, _, pixels)| pixels),
+            Some(FlattenedPixels::Sparse(_)),
+        ));
+        let mut direct = TreeCpuRenderer::with_opaque_composition(OpaqueComposition::Direct);
+        let (width, height) = (36, 30);
+        let mut actual = vec![0; width as usize * height as usize * 4];
+        let mut expected = actual.clone();
+        for progress in [0.12, 0.34, 0.6, 0.92, 1.] {
+            split.reveal(progress);
+            reference.reveal(progress);
+            split.opacity = if progress == 0.6 { 0.45 } else { 1. };
+            reference.opacity = split.opacity;
+            renderer.prepare_on_ui(&split, 1.5).unwrap();
+            direct.prepare_on_ui(&reference, 1.5).unwrap();
+            renderer
+                .render(
+                    &split,
+                    ShmTarget {
+                        bytes: &mut actual,
+                        width,
+                        height,
+                        scale: 1.5,
+                        format: PixelFormat::Rgba,
+                    },
+                    Damage::full(width, height),
+                )
+                .unwrap();
+            direct
+                .render(
+                    &reference,
+                    ShmTarget {
+                        bytes: &mut expected,
+                        width,
+                        height,
+                        scale: 1.5,
+                        format: PixelFormat::Rgba,
+                    },
+                    Damage::full(width, height),
+                )
+                .unwrap();
+            assert_eq!(actual, expected, "pixels differ at progress={progress}");
+        }
     }
 
     #[test]

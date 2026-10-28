@@ -655,6 +655,9 @@ pub trait SceneSource {
         String::new()
     }
     fn commit(&mut self) -> bool;
+    /// Tell a source that the compositor is presenting a time-sensitive pose.
+    /// Sources may defer coalescible model refreshes until the pose settles.
+    fn presentation_motion(&mut self, _active: bool) {}
     /// Delivered once per generation after successful presentation, off-thread for worker sources.
     fn presented(&mut self, _revision: u64) {}
     fn error_scene(&mut self, error: String) -> Scene;
@@ -914,6 +917,8 @@ struct Surface {
     format: PixelFormat,
     previous: Option<Rect>,
     visual_damage: bead_render::damage::FrameDamage,
+    previous_reveal_window: Option<(u32, u32, Damage)>,
+    pending_reveal_window: Option<(u32, u32, Damage)>,
     allocations: usize,
     shm_trim_pending: bool,
     heap_trimmed_ui_serial: u64,

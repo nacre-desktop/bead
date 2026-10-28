@@ -276,6 +276,7 @@ impl App {
             .filter(|(w, h)| *w > 0 && *h > 0)
             .map_or(size, |(w, h)| (w as u32, h as u32));
         source.viewport(viewport_size.0, viewport_size.1);
+        source.presentation_motion(spec.fallback.motion.is_some());
         let renderer = bead_render::renderer(RendererKind::Cpu).map_err(|e| e.to_string())?;
         let scale120 = self
             .output
@@ -606,6 +607,7 @@ impl App {
                 scene.reveal(progress);
             }
         }
+        o.source.presentation_motion(animating);
         o.offset = scene.offset;
         // Input only where the card is, and only while it is shown and interactive.
         let visible = o.open && scene.opacity > 0.001 && !self.options.test_passive;

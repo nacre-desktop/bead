@@ -3,7 +3,7 @@
 use crate::{InputRegion, PanelAnchor, SceneSource, UiEvent};
 use bead_render::{Rect, Scene};
 use std::{
-    collections::VecDeque,
+    collections::{BTreeMap, VecDeque},
     error::Error,
     sync::{Arc, mpsc},
     thread::JoinHandle,
@@ -113,12 +113,63 @@ enum Job {
     Presented(u64),
     Idle(bool),
     FrameInterval(std::time::Duration),
+    PresentationMotion(bool),
     Stage(UiEvent, Vec<f32>),
     ContentScroll(UiEvent, Vec<f32>),
     Viewport(u32, u32),
     Watch(Box<dyn Fn(Result<(), String>) + Send>),
     Ack(u64, Result<(), String>),
     Stop,
+}
+#[derive(Default)]
+struct DeferredRefresh {
+    model: BTreeMap<String, bead_core::Value>,
+    reload: bool,
+    desktop: Option<Arc<bead_services::Snapshot>>,
+    backend: Option<Arc<bead_backends::Snapshot>>,
+    wallpaper_palette: Option<BTreeMap<String, [u8; 4]>>,
+    presented: Option<u64>,
+}
+impl DeferredRefresh {
+    fn defer(&mut self, event: &UiEvent) -> bool {
+        match event {
+            UiEvent::Reload => {
+                self.reload = true;
+                true
+            }
+            UiEvent::Model(values) => {
+                for (key, value) in values {
+                    self.model.insert(key.clone(), value.clone());
+                }
+                true
+            }
+            UiEvent::Desktop(snapshot) => {
+                if self
+                    .desktop
+                    .as_ref()
+                    .is_none_or(|old| snapshot.revision >= old.revision)
+                {
+                    self.desktop = Some(snapshot.clone());
+                }
+                true
+            }
+            UiEvent::Backend(snapshot) => {
+                if self
+                    .backend
+                    .as_ref()
+                    .is_none_or(|old| snapshot.epoch >= old.epoch)
+                {
+                    self.backend = Some(snapshot.clone());
+                }
+                true
+            }
+            UiEvent::WallpaperPalette(palette) => {
+                self.wallpaper_palette = Some(palette.clone());
+                true
+            }
+            _ => false,
+        }
+    }
 }
 // Pointer positions are replaceable only within the same gesture. Every other
 // job is an ordering barrier (especially press, release and model updates).
@@ -196,6 +247,7 @@ pub struct Source {
     candidate: Option<Scene>,
     viewport: Option<(u32, u32)>,
     frame_interval: Option<std::time::Duration>,
+    presentation_motion: Option<bool>,
 }
 impl Source {
     pub fn new(factory: Factory, fallback: Scene) -> Self {
@@ -214,6 +266,7 @@ impl Source {
             candidate: None,
             viewport: None,
             frame_interval: None,
+            presentation_motion: None,
         }
     }
     pub fn with_image_policy(mut self, policy: bead_render::tree::ImagePolicy) -> Self {
@@ -236,6 +289,10 @@ impl Drop for Source {
         if let Some(worker) = self.thread.take() {
             let _ = worker.join();
         }
+    }
+
+    fn defer_presented(&mut self, revision: u64) {
+        self.presented = Some(self.presented.map_or(revision, |old| old.max(revision)));
     }
 }
 fn bake(
@@ -391,6 +448,8 @@ impl SceneSource for Source {
                 let mut needs_trim = false;
                 let mut active_scales = vec![1.];
                 let mut accepted_resource_revision = None;
+                let mut presentation_motion = false;
+                let mut pending_refresh = DeferredRefresh::default();
                 'actor: loop {
                     for job in receiver.try_iter() {
                         match job {
@@ -400,6 +459,11 @@ impl SceneSource for Source {
                     }
                     let job = if let Some(job) = queue.pop_front() {
                         job
+                    } else if presentation_motion {
+                        match receiver.recv() {
+                            Ok(job) => job,
+                            Err(_) => break,
+                        }
                     } else {
                         if let Some(deadline) = source.wakeup_at() {
                             match receiver.recv_timeout(
@@ -452,7 +516,48 @@ impl SceneSource for Source {
                         }
                         Job::PanelAnchor(anchor) => source.panel_anchor(anchor),
                         Job::Stop => break,
+                        Job::Presented(revision) if presentation_motion => {
+                            pending_refresh.defer_presented(revision);
+                        }
                         Job::Presented(revision) => source.presented(revision),
+                        Job::PresentationMotion(active) => {
+                            presentation_motion = active;
+                            if !active {
+                                if std::mem::take(&mut pending_refresh.reload) {
+                                    queue.push_back(Job::Stage(
+                                        UiEvent::Reload,
+                                        active_scales.clone(),
+                                    ));
+                                }
+                                if let Some(palette) = pending_refresh.wallpaper_palette.take() {
+                                    queue.push_back(Job::Stage(
+                                        UiEvent::WallpaperPalette(palette),
+                                        active_scales.clone(),
+                                    ));
+                                }
+                                if let Some(snapshot) = pending_refresh.desktop.take() {
+                                    queue.push_back(Job::Stage(
+                                        UiEvent::Desktop(snapshot),
+                                        active_scales.clone(),
+                                    ));
+                                }
+                                if let Some(snapshot) = pending_refresh.backend.take() {
+                                    queue.push_back(Job::Stage(
+                                        UiEvent::Backend(snapshot),
+                                        active_scales.clone(),
+                                    ));
+                                }
+                                if let Some(revision) = pending_refresh.presented.take() {
+                                    queue.push_back(Job::Presented(revision));
+                                }
+                                if !pending_refresh.model.is_empty() {
+                                    queue.push_back(Job::Stage(
+                                        UiEvent::Model(std::mem::take(&mut pending_refresh.model)),
+                                        active_scales.clone(),
+                                    ));
+                                }
+                            }
+                        }
                         Job::Idle(value) => {
                             idle = value;
                             source.set_idle(value);
@@ -477,6 +582,11 @@ impl SceneSource for Source {
                         }
                         Job::Ack(_, _) => {}
                         Job::Stage(event, scales) | Job::ContentScroll(event, scales) => {
+                            if presentation_motion
+                                && pending_refresh.defer(&event)
+                            {
+                                continue;
+                            }
                             source.scales(scales.clone());
                             active_scales.clone_from(&scales);
                             match &event {
@@ -680,6 +790,9 @@ impl SceneSource for Source {
         if let Some(interval) = self.frame_interval {
             let _ = self.send(Job::FrameInterval(interval));
         }
+        if let Some(active) = self.presentation_motion {
+            let _ = self.send(Job::PresentationMotion(active));
+        }
     }
     fn frame_interval(&mut self, interval: std::time::Duration) {
         if self.frame_interval == Some(interval) {
@@ -689,6 +802,13 @@ impl SceneSource for Source {
         if self.sender.is_some() {
             let _ = self.send(Job::FrameInterval(interval));
         }
+    }
+    fn presentation_motion(&mut self, active: bool) {
+        if self.presentation_motion == Some(active) {
+            return;
+        }
+        self.presentation_motion = Some(active);
+        let _ = self.send(Job::PresentationMotion(active));
     }
     fn set_idle(&mut self, idle: bool) {
         let _ = self.send(Job::Idle(idle));
@@ -873,6 +993,53 @@ mod tests {
             offset: (0., 0.),
             bounds: bead_render::Rect::new(0., 0., 16., 16.),
         }
+    }
+    #[test]
+    fn slide_defers_and_coalesces_model_refreshes_and_file_reload() {
+        let mut pending = DeferredRefresh::default();
+        let first = UiEvent::Model(BTreeMap::from([
+            ("dashboard.title".into(), bead_core::Value::Text("old".into())),
+            ("dashboard.count".into(), bead_core::Value::Number(1.)),
+        ]));
+        assert!(pending.defer(&first));
+        let latest = UiEvent::Model(BTreeMap::from([(
+            "dashboard.title".into(),
+            bead_core::Value::Text("new".into()),
+        )]));
+        assert!(pending.defer(&latest));
+        assert!(pending.defer(&UiEvent::Reload));
+        pending.defer_presented(18);
+        pending.defer_presented(21);
+        assert_eq!(pending.presented, Some(21));
+        assert!(pending.defer(&UiEvent::Desktop(Arc::new(
+            bead_services::Snapshot { revision: 4, ..Default::default() },
+        ))));
+        assert!(pending.defer(&UiEvent::Desktop(Arc::new(
+            bead_services::Snapshot { revision: 5, ..Default::default() },
+        ))));
+        assert!(pending.defer(&UiEvent::Backend(Arc::new(
+            bead_backends::Snapshot { epoch: 2, ..Default::default() },
+        ))));
+        assert!(pending.defer(&UiEvent::Backend(Arc::new(
+            bead_backends::Snapshot { epoch: 3, ..Default::default() },
+        ))));
+        assert_eq!(
+            pending.model.get("dashboard.title"),
+            Some(&bead_core::Value::Text("new".into())),
+        );
+        assert_eq!(
+            pending.model.get("dashboard.count"),
+            Some(&bead_core::Value::Number(1.)),
+        );
+        assert!(pending.reload);
+        assert_eq!(pending.desktop.as_ref().unwrap().revision, 5);
+        assert_eq!(pending.backend.as_ref().unwrap().epoch, 3);
+        assert!(
+            !pending.defer(
+                &UiEvent::Click { x: 3., y: 4. },
+            ),
+            "input remains immediate during a slide"
+        );
     }
     #[test]
     fn unchanged_frame_interval_sends_no_worker_job_and_queued_changes_coalesce() {

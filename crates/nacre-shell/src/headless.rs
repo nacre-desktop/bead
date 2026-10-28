@@ -483,6 +483,91 @@ mod tests {
         }
         Ok(())
     }
+    /// Manual per-tick CPU cost of panel reveal preparation and painting at the
+    /// owner's effective scale. This is a software benchmark, not scanout timing.
+    #[test]
+    #[ignore = "manual panel slide CPU benchmark; no compositor needed"]
+    fn panel_slide_tick_measurement() -> Result<(), Box<dyn std::error::Error>> {
+        use bead::render::{
+            Damage, PixelFormat, Renderer, ShmTarget,
+            tree::{CpuResourcesPending, TreeCpuRenderer},
+        };
+        for (entry, logical) in [
+            ("dashboard/main.luau", (780, 1040)),
+            ("control/main.luau", (640, 920)),
+            ("sound/main.luau", (464, 350)),
+        ] {
+            let mut fixture = initial_models()?;
+            fixture.insert("panel.open".into(), Value::Bool(true));
+            fixture.insert(
+                "bead.workspaces".into(),
+                Value::list((1..=8).map(|i| serde_json::json!({
+                    "id": i.to_string(), "name": i.to_string(), "index": i,
+                    "active": i == 1, "urgent": false, "mru": false,
+                })).collect()),
+            );
+            fixture.insert("bead.desktop.audio.device".into(), Value::Text("Output".into()));
+            fixture.insert("bead.desktop.audio.label".into(), Value::Text("75%".into()));
+            fixture.insert("bead.desktop.audio.percent".into(), Value::Number(75.));
+            let harness = bead_test::Harness::load(
+                &root(), Path::new(entry), &root().join("palette.json"), fixture,
+                bead_test::Config { width: logical.0, height: logical.1, scale: 1.5 },
+            )?;
+            let mut scene = harness.scene().clone();
+            scene.opacity = 1.;
+            let scale = 1.5;
+            let (width, height) = (2880, 1800);
+            let mut pixels = vec![0u8; width as usize * height as usize * 4];
+            let mut renderer = TreeCpuRenderer::default();
+            let mut samples = Vec::with_capacity(100);
+            let mut first_content_ms = 0.;
+            for tick in 0..130 {
+                let progress = if tick == 0 { 0. } else { (tick % 60) as f32 / 59. };
+                scene.reveal(progress);
+                let wall_started = std::time::Instant::now();
+                let began = bead::core::profile::process_cpu_ns();
+                if let Err(error) = renderer.prepare_on_ui(&scene, scale) {
+                    let Some(pending) = error.downcast_ref::<CpuResourcesPending>() else {
+                        return Err(error);
+                    };
+                    pending
+                        .request
+                        .prepare()
+                        .map_err(std::io::Error::other)?;
+                    renderer.prepare_on_ui(&scene, scale)?;
+                }
+                let damage = scene.bounds().pixels(scale, width, height);
+                renderer.render(
+                    &scene,
+                    ShmTarget { bytes: &mut pixels, width, height, scale, format: PixelFormat::Rgba },
+                    damage,
+                )?;
+                let elapsed = bead::core::profile::process_cpu_ns() - began;
+                if tick == 0 {
+                    first_content_ms = wall_started.elapsed().as_secs_f64() * 1000.;
+                } else if tick >= 31 {
+                    samples.push(elapsed as f64 / 1e6);
+                }
+            }
+            if std::env::var_os("BEAD_REVEAL_BYTES").is_some() {
+                println!(
+                    "REVEAL_CACHE entry={entry} bytes={} preparations={} composites={} svg_rasterizations={}",
+                    renderer.reveal_content_bytes,
+                    renderer.reveal_content_preparations,
+                    renderer.reveal_content_composites,
+                    renderer.cache.reveal_svg_rasterizations,
+                );
+            }
+            samples.sort_by(f64::total_cmp);
+            println!(
+                "PANEL_SLIDE_TICK entry={entry} output={width}x{height} scale={scale} first_content_wall_ms={first_content_ms:.4} cpu_p50_ms={:.4} cpu_p99_ms={:.4} samples={}",
+                samples[samples.len() / 2],
+                samples[(samples.len() * 99 / 100).min(samples.len() - 1)],
+                samples.len(),
+            );
+        }
+        Ok(())
+    }
     #[test]
     fn launcher_source_fixtures_cover_grid_results_and_prefixes()
     -> Result<(), Box<dyn std::error::Error>> {

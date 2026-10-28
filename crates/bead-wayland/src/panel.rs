@@ -771,6 +771,9 @@ impl App {
                     surface.presented_generation = None;
                 }
             }
+            if open && let Some(source) = &mut self.panel_runtime {
+                source.presentation_motion(spec.fallback.motion.is_some());
+            }
             // PanelVisibility forces a draw of the last prepared scene even if
             // its worker is still refreshing service data in the background.
             self.panel_ui(UiEvent::PanelVisibility(true));
@@ -832,6 +835,9 @@ impl App {
             let _ = notify.send(UiEvent::Panel(epoch, Box::new(event)));
         }));
         source.frame_interval(self.output_frame_interval(&output));
+        if open && spec.fallback.motion.is_some() {
+            source.presentation_motion(true);
+        }
         source.panel_center(self.panel_center);
         source.panel_anchor(self.panel_anchor);
         source
