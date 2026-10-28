@@ -1,11 +1,13 @@
-Status: done; branch: `task/codex-b0178-frame-cost-20261028`; pushed code commit `f1746a9b`.
-
-Cause: suppressing `Session::preview_deadline()` during the panel hold removed the actor timeout that had also prompted redraws. Wayland’s companion frame callback only continued on `panel_animations.active()`, which did not reliably cover scene-motion slides. This made ordinary panel transitions wait for unrelated wakeups; the audit saw only 3–6 frames, gaps 300–1000 ms, and ~1 s duration. The separate extras animation still ran at 39 frames / 11–12 ms gaps.
-
-Fix: record a companion motion deadline when its first frame commits; keep scheduling/drawing from Wayland frame callbacks through that deadline. This redraws and re-poses the already prepared scene without calling `SceneSource::stage`; reset the deadline on each panel target change. Retained the icon cache, dashboard memoization, shared status snapshots, and existing damage-copy improvements.
-
-Regression test `companion_slide_callbacks_at_120_hz_keep_committing_without_staging`: fake callbacks at 120 Hz for 300 ms produced 37 commits, max gap 8.33 ms, and B0170 `PANEL_SLIDE` marker `frames=37`. Existing counter tests passed: 0 stage wakeups in 40 held ticks; 0 Luau materialize/build calls in 40 unchanged ticks after the initial build. Existing icon test counts one lookup per key across repeated requests.
-
-Full Bead CI: `bash /ci.sh` in the task Ubuntu 24.04 container; `FULL_CI_PASS`, exit 0.
-
-Profiling ELF: `.lead/profiling/nacre-shell`, 399,061,536 bytes, x86-64 with `.debug_info` and `.eh_frame`. Arch build command: `RUSTFLAGS='-C force-frame-pointers=yes' cargo build -p nacre-shell --bin nacre-shell --profile profiling --locked -j2`.
+Status: blocked — branch work is pushed; performance acceptance and owner laptop audit remain open.
+Branch: `task/codex-b0180-draw-cost-20261029`, implementation HEAD `84cdcf3b` is pushed. 15 implementation commits use `[no-publish]`; this report is the follow-up record. No merge or PR.
+Commits: `226a5000`–`84cdcf3b` (15 implementation commits); author/committer and Codex trailer verified.
+Cause: CPU reveal content was repainted each tick; motion also replayed intermediate service/model/reload/presentation work. SVG reveal callback remains progress-dependent; `presented` serialization was not measured to zero.
+Fix: precompose contiguous reveal content once off-thread; retain and composite content while drawing dynamic contours. Whole-panel slides reuse a retained picture. Coalesce refresh/reload/presentation work during motion. Bound/cache exact-input SVG slices and replace JSON bounds hashing with direct hashing.
+CPU headless benchmark, debug test profile, 2880×1800/1.5, p50/p99 ms (baseline → candidate): dashboard 454.6/728.8 → 394.6/606.6; control centre 282.3/414.3 → 236.3/381.9; sound 40.9/41.9 → 1.60/1.66.
+First-content wall ms: dashboard 213.5 → 262.2; control 140.4 → 152.2; sound 41.3 → 62.0 (regressed; idle prewarming is missing).
+Retained cache calls over 130 ticks: dashboard 1 prepare / 130 composites / 0 SVG rasterizations; control 1 / 130 / 0; sound 1 slide prepare / 130 composites. Fixture contains no Nacre Chrome SVG, so its zero SVG count is not production evidence. Dynamic SVG can still rasterize per pose; no serialize-zero counter was added.
+B0178 scheduler proof passed: 37 commits in 300 ms, maximum gap 8.33 ms; no staging during motion.
+Full CI: task CI recipe on a CI container using an archive of the exact pushed source tree; synthetic Git metadata. `FULL_CI_OK`; workspace 783 passed, 3 ignored; private clock proof 1 passed in 59.17 s; all remaining workflow checks passed.
+Profiling build: `nice -n 10 cargo build --profile profiling -p nacre-shell --locked -j2`, `RUSTFLAGS='-C force-frame-pointers=yes'`; passed in 8m08s. `.lead/profiling/nacre-shell`: x86-64 ELF with debug info, 384,766,096 bytes, SHA-256 `19e329b57e9a31f0b797a142a929d106b9dbce09fd0ac5d46ff9dca461b4745a`. Built from code-identical `a372a4bf` (final `84cdcf3b` only changes docs).
+Diff vs origin/main: 1,391 insertions, 78 deletions across 10 files; removed 0 product lines/files (no replaced legacy implementation was deleted).
+Open: first-content latency regressions; release-profile matched benchmark missing; Chrome art/raster call count unverified; per-frame serialization count unverified; no live audit or smoothness acceptance. Task rules reserve laptop live audit to the lead.
