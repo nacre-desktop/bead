@@ -723,7 +723,7 @@ async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_previe
         repeated.asset_data.values().any(|bytes| !bytes.is_empty()),
         "the advertised thumbnail remains a fallback"
     );
-    // Cached thumbnails still need the palette/publication-thumbnail prewarm.
+    // A cached thumbnail is ready content and does not restart a catalogue child.
     let mut cached = repeated.clone();
     if let Primitive::Image { path, .. } = &mut cached.primitives[0] {
         *path = std::path::PathBuf::from("@icon:wallpaper:thumbnail:/fixture/next.mp4");
@@ -733,26 +733,16 @@ async fn wallpaper_hydrates_only_visible_image_ids_and_suppresses_missing_previe
     wallpaper.attach_images(&mut cached, Some(wake.clone()));
     assert!(
         wallpaper.content_ready(),
-        "palette prewarming must not delay ready images"
+        "cached thumbnails must not delay ready images"
     );
-    assert_eq!(
-        lab.calls.recv().await.unwrap(),
-        (
-            "wallpaper.catalogue".into(),
-            json!({"ids":["/fixture/next.mp4"]})
-        )
+    assert!(
+        lab.calls.try_recv().is_err(),
+        "a cached thumbnail must not respawn palette/catalogue preparation"
     );
-    for _ in 0..200 {
-        wallpaper.project(&open, Some(wake.clone()));
-        if wallpaper.state.borrow().catalogue.is_none() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(5)).await;
-    }
     assert_eq!(
         wallpaper.state.borrow().image_revision,
         ready_revision,
-        "palette-only preparation must not discard prepared render content"
+        "a cached thumbnail must not discard prepared render content"
     );
     wallpaper.attach_images(&mut template.clone(), Some(wake.clone()));
     assert!(
