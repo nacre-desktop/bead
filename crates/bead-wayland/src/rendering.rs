@@ -1331,7 +1331,7 @@ impl App {
         let previous_frames = self.surfaces[index].frames;
         let mut busy = false;
         // The motion this frame shows and the clock of its pose; a committed frame starts a held clock.
-        let mut motion_clock: Option<(String, f64)> = None;
+        let mut motion_clock: Option<(String, f64, f64)> = None;
         let result = (|| -> Result<(), Box<dyn Error>> {
             #[cfg(feature = "native-gl")]
             if self.surfaces[index].companion
@@ -1488,7 +1488,15 @@ impl App {
                     }),
                 );
                 let (progress, active) = self.animations.value(&motion.id, now).unwrap();
-                motion_clock = Some((motion.id.clone(), now));
+                motion_clock = Some((
+                    motion.id.clone(),
+                    now,
+                    if self.options.animate {
+                        1.
+                    } else {
+                        motion.duration
+                    },
+                ));
                 // A callback can arrive after the motion expires. Keep it armed
                 // until we have drawn the terminal pose, rather than making the
                 // next input finish the motion and invalidate the whole surface.
@@ -2377,15 +2385,17 @@ impl App {
             // destination has committed accepted content, never on dock request.
             self.panel_cover = None;
         }
-        if let Some((id, drawn)) = motion_clock
+        if let Some((id, drawn, duration)) = motion_clock
             && self.surfaces[index].frames > previous_frames
         {
             // The first committed frame of a motion starts its clock: preparation, configure and
             // a slow first frame never spend the slide (B0170).
-            let slide = self
-                .animations
-                .committed(&id, drawn, self.started.elapsed().as_secs_f64());
+            let committed_at = self.started.elapsed().as_secs_f64();
+            let slide = self.animations.committed(&id, drawn, committed_at);
             super::overlay::log_slide(&id, slide);
+            if self.surfaces[index].companion && self.panel_frame_until.is_none() {
+                self.panel_frame_until = Some(committed_at + duration);
+            }
         }
         // A pending frame callback already supplies the retry wakeup.
         if busy && !self.surfaces[index].callbacks.pending {

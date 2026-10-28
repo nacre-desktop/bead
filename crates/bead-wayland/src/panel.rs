@@ -703,6 +703,7 @@ impl App {
         }
         self.panel_close_epoch = self.panel_close_epoch.wrapping_add(1);
         self.panel_target = open;
+        self.panel_frame_until = None;
         if open && std::env::var_os("BEAD_ACCEPTANCE_PANEL_LATENCY").is_some() {
             self.acceptance_panel_open_started = Some((self.panel_close_epoch, Instant::now()));
         }

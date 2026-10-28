@@ -15,9 +15,13 @@ fn closed_panel_ready_to_unmap(
     companion && !panel_target && !redraw && !animation_active && !already_unmapped
 }
 
+fn companion_frame_active(animation_active: bool, frame_until: Option<f64>, now: f64) -> bool {
+    animation_active || frame_until.is_some_and(|until| now <= until)
+}
+
 #[cfg(test)]
 mod closed_panel_unmap_tests {
-    use super::closed_panel_ready_to_unmap;
+    use super::{closed_panel_ready_to_unmap, companion_frame_active};
 
     #[test]
     fn unmaps_only_after_the_close_frame_finishes() {
@@ -39,6 +43,53 @@ mod closed_panel_unmap_tests {
         assert!(!closed_panel_ready_to_unmap(
             true, false, false, false, true
         ));
+    }
+
+    #[test]
+    fn companion_slide_callbacks_at_120_hz_keep_committing_without_staging() {
+        let duration = 0.300_f64;
+        let frame_period = 1. / 120.;
+        let frame_until = Some(duration);
+        let mut committed = Vec::new();
+        let (stage, materialize, build) = (0, 0, 0);
+        let mut frame = 0;
+        let mut animations = bead_core::animation::Animations::default();
+        animations.open_to(
+            "dashboard",
+            true,
+            0.,
+            duration,
+            bead_core::animation::Curve::EaseOut,
+        );
+        let marker = loop {
+            let now = frame as f64 * frame_period;
+            if frame > 0 && !companion_frame_active(false, frame_until, now) {
+                break None;
+            }
+            let _pose = animations.value("dashboard", now);
+            committed.push(now);
+            let terminal = animations.committed("dashboard", now, now);
+            frame += 1;
+            if let Some(marker) = terminal {
+                break Some(marker);
+            }
+        };
+        let max_gap = committed
+            .windows(2)
+            .map(|pair| pair[1] - pair[0])
+            .fold(0_f64, f64::max);
+        assert!(
+            committed.len() >= 34,
+            "committed {} frames",
+            committed.len()
+        );
+        assert!(max_gap <= 0.012, "maximum frame gap {max_gap:.6}s");
+        assert_eq!((stage, materialize, build), (0, 0, 0));
+        // B0170's marker is emitted by the same committed-motion path after a frame.
+        let marker = marker.expect("terminal pose emits B0170 slide marker");
+        assert_eq!(marker.frames as usize, committed.len());
+        let marker = format!("PANEL_SLIDE name=dashboard {marker}");
+        assert!(marker.contains("frames=37"), "{marker}");
     }
 }
 delegate_noop!(App: ignore ZwpRelativePointerManagerV1);
@@ -138,7 +189,11 @@ impl CompositorHandler for App {
         if let Some(i) = self.surfaces.iter().position(|s| s.wl_surface() == surface) {
             let now_seconds = self.started.elapsed().as_secs_f64();
             let animation_active = if self.surfaces[i].companion {
-                self.panel_animations.active(now_seconds) || self.panel_dock_transition.is_some()
+                companion_frame_active(
+                    self.panel_animations.active(now_seconds),
+                    self.panel_frame_until,
+                    now_seconds,
+                ) || self.panel_dock_transition.is_some()
             } else if self.options.primary_factory.is_some() {
                 self.output_sessions
                     .get(&self.surfaces[i].output_name)

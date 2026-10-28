@@ -126,6 +126,8 @@ pub(super) struct App {
     pub(super) companion: Option<(Scene, Box<dyn Renderer>, RendererKind)>,
     pub(super) animations: bead_core::animation::Animations,
     pub(super) panel_animations: bead_core::animation::Animations,
+    /// Keep requesting compositor frame callbacks through a committed companion slide.
+    pub(super) panel_frame_until: Option<f64>,
     /// Set while a pearl (or guide) is swapped in as the resident panel.
     pub(super) pearl: Option<pearls::Info>,
     pub(super) reserved_pearl_id: Option<u32>,
@@ -446,6 +448,7 @@ pub fn run_runtime(
         companion,
         animations: Default::default(),
         panel_animations: Default::default(),
+        panel_frame_until: None,
         pearl: None,
         reserved_pearl_id: None,
         prewarm_attempted: false,
