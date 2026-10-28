@@ -673,7 +673,7 @@ fn disconnect(shared: &Shared) {
     let _ = shared.link.disconnect();
     shared.transport_generation.fetch_add(1, Ordering::AcqRel);
     if let Ok(mut status) = shared.status.lock() {
-        *status = Status::default();
+        *status = Arc::new(Status::default());
     }
     for publisher in shared.publishers() {
         let _ = publisher.disconnect();
