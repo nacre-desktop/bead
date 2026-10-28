@@ -501,17 +501,33 @@ mod tests {
             fixture.insert("panel.open".into(), Value::Bool(true));
             fixture.insert(
                 "bead.workspaces".into(),
-                Value::list((1..=8).map(|i| serde_json::json!({
-                    "id": i.to_string(), "name": i.to_string(), "index": i,
-                    "active": i == 1, "urgent": false, "mru": false,
-                })).collect()),
+                Value::list(
+                    (1..=8)
+                        .map(|i| {
+                            serde_json::json!({
+                                "id": i.to_string(), "name": i.to_string(), "index": i,
+                                "active": i == 1, "urgent": false, "mru": false,
+                            })
+                        })
+                        .collect(),
+                ),
             );
-            fixture.insert("bead.desktop.audio.device".into(), Value::Text("Output".into()));
+            fixture.insert(
+                "bead.desktop.audio.device".into(),
+                Value::Text("Output".into()),
+            );
             fixture.insert("bead.desktop.audio.label".into(), Value::Text("75%".into()));
             fixture.insert("bead.desktop.audio.percent".into(), Value::Number(75.));
             let harness = bead_test::Harness::load(
-                &root(), Path::new(entry), &root().join("palette.json"), fixture,
-                bead_test::Config { width: logical.0, height: logical.1, scale: 1.5 },
+                &root(),
+                Path::new(entry),
+                &root().join("palette.json"),
+                fixture,
+                bead_test::Config {
+                    width: logical.0,
+                    height: logical.1,
+                    scale: 1.5,
+                },
             )?;
             let mut scene = harness.scene().clone();
             scene.opacity = 1.;
@@ -522,7 +538,11 @@ mod tests {
             let mut samples = Vec::with_capacity(100);
             let mut first_content_ms = 0.;
             for tick in 0..130 {
-                let progress = if tick == 0 { 0. } else { (tick % 60) as f32 / 59. };
+                let progress = if tick == 0 {
+                    0.
+                } else {
+                    (tick % 60) as f32 / 59.
+                };
                 scene.reveal(progress);
                 let wall_started = std::time::Instant::now();
                 let began = bead::core::profile::process_cpu_ns();
@@ -530,16 +550,19 @@ mod tests {
                     let Some(pending) = error.downcast_ref::<CpuResourcesPending>() else {
                         return Err(error);
                     };
-                    pending
-                        .request
-                        .prepare()
-                        .map_err(std::io::Error::other)?;
+                    pending.request.prepare().map_err(std::io::Error::other)?;
                     renderer.prepare_on_ui(&scene, scale)?;
                 }
                 let damage = scene.bounds().pixels(scale, width, height);
                 renderer.render(
                     &scene,
-                    ShmTarget { bytes: &mut pixels, width, height, scale, format: PixelFormat::Rgba },
+                    ShmTarget {
+                        bytes: &mut pixels,
+                        width,
+                        height,
+                        scale,
+                        format: PixelFormat::Rgba,
+                    },
                     damage,
                 )?;
                 let elapsed = bead::core::profile::process_cpu_ns() - began;

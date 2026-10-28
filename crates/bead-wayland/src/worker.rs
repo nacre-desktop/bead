@@ -582,9 +582,7 @@ impl SceneSource for Source {
                         }
                         Job::Ack(_, _) => {}
                         Job::Stage(event, scales) | Job::ContentScroll(event, scales) => {
-                            if presentation_motion
-                                && pending_refresh.defer(&event)
-                            {
+                            if presentation_motion && pending_refresh.defer(&event) {
                                 continue;
                             }
                             source.scales(scales.clone());
@@ -998,7 +996,10 @@ mod tests {
     fn slide_defers_and_coalesces_model_refreshes_and_file_reload() {
         let mut pending = DeferredRefresh::default();
         let first = UiEvent::Model(BTreeMap::from([
-            ("dashboard.title".into(), bead_core::Value::Text("old".into())),
+            (
+                "dashboard.title".into(),
+                bead_core::Value::Text("old".into()),
+            ),
             ("dashboard.count".into(), bead_core::Value::Number(1.)),
         ]));
         assert!(pending.defer(&first));
@@ -1011,18 +1012,30 @@ mod tests {
         pending.defer_presented(18);
         pending.defer_presented(21);
         assert_eq!(pending.presented, Some(21));
-        assert!(pending.defer(&UiEvent::Desktop(Arc::new(
-            bead_services::Snapshot { revision: 4, ..Default::default() },
-        ))));
-        assert!(pending.defer(&UiEvent::Desktop(Arc::new(
-            bead_services::Snapshot { revision: 5, ..Default::default() },
-        ))));
-        assert!(pending.defer(&UiEvent::Backend(Arc::new(
-            bead_backends::Snapshot { epoch: 2, ..Default::default() },
-        ))));
-        assert!(pending.defer(&UiEvent::Backend(Arc::new(
-            bead_backends::Snapshot { epoch: 3, ..Default::default() },
-        ))));
+        assert!(
+            pending.defer(&UiEvent::Desktop(Arc::new(bead_services::Snapshot {
+                revision: 4,
+                ..Default::default()
+            },)))
+        );
+        assert!(
+            pending.defer(&UiEvent::Desktop(Arc::new(bead_services::Snapshot {
+                revision: 5,
+                ..Default::default()
+            },)))
+        );
+        assert!(
+            pending.defer(&UiEvent::Backend(Arc::new(bead_backends::Snapshot {
+                epoch: 2,
+                ..Default::default()
+            },)))
+        );
+        assert!(
+            pending.defer(&UiEvent::Backend(Arc::new(bead_backends::Snapshot {
+                epoch: 3,
+                ..Default::default()
+            },)))
+        );
         assert_eq!(
             pending.model.get("dashboard.title"),
             Some(&bead_core::Value::Text("new".into())),
@@ -1035,9 +1048,7 @@ mod tests {
         assert_eq!(pending.desktop.as_ref().unwrap().revision, 5);
         assert_eq!(pending.backend.as_ref().unwrap().epoch, 3);
         assert!(
-            !pending.defer(
-                &UiEvent::Click { x: 3., y: 4. },
-            ),
+            !pending.defer(&UiEvent::Click { x: 3., y: 4. },),
             "input remains immediate during a slide"
         );
     }

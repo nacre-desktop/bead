@@ -1702,9 +1702,11 @@ impl App {
                     .filter(|(old_w, old_h, _)| *old_w == w as u32 && *old_h == h as u32)
                     .map_or(window, |(_, _, old)| old.union(window));
                 s.pending_reveal_window = Some((w as u32, h as u32, window));
-                regions = vec![regions
-                    .into_iter()
-                    .fold(damage, |current, region| current.union(region))];
+                regions = vec![
+                    regions
+                        .into_iter()
+                        .fold(damage, |current, region| current.union(region)),
+                ];
             } else {
                 s.pending_reveal_window = None;
             }

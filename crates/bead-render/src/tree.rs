@@ -602,7 +602,9 @@ fn reveal_content_scene(scene: &Scene, prefix: usize) -> Scene {
             _ => None,
         })
         .collect::<BTreeSet<_>>();
-    content.asset_data.retain(|path, _| needed_assets.contains(path));
+    content
+        .asset_data
+        .retain(|path, _| needed_assets.contains(path));
     content.prepared.clear();
     content
 }
@@ -654,9 +656,9 @@ impl SnapshotFingerprint {
                 return Ok(false);
             };
             if old_path != path
-                || !old_bytes.upgrade().is_some_and(|old| {
-                    Arc::ptr_eq(&old, bytes) || old.as_ref() == bytes.as_ref()
-                })
+                || !old_bytes
+                    .upgrade()
+                    .is_some_and(|old| Arc::ptr_eq(&old, bytes) || old.as_ref() == bytes.as_ref())
             {
                 return Ok(false);
             }
@@ -679,7 +681,10 @@ impl SnapshotFingerprint {
 }
 
 fn reveal_art_asset(scene: &Scene, path: &std::path::Path) -> bool {
-    scene.motion.as_ref().is_some_and(|motion| motion.art.is_some())
+    scene
+        .motion
+        .as_ref()
+        .is_some_and(|motion| motion.art.is_some())
         && path.to_string_lossy().starts_with("@reveal-art-")
 }
 
@@ -1463,15 +1468,13 @@ impl TreeCache {
             let Some(old) = self.reveal_art_rasters.first() else {
                 break;
             };
-            self.reveal_art_raster_bytes = self
-                .reveal_art_raster_bytes
-                .saturating_sub(
-                    old.pixels
-                        .data()
-                        .len()
-                        .saturating_add(old.svg.len())
-                        .saturating_add(192),
-                );
+            self.reveal_art_raster_bytes = self.reveal_art_raster_bytes.saturating_sub(
+                old.pixels
+                    .data()
+                    .len()
+                    .saturating_add(old.svg.len())
+                    .saturating_add(192),
+            );
             self.reveal_art_rasters.remove(0);
         }
         let budget = self.raster_budget.get_or_insert_with(|| {
@@ -3221,12 +3224,13 @@ impl FlattenedPixels {
 impl TreeCpuRenderer {
     fn prepare_reveal_content(&mut self, scene: &Scene, scale: f32, prefix: usize) -> Result<()> {
         let content = reveal_content_scene(scene, prefix);
-        if self
-            .worker_fingerprint
-            .as_ref()
-            .is_some_and(|fingerprint| fingerprint.matches_content(&content, scale).unwrap_or(false))
-        {
-            self.cache.prepare(&reveal_parts_scene(scene, prefix), scale)?;
+        if self.worker_fingerprint.as_ref().is_some_and(|fingerprint| {
+            fingerprint
+                .matches_content(&content, scale)
+                .unwrap_or(false)
+        }) {
+            self.cache
+                .prepare(&reveal_parts_scene(scene, prefix), scale)?;
             self.reveal_content = true;
             self.opaque_composition = OpaqueComposition::Cached;
             return Ok(());
@@ -3590,7 +3594,11 @@ impl Renderer for TreeCpuRenderer {
                 format,
             } = target;
             let frame_damage = damage;
-            let frame = self.cache.frame.as_ref().ok_or("unprepared reveal contour")?;
+            let frame = self
+                .cache
+                .frame
+                .as_ref()
+                .ok_or("unprepared reveal contour")?;
             paint_with_scratch(
                 frame,
                 scene.offset,
@@ -3616,7 +3624,9 @@ impl Renderer for TreeCpuRenderer {
                 .filter(|motion| motion.reveal)
                 .and_then(|motion| {
                     motion.slide_distance.map(|distance| {
-                        motion.edge.closed_offset(distance, distance, motion.progress)
+                        motion
+                            .edge
+                            .closed_offset(distance, distance, motion.progress)
                     })
                 })
                 .unwrap_or((0., 0.));
@@ -3944,7 +3954,9 @@ fn blend_reveal_content(
     let source_width = pixels.width() as i64;
     let source_height = pixels.height() as i64;
     let left = i64::from(damage.x.min(width)).max(origin.0).max(0);
-    let right = i64::from(right).min(origin.0 + source_width).min(i64::from(width));
+    let right = i64::from(right)
+        .min(origin.0 + source_width)
+        .min(i64::from(width));
     if left >= right {
         return;
     }
@@ -4004,7 +4016,9 @@ fn blend_reveal_sparse(
     let right = damage.x.saturating_add(damage.w).min(width);
     let bottom = damage.y.saturating_add(damage.h).min(height);
     let left = i64::from(damage.x.min(width)).max(origin.0).max(0);
-    let right = i64::from(right).min(origin.0 + i64::from(pixels.width)).min(i64::from(width));
+    let right = i64::from(right)
+        .min(origin.0 + i64::from(pixels.width))
+        .min(i64::from(width));
     let source_left = (left - origin.0).max(0);
     let source_right = (right - origin.0).min(i64::from(pixels.width));
     if source_left >= source_right {
@@ -4034,8 +4048,7 @@ fn blend_reveal_sparse(
                         } else {
                             [red, green, blue, 255]
                         };
-                        let from =
-                            (y as usize * width as usize + (origin.0 + start) as usize) * 4;
+                        let from = (y as usize * width as usize + (origin.0 + start) as usize) * 4;
                         let to = from + (end - start) as usize * 4;
                         bytes[from..to].as_chunks_mut::<4>().0.fill(pixel);
                     } else if color[3] != 0 {
@@ -4104,7 +4117,10 @@ mod tests {
         let bounds = Rect::new(1.25, -2.5, 80., 48.);
         assert_eq!(hash(bounds), hash(bounds));
         assert_ne!(hash(bounds), hash(Rect::new(1.5, -2.5, 80., 48.)));
-        assert_ne!(hash(Rect::new(0., 0., 1., 1.)), hash(Rect::new(-0., 0., 1., 1.)));
+        assert_ne!(
+            hash(Rect::new(0., 0., 1., 1.)),
+            hash(Rect::new(-0., 0., 1., 1.))
+        );
     }
 
     #[test]
@@ -5065,26 +5081,33 @@ mod tests {
         assert!(renderer.reveal_content);
         assert_eq!(renderer.reveal_content_preparations, 1);
         assert!(renderer.reveal_content_bytes <= 64 * bead_core::cache::MIB);
-        println!("REVEAL_CONTENT_BYTES bytes={}", renderer.reveal_content_bytes);
-        assert_eq!(renderer.opacity_builds, 1, "open-pose content is flattened once");
+        println!(
+            "REVEAL_CONTENT_BYTES bytes={}",
+            renderer.reveal_content_bytes
+        );
+        assert_eq!(
+            renderer.opacity_builds, 1,
+            "open-pose content is flattened once"
+        );
 
         let mut pixels = vec![0; 24 * 20 * 4];
         for tick in 0..40 {
             let progress = (tick + 10) as f32 / 50.;
             scene.reveal(progress);
             renderer.prepare_on_ui(&scene, 1.).unwrap();
-            renderer.render(
-                &scene,
-                ShmTarget {
-                    bytes: &mut pixels,
-                    width: 24,
-                    height: 20,
-                    scale: 1.,
-                    format: PixelFormat::Rgba,
-                },
-                Damage::full(24, 20),
-            )
-            .unwrap();
+            renderer
+                .render(
+                    &scene,
+                    ShmTarget {
+                        bytes: &mut pixels,
+                        width: 24,
+                        height: 20,
+                        scale: 1.,
+                        format: PixelFormat::Rgba,
+                    },
+                    Damage::full(24, 20),
+                )
+                .unwrap();
         }
         assert_eq!(renderer.reveal_content_preparations, 1);
         assert_eq!(renderer.opacity_builds, 1);
