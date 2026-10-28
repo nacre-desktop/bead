@@ -3226,11 +3226,11 @@ impl FlattenedPixels {
 impl TreeCpuRenderer {
     fn prepare_slide_content(&mut self, scene: &Scene, scale: f32) -> Result<()> {
         let content = cpu_content_scene(scene);
-        if self
-            .worker_fingerprint
-            .as_ref()
-            .is_some_and(|fingerprint| fingerprint.matches_content(&content, scale).unwrap_or(false))
-        {
+        if self.worker_fingerprint.as_ref().is_some_and(|fingerprint| {
+            fingerprint
+                .matches_content(&content, scale)
+                .unwrap_or(false)
+        }) {
             self.cache.prepare(scene, scale)?;
             self.slide_content = true;
             self.reveal_content = false;
@@ -3274,8 +3274,7 @@ impl TreeCpuRenderer {
             renderer.cache.prepare(scene, scale)?;
             renderer.slide_content = true;
             renderer.reveal_content = false;
-            renderer.slide_content_preparations =
-                self.slide_content_preparations.saturating_add(1);
+            renderer.slide_content_preparations = self.slide_content_preparations.saturating_add(1);
             renderer.reveal_content_bytes = renderer
                 .flattened
                 .as_ref()
@@ -3503,11 +3502,7 @@ impl Renderer for TreeCpuRenderer {
         Ok(false)
     }
     fn prepare_on_ui(&mut self, scene: &Scene, scale: f32) -> Result<()> {
-        if scene
-            .motion
-            .as_ref()
-            .is_some_and(|motion| !motion.reveal)
-        {
+        if scene.motion.as_ref().is_some_and(|motion| !motion.reveal) {
             return self.prepare_slide_content(scene, scale);
         }
         self.slide_content = false;
