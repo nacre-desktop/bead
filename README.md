@@ -15,10 +15,11 @@ work remains in progress; the current gaps and their evidence are tracked in
 the [core-switch review](docs/research/core-switch-gap-20261022.md) and
 [project status](docs/STATUS.md).
 
-The wallpaper picker commits its loading or cached state immediately; catalogue
-metadata refreshes in the background and visible thumbnails hydrate as they are
-needed. See [B0173](docs/specs/0173-picker-cold-open.md) for the cold-open design
-and measured acceptance status.
+The wallpaper picker commits its loading or cached state immediately, reuses its
+current-boot catalogue across reopens, and hydrates visible thumbnail misses in
+the background. It does not restart the full catalogue scan on a cached reopen.
+See [B0173](docs/specs/0173-picker-cold-open.md) for the route timing and
+measured acceptance status.
 
 ## How it fits Nacre
 
