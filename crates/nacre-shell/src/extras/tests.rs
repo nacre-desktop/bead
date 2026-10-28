@@ -1222,9 +1222,14 @@ async fn wallpaper_runtime_search_and_next_button_dispatch_real_activation() {
     runtime.services(Box::new(|_| {}));
     assert!(runtime.viewport(1920, 1200));
     assert!(
-        runtime.stage(UiEvent::Reload).unwrap().is_none(),
-        "cold catalogue loading must not publish a blank first scene"
+        runtime.stage(UiEvent::Reload).unwrap().is_some(),
+        "cold catalogue loading must publish its loading scene immediately"
     );
+    assert_eq!(
+        runtime.session.stores.get("extras.empty_message"),
+        Some(&Value::Text("Loading wallpapers…".into()))
+    );
+    assert!(runtime.commit());
     let mut first_content = None;
     for _ in 0..200 {
         if let Some(scene) = runtime.stage(UiEvent::Model(BTreeMap::new())).unwrap() {
