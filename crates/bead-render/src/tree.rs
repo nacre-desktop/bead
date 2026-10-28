@@ -3207,12 +3207,30 @@ impl Renderer for TreeCpuRenderer {
         Ok(false)
     }
     fn prepare_on_ui(&mut self, scene: &Scene, scale: f32) -> Result<()> {
+        let motion = scene.motion.as_ref().filter(|motion| motion.reveal);
+        let native_images = scene
+            .prepared
+            .get(&scale.to_bits())
+            .is_some_and(|frame| frame.items.iter().any(|item| item.image.is_some()));
+        if motion.is_some_and(|motion| !motion.open || motion.progress < 1.) && !native_images {
+            // Dense CPU scenes already have their source assets. Prepare the
+            // reveal pose directly instead of flattening a second worker snapshot.
+            self.cpu_preparation = None;
+            self.prepare(scene, scale)?;
+            self.opaque_composition = OpaqueComposition::Direct;
+            return Ok(());
+        }
         if self.reusable_scene(scene, scale)? {
             // Worker-prepared content is reused across a reveal; each frame only
             // derives its pose (clip and growing edge) from the retained frame.
             if self.worker_fingerprint.is_some()
-                && scene.motion.as_ref().is_some_and(|motion| motion.reveal)
+                && let Some(motion) = scene.motion.as_ref().filter(|motion| motion.reveal)
             {
+                self.opaque_composition = if !motion.open || motion.progress < 1. {
+                    OpaqueComposition::Direct
+                } else {
+                    OpaqueComposition::Cached
+                };
                 return self.cache.prepare(scene, scale);
             }
             return Ok(());
@@ -3272,6 +3290,16 @@ impl Renderer for TreeCpuRenderer {
             let mut renderer = prepared.accept()?;
             renderer.snapshot_fingerprint = None;
             renderer.worker_fingerprint = Some(SnapshotFingerprint::new(scene, scale)?);
+            if let Some(motion) = scene.motion.as_ref().filter(|motion| motion.reveal) {
+                renderer.opaque_composition = if !motion.open || motion.progress < 1. {
+                    OpaqueComposition::Direct
+                } else {
+                    OpaqueComposition::Cached
+                };
+                // The worker's flattened content is the open-state base. Derive
+                // this first reveal pose before the first buffer can be committed.
+                renderer.cache.prepare(scene, scale)?;
+            }
             *self = renderer;
             return Ok(());
         }
@@ -4443,6 +4471,38 @@ mod tests {
     }
 
     #[test]
+    fn ui_cpu_dense_reveal_prepares_the_pose_without_a_flattened_worker_snapshot() {
+        let mut scene = scene();
+        scene.motion = Some(crate::Motion {
+            id: "reveal-test".into(),
+            open: true,
+            duration: 0.2,
+            return_duration: None,
+            return_curve: None,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            fade: false,
+            reveal: true,
+            progress: 0.2,
+            parts: vec![(1, scene.primitives[1].clone())],
+            art: None,
+        });
+        scene.reveal(0.2);
+        let mut expected = TreeCache::default();
+        expected.prepare(&scene, 1.).unwrap();
+        let expected_key = expected.frame.as_ref().unwrap().key;
+
+        let mut renderer = TreeCpuRenderer::default();
+        renderer.prepare_on_ui(&scene, 1.).unwrap();
+
+        assert!(renderer.cpu_preparation.is_none());
+        assert_eq!(renderer.opaque_composition, OpaqueComposition::Direct);
+        assert_eq!(renderer.cache.frame.as_ref().unwrap().key, expected_key);
+    }
+
+    #[test]
     fn ui_cpu_prepare_reuses_content_across_reveal_progress() {
         let mut scene = scene();
         let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
@@ -4490,7 +4550,12 @@ mod tests {
         scene
             .asset_data
             .insert("proof.png".into(), same_asset_bytes);
+        let mut expected = TreeCache::default();
+        expected.prepare(&scene, 1.).unwrap();
+        let expected_key = expected.frame.as_ref().unwrap().key;
         renderer.prepare_on_ui(&scene, 1.).unwrap();
+        assert_eq!(renderer.cache.frame.as_ref().unwrap().key, expected_key);
+        assert_eq!(renderer.opaque_composition, OpaqueComposition::Direct);
         let builds = renderer.opacity_builds;
 
         let pose = renderer.prepared_frame().unwrap();
@@ -4502,6 +4567,11 @@ mod tests {
         assert_eq!(renderer.opacity_builds, builds);
         // The reused content still takes each frame's reveal pose.
         assert!(!Arc::ptr_eq(&renderer.prepared_frame().unwrap(), &pose));
+        assert_eq!(renderer.opaque_composition, OpaqueComposition::Direct);
+
+        scene.reveal(1.);
+        renderer.prepare_on_ui(&scene, 1.).unwrap();
+        assert_eq!(renderer.opaque_composition, OpaqueComposition::Cached);
 
         let mut changed = scene.clone();
         changed.motion.as_mut().unwrap().parts[0].1 = Primitive::Rounded {
