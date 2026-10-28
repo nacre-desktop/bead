@@ -380,7 +380,7 @@ local function style_tile(widget,placement,package,style_id,style,settings,is_se
         ui.Column{id="style-card",width="fill",height="fill",gap=spacing.xs,align="center",
             ui.Box{id="style-preview",width=preview_width,height=preview_height,align="center",justify="center",
                 radius=kit.tokens.radii.small,fill="surfaceContainerHighest",clip_children=true,tile_preview},
-            label("style-title",style.title,text.caption*4/3,"onSurface",{width=preview_width,height=14,text_align="center"})}}
+            label("style-title",style.title,text.caption*4/3,"onSurface",{width=tile_width,height=14,text_align="center"})}}
 end
 local function style_tiles(widget,placement,package,style_id,settings)
     local forms=package.forms[placement]
