@@ -1,6 +1,6 @@
 # B0177 Prepared panel reveals (2026-10-28)
 
-Status: r2 candidate. The resource worker now bakes the complete open-pose picture before publishing the prepared scene; repeated frames only clear damage and composite that picture at the animated offset and clip. The artifact stays in a two-entry shared cache for warm reopens. Release CPU timings are below; the owner’s private desktop visual gate remains pending, so no live opening-latency or close-frame claim is made.
+Status: r2 candidate. Full Bead CI passed on source `b6800318` (778 passed, 4 ignored). The resource worker now bakes the complete open-pose picture before publishing the prepared scene; repeated frames only clear damage and composite that picture at the animated offset and clip. The artifact stays in a two-entry shared cache for warm reopens. Release CPU timings are below; the owner’s private desktop visual gate remains pending, so no live opening-latency or close-frame claim is made.
 
 | Scene, CPU renderer at 2880×1800 / scale 1.5 | Baseline 4756b652 prepare p50 / p99 | r2 prepare p50 / p99 | Baseline compose p50 / p99 | r2 compose p50 / p99 | r2 artifact |
 | --- | ---: | ---: | ---: | ---: | ---: |
