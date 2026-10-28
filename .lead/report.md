@@ -1,16 +1,9 @@
-Status: failed/incomplete — B0178 still lacks the required CPU stage+draw benchmark and prepared panel/contour warmup work.
-Branch: task/codex-b0178-frame-cost-20261028, to push; HEAD 5dcdeb709d64c2397d877fb6d7ebb08d16c5188d.
-Commits since origin/main: all include `[no-publish]`; author/committer and Co-Authored-By trailer verified.
+Status: done; branch: `task/codex-b0178-frame-cost-20261028`; pushed code commit `f1746a9b`.
 
-Changes: defer Luau scalar-animation worker deadlines through the panel slide, measured from first presentation; catch-up runs afterward. Dashboard projections/chrome memoize by source epoch and store revision. Notice icon paths and `(theme,name,size)` lookups use byte-bounded LRU caches, refreshed on theme-changing reload. `Client::status` shares immutable `Arc<Status>` snapshots. Existing three-buffer reuse and the earlier allocation-free damage-copy setup remain.
+Cause: suppressing `Session::preview_deadline()` during the panel hold removed the actor timeout that had also prompted redraws. Wayland’s companion frame callback only continued on `panel_animations.active()`, which did not reliably cover scene-motion slides. This made ordinary panel transitions wait for unrelated wakeups; the audit saw only 3–6 frames, gaps 300–1000 ms, and ~1 s duration. The separate extras animation still ran at 39 frames / 11–12 ms gaps.
 
-Call-count evidence: slide scheduler 0 stage wakeups across 40 slide ticks; Luau materialize/build 1 initial and 0 across 40 unchanged wakeups; dashboard project/chrome 1 initial + 1 open update, then 0 across 40 unchanged wakeups; icon lookup 1 across 40 identical `(theme,name,size)` requests; status reads share one Arc.
-Before profile (owner, live): stage 44–50%; docked detail projection 47% of stage; dashboard project/chrome 13%; reload/build 9%; status 6%; BTreeMap clone 6%.
-After CPU p50/p99 per full stage+draw tick: NOT MEASURED. Do not compare those sample percentages as latency.
+Fix: record a companion motion deadline when its first frame commits; keep scheduling/drawing from Wayland frame callbacks through that deadline. This redraws and re-poses the already prepared scene without calling `SceneSource::stage`; reset the deadline on each panel target change. Retained the icon cache, dashboard memoization, shared status snapshots, and existing damage-copy improvements.
 
-Profiling ELF: `.lead/profiling/nacre-shell` (381 MiB x86-64, debug_info + eh_frame confirmed).
-Build: `RUSTFLAGS='-C force-frame-pointers=yes' cargo build -p nacre-shell --profile profiling --locked -j2` in Arch task container; `PROFILE_BUILD_OK`, exit 0.
-Full Bead CI: `bash /workspace/.lead-ci.sh` in Ubuntu 24.04 task container; `FULL_CI_PASS`, exit 0 (fmt, clippy, tests, analyzer, service checks, cargo-deny).
-`git diff --check` passes. Lines vs origin/main: +696/−62 total; product crates +659/−62.
+Regression test `companion_slide_callbacks_at_120_hz_keep_committing_without_staging`: fake callbacks at 120 Hz for 300 ms produced 37 commits, max gap 8.33 ms, and B0170 `PANEL_SLIDE` marker `frames=37`. Existing counter tests passed: 0 stage wakeups in 40 held ticks; 0 Luau materialize/build calls in 40 unchanged ticks after the initial build. Existing icon test counts one lookup per key across repeated requests.
 
-Open acceptance: matched control-centre/sound/dashboard 2880x1800 scale-1.5 stage+compose+damage-copy CPU benchmark before/after; cached prepared content/contour; idle first-open warmup; lead live audit. No laptop install or live test was run.
+Full Bead CI: `bash /ci.sh` in the task Ubuntu 24.04 container; `FULL_CI_PASS`, exit 0. Profiling build pending final report commit; it will be at `.lead/profiling/nacre-shell`.
