@@ -580,6 +580,17 @@ mod tests {
                     samples.push(elapsed as f64 / 1e6);
                 }
             }
+            if std::env::var_os("BEAD_REVEAL_BYTES").is_some() {
+                println!(
+                    "PANEL_CONTENT_CACHE entry={entry} bytes={} reveal_preparations={} reveal_composites={} slide_preparations={} slide_composites={} svg_rasterizations={}",
+                    renderer.reveal_content_bytes,
+                    renderer.reveal_content_preparations,
+                    renderer.reveal_content_composites,
+                    renderer.slide_content_preparations,
+                    renderer.slide_content_composites,
+                    renderer.cache.reveal_svg_rasterizations,
+                );
+            }
             samples.sort_by(f64::total_cmp);
             println!(
                 "PANEL_SLIDE_TICK entry={entry} output={width}x{height} scale={scale} first_content_wall_ms={first_content_ms:.4} cpu_p50_ms={:.4} cpu_p99_ms={:.4} samples={}",
