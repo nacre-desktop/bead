@@ -161,7 +161,7 @@ fn control_center_scene() -> Result<bead::render::Scene, Box<dyn std::error::Err
         "panel.open".into(),
         bead::core::Value::Bool(true),
     )]))?;
-    Ok(runtime.warm_frame()?)
+    runtime.warm_frame()
 }
 
 fn quantile(sorted_ns: &[u128], percentile: usize) -> u128 {
