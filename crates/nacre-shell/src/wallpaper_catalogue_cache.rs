@@ -46,7 +46,7 @@ fn valid_entry(entry: &Value) -> bool {
 }
 
 fn load_at(path: &Path, current_cache_root: &Path) -> Option<Vec<Value>> {
-    let metadata = fs::symlink_metadata(&path).ok()?;
+    let metadata = fs::symlink_metadata(path).ok()?;
     if !metadata.is_file() || metadata.len() > LIMIT {
         return None;
     }
@@ -136,7 +136,7 @@ fn store_at(destination: &Path, entries: &[Value]) {
     }
     let written = file.write_all(&bytes).and_then(|()| file.sync_all());
     drop(file);
-    if written.is_ok() && fs::rename(&temporary, &destination).is_ok() {
+    if written.is_ok() && fs::rename(&temporary, destination).is_ok() {
         return;
     }
     let _ = fs::remove_file(temporary);
