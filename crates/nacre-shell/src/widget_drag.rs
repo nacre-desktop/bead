@@ -373,8 +373,8 @@ pub fn prepare_event(
             name.clone(),
         ))
     });
-    let from_canvas = !app_source
-        && source_record(&event).is_some_and(|source| source["host"] == "canvas");
+    let from_canvas =
+        !app_source && source_record(&event).is_some_and(|source| source["host"] == "canvas");
     let inside_app = app_source
         && app_width > 0.
         && app_height > 0.
