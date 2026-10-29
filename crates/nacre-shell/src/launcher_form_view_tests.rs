@@ -122,7 +122,7 @@ fn every_form_string_exists_in_english() {
     let source = include_str!("../../../shell/ui/components/form.luau");
     let mut ids = 0;
     for part in source.split('"').skip(1).step_by(2) {
-        if part.starts_with("bead.launcher.form.") {
+        if part.starts_with(&format!("bead.launcher.{}", "form-")) {
             ids += 1;
             assert_ne!(
                 crate::i18n::tr(part, &[]),
@@ -133,13 +133,13 @@ fn every_form_string_exists_in_english() {
     }
     assert!(ids >= 30, "{ids}");
     for id in [
-        "bead.launcher.form.error-reminder",
-        "bead.launcher.form.error-webapp",
-        "bead.launcher.form.error-tui",
-        "bead.launcher.form.error-path",
-        "bead.launcher.form.error-url",
-        "bead.launcher.form.error-audio",
-        "bead.launcher.form.error-failed",
+        "bead.launcher.form-error-reminder",
+        "bead.launcher.form-error-webapp",
+        "bead.launcher.form-error-tui",
+        "bead.launcher.form-error-path",
+        "bead.launcher.form-error-url",
+        "bead.launcher.form-error-audio",
+        "bead.launcher.form-error-failed",
         "bead.bar.stop-recording",
     ] {
         assert_ne!(crate::i18n::tr(id, &[]), id, "{id}");

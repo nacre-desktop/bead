@@ -12,29 +12,29 @@ local G={column=520,top=24,gap=16,title_font=24,label_font=14.667,text_font=14.6
 -- One entry per form kind. `title`/`description` are i18n ids (a missing title is the row's own text in
 -- `launcher.form.message`); a field is a text slot, or a choice with `choices`.
 local FORMS={
-    reminder={title="bead.launcher.form.reminder",button="bead.launcher.form.reminder-button",fields={
-        {slot=1,label="bead.launcher.form.minutes"},
-        {slot=2,label="bead.launcher.form.message",placeholder="bead.launcher.form.message-placeholder"}}},
-    webapp={title="bead.launcher.form.webapp",description="bead.launcher.form.webapp-description",button="bead.launcher.form.create-app",fields={
-        {slot=1,label="bead.launcher.form.app-name",placeholder="bead.launcher.form.app-name-placeholder"},
-        {slot=2,label="bead.launcher.form.website",placeholder_text="https://…"}}},
-    tui={title="bead.launcher.form.tui",description="bead.launcher.form.tui-description",button="bead.launcher.form.create-app",fields={
-        {slot=1,label="bead.launcher.form.app-name"},
-        {slot=2,label="bead.launcher.form.tui-command",multiline=true},
-        {slot=3,label="bead.launcher.form.tui-icon"},
-        {slot=4,label="bead.launcher.form.tui-terminal",choices={
+    reminder={title="bead.launcher.form-reminder",button="bead.launcher.form-reminder-button",fields={
+        {slot=1,label="bead.launcher.form-minutes"},
+        {slot=2,label="bead.launcher.form-message",placeholder="bead.launcher.form-message-placeholder"}}},
+    webapp={title="bead.launcher.form-webapp",description="bead.launcher.form-webapp-description",button="bead.launcher.form-create-app",fields={
+        {slot=1,label="bead.launcher.form-app-name",placeholder="bead.launcher.form-app-name-placeholder"},
+        {slot=2,label="bead.launcher.form-website",placeholder_text="https://…"}}},
+    tui={title="bead.launcher.form-tui",description="bead.launcher.form-tui-description",button="bead.launcher.form-create-app",fields={
+        {slot=1,label="bead.launcher.form-app-name"},
+        {slot=2,label="bead.launcher.form-tui-command",multiline=true},
+        {slot=3,label="bead.launcher.form-tui-icon"},
+        {slot=4,label="bead.launcher.form-tui-terminal",choices={
             {value="kitty",label="Kitty"},{value="foot",label="Foot"},{value="alacritty",label="Alacritty"},{value="wezterm",label="WezTerm"}}}}},
-    ["theme-import"]={title="bead.launcher.form.theme-import",button="bead.launcher.form.theme-import-button",fields={
-        {slot=1,label="bead.launcher.form.theme-file",placeholder_text="~/Downloads/nacre.extension.json"}}},
-    ["extension-import"]={title="bead.launcher.form.extension-import",description="bead.launcher.form.extension-description",button="bead.launcher.form.extension-button",fields={
-        {slot=1,label="bead.launcher.form.repository",placeholder_text="https://github.com/owner/extension"}}},
-    ["recording-area"]={description="bead.launcher.form.recording-description",button="bead.launcher.form.recording-start",fields={
-        {slot=1,label="bead.launcher.form.recording-sound",choices={
-            {value="none",label_id="bead.launcher.form.recording-none"},
-            {value="system",label_id="bead.launcher.form.recording-system"},
-            {value="mixed",label_id="bead.launcher.form.recording-mixed"}}}}},
-    ["confirm-restart"]={description="bead.launcher.form.restart-description",button="bead.launcher.form.continue",fields={}},
-    ["confirm-mise"]={description="bead.launcher.form.mise-description",button="bead.launcher.form.continue",fields={}},
+    ["theme-import"]={title="bead.launcher.form-theme-import",button="bead.launcher.form-theme-import-button",fields={
+        {slot=1,label="bead.launcher.form-theme-file",placeholder_text="~/Downloads/nacre.extension.json"}}},
+    ["extension-import"]={title="bead.launcher.form-extension-import",description="bead.launcher.form-extension-description",button="bead.launcher.form-extension-button",fields={
+        {slot=1,label="bead.launcher.form-repository",placeholder_text="https://github.com/owner/extension"}}},
+    ["recording-area"]={description="bead.launcher.form-recording-description",button="bead.launcher.form-recording-start",fields={
+        {slot=1,label="bead.launcher.form-recording-sound",choices={
+            {value="none",label_id="bead.launcher.form-recording-none"},
+            {value="system",label_id="bead.launcher.form-recording-system"},
+            {value="mixed",label_id="bead.launcher.form-recording-mixed"}}}}},
+    ["confirm-restart"]={description="bead.launcher.form-restart-description",button="bead.launcher.form-continue",fields={}},
+    ["confirm-mise"]={description="bead.launcher.form-mise-description",button="bead.launcher.form-continue",fields={}},
 }
 FORMS["recording-screen"]=FORMS["recording-area"]
 local function get(name) return ui.resolve_for_check(ui.bind(name)) end
@@ -92,6 +92,6 @@ return ui.component("LauncherForm",{},function(_)
                 ui.Text{id="form-error",width="fill",height=G.error_height,text=ui.bind("launcher.form.error"),
                     visible=ui.bind("launcher.form.has_error"),font_size=G.text_font,color="error"},
                 ui.Row{gap=G.button_gap,
-                    button("cancel",ui.tr("bead.launcher.form.cancel"),false,"cancel"),
+                    button("cancel",ui.tr("bead.launcher.form-cancel"),false,"cancel"),
                     button("submit",ui.tr(def.button),true,"submit")}}}}
 end)

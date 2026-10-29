@@ -114,7 +114,7 @@ pub(crate) fn work(kind: &str, v: &[String; SLOTS]) -> Result<Work, String> {
         "reminder" => {
             let minutes = trimmed(0).parse::<f64>().ok();
             if !minutes.is_some_and(|m| (0.1..=1440.).contains(&m)) || trimmed(1).is_empty() {
-                return Err(tr("bead.launcher.form.error-reminder", &[]));
+                return Err(tr("bead.launcher.form-error-reminder", &[]));
             }
             Ok(helper(
                 &["menu-backend", "reminder", ""],
@@ -125,7 +125,7 @@ pub(crate) fn work(kind: &str, v: &[String; SLOTS]) -> Result<Work, String> {
             let url = trimmed(1);
             if trimmed(0).is_empty() || !(url.starts_with("https://") || url.starts_with("http://"))
             {
-                return Err(tr("bead.launcher.form.error-webapp", &[]));
+                return Err(tr("bead.launcher.form-error-webapp", &[]));
             }
             Ok(helper(
                 &["menu-backend", "webapp-create", ""],
@@ -138,7 +138,7 @@ pub(crate) fn work(kind: &str, v: &[String; SLOTS]) -> Result<Work, String> {
                 || command.is_empty()
                 || !matches!(v[3].as_str(), "kitty" | "foot" | "alacritty" | "wezterm")
             {
-                return Err(tr("bead.launcher.form.error-tui", &[]));
+                return Err(tr("bead.launcher.form-error-tui", &[]));
             }
             Ok(helper(
                 &["software-library", "tui-create", ""],
@@ -147,9 +147,9 @@ pub(crate) fn work(kind: &str, v: &[String; SLOTS]) -> Result<Work, String> {
         }
         "theme-import" | "extension-import" => {
             let (action, field, error) = if kind == "theme-import" {
-                ("theme-import", "path", "bead.launcher.form.error-path")
+                ("theme-import", "path", "bead.launcher.form-error-path")
             } else {
-                ("import", "url", "bead.launcher.form.error-url")
+                ("import", "url", "bead.launcher.form-error-url")
             };
             if trimmed(0).is_empty() {
                 return Err(tr(error, &[]));
@@ -162,7 +162,7 @@ pub(crate) fn work(kind: &str, v: &[String; SLOTS]) -> Result<Work, String> {
         "recording-area" | "recording-screen" => {
             let audio = v[0].as_str();
             if !matches!(audio, "none" | "system" | "mixed") {
-                return Err(tr("bead.launcher.form.error-audio", &[]));
+                return Err(tr("bead.launcher.form-error-audio", &[]));
             }
             let mode = if kind == "recording-screen" {
                 "screen"
@@ -193,7 +193,7 @@ pub(crate) fn helper_answer(stdout: &str, success: bool) -> Result<String, Strin
         return Err(error.to_owned());
     }
     if !success {
-        return Err(tr("bead.launcher.form.error-failed", &[]));
+        return Err(tr("bead.launcher.form-error-failed", &[]));
     }
     Ok(value["message"].as_str().unwrap_or_default().to_owned())
 }
