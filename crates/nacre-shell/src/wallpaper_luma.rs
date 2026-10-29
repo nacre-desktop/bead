@@ -174,7 +174,7 @@ mod tests {
     fn grid_follows_the_pixels_and_roles_come_from_the_palette() {
         let (w, h) = (64usize, 36usize);
         let mut rgba = vec![0u8; w * h * 4];
-        for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        for (i, px) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             // left half white, right half black
             let v = if i % w < w / 2 { 255 } else { 0 };
             px.copy_from_slice(&[v, v, v, 255]);
