@@ -831,6 +831,9 @@ mod tests {
                     })
             };
             let initial = fill_width(&harness).expect("OSD fill image");
+            // The pill is visible: let the show settle so the step below animates.
+            thread::sleep(Duration::from_millis(20));
+            harness.update(BTreeMap::new())?;
             harness.update(BTreeMap::from([("osd.value".into(), Value::Number(0.8))]))?;
             assert!(
                 harness.scene().primitives.iter().any(|primitive| matches!(
@@ -864,5 +867,68 @@ mod tests {
             );
         }
         Ok(())
+
+    /// B0207: a pill that appears is filled at its level from the first frame; a repeat at the
+    /// limit does not move the fill.
+    #[test]
+    fn osd_shows_filled_and_a_repeat_at_the_limit_does_not_move_the_fill()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use std::{collections::BTreeMap, thread, time::Duration};
+
+        for kind in ["volume", "brightness"] {
+            let mut fixture = initial_models()?;
+            fixture.insert("panel.open".into(), Value::Bool(false));
+            for (key, value) in [
+                ("osd.open", Value::Bool(false)),
+                ("osd.kind", Value::Text(kind.into())),
+                ("osd.value", Value::Number(0.3)),
+                ("osd.muted", Value::Bool(false)),
+                ("osd.label", Value::Text(String::new())),
+                ("osd.device", Value::Text(String::new())),
+            ] {
+                fixture.insert(key.into(), value);
+            }
+            let mut harness = bead_test::Harness::load(
+                &root(),
+                Path::new("osd/main.luau"),
+                &root().join("palette.json"),
+                fixture,
+                bead_test::Config {
+                    width: 404,
+                    height: 144,
+                    scale: 1.,
+                },
+            )?;
+            let fill_width = |harness: &bead_test::Harness| {
+                harness
+                    .scene()
+                    .primitives
+                    .iter()
+                    .find_map(|primitive| match primitive {
+                        bead::render::Primitive::Image { rect, .. } => Some(rect.w),
+                        _ => None,
+                    })
+            };
+            let track = 336. - 60. - 24.;
+            harness.update(BTreeMap::from([
+                ("panel.open".into(), Value::Bool(true)),
+                ("osd.open".into(), Value::Bool(true)),
+                ("osd.value".into(), Value::Number(1.0)),
+            ]))?;
+            let first = fill_width(&harness).expect("OSD fill image");
+            assert!(
+                (first - track).abs() < 0.01,
+                "{kind}: first visible frame is already full, {first} vs {track}"
+            );
+            for _ in 0..3 {
+                thread::sleep(Duration::from_millis(15));
+                harness.update(BTreeMap::new())?;
+                harness.update(BTreeMap::from([("osd.value".into(), Value::Number(1.0))]))?;
+                let repeat = fill_width(&harness).expect("OSD fill image");
+                assert!((repeat - track).abs() < 0.01, "{kind}: no fill motion at the limit");
+            }
+        }
+        Ok(())
+    }
     }
 }
