@@ -204,6 +204,12 @@ pub(crate) struct Info {
     pub rect: pearl::Rect,
 }
 
+/// B0200: a prepared (not yet released) native target carries this app id, so a
+/// compositor rule can keep it invisible (`shell/niri-pearls.kdl`: opacity 0)
+/// while it maps and moves. Release switches to `bead.pearl` in the same commit
+/// as its first content.
+const PENDING_APP_ID: &str = "bead.pearl.pending";
+
 fn placement_monitor<'a>(
     rect: pearl::Rect,
     origin: Option<&str>,
@@ -866,7 +872,7 @@ impl App {
                 &qh,
             );
             window.set_title((native.title)(id, &name));
-            window.set_app_id("bead.pearl");
+            window.set_app_id(PENDING_APP_ID);
             let body = self
                 .companion
                 .as_ref()
@@ -980,7 +986,7 @@ impl App {
             );
             let title = (native.title)(id, &name);
             window.set_title(title);
-            window.set_app_id("bead.pearl");
+            window.set_app_id(PENDING_APP_ID);
             window.set_min_size(Some((1, 1)));
             if let Some((scene, _, _)) = &self.companion
                 && let Some([x, y, w, h]) = rendering::content_window_rect(scene)
@@ -1730,7 +1736,9 @@ impl App {
         for i in indices {
             let s = &mut self.surfaces[i];
             let mut prepared = s.prepared_native.take().unwrap();
-            let surface = prepared.window.as_ref().unwrap().wl_surface().clone();
+            let window = prepared.window.as_ref().unwrap();
+            window.set_app_id("bead.pearl");
+            let surface = window.wl_surface().clone();
             surface.set_opaque_region(None);
             let dx = (rect.x - prepared.anchor.x).round() as i32;
             let dy = (rect.y - prepared.anchor.y).round() as i32;
@@ -1904,6 +1912,10 @@ impl App {
                 return;
             }
             self.surfaces[i].handoff.as_mut().unwrap().gate.placed(rect);
+            // Placed: the next draw commits the first content with the visible app id.
+            if let Some(window) = &self.surfaces[i].native {
+                window.set_app_id("bead.pearl");
+            }
             self.surfaces[i].input_visible = None;
             self.surfaces[i].redraw = true;
         }

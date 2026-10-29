@@ -81,6 +81,7 @@ def surface_delta(before, after):
             'removed': sorted(f'{s}:{r}' for s, r in before.items() if after.get(s) != r)}
 
 
+DRAG_MS = os.environ.get('DETACH_DRAG_MS', '650')
 INTERVAL = float(os.environ.get('DETACH_INTERVAL', '0.025'))
 
 
@@ -162,6 +163,9 @@ def drive(self, _names):
             closed_surfaces = mapped_surfaces(trace_text(self))
             directory = out / view
             directory.mkdir(parents=True, exist_ok=True)
+            self.run(['grim', '-s', '0.5', str(directory / 'closed-before.png')])
+            directory = out / view
+            directory.mkdir(parents=True, exist_ok=True)
             for step in OPEN[view]:
                 self.dispatch(*step)
             time.sleep(2.0)
@@ -185,8 +189,14 @@ def drive(self, _names):
             self.release_pointer()
 
             def detach():
-                proc = self.run([self.args.pointer_tool, *map(str, start), *map(str, self.args.size),
-                                 'relative-drag', *map(str, end), '650', '1.5'], timeout=15, check=False)
+                proc = subprocess.Popen([self.args.pointer_tool, *map(str, start), *map(str, self.args.size),
+                                         'relative-drag', *map(str, end), DRAG_MS, '1.5'], env=self.env,
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                if int(DRAG_MS) >= 1500:
+                    time.sleep(int(DRAG_MS) / 2000)
+                    row['mid_drag_compositor'] = compositor_state(self)
+                stdout, stderr = proc.communicate(timeout=15)
+                proc.stdout, proc.stderr = stdout, stderr
                 row['pointer'] = {'rc': proc.returncode, 'stdout': proc.stdout[-400:], 'stderr': proc.stderr[-400:],
                                   'start_px': start, 'end_px': end}
 
@@ -222,6 +232,26 @@ def drive(self, _names):
             row['detach_frames'] = rows
             release = re.search(r'POINTER_RELEASE monotonic_ns=(\d+)', row['pointer']['stdout'])
             row['detach_max_stray_px'] = max((r['stray_px'] for r in rows), default=0)
+            # During the drag: everything except the moving panel must equal the closed
+            # shell. The dragged layer is located per frame as the bbox of the diff that
+            # touches the pointer path; report what lies outside the panel's own extent.
+            drag_end_ms = 100 + int(DRAG_MS)
+            during = []
+            for path, stamp in zip(sorted((directory / 'detach').glob('[0-9][0-9][0-9].png')),
+                                   row['detach_stamps_ms']):
+                if not 200 <= stamp <= drag_end_ms:
+                    continue
+                with Image.open(path) as frame, Image.open(directory / 'closed-before.png') as base:
+                    diff = ImageChops.difference(frame.convert('RGB'), base.convert('RGB')).convert('L')
+                mask = diff.point(lambda p: 255 if p > 24 else 0)
+                mask.paste(0, (0, 0, mask.width, round(40 * 0.5)))  # bar title changes
+                docked = [round(v * 0.5) for v in (body_x, body_y, body_x + body_w, body_y + body_h)]
+                inside = mask.crop(docked)
+                left = mask.crop((0, 0, max(1, docked[0] - 20), mask.height))
+                during.append({'frame': path.name, 'stamp_ms': stamp,
+                               'docked_area_changed_px': sum(1 for p in inside.getdata() if p),
+                               'left_of_panel_changed_px': sum(1 for p in left.getdata() if p)})
+            row['during_drag'] = during
 
             def dock():
                 panel_call(self, 'bead.panel', 'dock', [pearl['id']])

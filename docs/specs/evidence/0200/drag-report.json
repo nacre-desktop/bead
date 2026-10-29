@@ -1,0 +1,1992 @@
+{
+ "method": "full-output grim -s 0.5 frames every 25 ms, niri default animations, owner rounded-window rule",
+ "renderer": "cpu",
+ "views": [
+  {
+   "view": "launcher",
+   "docked_state": {
+    "view": "launcher",
+    "origin": [
+     378,
+     568
+    ],
+    "content_frame": [
+     0.0,
+     0.0,
+     1100.0,
+     590.0
+    ],
+    "edge": "bottom",
+    "size": [
+     1164,
+     632
+    ]
+   },
+   "docked_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-panel-dismiss",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     }
+    ]
+   },
+   "mid_drag_compositor": {
+    "windows": [
+     {
+      "id": 2,
+      "title": "Nacre Pearl Launcher 1",
+      "app_id": "bead.pearl.pending",
+      "is_floating": true,
+      "layout": {
+       "pos_in_scrolling_layout": null,
+       "tile_size": [
+        1100.0,
+        590.0
+       ],
+       "window_size": [
+        1100,
+        590
+       ],
+       "tile_pos_in_workspace_view": [
+        410.0,
+        600.0
+       ],
+       "window_offset_in_tile": [
+        0.0,
+        0.0
+       ]
+      }
+     }
+    ],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     }
+    ]
+   },
+   "pointer": {
+    "rc": 0,
+    "stdout": "46791843633 x=1611 y=1483\nPOINTER_SENT monotonic_ns=59446795836525 x=1612 y=1483\nPOINTER_SENT monotonic_ns=59446799827043 x=1612 y=1482\nPOINTER_SENT monotonic_ns=59446803819934 x=1612 y=1482\nPOINTER_SENT monotonic_ns=59446807811639 x=1613 y=1481\nPOINTER_SENT monotonic_ns=59446811803344 x=1613 y=1481\nPOINTER_SENT monotonic_ns=59446815797423 x=1614 y=1481\nPOINTER_RELEASE monotonic_ns=59446815803359\n",
+    "stderr": "",
+    "start_px": [
+     1434,
+     1721
+    ],
+    "end_px": [
+     1614,
+     1481
+    ]
+   },
+   "detach_stamps_ms": [
+    0,
+    60,
+    120,
+    180,
+    240,
+    301,
+    361,
+    421,
+    481,
+    541,
+    601,
+    661,
+    721,
+    781,
+    841,
+    901,
+    961,
+    1021,
+    1081,
+    1142,
+    1202,
+    1262,
+    1322,
+    1382,
+    1442,
+    1502,
+    1562,
+    1622,
+    1682,
+    1742,
+    1802,
+    1862,
+    1922,
+    1982,
+    2042,
+    2103,
+    2163,
+    2223,
+    2283,
+    2343,
+    2403,
+    2463,
+    2523,
+    2583,
+    2643,
+    2703,
+    2763,
+    2823,
+    2884,
+    2944
+   ],
+   "pearls": [
+    {
+     "id": 1,
+     "output": "winit",
+     "rect": [
+      530.0,
+      440.0,
+      1100.0,
+      590.0
+     ],
+     "view": "launcher"
+    }
+   ],
+   "detached_compositor": {
+    "windows": [
+     {
+      "id": 2,
+      "title": "Nacre Pearl Launcher 1",
+      "app_id": "bead.pearl",
+      "is_floating": true,
+      "layout": {
+       "pos_in_scrolling_layout": null,
+       "tile_size": [
+        1100.0,
+        590.0
+       ],
+       "window_size": [
+        1100,
+        590
+       ],
+       "tile_pos_in_workspace_view": [
+        530.0,
+        440.0
+       ],
+       "window_offset_in_tile": [
+        0.0,
+        0.0
+       ]
+      }
+     }
+    ],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Background"
+     }
+    ]
+   },
+   "detached_surface_delta": {
+    "added": [
+     "81:xdg"
+    ],
+    "removed": []
+   },
+   "only_new_window_mapped": true,
+   "detach_max_stray_px": 461,
+   "during_drag": [
+    {
+     "frame": "004.png",
+     "stamp_ms": 240,
+     "docked_area_changed_px": 155306,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "005.png",
+     "stamp_ms": 301,
+     "docked_area_changed_px": 154900,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "006.png",
+     "stamp_ms": 361,
+     "docked_area_changed_px": 152995,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "007.png",
+     "stamp_ms": 421,
+     "docked_area_changed_px": 151083,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "008.png",
+     "stamp_ms": 481,
+     "docked_area_changed_px": 150156,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "009.png",
+     "stamp_ms": 541,
+     "docked_area_changed_px": 148092,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "010.png",
+     "stamp_ms": 601,
+     "docked_area_changed_px": 146360,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "011.png",
+     "stamp_ms": 661,
+     "docked_area_changed_px": 144270,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "012.png",
+     "stamp_ms": 721,
+     "docked_area_changed_px": 143404,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "013.png",
+     "stamp_ms": 781,
+     "docked_area_changed_px": 141065,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "014.png",
+     "stamp_ms": 841,
+     "docked_area_changed_px": 138811,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "015.png",
+     "stamp_ms": 901,
+     "docked_area_changed_px": 137467,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "016.png",
+     "stamp_ms": 961,
+     "docked_area_changed_px": 136083,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "017.png",
+     "stamp_ms": 1021,
+     "docked_area_changed_px": 134091,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "018.png",
+     "stamp_ms": 1081,
+     "docked_area_changed_px": 131636,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "019.png",
+     "stamp_ms": 1142,
+     "docked_area_changed_px": 130299,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "020.png",
+     "stamp_ms": 1202,
+     "docked_area_changed_px": 128483,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "021.png",
+     "stamp_ms": 1262,
+     "docked_area_changed_px": 126993,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "022.png",
+     "stamp_ms": 1322,
+     "docked_area_changed_px": 125319,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "023.png",
+     "stamp_ms": 1382,
+     "docked_area_changed_px": 122957,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "024.png",
+     "stamp_ms": 1442,
+     "docked_area_changed_px": 121577,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "025.png",
+     "stamp_ms": 1502,
+     "docked_area_changed_px": 120358,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "026.png",
+     "stamp_ms": 1562,
+     "docked_area_changed_px": 118726,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "027.png",
+     "stamp_ms": 1622,
+     "docked_area_changed_px": 116401,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "028.png",
+     "stamp_ms": 1682,
+     "docked_area_changed_px": 115273,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "029.png",
+     "stamp_ms": 1742,
+     "docked_area_changed_px": 113848,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "030.png",
+     "stamp_ms": 1802,
+     "docked_area_changed_px": 111719,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "031.png",
+     "stamp_ms": 1862,
+     "docked_area_changed_px": 110000,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "032.png",
+     "stamp_ms": 1922,
+     "docked_area_changed_px": 109283,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "033.png",
+     "stamp_ms": 1982,
+     "docked_area_changed_px": 108400,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "034.png",
+     "stamp_ms": 2042,
+     "docked_area_changed_px": 105310,
+     "left_of_panel_changed_px": 0
+    }
+   ],
+   "dock_stamps_ms": [
+    0,
+    60,
+    120,
+    180,
+    240,
+    300,
+    361,
+    421,
+    481,
+    541,
+    601,
+    661,
+    721,
+    781,
+    841,
+    901,
+    961,
+    1021,
+    1081,
+    1142,
+    1202,
+    1262,
+    1322,
+    1382,
+    1442,
+    1502,
+    1562,
+    1622,
+    1682,
+    1742,
+    1802,
+    1862,
+    1923,
+    1983
+   ],
+   "docked_again_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-panel-dismiss",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     }
+    ]
+   },
+   "pearls_after_dock": [],
+   "docked_again_surface_delta": {
+    "added": [
+     "144:layer:bead-panel-dismiss",
+     "165:layer:bead-dev"
+    ],
+    "removed": []
+   },
+   "closed_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Background"
+     }
+    ]
+   },
+   "closed_surface_delta": {
+    "added": [],
+    "removed": []
+   },
+   "clean_after_close": true,
+   "release_seen": true
+  },
+  {
+   "view": "dashboard",
+   "docked_state": {
+    "view": "dashboard-today",
+    "origin": [
+     436,
+     18
+    ],
+    "content_frame": [
+     0.0,
+     0.0,
+     984.0,
+     650.0
+    ],
+    "edge": "top",
+    "size": [
+     1048,
+     714
+    ]
+   },
+   "docked_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-panel-dismiss",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     }
+    ]
+   },
+   "mid_drag_compositor": {
+    "windows": [
+     {
+      "id": 3,
+      "title": "Nacre Pearl Dashboard 3",
+      "app_id": "bead.pearl.pending",
+      "is_floating": true,
+      "layout": {
+       "pos_in_scrolling_layout": null,
+       "tile_size": [
+        984.0,
+        650.0
+       ],
+       "window_size": [
+        984,
+        650
+       ],
+       "tile_pos_in_workspace_view": [
+        468.0,
+        50.0
+       ],
+       "window_offset_in_tile": [
+        0.0,
+        0.0
+       ]
+      }
+     }
+    ],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     }
+    ]
+   },
+   "pointer": {
+    "rc": 0,
+    "stdout": "_ns=59460181303043 x=1441 y=363\nPOINTER_SENT monotonic_ns=59460185293560 x=1442 y=363\nPOINTER_SENT monotonic_ns=59460189297138 x=1442 y=364\nPOINTER_SENT monotonic_ns=59460193275782 x=1442 y=364\nPOINTER_SENT monotonic_ns=59460197248490 x=1443 y=365\nPOINTER_SENT monotonic_ns=59460201258004 x=1443 y=365\nPOINTER_SENT monotonic_ns=59460205252083 x=1444 y=366\nPOINTER_RELEASE monotonic_ns=59460205258019\n",
+    "stderr": "",
+    "start_px": [
+     1264,
+     126
+    ],
+    "end_px": [
+     1444,
+     366
+    ]
+   },
+   "detach_stamps_ms": [
+    0,
+    60,
+    120,
+    181,
+    241,
+    301,
+    361,
+    421,
+    481,
+    541,
+    601,
+    661,
+    721,
+    781,
+    841,
+    901,
+    961,
+    1022,
+    1082,
+    1142,
+    1202,
+    1262,
+    1322,
+    1382,
+    1442,
+    1502,
+    1562,
+    1622,
+    1682,
+    1742,
+    1802,
+    1862,
+    1923,
+    1983,
+    2043,
+    2103,
+    2163,
+    2223,
+    2283,
+    2343,
+    2403,
+    2463,
+    2523,
+    2583,
+    2643,
+    2704,
+    2764,
+    2824,
+    2884,
+    2944
+   ],
+   "pearls": [
+    {
+     "id": 3,
+     "output": "winit",
+     "rect": [
+      588.0,
+      210.0,
+      984.0,
+      650.0
+     ],
+     "view": "dashboard-today"
+    }
+   ],
+   "detached_compositor": {
+    "windows": [
+     {
+      "id": 3,
+      "title": "Nacre Pearl Dashboard 3",
+      "app_id": "bead.pearl",
+      "is_floating": true,
+      "layout": {
+       "pos_in_scrolling_layout": null,
+       "tile_size": [
+        984.0,
+        650.0
+       ],
+       "window_size": [
+        984,
+        650
+       ],
+       "tile_pos_in_workspace_view": [
+        588.0,
+        210.0
+       ],
+       "window_offset_in_tile": [
+        0.0,
+        0.0
+       ]
+      }
+     }
+    ],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Background"
+     }
+    ]
+   },
+   "detached_surface_delta": {
+    "added": [
+     "147:xdg"
+    ],
+    "removed": []
+   },
+   "only_new_window_mapped": true,
+   "detach_max_stray_px": 370,
+   "during_drag": [
+    {
+     "frame": "004.png",
+     "stamp_ms": 241,
+     "docked_area_changed_px": 151228,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "005.png",
+     "stamp_ms": 301,
+     "docked_area_changed_px": 149550,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "006.png",
+     "stamp_ms": 361,
+     "docked_area_changed_px": 147729,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "007.png",
+     "stamp_ms": 421,
+     "docked_area_changed_px": 146401,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "008.png",
+     "stamp_ms": 481,
+     "docked_area_changed_px": 144569,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "009.png",
+     "stamp_ms": 541,
+     "docked_area_changed_px": 143842,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "010.png",
+     "stamp_ms": 601,
+     "docked_area_changed_px": 141036,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "011.png",
+     "stamp_ms": 661,
+     "docked_area_changed_px": 141036,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "012.png",
+     "stamp_ms": 721,
+     "docked_area_changed_px": 139535,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "013.png",
+     "stamp_ms": 781,
+     "docked_area_changed_px": 136434,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "014.png",
+     "stamp_ms": 841,
+     "docked_area_changed_px": 134825,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "015.png",
+     "stamp_ms": 901,
+     "docked_area_changed_px": 133688,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "016.png",
+     "stamp_ms": 961,
+     "docked_area_changed_px": 132121,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "017.png",
+     "stamp_ms": 1022,
+     "docked_area_changed_px": 130243,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "018.png",
+     "stamp_ms": 1082,
+     "docked_area_changed_px": 128728,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "019.png",
+     "stamp_ms": 1142,
+     "docked_area_changed_px": 127564,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "020.png",
+     "stamp_ms": 1202,
+     "docked_area_changed_px": 125664,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "021.png",
+     "stamp_ms": 1262,
+     "docked_area_changed_px": 123476,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "022.png",
+     "stamp_ms": 1322,
+     "docked_area_changed_px": 121543,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "023.png",
+     "stamp_ms": 1382,
+     "docked_area_changed_px": 121606,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "024.png",
+     "stamp_ms": 1442,
+     "docked_area_changed_px": 119088,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "025.png",
+     "stamp_ms": 1502,
+     "docked_area_changed_px": 117928,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "026.png",
+     "stamp_ms": 1562,
+     "docked_area_changed_px": 115818,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "027.png",
+     "stamp_ms": 1622,
+     "docked_area_changed_px": 114538,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "028.png",
+     "stamp_ms": 1682,
+     "docked_area_changed_px": 113302,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "029.png",
+     "stamp_ms": 1742,
+     "docked_area_changed_px": 111327,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "030.png",
+     "stamp_ms": 1802,
+     "docked_area_changed_px": 109673,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "031.png",
+     "stamp_ms": 1862,
+     "docked_area_changed_px": 109001,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "032.png",
+     "stamp_ms": 1923,
+     "docked_area_changed_px": 107241,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "033.png",
+     "stamp_ms": 1983,
+     "docked_area_changed_px": 105905,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "034.png",
+     "stamp_ms": 2043,
+     "docked_area_changed_px": 104698,
+     "left_of_panel_changed_px": 0
+    }
+   ],
+   "dock_stamps_ms": [
+    0,
+    60,
+    120,
+    181,
+    241,
+    301,
+    361,
+    421,
+    481,
+    541,
+    601,
+    661,
+    721,
+    781,
+    841,
+    901,
+    961,
+    1022,
+    1082,
+    1142,
+    1202,
+    1262,
+    1322,
+    1382,
+    1442,
+    1502,
+    1562,
+    1622,
+    1682,
+    1742,
+    1802,
+    1863,
+    1923,
+    1983
+   ],
+   "docked_again_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-panel-dismiss",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     }
+    ]
+   },
+   "pearls_after_dock": [],
+   "docked_again_surface_delta": {
+    "added": [
+     "139:layer:bead-dev",
+     "98:layer:bead-panel-dismiss"
+    ],
+    "removed": []
+   },
+   "closed_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Background"
+     }
+    ]
+   },
+   "closed_surface_delta": {
+    "added": [],
+    "removed": []
+   },
+   "clean_after_close": true,
+   "release_seen": true
+  },
+  {
+   "view": "control",
+   "docked_state": {
+    "view": "control",
+    "origin": [
+     1454,
+     18
+    ],
+    "content_frame": [
+     0.0,
+     0.0,
+     424.0,
+     1140.0
+    ],
+    "edge": "right",
+    "size": [
+     466,
+     1182
+    ]
+   },
+   "docked_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-panel-dismiss",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     }
+    ]
+   },
+   "mid_drag_compositor": {
+    "windows": [
+     {
+      "id": 4,
+      "title": "Nacre Pearl Controls 5",
+      "app_id": "bead.pearl.pending",
+      "is_floating": true,
+      "layout": {
+       "pos_in_scrolling_layout": null,
+       "tile_size": [
+        424.0,
+        1140.0
+       ],
+       "window_size": [
+        424,
+        1140
+       ],
+       "tile_pos_in_workspace_view": [
+        1486.0,
+        50.0
+       ],
+       "window_offset_in_tile": [
+        0.0,
+        0.0
+       ]
+      }
+     }
+    ],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     }
+    ]
+   },
+   "pointer": {
+    "rc": 0,
+    "stdout": "73625739217 x=2369 y=1208\nPOINTER_SENT monotonic_ns=59473629730922 x=2368 y=1208\nPOINTER_SENT monotonic_ns=59473633725001 x=2368 y=1208\nPOINTER_SENT monotonic_ns=59473637713143 x=2368 y=1208\nPOINTER_SENT monotonic_ns=59473641708410 x=2367 y=1208\nPOINTER_SENT monotonic_ns=59473645701302 x=2367 y=1208\nPOINTER_SENT monotonic_ns=59473649689444 x=2367 y=1209\nPOINTER_RELEASE monotonic_ns=59473649696568\n",
+    "stderr": "",
+    "start_px": [
+     2547,
+     1194
+    ],
+    "end_px": [
+     2367,
+     1209
+    ]
+   },
+   "detach_stamps_ms": [
+    0,
+    60,
+    120,
+    180,
+    240,
+    300,
+    361,
+    421,
+    481,
+    541,
+    601,
+    661,
+    721,
+    781,
+    841,
+    901,
+    961,
+    1021,
+    1081,
+    1141,
+    1202,
+    1262,
+    1322,
+    1382,
+    1442,
+    1502,
+    1562,
+    1622,
+    1682,
+    1742,
+    1802,
+    1862,
+    1922,
+    1982,
+    2042,
+    2103,
+    2163,
+    2223,
+    2283,
+    2343,
+    2403,
+    2463,
+    2523,
+    2583,
+    2643,
+    2703,
+    2763,
+    2823,
+    2883,
+    2944
+   ],
+   "pearls": [
+    {
+     "id": 5,
+     "output": "winit",
+     "rect": [
+      1366.0,
+      60.0,
+      424.0,
+      1140.0
+     ],
+     "view": "control"
+    }
+   ],
+   "detached_compositor": {
+    "windows": [
+     {
+      "id": 5,
+      "title": "Nacre Pearl Controls 5",
+      "app_id": "bead.pearl",
+      "is_floating": true,
+      "layout": {
+       "pos_in_scrolling_layout": null,
+       "tile_size": [
+        424.0,
+        1140.0
+       ],
+       "window_size": [
+        424,
+        1140
+       ],
+       "tile_pos_in_workspace_view": [
+        1366.0,
+        60.0
+       ],
+       "window_offset_in_tile": [
+        0.0,
+        0.0
+       ]
+      }
+     }
+    ],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Background"
+     }
+    ]
+   },
+   "detached_surface_delta": {
+    "added": [
+     "140:xdg"
+    ],
+    "removed": []
+   },
+   "only_new_window_mapped": true,
+   "detach_max_stray_px": 408,
+   "during_drag": [
+    {
+     "frame": "004.png",
+     "stamp_ms": 240,
+     "docked_area_changed_px": 120670,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "005.png",
+     "stamp_ms": 300,
+     "docked_area_changed_px": 120670,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "006.png",
+     "stamp_ms": 361,
+     "docked_area_changed_px": 113511,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "007.png",
+     "stamp_ms": 421,
+     "docked_area_changed_px": 112947,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "008.png",
+     "stamp_ms": 481,
+     "docked_area_changed_px": 112376,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "009.png",
+     "stamp_ms": 541,
+     "docked_area_changed_px": 111109,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "010.png",
+     "stamp_ms": 601,
+     "docked_area_changed_px": 109549,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "011.png",
+     "stamp_ms": 661,
+     "docked_area_changed_px": 109549,
+     "left_of_panel_changed_px": 0
+    },
+    {
+     "frame": "012.png",
+     "stamp_ms": 721,
+     "docked_area_changed_px": 108274,
+     "left_of_panel_changed_px": 459
+    },
+    {
+     "frame": "013.png",
+     "stamp_ms": 781,
+     "docked_area_changed_px": 107143,
+     "left_of_panel_changed_px": 1581
+    },
+    {
+     "frame": "014.png",
+     "stamp_ms": 841,
+     "docked_area_changed_px": 106016,
+     "left_of_panel_changed_px": 2701
+    },
+    {
+     "frame": "015.png",
+     "stamp_ms": 901,
+     "docked_area_changed_px": 105446,
+     "left_of_panel_changed_px": 3261
+    },
+    {
+     "frame": "016.png",
+     "stamp_ms": 961,
+     "docked_area_changed_px": 103755,
+     "left_of_panel_changed_px": 4944
+    },
+    {
+     "frame": "017.png",
+     "stamp_ms": 1021,
+     "docked_area_changed_px": 102768,
+     "left_of_panel_changed_px": 5904
+    },
+    {
+     "frame": "018.png",
+     "stamp_ms": 1081,
+     "docked_area_changed_px": 101500,
+     "left_of_panel_changed_px": 7189
+    },
+    {
+     "frame": "019.png",
+     "stamp_ms": 1141,
+     "docked_area_changed_px": 100933,
+     "left_of_panel_changed_px": 7752
+    },
+    {
+     "frame": "020.png",
+     "stamp_ms": 1202,
+     "docked_area_changed_px": 99927,
+     "left_of_panel_changed_px": 8711
+    },
+    {
+     "frame": "021.png",
+     "stamp_ms": 1262,
+     "docked_area_changed_px": 98682,
+     "left_of_panel_changed_px": 10003
+    },
+    {
+     "frame": "022.png",
+     "stamp_ms": 1322,
+     "docked_area_changed_px": 97679,
+     "left_of_panel_changed_px": 10955
+    },
+    {
+     "frame": "023.png",
+     "stamp_ms": 1382,
+     "docked_area_changed_px": 96997,
+     "left_of_panel_changed_px": 11651
+    },
+    {
+     "frame": "024.png",
+     "stamp_ms": 1442,
+     "docked_area_changed_px": 95423,
+     "left_of_panel_changed_px": 13194
+    },
+    {
+     "frame": "025.png",
+     "stamp_ms": 1502,
+     "docked_area_changed_px": 94749,
+     "left_of_panel_changed_px": 13901
+    },
+    {
+     "frame": "026.png",
+     "stamp_ms": 1562,
+     "docked_area_changed_px": 93168,
+     "left_of_panel_changed_px": 15437
+    },
+    {
+     "frame": "027.png",
+     "stamp_ms": 1622,
+     "docked_area_changed_px": 92495,
+     "left_of_panel_changed_px": 16142
+    },
+    {
+     "frame": "028.png",
+     "stamp_ms": 1682,
+     "docked_area_changed_px": 91478,
+     "left_of_panel_changed_px": 17112
+    },
+    {
+     "frame": "029.png",
+     "stamp_ms": 1742,
+     "docked_area_changed_px": 90355,
+     "left_of_panel_changed_px": 18234
+    },
+    {
+     "frame": "030.png",
+     "stamp_ms": 1802,
+     "docked_area_changed_px": 89792,
+     "left_of_panel_changed_px": 18792
+    },
+    {
+     "frame": "031.png",
+     "stamp_ms": 1862,
+     "docked_area_changed_px": 88670,
+     "left_of_panel_changed_px": 19907
+    },
+    {
+     "frame": "032.png",
+     "stamp_ms": 1922,
+     "docked_area_changed_px": 87545,
+     "left_of_panel_changed_px": 21030
+    },
+    {
+     "frame": "033.png",
+     "stamp_ms": 1982,
+     "docked_area_changed_px": 86409,
+     "left_of_panel_changed_px": 22140
+    },
+    {
+     "frame": "034.png",
+     "stamp_ms": 2042,
+     "docked_area_changed_px": 85856,
+     "left_of_panel_changed_px": 22700
+    }
+   ],
+   "dock_stamps_ms": [
+    0,
+    60,
+    120,
+    180,
+    240,
+    301,
+    361,
+    421,
+    481,
+    541,
+    601,
+    661,
+    721,
+    781,
+    841,
+    901,
+    961,
+    1021,
+    1082,
+    1142,
+    1202,
+    1262,
+    1322,
+    1382,
+    1442,
+    1502,
+    1562,
+    1622,
+    1682,
+    1742,
+    1802,
+    1863,
+    1923,
+    1983
+   ],
+   "docked_again_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-panel-dismiss",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     }
+    ]
+   },
+   "pearls_after_dock": [],
+   "docked_again_surface_delta": {
+    "added": [
+     "174:layer:bead-dev",
+     "80:layer:bead-panel-dismiss"
+    ],
+    "removed": []
+   },
+   "closed_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Background"
+     }
+    ]
+   },
+   "closed_surface_delta": {
+    "added": [],
+    "removed": []
+   },
+   "clean_after_close": true,
+   "release_seen": true
+  }
+ ]
+}
