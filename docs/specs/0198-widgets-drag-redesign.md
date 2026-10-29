@@ -66,6 +66,20 @@ Known leftover: the Rust "entry flight" path (`widget_entry_source` etc. in `rel
 triggered by a `toggle-form enabled=true` request is now unreachable from the UI. Delete it
 (and its 4 tests) within 7 days of this landing, or reuse it for a keyboard "place" action.
 
+## Real-input findings (round 2)
+- Desktop → bar: the nested compositor confines a Bottom-layer canvas drag to the work area;
+  traced pointer events stop at y≈67 (the bottom of the reserved top edge under a 50 px bar)
+  and the bar never receives the pointer. `widget_drag::prepare_event` now counts a
+  canvas-sourced position within half a bar height below the bar as the bar; the bar
+  publishes its widget rects while a drag is active (`note_bar_geometry`) so the canvas drop
+  is ordered among them; a bar drop over the pill's x-span joins the pill at any height.
+- The bar is its own drop zone (outline on the bar surface while a widget is dragged).
+- The pill width is set, not animated: the shrinking right-anchored pill left stale copies of
+  itself in the bar mid-drag (partial damage). The animated-pill test was removed with it.
+- Known gap: the drag overlay paints its desktop/Remove zones (and ghost) 32 px right/down of
+  output coordinates (the layout's 32 px scene margin on the passive overlay canvas); the
+  Remove hit test uses true output coordinates. Needs a bead-wayland/bead-ui fix.
+
 ## Proof
 - `crates/nacre-shell/src/reload/widget_layout_property_tests.rs`:
   random drag sequences (12 seeds × 8 gestures: into/out of the pill, between regions, to the
@@ -75,4 +89,6 @@ triggered by a `toggle-form enabled=true` request is now unreachable from the UI
   the Remove zone removes; the owner's broken file repairs on load and renders like the clean
   layout with the same order.
 - Updated tests: content-mode assertions, `remove` op, preset repair instead of rejection.
-- Captures and real-input drag: see the report (`.lead/report.md`) for paths.
+- Real input (desktop, nested 2880x1800 @1.5, B0176 harness + `b0198-capture.py`):
+  clock bar→desktop→pill and pill→bar→pill both restore the default slots with 0 changed bar
+  pixels (`b0198-*-roundtrip-proof.json`); 0 UI_ERROR.
