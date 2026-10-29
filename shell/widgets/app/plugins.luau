@@ -78,7 +78,7 @@ local function settings_page(entry,navigate)
     local rows=settings_form.rows(item,package,function(kind,record)
         if kind~="setting" or record.value==nil then return nil end
         return act("set|"..entry.id.."|"..record.key.."|"..encode(record.value))
-    end,false)
+    end)
     return ui.Column{id="plugin-settings",width=0,grow=1,height="fill",gap=spacing.md,
         ui.Row{id="plugin-settings-heading",width="fill",height=54,shrink=0,gap=spacing.md,align="center",
             button("plugin-settings-back","Back",navigate("select","@plugins")),

@@ -875,7 +875,7 @@
   "bead.widgets.colour": "Colour",
   "bead.widgets.find": "Find a widget",
   "bead.widgets.overview": "Overview",
-  "bead.widgets.drag-hint": "Drag a style card onto the bar or the desktop to add a widget. Drag a placed widget to move it, or onto Remove to take it off.",
+  "bead.widgets.drag-hint": "Drag a style onto the bar or the desktop to add a new copy. Click a placed widget, or pick a copy below, to edit it.",
   "bead.widgets.launcher-title": "Launcher",
   "bead.widgets.launcher-description": "Apps and favourites",
   "bead.widgets.notifications-title": "Notifications",
@@ -952,5 +952,13 @@
   "bead.widgets.drag-to-bar": "Drag onto the bar",
   "bead.widgets.drag-to-desktop": "Drag onto the desktop",
   "bead.widgets.add-bar": "Add to bar",
-  "bead.widgets.add-desktop": "Add to desktop"
+  "bead.widgets.add-desktop": "Add to desktop",
+  "bead.widgets.where-desktop": "Desktop",
+  "bead.widgets.where-left": "Bar · Left",
+  "bead.widgets.where-centre": "Bar · Centre",
+  "bead.widgets.where-right": "Bar · Right",
+  "bead.widgets.remove-copy": "Remove",
+  "bead.widgets.on-screen": "On your screen",
+  "bead.widgets.on-screen-hint": "Choose a copy, or click it on the bar or desktop while this window is open, to change its style, colour and settings.",
+  "bead.widgets.on-screen-empty": "Not placed yet. Drag a style above onto the bar or the desktop."
 }

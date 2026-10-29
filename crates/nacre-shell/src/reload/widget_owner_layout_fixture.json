@@ -1,0 +1,194 @@
+{
+ "layout": {
+  "hosts": {
+   "top_bar": {
+    "instances": [
+     {
+      "host": "top_bar",
+      "iid": "launcher",
+      "settings": {
+       "action": "launcher",
+       "custom_path": "",
+       "icon": "nacre",
+       "route": ""
+      },
+      "slot": {
+       "region": "left",
+       "span": 1,
+       "start": 0
+      },
+      "widget": "launcher"
+     },
+     {
+      "host": "top_bar",
+      "iid": "workspaces",
+      "settings": {},
+      "slot": {
+       "region": "left",
+       "span": 1,
+       "start": 1
+      },
+      "widget": "workspaces"
+     },
+     {
+      "host": "top_bar",
+      "iid": "title",
+      "settings": {},
+      "slot": {
+       "region": "centre",
+       "span": 1,
+       "start": 0
+      },
+      "widget": "title"
+     },
+     {
+      "children": [
+       {
+        "host": "status-pill",
+        "iid": "updates",
+        "settings": {},
+        "slot": {
+         "region": "left",
+         "span": 1,
+         "start": 0
+        },
+        "widget": "updates"
+       },
+       {
+        "host": "status-pill",
+        "iid": "sound",
+        "settings": {},
+        "slot": {
+         "region": "centre",
+         "span": 1,
+         "start": 0
+        },
+        "widget": "sound"
+       },
+       {
+        "host": "status-pill",
+        "iid": "wifi",
+        "settings": {},
+        "slot": {
+         "region": "centre",
+         "span": 1,
+         "start": 1
+        },
+        "widget": "wifi"
+       },
+       {
+        "host": "status-pill",
+        "iid": "bluetooth",
+        "settings": {},
+        "slot": {
+         "region": "centre",
+         "span": 1,
+         "start": 2
+        },
+        "widget": "bluetooth"
+       },
+       {
+        "host": "status-pill",
+        "iid": "battery",
+        "settings": {},
+        "slot": {
+         "region": "centre",
+         "span": 1,
+         "start": 3
+        },
+        "widget": "battery"
+       },
+       {
+        "host": "status-pill",
+        "iid": "notifications",
+        "settings": {},
+        "slot": {
+         "region": "centre",
+         "span": 1,
+         "start": 4
+        },
+        "widget": "notifications"
+       },
+       {
+        "group": "clock",
+        "host": "status-pill",
+        "iid": "clock",
+        "settings": {},
+        "slot": {
+         "region": "right",
+         "span": 1,
+         "start": 0
+        },
+        "widget": "clock"
+       },
+       {
+        "host": "status-pill",
+        "iid": "power",
+        "settings": {},
+        "slot": {
+         "region": "right",
+         "span": 1,
+         "start": 1
+        },
+        "widget": "power"
+       }
+      ],
+      "host": "top_bar",
+      "iid": "status-pill",
+      "settings": {},
+      "slot": {
+       "region": "right",
+       "span": 1,
+       "start": 0
+      },
+      "widget": "pill"
+     }
+    ],
+    "mode": "content",
+    "regions": {
+     "centre": {
+      "span": 60,
+      "start": 0
+     },
+     "left": {
+      "span": 60,
+      "start": 0
+     },
+     "right": {
+      "span": 60,
+      "start": 0
+     }
+    },
+    "tiles": 60
+   }
+  },
+  "preset": "Nacre default",
+  "version": 1,
+  "widgets": {
+   "clock": {
+    "forms": {
+     "bar": {
+      "enabled": true,
+      "placement": {
+       "host": "status-pill",
+       "slot": {
+        "region": "right",
+        "span": 1,
+        "start": 0
+       }
+      },
+      "style": ""
+     },
+     "desktop": {
+      "enabled": false,
+      "placement": {},
+      "style": "analog-seconds"
+     }
+    },
+    "settings": {},
+    "widget": "clock"
+   }
+  }
+ },
+ "version": 1
+}

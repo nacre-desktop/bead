@@ -58,18 +58,6 @@ local function copy_data(value)
     return copy
 end
 
-local function default_preview_children(widget,width)
-    local document=registry.default(width)
-    local function find(items)
-        for _,item in items or {} do
-            if item.widget==widget and item.children then return copy_data(item.children) end
-            local children=find(item.children)
-            if children then return children end
-        end
-    end
-    return find(document.hosts.top_bar.instances) or {}
-end
-
 local function render_item(package,instance,placement,settings,factor)
     local variant=package and package.variants[placement=="desktop" and "canvas" or "bar"]
     if not variant then return nil end
@@ -94,25 +82,18 @@ function M.render_instance(instance,placement,factor)
     return render_item(package,instance,placement,values,factor)
 end
 
-function M.render_bar(document,width,height,factor,selected,style,settings,selected_group)
+function M.render_bar(document,width,height,factor,selected,selected_group)
     local layout=document.hosts.top_bar
     if not layout then return nil end
     local scale=factor or 1
-    local regions={}
-    for name,region in layout.regions do regions[name]=table.clone(region) end
-    regions.left.props={id="left",height=34,gap=12,shrink=1,align="center"}
-    regions.centre.inline=true
-    regions.right.props={id="right",height=34,gap=12,shrink=0,align="center"}
+    local regions=registry.bar_regions(layout)
+    local shared_centre=registry.centre_shared(layout)
     regions.right.before={}
     for _,node in require("../tray") do
         table.insert(regions.right.before,copy_node(node))
     end
     local function copy_item(item)
         local copy=table.clone(item)
-        if item.widget==selected and (selected_group==nil or (item.group or item.iid)==selected_group) then
-            copy.style=style
-            copy.settings=settings
-        end
         if item.children then
             copy.children={}
             for _,child in item.children do table.insert(copy.children,copy_item(child)) end
@@ -130,7 +111,7 @@ function M.render_bar(document,width,height,factor,selected,style,settings,selec
         local values=table.clone(package.defaults)
         for key,value in item.settings or {} do values[key]=value end
         local node=variant.render({instance=item,catalogue=registry.catalogue,render=render,editing=false,
-            local_layout=layout.mode=="tiles"},values,{})
+            local_layout=shared_centre and item.host=="top_bar" and item.slot.region=="centre"},values,{})
         if node and item.widget==selected and (selected_group==nil or (item.group or item.iid)==selected_group) then
             node.props=node.props or {}
             node.props.border_width=2
@@ -146,7 +127,9 @@ function M.render_bar(document,width,height,factor,selected,style,settings,selec
     return prepare(node,scale)
 end
 
-function M.render(id,placement,style,settings,width,height,actual_size)
+-- `children` are a placed container's own children (the drag ghost of a moved pill); the
+-- gallery passes none, so a container shows empty: things are placed into it (B0208).
+function M.render(id,placement,style,settings,width,height,actual_size,children)
     local package=registry.catalogue[id]
     if not package then return nil end
     local values=table.clone(package.defaults)
@@ -169,8 +152,19 @@ function M.render(id,placement,style,settings,width,height,actual_size)
     else
         local instance={iid="preview-"..id,widget=id,host="top_bar",style=style,settings=values,
             slot={region="left",start=0,span=package.forms.bar.styles[style].preferred_span},
-            children=default_preview_children(id,width)}
+            children=children or {}}
         local node=render_item(package,instance,placement,values,1)
+        if package.category=="containers" and #instance.children==0 and node and node.props then
+            local t=context.t
+            node.props.width=t.pill_height*3
+            node.props.border_width=kit.tokens.spacing.hairline
+            node.props.border_color="outlineVariant"
+            node.props.justify="center"
+            node.children=node.children or {}
+            table.insert(node.children,ui.Text{id="container-empty",text="add",family="Material Symbols Rounded",
+                font_size=kit.tokens.icons.medium,width=kit.tokens.icons.medium+2,height=t.pill_height,
+                color="onSurfaceVariant",text_align="center"})
+        end
         local natural=measure.width(node)
         if natural<=0 then
             local definition=package.forms.bar.styles[style]

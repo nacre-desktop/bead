@@ -429,9 +429,38 @@ function M.project(document,width)
     M.validate(projected)
     return projected
 end
+-- B0208: the bar has three real sections. A lone title keeps its centred QML band
+-- (absolute, unchanged pixels); any other centre content is a centred row, so a widget
+-- dropped in the middle lands beside the title, never on top of it.
+function M.centre_shared(layout)
+    local count,title=0,false
+    for _,item in layout.instances or {} do
+        if type(item.slot)=="table" and item.slot.region=="centre" then
+            count+=1
+            title=title or item.widget=="title"
+        end
+    end
+    return count>1 or (count==1 and not title)
+end
+function M.bar_regions(layout)
+    local regions={}
+    for name,region in layout.regions do regions[name]=table.clone(region) end
+    local gap=context.t.status_gap or 12
+    regions.left.props={id="left",height=34,gap=12,shrink=1,align="center"}
+    if M.centre_shared(layout) then
+        regions.centre.props={id="centre",position="absolute",left="28%",right="28%",top=0,height="100%",
+            gap=gap,align="center",justify="center"}
+    else
+        regions.centre.inline=true
+    end
+    regions.right.props={id="right",height=34,gap=12,shrink=0,align="center"}
+    return regions
+end
 function M.renderer(document)
     M.validate(document)
     local copies={}
+    local bar_layout=document.hosts.top_bar
+    local shared_centre=bar_layout and M.centre_shared(bar_layout)
     local render
     render=function(item,variant)
         local package=registry[item.widget]
@@ -440,7 +469,7 @@ function M.renderer(document)
         local editing=require("context").ui.resolve_for_check(require("context").ui.bind("widgets.editing"))
         local host=document.hosts[item.host]
         local node=variant.render({instance=item,catalogue=registry,render=render,editing=editing,
-            local_layout=false},values,{})
+            local_layout=shared_centre and item.host=="top_bar" and item.slot.region=="centre"},values,{})
         if not node then return nil end
         node=require("dragging").attach(document,item,node)
         if item.widget=="pill" and item.host=="top_bar" and host and node.props then
@@ -453,11 +482,16 @@ function M.renderer(document)
             props.clip_children=true
             node.props=props
         end
+        -- B0208 edit mode: a click on a placed widget opens that instance's settings in the
+        -- Widgets app instead of its dropdown or action.
+        local inspect=editing and item.widget~="pill" and require("editing").inspect(item) or nil
         -- Dropdown identity follows the instance, including copies and moves out of pills.
         local function own(child)
             local p=child.props or {}
             local action=p.on_activate
-            if action and (action.name=="status.pill.open" or
+            if inspect and action then
+                p.on_activate=inspect
+            elseif action and (action.name=="status.pill.open" or
                 (action.name=="view.open" and (item.widget=="clock" or item.widget=="power"))) then
                 local trigger=values.dropdown_trigger
                 if trigger==nil or trigger=="default" then trigger=document.dropdown_trigger or "click" end

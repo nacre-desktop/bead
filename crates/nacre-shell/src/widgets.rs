@@ -189,14 +189,29 @@ pub fn window_spec(
         }),
         fallback,
         factory,
-        model: Arc::new(|args| {
-            let query = args
-                .first()
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default();
-            BTreeMap::from([("widgets.search".into(), Value::Text(query.into()))])
-        }),
+        model: Arc::new(|args| open_model(args.first())),
     })
+}
+/// An open request: a gallery search string, or (B0208 edit mode) the placed instance the user
+/// clicked, `{widget, group}`, which opens that widget's page on that copy.
+pub(crate) fn open_model(arg: Option<&serde_json::Value>) -> BTreeMap<String, Value> {
+    let text = |value: &serde_json::Value| value.as_str().unwrap_or_default().to_owned();
+    match arg {
+        Some(target @ serde_json::Value::Object(_)) if target["widget"].is_string() => {
+            BTreeMap::from([
+                ("widgets.search".into(), Value::Text(String::new())),
+                (
+                    "widgets.selected".into(),
+                    Value::Text(text(&target["widget"])),
+                ),
+                ("widgets.group".into(), Value::Text(text(&target["group"]))),
+            ])
+        }
+        other => BTreeMap::from([(
+            "widgets.search".into(),
+            Value::Text(other.map(text).unwrap_or_default()),
+        )]),
+    }
 }
 /// Compatibility with the original bar's string arguments and instance-owned dropdowns.
 pub fn dropdown_view(argument: &Value) -> Option<&str> {

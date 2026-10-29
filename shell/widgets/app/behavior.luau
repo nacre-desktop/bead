@@ -164,6 +164,7 @@ local function drag_clear(s)
     s["widgets.drag.original"]={}
     s["widgets.drag.layout"]={}
     s["widgets.drag.revision"]=0
+    s["widgets.drag.preview"]=""
 end
 local function current_canonical(s,context)
     local saved=(s["widgets.layout"] or {})[1]
@@ -421,6 +422,49 @@ local function unique_iid(doc,stem)
     while locate_document_item(doc,iid) do suffix+=1; iid=stem..":"..tostring(suffix) end
     return iid
 end
+-- B0208: the desktop is a snapping grid (cell from the seed's `grid_cell` token). A widget
+-- lands on the nearest free cell; if that overlaps another widget it moves to the closest
+-- free cell, searched ring by ring.
+local function overlaps(slot,others)
+    for _,other in others do
+        local o=other.slot
+        if type(o)=="table" and slot.x<o.x+o.w and o.x<slot.x+slot.w and slot.y<o.y+o.h and o.y<slot.y+slot.h then
+            return true
+        end
+    end
+    return false
+end
+local function desktop_landing(others,x,y,w,h,width,height,cell)
+    cell=math.max(1,tonumber(cell) or 32)
+    local function snap(value,extent) return math.clamp(math.floor(value/cell+.5)*cell,0,math.max(0,extent)) end
+    local slot={x=snap(x,width-w),y=snap(y,height-h),w=w,h=h}
+    if not overlaps(slot,others) then return slot end
+    local best,best_distance
+    for ring=1,16 do
+        for dx=-ring,ring do
+            for dy=-ring,ring do
+                if math.max(math.abs(dx),math.abs(dy))==ring then
+                    local candidate={x=math.clamp(slot.x+dx*cell,0,math.max(0,width-w)),
+                        y=math.clamp(slot.y+dy*cell,0,math.max(0,height-h)),w=w,h=h}
+                    local distance=(candidate.x-x)^2+(candidate.y-y)^2
+                    if not overlaps(candidate,others) and (not best or distance<best_distance) then
+                        best,best_distance=candidate,distance
+                    end
+                end
+            end
+        end
+        if best then return best end
+    end
+    return slot
+end
+local function desktop_size(state,item_slot,style)
+    local configured=state and state.forms and state.forms.desktop and state.forms.desktop.placement
+        and state.forms.desktop.placement.slot or {}
+    local previous=type(item_slot)=="table" and item_slot or {}
+    local w=tonumber(configured.w) or tonumber(previous.w) or style.preferred_span
+    local h=tonumber(configured.h) or tonumber(previous.h) or style.preferred_height or 96
+    return math.clamp(w,style.min_span,style.max_span),h
+end
 -- One placement transaction: detach, place by pointer order, normalise, validate.
 -- Any rejection leaves the base untouched so the ghost snaps back.
 local function drag_drop(s,event,context,base,commit,undo_document)
@@ -494,27 +538,14 @@ local function drag_drop(s,event,context,base,commit,undo_document)
         doc.hosts.canvas=canvas
         canvas.width=width; canvas.height=height
         local x,y=output_local(event,context)
-        local configured=config.placement and config.placement.slot or {}
-        local previous_slot=item.host=="canvas" and type(item.slot)=="table" and item.slot or {}
-        local w=tonumber(configured.w) or tonumber(previous_slot.w) or style.preferred_span
-        local h=tonumber(configured.h) or tonumber(previous_slot.h) or style.preferred_height or 96
-        w=math.clamp(w,style.min_span,style.max_span)
+        local w,h=desktop_size(state,item.host=="canvas" and item.slot or nil,style)
         if w>width or h<=0 or h>height then return false end
         x-=(tonumber(event.grab_x) or 0)*w/math.max(1,tonumber(event.width) or w)
         y-=(tonumber(event.grab_y) or 0)*h/math.max(1,tonumber(event.height) or h)
-        local function magnet(value,extent)
-            value=math.clamp(value,0,extent)
-            local nearest=value
-            local distance=tonumber(context.snap_distance) or 16
-            for _,target in {0,extent/2,extent} do
-                if math.abs(value-target)<distance then nearest=target; distance=math.abs(value-target) end
-            end
-            return nearest
-        end
         item.host="canvas"
         item.children=nil
-        item.slot={x=magnet(tonumber(event.slot and event.slot.x) or x,width-w),
-            y=magnet(tonumber(event.slot and event.slot.y) or y,height-h),w=w,h=h}
+        item.slot=desktop_landing(canvas.instances,tonumber(event.slot and event.slot.x) or x,
+            tonumber(event.slot and event.slot.y) or y,w,h,width,height,context.grid_cell)
         table.insert(canvas.instances,item)
     else
         local x=output_local(event,context)
@@ -674,8 +705,9 @@ local function op(s,args)
         style=descriptor.styles and descriptor.styles[style_name]
         if not style then s["widgets.error"]="invalid style"; return end
         form_state.style=style_name
+        -- B0208: a style change edits the one placed instance the user clicked.
         for _,item in group_items(doc,group,id) do
-            if (item.host=="canvas" and "desktop" or "bar")==form then
+            if (item.host=="canvas" and "desktop" or "bar")==form and (req.iid==nil or item.iid==req.iid) then
                 item.style=style_name
                 if item.host=="canvas" then item.slot.w=math.min(style.preferred_span,doc.hosts.canvas.width-item.slot.x) end
             end
@@ -729,6 +761,26 @@ local function op(s,args)
     history(s,previous)
     finish(s,doc)
 end
+local function desktop_preview(base,event,context,source)
+    local package=catalogue(context,source.widget)
+    local descriptor=package and package.forms and package.forms.desktop
+    if not descriptor then return nil end
+    local live=type(source.iid)=="string" and locate_document_item(base,source.iid) or nil
+    local state=base.widgets and base.widgets[(live and (live.item.group or live.item.iid)) or source.group or ""]
+    local style_name=live and live.host=="canvas" and live.item.style or source.style
+    local style=descriptor.styles[style_name or ""] or descriptor.styles[descriptor.default_style]
+    if not style then return nil end
+    local w,h=desktop_size(state,live and live.host=="canvas" and live.item.slot or nil,style)
+    local width,height=output_dimensions(base,event,context)
+    local x,y=output_local(event,context)
+    x-=(tonumber(event.grab_x) or 0)*w/math.max(1,tonumber(event.width) or w)
+    y-=(tonumber(event.grab_y) or 0)*h/math.max(1,tonumber(event.height) or h)
+    local others={}
+    for _,item in base.hosts.canvas and base.hosts.canvas.instances or {} do
+        if item.iid~=source.iid then table.insert(others,item) end
+    end
+    return desktop_landing(others,x,y,w,h,width,height,context.grid_cell)
+end
 local function drag(s,args)
     s["widgets.write"]={}
     local event=request(args)
@@ -777,8 +829,23 @@ local function drag(s,args)
         s["widgets.drag.target_origin_x"]=target_x
         s["widgets.drag.target_origin_y"]=target_y
         s["widgets.drag.target_output_id"]=event.target_output_id or event.app_output_id or ""
-        if base then
-            local context=type(event.context)=="table" and event.context or event
+        local context=type(event.context)=="table" and event.context or event
+        if base and event.destination=="desktop" and source.kind~="resize" then
+            -- B0208: a desktop move is a cheap transform. The layout stays the frozen base (the
+            -- source dims in place) so no host re-renders per motion; only the landing cell
+            -- for the ghost's outline is computed. The layout changes once, on drop.
+            local landing=desktop_preview(base,event,context,source)
+            if landing then
+                s["widgets.drag.snap_x"]=landing.x
+                s["widgets.drag.snap_y"]=landing.y
+            end
+            local layout=(s["widgets.drag.layout"] or {})[1]
+            if start or s["widgets.drag.preview"]~="desktop" or type(layout)~="table" then
+                s["widgets.drag.layout"]={clone(base)}
+            end
+            s["widgets.drag.preview"]="desktop"
+        elseif base then
+            s["widgets.drag.preview"]="bar"
             local accepted,candidate,moved=drag_drop(s,event,context,base,false)
             s["widgets.drag.layout"]={accepted and (source.kind=="resize" and candidate or transient_layout(base,candidate,moved,source,s["widgets.drag.epoch"],{catalogue=context.catalogue})) or clone(base)}
         else
@@ -861,7 +928,7 @@ return {
         ["window.width"]=1100,["window.height"]=800,["window.min_width"]=420,["window.min_height"]=360,
         ["window.width_fraction"]=0.7,["window.height_fraction"]=0.7,
         ["widgets.layout"]={},["widgets.rev"]=0,["widgets.category"]="all",["widgets.search"]="",
-        ["widgets.selected"]="",["widgets.group"]="",["widgets.form"]="bar",["widgets.advanced.open"]=false,["widgets.scroll"]=0,["widgets.nav.scroll"]=0,
+        ["widgets.selected"]="",["widgets.group"]="",["widgets.form"]="bar",["widgets.new_style"]={},["widgets.scroll"]=0,["widgets.detail.scroll"]=0,["widgets.nav.scroll"]=0,
         ["widgets.screen_width"]=1920,["widgets.screen_height"]=1080,
         ["widgets.screen_origin_x"]=0,["widgets.screen_origin_y"]=0,["widgets.screen_id"]="",["widgets.outputs"]={},
         ["widgets.wallpaper.path"]="",
@@ -874,7 +941,7 @@ return {
         ["widgets.drag.x"]=0,["widgets.drag.y"]=0,["widgets.drag.start_x"]=0,["widgets.drag.start_y"]=0,
         ["widgets.drag.phase"]="",["widgets.drag.epoch"]=0,["widgets.drag.snap_x"]=0,["widgets.drag.snap_y"]=0,
         ["widgets.drag.base"]={},["widgets.drag.original"]={},["widgets.drag.layout"]={},
-        ["widgets.drag.revision"]=0,
+        ["widgets.drag.revision"]=0,["widgets.drag.preview"]="",
         ["widgets.drag.width"]=0,["widgets.drag.height"]=0,["widgets.drag.grab_x"]=0,["widgets.drag.grab_y"]=0,
         ["widgets.drag.target_origin_x"]=0,["widgets.drag.target_origin_y"]=0,
         ["widgets.drag.target_output_id"]="",
@@ -924,9 +991,13 @@ return {
             elseif req.op=="category" then s["widgets.category"]=req.value or "all"; s["widgets.selected"]=""
             elseif req.op=="form" then
                 if req.value=="bar" or req.value=="desktop" then s["widgets.form"]=req.value end
+            elseif req.op=="new-style" and (req.form=="bar" or req.form=="desktop") then
+                -- B0208: gallery cards only choose the style a new copy gets; nothing placed changes.
+                local chosen=clone(s["widgets.new_style"] or {})
+                chosen[tostring(req.widget).."/"..req.form]=req.value
+                s["widgets.new_style"]=chosen
             end
         end,
-        ["widgets.advanced.toggle"]=function(s) s["widgets.advanced.open"]=not s["widgets.advanced.open"] end,
         -- Spec 0203: the shell handles Plugins page actions on the host side.
         ["plugins.do"]=function(_) end,
         ["widgets.edit"]=op,

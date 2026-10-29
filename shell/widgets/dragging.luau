@@ -6,6 +6,7 @@ local registry=require("registry")
 local preview=require("app/preview")
 local t=context.t
 local M={}
+local landing
 
 local function document_value(value)
     if type(value)~="table" then return nil end
@@ -278,17 +279,6 @@ function M.ghost_node()
     local scale_y=animated_height/source_height
     local pointer_left,pointer_top=pointer_x-grab_x*scale_x,pointer_y-grab_y*scale_y
     local left_target,top_target=pointer_left,pointer_top
-    if phase=="dragging" and destination=="desktop" then
-        for _,item in document.hosts.canvas and document.hosts.canvas.instances or {} do
-            if item.widget==source.widget and (item.group or item.iid)==group
-                and (item.drag_placeholder==true or item.iid==source.iid) then
-                local slot=item.slot
-                if math.abs(slot.x-pointer_left)<=kit.tokens.spacing.lg then left_target=slot.x end
-                if math.abs(slot.y-pointer_top)<=kit.tokens.spacing.lg then top_target=slot.y end
-                break
-            end
-        end
-    end
     if phase=="settle" or phase=="return" then
         local snap_x=ui.resolve_for_check(ui.bind("widgets.drag.snap_x")) or pointer_left
         local snap_y=ui.resolve_for_check(ui.bind("widgets.drag.snap_y")) or pointer_top
@@ -299,7 +289,18 @@ function M.ghost_node()
     local position_curve=settling and "out-back" or "out-cubic"
     local left=ui.animate("widgets.drag.ghost.left",left_target,position_duration,position_curve)
     local top=ui.animate("widgets.drag.ghost.top",top_target,position_duration,position_curve)
-    local node=preview.render(source.widget,form,style_name,settings,width,height,true)
+    local children
+    if source.iid~=nil then
+        local function find(items)
+            for _,item in items or {} do
+                if item.iid==source.iid then return item.children end
+                local nested=find(item.children)
+                if nested then return nested end
+            end
+        end
+        for _,host in document.hosts do children=children or find(host.instances) end
+    end
+    local node=preview.render(source.widget,form,style_name,settings,width,height,true,children)
     if not node then return nil end
     local marker=form=="bar" and ui.Box{id="widget-snap-marker",position="absolute",right=0,top=0,
         width=kit.tokens.spacing.xs,height=height,radius=kit.tokens.radii.small,
@@ -307,12 +308,39 @@ function M.ghost_node()
     -- A bar widget has no card of its own, so its ghost gets one; a desktop widget is its own
     -- card, and a second rectangle behind its rounded glass showed as a background artifact.
     local carded=form=="bar"
-    return ui.Box{id="widgets-drag-ghost",position="absolute",
+    local ghost=ui.Box{id="widgets-drag-ghost",position="absolute",
         left=left,top=top,width=width,height=height,clip_children=true,
         radius=carded and kit.tokens.radii.medium or 0,fill=carded and ui.alpha("surfaceContainerHighest",.96) or "transparent",
         border_width=carded and ui.animate("widgets.drag.ghost.border",phase=="settle" and 2.5 or 1.5,
             preparing and 0 or .14,"out-cubic") or 0,border_color="primary",
         node,marker}
+    if phase=="dragging" and destination=="desktop" then
+        return ui.Group{id="widgets-drag-desktop",landing(target_width,target_height),ghost}
+    end
+    return ghost
+end
+-- B0208: the desktop snapping grid. Cell size is a spacing token; the drop model reads it
+-- from the host seed (`grid_cell`). While dragging, the grid shows around the landing cell
+-- (a few cells each way, so the overlay stays small) with the landing outline on top.
+function M.grid_cell() return kit.tokens.spacing.huge end
+landing=function(width,height)
+    local cell=M.grid_cell()
+    local x=ui.resolve_for_check(ui.bind("widgets.drag.snap_x")) or 0
+    local y=ui.resolve_for_check(ui.bind("widgets.drag.snap_y")) or 0
+    local reach=3*cell
+    local left,top=x-reach,y-reach
+    local w,h=width+2*reach,height+2*reach
+    local lines={id="widgets-drag-grid",position="absolute",left=left,top=top,width=w,height=h,clip_children=true}
+    local line=ui.alpha("onSurface",.16)
+    for i=0,math.ceil(w/cell) do
+        table.insert(lines,ui.Box{id="grid-v-"..i,position="absolute",left=i*cell,top=0,width=1,height=h,fill=line})
+    end
+    for i=0,math.ceil(h/cell) do
+        table.insert(lines,ui.Box{id="grid-h-"..i,position="absolute",left=0,top=i*cell,width=w,height=1,fill=line})
+    end
+    return ui.Group{id="widgets-drag-landing",ui.Box(lines),
+        ui.Box{id="widgets-drag-landing-cell",position="absolute",left=x,top=y,width=width,height=height,
+            radius=kit.tokens.radii.medium,fill=ui.alpha("primary",.10),border_width=2,border_color=ui.alpha("primary",.8)}}
 end
 
 -- B0198 edit mode: while a widget is dragged, the desktop shows where it
