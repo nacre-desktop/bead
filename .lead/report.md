@@ -1,11 +1,15 @@
-Status: done; branch: `task/codex-b0178-frame-cost-20261028`; pushed code commit `f1746a9b`.
+Status: done; task branch pushed, no publish.
+Branch: `task/codex-b0181-close-ghost-20261029`.
+Commit: `40982329` — author/committer siverteh; `[no-publish]` and Codex Luna trailer verified.
 
-Cause: suppressing `Session::preview_deadline()` during the panel hold removed the actor timeout that had also prompted redraws. Wayland’s companion frame callback only continued on `panel_animations.active()`, which did not reliably cover scene-motion slides. This made ordinary panel transitions wait for unrelated wakeups; the audit saw only 3–6 frames, gaps 300–1000 ms, and ~1 s duration. The separate extras animation still ran at 39 frames / 11–12 ms gaps.
+Cause: revealing motion reshaped the body and shadow while content moved behind a shrinking edge clip. On close, content could escape the body and leave the launcher header at the dock.
+Fix: shared `Scene::panel_offset` preserves reveal openings and closes by restoring full geometry then translating the whole scene. Panel and overlay paths use it; opacity reaches zero before existing frame-gated unmap.
 
-Fix: record a companion motion deadline when its first frame commits; keep scheduling/drawing from Wayland frame callbacks through that deadline. This redraws and re-poses the already prepared scene without calling `SceneSource::stage`; reset the deadline on each panel target change. Retained the icon cache, dashboard memoization, shared status snapshots, and existing damage-copy improvements.
+Close test: `revealing_panel_close_moves_every_part_as_one_scene_at_120_hz` passed; 37 poses at 8.33 ms, shared scene offset, no close clip, zero terminal opacity.
+B0178 scheduler proof: `forty_slide_frames_do_not_wake_the_script_stage_for_scalar_animation` passed.
+B0180 route smoke: `real_shell_panel_routes_open_and_close_with_prepared_scenes` passed for 12 routes, checking `panel.open` and prepared scenes without runtime errors.
+Full Bead CI: `bash /workspace/b0181-ci-inner.sh` in the Ubuntu 24.04 task container; `FULL_CI_PASS`, exit 0. `cargo test --workspace --locked -j2`: 784 passed, 2 ignored.
 
-Regression test `companion_slide_callbacks_at_120_hz_keep_committing_without_staging`: fake callbacks at 120 Hz for 300 ms produced 37 commits, max gap 8.33 ms, and B0170 `PANEL_SLIDE` marker `frames=37`. Existing counter tests passed: 0 stage wakeups in 40 held ticks; 0 Luau materialize/build calls in 40 unchanged ticks after the initial build. Existing icon test counts one lookup per key across repeated requests.
-
-Full Bead CI: `bash /ci.sh` in the task Ubuntu 24.04 container; `FULL_CI_PASS`, exit 0.
-
-Profiling ELF: `.lead/profiling/nacre-shell`, 399,061,536 bytes, x86-64 with `.debug_info` and `.eh_frame`. Arch build command: `RUSTFLAGS='-C force-frame-pointers=yes' cargo build -p nacre-shell --bin nacre-shell --profile profiling --locked -j2`.
+Visual validation: private QML arm passed 19 states at 2880×1800, scale 1.5, requested 120 Hz. The Bead compositor arm timed out at Nacre `ui.dispatch` provider startup with both current-main and protocol-pinned helpers; its captures were discarded. Paired compositor screenshots remain a known gap; the route smoke validates Bead’s actual Luau runtime.
+Preview refresh completed after push.
+Source/test lines: +422/−33; the 33 removed lines were the separate reveal/slide pose branches. No files removed.
