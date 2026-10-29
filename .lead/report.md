@@ -1,13 +1,15 @@
-Status: blocked — branch work is pushed; performance acceptance and owner laptop audit remain open.
-Branch: `task/codex-b0180-draw-cost-20261029`, implementation HEAD `84cdcf3b` is pushed. 15 implementation commits use `[no-publish]`; this report is the follow-up record. No merge or PR.
-Commits: `226a5000`–`84cdcf3b` (15 implementation commits); author/committer and Codex trailer verified.
-Cause: CPU reveal content was repainted each tick; motion also replayed intermediate service/model/reload/presentation work. SVG reveal callback remains progress-dependent; `presented` serialization was not measured to zero.
-Fix: precompose contiguous reveal content once off-thread; retain and composite content while drawing dynamic contours. Whole-panel slides reuse a retained picture. Coalesce refresh/reload/presentation work during motion. Bound/cache exact-input SVG slices and replace JSON bounds hashing with direct hashing.
-CPU headless benchmark, debug test profile, 2880×1800/1.5, p50/p99 ms (baseline → candidate): dashboard 454.6/728.8 → 394.6/606.6; control centre 282.3/414.3 → 236.3/381.9; sound 40.9/41.9 → 1.60/1.66.
-First-content wall ms: dashboard 213.5 → 262.2; control 140.4 → 152.2; sound 41.3 → 62.0 (regressed; idle prewarming is missing).
-Retained cache calls over 130 ticks: dashboard 1 prepare / 130 composites / 0 SVG rasterizations; control 1 / 130 / 0; sound 1 slide prepare / 130 composites. Fixture contains no Nacre Chrome SVG, so its zero SVG count is not production evidence. Dynamic SVG can still rasterize per pose; no serialize-zero counter was added.
-B0178 scheduler proof passed: 37 commits in 300 ms, maximum gap 8.33 ms; no staging during motion.
-Full CI: task CI recipe on a CI container using an archive of the exact pushed source tree; synthetic Git metadata. `FULL_CI_OK`; workspace 783 passed, 3 ignored; private clock proof 1 passed in 59.17 s; all remaining workflow checks passed.
-Profiling build: `nice -n 10 cargo build --profile profiling -p nacre-shell --locked -j2`, `RUSTFLAGS='-C force-frame-pointers=yes'`; passed in 8m08s. `.lead/profiling/nacre-shell`: x86-64 ELF with debug info, 384,766,096 bytes, SHA-256 `19e329b57e9a31f0b797a142a929d106b9dbce09fd0ac5d46ff9dca461b4745a`. Built from code-identical `a372a4bf` (final `84cdcf3b` only changes docs).
-Diff vs origin/main: 1,391 insertions, 78 deletions across 10 files; removed 0 product lines/files (no replaced legacy implementation was deleted).
-Open: first-content latency regressions; release-profile matched benchmark missing; Chrome art/raster call count unverified; per-frame serialization count unverified; no live audit or smoothness acceptance. Task rules reserve laptop live audit to the lead.
+Status: blocked on owner laptop live acceptance; the rejection fix and requested headless validation are complete.
+Branch: `task/codex-b0180-draw-cost-r2-20261029`; code HEAD `ec573ada` pushed without force. Report/docs follow-up only.
+R2 commits: `a1fc48f3`, `76f993ff`, `675d0b9d`, `8be49a6d`, `fe55055e`, `ec573ada`; every commit uses `[no-publish]`, required identity and Codex trailer.
+Cause: motion coalescing deferred the first Reload, then PanelVisibility(true) committed `panel.open` before the route schema existed.
+Fix: first schema-building Reload is admitted during motion; later refreshes remain coalesced. `panel.open` remains the open/closed state and is verified true/false.
+Real-shell smoke loads and opens/closes 12 routes: dashboard, session, launcher, network, bluetooth, battery, sound, sound/core, calendar, chat, control, wallpaper. Every route produced a CPU-prepared scene without Runtime errors.
+Startup warming begins after the first primary frame, uses actual output logical size/scale, and runs at nice 10 without creating a surface or calling `presented`.
+CPU cache is consume-once and bounded at 2 MiB including asset references. Smoke warmed 12/12 routes; retained 1,429,994 bytes.
+B0178 120 Hz scheduler proof passed: 37 commits in 300 ms, maximum gap 8.33 ms.
+Warmed first-content wall ms, baseline 3b6de41f → candidate: dashboard 213.51 → 2.84; control 140.39 → 1.45; sound 41.27 → 1.74.
+Debug tick p50/p99 ms: dashboard 454.6/728.8 → 398.61/612.80; control 282.3/414.3 → 238.03/385.71; sound 40.9/41.9 → 1.60/1.61.
+Full Bead CI on `ec573ada`: `FULL_CI_OK`; 784 passed, 3 ignored; remaining workflow steps passed.
+Profiling ELF built in 5m48s with `RUSTFLAGS='-C force-frame-pointers=yes' nice -n 10 cargo build --profile profiling -p nacre-shell --locked -j2`; 385,863,616 bytes, x86-64 with debug info; SHA-256 `f5a5d3f1cd1ea52605cfc227c2131b8d85bc7405919e14ef7e48f5e1f7777bd2`.
+Removed: 0 old routes/files; the existing direct-render fallback remains for scenes whose contour order cannot be safely split.
+Open: benchmark is debug software rendering, not physical 120 Hz scanout; Nacre Chrome SVG rasterization and per-frame serialization counts remain unverified. No laptop live audit was rerun.
