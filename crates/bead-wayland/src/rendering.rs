@@ -101,6 +101,21 @@ fn content_body(scene: &Scene) -> Option<bead_render::Rect> {
         })
 }
 
+fn motion_scene_offset(
+    prior_x: f32,
+    edge: bead_core::Edge,
+    opening: bool,
+    dx: f32,
+    dy: f32,
+) -> (f32, f32) {
+    let x = if !opening && matches!(edge, bead_core::Edge::Top | bead_core::Edge::Bottom) {
+        prior_x
+    } else {
+        32. + dx
+    };
+    (x, 32. + dy)
+}
+
 /// The docked layer may be clipped to the output while its detached window
 /// must retain the complete panel content extent.
 #[cfg(any(feature = "native-gl", test))]
@@ -1462,6 +1477,7 @@ impl App {
             s.redraw = false;
             let mut opaque_motion = self.options.animate;
             if let Some(motion) = scene.motion.clone() {
+                let prior_x = scene.offset.0;
                 let now = self.started.elapsed().as_secs_f64();
                 let open = if self.options.animate {
                     ((now - 3.).max(0.) % 2.) >= 1. || now < 3.
@@ -1471,30 +1487,19 @@ impl App {
                     motion.open
                 };
                 // A panel opens from closed (B0067); the clock starts at the first committed frame (B0170).
+                let (duration, curve) = motion.transition(open);
                 self.animations.open_to(
                     &motion.id,
                     open,
                     now,
-                    if self.options.animate {
-                        1.
-                    } else {
-                        motion.duration
-                    },
-                    motion.curve.unwrap_or(if motion.spring {
-                        bead_core::animation::Curve::Spring
-                    } else {
-                        bead_core::animation::Curve::EaseOut
-                    }),
+                    if self.options.animate { 1. } else { duration },
+                    curve,
                 );
                 let (progress, active) = self.animations.value(&motion.id, now).unwrap();
                 motion_clock = Some((
                     motion.id.clone(),
                     now,
-                    if self.options.animate {
-                        1.
-                    } else {
-                        motion.duration
-                    },
+                    if self.options.animate { 1. } else { duration },
                 ));
                 // A callback can arrive after the motion expires. Keep it armed
                 // until we have drawn the terminal pose, rather than making the
@@ -1503,8 +1508,9 @@ impl App {
                 scene.opacity = motion.opacity(progress);
                 let (dx, dy) = scene.panel_offset(progress, open);
                 opaque_motion = active && (dx != 0. || dy != 0. || (motion.reveal && open));
-                scene.offset.0 = 32. + dx;
-                scene.offset.1 = 32. + dy;
+                // A vertical exit retains the open x origin instead of
+                // re-centering from the live surface width every frame.
+                scene.offset = motion_scene_offset(prior_x, motion.edge, open, dx, dy);
             }
 
             s.background_visible = scene.opacity > 0.001;
@@ -1530,7 +1536,7 @@ impl App {
                     .as_ref()
                     .is_none_or(|spec| spec.position.is_none())
                     && scene.motion.as_ref().is_none_or(|m| {
-                        m.edge == bead_core::Edge::Top || m.edge == bead_core::Edge::Bottom
+                        m.open && matches!(m.edge, bead_core::Edge::Top | bead_core::Edge::Bottom)
                     })
                 {
                     // Custom positioners already align the body through the padded
@@ -2903,6 +2909,35 @@ mod repair_tests {
 #[cfg(test)]
 mod input_tests {
     use super::*;
+    #[test]
+    fn vertical_close_keeps_x_fixed_while_side_close_keeps_y_fixed() {
+        let close_duration = 0.21_f32;
+        let mut previous_vertical_x = None;
+        let mut previous_side_y = None;
+        for frame in 0..=26 {
+            let t = (frame as f32 / 120. / close_duration).clamp(0., 1.);
+            let progress = 1. - t.powi(4);
+            let (bottom_dx, bottom_dy) =
+                bead_core::Edge::Bottom.closed_offset(1100., 590., progress);
+            let bottom =
+                motion_scene_offset(812., bead_core::Edge::Bottom, false, bottom_dx, bottom_dy);
+            assert_eq!(bottom.0, 812.);
+            if let Some(previous) = previous_vertical_x {
+                assert_eq!(bottom.0, previous);
+            }
+            previous_vertical_x = Some(bottom.0);
+
+            let (right_dx, right_dy) = bead_core::Edge::Right.closed_offset(1100., 590., progress);
+            let right =
+                motion_scene_offset(812., bead_core::Edge::Right, false, right_dx, right_dy);
+            assert_eq!(right.1, 32.);
+            if let Some(previous) = previous_side_y {
+                assert_eq!(right.1, previous);
+            }
+            previous_side_y = Some(right.1);
+        }
+    }
+
     fn scene() -> Scene {
         let body = Rect::new(0., 0., 200., 100.);
         Scene {

@@ -570,17 +570,10 @@ impl App {
         let scene = &mut o.scene;
         let mut animating = false;
         if let Some(motion) = scene.motion.clone() {
-            o.animations.open_to(
-                &motion.id,
-                o.open,
-                now,
-                motion.duration,
-                motion.curve.unwrap_or(if motion.spring {
-                    bead_core::animation::Curve::Spring
-                } else {
-                    bead_core::animation::Curve::EaseOut
-                }),
-            );
+            let prior_x = scene.offset.0;
+            let (duration, curve) = motion.transition(o.open);
+            o.animations
+                .open_to(&motion.id, o.open, now, duration, curve);
             let (progress, active) = o
                 .animations
                 .value(&motion.id, now)
@@ -591,7 +584,11 @@ impl App {
             scene.offset = (32. + dx, 32. + dy);
 
             if matches!(motion.edge, bead_core::Edge::Top | bead_core::Edge::Bottom) {
-                scene.offset.0 = ((o.size.0 as f32 - scene.width) / 2.).max(0.);
+                scene.offset.0 = if o.open {
+                    ((o.size.0 as f32 - scene.width) / 2.).max(0.)
+                } else {
+                    prior_x
+                };
             }
         }
         o.offset = scene.offset;

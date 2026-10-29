@@ -17,6 +17,8 @@ pub fn reduced_motion() -> bool {
 pub enum Curve {
     EaseOut,
     EaseInOut,
+    /// Accelerating exit curve that commits most travel to its final frames.
+    EmphasizedAccelerate,
     Spring,
 }
 #[derive(Clone, Copy)]
@@ -177,6 +179,7 @@ impl Animations {
                     1. - (-2. * t + 2.).powi(3) / 2.
                 }
             }
+            Curve::EmphasizedAccelerate => t.powi(4),
             Curve::Spring => {
                 let x = 8. * t;
                 (1. - (1. + x) * (-x).exp()) / (1. - 9. * (-8_f32).exp())
