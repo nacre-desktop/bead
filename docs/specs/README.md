@@ -531,6 +531,10 @@ B0183 caches repeated SVG raster crops and gates last-good recovery bundle write
 on content changes; the 8 MiB LRU and validation are documented in the
 [SVG cache and presented-frame spec](0183-svg-cache-presented.md).
 
+B0185 (in review, live laptop audit pending): reveal-panel slides flatten their moving content
+once per slide and composite it each frame instead of repainting every primitive; see the
+[frame render cost spec](0185-frame-render-cost.md).
+
 Exact-source full hosted [CI 39388972154](https://github.com/nacre-desktop/bead/actions/runs/39388972154)
 passed on dc8832fe: formatting, Clippy, workspace tests, renderer configurations,
 facade/headless UI/Luau schema, capture-window regressions, private service
