@@ -805,6 +805,70 @@ fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
     Ok(())
 }
 
+/// B0192: a workspace switch ticks once per refresh of a 120 Hz output, in both directions: the median
+/// scheduled gap is one refresh, and the frame count matches the tween length.
+#[test]
+fn workspace_switch_ticks_every_refresh_at_120_hz_in_both_directions() -> Result<()> {
+    let refresh = std::time::Duration::from_nanos(8_333_333);
+    let row = |active: usize| {
+        Value::list(
+            (1..=3)
+                .map(|i| {
+                    serde_json::json!({"id":format!("w{i}"),"index":i,"label":i.to_string(),"active":i == active,"icon_mode":false})
+                })
+                .collect(),
+        )
+    };
+    let mut values = super::initial_models()?;
+    values.insert("bead.workspaces".into(), row(3));
+    let mut h = Harness::load(
+        &root(),
+        Path::new("bar/main.luau"),
+        &root().join("palette.json"),
+        values,
+        Config {
+            width: 1920,
+            height: 50,
+            scale: 1.5,
+        },
+    )?;
+    h.session.set_frame_interval(refresh);
+    settle_harness_animations(&mut h)?;
+    for (from, to) in [(3, 1), (1, 3)] {
+        h.update(BTreeMap::from([("bead.workspaces".into(), row(to))]))?;
+        let mut deadlines = Vec::new();
+        while let Some(deadline) = h.session.preview_deadline() {
+            assert!(
+                deadlines.len() < 64,
+                "workspace {from}->{to} did not settle"
+            );
+            deadlines.push(deadline);
+            let now = std::time::Instant::now();
+            if deadline > now {
+                std::thread::sleep(deadline - now);
+            }
+            h.update(BTreeMap::new())?;
+        }
+        assert!(
+            deadlines.len() >= 16,
+            "workspace {from}->{to}: {} frames; a 60 Hz tick would give about 11",
+            deadlines.len()
+        );
+        // Debug-build stages are slow enough to skip slots, so judge the schedule by its median gap.
+        let mut gaps: Vec<_> = deadlines
+            .windows(2)
+            .map(|pair| pair[1].saturating_duration_since(pair[0]))
+            .collect();
+        gaps.sort();
+        let median = gaps[gaps.len() / 2];
+        assert!(
+            median <= refresh + std::time::Duration::from_millis(1),
+            "workspace {from}->{to}: median scheduled gap {median:?} exceeds one refresh"
+        );
+    }
+    Ok(())
+}
+
 #[test]
 fn workspace_icon_cells_share_one_bar_pill_at_both_scales() -> Result<()> {
     for scale in [1., 1.5] {

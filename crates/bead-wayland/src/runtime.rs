@@ -154,6 +154,12 @@ pub(super) struct OutputSession {
     pub(super) animations: bead_core::animation::Animations,
 }
 
+/// B0192: until presentation feedback names the real refresh, the advertised mode is not trusted below
+/// 120 Hz. A nested compositor advertises its own 60 Hz window mode while its clients are paced by the
+/// 120 Hz parent, and the bar's tweens then committed every other frame. This is the same 120 Hz
+/// opportunity `scroll::tick` keeps for unknown refresh; `output_presented` sets the exact interval.
+pub(super) const UNCONFIRMED_TICK_CAP: Duration = Duration::from_nanos(8_333_333);
+
 pub(super) fn frame_interval_from_refresh_millihz(refresh_rate: i32) -> Duration {
     match u64::try_from(refresh_rate) {
         Ok(refresh_rate) if refresh_rate > 0 => {
@@ -744,6 +750,7 @@ impl App {
                     .map(|mode| frame_interval_from_refresh_millihz(mode.refresh_rate))
             })
             .unwrap_or_else(|| Duration::from_millis(16))
+            .min(UNCONFIRMED_TICK_CAP)
     }
     fn presented_output_frame_interval(&self, output: &wl_output::WlOutput) -> Duration {
         self.surfaces
@@ -780,6 +787,10 @@ impl App {
         }
         let name = self.output_id(output);
         let interval = self.output_frame_interval(output);
+        eprintln!(
+            "OUTPUT_FRAME_INTERVAL output={name} origin=mode ns={}",
+            interval.as_nanos()
+        );
         if let Some(session) = self.output_sessions.get_mut(&name)
             && let Some(source) = &mut session.source
         {
@@ -825,6 +836,9 @@ impl App {
             return;
         }
         let interval = Duration::from_nanos(u64::from(refresh_ns));
+        eprintln!(
+            "OUTPUT_FRAME_INTERVAL output={output_name} origin=presented companion={companion} ns={refresh_ns}"
+        );
         if companion {
             if self.panel_output.as_ref() == Some(output)
                 && let Some(source) = &mut self.panel_runtime
@@ -2634,6 +2648,12 @@ mod palette_barrier_tests {
             frame_interval_from_refresh_millihz(0),
             std::time::Duration::from_millis(16)
         );
+        // An advertised 60 Hz mode is capped to the 120 Hz opportunity until presentation confirms it.
+        let capped =
+            |millihz| frame_interval_from_refresh_millihz(millihz).min(super::UNCONFIRMED_TICK_CAP);
+        assert_eq!(capped(60_000), std::time::Duration::from_nanos(8_333_333));
+        assert_eq!(capped(120_000), std::time::Duration::from_nanos(8_333_333));
+        assert_eq!(capped(240_000), std::time::Duration::from_nanos(4_166_666));
     }
 
     #[test]
