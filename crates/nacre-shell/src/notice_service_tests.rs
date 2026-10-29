@@ -471,6 +471,30 @@ fn osd_events_clamp_the_level_and_refuse_invalid_ones() {
     assert!(s.lock().osd.shown.is_none());
 }
 
+/// N0102: a held volume key at 100 % repeats an identical event; each one must keep the
+/// pill shown (extend the hide clock), and one after the pill hid must show it again.
+#[test]
+fn unchanged_osd_level_at_the_limit_reshows_and_extends_the_pill() {
+    let s = shared();
+    let full = || event(json!({"kind":"volume","value":1.0,"muted":false,"label":"Speakers"}));
+    deliver(&s, &full());
+    let first = s.lock().osd.deadline.expect("the hide timer starts");
+    std::thread::sleep(Duration::from_millis(5));
+    deliver(&s, &full());
+    let second = s.lock().osd.deadline.expect("still shown");
+    assert!(second > first, "a repeated step at the limit extends the pill");
+    {
+        let mut g = s.lock();
+        g.osd.shown = None;
+        g.osd.deadline = None;
+    }
+    deliver(&s, &full());
+    let v = shown(&s);
+    assert!(flag(&v, "osd.open"), "the same level shows the pill again");
+    assert_eq!(number(&v, "osd.value"), 1.);
+    assert!(s.lock().osd.deadline.is_some());
+}
+
 #[test]
 fn osd_arming_and_hover_control_the_hide_clock() {
     let s = shared();
