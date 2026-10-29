@@ -120,24 +120,24 @@ fn example_plugin_enables_renders_unloads_and_a_faulting_plugin_is_switched_off(
     );
 
     assert_eq!(
-        act(&root, "enable|hello", "")["plugins.message"],
+        act(&root, "enable|hello")["plugins.message"],
         Value::Text("hello enabled".into())
     );
-    act(&root, "set|hello|greeting|s:Hey", "");
+    act(&root, "set|hello|greeting|s:Hey");
     let detail = texts(&app(&root, "hello"));
     assert!(
         detail.iter().any(|t| t == "Hey"),
         "plugin setting reaches the widget: {detail:?}"
     );
 
-    act(&root, "disable|hello", "");
+    act(&root, "disable|hello");
     let gallery = texts(&app(&root, "hello"));
     assert!(
         gallery.iter().all(|t| t != "Hey"),
         "disabling removes the widget: {gallery:?}"
     );
 
-    act(&root, "enable|nosy", "");
+    act(&root, "enable|nosy");
     let shown = texts(&app(&root, "nosy"));
     assert!(
         shown.iter().any(|t| t == "Plugins"),
@@ -155,4 +155,104 @@ fn example_plugin_enables_renders_unloads_and_a_faulting_plugin_is_switched_off(
         "{page:?}"
     );
     let _ = std::fs::remove_dir_all(&temp);
+}
+
+/// B0208: plugins install from the launcher (`>plugin <folder>`), arrive disabled, and list
+/// their declared access before the user enables them; ordinary typing never scans.
+#[test]
+fn launcher_plugin_mode_installs_a_local_folder_and_lists_its_access() {
+    let temp = std::env::temp_dir().join(format!("nacre-launcher-plugins-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&temp);
+    let root = temp.join("shell");
+    std::fs::create_dir_all(&root).unwrap();
+    let source = temp.join("src/hello");
+    copy_tree(&repository().join("examples/plugins/hello"), &source);
+    let config = plugins::Config {
+        system: Vec::new(),
+        user: Some(temp.join("data/plugins")),
+        state: Some(temp.join("config/plugins.json")),
+    };
+    plugins::configure(&root, config.clone());
+
+    assert_eq!(
+        launcher_values(&root, "firefox")["launcher.plugin.active"],
+        Value::Bool(false)
+    );
+    let query = format!(">plugin {}", source.display());
+    let mode = launcher_values(&root, &query);
+    assert_eq!(mode["launcher.plugin.active"], Value::Bool(true));
+    assert_eq!(
+        mode["launcher.plugin.source"],
+        Value::Text(source.display().to_string())
+    );
+    let started = act(&root, &format!("install|{}", source.display()));
+    assert_eq!(
+        started["plugins.message"],
+        Value::Text("Installing…".into())
+    );
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let row = loop {
+        let values = launcher_values(&root, &query);
+        if let Value::List(rows) = &values["launcher.plugin.rows"]
+            && let Some(row) = rows.iter().find(|row| row["id"] == "hello")
+        {
+            break row.clone();
+        }
+        assert!(std::time::Instant::now() < deadline, "install finished");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    assert_eq!(row["enabled"], false, "user plugins arrive disabled");
+    assert!(row["access"].as_str().is_some(), "{row}");
+    act(&root, "enable|hello");
+    let Value::List(rows) = &launcher_values(&root, &query)["launcher.plugin.rows"] else {
+        panic!("rows")
+    };
+    assert_eq!(rows[0]["enabled"], true);
+    let _ = std::fs::remove_dir_all(&temp);
+}
+
+#[test]
+fn launcher_plugin_mode_renders_install_and_the_declared_access() {
+    crate::i18n::init();
+    let root = repository().join("shell");
+    let values = BTreeMap::from([
+        (
+            "launcher.search.text".into(),
+            Value::Text(">plugin /tmp/x".into()),
+        ),
+        ("launcher.plugin.active".into(), Value::Bool(true)),
+        (
+            "launcher.plugin.source".into(),
+            Value::Text("/tmp/x".into()),
+        ),
+        (
+            "launcher.plugin.rows".into(),
+            Value::list(vec![
+                serde_json::json!({"id":"nosy","name":"Nosy","enabled":false,
+                "access":"Network access","error":"","update":false}),
+            ]),
+        ),
+    ]);
+    let harness = Harness::load(
+        &root,
+        Path::new("ui/main.luau"),
+        &root.join("palette.json"),
+        values,
+        Config {
+            width: 1280,
+            height: 800,
+            scale: 1.,
+        },
+    )
+    .unwrap();
+    let shown = texts(&harness);
+    for expected in [
+        "Install from /tmp/x",
+        "Install",
+        "Nosy",
+        "Access: Network access",
+        "Enable",
+    ] {
+        assert!(shown.iter().any(|t| t == expected), "{expected}: {shown:?}");
+    }
 }

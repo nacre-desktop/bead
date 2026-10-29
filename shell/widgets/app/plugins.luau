@@ -102,11 +102,10 @@ function M.page(selected,navigate)
         label("plugins-title","Plugins",text.headline*4/3,"onSurface",{height=28}),
         label("plugins-trust",TRUST[1],text.caption*4/3,"onSurfaceVariant",{height=16}),
         label("plugins-trust-boundary",TRUST[2],text.caption*4/3,"onSurfaceVariant",{height=16}),
+        -- B0208: installing lives in the launcher (`>plugin <git URL or folder>`).
         registry.plugins.user_dir and ui.Row{id="plugins-add",width="fill",height=spacing.huge+spacing.md,shrink=0,gap=spacing.sm,align="center",
-            kit.TextInput{id="plugins-source",width=0,grow=1,height=spacing.huge+spacing.md,text=ui.bind("plugins.source"),
-                placeholder="Git URL or absolute folder path",fill="surface",border_width=1,border_color="outlineVariant",
-                aria_label="Plugin source"},
-            button("plugins-add-button","Add",act("add")),
+            label("plugins-install-hint","To install a plugin, type >plugin and a git URL or folder path in the launcher.",
+                text.caption*4/3,"onSurfaceVariant",{width=0,grow=1,height=18}),
             button("plugins-check","Check for updates",act("check"),{fill="surfaceContainerHigh"})} or nil,
         message~="" and label("plugins-message",message,text.caption*4/3,"onSurfaceVariant",{height=18}) or nil,
         ui.Scroll{id="plugins-scroll",width="fill",grow=1,scroll=ui.bind("plugins.scroll"),ui.Column(cards)})

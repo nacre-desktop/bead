@@ -951,7 +951,7 @@ return {
         ["widgets.drag.app_output_id"]="",["widgets.app.open"]=false,
         ["widgets.message"]="",["widgets.error"]="",["widgets.busy"]=false,["widgets.draft"]={},["widgets.undo"]={},
         ["widgets.history.revision"]=0,
-        ["plugins.source"]="",["plugins.message"]="",["plugins.scroll"]=0,
+        ["plugins.message"]="",["plugins.scroll"]=0,
         ["widgets.write"]={},["widgets.initial"]={},["widgets.catalogue"]={},["widgets.field"]="",["widgets.select"]="",
         ["widgets.editing"]=true,["panel.open"]=true,
         ["widgets.preview"]={{["bead.desktop.audio"]="volume_up",["bead.desktop.audio.label"]="42%",

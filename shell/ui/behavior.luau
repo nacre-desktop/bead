@@ -10,6 +10,8 @@ return {
     ["launcher.conversion.value"]="", ["launcher.conversion.description"]="",
     ["launcher.conversion.error"]="", ["launcher.message"]="",
     ["launcher.quick"]={}, ["launcher.quick_error"]="", ["launcher.updates.count"]=-1,
+    ["launcher.plugin.active"]=false, ["launcher.plugin.source"]="", ["launcher.plugin.rows"]={},
+    ["launcher.plugin.notice"]="", ["plugins.message"]="",
     -- The inline form (B0199): `launcher_form.rs` opens it (kind, prompt, starting values) and runs its backend.
     ["launcher.form.kind"]="", ["launcher.form.message"]="", ["launcher.form.error"]="", ["launcher.form.busy"]=false,
     ["launcher.form.v1"]="", ["launcher.form.v2"]="", ["launcher.form.v3"]="", ["launcher.form.v4"]="",
@@ -18,6 +20,8 @@ return {
     select_app = function(s,id) s["launcher.selection"] = id end,
     toggle_favorite = function(s,id) s["launcher.selection"] = id end,
     ["launcher.quick"] = function(_) end,
+    -- B0208: `>plugin` mode; the host installs, enables and updates (spec 0203 plugin state).
+    ["plugins.do"] = function(_) end,
     -- Submit and cancel are the host's (`launcher.form`); a choice is only a store write ("<slot>:<value>").
     ["launcher.form"] = function(_) end,
     ["launcher.form.choose"] = function(s,arg)
