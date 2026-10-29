@@ -130,7 +130,9 @@ fn inputs(windows: &Windows, services: &Services, prefs: Prefs) -> BTreeMap<Stri
 /// that hides the motion wallpaper).
 pub(crate) fn output_hidden(windows: &Windows, services: &Services, output: &str) -> bool {
     let all = inputs(windows, services, Prefs::default());
-    all.get(output).or_else(|| all.get(ANY)).is_some_and(|input| input.hidden)
+    all.get(output)
+        .or_else(|| all.get(ANY))
+        .is_some_and(|input| input.hidden)
 }
 
 fn event_wait(wait: Duration, source_active: bool) -> Duration {
@@ -457,19 +459,32 @@ mod tests {
         let services = Services::default();
         assert!(!output_hidden(&windows, &services, "A"));
         windows.windows.push(window("a1", false, Some(false)));
-        assert!(!output_hidden(&windows, &services, "A"), "tiled is not covered");
+        assert!(
+            !output_hidden(&windows, &services, "A"),
+            "tiled is not covered"
+        );
         windows.windows.push(window("a2", true, Some(true)));
-        assert!(!output_hidden(&windows, &services, "A"), "inactive workspace");
+        assert!(
+            !output_hidden(&windows, &services, "A"),
+            "inactive workspace"
+        );
         windows.windows.push(window("b1", false, Some(true)));
         assert!(output_hidden(&windows, &services, "B"));
-        assert!(!output_hidden(&windows, &services, "A"), "other output stays live");
+        assert!(
+            !output_hidden(&windows, &services, "A"),
+            "other output stays live"
+        );
         let mut locked = Services::default();
         locked.session.locked = true;
         assert!(output_hidden(&desktop(), &locked, "A") && output_hidden(&desktop(), &locked, "B"));
         locked.session.locked = false;
         locked.session.sleeping = true;
         assert!(output_hidden(&desktop(), &locked, "A"));
-        assert!(!output_hidden(&Windows::default(), &Services::default(), "A"));
+        assert!(!output_hidden(
+            &Windows::default(),
+            &Services::default(),
+            "A"
+        ));
     }
 
     /// The whole Nacre edge over a real daemon connection: a published motion member starts
