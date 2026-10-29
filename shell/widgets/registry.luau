@@ -333,6 +333,7 @@ function M.normalise(document)
     local canvas=doc.hosts.canvas
     if type(canvas)=="table" and type(canvas.instances)=="table" then
         for _,item in canvas.instances do
+            if type(item)=="table" and (type(item.children)~="table" or item.widget~="pill") then item.children=nil end
             local slot=type(item)=="table" and item.slot
             if type(slot)=="table" and finite(canvas.width,1,20000) and finite(canvas.height,1,20000)
                 and finite(slot.w,0.000001,canvas.width) and finite(slot.h,0.000001,canvas.height) then

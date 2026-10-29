@@ -860,7 +860,7 @@
   "bead.widgets.colour": "Widgets app per-instance palette role setting label.",
   "bead.widgets.find": "Widgets app search placeholder and accessible name.",
   "bead.widgets.overview": "Widgets app sidebar entry that returns to the widget overview.",
-  "bead.widgets.drag-hint": "Widgets app one-line hint explaining drag placement and drag-off removal.",
+  "bead.widgets.drag-hint": "Widgets app one-line hint: style cards are dragged to add widgets; placed widgets are dragged to move or remove.",
   "bead.widgets.launcher-title": "Widgets app sidebar and page title for Launcher.",
   "bead.widgets.launcher-description": "One-line description shown below Launcher and in the widget list.",
   "bead.widgets.notifications-title": "Widgets app sidebar and page title for Notifications.",
@@ -933,5 +933,9 @@
   "bead.launcher.form-error-url": "Launcher form: error when the repository address is empty.",
   "bead.launcher.form-error-audio": "Launcher form: error when the recording sound choice is not valid.",
   "bead.launcher.form-error-failed": "Launcher form: error when a helper command fails without a message.",
-  "bead.bar.stop-recording": "Bead top bar: accessible name of the red button that stops a running screen recording."
+  "bead.bar.stop-recording": "Bead top bar: accessible name of the red button that stops a running screen recording.",
+  "bead.widgets.drag-to-bar": "Widgets app hint beside the bar style cards, which are drag sources.",
+  "bead.widgets.drag-to-desktop": "Widgets app hint beside the desktop style cards, which are drag sources.",
+  "bead.widgets.add-bar": "Widgets app button that adds a new copy of the widget to the bar (non-drag path).",
+  "bead.widgets.add-desktop": "Widgets app button that adds a new copy of the widget to the desktop (non-drag path)."
 }

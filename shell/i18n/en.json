@@ -875,7 +875,7 @@
   "bead.widgets.colour": "Colour",
   "bead.widgets.find": "Find a widget",
   "bead.widgets.overview": "Overview",
-  "bead.widgets.drag-hint": "Drag the preview onto the bar or the desktop. Drag a placed widget onto Remove to take it off.",
+  "bead.widgets.drag-hint": "Drag a style card onto the bar or the desktop to add a widget. Drag a placed widget to move it, or onto Remove to take it off.",
   "bead.widgets.launcher-title": "Launcher",
   "bead.widgets.launcher-description": "Apps and favourites",
   "bead.widgets.notifications-title": "Notifications",
@@ -948,5 +948,9 @@
   "bead.launcher.form-error-url": "Enter the extension repository URL",
   "bead.launcher.form-error-audio": "Choose a recording sound",
   "bead.launcher.form-error-failed": "The action failed",
-  "bead.bar.stop-recording": "Stop recording"
+  "bead.bar.stop-recording": "Stop recording",
+  "bead.widgets.drag-to-bar": "Drag onto the bar",
+  "bead.widgets.drag-to-desktop": "Drag onto the desktop",
+  "bead.widgets.add-bar": "Add to bar",
+  "bead.widgets.add-desktop": "Add to desktop"
 }

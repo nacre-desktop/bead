@@ -94,7 +94,7 @@ function M.render_instance(instance,placement,factor)
     return render_item(package,instance,placement,values,factor)
 end
 
-function M.render_bar(document,width,height,factor,selected,style,settings,selected_group,entry_candidate)
+function M.render_bar(document,width,height,factor,selected,style,settings,selected_group)
     local layout=document.hosts.top_bar
     if not layout then return nil end
     local scale=factor or 1
@@ -122,63 +122,6 @@ function M.render_bar(document,width,height,factor,selected,style,settings,selec
     local instances={}
     for _,item in layout.instances or {} do
         table.insert(instances,copy_item(item))
-    end
-    if entry_candidate then
-        local package=registry.catalogue[entry_candidate.widget]
-        local definition=package and package.forms.bar.styles[entry_candidate.style]
-        local preferred=definition and definition.preferred_span or 1
-        local placement=entry_candidate.placement or {}
-        local saved_slot=placement.slot or {}
-        local region=saved_slot.region or "left"
-        local region_def=layout.regions[region]
-        if not region_def then region="left"; region_def=layout.regions.left end
-        local span=math.floor(tonumber(saved_slot.span) or preferred)
-        if definition and (span<definition.min_span or span>definition.max_span) then span=preferred end
-        span=math.max(1,math.min(region_def and region_def.span or layout.tiles or 1,span))
-        local candidate={iid=entry_candidate.group,group=entry_candidate.group,
-            widget=entry_candidate.widget,host="top_bar",style=entry_candidate.style,
-            settings=copy_data(entry_candidate.settings or {}),slot=copy_data(saved_slot),children={}}
-        local target_host=placement.host
-        local function insert_in_container(items)
-            for _,item in items or {} do
-                if item.iid==target_host and item.widget=="pill" then
-                    item.children=item.children or {}
-                    candidate.host=item.iid
-                    table.insert(item.children,candidate)
-                    return true
-                end
-                if insert_in_container(item.children) then return true end
-            end
-        end
-        local inserted=type(target_host)=="string" and target_host~="" and target_host~="top_bar"
-            and insert_in_container(instances) or false
-        if not inserted then
-            local start=saved_slot.start
-            local occupied={}
-            for _,item in instances do
-                if item.slot and item.slot.region==region then
-                    for tile=item.slot.start,item.slot.start+item.slot.span-1 do occupied[tile]=true end
-                end
-            end
-            local function free(at)
-                if type(at)~="number" or at%1~=0 or at<0 or at+span>(region_def and region_def.span or 0) then return false end
-                for tile=at,at+span-1 do if occupied[tile] then return false end end
-                return true
-            end
-            if not free(start) then
-                local limit=math.max(0,(region_def and region_def.span or layout.tiles or 1)-span)
-                start=0
-                while start<=limit do
-                    if free(start) then break end
-                    start+=1
-                end
-            end
-            if region_def and start>=0 and start+span<=region_def.span then
-                candidate.host="top_bar"
-                candidate.slot={region=region,start=start,span=span}
-                table.insert(instances,candidate)
-            end
-        end
     end
     local render
     render=function(item,variant)

@@ -139,7 +139,7 @@ local function decorate_target(document,item,target,host,hovered,outlined)
         table.insert(target.children,kit.IconButton{id="remove",position="absolute",right=-sp.xs,top=0,
             width=sp.md,height=sp.md,padding=0,font_size=sp.md,text="close",focus_on_pointer=false,
             aria_label="Remove "..tostring(item.widget),
-            on_activate=M.request(document,{op="remove",widget=item.widget,group=item.group or item.iid,
+            on_activate=M.request(document,{op="remove",widget=item.widget,iid=item.iid,group=item.group or item.iid,
                 form=host})})
     end
 end
@@ -170,7 +170,7 @@ function M.decorate(document,item,node)
         table.insert(props,kit.IconButton{id="remove",position="absolute",right=-sp.xs,top=0,
             width=sp.md,height=sp.md,padding=0,font_size=sp.md,text="close",focus_on_pointer=false,
             aria_label="Remove "..tostring(item.widget),
-            on_activate=M.request(document,{op="remove",widget=item.widget,group=item.group or item.iid,
+            on_activate=M.request(document,{op="remove",widget=item.widget,iid=item.iid,group=item.group or item.iid,
                 form=host})})
     end
     return ui.Box(props)

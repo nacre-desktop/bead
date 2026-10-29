@@ -92,3 +92,24 @@ tile spans/reflow. App behaviour 1331 → ~950 lines; registry −40 lines.
 - Real input (desktop, nested 2880x1800 @1.5, B0176 harness + `b0198-capture.py`):
   clock bar→desktop→pill and pill→bar→pill both restore the default slots with 0 changed bar
   pixels (`b0198-*-roundtrip-proof.json`); 0 UI_ERROR.
+
+## B0198b: copies, drag sources, drag background (owner feedback 2026-10-30)
+- **Copies.** A drag from the Widgets app always adds a new instance with its own group
+  (`clock`, `clock-2`, `clock-3`, ...): its own settings, style and colour in
+  `widgets[group]`, a unique iid, stable order through normalisation. A placed instance moves
+  (or changes form) only when that instance itself is dragged on the bar or desktop. Removing a
+  copy (Remove zone or the edit-mode x, which now names the iid) drops its empty group state;
+  the base group keeps its saved style. The page's "Choose a copy" picker now works
+  (`widgets.navigate` `instance`).
+- **Drag sources.** The style cards on each widget page (bar and desktop) are the drag sources:
+  a grip in the corner, a "Drag onto the bar / desktop" hint beside each section heading, and the
+  sections sit at the top of the page. Overview cards' bar/desktop previews are drag sources
+  too. "Add to bar" / "Add to desktop" add a copy without dragging (end of the status pill, or
+  cascaded at the desktop centre). The screen stage is a live preview only (no drag source, no
+  candidate widget); render_bar's entry-candidate path is gone.
+- **Drag background.** The desktop drop zone is an outline (no tinted fill over the whole
+  desktop); a desktop-form ghost has no card behind its own rounded glass (the rectangle showed
+  around it). Bar ghosts keep their card. The Remove zone keeps a light tint.
+- Tests: `dragging_from_the_app_adds_copies_with_their_own_settings` (two more clocks on the
+  bar, per-copy colour, a second and third battery on the desktop, move, remove, exact undo,
+  Add buttons) and random sequences now include app adds.

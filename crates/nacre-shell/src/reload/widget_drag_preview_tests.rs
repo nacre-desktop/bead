@@ -2261,23 +2261,55 @@ fn widget_host_effect(event: &UiEvent) -> bool {
 }
 
 fn largest_rounded_size(scene: &bead::render::Scene) -> (f32, f32) {
-    scene
+    // The ghost's painted extent: a bar ghost has its own card; a desktop ghost is the widget
+    // itself (B0198b). Drop zones (output-wide areas, the 192x64 removal target) and the label
+    // chips centred in them are excluded.
+    let zone = |rect: &bead::render::Rect| rect.w >= 1000. || (rect.w, rect.h) == (192., 64.);
+    let rounded: Vec<_> = scene
         .primitives
         .iter()
         .filter_map(|primitive| match primitive {
-            // B0198 drop zones (output-wide areas, the 192x64 removal target) are not the card.
-            bead::render::Primitive::Rounded { rect, .. }
-                if rect.w > 0.
-                    && rect.h > 0.
-                    && rect.w < 1000.
-                    && (rect.w, rect.h) != (192., 64.) =>
-            {
-                Some((rect.w, rect.h))
-            }
+            bead::render::Primitive::Rounded { rect, .. } => Some(*rect),
             _ => None,
         })
-        .max_by(|left, right| (left.0 * left.1).total_cmp(&(right.0 * right.1)))
-        .expect("the passive clock ghost paints a rounded card")
+        .collect();
+    let centre = |rect: &bead::render::Rect| (rect.x + rect.w / 2., rect.y + rect.h / 2.);
+    let chips: Vec<_> = rounded
+        .iter()
+        .filter(|chip| {
+            !zone(chip)
+                && rounded.iter().any(|zone_rect| {
+                    zone(zone_rect)
+                        && (centre(chip).0 - centre(zone_rect).0).abs() < 1.
+                        && (centre(chip).1 - centre(zone_rect).1).abs() < 1.
+                })
+        })
+        .copied()
+        .collect();
+    let inside = |rect: &bead::render::Rect, outer: &bead::render::Rect| {
+        rect.x >= outer.x - 0.5
+            && rect.y >= outer.y - 0.5
+            && rect.x + rect.w <= outer.x + outer.w + 0.5
+            && rect.y + rect.h <= outer.y + outer.h + 0.5
+    };
+    let mut bounds: Option<bead::render::Rect> = None;
+    for primitive in &scene.primitives {
+        let rect = match primitive {
+            bead::render::Primitive::Rounded { rect, .. }
+            | bead::render::Primitive::Text { rect, .. } => *rect,
+            _ => continue,
+        };
+        if rect.w <= 0.
+            || rect.h <= 0.
+            || zone(&rect)
+            || chips.iter().any(|chip| inside(&rect, chip))
+        {
+            continue;
+        }
+        bounds = Some(bounds.map_or(rect, |bounds| bounds.union(rect)));
+    }
+    let bounds = bounds.expect("the passive ghost paints the widget");
+    (bounds.w, bounds.h)
 }
 
 #[test]
