@@ -44,6 +44,11 @@ pub(super) struct Overlay {
     timer: bool,
 }
 impl Overlay {
+    pub(super) fn output_mode_changed(&mut self, output: &wl_output::WlOutput, interval: Duration) {
+        if self.output == *output {
+            self.source.frame_interval(interval);
+        }
+    }
     pub(super) fn viewport_size(&self) -> (u32, u32) {
         self.size
     }
@@ -276,6 +281,9 @@ impl App {
             .filter(|(w, h)| *w > 0 && *h > 0)
             .map_or(size, |(w, h)| (w as u32, h as u32));
         source.viewport(viewport_size.0, viewport_size.1);
+        // B0188: motion inside the view (the OSD level fill) ticks at the display's rate, not
+        // the 16 ms default every other slot already overrides.
+        source.frame_interval(self.output_frame_interval(&output));
         let renderer = bead_render::renderer(RendererKind::Cpu).map_err(|e| e.to_string())?;
         let scale120 = self
             .output
@@ -866,5 +874,83 @@ impl Overlays {
         view.and_then(|v| self.views.get_key_value(v))
             .map(|(k, v)| (k.as_str(), v))
             .ok_or_else(|| "unknown overlay view".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bead_core::animation::{Animations, Curve};
+
+    /// One display refresh at 120 Hz, the owner's laptop.
+    const VBLANK: f64 = 1. / 120.;
+
+    /// Plays a show or hide on the overlay's draw cadence (one pose per refresh while the motion
+    /// is active, no re-staging). Returns the commit times and the PANEL_SLIDE marker.
+    fn play(
+        open: bool,
+        duration: f64,
+        curve: Curve,
+    ) -> (Vec<f64>, Option<bead_core::animation::Slide>) {
+        let mut animations = Animations::default();
+        if !open {
+            animations.open_to("osd", true, 0., 0.15, Curve::EaseOut);
+            let _ = animations.committed("osd", 0., 0.);
+        }
+        let start = if open { 0. } else { 1. };
+        animations.open_to("osd", open, start, duration, curve);
+        let (mut commits, mut marker, mut now) = (Vec::new(), None, start);
+        loop {
+            let (_, active) = animations.value("osd", now).expect("motion value");
+            commits.push(now);
+            marker = animations.committed("osd", now, now).or(marker);
+            if !active || commits.len() > 200 {
+                return (commits, marker);
+            }
+            now += VBLANK;
+        }
+    }
+
+    #[test]
+    fn osd_and_toast_motion_commit_every_refresh_at_120_hz() {
+        let motion = bead_render::Motion {
+            id: "osd".into(),
+            open: true,
+            duration: 0.150,
+            return_duration: None,
+            return_curve: None,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Bottom,
+            slide_distance: Some(4.),
+            fade: true,
+            reveal: false,
+            progress: 0.,
+            parts: Vec::new(),
+            art: None,
+        };
+        let (open_duration, open_curve) = motion.transition(true);
+        let (close_duration, close_curve) = motion.transition(false);
+        assert!(close_duration < open_duration, "exits are shorter (B0181)");
+        assert_eq!(close_curve, Curve::EmphasizedAccelerate, "exits accelerate");
+        let (shown, shown_marker) = play(true, open_duration, open_curve);
+        let (hidden, hidden_marker) = play(false, close_duration, close_curve);
+        for (name, commits, floor) in [("show", &shown, 17), ("hide", &hidden, 11)] {
+            assert!(
+                commits.len() >= floor,
+                "{name} committed {} frames",
+                commits.len()
+            );
+            let gap = commits
+                .windows(2)
+                .map(|w| w[1] - w[0])
+                .fold(0_f64, f64::max);
+            assert!(gap <= 0.009, "{name} maximum frame gap {gap:.6}s");
+        }
+        for marker in [shown_marker, hidden_marker] {
+            assert!(
+                marker.is_some(),
+                "a finished motion logs its PANEL_SLIDE marker"
+            );
+        }
     }
 }

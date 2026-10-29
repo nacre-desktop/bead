@@ -32,6 +32,20 @@ ap.ANIMS.update({
     'popout-bluetooth': ([], [('ui', 'nacre', 'popout', 'bluetooth', '1600')], [('ui', 'nacre', 'close')], 1.2),
     'popout-battery': ([], [('ui', 'nacre', 'popout', 'battery', '1640')], [('ui', 'nacre', 'close')], 1.2),
     'popout-calendar': ([], [('ui', 'nacre', 'popout', 'calendar', '1700')], [('ui', 'nacre', 'close')], 1.2),
+    # B0188: bar workspace indicator motion (niri focus-workspace in the private nested session).
+    # Needs PARITY_NAMED_WORKSPACES=1 (the nested niri then has four persistent workspaces).
+    'workspace': ([('niri-action', 'focus-workspace', '1'), ('sleep', 0.8)],
+                  [('niri-action', 'focus-workspace', '3')], [('niri-action', 'focus-workspace', '1')], 1.0),
+    # B0188 OSD/toast cold shows (each name once: a repeated identical value publishes no OSD event; the
+    # prepare sleeps outlast the 2 s OSD / 5 s toast timers so every show starts hidden) and a held-key step run.
+    'osd-a': ([('sleep', 2.6)], [('level', 'sink', 0.35)], [('ui', 'nacre', 'close')], 1.6),
+    'osd-b': ([('sleep', 2.6)], [('level', 'sink', 0.55)], [('ui', 'nacre', 'close')], 1.6),
+    'osd-c': ([('sleep', 2.6)], [('level', 'sink', 0.80)], [('ui', 'nacre', 'close')], 1.6),
+    'osd-step': ([('sleep', 2.6)], [('level', 'sink', v / 10) if i % 2 == 0 else ('sleep', 0.06)
+                                    for i, v in enumerate([1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 6, 0, 7])], [], 1.4),
+    'notify-a': ([('sleep', 7)], [('notify', 'Pacing check A', 'First toast body.')], [('ui', 'nacre', 'close')], 2.0),
+    'notify-b': ([('sleep', 7)], [('notify', 'Pacing check B', 'Second toast body.')], [('ui', 'nacre', 'close')], 2.0),
+    'notify-c': ([('sleep', 7)], [('notify', 'Pacing check C', 'Third toast body.')], [('ui', 'nacre', 'close')], 2.0),
     'menu-power': ([], [('ui', 'nacre', 'menu', 'power', '')], [('ui', 'nacre', 'close')], 1.2),
     'popout-updates': ([], [('ui', 'nacre', 'controls', 'updates')], [('ui', 'nacre', 'close')], 1.2),
 })
@@ -127,9 +141,21 @@ def drive(self, names):
                 except Exception as error:  # keep the audit going; the error is part of the evidence
                     motion.setdefault(f'{name}/error', []).append(str(error)[:200])
         data['motion'] = motion
+    data['level_marks_ns'] = getattr(self, 'level_marks', [])
     path.write_text(json.dumps(data, indent=1))
 
 
+_set_level = m.Arm.set_level
+
+
+def set_level(self, *args, **kwargs):
+    # B0188: monotonic stamp of every fake-daemon level change, to match against overlay commits.
+    self.level_marks = getattr(self, 'level_marks', [])
+    self.level_marks.append(time.monotonic_ns())
+    return _set_level(self, *args, **kwargs)
+
+
+m.Arm.set_level = set_level
 m.__file__ = __file__  # guarded re-execs come back through this wrapper
 m.Arm.drive = drive
 if __name__ == '__main__':

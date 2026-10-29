@@ -801,6 +801,9 @@ impl App {
         {
             source.frame_interval(interval);
         }
+        if let Some(overlay) = self.overlay.as_mut() {
+            overlay.output_mode_changed(output, interval);
+        }
         self.pearl_output_mode_changed(output, interval);
         for canvas in self
             .canvases
