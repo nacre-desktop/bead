@@ -283,6 +283,7 @@ def sample(env, raw, compositor, stop):
                                    stdout=(raw / 'preview-notices.log').open('w'), stderr=subprocess.STDOUT,
                                    start_new_session=True)
         dashboard_fixtures = os.environ.get('BEAD_PREVIEW_DASHBOARD_FIXTURES') == '1'
+        panel_route_smoke = os.environ.get('BEAD_PREVIEW_SMOKE') == '1'
         dashboard_args = ['--dashboard-fixtures', str(root / 'shell/tests/fixtures/dashboard')] if dashboard_fixtures else []
         bar = subprocess.Popen([str(binary), '--bar', '--core-views', '--renderer', 'cpu',
                                 '--panel-renderer', 'cpu', '--daemon-socket', str(endpoint),
@@ -291,11 +292,12 @@ def sample(env, raw, compositor, stop):
                                 '--namespace', 'bead-preview-bar']+dashboard_args+output_args+(['--trace-state'] if os.environ.get('BEAD_PREVIEW_RECONNECT')=='1' or (dashboard_fixtures and os.environ.get('BEAD_PREVIEW_SMOKE')=='1') else []), cwd=root, env=bar_env,
                                stdout=(raw / 'preview-bar.log').open('w'), stderr=subprocess.STDOUT,
                                start_new_session=True)
-        state = wait_call('ui.dispatch', {'target': 'nacre', 'method': 'state', 'args': []})
-        if isinstance(state, str):
-            state = json.loads(state)
-        assert {'calendar', 'sound-output', 'network-status', 'bluetooth-status', 'battery-status'} <= set(state['bead']['available']), 'preview needs the matching core-views binary and bundle'
-        wait_call('ui.dispatch', {'target': 'notifs', 'method': 'counts', 'args': []})
+        if not panel_route_smoke:
+            state = wait_call('ui.dispatch', {'target': 'nacre', 'method': 'state', 'args': []})
+            if isinstance(state, str):
+                state = json.loads(state)
+            assert {'calendar', 'sound-output', 'network-status', 'bluetooth-status', 'battery-status'} <= set(state['bead']['available']), 'preview needs the matching core-views binary and bundle'
+            wait_call('ui.dispatch', {'target': 'notifs', 'method': 'counts', 'args': []})
         matrix.wait_log(raw/'preview-bar.log',lambda t:'READY output=' in t)
         matrix.wait_log(raw/'preview-notices.log',lambda t:'READY output=' in t)
         def prepared_and_presented(text):
@@ -334,23 +336,25 @@ def sample(env, raw, compositor, stop):
             (raw/'preview-reconnect.json').write_text(json.dumps({'valid':True,'old_boot':old_boot,'new_boot':new_boot,
                 'mark_observed_seconds_after_stop':delay,'bar_recovered_seconds_after_launch_upper_bound':fresh_upper,
                 'ui_provider_reregistered':True,'presented_mark_and_recovery':True},indent=2)+'\n')
-        offset=len(matrix.log_text(raw/'preview-bar.log'))
-        call('ui.dispatch', {'target': 'nacre', 'method': 'launcher', 'args': ['']})
-        if os.environ.get('BEAD_PREVIEW_SMOKE')=='1':
-            matrix.wait_log(raw/'preview-bar.log',lambda t:prepared_and_presented(t[offset:]))
-        else:
-            matrix.wait_log(raw/'preview-bar.log',lambda t:re.search(r'UI_PRESENTED generation=[1-9]\d* [^\n]*companion=true',t[offset:])is not None)
-        notify = subprocess.run(['gdbus', 'call', '--address', 'unix:path=' + str(notice_bus),
-                                 '--dest', 'org.freedesktop.Notifications', '--object-path', '/org/freedesktop/Notifications',
-                                 '--method', 'org.freedesktop.Notifications.Notify', "'Bead preview'", '0', "''",
-                                 "'Foundation preview'", "'This notification stays inside the nested window.'", '[]', '{}', '8000'],
-                                env=private, capture_output=True, text=True, timeout=4)
-        if notify.returncode:
-            raise RuntimeError('private notification injection failed')
-        counts = wait_call('ui.dispatch', {'target': 'notifs', 'method': 'counts', 'args': []})
-        if isinstance(counts, str):
-            counts = json.loads(counts)
-        assert counts['retained'] >= 1
+        if not panel_route_smoke:
+            offset=len(matrix.log_text(raw/'preview-bar.log'))
+            call('ui.dispatch', {'target': 'nacre', 'method': 'launcher', 'args': ['']})
+            if os.environ.get('BEAD_PREVIEW_SMOKE')=='1':
+                matrix.wait_log(raw/'preview-bar.log',lambda t:prepared_and_presented(t[offset:]))
+            else:
+                matrix.wait_log(raw/'preview-bar.log',lambda t:re.search(r'UI_PRESENTED generation=[1-9]\d* [^\n]*companion=true',t[offset:])is not None)
+        if not panel_route_smoke:
+            notify = subprocess.run(['gdbus', 'call', '--address', 'unix:path=' + str(notice_bus),
+                                     '--dest', 'org.freedesktop.Notifications', '--object-path', '/org/freedesktop/Notifications',
+                                     '--method', 'org.freedesktop.Notifications.Notify', "'Bead preview'", '0', "''",
+                                     "'Foundation preview'", "'This notification stays inside the nested window.'", '[]', '{}', '8000'],
+                                    env=private, capture_output=True, text=True, timeout=4)
+            if notify.returncode:
+                raise RuntimeError('private notification injection failed')
+            counts = wait_call('ui.dispatch', {'target': 'notifs', 'method': 'counts', 'args': []})
+            if isinstance(counts, str):
+                counts = json.loads(counts)
+            assert counts['retained'] >= 1
         assert 'UI_ERROR' not in (raw/'preview-bar.log').read_text(), 'bar reported a UI error'
         assert 'UI_ERROR' not in (raw/'preview-notices.log').read_text(), 'notices reported a UI error'
         if dashboard_fixtures and os.environ.get('BEAD_PREVIEW_SMOKE') == '1':
@@ -460,12 +464,13 @@ def sample(env, raw, compositor, stop):
         print('PREVIEW_READY core_views=true daemon_menu=true daemon_ui_controls=true private_notification_host=bead no_input_injection=true', flush=True)
         smoke = os.environ.get('BEAD_PREVIEW_SMOKE') == '1'
         if smoke:
-            offset=len(matrix.log_text(raw/'preview-bar.log'))
-            call('ui.dispatch', {'target': 'nacre', 'method': 'launcher', 'args': ['a']})
-            matrix.wait_log(raw/'preview-bar.log',lambda t:prepared_and_presented(t[offset:]))
-            call('ui.dispatch', {'target': 'notifs', 'method': 'clear', 'args': []})
-            call('ui.dispatch', {'target': 'nacre', 'method': 'close', 'args': []})
-            time.sleep(3)
+            if not panel_route_smoke:
+                offset=len(matrix.log_text(raw/'preview-bar.log'))
+                call('ui.dispatch', {'target': 'nacre', 'method': 'launcher', 'args': ['a']})
+                matrix.wait_log(raw/'preview-bar.log',lambda t:prepared_and_presented(t[offset:]))
+                call('ui.dispatch', {'target': 'notifs', 'method': 'clear', 'args': []})
+                call('ui.dispatch', {'target': 'nacre', 'method': 'close', 'args': []})
+                time.sleep(3)
         else:
             while bar.poll() is None and notices.poll() is None and daemon.poll() is None:
                 time.sleep(.1)
