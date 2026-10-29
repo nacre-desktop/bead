@@ -1080,6 +1080,19 @@ fn start(
     };
     if let Some(backend) = &shared_backend {
         let _ = widget_backend.set(backend.clone());
+        // B0194: keyboard and IPC opens (panels, the AI sidebar) follow the focused output.
+        let probe = backend.clone();
+        let focused: bead::wayland::FocusedOutput = std::sync::Arc::new(move || {
+            use bead::backends::Backend;
+            probe
+                .snapshot()
+                .outputs
+                .iter()
+                .find(|o| o.focused)
+                .map(|o| o.name.clone())
+        });
+        app::set_focused_output(focused.clone());
+        options.focused_output = Some(focused);
     }
     let shared_desktop = options.bar.then(bead::services::Desktop::start);
     if let Some(desktop) = &shared_desktop {
