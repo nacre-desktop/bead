@@ -455,7 +455,13 @@ fn bar_markup_stays_well_under_the_budget() {
     }
     times.sort_unstable();
     let median_ms = times[times.len() / 2] as f64 / 1e6;
-    eprintln!("B0186 bar update median {median_ms:.2} ms, max {:.2} ms", times[14] as f64 / 1e6);
+    eprintln!(
+        "B0186 bar update median {median_ms:.2} ms, max {:.2} ms",
+        times[14] as f64 / 1e6
+    );
     let limit = if cfg!(debug_assertions) { 40. } else { 10. };
-    assert!(median_ms < limit, "bar update took {median_ms:.2} ms (limit {limit})");
+    assert!(
+        median_ms < limit,
+        "bar update took {median_ms:.2} ms (limit {limit})"
+    );
 }
