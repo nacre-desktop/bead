@@ -99,10 +99,15 @@ function M.seed(document,width,height,placement)
     return {{widget_layout=true,document=document,initial=require("default")(width),rev=ui.resolve_for_check(ui.bind("widgets.rev")),
         widget_clock_seconds=placement~=nil and M.requires(document,placement,"bead.desktop.clock.seconds") or false,
         geometry=geometry,reservations=reservations,canvas_width=width,canvas_height=height,
-        catalogue=descriptors(),snap_distance=sp.lg,remove_zone=require("dragging").remove_zone()}}
+        catalogue=descriptors(),grid_cell=require("dragging").grid_cell(),remove_zone=require("dragging").remove_zone()}}
 end
 function M.request(_document,extra)
     return ui.action("widgets.edit",{extra})
+end
+-- B0208: edit mode click target. The host opens the Widgets app on this instance.
+function M.inspect(item)
+    return ui.action("widgets.edit",{{op="inspect",widget=item.widget,iid=item.iid,group=item.group or item.iid,
+        form=item.host=="canvas" and "desktop" or "bar"}})
 end
 local function marked_drag_target(root)
     local match,count
@@ -126,8 +131,14 @@ local function nested_widget_hovered(item,hover)
     end
     return false
 end
+-- A release without a drag inspects; buttons wait for release so a drag never also clicks.
+local function click_to_inspect(node,item)
+    node.props.on_activate=M.inspect(item)
+    if type(node.kind)=="string" and string.lower(node.kind)=="button" then node.props.activate_on_release=true end
+end
 local function decorate_target(document,item,target,host,hovered,outlined)
     local p=target.props
+    if item.widget~="pill" then click_to_inspect(target,item) end
     p.fill=hovered and ui.alpha("primary",.025) or p.fill
     p.selected=outlined or p.selected==true
     if outlined then
@@ -160,6 +171,9 @@ function M.decorate(document,item,node)
         elseif type(p.width)~="number" or type(p.height)~="number" then
             return node
         end
+    end
+    if item.widget~="pill" and type(node.props)=="table" and node.props.drag_payload~=nil then
+        click_to_inspect(node,item)
     end
     local props={id=key,padding=0,fill=hovered and ui.alpha("primary",.025) or "transparent",
         selected=outlined,border_width=outlined and sp.hairline*1.5 or 0,border_color="primary",radius=kit.tokens.radii.small,node}

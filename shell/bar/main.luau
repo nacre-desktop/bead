@@ -15,11 +15,7 @@ local canonical=widgets.normalise(document)
 document=widgets.project(canonical,ui.resolve_for_check(ui.bind("bead.viewport.width")))
 local render=widgets.renderer(document)
 local layout=document.hosts.top_bar
-local regions={}
-for name,region in layout.regions do regions[name]=table.clone(region) end
-regions.left.props={id="left",height=34,gap=12,shrink=1,align="center"}
-regions.centre.inline=true
-regions.right.props={id="right",height=34,gap=12,shrink=0,align="center"}
+local regions=widgets.bar_regions(layout)
 -- The recording stop button (only while recording) sits before the tray, as QML put it first in the status column.
 regions.right.before=table.clone(require("./recording"))
 for _,node in require("../widgets/tray") do table.insert(regions.right.before,node) end

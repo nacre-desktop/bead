@@ -82,13 +82,24 @@ function M.row(item,key,schema,value,action_factory)
     end
 end
 
-function M.rows(item,package,action_factory,advanced)
+local function value_of(item,package,key)
+    local value=(item.settings or {})[key]
+    if value==nil then value=package.defaults[key] end
+    return value
+end
+-- `shown_when={key=value}` keeps a field out of the form until another setting selects it
+-- (for example a custom route only when the action is "custom").
+function M.rows(item,package,action_factory)
     local rows={id="settings-fields",width="fill",gap=sp.sm,shrink=0}
     for _,key in sorted_keys(package.settings) do
         local schema=package.settings[key]
-        if schema.hidden or (schema.advanced==true)~=(advanced==true) then continue end
-        local value=(item.settings or {})[key]
-        if value==nil then value=package.defaults[key] end
+        if schema.hidden then continue end
+        local shown=true
+        for other,wanted in schema.shown_when or {} do
+            if value_of(item,package,other)~=wanted then shown=false end
+        end
+        if not shown then continue end
+        local value=value_of(item,package,key)
         local row=M.row(item,key,schema,value,action_factory)
         if row then table.insert(rows,row) end
     end

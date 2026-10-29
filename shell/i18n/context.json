@@ -937,5 +937,13 @@
   "bead.widgets.drag-to-bar": "Widgets app hint beside the bar style cards, which are drag sources.",
   "bead.widgets.drag-to-desktop": "Widgets app hint beside the desktop style cards, which are drag sources.",
   "bead.widgets.add-bar": "Widgets app button that adds a new copy of the widget to the bar (non-drag path).",
-  "bead.widgets.add-desktop": "Widgets app button that adds a new copy of the widget to the desktop (non-drag path)."
+  "bead.widgets.add-desktop": "Widgets app button that adds a new copy of the widget to the desktop (non-drag path).",
+  "bead.widgets.where-desktop": "Widgets app: where a placed copy sits (the desktop).",
+  "bead.widgets.where-left": "Widgets app: where a placed copy sits (left section of the bar).",
+  "bead.widgets.where-centre": "Widgets app: where a placed copy sits (centre section of the bar).",
+  "bead.widgets.where-right": "Widgets app: where a placed copy sits (right section of the bar).",
+  "bead.widgets.remove-copy": "Widgets app button that removes the placed copy being edited.",
+  "bead.widgets.on-screen": "Widgets app heading for the placed copies of this widget.",
+  "bead.widgets.on-screen-hint": "Widgets app hint: edit mode clicks select a placed copy.",
+  "bead.widgets.on-screen-empty": "Widgets app: shown when no copy of the widget is placed."
 }

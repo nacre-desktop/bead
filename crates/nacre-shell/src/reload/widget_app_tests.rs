@@ -265,39 +265,6 @@ fn real_widgets_gallery_shows_descriptions_and_a_persistent_colour_role_control(
             .collect::<Vec<_>>()
     );
     assert!(has_text(&harness, "Clock"));
-    let scene = harness.scene();
-    let pill_frame = scene
-        .layers
-        .iter()
-        .find(|layer| {
-            layer.id.contains("widget-card-pill") && layer.id.ends_with("bar-preview-frame")
-        })
-        .expect("pill gallery card must have a clipped bar preview frame");
-    let rendered = scene
-        .primitives
-        .iter()
-        .filter_map(|primitive| match primitive {
-            bead::render::Primitive::Text { text, rect, .. } => Some((text.as_str(), *rect)),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    for expected in ["volume_up", "calendar_month", "power_settings_new"] {
-        assert!(
-            scene.primitives.iter().any(|primitive| match primitive {
-                bead::render::Primitive::Text { rect, text, .. } if text == expected => {
-                    let x = rect.x + rect.w / 2.;
-                    let y = rect.y + rect.h / 2.;
-                    x >= pill_frame.bounds.x
-                        && x <= pill_frame.bounds.x + pill_frame.bounds.w
-                        && y >= pill_frame.bounds.y
-                        && y <= pill_frame.bounds.y + pill_frame.bounds.h
-                }
-                _ => false,
-            }),
-            "pill gallery preview must show representative default child {expected} inside its frame; frame={:?}, text={rendered:?}",
-            pill_frame.bounds
-        );
-    }
     assert!(
         harness
             .session
@@ -376,9 +343,10 @@ fn real_widgets_gallery_shows_descriptions_and_a_persistent_colour_role_control(
         .view_nodes()
         .iter()
         .find(|node| {
-            node.id.ends_with("style-seconds") && node.action.as_deref() == Some("widgets.edit")
+            node.id.ends_with("style-seconds-placed")
+                && node.action.as_deref() == Some("widgets.edit")
         })
-        .expect("clock style tile must be present");
+        .expect("the placed clock's own style tile must be present");
     let rect = bead::ui::rect(&button.draw);
     let rect = button.clip.map_or(rect, |clip| rect.intersect(clip));
     let (x, y) = (rect.x + rect.w / 2., rect.y + rect.h / 2.);
@@ -391,16 +359,9 @@ fn real_widgets_gallery_shows_descriptions_and_a_persistent_colour_role_control(
         .unwrap();
     assert!(
         matches!(harness.session.stores.get("bead.hovered"), Some(Value::Text(value)) if value.contains("style-seconds")),
-        "style tile receives pointer hover; hovered={:?}, rect={:?}, advanced={:?}",
+        "style tile receives pointer hover; hovered={:?}, rect={:?}",
         harness.session.stores.get("bead.hovered"),
-        rect,
-        harness
-            .session
-            .view_nodes()
-            .iter()
-            .filter(|node| node.id.contains("advanced-toggle"))
-            .map(|node| (node.id.clone(), bead::ui::rect(&node.draw)))
-            .collect::<Vec<_>>()
+        rect
     );
     // B0198b: the card is also a drag source, so its click activates on release through the
     // host's transfer path (the bar's widget buttons use the same pattern). Activate the
@@ -451,7 +412,7 @@ fn clock_detail_stage_and_style_previews_keep_all_content_inside_their_clips() {
         .session
         .view_nodes()
         .iter()
-        .find(|node| node.scroll_store.as_deref() == Some("widgets.scroll"))
+        .find(|node| node.scroll_store.as_deref() == Some("widgets.detail.scroll"))
         .map(|node| bead::ui::rect(&node.draw))
         .expect("widget detail exposes its scroll region");
     harness

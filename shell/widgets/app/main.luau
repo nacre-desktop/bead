@@ -75,7 +75,6 @@ local selected=get("widgets.selected","")
 local selected_group=get("widgets.group","")
 local category=get("widgets.category","all")
 local searching=get("widgets.search","")
-local form=get("widgets.form","bar")
 local undo_state=get("widgets.undo",false)
 local undo_available=(type(undo_state)=="table" and #undo_state>0) or undo_state==true
 local message=get("widgets.message","")
@@ -323,39 +322,6 @@ local function gallery()
     }
 end
 
-local function config_for(widget,requested_group)
-    local group=active_group(widget,requested_group)
-    local rows=groups_for(widget)
-    for _,row in rows do
-        if row.id==group then
-            return group,row.entry,row.instance
-        end
-    end
-    return group,{widget=widget,settings={},forms={}},nil
-end
-local function form_state(widget,placement,package,requested_group)
-    local group,entry,instance=config_for(widget,requested_group)
-    local config=entry.forms and entry.forms[placement] or {}
-    local active=instance~=nil and ((instance.host=="canvas" and "desktop" or "bar")==placement)
-    if config.enabled~=nil then active=config.enabled end
-    local host=placement=="bar" and doc.hosts.top_bar or doc.hosts.canvas
-    local configured=config.style
-    if configured==nil or configured=="" then
-        configured=nil
-        local function matching(items)
-            for _,item in items or {} do
-                if item.widget==widget and (item.group or item.iid)==group then configured=item.style or (package.forms[placement].legacy_style_setting and (item.settings or {})[package.forms[placement].legacy_style_setting]); return true end
-                if matching(item.children) then return true end
-            end
-            return false
-        end
-        matching(host and host.instances)
-    end
-    local selected=configured or style_name(package,placement)
-    local selected_descriptor=package.forms[placement].styles[selected]
-    if selected_descriptor and selected_descriptor.hidden then selected=package.forms[placement].default_style end
-    return group,entry,instance,config,active,selected
-end
 local function active_settings(package,entry,instance)
     local values=table.clone(package.defaults)
     for key,value in entry.settings or instance and instance.settings or {} do values[key]=value end
@@ -373,46 +339,54 @@ end
 local STYLE_PREVIEW_HEIGHT=spacing.huge*2
 local STYLE_TILE_HEIGHT=STYLE_PREVIEW_HEIGHT+text.caption+spacing.md
 local STYLE_SECTION_HEIGHT=2*spacing.md+22+spacing.sm+STYLE_TILE_HEIGHT
-local function style_tile(widget,placement,package,style_id,style,settings,is_selected)
-    local count=0
-    for _ in package.forms[placement].styles do count+=1 end
-    local columns=math.max(1,math.min(4,count))
-    local panel_width=(width-RAIL-3*spacing.lg)/2-2*spacing.md
+local function new_style(widget,placement,package)
+    local chosen=get("widgets.new_style",{})
+    local name=type(chosen)=="table" and chosen[widget.."/"..placement] or nil
+    local styles=package.forms[placement].styles
+    if type(name)=="string" and styles[name] and not styles[name].hidden then return name end
+    return package.forms[placement].default_style
+end
+-- B0208: a gallery card is a drag source for a NEW copy; clicking it only chooses the style
+-- that "Add" uses. A placed copy's own style cards (on_activate given) restyle that copy only.
+local function style_tile(widget,placement,package,style_id,style,settings,is_selected,on_activate,draggable,columns)
+    local panel_width=(width-RAIL-3*spacing.lg)/(draggable and 2 or 1)-2*spacing.md
     local preview_width=math.max(spacing.xxl*2,math.min(spacing.huge*3+spacing.xl,
         (panel_width-(columns-1)*spacing.sm)/columns-2*spacing.xs))
     local tile_width=preview_width+2*spacing.sm
-    local preview_height=STYLE_PREVIEW_HEIGHT
-    local tile_height=STYLE_TILE_HEIGHT
-    local tile_preview=preview.render(widget,placement,style_id,settings,preview_width,preview_height)
-    local tile_id="style-"..style_id..(placement=="desktop" and "-desktop" or "")
-    -- B0198b: each style card is a drag source (grip in the corner): dragging it adds a new
-    -- copy in that style; a click (released without dragging) selects the style.
-    local payload=dragging.app_payload(doc,widget,placement,style_id,settings,nil)
-    return ui.Button{id=tile_id,width=tile_width,height=tile_height,shrink=0,
+    local tile_preview=preview.render(widget,placement,style_id,settings,preview_width,STYLE_PREVIEW_HEIGHT)
+    local payload=draggable and dragging.app_payload(doc,widget,placement,style_id,settings,nil) or nil
+    local props={id="style-"..style_id..(placement=="desktop" and "-desktop" or "")..(draggable and "" or "-placed"),
+        width=tile_width,height=STYLE_TILE_HEIGHT,shrink=0,
         radius=kit.tokens.radii.small,fill=is_selected and ui.alpha("primary",.15) or "surfaceContainer",
         border_width=is_selected and 1.5 or 0,border_color=is_selected and "primary" or nil,
         hover_fill="surfaceContainerHigh",selected=is_selected,focus_on_pointer=false,
-        aria_label=style.title,on_activate=edit({op="style",widget=widget,form=placement,style=style_id}),
-        drag_payload=payload and {payload} or nil,on_drag=payload and ui.action("widgets.drag") or nil,
-        ui.Text{id="style-grip",position="absolute",right=spacing.xs,top=spacing.xs,text="drag_indicator",
+        aria_label=style.title,on_activate=on_activate,
+        drag_payload=payload and {payload} or nil,on_drag=payload and ui.action("widgets.drag") or nil}
+    if payload then
+        table.insert(props,ui.Text{id="style-grip",position="absolute",right=spacing.xs,top=spacing.xs,text="drag_indicator",
             family="Material Symbols Rounded",font_size=kit.tokens.icons.medium,width=kit.tokens.icons.medium+2,
-            height=kit.tokens.icons.medium+2,color="onSurfaceVariant"},
-        ui.Column{id="style-card",width="fill",height="fill",gap=spacing.xs,align="center",
-            ui.Box{id="style-preview",width=preview_width,height=preview_height,align="center",justify="center",
-                radius=kit.tokens.radii.small,fill="surfaceContainerHighest",clip_children=true,tile_preview},
-            label("style-title",style.title,text.caption*4/3,"onSurface",{width=tile_width,height=14,text_align="center"})}}
+            height=kit.tokens.icons.medium+2,color="onSurfaceVariant"})
+    end
+    table.insert(props,ui.Column{id="style-card",width="fill",height="fill",gap=spacing.xs,align="center",
+        ui.Box{id="style-preview",width=preview_width,height=STYLE_PREVIEW_HEIGHT,align="center",justify="center",
+            radius=kit.tokens.radii.small,fill="surfaceContainerHighest",clip_children=true,tile_preview},
+        label("style-title",style.title,text.caption*4/3,"onSurface",{width=tile_width,height=14,text_align="center"})})
+    return ui.Button(props)
 end
-local function style_tiles(widget,placement,package,style_id,settings)
+local function style_tiles(widget,placement,package,style_id,settings,activate,draggable)
     local forms=package.forms[placement]
     local keys={}
     for key,style in forms.styles do if not style.hidden then table.insert(keys,key) end end
     table.sort(keys)
-    local tiles={id="style-tiles",width="fill",height=STYLE_TILE_HEIGHT,columns=math.max(1,math.min(4,#keys)),
+    local columns=math.max(1,math.min(draggable and 4 or 6,#keys))
+    local tiles={id=draggable and "style-tiles" or "placed-style-tiles",width="fill",height=STYLE_TILE_HEIGHT,columns=columns,
         gap=spacing.sm,row_height=STYLE_TILE_HEIGHT,shrink=0}
-    for _,key in keys do table.insert(tiles,style_tile(widget,placement,package,key,forms.styles[key],settings,key==style_id)) end
+    for _,key in keys do
+        table.insert(tiles,style_tile(widget,placement,package,key,forms.styles[key],settings,key==style_id,
+            activate(key),draggable,columns))
+    end
     return ui.Grid(tiles)
 end
-
 -- B0198: one live screen preview at the real output aspect: the real bar with its
 -- widgets and every desktop widget at its slot. Large enough that the bar reads.
 local function stage_geometry()
@@ -435,14 +409,14 @@ local function stage_backdrop(stage)
         width=stage.mini_w,height=stage.mini_h,fill=ui.alpha("surface",.08)})
     return children
 end
-local function stage_desktop(stage,selected_widget)
+local function stage_desktop(stage,selected_iid)
     local nodes={}
     local canvas=doc.hosts.canvas
     for _,item in canvas and canvas.instances or {} do
         local slot=item.slot
         local node=preview.render_instance(item,"desktop",stage.scale)
         if node and slot then
-            local own=item.widget==selected_widget
+            local own=item.iid==selected_iid
             table.insert(nodes,ui.Box{id="stage-desktop-"..tostring(item.iid),position="absolute",
                 left=stage.left+slot.x*stage.scale,top=stage.top+slot.y*stage.scale,
                 width=slot.w*stage.scale,height=slot.h*stage.scale,clip_children=true,
@@ -492,119 +466,128 @@ local function widget_sidebar()
         ui.Scroll{id="widget-sidebar-scroll",width="fill",grow=1,scroll=ui.bind("widgets.nav.scroll"),ui.Column(nav)}}
 end
 
+local function section(id,props,...)
+    props.id=id; props.width=props.width or "fill"; props.shrink=0
+    props.padding=props.padding or spacing.md; props.radius=kit.tokens.radii.medium; props.fill=props.fill or "surfaceContainer"
+    props.gap=props.gap or spacing.sm
+    for index=1,select("#",...) do
+        local child=select(index,...)
+        if child then table.insert(props,child) end
+    end
+    return ui.Column(props)
+end
+local function where(item)
+    if not item then return "" end
+    if item.host=="canvas" then return ui.tr("bead.widgets.where-desktop") end
+    local region=item.slot and item.slot.region or "left"
+    local side=({left="bead.widgets.where-left",centre="bead.widgets.where-centre",right="bead.widgets.where-right"})[region]
+        or "bead.widgets.where-left"
+    return ui.tr(side)
+end
+-- B0208: the page has two jobs, kept apart. "Add" holds the gallery (drag a style card, or
+-- choose one and press Add). "On your screen" edits one placed copy at a time: the copy the
+-- user clicked on the bar or desktop in edit mode, or picked here.
 local function detail()
     local package=registry.catalogue[selected]
     if not package then return gallery() end
-    local placement=package.forms[form] and form or package.forms.bar and "bar" or "desktop"
-    local group,entry,instance=form_state(selected,placement,package,selected_group)
-    local bar_group,_bar_entry,_bar_instance,_bar_config,bar_enabled,bar_style=form_state(selected,"bar",package,selected_group)
-    local desktop_style=""
-    if package.forms.desktop then
-        local _group,_entry,_instance,_config,_enabled
-        _group,_entry,_instance,_config,_enabled,desktop_style=form_state(selected,"desktop",package,selected_group)
-    end
-    local instance_groups=groups_for(selected)
-    local settings=active_settings(package,entry,instance)
+    local placed={}
+    for _,row in groups_for(selected) do if row.instance then table.insert(placed,row) end end
+    local current
+    for _,row in placed do if row.id==selected_group then current=row end end
+    current=current or placed[1]
+    local instance=current and current.instance
+    local placement=instance and (instance.host=="canvas" and "desktop" or "bar") or "bar"
+    local group=current and current.id or selected
+    local settings=active_settings(package,current and current.entry or {},instance)
     local desktop_available=package.forms.desktop~=nil
-    local stage=stage_geometry()
-    local stage_w,stage_h,stage_scale=stage.w,stage.h,stage.scale
-    local mini_w,mini_h,mini_left,mini_top=stage.mini_w,stage.mini_h,stage.left,stage.top
-    local bar_h=stage.bar_h
-    local bar_node=preview.render_bar(doc,output_w,bar_h,stage_scale,
-        bar_enabled and selected or nil,bar_style,settings,bar_group)
-    local stage_bar_height=bar_h*stage_scale
-    local settings_package=table.clone(package)
-    settings_package.settings={}
-    for key,schema in package.settings do
-        if key~="dropdown_trigger" and key~="colour_role" and not schema.style_alias and not schema.hidden then
-            settings_package.settings[key]=schema
+    local new_bar=new_style(selected,"bar",package)
+    local new_desktop=desktop_available and new_style(selected,"desktop",package) or ""
+    local defaults=table.clone(package.defaults)
+    local function choose(form_name)
+        return function(style_id)
+            return ui.action("widgets.navigate",{{op="new-style",widget=selected,form=form_name,value=style_id}})
         end
     end
-    local item={iid=group,widget=selected,settings=settings}
-    local fields=settings_form.rows(item,settings_package,form_action(selected,placement,group))
-    local advanced_fields=settings_form.rows(item,settings_package,form_action(selected,placement,group),true)
-    local colour_field=settings_form.row(item,"colour_role",package.settings.colour_role,
-        settings.colour_role,form_action(selected,placement,group))
-    local advanced_open=get("widgets.advanced.open",false)==true
-    local stage_children=stage_backdrop(stage)
-    -- B0198b: the stage is a live preview only; the style cards below are the drag sources.
-    table.insert(stage_children,ui.Box{id="stage-bar",position="absolute",left=mini_left,top=mini_top,
-        width=mini_w,height=stage_bar_height,clip_children=true,fill="surface",bar_node})
-    for _,node in stage_desktop(stage,selected) do table.insert(stage_children,node) end
-    table.insert(stage_children,ui.Column{id="stage-caption",position="absolute",left=spacing.md,bottom=spacing.md,gap=spacing.xs,
-        label("stage-title","Your screen",text.caption*4/3,"onSurface",{height=18}),
-        label("stage-size",tostring(output_w).." × "..tostring(output_h),text.caption*4/3,"onSurfaceVariant",{height=16})})
-    local stage_props={id="preview-stage",width="fill",height=stage_h,shrink=0,clip_children=true,
-        radius=kit.tokens.radii.medium,fill="surfaceContainerHigh"}
-    for _,child in stage_children do table.insert(stage_props,child) end
+    local function add_column(form_name,chosen)
+        return section(form_name.."-style-section",{width=0,grow=1,height=STYLE_SECTION_HEIGHT},
+            ui.Row{id=form_name.."-style-heading-row",width="fill",height=22,shrink=0,align="center",gap=spacing.sm,
+                label(form_name.."-style-heading",form_name=="bar" and "Bar" or "Desktop",text.body*4/3,"onSurface",{height=22}),
+                ui.Text{id=form_name.."-drag-icon",text="drag_indicator",family="Material Symbols Rounded",font_size=kit.tokens.icons.medium,
+                    width=kit.tokens.icons.medium+2,height=20,color="primary"},
+                label(form_name.."-drag-hint",ui.tr(form_name=="bar" and "bead.widgets.drag-to-bar" or "bead.widgets.drag-to-desktop"),
+                    text.caption*4/3,"onSurfaceVariant",{width=0,grow=1,height=18}),
+                button(form_name.."-add",ui.tr(form_name=="bar" and "bead.widgets.add-bar" or "bead.widgets.add-desktop"),
+                    edit({op="add",widget=selected,form=form_name,style=chosen}),{height=22,padding=spacing.xs,font_size=text.caption*4/3})},
+            style_tiles(selected,form_name,package,chosen,defaults,choose(form_name),true))
+    end
     local content_props={id="detail-content",width="fill",shrink=0,gap=spacing.md,
         label("drag-hint",ui.tr("bead.widgets.drag-hint"),text.caption*4/3,"onSurfaceVariant",{width="fill",height=18,shrink=0}),
         ui.Row{id="form-style-columns",width="fill",height=STYLE_SECTION_HEIGHT,shrink=0,gap=spacing.md,
-            ui.Column{id="bar-style-section",width=0,grow=1,height=STYLE_SECTION_HEIGHT,shrink=0,gap=spacing.sm,padding=spacing.md,
-                radius=kit.tokens.radii.medium,fill="surfaceContainer",
-                ui.Row{id="bar-style-heading-row",width="fill",height=22,shrink=0,align="center",gap=spacing.sm,
-                    label("bar-style-heading","Bar style",text.body*4/3,"onSurface",{height=22}),
-                    ui.Text{id="bar-drag-icon",text="drag_indicator",family="Material Symbols Rounded",font_size=kit.tokens.icons.medium,
-                        width=kit.tokens.icons.medium+2,height=20,color="primary"},
-                    label("bar-drag-hint",ui.tr("bead.widgets.drag-to-bar"),text.caption*4/3,"onSurfaceVariant",{width=0,grow=1,height=18}),
-                    button("bar-add",ui.tr("bead.widgets.add-bar"),edit({op="add",widget=selected,form="bar",style=bar_style}),{height=22,padding=spacing.xs,font_size=text.caption*4/3})},
-                style_tiles(selected,"bar",package,bar_style,settings)},
-            desktop_available and ui.Column{id="desktop-style-section",width=0,grow=1,height=STYLE_SECTION_HEIGHT,shrink=0,gap=spacing.sm,padding=spacing.md,
-                radius=kit.tokens.radii.medium,fill="surfaceContainer",
-                ui.Row{id="desktop-style-heading-row",width="fill",height=22,shrink=0,align="center",gap=spacing.sm,
-                    label("desktop-style-heading","Desktop style",text.body*4/3,"onSurface",{height=22}),
-                    ui.Text{id="desktop-drag-icon",text="drag_indicator",family="Material Symbols Rounded",font_size=kit.tokens.icons.medium,
-                        width=kit.tokens.icons.medium+2,height=20,color="primary"},
-                    label("desktop-drag-hint",ui.tr("bead.widgets.drag-to-desktop"),text.caption*4/3,"onSurfaceVariant",{width=0,grow=1,height=18}),
-                    button("desktop-add",ui.tr("bead.widgets.add-desktop"),edit({op="add",widget=selected,form="desktop",style=desktop_style}),{height=22,padding=spacing.xs,font_size=text.caption*4/3})},
-                style_tiles(selected,"desktop",package,desktop_style,settings)} or nil},
-        ui.Column{id="colour-role-section",width="fill",shrink=0,gap=spacing.sm,padding=spacing.md,
-            radius=kit.tokens.radii.medium,fill="surfaceContainer",colour_field},
-        ui.Box(stage_props),
-        ui.Column{id="dropdown-trigger",width="fill",shrink=0,gap=spacing.xs,padding=spacing.md,
-            radius=kit.tokens.radii.medium,fill="surfaceContainer",
-            label("trigger-label","Open its dropdown on",text.body*4/3,"onSurface",{height=22}),
-            ui.Row{id="trigger-choices",width="fill",height=spacing.huge+spacing.xs,gap=spacing.xs,
-                button("trigger-click","Click",edit({op="default-trigger",value="click"}),{
-                    width=0,grow=1,selected=(doc.dropdown_trigger or "click")=="click"}),
-                button("trigger-hover","Hover",edit({op="default-trigger",value="hover"}),{
-                    width=0,grow=1,selected=doc.dropdown_trigger=="hover"})}}}
-    if #instance_groups>1 then
-        local options={id="instance-options",width="fill",gap=spacing.sm}
-        for _,copy in instance_groups do
-            table.insert(options,button("instance-"..copy.id,copy.label,navigate("instance",copy.id),{
-                selected=copy.id==group,fill=copy.id==group and ui.alpha("primary",.15) or "surfaceContainer"}))
+            add_column("bar",new_bar),desktop_available and add_column("desktop",new_desktop) or nil}}
+    -- On your screen: the placed copies, then the selected copy's own style, colour and settings.
+    local copies={id="instance-options",width="fill",height=spacing.huge+spacing.xs,gap=spacing.sm}
+    local seen={}
+    for _,row in placed do
+        local name=where(row.instance)
+        seen[name]=(seen[name] or 0)+1
+        local caption=seen[name]>1 and name.." · "..tostring(seen[name]) or name
+        table.insert(copies,button("instance-"..row.id,caption,navigate("instance",row.id),{
+            selected=row==current,fill=row==current and ui.alpha("primary",.15) or "surfaceContainerHigh"}))
+    end
+    local editor
+    if instance then
+        local act=form_action(selected,placement,group)
+        local settings_package=table.clone(package)
+        settings_package.settings={}
+        for key,schema in package.settings do
+            if key~="dropdown_trigger" and key~="colour_role" and not schema.style_alias and not schema.hidden then
+                settings_package.settings[key]=schema
+            end
         end
-        table.insert(content_props,1,ui.Column{id="instance-picker",width="fill",shrink=0,gap=spacing.xs,
-            label("instance-heading","Choose a copy",text.caption*4/3,"onSurfaceVariant",{height=18}),ui.Row(options)})
+        local item={iid=group,widget=selected,settings=settings}
+        local fields=settings_form.rows(item,settings_package,act)
+        local current_style=instance.style
+        local styles=package.forms[placement].styles
+        if type(current_style)~="string" or not styles[current_style] then current_style=package.forms[placement].default_style end
+        editor=section("instance-editor",{fill="surfaceContainerHigh"},
+            ui.Row{id="instance-editor-heading",width="fill",height=spacing.huge+spacing.xs,shrink=0,align="center",gap=spacing.sm,
+                label("instance-editor-title",package.title.." · "..where(instance),text.title*4/3,"onSurface",{width=0,grow=1,height=24}),
+                button("instance-remove",ui.tr("bead.widgets.remove-copy"),
+                    edit({op="remove",widget=selected,group=group,iid=instance.iid,form=placement}),{fill="surfaceContainerHighest"})},
+            style_tiles(selected,placement,package,current_style,settings,function(style_id)
+                return edit({op="style",widget=selected,group=group,iid=instance.iid,form=placement,style=style_id})
+            end,false),
+            settings_form.row(item,"colour_role",package.settings.colour_role,settings.colour_role,act),
+            #fields.children>0 and fields or nil)
     end
-    if next(settings_package.settings)~=nil then
-        table.insert(content_props,ui.Column{id="settings-section",width="fill",shrink=0,gap=spacing.md,padding=spacing.md,
-            radius=kit.tokens.radii.medium,fill="surfaceContainer",
-            label("settings-title","Settings",text.title*4/3,"onSurface",{height=24}),
-            #fields.children>0 and fields or nil,
-            #advanced_fields.children>0 and ui.Column{id="advanced-fields",width="fill",gap=spacing.sm,
-                button("advanced-toggle",advanced_open and "Hide advanced" or "Advanced",ui.action("widgets.advanced.toggle"),{fill="transparent"}),
-                advanced_open and advanced_fields or nil} or nil})
-    else
-        local slot=instance and instance.slot or {}
-        table.insert(content_props,ui.Column{id="advanced-section",width="fill",shrink=0,gap=spacing.sm,padding=spacing.md,
-            radius=kit.tokens.radii.medium,fill="surfaceContainer",
-            button("advanced-toggle",advanced_open and "Hide advanced" or "Advanced",ui.action("widgets.advanced.toggle"),{fill="transparent"}),
-            advanced_open and ui.Grid{id="developer-fields",width="fill",columns=2,gap=spacing.md,row_height=38,
-                ui.Column{id="developer-widget",gap=spacing.xs,
-                    label("developer-widget-label","Widget identifier",text.caption*4/3,"onSurfaceVariant",{height=16}),
-                    label("developer-widget-value",selected,text.body*4/3,"onSurface",{height=18})},
-                ui.Column{id="developer-bar-style",gap=spacing.xs,
-                    label("developer-bar-label","Bar style",text.caption*4/3,"onSurfaceVariant",{height=16}),
-                    label("developer-bar-value",bar_style,text.body*4/3,"onSurface",{height=18})},
-                ui.Column{id="developer-desktop-style",gap=spacing.xs,
-                    label("developer-desktop-label","Desktop style",text.caption*4/3,"onSurfaceVariant",{height=16}),
-                    label("developer-desktop-value",desktop_style,text.body*4/3,"onSurface",{height=18})},
-                ui.Column{id="developer-canvas-slot",gap=spacing.xs,
-                    label("developer-slot-label","Desktop position",text.caption*4/3,"onSurfaceVariant",{height=16}),
-                    label("developer-slot-value",tostring(slot.x or 0)..", "..tostring(slot.y or 0),text.body*4/3,"onSurface",{height=18})}} or nil})
-    end
+    table.insert(content_props,section("placed-section",{},
+        label("placed-title",ui.tr("bead.widgets.on-screen"),text.title*4/3,"onSurface",{height=24}),
+        #placed>0 and label("placed-hint",ui.tr("bead.widgets.on-screen-hint"),text.caption*4/3,"onSurfaceVariant",{width="fill",height=18})
+            or label("placed-empty",ui.tr("bead.widgets.on-screen-empty"),text.caption*4/3,"onSurfaceVariant",{width="fill",height=18}),
+        #placed>0 and ui.Row(copies) or nil,
+        editor))
+    -- The live screen preview outlines the copy being edited.
+    local stage=stage_geometry()
+    local bar_node=preview.render_bar(doc,output_w,stage.bar_h,stage.scale,
+        instance and instance.host~="canvas" and selected or nil,instance and group or nil)
+    local stage_children=stage_backdrop(stage)
+    table.insert(stage_children,ui.Box{id="stage-bar",position="absolute",left=stage.left,top=stage.top,
+        width=stage.mini_w,height=stage.bar_h*stage.scale,clip_children=true,fill="surface",bar_node})
+    for _,node in stage_desktop(stage,instance and instance.iid) do table.insert(stage_children,node) end
+    table.insert(stage_children,ui.Column{id="stage-caption",position="absolute",left=spacing.md,bottom=spacing.md,gap=spacing.xs,
+        label("stage-title","Your screen",text.caption*4/3,"onSurface",{height=18}),
+        label("stage-size",tostring(output_w).." × "..tostring(output_h),text.caption*4/3,"onSurfaceVariant",{height=16})})
+    local stage_props={id="preview-stage",width="fill",height=stage.h,shrink=0,clip_children=true,
+        radius=kit.tokens.radii.medium,fill="surfaceContainerHigh"}
+    for _,child in stage_children do table.insert(stage_props,child) end
+    table.insert(content_props,ui.Box(stage_props))
+    table.insert(content_props,section("dropdown-trigger",{gap=spacing.xs},
+        label("trigger-label","Open dropdowns on",text.body*4/3,"onSurface",{height=22}),
+        ui.Row{id="trigger-choices",width="fill",height=spacing.huge+spacing.xs,gap=spacing.xs,
+            button("trigger-click","Click",edit({op="default-trigger",value="click"}),{
+                width=0,grow=1,selected=(doc.dropdown_trigger or "click")=="click"}),
+            button("trigger-hover","Hover",edit({op="default-trigger",value="hover"}),{
+                width=0,grow=1,selected=doc.dropdown_trigger=="hover"})}))
     if error_message~="" or message~="" then
         table.insert(content_props,label("save-status",error_message~="" and error_message or message,
             text.caption*4/3,error_message~="" and "error" or "onSurfaceVariant",{width="fill",height=20}))
@@ -615,13 +598,13 @@ local function detail()
             ui.Column{id="detail-title-copy",width=0,grow=1,gap=spacing.xs,
                 label("detail-title",package.title,text.headline*4/3,"onSurface",{width="fill",height=28}),
                 label("detail-description",package.description,text.caption*4/3,"onSurfaceVariant",{height=18})}},
-        ui.Scroll{id="detail-scroll",width="fill",grow=1,scroll=ui.bind("widgets.scroll"),ui.Column(content_props)}
+        ui.Scroll{id="detail-scroll",width="fill",grow=1,scroll=ui.bind("widgets.detail.scroll"),ui.Column(content_props)}
     }
 end
 
 local function metadata()
     return {{widget_layout=true,widget_clock_preview_seconds=selected=="clock",document=doc,initial=initial,rev=rev,catalogue=catalogue,
-        screen_width=screen_w,screen_height=screen_h,snap_distance=spacing.lg,
+        screen_width=screen_w,screen_height=screen_h,grid_cell=dragging.grid_cell(),
         viewport_width=width,viewport_height=height}}
 end
 

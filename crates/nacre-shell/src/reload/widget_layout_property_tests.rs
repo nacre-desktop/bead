@@ -8,10 +8,10 @@ use bead_test::{Config, Harness};
 use serde_json::{Value as Json, json};
 use std::{collections::BTreeMap, path::Path};
 
-const WIDTH: f64 = 1920.;
-const HEIGHT: f64 = 1200.;
+pub(super) const WIDTH: f64 = 1920.;
+pub(super) const HEIGHT: f64 = 1200.;
 
-fn catalogue() -> Json {
+pub(super) fn catalogue() -> Json {
     // The real packages' default style names (the bar validates them); spans as shipped.
     let styles = [
         ("launcher", "nacre"),
@@ -47,7 +47,7 @@ fn catalogue() -> Json {
 }
 
 /// The shipped default (shell/widgets/default.luau) at 1920 px.
-fn default_layout() -> Json {
+pub(super) fn default_layout() -> Json {
     let item = |iid: &str, widget: &str, host: &str, region: &str, start: u32| json!({"iid":iid,"widget":widget,"host":host,"slot":{"region":region,"start":start,"span":1},"settings":{}});
     let mut pill = item("status-pill", "pill", "top_bar", "right", 0);
     pill["children"] = json!([
@@ -149,13 +149,13 @@ fn geometry(doc: &Json) -> Vec<Json> {
     rects
 }
 
-fn context(doc: &Json) -> Json {
+pub(super) fn context(doc: &Json) -> Json {
     json!({"catalogue":catalogue(),"geometry":geometry(doc),"screen_width":WIDTH,"screen_height":HEIGHT,
         "canvas_width":WIDTH,"canvas_height":HEIGHT,"snap_distance":14,
         "remove_zone":{"width":192,"height":64,"bottom":64}})
 }
 
-fn locate<'a>(doc: &'a Json, iid: &str) -> Option<&'a Json> {
+pub(super) fn locate<'a>(doc: &'a Json, iid: &str) -> Option<&'a Json> {
     fn find<'a>(items: &'a [Json], iid: &str) -> Option<&'a Json> {
         items.iter().find_map(|item| {
             (item["iid"] == iid).then_some(item).or_else(|| {
@@ -179,7 +179,14 @@ fn rect(doc: &Json, iid: &str) -> Option<(f64, f64)> {
         .map(|rect| (rect["x"].as_f64().unwrap(), rect["w"].as_f64().unwrap()))
 }
 
-fn drop_event(doc: &Json, iid: &str, destination: &str, x: f64, y: f64, phase: &str) -> Value {
+pub(super) fn drop_event(
+    doc: &Json,
+    iid: &str,
+    destination: &str,
+    x: f64,
+    y: f64,
+    phase: &str,
+) -> Value {
     let item = locate(doc, iid).unwrap();
     let canvas = item["host"] == "canvas";
     let (width, height) = if canvas { (240., 120.) } else { (64., 34.) };
@@ -195,7 +202,7 @@ fn drop_event(doc: &Json, iid: &str, destination: &str, x: f64, y: f64, phase: &
 
 /// A drag from the Widgets app (a style card): always adds a new instance.
 #[allow(clippy::too_many_arguments)]
-fn app_event(
+pub(super) fn app_event(
     doc: &Json,
     widget: &str,
     form: &str,
@@ -226,14 +233,14 @@ fn app_event(
     ])
 }
 
-struct Model {
-    controller: Controller,
-    doc: Json,
+pub(super) struct Model {
+    pub(super) controller: Controller,
+    pub(super) doc: Json,
     epoch: f64,
 }
 
 impl Model {
-    fn new(doc: Json) -> Self {
+    pub(super) fn new(doc: Json) -> Self {
         let mut controller = Controller::new().unwrap();
         controller
             .sync(&BTreeMap::from([
@@ -250,13 +257,13 @@ impl Model {
     }
 
     /// One real gesture: move then drop, then retire. Returns whether it committed.
-    fn drag(&mut self, iid: &str, destination: &str, x: f64, y: f64) -> bool {
+    pub(super) fn drag(&mut self, iid: &str, destination: &str, x: f64, y: f64) -> bool {
         let before = self.doc.clone();
         self.gesture(|phase| drop_event(&before, iid, destination, x, y, phase))
     }
 
     /// Drag a new copy in from the app.
-    fn add(
+    pub(super) fn add(
         &mut self,
         widget: &str,
         form: &str,
@@ -312,7 +319,7 @@ impl Model {
         }
     }
 
-    fn edit(&mut self, request: Json) -> Json {
+    pub(super) fn edit(&mut self, request: Json) -> Json {
         let mut request = request;
         request["catalogue"] = catalogue();
         request["screen_width"] = json!(WIDTH);

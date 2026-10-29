@@ -6570,6 +6570,20 @@ impl SceneSource for Runtime {
                         .unwrap_or_default(),
                     _ => "",
                 };
+                if operation == "inspect" {
+                    // B0208 edit mode: a click on a placed widget opens its own settings in the
+                    // Widgets app. Routing may spawn or call the app, so it never blocks the UI.
+                    if let bead::core::Value::List(records) = &argument
+                        && let Some(record) = records.first()
+                    {
+                        let target = serde_json::json!({"widget": record["widget"],
+                            "group": record["group"], "iid": record["iid"]});
+                        let _ = std::thread::Builder::new()
+                            .name("widgets-inspect".into())
+                            .spawn(move || crate::app::route(0, "widgets", "open", &[target]));
+                    }
+                    return Ok(None);
+                }
                 let persistent = matches!(
                     operation,
                     "add" | "remove" | "style" | "setting" | "undo" | "reset"
@@ -10042,6 +10056,8 @@ mod shell_route_smoke_tests;
 mod widget_app_tests;
 #[cfg(test)]
 mod widget_drag_preview_tests;
+#[cfg(test)]
+mod widget_editor_tests;
 #[cfg(test)]
 mod widget_layout_property_tests;
 #[cfg(test)]
