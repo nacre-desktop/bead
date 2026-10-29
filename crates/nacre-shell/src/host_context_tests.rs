@@ -29,9 +29,18 @@ fn panels_ignore_undeclared_bar_widget_context() {
     let context = BTreeMap::from([
         ("bar.clock.twelve".to_string(), Value::Bool(true)),
         ("bar.height".to_string(), Value::Number(50.)),
-        ("bead.desktop.clock".to_string(), Value::Text("12:34".into())),
-        ("bead.workspaces".to_string(), Value::list(Vec::<serde_json::Value>::new())),
-        ("bead.focused_title".to_string(), Value::Text("Notes".into())),
+        (
+            "bead.desktop.clock".to_string(),
+            Value::Text("12:34".into()),
+        ),
+        (
+            "bead.workspaces".to_string(),
+            Value::list(Vec::<serde_json::Value>::new()),
+        ),
+        (
+            "bead.focused_title".to_string(),
+            Value::Text("Notes".into()),
+        ),
     ]);
     for (entry, models) in [
         ("popouts/main.luau", BTreeMap::new()),
