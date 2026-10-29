@@ -396,7 +396,9 @@ function M.renderer(document)
             local props=node.props
             -- An empty pill stays a visible drop target as wide as it is tall.
             local natural=math.max(measured_width(node,0),require("context").t.pill_height)
-            if natural>0 then props.width=ui.animate("pill-width:"..item.iid,natural,.18,"out-cubic") end
+            -- B0198: set, not animated: a right-anchored pill shrinking over several frames
+            -- left stale copies of itself in the bar (partial damage) mid-drag.
+            if natural>0 then props.width=natural end
             props.clip_children=true
             node.props=props
         end

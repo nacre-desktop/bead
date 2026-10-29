@@ -318,8 +318,9 @@ function M.ghost_node()
         node,marker}
 end
 
--- B0198 edit mode: while a widget is dragged, the real bar and desktop show where it
--- can land and a removal target appears for placed widgets. Passive; the drop model
+-- B0198 edit mode: while a widget is dragged, the desktop shows where it
+-- can land and a removal target appears for placed widgets; the bar outlines itself
+-- (bar/main.luau, drawn on the bar surface). Passive; the drop model
 -- in the app behaviour decides with the same zone geometry (M.remove_zone).
 -- The removal target, centred near the bottom of the output.
 function M.remove_zone()
@@ -359,8 +360,6 @@ function M.drop_zones(width,height)
     local y=ui.resolve_for_check(ui.bind("widgets.drag.y")) or -1
     local over_remove=source.iid~=nil and x>=remove_left and x<remove_left+remove.width
         and y>=remove_top and y<remove_top+remove.height
-    table.insert(zones,zone("drop-zone-bar",0,0,width,bar_height,nil,nil,
-        destination=="bar",false))
     if package.forms.desktop then
         table.insert(zones,zone("drop-zone-desktop",inset,bar_height+inset,width-2*inset,height-bar_height-2*inset,
             ui.tr("bead.widgets.zone-desktop"),"wallpaper",destination=="desktop" and not over_remove,false))
