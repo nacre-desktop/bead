@@ -34,6 +34,8 @@ pub(super) struct Canvas {
     pub(super) buffers: Vec<Buffer>,
     /// Damage accumulated independently for each reusable slot.
     pub(super) damage_history: Vec<Damage>,
+    /// Semantic frame diff: only primitives whose pixels changed repaint (B0189).
+    visual_damage: bead_render::damage::FrameDamage,
     pub(super) geometry: Option<(i32, i32)>,
     /// Full logical output viewport passed to the source for placement.
     pub(super) viewport_size: (u32, u32),
@@ -482,6 +484,7 @@ impl App {
                 pool: None,
                 buffers: Vec::new(),
                 damage_history: Vec::new(),
+                visual_damage: Default::default(),
                 geometry: None,
                 viewport_size: (width as u32, height as u32),
                 bounds: None,
@@ -908,20 +911,10 @@ impl App {
             }
             canvas.pool = Some(pool);
             canvas.geometry = Some(geometry);
-            canvas.damage_history = vec![
-                Damage {
-                    x: 0,
-                    y: 0,
-                    w: 0,
-                    h: 0
-                };
-                2
-            ];
+            canvas.damage_history = vec![Damage::full(width as u32, height as u32); 2];
+            canvas.visual_damage = Default::default();
         }
         let full = Damage::full(width as u32, height as u32);
-        for history in &mut canvas.damage_history {
-            *history = history.union(full);
-        }
         let pool = canvas.pool.as_mut().ok_or("canvas pool missing")?;
         let Some(slot) = canvas
             .buffers
@@ -948,6 +941,42 @@ impl App {
                 .commit();
             return Ok(());
         };
+        canvas.renderer.prepare(&canvas.scene, scale)?;
+        // Repaint only what changed since each buffer was last painted. The frame
+        // diff is independent of buffer age; the per-slot history carries it.
+        let changed = match canvas.renderer.prepared_frame() {
+            Some(frame) if self.options.damage => canvas.visual_damage.update(
+                &frame,
+                canvas.scene.offset,
+                canvas.scene.opacity,
+                width as u32,
+                height as u32,
+            )?,
+            _ => vec![full],
+        };
+        if self.options.trace_state {
+            let pixels: u64 = changed
+                .iter()
+                .map(|r| u64::from(r.w) * u64::from(r.h))
+                .sum();
+            bead_core::vprintln!(
+                "CANVAS_DAMAGE rects={} pixels={} surface={}",
+                changed.len(),
+                pixels,
+                u64::from(width as u32) * u64::from(height as u32)
+            );
+        }
+        if changed.is_empty() {
+            canvas.dirty = false;
+            return Ok(());
+        }
+        let bounding = changed
+            .iter()
+            .copied()
+            .fold(Damage::full(0, 0), Damage::union);
+        for history in &mut canvas.damage_history {
+            *history = history.union(bounding);
+        }
         let mut damage = std::mem::replace(
             &mut canvas.damage_history[slot],
             Damage {
@@ -960,7 +989,6 @@ impl App {
         if damage.w == 0 || damage.h == 0 {
             damage = full;
         }
-        canvas.renderer.prepare(&canvas.scene, scale)?;
         let bytes = canvas.buffers[slot]
             .canvas(pool)
             .ok_or("compositor owns canvas buffer")?;
@@ -976,6 +1004,9 @@ impl App {
             damage,
         ) {
             if super::rendering::prepare_pending_images(error.as_ref(), canvas.source.as_mut())? {
+                // The retry must repaint what this failed attempt consumed.
+                canvas.visual_damage = Default::default();
+                canvas.damage_history = vec![full; 2];
                 canvas.dirty = true;
                 return Ok(());
             }
