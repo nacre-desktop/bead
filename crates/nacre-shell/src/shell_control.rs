@@ -243,7 +243,11 @@ impl ShellControl for Gate {
     }
     fn external_panel_hover(&self, view: &str, output: &str, inside: bool) {
         if view == "assistant" {
-            crate::app::panel_request("chat", if inside { "hover-enter" } else { "hover-leave" }, output);
+            crate::app::panel_request(
+                "chat",
+                if inside { "hover-enter" } else { "hover-leave" },
+                output,
+            );
         }
     }
     fn edge_chrome(&self) -> EdgeChrome {

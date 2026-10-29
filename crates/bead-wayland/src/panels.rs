@@ -223,13 +223,28 @@ mod tests {
         let known = ["eDP-1".to_owned(), "DP-1".to_owned()];
         let pick = |req, routed, focus, ptr| invocation_output(&known, req, routed, focus, ptr);
         // Keyboard/IPC: the compositor-focused output, whichever it is.
-        assert_eq!(pick(None, None, Some("DP-1"), Some("eDP-1")).as_deref(), Some("DP-1"));
-        assert_eq!(pick(None, None, Some("eDP-1"), Some("DP-1")).as_deref(), Some("eDP-1"));
+        assert_eq!(
+            pick(None, None, Some("DP-1"), Some("eDP-1")).as_deref(),
+            Some("DP-1")
+        );
+        assert_eq!(
+            pick(None, None, Some("eDP-1"), Some("DP-1")).as_deref(),
+            Some("eDP-1")
+        );
         // Pointer: the output already routed from the pointer's surface.
-        assert_eq!(pick(None, Some("DP-1"), Some("eDP-1"), None).as_deref(), Some("DP-1"));
+        assert_eq!(
+            pick(None, Some("DP-1"), Some("eDP-1"), None).as_deref(),
+            Some("DP-1")
+        );
         // Explicit request wins; unknown names are skipped; nothing known gives None.
-        assert_eq!(pick(Some("eDP-1"), Some("DP-1"), None, None).as_deref(), Some("eDP-1"));
-        assert_eq!(pick(None, None, Some("HDMI-9"), Some("DP-1")).as_deref(), Some("DP-1"));
+        assert_eq!(
+            pick(Some("eDP-1"), Some("DP-1"), None, None).as_deref(),
+            Some("eDP-1")
+        );
+        assert_eq!(
+            pick(None, None, Some("HDMI-9"), Some("DP-1")).as_deref(),
+            Some("DP-1")
+        );
         assert_eq!(pick(None, None, None, None), None);
     }
 
