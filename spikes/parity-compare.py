@@ -1646,7 +1646,8 @@ def main():
             swap_used = int([line for line in meminfo.splitlines() if line.startswith('SwapTotal:')][0].split()[1]) - int(
                 [line for line in meminfo.splitlines() if line.startswith('SwapFree:')][0].split()[1])
             log(f'swap used before {arm}: {swap_used // 1024} MiB')
-            if swap_used >= 64 * 1024:
+            # Image-only proofs (B0200) measure no memory; the swap gate guards memory numbers.
+            if swap_used >= 64 * 1024 and os.environ.get('PARITY_IMAGE_ONLY') != '1':
                 parser.error(f'swap used {swap_used // 1024} MiB is at least 64 MiB before {arm}; reset between arms and retry')
             swap_in_before = int(dict(line.split() for line in Path('/proc/vmstat').read_text().splitlines())['pswpin'])
             shutil.rmtree(args.out / arm, ignore_errors=True)
@@ -1682,7 +1683,7 @@ def main():
                     'swap_used_before_kib': swap_used, 'pswpin_before': swap_in_before,
                     'pswpin_after': swap_in_after, 'pswpin_delta': swap_in_after - swap_in_before,
                 }))
-                if swap_in_after != swap_in_before:
+                if swap_in_after != swap_in_before and os.environ.get('PARITY_IMAGE_ONLY') != '1':
                     parser.error(f'host swap-in changed by {swap_in_after - swap_in_before} pages during {arm}; rejecting arm')
                 if child.returncode != 0:
                     return child.returncode
