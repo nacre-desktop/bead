@@ -28,7 +28,11 @@ local function detail(d)
     return ""
 end
 local level,text=spec.level==true,detail(spec.detail)
-local fill_value=level and ui.animate("osd-level",value,0.13,"out-cubic") or value
+-- A pill that appears shows its level already filled: while hidden, and on the first frame after
+-- the show (`osd-shown` has not left 0 yet), the fill snaps to the value; only changes made while
+-- the pill is visible animate.
+local shown=ui.animate("osd-shown",get("osd.open") and 1 or 0,0.001,"linear")
+local fill_value=level and ui.animate("osd-level",value,shown>=1 and 0.13 or 0,"out-cubic") or value
 local dim=muted or (spec.toggle==true and value<=0)
 local percent=muted and ui.tr("bead.osd.muted") or string.format("%d%%",math.floor(value*100+.5))
 local H=level and (text~="" and 76 or 60) or 68
