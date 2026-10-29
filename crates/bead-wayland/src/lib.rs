@@ -669,6 +669,8 @@ pub type CommandMap = std::sync::Arc<
 >;
 pub type PanelFactory =
     std::sync::Arc<dyn Fn(bool) -> Result<Box<dyn SceneSource>, String> + Send + Sync>;
+/// Product-owned low-priority CPU warming for named panel scenes after the first primary frame.
+pub type PanelPrewarm = std::sync::Arc<dyn Fn((u32, u32), f32) + Send + Sync>;
 pub type PrimaryFactory =
     std::sync::Arc<dyn Fn(String) -> Result<Box<dyn SceneSource>, String> + Send + Sync>;
 /// Small static, input-transparent vector tiles outside a bar's own rectangle.
@@ -740,6 +742,8 @@ pub struct Options {
     pub panel_spec: Option<PanelSpec>,
     /// Optional named views sharing the existing one-resident-panel lifecycle.
     pub panels: Option<Panels>,
+    /// Product-owned idle CPU prewarm callback; receives the actual logical output size and scale.
+    pub panel_prewarm: Option<PanelPrewarm>,
     /// B0053: views offered into the overlay slot (see [`UiEvent::CompanionOffer`]).
     pub overlays: Option<Overlays>,
     /// Optional output-sized canvas views, created on first offer per output and name.
@@ -807,6 +811,7 @@ impl Default for Options {
             namespace: "bead-dev".into(),
             panel_spec: None,
             panels: None,
+            panel_prewarm: None,
             overlays: None,
             canvases: None,
             canvas_layers: Default::default(),

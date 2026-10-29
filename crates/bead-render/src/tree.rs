@@ -575,6 +575,9 @@ fn cpu_content_scene(scene: &Scene) -> Scene {
 /// form a contiguous prefix. Other authored scenes keep the existing renderer.
 fn reveal_parts_prefix(scene: &Scene) -> Option<usize> {
     let motion = scene.motion.as_ref().filter(|motion| motion.reveal)?;
+    if motion.parts.is_empty() {
+        return Some(0);
+    }
     let indices = motion
         .parts
         .iter()
@@ -582,7 +585,10 @@ fn reveal_parts_prefix(scene: &Scene) -> Option<usize> {
         .collect::<BTreeSet<_>>();
     let last = *indices.iter().next_back()?;
     let prefix = last.checked_add(1)?;
-    (indices.len() == prefix && indices.iter().copied().eq(0..prefix)).then_some(prefix)
+    // Preserve painter order when a scene has static primitives between the
+    // canvas start and its first moving contour: keep that leading run in the
+    // changing frame and cache only the suffix.
+    (prefix <= scene.primitives.len()).then_some(prefix)
 }
 
 fn reveal_content_scene(scene: &Scene, prefix: usize) -> Scene {
@@ -3205,6 +3211,118 @@ pub struct TreeCpuRenderer {
     pub slide_content_composites: usize,
     pub reveal_content_bytes: usize,
 }
+// Startup first-content smoothing is allowed up to 2 MiB of bounded anon pixels.
+const CPU_CONTENT_WARM_LIMIT: usize = 2 * bead_core::cache::MIB;
+struct CpuContentWarmEntry {
+    fingerprint: SnapshotFingerprint,
+    // Keep the input payloads alive for as long as the prepared pixels are reusable.
+    _asset_refs: Vec<Arc<[u8]>>,
+    pixels: FlattenedPixels,
+}
+impl CpuContentWarmEntry {
+    fn bytes(&self) -> usize {
+        self.pixels.bytes().saturating_add(
+            self._asset_refs
+                .iter()
+                .map(|asset| asset.len())
+                .sum::<usize>(),
+        )
+    }
+}
+#[derive(Default)]
+struct CpuContentWarmCache {
+    entries: Vec<CpuContentWarmEntry>,
+    bytes: usize,
+    hits: usize,
+    misses: usize,
+}
+impl CpuContentWarmCache {
+    fn insert(
+        &mut self,
+        fingerprint: SnapshotFingerprint,
+        scene: &Scene,
+        pixels: FlattenedPixels,
+    ) -> usize {
+        let asset_refs = scene
+            .asset_data
+            .iter()
+            .filter(|(path, _)| !reveal_art_asset(scene, path))
+            .map(|(_, data)| data.clone())
+            .collect::<Vec<_>>();
+        let bytes = pixels.bytes().saturating_add(
+            asset_refs.iter().map(|asset| asset.len()).sum::<usize>(),
+        );
+        if bytes > CPU_CONTENT_WARM_LIMIT {
+            return 0;
+        }
+        if let Some(index) = self.entries.iter().position(|entry| {
+            entry
+                .fingerprint
+                .matches_content(scene, f32::from_bits(fingerprint.scale_bits))
+                .unwrap_or(false)
+        }) {
+            let old = self.entries.remove(index);
+            self.bytes = self.bytes.saturating_sub(old.bytes());
+        }
+        while self.bytes.saturating_add(bytes) > CPU_CONTENT_WARM_LIMIT {
+            if self.entries.is_empty() {
+                return 0;
+            }
+            let evicted = self.entries.remove(0);
+            self.bytes = self.bytes.saturating_sub(evicted.bytes());
+        }
+        self.bytes += bytes;
+        self.entries.push(CpuContentWarmEntry {
+            fingerprint,
+            _asset_refs: asset_refs,
+            pixels,
+        });
+        bytes
+    }
+    fn take(&mut self, scene: &Scene, scale: f32) -> Result<Option<FlattenedPixels>> {
+        let Some(index) = self.entries.iter().position(|entry| {
+            entry
+                .fingerprint
+                .matches_content(scene, scale)
+                .unwrap_or(false)
+        }) else {
+            self.misses = self.misses.saturating_add(1);
+            return Ok(None);
+        };
+        self.hits = self.hits.saturating_add(1);
+        let entry = self.entries.remove(index);
+        self.bytes = self.bytes.saturating_sub(entry.bytes());
+        Ok(Some(entry.pixels))
+    }
+}
+static CPU_CONTENT_WARM_CACHE: OnceLock<std::sync::Mutex<CpuContentWarmCache>> = OnceLock::new();
+fn cpu_content_warm_cache() -> &'static std::sync::Mutex<CpuContentWarmCache> {
+    CPU_CONTENT_WARM_CACHE.get_or_init(Default::default)
+}
+/// Return process-wide warm-cache hit, miss, and retained-byte counters.
+pub fn cpu_content_warm_cache_stats() -> (usize, usize, usize) {
+    cpu_content_warm_cache()
+        .lock()
+        .map(|cache| (cache.hits, cache.misses, cache.bytes))
+        .unwrap_or_default()
+}
+fn clone_flattened(pixels: &FlattenedPixels) -> Result<FlattenedPixels> {
+    match pixels {
+        FlattenedPixels::Dense(pixmap) => Pixmap::from_vec(
+            pixmap.data().to_vec(),
+            tiny_skia::IntSize::from_wh(pixmap.width(), pixmap.height())
+                .ok_or("warm pixmap size")?,
+        )
+        .map(FlattenedPixels::Dense)
+        .ok_or_else(|| "warm pixmap allocation".into()),
+        FlattenedPixels::Sparse(sparse) => Ok(FlattenedPixels::Sparse(SparsePixels {
+            width: sparse.width,
+            height: sparse.height,
+            rows: sparse.rows.clone(),
+            words: sparse.words.clone(),
+        })),
+    }
+}
 enum FlattenedPixels {
     Dense(Pixmap),
     Sparse(SparsePixels),
@@ -3224,6 +3342,72 @@ impl FlattenedPixels {
     }
 }
 impl TreeCpuRenderer {
+    /// Build and retain the same canonical flat content used by moving CPU panels.
+    /// The process-wide cache keeps at most 2 MiB and consumes entries once.
+    pub fn prewarm_content(scene: &Scene, scale: f32) -> Result<usize> {
+        let mut posed = scene.clone();
+        if posed
+            .motion
+            .as_ref()
+            .is_some_and(|motion| motion.reveal && motion.parts.is_empty())
+        {
+            // The first compositor pose populates automatic body/shadow parts.
+            // Do that off the visible path so the warm key matches real frames.
+            posed.reveal(0.);
+        }
+        let content = if posed.motion.as_ref().is_some_and(|motion| motion.reveal) {
+            let Some(prefix) = reveal_parts_prefix(&posed) else {
+                return Ok(0);
+            };
+            reveal_content_scene(&posed, prefix)
+        } else {
+            cpu_content_scene(&posed)
+        };
+        let prepared = Self::prepare_snapshot_with_storage(&content, scale, true)?.accept()?;
+        let Some((_, _, pixels)) = prepared.flattened.as_ref() else {
+            return Ok(0);
+        };
+        if pixels.bytes() > CPU_CONTENT_WARM_LIMIT {
+            return Ok(0);
+        }
+        let pixels = clone_flattened(pixels)?;
+        let fingerprint = SnapshotFingerprint::new(&content, scale)?;
+        let mut warm = cpu_content_warm_cache()
+            .lock()
+            .map_err(|_| "CPU content warm cache poisoned")?;
+        Ok(warm.insert(fingerprint, &content, pixels))
+    }
+
+    fn take_warmed_content(&mut self, content: &Scene, scale: f32) -> Result<bool> {
+        let Some(frame) = self.cache.frame.as_ref() else {
+            return Ok(false);
+        };
+        let frame_key = frame.key;
+        let pixels = cpu_content_warm_cache()
+            .lock()
+            .map_err(|_| "CPU content warm cache poisoned")?
+            .take(content, scale)?;
+        let Some(pixels) = pixels else {
+            return Ok(false);
+        };
+        let bytes = pixels.bytes();
+        let budget = self
+            .group_budget
+            .get_or_insert_with(|| {
+                bead_core::cache::Budget::new("cpu-composite", 64 * bead_core::cache::MIB)
+            })
+            .clone();
+        let charge = match budget.reserve(bytes.saturating_add(64)) {
+            Ok(charge) => charge,
+            Err("retained cache byte budget exceeded") => return Ok(false),
+            Err(error) => return Err(error.into()),
+        };
+        self.flattened = Some((frame_key, scale, pixels));
+        self.group_charge = Some(charge);
+        self.reveal_content_bytes = bytes;
+        Ok(true)
+    }
+
     fn prepare_slide_content(&mut self, scene: &Scene, scale: f32) -> Result<()> {
         let content = cpu_content_scene(scene);
         if self.worker_fingerprint.as_ref().is_some_and(|fingerprint| {
@@ -3237,6 +3421,24 @@ impl TreeCpuRenderer {
             self.opaque_composition = OpaqueComposition::Cached;
             return Ok(());
         }
+        self.cache.prepare(scene, scale)?;
+        if self.take_warmed_content(&content, scale)? {
+            self.worker_fingerprint = Some(SnapshotFingerprint::new(&content, scale)?);
+            self.slide_content = true;
+            self.reveal_content = false;
+            self.slide_content_preparations = self.slide_content_preparations.saturating_add(1);
+            self.opaque_composition = OpaqueComposition::Cached;
+            return Ok(());
+        }
+        self.prepare_slide_content_worker(scene, scale, content)
+    }
+
+    fn prepare_slide_content_worker(
+        &mut self,
+        scene: &Scene,
+        scale: f32,
+        content: Scene,
+    ) -> Result<()> {
         if self.cpu_preparation.as_ref().is_none_or(|request| {
             !request
                 .fingerprint
@@ -3299,6 +3501,25 @@ impl TreeCpuRenderer {
             self.opaque_composition = OpaqueComposition::Cached;
             return Ok(());
         }
+        self.cache
+            .prepare(&reveal_parts_scene(scene, prefix), scale)?;
+        if self.take_warmed_content(&content, scale)? {
+            self.worker_fingerprint = Some(SnapshotFingerprint::new(&content, scale)?);
+            self.reveal_content = true;
+            self.reveal_content_preparations = self.reveal_content_preparations.saturating_add(1);
+            self.opaque_composition = OpaqueComposition::Cached;
+            return Ok(());
+        }
+        self.prepare_reveal_content_worker(scene, scale, prefix, content)
+    }
+
+    fn prepare_reveal_content_worker(
+        &mut self,
+        scene: &Scene,
+        scale: f32,
+        prefix: usize,
+        content: Scene,
+    ) -> Result<()> {
         if self.cpu_preparation.as_ref().is_none_or(|request| {
             !request
                 .fingerprint
@@ -3511,7 +3732,19 @@ impl Renderer for TreeCpuRenderer {
                 .prepared
                 .get(&scale.to_bits())
                 .is_some_and(|frame| frame.items.iter().any(|item| item.image.is_some()));
-            if !native_images {
+            if native_images {
+                let content = reveal_content_scene(scene, prefix);
+                self.cache
+                    .prepare(&reveal_parts_scene(scene, prefix), scale)?;
+                if self.take_warmed_content(&content, scale)? {
+                    self.worker_fingerprint = Some(SnapshotFingerprint::new(&content, scale)?);
+                    self.reveal_content = true;
+                    self.reveal_content_preparations =
+                        self.reveal_content_preparations.saturating_add(1);
+                    self.opaque_composition = OpaqueComposition::Cached;
+                    return Ok(());
+                }
+            } else {
                 return self.prepare_reveal_content(scene, scale, prefix);
             }
         }
@@ -4200,6 +4433,178 @@ fn blend_reveal_sparse(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cpu_content_warm_cache_matches_exact_scale_and_consumes_once() {
+        let scene = cpu_content_scene(&scene());
+        let fingerprint = SnapshotFingerprint::new(&scene, 1.5).unwrap();
+        let asset_bytes = scene
+            .asset_data
+            .values()
+            .map(|asset| asset.len())
+            .sum::<usize>();
+        let original = Pixmap::new(2, 2).unwrap();
+        let expected = original.data().to_vec();
+        let mut warm = CpuContentWarmCache::default();
+        assert_eq!(
+            warm.insert(fingerprint, &scene, FlattenedPixels::Dense(original)),
+            16 + asset_bytes
+        );
+        let other_scale = warm.take(&scene, 1.).unwrap();
+        assert!(other_scale.is_none());
+        assert_eq!(warm.bytes, 16 + asset_bytes);
+        let matched = warm.take(&scene, 1.5).unwrap().expect("exact warm match");
+        let FlattenedPixels::Dense(matched) = matched else {
+            panic!("expected dense pixels")
+        };
+        assert_eq!(matched.data(), expected);
+        assert!(warm.take(&scene, 1.5).unwrap().is_none());
+        assert_eq!((warm.hits, warm.misses, warm.bytes), (1, 2, 0));
+    }
+
+    #[test]
+    fn noncontiguous_contour_reveal_reuses_warmed_suffix_without_reordering_pixels() {
+        let mut scene = scene();
+        let contour = Primitive::Rounded {
+            rect: Rect::new(0., 0., 24., 20.),
+            radius: 8.,
+            fill: [20, 30, 40, 255],
+            border: None,
+        };
+        scene.primitives = vec![
+            Primitive::Rounded {
+                rect: Rect::new(2., 2., 4., 4.),
+                radius: 2.,
+                fill: [80, 120, 220, 255],
+                border: None,
+            },
+            contour.clone(),
+            Primitive::Rounded {
+                rect: Rect::new(10., 8., 8., 8.),
+                radius: 2.,
+                fill: [220, 40, 30, 180],
+                border: None,
+            },
+        ];
+        scene.asset_data.clear();
+        scene.layers.clear();
+        scene.motion = Some(crate::Motion {
+            id: "warm-no-contour".into(),
+            open: false,
+            duration: 0.24,
+            return_duration: None,
+            return_curve: None,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            fade: false,
+            reveal: true,
+            progress: 0.,
+            parts: vec![(1, contour)],
+            art: None,
+        });
+        assert!(TreeCpuRenderer::prewarm_content(&scene, 1.5).unwrap() > 0);
+        scene.reveal(0.34);
+        let prefix = reveal_parts_prefix(&scene).unwrap();
+        let content = reveal_content_scene(&scene, prefix);
+        let matches = cpu_content_warm_cache()
+            .lock()
+            .unwrap()
+            .entries
+            .last()
+            .unwrap()
+            .fingerprint
+            .matches_content(&content, 1.5)
+            .unwrap();
+        assert!(
+            matches,
+            "revealed content must match its open-pose warm key"
+        );
+        let (hits_before, _, _) = cpu_content_warm_cache_stats();
+        let mut warmed = TreeCpuRenderer::default();
+        warmed.prepare_on_ui(&scene, 1.5).unwrap();
+        let (hits_after, _, _) = cpu_content_warm_cache_stats();
+        assert_eq!(hits_after, hits_before + 1);
+
+        let (width, height) = (
+            (scene.bounds.w * 1.5).ceil() as u32,
+            (scene.bounds.h * 1.5).ceil() as u32,
+        );
+        let mut actual = vec![0; width as usize * height as usize * 4];
+        warmed
+            .render(
+                &scene,
+                ShmTarget {
+                    bytes: &mut actual,
+                    width,
+                    height,
+                    scale: 1.5,
+                    format: PixelFormat::Rgba,
+                },
+                Damage::full(width, height),
+            )
+            .unwrap();
+        let mut direct = TreeCpuRenderer::with_opaque_composition(OpaqueComposition::Direct);
+        let expected = render_cpu_frame(&mut direct, &scene, 1.5, PixelFormat::Rgba);
+        assert_eq!(actual.len(), expected.len());
+        let max_step = actual
+            .iter()
+            .zip(&expected)
+            .map(|(a, b)| a.abs_diff(*b))
+            .max()
+            .unwrap_or(0);
+        assert!(max_step <= 1, "maximum channel step {max_step}");
+    }
+
+    #[test]
+    fn cpu_content_warm_cache_holds_assets_and_obeys_two_mib_budget() {
+        let source = scene();
+        let content = cpu_content_scene(&source);
+        let weak = Arc::downgrade(content.asset_data.values().next().unwrap());
+        let asset_bytes = content
+            .asset_data
+            .values()
+            .map(|asset| asset.len())
+            .sum::<usize>();
+        let fingerprint = SnapshotFingerprint::new(&content, 1.).unwrap();
+        let mut warm = CpuContentWarmCache::default();
+        let pixmap = Pixmap::new(8, 8).unwrap();
+        assert_eq!(
+            warm.insert(fingerprint, &content, FlattenedPixels::Dense(pixmap)),
+            256 + asset_bytes
+        );
+        drop(content);
+        assert!(weak.upgrade().is_some());
+        let oversized = FlattenedPixels::Dense(Pixmap::new(1025, 513).unwrap());
+        assert_eq!(
+            warm.insert(
+                SnapshotFingerprint::new(&source, 1.).unwrap(),
+                &source,
+                oversized
+            ),
+            0
+        );
+        assert_eq!(warm.entries.len(), 1);
+        assert_eq!(warm.bytes, 256 + asset_bytes);
+        let mut other = cpu_content_scene(&source);
+        other.width += 1.;
+        other.asset_data.clear();
+        let exact_budget = FlattenedPixels::Dense(Pixmap::new(1024, 512).unwrap());
+        assert_eq!(
+            warm.insert(
+                SnapshotFingerprint::new(&other, 1.).unwrap(),
+                &other,
+                exact_budget
+            ),
+            CPU_CONTENT_WARM_LIMIT
+        );
+        drop(source);
+        assert_eq!(warm.entries.len(), 1);
+        assert_eq!(warm.bytes, CPU_CONTENT_WARM_LIMIT);
+        drop(other);
+        assert!(weak.upgrade().is_none());
+    }
+
     #[test]
     fn cpu_snapshot_accept_falls_back_when_native_view_budget_is_full() {
         let scene = scene();

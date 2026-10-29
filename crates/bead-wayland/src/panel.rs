@@ -468,6 +468,41 @@ impl App {
     pub(super) fn open_panel(&mut self, output: Option<&str>) -> Result<(), String> {
         self.request_panel(None, output, true)
     }
+    pub(super) fn schedule_startup_panel_warm(&mut self) {
+        if self.startup_panel_warm_started
+            || self.startup_panel_warm_scheduled
+            || self.options.panel_prewarm.is_none()
+        {
+            return;
+        }
+        let Some(surface) = self.surfaces.iter().find(|surface| !surface.companion) else {
+            return;
+        };
+        let viewport = self
+            .output
+            .info(&surface.output)
+            .and_then(|info| info.logical_size)
+            .filter(|(width, height)| *width > 0 && *height > 0)
+            .map(|(width, height)| (width as u32, height as u32))
+            .unwrap_or((1200, 800));
+        let scale = surface.scale120 as f32 / 120.;
+        let prewarm = self.options.panel_prewarm.clone().unwrap();
+        self.startup_panel_warm_scheduled = true;
+        if let Err(error) = self.loop_handle.insert_source(
+            Timer::from_duration(Duration::from_millis(750)),
+            move |_, _, app| {
+                app.startup_panel_warm_scheduled = false;
+                if !app.panel_target {
+                    app.startup_panel_warm_started = true;
+                    prewarm(viewport, scale);
+                }
+                TimeoutAction::Drop
+            },
+        ) {
+            self.startup_panel_warm_scheduled = false;
+            self.fail(error);
+        }
+    }
     pub(super) fn prepare_panel(&mut self, output: Option<&str>) {
         self.prepare_named_panel(None, output, None);
     }
@@ -1041,6 +1076,7 @@ impl App {
         self.prewarm_attempted = false;
         self.notify_panel_owner(UiEvent::PanelDismissed);
         self.panel_target = false;
+        self.schedule_startup_panel_warm();
         self.edges_panel_changed(true);
         if self
             .options

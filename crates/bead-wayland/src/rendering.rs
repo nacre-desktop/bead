@@ -2386,6 +2386,12 @@ impl App {
             self.log_prepared_native_ready(index);
         }
         if result.is_ok()
+            && !self.surfaces[index].companion
+            && self.surfaces[index].frames > previous_frames
+        {
+            self.schedule_startup_panel_warm();
+        }
+        if result.is_ok()
             && self.surfaces[index].companion
             && self.surfaces[index].frames > previous_frames
         {

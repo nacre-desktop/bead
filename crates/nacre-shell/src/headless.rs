@@ -532,6 +532,7 @@ mod tests {
             let mut scene = harness.scene().clone();
             scene.opacity = 1.;
             let scale = 1.5;
+            scene.reveal(0.);
             // Match SceneSource::bake: the view worker prepares primitive
             // rasters before the compositor's first slide frame.
             let mut prepared = TreeCache::default();
@@ -540,9 +541,12 @@ mod tests {
                 scale.to_bits(),
                 prepared.frame.ok_or("benchmark scene frame missing")?,
             );
+            let startup_warm_bytes = TreeCpuRenderer::prewarm_content(&scene, scale)?;
             let (width, height) = (2880, 1800);
             let mut pixels = vec![0u8; width as usize * height as usize * 4];
             let mut renderer = TreeCpuRenderer::default();
+            scene.reveal(0.);
+            let warm_content_bytes = TreeCpuRenderer::prewarm_content(&scene, scale)?;
             let mut samples = Vec::with_capacity(100);
             let mut first_content_ms = 0.;
             for tick in 0..130 {
@@ -582,7 +586,7 @@ mod tests {
             }
             if std::env::var_os("BEAD_REVEAL_BYTES").is_some() {
                 println!(
-                    "PANEL_CONTENT_CACHE entry={entry} bytes={} reveal_preparations={} reveal_composites={} slide_preparations={} slide_composites={} svg_rasterizations={}",
+                    "PANEL_CONTENT_CACHE entry={entry} startup_warm_bytes={startup_warm_bytes} bytes={} reveal_preparations={} reveal_composites={} slide_preparations={} slide_composites={} svg_rasterizations={}",
                     renderer.reveal_content_bytes,
                     renderer.reveal_content_preparations,
                     renderer.reveal_content_composites,
@@ -593,7 +597,7 @@ mod tests {
             }
             samples.sort_by(f64::total_cmp);
             println!(
-                "PANEL_SLIDE_TICK entry={entry} output={width}x{height} scale={scale} first_content_wall_ms={first_content_ms:.4} cpu_p50_ms={:.4} cpu_p99_ms={:.4} samples={}",
+                "PANEL_SLIDE_TICK entry={entry} output={width}x{height} scale={scale} startup_warm_bytes={warm_content_bytes} first_content_wall_ms={first_content_ms:.4} cpu_p50_ms={:.4} cpu_p99_ms={:.4} samples={}",
                 samples[samples.len() / 2],
                 samples[(samples.len() * 99 / 100).min(samples.len() - 1)],
                 samples.len(),

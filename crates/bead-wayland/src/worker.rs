@@ -450,6 +450,11 @@ impl SceneSource for Source {
                 let mut accepted_resource_revision = None;
                 let mut presentation_motion = false;
                 let mut pending_refresh = DeferredRefresh::default();
+                // The first reload establishes the Luau store schema. A panel
+                // visibility update can arrive immediately after its opening
+                // frame starts, so bootstrap must bypass motion coalescing.
+                let mut initial_reload_accepted = false;
+                let mut initial_reload_token = None;
                 'actor: loop {
                     for job in receiver.try_iter() {
                         match job {
@@ -582,7 +587,13 @@ impl SceneSource for Source {
                         }
                         Job::Ack(_, _) => {}
                         Job::Stage(event, scales) | Job::ContentScroll(event, scales) => {
-                            if presentation_motion && pending_refresh.defer(&event) {
+                            let initial_reload = !initial_reload_accepted
+                                && initial_reload_token.is_none()
+                                && matches!(&event, UiEvent::Reload);
+                            if presentation_motion
+                                && !initial_reload
+                                && pending_refresh.defer(&event)
+                            {
                                 continue;
                             }
                             source.scales(scales.clone());
@@ -619,9 +630,15 @@ impl SceneSource for Source {
                             let _profile = bead_core::profile::Span::new("worker");
                             let started = std::time::Instant::now();
                             token += 1;
+                            if initial_reload {
+                                initial_reload_token = Some(token);
+                            }
                             let (mut scene, fault) = match source.stage(event) {
                                 Ok(Some(scene)) => (scene, None),
                                 Ok(None) => {
+                                    if initial_reload_token == Some(token) {
+                                        initial_reload_token = None;
+                                    }
                                     wakeup(UiEvent::Worker(Arc::new(Packet {
                                         phase: Phase::Settled,
                                         token,
@@ -729,6 +746,12 @@ impl SceneSource for Source {
                                                     source.commit();
                                                     accepted_resource_revision =
                                                         Some(resource_revision);
+                                                    if initial_reload_token == Some(id) {
+                                                        initial_reload_accepted = true;
+                                                    }
+                                                }
+                                                if initial_reload_token == Some(id) {
+                                                    initial_reload_token = None;
                                                 }
                                                 if look_change {
                                                     cache.drop_unused_since(baked_after);
@@ -753,6 +776,9 @@ impl SceneSource for Source {
                                                 })));
                                             }
                                             Err(error) => {
+                                                if initial_reload_token == Some(id) {
+                                                    initial_reload_token = None;
+                                                }
                                                 let mut overlay = source.error_scene(error.clone());
                                                 if bake(&mut cache, &mut overlay, &scales).is_ok() {
                                                     wakeup(UiEvent::Worker(Arc::new(Packet {
@@ -992,6 +1018,109 @@ mod tests {
             bounds: bead_render::Rect::new(0., 0., 16., 16.),
         }
     }
+    struct PanelBootstrap {
+        stores: bead_core::Stores,
+    }
+    impl SceneSource for PanelBootstrap {
+        fn watch(
+            &mut self,
+            _: Box<dyn Fn(Result<(), String>) + Send>,
+        ) -> Result<(), Box<dyn Error>> {
+            Ok(())
+        }
+        fn stage(&mut self, event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+            match event {
+                UiEvent::Reload => {
+                    self.stores = self
+                        .stores
+                        .reconcile(&BTreeMap::from([(
+                            "panel.open".into(),
+                            bead_core::Value::Bool(true),
+                        )]))
+                        .map_err(std::io::Error::other)?;
+                    Ok(Some(scene()))
+                }
+                UiEvent::PanelVisibility(open) => {
+                    self.stores
+                        .commit(BTreeMap::from([(
+                            "panel.open".into(),
+                            bead_core::Value::Bool(open),
+                        )]))
+                        .map_err(std::io::Error::other)?;
+                    Ok(Some(scene()))
+                }
+                _ => Ok(None),
+            }
+        }
+        fn validate(&self) -> Result<(), Box<dyn Error>> {
+            Ok(())
+        }
+        fn state_summary(&self) -> String {
+            String::new()
+        }
+        fn commit(&mut self) -> bool {
+            true
+        }
+        fn error_scene(&mut self, _: String) -> Scene {
+            scene()
+        }
+    }
+
+    fn accept_worker_scene(source: &mut Source, receiver: &mpsc::Receiver<UiEvent>) -> Scene {
+        let ready = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("worker prepares a panel scene");
+        let UiEvent::Worker(packet) = &ready else {
+            panic!("expected prepared worker packet, got {ready:?}")
+        };
+        assert!(
+            packet.error.is_none(),
+            "worker reported UI error: {:?}",
+            packet.error
+        );
+        assert!(matches!(packet.phase, Phase::Ready));
+        let prepared = source
+            .stage(ready)
+            .unwrap()
+            .expect("ready packet contains scene");
+        assert!(!prepared.primitives.is_empty());
+        assert!(!source.commit(), "first commit acknowledges worker scene");
+        let accepted = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("worker accepts panel scene");
+        source.stage(accepted).unwrap();
+        assert!(source.commit(), "accepted packet installs worker scene");
+        prepared
+    }
+
+    #[test]
+    fn opening_motion_never_defers_the_schema_reload_before_panel_open() {
+        let (sender, receiver) = mpsc::channel();
+        let mut source = Source::new(
+            Box::new(|| {
+                Ok(Box::new(PanelBootstrap {
+                    stores: Default::default(),
+                }))
+            }),
+            scene(),
+        );
+        source.services(Box::new(move |event| {
+            let _ = sender.send(event);
+        }));
+        source.presentation_motion(true);
+        source.stage(UiEvent::Reload).unwrap();
+        source.stage(UiEvent::PanelVisibility(true)).unwrap();
+
+        let opened = accept_worker_scene(&mut source, &receiver);
+        assert_eq!(opened.primitives.len(), 1);
+        let opened = accept_worker_scene(&mut source, &receiver);
+        assert_eq!(opened.primitives.len(), 1);
+
+        source.stage(UiEvent::PanelVisibility(false)).unwrap();
+        let closed = accept_worker_scene(&mut source, &receiver);
+        assert_eq!(closed.primitives.len(), 1);
+    }
+
     #[test]
     fn slide_defers_and_coalesces_model_refreshes_and_file_reload() {
         let mut pending = DeferredRefresh::default();

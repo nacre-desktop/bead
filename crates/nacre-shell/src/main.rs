@@ -28,6 +28,7 @@ mod nacre_source;
 mod notice_service;
 mod notice_views;
 mod notifications;
+mod panel_warm;
 mod pearls;
 mod placement;
 mod player_art;
@@ -344,6 +345,7 @@ fn start(
     if dashboard_fixtures.is_some() && !core_views {
         return Err("--dashboard-fixtures requires --core-views".into());
     }
+    let mut startup_panel_specs = Vec::new();
     if core_views {
         launcher_panel = true;
     }
@@ -1031,6 +1033,26 @@ fn start(
         // Drag guides are transient utility surfaces; keep their CPU renderer
         // even when benchmarking the content panels with GL.
         views.insert(pearls::GUIDE_VIEW.into(), pearls::guide_spec(&colors)?);
+        for name in [
+            "launcher",
+            "sound",
+            "calendar",
+            "session",
+            "network",
+            "bluetooth",
+            "battery",
+            "dashboard-today",
+            "control",
+            "wallpaper",
+        ] {
+            if let Some(spec) = views.get(name) {
+                startup_panel_specs.push((name.to_owned(), spec.clone()));
+            }
+        }
+        let prewarm_specs = startup_panel_specs.clone();
+        options.panel_prewarm = Some(std::sync::Arc::new(move |viewport, scale| {
+            panel_warm::start(prewarm_specs.clone(), viewport, scale);
+        }));
         options.panels = Some(bead::wayland::Panels::new("launcher".into(), views)?);
         // B0052: Settings and the AI sidebar are separate on-demand processes.
         if let Some(socket) = &options.command_socket {

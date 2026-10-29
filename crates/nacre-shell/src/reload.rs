@@ -10414,6 +10414,8 @@ mod scroll_runtime_tests;
 #[cfg(test)]
 mod session_menu_runtime_tests;
 #[cfg(test)]
+mod shell_route_smoke_tests;
+#[cfg(test)]
 mod widget_app_tests;
 #[cfg(test)]
 mod widget_drag_preview_tests;
