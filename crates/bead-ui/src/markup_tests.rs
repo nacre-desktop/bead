@@ -3833,3 +3833,34 @@ return ui.Column{id='root',ui.Text{id='b',text=tostring(pure.loads)}}"#,
     // A failed build may have left module state half-written: the next starts fresh.
     assert_eq!(build(&frontend, 4).unwrap(), ["1"]);
 }
+
+#[test]
+fn reloading_a_bundle_reuses_cached_bytecode() {
+    // B0202: a reopened panel builds a new generation; it must not compile its sources again.
+    let f = fixture();
+    let unique = format!("-- b0202 {:?}\n", f.0);
+    for file in [
+        "ui/main.luau",
+        "ui/behavior.luau",
+        "ui/components/card.luau",
+    ] {
+        let path = f.0.join(file);
+        let text = fs::read_to_string(&path).unwrap();
+        fs::write(&path, format!("{unique}{text}")).unwrap();
+    }
+    let load = || {
+        let before = crate::frontend::compiles();
+        let (generation, stores) =
+            Generation::load(&f.0, Path::new("ui/main.luau"), &Stores::default(), 1).unwrap();
+        generation
+            .materialize(
+                &stores,
+                &Palette::read(&f.0.join("palette.json")).unwrap(),
+                (400., 240.),
+            )
+            .unwrap();
+        crate::frontend::compiles() - before
+    };
+    assert_eq!(load(), 3, "first load compiles each source once");
+    assert_eq!(load(), 0, "a second generation reuses the bytecode");
+}

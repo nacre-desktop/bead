@@ -264,7 +264,17 @@ fn slide(open_scene: &Scene, opening: bool) -> Steps {
 #[ignore = "manual B0185 frame-cost benchmark; release build on a build host"]
 fn frame_cost_bench() {
     crate::i18n::init();
-    for (name, scene) in scenes() {
+    // B0202: building the routes again is what a panel reopen pays (new sessions).
+    let started = Instant::now();
+    drop(scenes());
+    let first = started.elapsed().as_secs_f64() * 1e3;
+    let started = Instant::now();
+    let scenes = scenes();
+    println!(
+        "B0202_SETUP first_ms={first:.2} again_ms={:.2}",
+        started.elapsed().as_secs_f64() * 1e3
+    );
+    for (name, scene) in scenes {
         for opening in [true, false] {
             let mut all = Steps::default();
             for _ in 0..RUNS {

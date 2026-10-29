@@ -84,6 +84,11 @@ pub struct Script {
 }
 impl Script {
     pub fn validate_source(bytes: &[u8], path: &Path) -> Result<(), Diagnostic> {
+        // B0202: valid source compiles; cached bytecode skips a VM per file. Errors keep the
+        // loader's message (chunk name and line).
+        if crate::frontend::bytecode(bytes).is_ok() {
+            return Ok(());
+        }
         let lua = Lua::new();
         lua.set_memory_limit(8 * 1024 * 1024)
             .map_err(|e| lua_error(path, e))?;
@@ -124,7 +129,11 @@ impl Script {
                 })?,
             )?;
             lua.sandbox(true)?;
-            lua.load(bytes).set_name(format!("@{name}")).eval()
+            // B0202: cached bytecode when it compiles; text otherwise, for the syntax message.
+            match crate::frontend::bytecode(bytes) {
+                Ok(code) => lua.load(&*code).set_name(format!("@{name}")).eval(),
+                Err(_) => lua.load(bytes).set_name(format!("@{name}")).eval(),
+            }
         })()
         .map_err(|e| lua_error(path, e))?;
         bead_core::profile::mark("vm_ready");
