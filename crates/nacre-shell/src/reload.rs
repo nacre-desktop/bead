@@ -3123,6 +3123,7 @@ impl Runtime {
         let quick = std::rc::Rc::new(quick);
         let projector = quick.clone();
         let initial = self.launcher_initial_projection.clone();
+        let root = self.session.root().to_path_buf();
         self.session.set_projector(Box::new(move |stores| {
             let mut changes = if initial.replace(false) {
                 menu.project_initial(stores, std::time::Duration::from_millis(20))?
@@ -3130,9 +3131,13 @@ impl Runtime {
                 menu.project(stores)?
             };
             changes.extend(projector.project(stores));
+            if let Some(bead::core::Value::Text(query)) = stores.get("launcher.search.text") {
+                changes.extend(crate::plugins::launcher_values(&root, query));
+            }
             Ok(changes)
         }));
         self.actions.register("launcher.quick", "launcher")?;
+        self.actions.register("plugins.do", "launcher")?;
         self.launcher_quick = Some(quick);
         Ok(self)
     }
@@ -6513,19 +6518,20 @@ impl SceneSource for Runtime {
         }
         if let Some((_, name, bead::core::Value::Text(argument))) = &host_action
             && name == "plugins.do"
-            && self.widget_app
+            && (self.widget_app || self.launcher_quick.is_some())
             && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
                 || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
         {
             self.actions.authorize(name)?;
-            let source = match self.session.stores.get("plugins.source") {
-                Some(bead::core::Value::Text(text)) => text.clone(),
-                _ => String::new(),
-            };
-            let changes = crate::plugins::act(self.session.root(), argument, &source);
+            let changes = crate::plugins::act(self.session.root(), argument);
+            self.session.stores.commit(changes)?;
+            if !self.widget_app {
+                // B0208 launcher `>plugin` mode: re-project its rows from the plugin state.
+                let scene = self.session.update(BTreeMap::new())?;
+                return self.finish_scene(scene);
+            }
             // Enable/disable/settings change the mounted plugins: rebuild from disk now; other
             // views follow through the watched plugin state file.
-            self.session.stores.commit(changes)?;
             let scene = self.session.reload()?;
             return self.finish_scene(Some(scene));
         }

@@ -136,8 +136,8 @@ fn edit_mode_clicks_inspect_the_placed_instance_instead_of_its_dropdown() {
             .session
             .view_nodes()
             .iter()
-            .filter(|node| node.contains(x, y) && node.action.is_some())
-            .last()
+            .rev()
+            .find(|node| node.contains(x, y) && node.action.is_some())
             .and_then(|node| node.action.clone())
     };
     assert_ne!(action_at(&normal, "clock").as_deref(), Some("widgets.edit"));

@@ -66,13 +66,18 @@ Builds on B0198/B0198b (drag-only placement, copies) and B0203 (plugins v1).
   in the test below. The live speed complaint still needs the lead's live check.
 - **Preview clock.** The page's previews (gallery cards, the copy's own cards, the stage) all
   render the clock; covered by a test with the owner-shaped layout.
-- **Plugins.** Decision: installing moves to the launcher; the Plugins page stays for listing,
-  enabling (with the declared access shown before enabling), settings and updates, because a
-  plugin's settings and access belong next to the widgets it adds. See "Open".
+- **Plugins.** Installing moves to the launcher: typing `>plugin <git URL or folder>` replaces
+  the results with the plugin mode (`shell/ui/components/plugins.luau`): Install, Check for
+  updates, and every plugin with its declared access, Enable/Disable and Update. The host's
+  `plugins.do` (`install|<source>`, `enable|id`, ...) and `plugins::launcher_values` (folders are
+  scanned only while the query has the prefix) do the work; user plugins still arrive disabled
+  and show their access before enabling, as in v1. The Plugins page stays for listing,
+  enabling, settings and updates (settings and access belong next to the widgets a plugin adds);
+  its source field and "Add" are gone, replaced by a pointer to the launcher.
 
 ## Removed
 The style-click-restyles-everything path, the Advanced toggle/section and its store/action,
-`form_state`/`config_for`, the stage's style/settings override in `render_bar`,
+`form_state`/`config_for`, the stage's style/settings override in `render_bar`, the Plugins page source field/`add` op and `plugins.source`,
 `default_preview_children`, the desktop magnet (`snap_distance`) and the ghost's magnet pass.
 
 ## Proof (`crates/nacre-shell/src/reload/widget_editor_tests.rs`)
@@ -88,8 +93,9 @@ The style-click-restyles-everything path, the Advanced toggle/section and its st
 - `the_gallery_pill_is_an_empty_container_and_there_is_no_advanced_section`.
 - `the_clock_page_shows_the_clock_in_its_previews_and_edits_one_copy`.
 - `widgets_app_scroll_moves_at_the_shared_wheel_distance`.
+- `plugins::tests::launcher_plugin_mode_installs_a_local_folder_and_lists_its_access`,
+  `launcher_plugin_mode_renders_install_and_the_declared_access`.
 
 ## Open
-- Launcher `>plugin` install mode: see the report for status.
 - Real-input captures on the desktop test host were not run in this unit (time box).
 - Memory: no new always-on state (a small transient grid in the drag overlay only).

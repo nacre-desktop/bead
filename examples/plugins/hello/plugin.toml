@@ -1,5 +1,5 @@
 # Example third-party Bead plugin (spec 0203). Copy this folder, change the id, and add it
-# from the Plugins page ("Git URL or absolute folder path"). It starts disabled.
+# from the launcher: type ">plugin" and the folder path or git URL. It starts disabled.
 id = "hello"
 name = "Hello"
 version = "0.1.0"
