@@ -220,6 +220,19 @@ fn placement_monitor<'a>(
         .or_else(|| monitors.first())
 }
 
+/// B0200: a prepared native target can only move by `wl_surface.offset` within
+/// the output it was mapped on. A target on another output (the compositor
+/// opens new windows on its active output) would show the pearl there.
+fn same_output(anchor: pearl::Rect, rect: pearl::Rect, monitors: &[Monitor]) -> bool {
+    let of = |r: pearl::Rect| {
+        monitors
+            .iter()
+            .find(|monitor| monitor.rect.contains(r.centre()))
+            .map(|monitor| monitor.name.as_str())
+    };
+    of(anchor).is_some() && of(anchor) == of(rect)
+}
+
 /// The resident-panel state, as one movable unit.
 pub(crate) struct Group {
     runtime: Option<Box<dyn SceneSource>>,
@@ -709,9 +722,9 @@ impl App {
     }
     /// With the slot swapped in: reposition, hand focus to click, tell the view.
     fn become_pearl(&mut self, native: bool) {
-        if let Err(error) = self.set_dismiss_enabled(false) {
-            eprintln!("PEARL_DISMISS_ERROR {error}");
-        }
+        // B0200: a pearl has no outside-dismiss catcher; destroy (unmap) its
+        // full-output layer rather than leaving it mapped. Docking recreates it.
+        drop(self.dismiss.take());
         self.panel_ui(UiEvent::PanelDetached(true));
         if self.native_pearls_enabled() {
             if native {
@@ -1669,6 +1682,7 @@ impl App {
             .filter(|(_, surface)| surface.companion)
             .map(|(index, _)| index)
             .collect();
+        let monitors = self.monitors();
         if expected_id.is_none()
             || indices.is_empty()
             || indices.iter().any(|&i| {
@@ -1676,7 +1690,9 @@ impl App {
                 let Some(prepared) = surface.prepared_native.as_ref() else {
                     return true;
                 };
-                if Some(prepared.id) != expected_id {
+                if Some(prepared.id) != expected_id
+                    || !same_output(prepared.anchor, rect, &monitors)
+                {
                     return true;
                 }
                 #[cfg(feature = "native-gl")]
@@ -2753,6 +2769,33 @@ mod placement_tests {
             "B"
         );
         assert!(placement_monitor(stale, Some("B"), &[]).is_none());
+    }
+
+    #[test]
+    fn a_prepared_target_on_another_output_is_not_admitted() {
+        let monitors = [
+            Monitor {
+                name: "eDP-1".into(),
+                rect: pearl::Rect::new(0., 0., 1920., 1200.),
+                frame: Default::default(),
+            },
+            Monitor {
+                name: "DP-1".into(),
+                rect: pearl::Rect::new(1920., 0., 3440., 1440.),
+                frame: Default::default(),
+            },
+        ];
+        // The compositor's bootstrap pose on the active (left) output.
+        let left = pearl::Rect::new(10., 50., 1100., 590.);
+        let on_right = pearl::Rect::new(3000., 300., 1100., 590.);
+        assert!(!same_output(left, on_right, &monitors));
+        // Placed on the panel's own output first: a release there is admitted.
+        let placed = pearl::Rect::new(3090., 40., 1100., 590.);
+        assert!(same_output(placed, on_right, &monitors));
+        // An unknown pose is never trusted.
+        let lost = pearl::Rect::new(-9000., -9000., 10., 10.);
+        assert!(!same_output(lost, on_right, &monitors));
+        assert!(!same_output(placed, on_right, &[]));
     }
 
     #[test]

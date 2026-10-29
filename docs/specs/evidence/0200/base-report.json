@@ -1,0 +1,1101 @@
+{
+ "method": "full-output grim -s 0.5 frames every 25 ms, niri default animations, owner rounded-window rule",
+ "renderer": "cpu",
+ "views": [
+  {
+   "view": "launcher",
+   "docked_state": {
+    "view": "launcher",
+    "origin": [
+     378,
+     568
+    ],
+    "content_frame": [
+     0.0,
+     0.0,
+     1100.0,
+     590.0
+    ],
+    "edge": "bottom",
+    "size": [
+     1164,
+     632
+    ]
+   },
+   "docked_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-panel-dismiss",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     }
+    ]
+   },
+   "pointer": {
+    "rc": 0,
+    "stdout": "02887674901 x=1607 y=1489\nPOINTER_SENT monotonic_ns=56502891665418 x=1608 y=1488\nPOINTER_SENT monotonic_ns=56502895648811 x=1609 y=1486\nPOINTER_SENT monotonic_ns=56502899639329 x=1610 y=1485\nPOINTER_SENT monotonic_ns=56502903626284 x=1611 y=1483\nPOINTER_SENT monotonic_ns=56502907615613 x=1612 y=1482\nPOINTER_SENT monotonic_ns=56502911604943 x=1614 y=1481\nPOINTER_RELEASE monotonic_ns=56502911610880\n",
+    "stderr": "",
+    "start_px": [
+     1434,
+     1721
+    ],
+    "end_px": [
+     1614,
+     1481
+    ]
+   },
+   "detach_stamps_ms": [
+    0,
+    100,
+    200,
+    300,
+    400,
+    501,
+    601,
+    701,
+    801,
+    901,
+    1001,
+    1101,
+    1201,
+    1301,
+    1401,
+    1501,
+    1601,
+    1701,
+    1802,
+    1902,
+    2002,
+    2102,
+    2202,
+    2302,
+    2402,
+    2502,
+    2602,
+    2702,
+    2802,
+    2903
+   ],
+   "pearls": [
+    {
+     "id": 1,
+     "output": "winit",
+     "rect": [
+      530.0,
+      440.0,
+      1100.0,
+      590.0
+     ],
+     "view": "launcher"
+    }
+   ],
+   "detached_compositor": {
+    "windows": [
+     {
+      "id": 2,
+      "title": "Nacre Pearl Launcher 1",
+      "app_id": "bead.pearl",
+      "is_floating": true,
+      "layout": {
+       "pos_in_scrolling_layout": null,
+       "tile_size": [
+        1100.0,
+        590.0
+       ],
+       "window_size": [
+        1100,
+        590
+       ],
+       "tile_pos_in_workspace_view": [
+        530.0,
+        440.0
+       ],
+       "window_offset_in_tile": [
+        0.0,
+        0.0
+       ]
+      }
+     }
+    ],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-panel-dismiss",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Background"
+     }
+    ]
+   },
+   "detached_surface_delta": {
+    "added": [
+     "105:layer:bead-panel-dismiss",
+     "81:xdg"
+    ],
+    "removed": []
+   },
+   "only_new_window_mapped": false,
+   "detach_max_stray_px": 461,
+   "dock_stamps_ms": [
+    0,
+    100,
+    200,
+    300,
+    400,
+    501,
+    601,
+    701,
+    801,
+    901,
+    1001,
+    1101,
+    1201,
+    1301,
+    1401,
+    1501,
+    1601,
+    1702,
+    1802,
+    1902
+   ],
+   "docked_again_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-panel-dismiss",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     }
+    ]
+   },
+   "pearls_after_dock": [],
+   "docked_again_surface_delta": {
+    "added": [
+     "144:layer:bead-panel-dismiss",
+     "167:layer:bead-dev"
+    ],
+    "removed": []
+   },
+   "closed_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Background"
+     }
+    ]
+   },
+   "closed_surface_delta": {
+    "added": [],
+    "removed": []
+   },
+   "clean_after_close": true,
+   "release_seen": true
+  },
+  {
+   "view": "dashboard",
+   "docked_state": {
+    "view": "dashboard-today",
+    "origin": [
+     436,
+     18
+    ],
+    "content_frame": [
+     0.0,
+     0.0,
+     984.0,
+     650.0
+    ],
+    "edge": "top",
+    "size": [
+     1048,
+     714
+    ]
+   },
+   "docked_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-panel-dismiss",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     }
+    ]
+   },
+   "pointer": {
+    "rc": 0,
+    "stdout": "_ns=56515056339308 x=1437 y=357\nPOINTER_SENT monotonic_ns=56515060328638 x=1438 y=358\nPOINTER_SENT monotonic_ns=56515064322717 x=1439 y=360\nPOINTER_SENT monotonic_ns=56515068314421 x=1440 y=361\nPOINTER_SENT monotonic_ns=56515072290691 x=1441 y=363\nPOINTER_SENT monotonic_ns=56515076290706 x=1442 y=364\nPOINTER_SENT monotonic_ns=56515080275287 x=1444 y=366\nPOINTER_RELEASE monotonic_ns=56515080280036\n",
+    "stderr": "",
+    "start_px": [
+     1264,
+     126
+    ],
+    "end_px": [
+     1444,
+     366
+    ]
+   },
+   "detach_stamps_ms": [
+    0,
+    100,
+    200,
+    300,
+    400,
+    500,
+    601,
+    701,
+    801,
+    901,
+    1001,
+    1101,
+    1201,
+    1301,
+    1401,
+    1501,
+    1601,
+    1701,
+    1801,
+    1901,
+    2002,
+    2102,
+    2202,
+    2302,
+    2402,
+    2502,
+    2602,
+    2702,
+    2802,
+    2902
+   ],
+   "pearls": [
+    {
+     "id": 3,
+     "output": "winit",
+     "rect": [
+      588.0,
+      210.0,
+      984.0,
+      650.0
+     ],
+     "view": "dashboard-today"
+    }
+   ],
+   "detached_compositor": {
+    "windows": [
+     {
+      "id": 3,
+      "title": "Nacre Pearl Dashboard 3",
+      "app_id": "bead.pearl",
+      "is_floating": true,
+      "layout": {
+       "pos_in_scrolling_layout": null,
+       "tile_size": [
+        984.0,
+        650.0
+       ],
+       "window_size": [
+        984,
+        650
+       ],
+       "tile_pos_in_workspace_view": [
+        588.0,
+        210.0
+       ],
+       "window_offset_in_tile": [
+        0.0,
+        0.0
+       ]
+      }
+     }
+    ],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-panel-dismiss",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Background"
+     }
+    ]
+   },
+   "detached_surface_delta": {
+    "added": [
+     "128:layer:bead-panel-dismiss",
+     "148:xdg"
+    ],
+    "removed": []
+   },
+   "only_new_window_mapped": false,
+   "detach_max_stray_px": 392,
+   "dock_stamps_ms": [
+    0,
+    100,
+    200,
+    300,
+    401,
+    501,
+    601,
+    701,
+    801,
+    902,
+    1002,
+    1102,
+    1202,
+    1302,
+    1402,
+    1502,
+    1602,
+    1702,
+    1802,
+    1902
+   ],
+   "docked_again_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-panel-dismiss",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     }
+    ]
+   },
+   "pearls_after_dock": [],
+   "docked_again_surface_delta": {
+    "added": [
+     "105:layer:bead-dev",
+     "109:layer:bead-panel-dismiss"
+    ],
+    "removed": []
+   },
+   "closed_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Background"
+     }
+    ]
+   },
+   "closed_surface_delta": {
+    "added": [],
+    "removed": []
+   },
+   "clean_after_close": true,
+   "release_seen": true
+  },
+  {
+   "view": "control",
+   "docked_state": {
+    "view": "control",
+    "origin": [
+     1454,
+     18
+    ],
+    "content_frame": [
+     0.0,
+     0.0,
+     424.0,
+     1140.0
+    ],
+    "edge": "right",
+    "size": [
+     466,
+     1182
+    ]
+   },
+   "docked_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-panel-dismiss",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     }
+    ]
+   },
+   "pointer": {
+    "rc": 0,
+    "stdout": "27242382239 x=2373 y=1208\nPOINTER_SENT monotonic_ns=56527246369194 x=2372 y=1208\nPOINTER_SENT monotonic_ns=56527250357337 x=2371 y=1208\nPOINTER_SENT monotonic_ns=56527254345479 x=2370 y=1208\nPOINTER_SENT monotonic_ns=56527258333622 x=2369 y=1208\nPOINTER_SENT monotonic_ns=56527262320577 x=2368 y=1208\nPOINTER_SENT monotonic_ns=56527266307532 x=2367 y=1209\nPOINTER_RELEASE monotonic_ns=56527266312281\n",
+    "stderr": "",
+    "start_px": [
+     2547,
+     1194
+    ],
+    "end_px": [
+     2367,
+     1209
+    ]
+   },
+   "detach_stamps_ms": [
+    0,
+    100,
+    200,
+    300,
+    401,
+    501,
+    601,
+    701,
+    801,
+    901,
+    1001,
+    1101,
+    1201,
+    1301,
+    1401,
+    1501,
+    1601,
+    1701,
+    1802,
+    1902,
+    2002,
+    2102,
+    2202,
+    2302,
+    2402,
+    2502,
+    2602,
+    2702,
+    2802,
+    2902
+   ],
+   "pearls": [
+    {
+     "id": 5,
+     "output": "winit",
+     "rect": [
+      1366.0,
+      60.0,
+      424.0,
+      1140.0
+     ],
+     "view": "control"
+    }
+   ],
+   "detached_compositor": {
+    "windows": [
+     {
+      "id": 5,
+      "title": "Nacre Pearl Controls 5",
+      "app_id": "bead.pearl",
+      "is_floating": true,
+      "layout": {
+       "pos_in_scrolling_layout": null,
+       "tile_size": [
+        424.0,
+        1140.0
+       ],
+       "window_size": [
+        424,
+        1140
+       ],
+       "tile_pos_in_workspace_view": [
+        1366.0,
+        60.0
+       ],
+       "window_offset_in_tile": [
+        0.0,
+        0.0
+       ]
+      }
+     }
+    ],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-panel-dismiss",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Background"
+     }
+    ]
+   },
+   "detached_surface_delta": {
+    "added": [
+     "81:xdg",
+     "83:layer:bead-panel-dismiss"
+    ],
+    "removed": []
+   },
+   "only_new_window_mapped": false,
+   "detach_max_stray_px": 392,
+   "dock_stamps_ms": [
+    0,
+    100,
+    200,
+    300,
+    401,
+    501,
+    601,
+    701,
+    801,
+    901,
+    1001,
+    1101,
+    1201,
+    1301,
+    1401,
+    1501,
+    1602,
+    1702,
+    1802,
+    1902
+   ],
+   "docked_again_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-panel-dismiss",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     }
+    ]
+   },
+   "pearls_after_dock": [],
+   "docked_again_surface_delta": {
+    "added": [
+     "162:layer:bead-dev",
+     "95:layer:bead-panel-dismiss"
+    ],
+    "removed": []
+   },
+   "closed_compositor": {
+    "windows": [],
+    "layers": [
+     {
+      "namespace": "wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-wallpaper",
+      "output": "winit",
+      "layer": "Background"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev-edge",
+      "output": "winit",
+      "layer": "Top"
+     },
+     {
+      "namespace": "bead-dev",
+      "output": "winit",
+      "layer": "Background"
+     }
+    ]
+   },
+   "closed_surface_delta": {
+    "added": [],
+    "removed": []
+   },
+   "clean_after_close": true,
+   "release_seen": true
+  }
+ ]
+}
