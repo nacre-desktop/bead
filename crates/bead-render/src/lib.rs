@@ -431,6 +431,42 @@ pub struct Scene {
     pub bounds: Rect,
 }
 impl Scene {
+    /// Pose a panel motion. Revealing panels grow from their dock while opening;
+    /// closing moves the complete scene as one unit so content cannot escape the
+    /// shrinking body at the final edge.
+    pub fn panel_offset(&mut self, progress: f32, opening: bool) -> (f32, f32) {
+        let Some((edge, reveal, distance, width, height)) = self.motion.as_ref().map(|motion| {
+            (
+                motion.edge,
+                motion.reveal,
+                motion.slide_distance,
+                self.bounds.w,
+                self.bounds.h,
+            )
+        }) else {
+            return (0., 0.);
+        };
+        if let Some(motion) = &mut self.motion {
+            motion.open = opening;
+        }
+        if reveal && opening {
+            self.reveal(progress);
+            (0., 0.)
+        } else {
+            if reveal {
+                self.reveal(1.);
+                if let Some(motion) = &mut self.motion {
+                    motion.progress = progress;
+                }
+            }
+            edge.closed_offset(
+                distance.unwrap_or(width),
+                distance.unwrap_or(height),
+                progress,
+            )
+        }
+    }
+
     /// Remove resources while preserving primitive-indexed clips, layers and reveal metadata.
     pub fn retain_primitives(&mut self, mut keep: impl FnMut(&Primitive) -> bool) {
         let Some(first_removed) = self
@@ -511,7 +547,7 @@ impl Scene {
     fn content_offset(&self, index: usize) -> (f32, f32) {
         self.motion
             .as_ref()
-            .filter(|m| m.reveal && !m.parts.iter().any(|(i, _)| *i == index))
+            .filter(|m| m.reveal && m.open && !m.parts.iter().any(|(i, _)| *i == index))
             .and_then(|m| {
                 m.slide_distance
                     .map(|distance| m.edge.closed_offset(distance, distance, m.progress))
@@ -704,7 +740,7 @@ impl Scene {
         let m = self
             .motion
             .as_ref()
-            .filter(|m| m.reveal && m.progress < 1.)?;
+            .filter(|m| m.reveal && m.open && m.progress < 1.)?;
         let body = self.reveal_body()?;
         let p = m.progress.clamp(0., 1.);
         const M: f32 = 4096.;
@@ -2881,6 +2917,109 @@ mod tests {
         }
         assert_eq!(serde_json::to_vec(&scene.primitives)?, original);
         Ok(())
+    }
+
+    #[test]
+    fn revealing_panel_close_moves_every_part_as_one_scene_at_120_hz() {
+        let body = Rect::new(32., 32., 300., 200.);
+        let mut scene = Scene {
+            opacity: 1.,
+            motion: Some(Motion {
+                id: "close-ghost".into(),
+                open: true,
+                duration: 0.3,
+                return_duration: None,
+                return_curve: None,
+                spring: false,
+                curve: None,
+                edge: bead_core::Edge::Bottom,
+                slide_distance: Some(200.),
+                fade: false,
+                reveal: true,
+                progress: 1.,
+                parts: Vec::new(),
+                art: None,
+            }),
+            resource_revision: 0,
+            asset_data: Default::default(),
+            clips: Default::default(),
+            layers: Vec::new(),
+            prepared: Default::default(),
+            font_files: Vec::new(),
+            width: 364.,
+            slide: None,
+            primitives: vec![
+                Primitive::Rounded {
+                    rect: body,
+                    radius: 12.,
+                    fill: [1, 2, 3, 255],
+                    border: None,
+                },
+                Primitive::Text {
+                    rect: Rect::new(48., 48., 120., 24.),
+                    text: "header".into(),
+                    family: "IBM Plex Sans".into(),
+                    size: 14.,
+                    weight: 400,
+                    align: None,
+                    color: [255; 4],
+                    shadow: None,
+                },
+                Primitive::Rounded {
+                    rect: Rect::new(32., 40., 4., 180.),
+                    radius: 2.,
+                    fill: [4, 5, 6, 255],
+                    border: None,
+                },
+                Primitive::Arc {
+                    rect: Rect::new(270., 48., 20., 20.),
+                    start_angle: 0.,
+                    sweep_angle: 180.,
+                    stroke_width: 2.,
+                    color: [7, 8, 9, 255],
+                    round_caps: false,
+                },
+            ],
+            offset: (0., 0.),
+            bounds: Rect::new(0., 0., 364., 264.),
+        };
+        let original = scene.primitives.clone();
+        for frame in 0..=36 {
+            let elapsed = frame as f32 / 120.;
+            let progress = (1. - elapsed / 0.3).clamp(0., 1.);
+            let (dx, dy) = scene.panel_offset(progress, false);
+            scene.offset = (32. + dx, 32. + dy);
+            assert!(
+                scene.reveal_window().is_none(),
+                "close has no shrinking clip"
+            );
+            assert!(
+                scene.primitives.iter().zip(&original).all(|(a, b)| {
+                    match (a, b) {
+                        (
+                            Primitive::Rounded { rect: a, .. },
+                            Primitive::Rounded { rect: b, .. },
+                        ) => a == b,
+                        _ => true,
+                    }
+                }),
+                "body and lips retain their complete open geometry"
+            );
+            // Every primitive, including header, lips and contour, receives the
+            // same host scene translation at this sampled pose.
+            assert!(scene.primitives.iter().zip(&original).all(|(posed, base)| {
+                let posed = tree::rect(posed);
+                let base = tree::rect(base);
+                ((posed.x + scene.offset.0) - (base.x + 32. + dx)).abs() < 0.01
+                    && ((posed.y + scene.offset.1) - (base.y + 32. + dy)).abs() < 0.01
+            }));
+            if frame == 36 {
+                assert_eq!(progress, 0.);
+                assert_eq!(scene.motion.as_ref().unwrap().opacity(progress), 0.);
+            } else {
+                assert!(scene.motion.as_ref().unwrap().opacity(progress) > 0.);
+            }
+        }
     }
     fn font_pool_scene() -> Scene {
         let font = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
