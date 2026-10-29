@@ -42,6 +42,21 @@ pub(super) struct Overlay {
     cursor_serial: u32,
     last_draw: Option<Instant>,
     timer: bool,
+    /// B0192: first-frame phase stamps, logged once as `OVERLAY_FIRST_FRAME`.
+    phases: Phases,
+}
+/// Milliseconds since `open_overlay` began, per first-frame phase.
+struct Phases {
+    began: Instant,
+    created: f64,
+    scene: Option<f64>,
+    configure: Option<f64>,
+    logged: bool,
+}
+impl Phases {
+    fn ms(&self) -> f64 {
+        self.began.elapsed().as_secs_f64() * 1000.
+    }
 }
 impl Overlay {
     pub(super) fn output_mode_changed(&mut self, output: &wl_output::WlOutput, interval: Duration) {
@@ -201,6 +216,7 @@ impl App {
         }
     }
     fn open_overlay(&mut self, view: &str, output: Option<&str>) -> Result<(), String> {
+        let began = Instant::now();
         let layer_kind = self
             .options
             .overlays
@@ -285,10 +301,21 @@ impl App {
         // the 16 ms default every other slot already overrides.
         source.frame_interval(self.output_frame_interval(&output));
         let renderer = bead_render::renderer(RendererKind::Cpu).map_err(|e| e.to_string())?;
-        let scale120 = self
-            .output
-            .info(&output)
-            .map_or(120, |i| i.scale_factor.max(1) as u32 * 120);
+        // B0192: start at the scale the output's own surfaces already use. The integer wl_output factor
+        // (2 at 1.5x) made the first prepare raster everything at the wrong scale (shadow template 30 ms)
+        // before the fractional-scale event corrected it.
+        let scale120 = if fractional.is_some()
+            && let Some(known) = self
+                .surfaces
+                .iter()
+                .find(|s| s.output == output && s.fractional.is_some())
+        {
+            known.scale120
+        } else {
+            self.output
+                .info(&output)
+                .map_or(120, |i| i.scale_factor.max(1) as u32 * 120)
+        };
         self.overlay = Some(Overlay {
             name: view.to_owned(),
             epoch,
@@ -320,6 +347,13 @@ impl App {
             cursor_serial: 0,
             last_draw: None,
             timer: false,
+            phases: Phases {
+                began,
+                created: began.elapsed().as_secs_f64() * 1000.,
+                scene: None,
+                configure: None,
+                logged: false,
+            },
         });
         if let Some(palette) = self.wallpaper_palette.clone() {
             self.overlay_ui(UiEvent::WallpaperPalette(palette));
@@ -438,6 +472,9 @@ impl App {
             size
         };
         o.configured = true;
+        if o.phases.configure.is_none() {
+            o.phases.configure = Some(o.phases.ms());
+        }
         if let Some(v) = &o.viewport {
             v.set_destination(o.size.0 as i32, o.size.1 as i32);
         }
@@ -479,6 +516,9 @@ impl App {
         };
         o.scene = scene;
         o.ui_serial = o.ui_serial.wrapping_add(1);
+        if o.phases.scene.is_none() {
+            o.phases.scene = Some(o.phases.ms());
+        }
         if self.options.trace_state {
             bead_core::vprintln!(
                 "WINDOW_STATE monotonic_ns={} epoch={} update={} generation={} kind=overlay state={}",
@@ -726,6 +766,18 @@ impl App {
         }
         o.damage.committed(slot, o.ui_serial);
         o.last_draw = Some(frame_started);
+        if !o.phases.logged && o.phases.scene.is_some() {
+            o.phases.logged = true;
+            eprintln!(
+                "OVERLAY_FIRST_FRAME view={} create_ms={:.1} scene_ms={:.1} configure_ms={:.1} commit_ms={:.1} render_ms={:.1}",
+                o.name,
+                o.phases.created,
+                o.phases.scene.unwrap_or(-1.),
+                o.phases.configure.unwrap_or(-1.),
+                o.phases.ms(),
+                frame_started.elapsed().as_secs_f64() * 1000.
+            );
+        }
         if bead_core::profile::frame_trace() {
             println!(
                 "WINDOW_FRAME monotonic_ns={} epoch={} update={} generation={} kind=overlay render_ms={:.3} damage={},{},{},{}",
