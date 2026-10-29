@@ -6,13 +6,15 @@ pub fn spawn_background<T: Send + 'static>(
     name: &str,
     work: impl FnOnce() -> T + Send + 'static,
 ) -> std::io::Result<std::thread::JoinHandle<T>> {
-    std::thread::Builder::new().name(name.into()).spawn(move || {
-        #[cfg(target_os = "linux")]
-        // SAFETY: setpriority on the calling thread's own id has no memory preconditions;
-        // failure only keeps the default priority.
-        unsafe {
-            libc::setpriority(libc::PRIO_PROCESS, libc::gettid() as libc::id_t, 10);
-        }
-        work()
-    })
+    std::thread::Builder::new()
+        .name(name.into())
+        .spawn(move || {
+            #[cfg(target_os = "linux")]
+            // SAFETY: setpriority on the calling thread's own id has no memory preconditions;
+            // failure only keeps the default priority.
+            unsafe {
+                libc::setpriority(libc::PRIO_PROCESS, libc::gettid() as libc::id_t, 10);
+            }
+            work()
+        })
 }
