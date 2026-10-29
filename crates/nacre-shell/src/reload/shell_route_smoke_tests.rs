@@ -261,28 +261,6 @@ fn real_shell_panel_routes_open_and_close_with_prepared_scenes() {
                 let warm_bytes = bead::render::tree::TreeCpuRenderer::prewarm_content(&scene, 1.5)
                     .unwrap_or_else(|error| panic!("{name}: CPU content prewarm failed: {error}"));
                 eprintln!("PANEL_SMOKE_WARM route={name} bytes={warm_bytes}");
-                if warm_bytes == 0 {
-                    eprintln!(
-                        "PANEL_SMOKE_WARM_SKIP route={name} motion={:?} primitives={} bounds={:?}",
-                        scene.motion.as_ref().map(|motion| (
-                            motion.reveal,
-                            motion.open,
-                            motion.parts.len()
-                        )),
-                        scene.primitives.len(),
-                        scene.bounds
-                    );
-                    if name == "sound-core" {
-                        eprintln!(
-                            "PANEL_SMOKE_WARM_PARTS {:?}",
-                            scene.motion.as_ref().map(|motion| motion
-                                .parts
-                                .iter()
-                                .map(|(index, _)| *index)
-                                .collect::<Vec<_>>())
-                        );
-                    }
-                }
                 if warm_bytes > 0 {
                     let (hits_before, _, _) = bead::render::tree::cpu_content_warm_cache_stats();
                     let mut renderer = bead::render::renderer(bead::render::RendererKind::Cpu)

@@ -585,10 +585,17 @@ fn reveal_parts_prefix(scene: &Scene) -> Option<usize> {
         .collect::<BTreeSet<_>>();
     let last = *indices.iter().next_back()?;
     let prefix = last.checked_add(1)?;
-    // Preserve painter order when a scene has static primitives between the
-    // canvas start and its first moving contour: keep that leading run in the
-    // changing frame and cache only the suffix.
-    (prefix <= scene.primitives.len()).then_some(prefix)
+    let contiguous = indices.len() == prefix && indices.iter().copied().eq(0..prefix);
+    // Static shadows/backgrounds may precede a moving body contour. Keep them
+    // in the changing frame so suffix flattening preserves painter order.
+    let shadow_gap = (0..prefix).all(|index| {
+        indices.contains(&index)
+            || matches!(
+                scene.primitives.get(index),
+                Some(Primitive::Shadow { .. } | Primitive::Rounded { .. })
+            )
+    });
+    (prefix <= scene.primitives.len() && (contiguous || shadow_gap)).then_some(prefix)
 }
 
 fn reveal_content_scene(scene: &Scene, prefix: usize) -> Scene {
@@ -3723,29 +3730,31 @@ impl Renderer for TreeCpuRenderer {
         Ok(false)
     }
     fn prepare_on_ui(&mut self, scene: &Scene, scale: f32) -> Result<()> {
-        if scene.motion.as_ref().is_some_and(|motion| !motion.reveal) {
-            return self.prepare_slide_content(scene, scale);
-        }
-        self.slide_content = false;
-        if let Some(prefix) = reveal_parts_prefix(scene) {
-            let native_images = scene
-                .prepared
-                .get(&scale.to_bits())
-                .is_some_and(|frame| frame.items.iter().any(|item| item.image.is_some()));
-            if native_images {
-                let content = reveal_content_scene(scene, prefix);
-                self.cache
-                    .prepare(&reveal_parts_scene(scene, prefix), scale)?;
-                if self.take_warmed_content(&content, scale)? {
-                    self.worker_fingerprint = Some(SnapshotFingerprint::new(&content, scale)?);
-                    self.reveal_content = true;
-                    self.reveal_content_preparations =
-                        self.reveal_content_preparations.saturating_add(1);
-                    self.opaque_composition = OpaqueComposition::Cached;
-                    return Ok(());
+        if self.opaque_composition != OpaqueComposition::Direct {
+            if scene.motion.as_ref().is_some_and(|motion| !motion.reveal) {
+                return self.prepare_slide_content(scene, scale);
+            }
+            self.slide_content = false;
+            if let Some(prefix) = reveal_parts_prefix(scene) {
+                let native_images = scene
+                    .prepared
+                    .get(&scale.to_bits())
+                    .is_some_and(|frame| frame.items.iter().any(|item| item.image.is_some()));
+                if native_images {
+                    let content = reveal_content_scene(scene, prefix);
+                    self.cache
+                        .prepare(&reveal_parts_scene(scene, prefix), scale)?;
+                    if self.take_warmed_content(&content, scale)? {
+                        self.worker_fingerprint = Some(SnapshotFingerprint::new(&content, scale)?);
+                        self.reveal_content = true;
+                        self.reveal_content_preparations =
+                            self.reveal_content_preparations.saturating_add(1);
+                        self.opaque_composition = OpaqueComposition::Cached;
+                        return Ok(());
+                    }
+                } else {
+                    return self.prepare_reveal_content(scene, scale, prefix);
                 }
-            } else {
-                return self.prepare_reveal_content(scene, scale, prefix);
             }
         }
         self.reveal_content = false;
@@ -4471,11 +4480,10 @@ mod tests {
             border: None,
         };
         scene.primitives = vec![
-            Primitive::Rounded {
-                rect: Rect::new(2., 2., 4., 4.),
-                radius: 2.,
-                fill: [80, 120, 220, 255],
-                border: None,
+            Primitive::Shadow {
+                rect: Rect::new(-2., -2., 28., 24.),
+                radius: 10.,
+                blur: 4.,
             },
             contour.clone(),
             Primitive::Rounded {
