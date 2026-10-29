@@ -1,0 +1,1200 @@
+{
+ "source": "nacre origin/main a73934c4 nacre/shell-tools/launcher-menu.json (catalogue rows) plus one row per nacre-menu provider operation (crates/nacre-menu/src)",
+ "catalogue": [
+  {
+   "id": "actions.capture.area",
+   "kind": "action",
+   "name": "Screenshot area",
+   "operation": "tool",
+   "disabled": false,
+   "value": "capture-area"
+  },
+  {
+   "id": "actions.capture.screen",
+   "kind": "action",
+   "name": "Screenshot screen",
+   "operation": "tool",
+   "disabled": false,
+   "value": "capture-screen"
+  },
+  {
+   "id": "actions.capture.window",
+   "kind": "action",
+   "name": "Screenshot window",
+   "operation": "tool",
+   "disabled": false,
+   "value": "capture-window"
+  },
+  {
+   "id": "actions.capture.record",
+   "kind": "action",
+   "name": "Record an area",
+   "operation": "tool",
+   "disabled": false,
+   "value": "record-start"
+  },
+  {
+   "id": "actions.capture.record-screen",
+   "kind": "action",
+   "name": "Record screen",
+   "operation": "tool",
+   "disabled": false,
+   "value": "record-screen"
+  },
+  {
+   "id": "actions.capture.stop",
+   "kind": "action",
+   "name": "Stop recording",
+   "operation": "tool",
+   "disabled": false,
+   "value": "record-stop"
+  },
+  {
+   "id": "actions.capture.text",
+   "kind": "action",
+   "name": "Read text from screen",
+   "operation": "tool",
+   "disabled": false,
+   "value": "capture-text"
+  },
+  {
+   "id": "actions.capture.qr",
+   "kind": "action",
+   "name": "Read a QR code",
+   "operation": "tool",
+   "disabled": false,
+   "value": "capture-qr"
+  },
+  {
+   "id": "actions.capture.color",
+   "kind": "action",
+   "name": "Pick a screen color",
+   "operation": "tool",
+   "disabled": false,
+   "value": "color-picker"
+  },
+  {
+   "id": "actions.calculator",
+   "kind": "action",
+   "name": "Calculator",
+   "operation": "calculator",
+   "disabled": false,
+   "value": ""
+  },
+  {
+   "id": "actions.reminders.new",
+   "kind": "action",
+   "name": "Set a reminder",
+   "operation": "form",
+   "disabled": false,
+   "value": "reminder"
+  },
+  {
+   "id": "actions.reminders.focus",
+   "kind": "action",
+   "name": "Focus for 25 minutes",
+   "operation": "tool",
+   "disabled": false,
+   "value": "focus-timer"
+  },
+  {
+   "id": "actions.assistant.ai",
+   "kind": "action",
+   "name": "Nacre AI",
+   "operation": "legacy",
+   "disabled": false,
+   "value": "tasks"
+  },
+  {
+   "id": "actions.assistant.new",
+   "kind": "action",
+   "name": "Nacre AI: New chat",
+   "operation": "legacy",
+   "disabled": false,
+   "value": "new"
+  },
+  {
+   "id": "actions.assistant.resume",
+   "kind": "action",
+   "name": "Nacre AI: Resume chat",
+   "operation": "legacy",
+   "disabled": false,
+   "value": "resume"
+  },
+  {
+   "id": "actions.assistant.chats",
+   "kind": "action",
+   "name": "Nacre AI: Browse chats",
+   "operation": "legacy",
+   "disabled": false,
+   "value": "load"
+  },
+  {
+   "id": "actions.assistant.brain",
+   "kind": "action",
+   "name": "Nacre Brain",
+   "operation": "legacy",
+   "disabled": false,
+   "value": "brain"
+  },
+  {
+   "id": "actions.assistant.capture",
+   "kind": "action",
+   "name": "Nacre Brain: Capture note",
+   "operation": "legacy",
+   "disabled": false,
+   "value": "capture"
+  },
+  {
+   "id": "actions.assistant.search",
+   "kind": "action",
+   "name": "Search Nacre Brain",
+   "operation": "scope",
+   "disabled": false,
+   "value": "# "
+  },
+  {
+   "id": "actions.assistant.ask",
+   "kind": "action",
+   "name": "Ask Nacre AI",
+   "operation": "scope",
+   "disabled": false,
+   "value": "? "
+  },
+  {
+   "id": "actions.controls.dnd",
+   "kind": "action",
+   "name": "Do not disturb",
+   "operation": "toggle",
+   "disabled": false,
+   "value": "dnd"
+  },
+  {
+   "id": "actions.controls.night-light",
+   "kind": "action",
+   "name": "Night light",
+   "operation": "toggle",
+   "disabled": false,
+   "value": "night-light"
+  },
+  {
+   "id": "actions.controls.stay-awake",
+   "kind": "action",
+   "name": "Stay awake",
+   "operation": "toggle",
+   "disabled": false,
+   "value": "stay-awake"
+  },
+  {
+   "id": "actions.controls.mute",
+   "kind": "action",
+   "name": "Mute speakers",
+   "operation": "toggle",
+   "disabled": false,
+   "value": "mute"
+  },
+  {
+   "id": "actions.controls.mic-mute",
+   "kind": "action",
+   "name": "Mute microphone",
+   "operation": "toggle",
+   "disabled": false,
+   "value": "mic-mute"
+  },
+  {
+   "id": "actions.controls.wifi",
+   "kind": "action",
+   "name": "Wi-Fi",
+   "operation": "toggle",
+   "disabled": false,
+   "value": "wifi"
+  },
+  {
+   "id": "actions.controls.bluetooth",
+   "kind": "action",
+   "name": "Bluetooth",
+   "operation": "toggle",
+   "disabled": false,
+   "value": "bluetooth"
+  },
+  {
+   "id": "style.wallpapers.picker",
+   "kind": "action",
+   "name": "Wallpaper picker",
+   "operation": "route",
+   "disabled": false,
+   "value": "wallpaper"
+  },
+  {
+   "id": "style.wallpapers.next",
+   "kind": "action",
+   "name": "Next wallpaper",
+   "operation": "next-wallpaper",
+   "disabled": false,
+   "value": ""
+  },
+  {
+   "id": "style.personality.natural",
+   "kind": "action",
+   "name": "Natural",
+   "operation": "personality",
+   "disabled": false,
+   "value": "natural"
+  },
+  {
+   "id": "style.personality.pigment",
+   "kind": "action",
+   "name": "Pigment",
+   "operation": "personality",
+   "disabled": false,
+   "value": "pigment"
+  },
+  {
+   "id": "style.personality.harmony",
+   "kind": "action",
+   "name": "Harmony",
+   "operation": "personality",
+   "disabled": false,
+   "value": "harmony"
+  },
+  {
+   "id": "style.personality.pop",
+   "kind": "action",
+   "name": "Pop",
+   "operation": "personality",
+   "disabled": false,
+   "value": "pop"
+  },
+  {
+   "id": "style.personality.mist",
+   "kind": "action",
+   "name": "Mist",
+   "operation": "personality",
+   "disabled": false,
+   "value": "mist"
+  },
+  {
+   "id": "style.personality.vivid",
+   "kind": "action",
+   "name": "Vivid",
+   "operation": "personality",
+   "disabled": false,
+   "value": "vivid"
+  },
+  {
+   "id": "style.personality.pearl",
+   "kind": "action",
+   "name": "Pearl",
+   "operation": "personality",
+   "disabled": false,
+   "value": "pearl"
+  },
+  {
+   "id": "style.personality.tide",
+   "kind": "action",
+   "name": "Tide",
+   "operation": "personality",
+   "disabled": false,
+   "value": "tide"
+  },
+  {
+   "id": "style.background.accent",
+   "kind": "action",
+   "name": "Accent tint",
+   "operation": "background",
+   "disabled": false,
+   "value": "accent"
+  },
+  {
+   "id": "style.background.wallpaper",
+   "kind": "action",
+   "name": "Wallpaper shadows",
+   "operation": "background",
+   "disabled": false,
+   "value": "wallpaper"
+  },
+  {
+   "id": "style.appearance.dark",
+   "kind": "action",
+   "name": "Dark",
+   "operation": "palette-mode",
+   "disabled": false,
+   "value": "dark"
+  },
+  {
+   "id": "style.appearance.light",
+   "kind": "action",
+   "name": "Light",
+   "operation": "palette-mode",
+   "disabled": false,
+   "value": "light"
+  },
+  {
+   "id": "style.appearance.auto",
+   "kind": "action",
+   "name": "Auto",
+   "operation": "palette-mode",
+   "disabled": false,
+   "value": "auto"
+  },
+  {
+   "id": "style.animations",
+   "kind": "action",
+   "name": "Animations",
+   "operation": "setting-toggle",
+   "disabled": false,
+   "value": "animations"
+  },
+  {
+   "id": "style.blur",
+   "kind": "action",
+   "name": "Background blur",
+   "operation": "setting-toggle",
+   "disabled": false,
+   "value": "blur"
+  },
+  {
+   "id": "style.shadow",
+   "kind": "action",
+   "name": "Window shadows",
+   "operation": "setting-toggle",
+   "disabled": false,
+   "value": "shadow"
+  },
+  {
+   "id": "style.colors",
+   "kind": "action",
+   "name": "Nacre Colors",
+   "operation": "legacy",
+   "disabled": false,
+   "value": "colors"
+  },
+  {
+   "id": "setup.appearance",
+   "kind": "action",
+   "name": "Appearance",
+   "operation": "settings",
+   "disabled": false,
+   "value": "appearance"
+  },
+  {
+   "id": "setup.desktop",
+   "kind": "action",
+   "name": "Desktop and input",
+   "operation": "settings",
+   "disabled": false,
+   "value": "desktop"
+  },
+  {
+   "id": "setup.displays",
+   "kind": "action",
+   "name": "Displays",
+   "operation": "settings",
+   "disabled": false,
+   "value": "displays"
+  },
+  {
+   "id": "setup.sound",
+   "kind": "action",
+   "name": "Sound",
+   "operation": "settings",
+   "disabled": false,
+   "value": "sound"
+  },
+  {
+   "id": "setup.network",
+   "kind": "action",
+   "name": "Network",
+   "operation": "settings",
+   "disabled": false,
+   "value": "network"
+  },
+  {
+   "id": "setup.bluetooth",
+   "kind": "action",
+   "name": "Bluetooth",
+   "operation": "settings",
+   "disabled": false,
+   "value": "bluetooth"
+  },
+  {
+   "id": "setup.notifications",
+   "kind": "action",
+   "name": "Notifications",
+   "operation": "settings",
+   "disabled": false,
+   "value": "notifications"
+  },
+  {
+   "id": "setup.workflows",
+   "kind": "action",
+   "name": "Workspaces and apps",
+   "operation": "settings",
+   "disabled": false,
+   "value": "workflows"
+  },
+  {
+   "id": "setup.lock",
+   "kind": "action",
+   "name": "Lock screen and idle",
+   "operation": "settings",
+   "disabled": false,
+   "value": "lock"
+  },
+  {
+   "id": "setup.time",
+   "kind": "action",
+   "name": "Date and time",
+   "operation": "settings",
+   "disabled": false,
+   "value": "time"
+  },
+  {
+   "id": "setup.ai",
+   "kind": "action",
+   "name": "Nacre AI preferences",
+   "operation": "settings",
+   "disabled": false,
+   "value": "ai"
+  },
+  {
+   "id": "setup.shortcuts",
+   "kind": "action",
+   "name": "Edit personal shortcuts",
+   "operation": "config",
+   "disabled": false,
+   "value": "shortcuts"
+  },
+  {
+   "id": "setup.defaults",
+   "kind": "action",
+   "name": "Default applications",
+   "operation": "config",
+   "disabled": false,
+   "value": "defaults"
+  },
+  {
+   "id": "software.development.mise",
+   "kind": "action",
+   "name": "Install mise",
+   "operation": "tool",
+   "disabled": false,
+   "value": "install-mise",
+   "confirm": "Open a terminal to install mise? The package manager may ask for administrator permission."
+  },
+  {
+   "id": "software.tui.new",
+   "kind": "action",
+   "name": "Create a TUI app",
+   "operation": "form",
+   "disabled": false,
+   "value": "tui"
+  },
+  {
+   "id": "software.webapps.new",
+   "kind": "action",
+   "name": "Create a web app",
+   "operation": "form",
+   "disabled": false,
+   "value": "webapp"
+  },
+  {
+   "id": "health.updates",
+   "kind": "action",
+   "name": "System updates",
+   "operation": "tool",
+   "disabled": false,
+   "value": "updates"
+  },
+  {
+   "id": "health.nacre",
+   "kind": "action",
+   "name": "Nacre maintenance",
+   "operation": "settings",
+   "disabled": false,
+   "value": "maintenance"
+  },
+  {
+   "id": "health.check",
+   "kind": "action",
+   "name": "Check the desktop",
+   "operation": "maintenance",
+   "disabled": false,
+   "value": "check"
+  },
+  {
+   "id": "health.status",
+   "kind": "action",
+   "name": "Current health",
+   "operation": "info",
+   "disabled": false,
+   "value": "health"
+  },
+  {
+   "id": "health.support-report",
+   "kind": "action",
+   "name": "Copy support report",
+   "operation": "tool",
+   "disabled": false,
+   "value": "support-report"
+  },
+  {
+   "id": "health.logs",
+   "kind": "action",
+   "name": "Desktop logs",
+   "operation": "tool",
+   "disabled": false,
+   "value": "logs"
+  },
+  {
+   "id": "health.restart",
+   "kind": "action",
+   "name": "Restart the desktop shell",
+   "operation": "maintenance",
+   "disabled": false,
+   "value": "restart",
+   "confirm": "Restart the Nacre shell?"
+  },
+  {
+   "id": "health.rollback",
+   "kind": "action",
+   "name": "Review a rollback",
+   "operation": "settings",
+   "disabled": false,
+   "value": "maintenance"
+  },
+  {
+   "id": "learn.welcome",
+   "kind": "action",
+   "name": "Nacre Welcome",
+   "operation": "legacy",
+   "disabled": false,
+   "value": "welcome"
+  },
+  {
+   "id": "learn.nacre",
+   "kind": "action",
+   "name": "Nacre guide",
+   "operation": "info",
+   "disabled": false,
+   "value": "guide"
+  },
+  {
+   "id": "learn.hyprland",
+   "kind": "action",
+   "name": "Hyprland manual",
+   "operation": "url",
+   "disabled": false,
+   "value": "https://wiki.hypr.land/"
+  },
+  {
+   "id": "learn.arch",
+   "kind": "action",
+   "name": "Arch Linux guide",
+   "operation": "url",
+   "disabled": false,
+   "value": "https://wiki.archlinux.org/"
+  },
+  {
+   "id": "learn.quickshell",
+   "kind": "action",
+   "name": "Quickshell documentation",
+   "operation": "url",
+   "disabled": false,
+   "value": "https://quickshell.org/docs/"
+  },
+  {
+   "id": "learn.news",
+   "kind": "action",
+   "name": "Nacre project",
+   "operation": "url",
+   "disabled": false,
+   "value": "https://github.com/nacre-desktop/nacre"
+  },
+  {
+   "id": "power.lock",
+   "kind": "action",
+   "name": "Lock the desktop",
+   "operation": "power",
+   "disabled": false,
+   "value": "lock"
+  },
+  {
+   "id": "power.suspend",
+   "kind": "action",
+   "name": "Sleep",
+   "operation": "power",
+   "disabled": false,
+   "value": "suspend",
+   "confirm": "Sleep?"
+  },
+  {
+   "id": "power.logout",
+   "kind": "action",
+   "name": "Log out",
+   "operation": "power",
+   "disabled": false,
+   "value": "logout",
+   "confirm": "Log out?"
+  },
+  {
+   "id": "power.reboot",
+   "kind": "action",
+   "name": "Restart",
+   "operation": "power",
+   "disabled": false,
+   "value": "reboot",
+   "confirm": "Restart?"
+  },
+  {
+   "id": "power.poweroff",
+   "kind": "action",
+   "name": "Shut down",
+   "operation": "power",
+   "disabled": false,
+   "value": "poweroff",
+   "confirm": "Shut down?"
+  },
+  {
+   "id": "actions.files",
+   "kind": "action",
+   "name": "Files",
+   "operation": "legacy",
+   "disabled": false,
+   "value": "files"
+  },
+  {
+   "id": "actions.terminal",
+   "kind": "action",
+   "name": "Terminal",
+   "operation": "legacy",
+   "disabled": false,
+   "value": "terminal"
+  },
+  {
+   "id": "actions.apps",
+   "kind": "action",
+   "name": "All apps",
+   "operation": "route",
+   "disabled": false,
+   "value": "apps"
+  },
+  {
+   "id": "actions.controls.profile.power-saver",
+   "kind": "action",
+   "name": "Power saver",
+   "operation": "power-profile",
+   "disabled": false,
+   "value": "power-saver"
+  },
+  {
+   "id": "actions.controls.profile.balanced",
+   "kind": "action",
+   "name": "Balanced",
+   "operation": "power-profile",
+   "disabled": false,
+   "value": "balanced"
+  },
+  {
+   "id": "actions.controls.profile.performance",
+   "kind": "action",
+   "name": "Performance",
+   "operation": "power-profile",
+   "disabled": false,
+   "value": "performance"
+  },
+  {
+   "id": "actions.media.play-pause",
+   "kind": "action",
+   "name": "Play or pause",
+   "operation": "media",
+   "disabled": false,
+   "value": "playPause"
+  },
+  {
+   "id": "actions.media.next",
+   "kind": "action",
+   "name": "Next track",
+   "operation": "media",
+   "disabled": false,
+   "value": "next"
+  },
+  {
+   "id": "actions.media.previous",
+   "kind": "action",
+   "name": "Previous track",
+   "operation": "media",
+   "disabled": false,
+   "value": "previous"
+  },
+  {
+   "id": "actions.find-files",
+   "kind": "action",
+   "name": "Find files",
+   "operation": "scope",
+   "disabled": false,
+   "value": ": "
+  },
+  {
+   "id": "actions.saved.add-action",
+   "kind": "action",
+   "name": "Add launcher action",
+   "operation": "form",
+   "disabled": false,
+   "value": "action"
+  },
+  {
+   "id": "actions.saved.add-snippet",
+   "kind": "action",
+   "name": "Save text snippet",
+   "operation": "form",
+   "disabled": false,
+   "value": "snippet"
+  },
+  {
+   "id": "actions.saved.add-search",
+   "kind": "action",
+   "name": "Add named web search",
+   "operation": "form",
+   "disabled": false,
+   "value": "search"
+  },
+  {
+   "id": "actions.saved.add-bookmark",
+   "kind": "action",
+   "name": "Save bookmark",
+   "operation": "form",
+   "disabled": false,
+   "value": "bookmark"
+  },
+  {
+   "id": "actions.saved.add-workspace",
+   "kind": "action",
+   "name": "Save workspace recipe",
+   "operation": "form",
+   "disabled": false,
+   "value": "workspace"
+  },
+  {
+   "id": "actions.saved.add-roots",
+   "kind": "action",
+   "name": "Choose file search folders",
+   "operation": "form",
+   "disabled": false,
+   "value": "roots"
+  },
+  {
+   "id": "actions.dictation.toggle",
+   "kind": "action",
+   "name": "Start or stop voice typing",
+   "operation": "command",
+   "disabled": false,
+   "arguments": [
+    "voxtype",
+    "record",
+    "toggle"
+   ]
+  },
+  {
+   "id": "actions.dictation.setup",
+   "kind": "action",
+   "name": "Configure voice typing",
+   "operation": "command",
+   "disabled": false,
+   "arguments": [
+    "kitty",
+    "--",
+    "voxtype",
+    "configure"
+   ]
+  },
+  {
+   "id": "actions.share",
+   "kind": "action",
+   "name": "Send or receive with LocalSend",
+   "operation": "command",
+   "disabled": false,
+   "arguments": [
+    "localsend"
+   ]
+  },
+  {
+   "id": "software.themes.import",
+   "kind": "action",
+   "name": "Import a theme",
+   "operation": "form",
+   "disabled": false,
+   "value": "software-theme-import"
+  },
+  {
+   "id": "software.themes.create",
+   "kind": "action",
+   "name": "Create a theme",
+   "operation": "settings",
+   "disabled": false,
+   "value": "colors"
+  },
+  {
+   "id": "software.extensions.import",
+   "kind": "action",
+   "name": "Add an extension",
+   "operation": "form",
+   "disabled": false,
+   "value": "software-extension-import"
+  },
+  {
+   "id": "software.packages.review-policy",
+   "kind": "action",
+   "name": "AUR package review policy",
+   "operation": "settings",
+   "disabled": false,
+   "value": "system"
+  },
+  {
+   "id": "actions.bring-visitors",
+   "kind": "action",
+   "name": "Bring visitors here",
+   "operation": "bring-visitors",
+   "disabled": false
+  }
+ ],
+ "providers": [
+  {
+   "id": "calculation",
+   "kind": "action",
+   "name": "calculation",
+   "operation": "copy",
+   "disabled": false,
+   "value": "2"
+  },
+  {
+   "id": "actions.emoji.x",
+   "kind": "action",
+   "name": "actions.emoji.x",
+   "operation": "copy",
+   "disabled": false,
+   "value": "😀"
+  },
+  {
+   "id": "actions.clipboard.1",
+   "kind": "action",
+   "name": "actions.clipboard.1",
+   "operation": "copy-clip",
+   "disabled": false,
+   "value": "clip-1"
+  },
+  {
+   "id": "apps.audio.output-1",
+   "kind": "action",
+   "name": "apps.audio.output-1",
+   "operation": "audio-output",
+   "disabled": false,
+   "value": "alsa_output.pci"
+  },
+  {
+   "id": "style.wallpapers.abc",
+   "kind": "action",
+   "name": "style.wallpapers.abc",
+   "operation": "wallpaper",
+   "disabled": false,
+   "value": "/home/u/Pictures/Wallpapers/a.png"
+  },
+  {
+   "id": "style.accents.choice-0",
+   "kind": "action",
+   "name": "style.accents.choice-0",
+   "operation": "accent",
+   "disabled": false,
+   "value": "#7a5af8"
+  },
+  {
+   "id": "actions.windows.1",
+   "kind": "action",
+   "name": "actions.windows.1",
+   "operation": "focus",
+   "disabled": false,
+   "value": 42
+  },
+  {
+   "id": "actions.windows.2",
+   "kind": "action",
+   "name": "actions.windows.2",
+   "operation": "focus",
+   "disabled": false,
+   "value": "0x55d1"
+  },
+  {
+   "id": "setup.network.ap",
+   "kind": "action",
+   "name": "setup.network.ap",
+   "operation": "settings",
+   "disabled": false,
+   "value": "network"
+  },
+  {
+   "id": "setup.bluetooth.dev",
+   "kind": "action",
+   "name": "setup.bluetooth.dev",
+   "operation": "settings",
+   "disabled": false,
+   "value": "bluetooth"
+  },
+  {
+   "id": "learn.shortcuts.binding-0",
+   "kind": "action",
+   "name": "learn.shortcuts.binding-0",
+   "operation": "info",
+   "disabled": false,
+   "value": "shortcut"
+  },
+  {
+   "id": "actions.reminders.unit",
+   "kind": "action",
+   "name": "actions.reminders.unit",
+   "operation": "timer-cancel",
+   "disabled": false,
+   "value": "nacre-reminder-123.timer"
+  },
+  {
+   "id": "software.webapps.x",
+   "kind": "action",
+   "name": "software.webapps.x",
+   "operation": "webapp",
+   "disabled": false,
+   "value": "x-site"
+  },
+  {
+   "id": "software.installed.x",
+   "kind": "action",
+   "name": "software.installed.x",
+   "operation": "remove-package",
+   "disabled": false,
+   "value": "htop"
+  },
+  {
+   "id": "software.packages.x",
+   "kind": "action",
+   "name": "software.packages.x",
+   "operation": "install-package",
+   "disabled": false,
+   "value": "btop"
+  },
+  {
+   "id": "style.fonts.inter",
+   "kind": "action",
+   "name": "style.fonts.inter",
+   "operation": "font",
+   "disabled": false,
+   "value": "Inter"
+  },
+  {
+   "id": "style.mono-fonts.jb",
+   "kind": "action",
+   "name": "style.mono-fonts.jb",
+   "operation": "mono-font",
+   "disabled": false,
+   "value": "JetBrains Mono"
+  },
+  {
+   "id": "software.development.node-install",
+   "kind": "action",
+   "name": "software.development.node-install",
+   "operation": "environment",
+   "disabled": false,
+   "value": "node",
+   "environmentOperation": "install"
+  },
+  {
+   "id": "software.tui.htop",
+   "kind": "action",
+   "name": "software.tui.htop",
+   "operation": "tui-launch",
+   "disabled": false,
+   "value": "htop"
+  },
+  {
+   "id": "software.tui.htop-remove",
+   "kind": "action",
+   "name": "software.tui.htop-remove",
+   "operation": "tui-remove",
+   "disabled": false,
+   "value": "htop"
+  },
+  {
+   "id": "software.ai.claude",
+   "kind": "action",
+   "name": "software.ai.claude",
+   "operation": "ai-terminal",
+   "disabled": false,
+   "value": "claude",
+   "terminalCommand": [
+    "claude"
+   ]
+  },
+  {
+   "id": "software.discover.site",
+   "kind": "action",
+   "name": "software.discover.site",
+   "operation": "webapp-offer",
+   "disabled": false,
+   "value": "https://example.org",
+   "webUrl": "https://example.org"
+  },
+  {
+   "id": "software.themes.preset",
+   "kind": "action",
+   "name": "software.themes.preset",
+   "operation": "software-theme",
+   "disabled": false,
+   "value": "catppuccin",
+   "themeMode": "dark"
+  },
+  {
+   "id": "software.themes.bundle",
+   "kind": "action",
+   "name": "software.themes.bundle",
+   "operation": "software-theme",
+   "disabled": false,
+   "value": "bundle-1",
+   "bundle": true,
+   "bundleScope": "all"
+  },
+  {
+   "id": "software.extensions.x",
+   "kind": "action",
+   "name": "software.extensions.x",
+   "operation": "software-extension-install",
+   "disabled": false,
+   "value": "x-ext"
+  },
+  {
+   "id": "software.extensions.y",
+   "kind": "action",
+   "name": "software.extensions.y",
+   "operation": "software-extension-open",
+   "disabled": false,
+   "value": "y-ext",
+   "extensionAction": "settings"
+  },
+  {
+   "id": "software.extensions.theme",
+   "kind": "action",
+   "name": "software.extensions.theme",
+   "operation": "extension-theme",
+   "disabled": false,
+   "value": "z-ext"
+  },
+  {
+   "id": "system.speed.x",
+   "kind": "action",
+   "name": "system.speed.x",
+   "operation": "system-action",
+   "disabled": false,
+   "value": "zram"
+  },
+  {
+   "id": "actions.palette.brain",
+   "kind": "action",
+   "name": "actions.palette.brain",
+   "operation": "legacy-action",
+   "disabled": false,
+   "value": "notes",
+   "action": "brain-query"
+  },
+  {
+   "id": "nacre-action:colors:",
+   "kind": "action",
+   "name": "nacre-action:colors:",
+   "operation": "legacy-action",
+   "disabled": false,
+   "value": "",
+   "action": "colors"
+  },
+  {
+   "id": "nacre-action:preset:focused",
+   "kind": "action",
+   "name": "nacre-action:preset:focused",
+   "operation": "legacy-action",
+   "disabled": false,
+   "value": "focused",
+   "action": "preset"
+  },
+  {
+   "id": "nacre-action:toggle-setting:blur",
+   "kind": "action",
+   "name": "nacre-action:toggle-setting:blur",
+   "operation": "legacy-action",
+   "disabled": false,
+   "value": "blur",
+   "action": "toggle-setting"
+  },
+  {
+   "id": "nacre-action:dark:",
+   "kind": "action",
+   "name": "nacre-action:dark:",
+   "operation": "legacy-action",
+   "disabled": false,
+   "value": "",
+   "action": "dark"
+  },
+  {
+   "id": "nacre-action:overview:",
+   "kind": "action",
+   "name": "nacre-action:overview:",
+   "operation": "legacy-action",
+   "disabled": false,
+   "value": "",
+   "action": "overview"
+  },
+  {
+   "id": "files.1",
+   "kind": "action",
+   "name": "files.1",
+   "operation": "open-file",
+   "disabled": false,
+   "value": "/home/u/Documents/a.pdf"
+  },
+  {
+   "id": "actions.assistant.search.n",
+   "kind": "action",
+   "name": "actions.assistant.search.n",
+   "operation": "note",
+   "disabled": false,
+   "value": "/home/u/Documents/Nacre-Brain/wiki/a.md"
+  },
+  {
+   "id": "actions.search-web",
+   "kind": "action",
+   "name": "actions.search-web",
+   "operation": "search-web",
+   "disabled": false,
+   "value": "rust lifetimes",
+   "webUrl": "https://duckduckgo.com/?q=rust%20lifetimes"
+  },
+  {
+   "id": "actions.search-web-old",
+   "kind": "action",
+   "name": "actions.search-web-old",
+   "operation": "search-web",
+   "disabled": false,
+   "value": "rust lifetimes"
+  },
+  {
+   "id": "actions.assistant.question",
+   "kind": "action",
+   "name": "actions.assistant.question",
+   "operation": "ask",
+   "disabled": false,
+   "value": "what is niri"
+  },
+  {
+   "id": "actions.saved.engine",
+   "kind": "action",
+   "name": "actions.saved.engine",
+   "operation": "workflow",
+   "disabled": false,
+   "value": "search-1",
+   "searchQuery": "niri"
+  }
+ ]
+}
