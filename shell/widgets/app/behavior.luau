@@ -1276,7 +1276,7 @@ return {
         ["bead.windows"]={},["bead.workspaces"]={},["bead.focused_title"]="",
         ["bead.desktop.audio.percent"]=0,["bead.desktop.audio.device"]="Output unavailable",
         ["bead.desktop.audio.label"]="Unavailable",["bead.desktop.titlevisible"]=true,
-        ["bead.desktop.clock"]="",["bead.desktop.clock.seconds"]="",["bead.desktop.clock.date"]="",
+        ["bead.desktop.clock"]="",["bead.desktop.clock.seconds"]="",["bead.desktop.clock.date"]="",["bead.desktop.wallpaper.luma"]={},
         ["bead.desktop.audio"]="volume_mute",["bead.desktop.audio.available"]=false,
         ["bead.desktop.battery"]="battery_unknown",["bead.desktop.battery.value"]="",
         ["bead.desktop.battery.value.width"]=3,["bead.desktop.network"]="wifi_off",

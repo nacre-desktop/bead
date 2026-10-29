@@ -479,6 +479,10 @@ fn widget_drag_targets_output(argument: &bead::core::Value, output: Option<&str>
     };
     output == Some(target)
 }
+/// Canvas store set by the host while the output is covered (B0193 `pause_on`).
+/// Model key a luminance change sends; the handler swaps it for this output's luma store.
+const WALLPAPER_LUMA_POKE: &str = "bead.desktop.wallpaper.rev";
+const WIDGETS_COVERED: &str = "bead.desktop.covered";
 fn widget_screen_values(
     snapshot: &bead::core::source::Snapshot,
 ) -> BTreeMap<String, bead::core::Value> {
@@ -790,6 +794,9 @@ pub struct Runtime {
     widgets_canvas_editing: bool,
     widgets_canvas_wanted: bool,
     widget_canvas_projection: Option<BTreeMap<String, bead::core::Value>>,
+    /// B0193 `pause_on`: the canvas of this output was told it is covered (fullscreen/lock).
+    widgets_covered: bool,
+    wallpaper_luma_watch: Option<crate::wallpaper_luma::Watch>,
     widgets_client: Option<crate::nacre_source::Client>,
     widget_editor: bool,
     widgets_close_on_commit: bool,
@@ -1684,6 +1691,7 @@ impl Runtime {
             "bead.desktop.menu",
             "bead.desktop.tray.tooltip",
             "bead.desktop.tray.tooltip.visible",
+            crate::wallpaper_luma::STORE,
         ];
         self.session
             .stores
@@ -2516,7 +2524,48 @@ impl Runtime {
             .map_err(|error| -> Box<dyn Error> { Box::new(error) })?;
         self.finish_scene(scene)
     }
+    /// B0193 `pause_on = {fullscreen, lock}` for the desktop layer. Editing and dragging
+    /// never pause: the owner is looking at the widgets.
+    fn widgets_covered_now(&self) -> bool {
+        let on = |key: &str| self.session.stores.get(key) == Some(&bead::core::Value::Bool(true));
+        if !self.bar || on("widgets.editing") || on("widgets.drag.active") {
+            return false;
+        }
+        let (Some(output), Some(backend), Some(desktop)) =
+            (self.output.as_deref(), &self.backend, &self.desktop)
+        else {
+            return false;
+        };
+        crate::wallpaper_motion::output_hidden(&backend.snapshot(), &desktop.snapshot(), output)
+    }
+    /// Tell the canvas when its output is covered or visible again. While covered the host
+    /// sends no further projections, so the canvas rebuilds nothing and drops its seconds
+    /// lease; on uncover the next projection is a full, current one.
+    fn sync_widgets_covered(&mut self) -> bool {
+        let covered = self.widgets_covered_now();
+        if covered != self.widgets_covered {
+            self.widgets_covered = covered;
+            if !covered {
+                self.widget_canvas_projection = None;
+                self.widgets_projection = None;
+            }
+            if self.widgets_canvas_wanted
+                && let Some(wakeup) = &self.wakeup
+            {
+                wakeup(UiEvent::CanvasModel {
+                    view: "widgets-canvas".into(),
+                    output: self.output.clone(),
+                    values: BTreeMap::from([(
+                        WIDGETS_COVERED.into(),
+                        bead::core::Value::Bool(covered),
+                    )]),
+                });
+            }
+        }
+        covered
+    }
     fn publish_widget_models(&mut self) {
+        let covered = self.sync_widgets_covered();
         if self.widget_editor && !self.widget_app {
             let keys = [
                 "widgets.layout",
@@ -2620,7 +2669,9 @@ impl Runtime {
                     });
                 }
             }
-            if self.bar && wanted {
+            if self.bar && wanted && covered {
+                // Paused: keep the last projection so nothing is rebuilt while covered.
+            } else if self.bar && wanted {
                 let projection = canvas_values.clone();
                 if self.widget_canvas_projection.as_ref() != Some(&projection) {
                     self.widget_canvas_projection = Some(projection.clone());
@@ -3039,6 +3090,8 @@ impl Runtime {
             widgets_canvas_editing: false,
             widgets_canvas_wanted: false,
             widget_canvas_projection: None,
+            widgets_covered: false,
+            wallpaper_luma_watch: None,
             widgets_client: None,
             widget_editor: false,
             widgets_close_on_commit: false,
@@ -5537,6 +5590,17 @@ impl SceneSource for Runtime {
                 Ok(subscription) => self.widget_compositor_subscription = Some(subscription),
                 Err(_) => eprintln!("SOURCE_ERROR code=widgets_compositor_subscription"),
             }
+        }
+        if self.bar {
+            let wakeup = wakeup.clone();
+            self.wallpaper_luma_watch = Some(crate::wallpaper_luma::watch(std::sync::Arc::new(
+                move || {
+                    wakeup(UiEvent::Model(BTreeMap::from([(
+                        WALLPAPER_LUMA_POKE.into(),
+                        bead::core::Value::Bool(true),
+                    )])))
+                },
+            )));
         }
         if self.bar || self.widget_app {
             let state_wakeup = wakeup.clone();
@@ -8273,6 +8337,9 @@ impl SceneSource for Runtime {
                     )))?
             }
             UiEvent::Model(mut values) => {
+                if values.remove(WALLPAPER_LUMA_POKE).is_some() {
+                    values.extend(crate::wallpaper_luma::values(self.output.as_deref()));
+                }
                 let policy = match (
                     values.remove("widgets.policy.pid"),
                     values.remove("widgets.policy.generation"),
@@ -8397,6 +8464,7 @@ impl SceneSource for Runtime {
             }
             UiEvent::OutputName(name) => {
                 self.output = Some(name.clone());
+                let luma = crate::wallpaper_luma::values(Some(&name));
                 scope_recovery(&mut self.session, Some(&name));
                 let values = if let Some(backend) = &self.backend {
                     let snapshot = backend.snapshot();
@@ -8409,6 +8477,10 @@ impl SceneSource for Runtime {
                 } else {
                     BTreeMap::from([("bead.output.name".into(), bead::core::Value::Text(name))])
                 };
+                let mut values = values;
+                if self.bar {
+                    values.extend(luma);
+                }
                 let scene = self.session.update_model(values)?;
                 // Publish a fresh accepted generation under the stable name's
                 // recovery key after this host-context transaction commits.
@@ -9896,7 +9968,9 @@ impl SceneSource for Runtime {
                         || (!self.widget_app && (self.bar || self.widget_canvas)
                             && seed["widget_clock_seconds"] == true)))
             });
-            if wants_seconds {
+            let paused = self.widget_canvas
+                && self.session.stores.get(WIDGETS_COVERED) == Some(&bead::core::Value::Bool(true));
+            if wants_seconds && !paused {
                 if self.clock_seconds_lease.is_none() {
                     self.clock_seconds_lease = self
                         .desktop
@@ -9990,7 +10064,8 @@ impl SceneSource for Runtime {
             }
 
             self.pending_dashboard = None;
-            if self.bar && self.widgets_canvas_wanted {
+            let covered = self.sync_widgets_covered();
+            if self.bar && self.widgets_canvas_wanted && !covered {
                 let projection = self.widget_host_values();
                 if self.widgets_projection.as_ref() != Some(&projection) {
                     self.widgets_projection = Some(projection.clone());

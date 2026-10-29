@@ -13,6 +13,11 @@ local document=(dragging and drag_layout and drag_layout[1]) or (editing and dra
     or registry.default(ui.resolve_for_check(ui.bind("bead.viewport.width")))
 local render=registry.renderer(document)
 local canvas=document.hosts.canvas or {width=ui.resolve_for_check(ui.bind("bead.viewport.width")),height=ui.resolve_for_check(ui.bind("bead.viewport.height")),instances={}}
+-- B0193: the host sets `bead.desktop.covered` while a fullscreen window or the lock screen hides
+-- this output.  Reading it here makes the canvas rebuild once on each change so the runtime can
+-- release the seconds lease; nothing else is sent while covered.
+ui.resolve_for_check(ui.bind("bead.desktop.covered"))
+require("../desktop-visuals").set_canvas(canvas.width,canvas.height)
 return ui.Host{id="desktop-widgets",shape="canvas",layout=canvas,catalogue=registry.catalogue,metadata=require("../editing").seed(document,ui.resolve_for_check(ui.bind("bead.viewport.width")),ui.resolve_for_check(ui.bind("bead.viewport.height")),"desktop"),
     render=function(item,variant)
         local node=render(item,variant)

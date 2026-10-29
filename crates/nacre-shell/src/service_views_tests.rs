@@ -2320,6 +2320,81 @@ fn analog_clock_redraws_only_on_ticks_and_hands_hug_their_pixels() -> Result<()>
     Ok(())
 }
 
+/// B0193: the digital clock's ink is the palette role that reads on the wallpaper under it
+/// (luminance grid from the host), with a translucent scrim only when neither role reaches
+/// the contrast floor, and it follows a wallpaper change.
+#[test]
+fn desktop_clock_ink_follows_wallpaper_luminance() -> Result<()> {
+    use serde_json::{Value as Json, json};
+    // Relative luminance of the dark palette's onSurface (ecebe8) and surface (12120f).
+    const ON_SURFACE: f64 = 0.83;
+    const SURFACE: f64 = 0.006;
+    const ON: [u8; 4] = [0xec, 0xeb, 0xe8, 255];
+    const SURF: [u8; 4] = [0x12, 0x12, 0x0f, 255];
+    fn luma(cell: f64) -> Value {
+        Value::list(vec![json!({"cols":16,"rows":9,"on_surface":ON_SURFACE,"surface":SURFACE,
+            "cells":(0..16 * 9).map(|_| cell).collect::<Vec<_>>()})])
+    }
+    fn ink(h: &Harness) -> ([u8; 4], bool) {
+        let ink = h
+            .scene()
+            .primitives
+            .iter()
+            .find_map(|p| match p {
+                bead::render::Primitive::Text { text, color, .. } if text == "12:34" => {
+                    Some(*color)
+                }
+                _ => None,
+            })
+            .expect("the time text");
+        let scrim = h.scene().primitives.iter().any(|p| {
+            matches!(p, bead::render::Primitive::Rounded { rect, fill, .. }
+                if rect.w >= 419. && rect.h >= 189. && fill[3] > 0 && fill[3] < 255)
+        });
+        (ink, scrim)
+    }
+    let mut document: Json =
+        serde_json::from_str(include_str!("../tests/widgets-default.json")).unwrap();
+    document["hosts"]["canvas"] = json!({"width":1920,"height":1080,"instances":[{
+        "iid":"desktop-digital","widget":"clock","host":"canvas","style":"digital",
+        "settings":{},"slot":{"x":96,"y":96,"w":420,"h":190}}]});
+    let mut values = super::initial_models()?;
+    values.insert("bead.desktop.clock".into(), Value::Text("12:34".into()));
+    values.insert(
+        "bead.desktop.clock.date".into(),
+        Value::Text("2026-10-29".into()),
+    );
+    values.insert("widgets.layout".into(), Value::list(vec![document]));
+    values.insert("widgets.editing".into(), Value::Bool(false));
+    let mut canvas = Harness::load(
+        &root(),
+        Path::new("widgets/editor/canvas.luau"),
+        &root().join("palette.json"),
+        values,
+        Config {
+            width: 1920,
+            height: 1080,
+            scale: 1.5,
+        },
+    )?;
+    let set = |canvas: &mut Harness, cell: f64| {
+        canvas.update(BTreeMap::from([(
+            "bead.desktop.wallpaper.luma".into(),
+            luma(cell),
+        )]))
+    };
+    assert_eq!(ink(&canvas), (ON, false), "no luminance yet: the theme ink");
+    set(&mut canvas, 0.02)?;
+    assert_eq!(ink(&canvas), (ON, false), "dark wallpaper keeps light ink");
+    set(&mut canvas, 0.9)?;
+    assert_eq!(ink(&canvas), (SURF, false), "bright wallpaper switches to dark ink");
+    set(&mut canvas, 0.2)?;
+    assert!(ink(&canvas).1, "mid luminance reads on neither role: scrim");
+    set(&mut canvas, 0.02)?;
+    assert_eq!(ink(&canvas), (ON, false), "a wallpaper change brings the light ink back");
+    Ok(())
+}
+
 #[test]
 fn title_width_reservation_uses_configured_instance_settings() -> Result<()> {
     let mut document: serde_json::Value =

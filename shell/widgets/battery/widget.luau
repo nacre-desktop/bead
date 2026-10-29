@@ -29,11 +29,12 @@ local function desktop(props,_settings,_data)
     if style=="frameless" then
         local reading=tostring(percent)
         local reading_width=ui.text_width(reading,visual.display_font,96)+kit.tokens.spacing.lg*4
-        return ui.Column{id="battery-line",width=w,height=h,fill="transparent",justify="center",gap=kit.tokens.spacing.sm,
+        local tone=visual.tone(props.instance)
+        return ui.Column{id="battery-line",width=w,height=h,fill=tone.scrim or "transparent",radius=tone.scrim and visual.radius or nil,justify="center",gap=kit.tokens.spacing.sm,
             ui.Row{id="battery-reading",width="fill",height=104,align="center",gap=kit.tokens.spacing.sm,
-                visual.display("value",reading,reading_width,104,96,"onSurface",true),
-                visual.shadow_text("suffix","% battery","fill",34,kit.tokens.text.body*4/3,"onSurface")},
-            ui.Box{id="battery-track",width=300,height=4,fill=ui.alpha("onSurface",.25),radius=2,
+                visual.display("value",reading,reading_width,104,96,tone.ink,tone.shadow),
+                visual.shadow_text("suffix","% battery","fill",34,kit.tokens.text.body*4/3,tone.ink,tone.shadow or false)},
+            ui.Box{id="battery-track",width=300,height=4,fill=ui.alpha(tone.ink,.25),radius=2,
                 ui.Box{id="battery-fill",position="absolute",left=0,top=0,width=300*percent/100,height=4,fill="primary",radius=2}}}
     end
     if style=="card" then
