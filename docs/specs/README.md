@@ -1,12 +1,14 @@
 # Bead implementation queue
 
 | — | [B0198 Widgets drag-only placement](0198-widgets-drag-redesign.md) | Candidate — order-based bar (no tiles), normalise+repair on load, drag-to-Remove, edit-mode drop zones, toggles removed, larger stage with bar; property tests; live gate pending |
+| — | [B0197 Launcher actions on Bead](0197-launcher-actions.md) | Candidate — every launcher operation maps to a daemon method, Bead route or the QML helper command (145 rows: 13 worked, 127 fixed, 5 inline-form gaps); recording via `recorder.start/stop`; Settings aliases resolve; bar recording indicator follow-up |
 | — | [B0191 Persistent Luau VM](0191-persistent-luau.md) | Candidate — one VM per view generation; per-update markup p50 bar 2.13→1.37 ms, launcher keystroke 0.90→0.50, dashboard 0.68→0.32, notifications 0.58→0.20 (release bench, real shell); bar stays >1 ms (widget context re-runs); lead live gate pending |
 | — | [B0187 Launcher input and scroll cost](0187-launcher-input-scroll.md) | Candidate — icon-miss cache cut keypress-to-results from 61 ms to 13 ms and fling frames from 47 ms to 7 ms (nested release, real shell); markup re-evaluation per update remains; lead live gate pending |
 | — | [B0192 Workspace-switch cadence and OSD first frame](0192-workspace-osd-cadence.md) | Candidate — bar ticks at 120 Hz when presentation refresh is unconfirmed (13 -> 24 workspace frames, 8.3 ms p50); OSD cold first content 40 -> 10 ms by starting at the fractional scale; real-key first frame left to the live audit |
 | — | [B0188 OSD, toast and workspace-switch motion](0188-osd-toast-motion.md) | Measured — overlay frame interval fix and 120 Hz motion test; prewarm attempt rejected; workspace indicator 60 Hz cadence and live OSD first frame open |
 | — | [B0193 Widget scrim + pause](0193-widget-scrim-pause.md) | Candidate — adaptive widget ink/scrim from wallpaper luminance, `pause_on` fullscreen/lock on the desktop layer, seconds churn removed; live audit pending |
 | — | [B0189 Desktop widgets cost](0189-desktop-widgets-cost.md) | Candidate — canvas semantic damage, tick-eased analog clock (seconds hand opt-in), idle numbers in spec; live audit pending |
+| — | [B0194 Panel output choice](0194-panel-output-choice.md) | Candidate — keyboard/IPC opens use the compositor-focused output, pointer opens the output under the pointer; AI sidebar no longer pinned to the first output; live two-monitor check pending |
 | — | [B0181 Ghost strip after panel close](0181-close-ghost-strip.md) | Complete — shared close pose, 120 Hz scene proof, 12-route smoke and full CI pass; paired compositor visual evidence has a UI-provider gap |
 
 2026-10-21 owner structure/licensing decision is recorded in

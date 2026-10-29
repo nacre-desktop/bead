@@ -152,6 +152,41 @@ impl Panels {
     }
 }
 
+/// B0194: one rule for the output a panel opens on. An explicit request wins; then the output
+/// already routed for this event (the pointer's, for pointer-invoked opens); then the output
+/// the compositor says has focus (keyboard and IPC); then the last output with pointer input.
+/// Names that are not a current output are skipped.
+pub(crate) fn invocation_output(
+    known: &[String],
+    requested: Option<&str>,
+    routed: Option<&str>,
+    focused: Option<&str>,
+    pointer: Option<&str>,
+) -> Option<String> {
+    requested.map(str::to_owned).or_else(|| {
+        [routed, focused, pointer]
+            .into_iter()
+            .flatten()
+            .find(|name| known.iter().any(|k| k == name))
+            .map(str::to_owned)
+    })
+}
+
+/// B0194: which ready output a panel app opens on at start: the one it was started for; the first
+/// when that one is absent and every output is known; none (retry on the next output event)
+/// while the wanted one may still be announced.
+pub(crate) fn app_start_output(
+    ready: &[Option<&str>],
+    wanted: Option<&str>,
+    all_known: bool,
+) -> Option<usize> {
+    match wanted.and_then(|w| ready.iter().position(|n| *n == Some(w))) {
+        Some(at) => Some(at),
+        None if wanted.is_some() && !all_known => None,
+        None => (!ready.is_empty()).then_some(0),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,6 +231,48 @@ mod tests {
                 (target.0 as i32 - 32, target.1 as i32 - 32)
             );
         }
+    }
+
+    #[test]
+    fn panels_open_on_the_invoking_output_of_two() {
+        let known = ["eDP-1".to_owned(), "DP-1".to_owned()];
+        let pick = |req, routed, focus, ptr| invocation_output(&known, req, routed, focus, ptr);
+        // Keyboard/IPC: the compositor-focused output, whichever it is.
+        assert_eq!(
+            pick(None, None, Some("DP-1"), Some("eDP-1")).as_deref(),
+            Some("DP-1")
+        );
+        assert_eq!(
+            pick(None, None, Some("eDP-1"), Some("DP-1")).as_deref(),
+            Some("eDP-1")
+        );
+        // Pointer: the output already routed from the pointer's surface.
+        assert_eq!(
+            pick(None, Some("DP-1"), Some("eDP-1"), None).as_deref(),
+            Some("DP-1")
+        );
+        // Explicit request wins; unknown names are skipped; nothing known gives None.
+        assert_eq!(
+            pick(Some("eDP-1"), Some("DP-1"), None, None).as_deref(),
+            Some("eDP-1")
+        );
+        assert_eq!(
+            pick(None, None, Some("HDMI-9"), Some("DP-1")).as_deref(),
+            Some("DP-1")
+        );
+        assert_eq!(pick(None, None, None, None), None);
+    }
+
+    #[test]
+    fn a_panel_app_starts_on_the_output_it_was_started_for() {
+        let two = [Some("eDP-1"), Some("DP-1")];
+        assert_eq!(app_start_output(&two, Some("DP-1"), true), Some(1));
+        assert_eq!(app_start_output(&two, Some("eDP-1"), true), Some(0));
+        assert_eq!(app_start_output(&two, None, true), Some(0));
+        // DP-1 not announced yet: wait; once everything is known, fall back to the first.
+        assert_eq!(app_start_output(&two[..1], Some("DP-1"), false), None);
+        assert_eq!(app_start_output(&two[..1], Some("DP-1"), true), Some(0));
+        assert_eq!(app_start_output(&[], None, true), None);
     }
 
     #[test]

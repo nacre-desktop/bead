@@ -63,16 +63,6 @@ impl App {
             } else {
                 None
             };
-            let focused_output = self
-                .keyboard_surface
-                .as_ref()
-                .and_then(|surface| {
-                    self.surfaces
-                        .iter()
-                        .find(|s| s.wl_surface() == surface)
-                        .map(|s| s.output_name.as_str())
-                })
-                .or(self.active_input_output.as_deref());
             if let Some(id) = requested_output
                 && !self.output_sessions.contains_key(id)
                 && let UiEvent::Remote(request) = &event
@@ -84,9 +74,24 @@ impl App {
                 ));
                 return;
             }
-            let output = requested_output
-                .or_else(|| focused_output.filter(|id| self.output_sessions.contains_key(*id)))
-                .or_else(|| self.output_sessions.keys().next().map(String::as_str));
+            // Keyboard/IPC: the focused output; else the last pointer or keyboard surface.
+            let keyboard = self.keyboard_surface.as_ref().and_then(|surface| {
+                self.surfaces
+                    .iter()
+                    .find(|s| s.wl_surface() == surface)
+                    .map(|s| s.output_name.clone())
+            });
+            let focused = self.options.focused_output.as_ref().and_then(|f| f());
+            let known: Vec<String> = self.output_sessions.keys().cloned().collect();
+            let output = panels::invocation_output(
+                &known,
+                requested_output,
+                None,
+                focused.as_deref(),
+                keyboard.as_deref().or(self.active_input_output.as_deref()),
+            )
+            .or_else(|| known.first().cloned());
+            let output = output.as_deref();
             if let Some(output) = output
                 && let Some(session) = self.output_sessions.get(output)
             {
@@ -367,7 +372,8 @@ impl App {
                     let result = if let Some(output) = self.active_output.clone() {
                         self.request_panel(None, Some(&output), true)
                     } else {
-                        self.open_panel(None)
+                        let output = self.invocation_output(None);
+                        self.open_panel(output.as_deref())
                     };
                     if let Err(e) = result {
                         eprintln!("COMPANION_ERROR {e}");
@@ -1093,7 +1099,8 @@ impl App {
             if let Some(spec) = &mut self.options.panel_spec {
                 spec.initial_open = false;
             }
-            if let Err(error) = self.open_panel(None) {
+            let output = self.invocation_output(None);
+            if let Err(error) = self.open_panel(output.as_deref()) {
                 eprintln!("PANEL_RESTORE_ERROR {error}");
             }
         }

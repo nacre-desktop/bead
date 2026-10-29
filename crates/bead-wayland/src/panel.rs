@@ -91,6 +91,21 @@ impl App {
             self.ui(event);
         }
     }
+    /// B0194: the output a panel opens on, see [`panels::invocation_output`]. A pointer-driven
+    /// `hover-open` has no compositor focus to consult: the pointer's output decides.
+    pub(super) fn invocation_output(&self, requested: Option<&str>) -> Option<String> {
+        let known: Vec<String> = self.output.outputs().map(|o| self.output_id(&o)).collect();
+        let focused = self.options.focused_output.as_ref().and_then(|f| f());
+        panels::invocation_output(
+            &known,
+            requested,
+            self.active_output
+                .as_deref()
+                .or(self.options.panel_output.as_deref()),
+            focused.as_deref(),
+            self.active_input_output.as_deref(),
+        )
+    }
     pub(super) fn panel_command(&mut self, request: std::sync::Arc<Remote>) -> bool {
         let call = &request.call;
         if call.target != "bead.panel" {
@@ -225,10 +240,15 @@ impl App {
                     self.set_hidden(false);
                 }
                 let name = call.args.first().and_then(serde_json::Value::as_str);
-                let output = call
+                let requested = call
                     .output
                     .as_deref()
                     .or_else(|| call.args.get(1).and_then(|v| v.as_str()));
+                let pointer = self.active_input_output.clone();
+                let resolved = self.invocation_output(
+                    requested.or(pointer.as_deref().filter(|_| call.method == "hover-open")),
+                );
+                let output = resolved.as_deref();
                 let center = call.args.get(1).and_then(|v| v.as_f64()).map(|v| v as f32);
                 if self.options.panels.is_some() && !call.args.is_empty() && name.is_none() {
                     Err("panel view needs a string".into())

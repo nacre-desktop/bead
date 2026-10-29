@@ -347,19 +347,34 @@ pub(crate) fn widget_history_feedback(
 }
 /// Open, deep-link or toggle an app for a routed command. Never blocks on the app's startup.
 pub fn route(id: u64, name: &str, method: &str, args: &[Value]) -> Reply {
+    route_on(id, name, method, args, None)
+}
+/// B0194: the compositor-focused output, set once by the shell.
+static FOCUSED: OnceLock<bead::wayland::FocusedOutput> = OnceLock::new();
+pub fn set_focused_output(probe: bead::wayland::FocusedOutput) {
+    let _ = FOCUSED.set(probe);
+}
+/// As [`route`], for an app panel that opens on `output`; none means the focused output
+/// (keyboard and IPC), while pointer-driven callers pass the output under the pointer.
+pub fn route_on(id: u64, name: &str, method: &str, args: &[Value], output: Option<&str>) -> Reply {
+    let focused = output
+        .is_none()
+        .then(|| FOCUSED.get().and_then(|probe| probe()))
+        .flatten();
+    let output = output.or(focused.as_deref());
     match HOST.get() {
-        Some(host) => host.route(id, name, method, args),
+        Some(host) => host.route_on(id, name, method, args, output),
         None => Reply::error(id, "unavailable", "apps are not configured in this shell"),
     }
 }
 
 /// Edge observations and opens share one ordered lane. In particular a leave
 /// cannot overtake startup or an earlier enter while the external app is cold.
-pub fn panel_request(name: &'static str, method: &'static str) {
-    enqueue_panel_request(PanelRequest::Panel(name, method));
+pub fn panel_request(name: &'static str, method: &'static str, output: &str) {
+    enqueue_panel_request(PanelRequest::Panel(name, method, output.to_owned()));
 }
 enum PanelRequest {
-    Panel(&'static str, &'static str),
+    Panel(&'static str, &'static str, String),
     Visibility(&'static str, bool),
     Describe(&'static str),
 }
@@ -402,8 +417,8 @@ fn enqueue_panel_request(request: PanelRequest) {
 fn panel_requests(host: &Host, receiver: std::sync::mpsc::Receiver<PanelRequest>) {
     for request in receiver {
         match request {
-            PanelRequest::Panel(name, method) => {
-                let reply = host.route(0, name, method, &[]);
+            PanelRequest::Panel(name, method, output) => {
+                let reply = host.route_on(0, name, method, &[], Some(&output));
                 if method == "hover-open" && reply.error.is_none() {
                     // The socket can precede the panel worker. Keep later observations
                     // queued until that worker can actually receive pointer events.
@@ -467,7 +482,18 @@ impl Host {
     pub fn socket(&self, name: &str) -> PathBuf {
         self.dir.join(format!("app-{name}.sock"))
     }
+    #[cfg(test)]
     pub fn route(&self, id: u64, name: &str, method: &str, args: &[Value]) -> Reply {
+        self.route_on(id, name, method, args, None)
+    }
+    pub fn route_on(
+        &self,
+        id: u64,
+        name: &str,
+        method: &str,
+        args: &[Value],
+        output: Option<&str>,
+    ) -> Reply {
         if !APPS.contains(&name) {
             return Reply::error(id, "unknown_app", "no such app");
         }
@@ -484,7 +510,7 @@ impl Host {
             target: target.into(),
             method: method.into(),
             args: args.to_vec(),
-            output: None,
+            output: output.map(str::to_owned),
         };
         match ipc::call(&self.socket(name), &call, Duration::from_millis(800)) {
             Ok(reply) if reply.error.is_none() => return Reply::ok(id, Value::Null),
@@ -505,7 +531,7 @@ impl Host {
         if name == "chat" && method == "pearl-open" {
             spawn_args.push(json!("--pearl"));
         }
-        match self.spawn(name, &spawn_args) {
+        match self.spawn(name, &spawn_args, output) {
             Ok(()) => Reply::ok(id, Value::Null),
             Err(error) => Reply::error(id, "spawn", error),
         }
@@ -543,19 +569,22 @@ impl Host {
                 return Reply::error(id, "busy", "another selector is still open");
             }
         }
-        match self.spawn("prompt", &[json!(ident)]) {
+        match self.spawn("prompt", &[json!(ident)], None) {
             Ok(()) => Reply::ok(id, Value::Null),
             Err(error) => Reply::error(id, "spawn", error),
         }
     }
     /// Starts the app detached from the shell's stdio. Single-instance is the socket bind: a
     /// second process that loses the race exits at once.
-    fn spawn(&self, name: &str, args: &[Value]) -> Result<(), String> {
+    fn spawn(&self, name: &str, args: &[Value], output: Option<&str>) -> Result<(), String> {
         use std::os::unix::process::CommandExt;
         let mut command = std::process::Command::new(&self.exe);
         command.arg("--app").arg(name);
         for arg in args.iter().filter_map(Value::as_str) {
             command.arg(arg);
+        }
+        if let Some(output) = output.filter(|_| name == "chat") {
+            command.arg("--output").arg(output);
         }
         command
             .arg("--command-socket")
@@ -819,7 +848,10 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
     let mut options = Options {
         namespace: format!("nacre-app-{name}"),
         command_socket,
-        output,
+        // A panel app keeps every output eligible and opens its first panel on the one it was
+        // started for (B0194); a window app is restricted to it.
+        output: output.clone().filter(|_| name != "chat"),
+        panel_output: output.filter(|_| name == "chat"),
         interactive: true,
         keyboard_focus: true,
         trace_state: cfg!(feature = "trace")
@@ -1158,6 +1190,19 @@ mod tests {
         }
         let argv = std::fs::read_to_string(&out).unwrap();
         assert!(argv.lines().any(|arg| arg == "--hover-open"));
+        // B0194: the sidebar is started for the output it was invoked from.
+        std::fs::remove_file(&out).unwrap();
+        let reply = host(&dir, &script).route_on(5, "chat", "toggle", &[], Some("DP-1"));
+        assert!(reply.error.is_none());
+        let started = std::time::Instant::now();
+        while !out.exists() && started.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        let argv = std::fs::read_to_string(&out).unwrap();
+        let lines: Vec<_> = argv.lines().collect();
+        let at = lines.iter().position(|arg| *arg == "--output").unwrap();
+        assert_eq!(lines[at + 1], "DP-1");
         let _ = std::fs::remove_dir_all(dir);
     }
     #[test]
@@ -1241,7 +1286,8 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         let worker = std::thread::spawn(move || panel_requests(&host, rx));
         for method in ["hover-open", "hover-leave", "hover-enter"] {
-            tx.send(PanelRequest::Panel("chat", method)).unwrap();
+            tx.send(PanelRequest::Panel("chat", method, "DP-1".into()))
+                .unwrap();
         }
         polling.recv_timeout(Duration::from_secs(2)).unwrap();
         assert_eq!(*seen.lock().unwrap(), ["hover-open"]);
