@@ -542,6 +542,9 @@ impl LuauFrontEnd {
     pub(super) fn shares_compiled_prelude_with(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.prelude, &other.prelude)
     }
+    pub(super) fn release_vm(&self) {
+        *self.vm.borrow_mut() = None;
+    }
     pub(super) fn animation_deadline(&self) -> Option<Instant> {
         self.animations.borrow().next_frame
     }

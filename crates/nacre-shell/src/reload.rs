@@ -5575,6 +5575,13 @@ impl SceneSource for Runtime {
         .min()
     }
 
+    fn set_idle(&mut self, idle: bool) {
+        // A closed view frees its markup VM before the worker's idle trim.
+        if idle {
+            self.session.release_markup_vm();
+        }
+    }
+
     fn frame_interval(&mut self, interval: std::time::Duration) {
         self.session.set_frame_interval(interval);
         self.smooth_frame_interval = interval.max(std::time::Duration::from_millis(1));
