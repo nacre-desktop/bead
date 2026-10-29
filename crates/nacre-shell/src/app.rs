@@ -482,6 +482,7 @@ impl Host {
     pub fn socket(&self, name: &str) -> PathBuf {
         self.dir.join(format!("app-{name}.sock"))
     }
+    #[cfg(test)]
     pub fn route(&self, id: u64, name: &str, method: &str, args: &[Value]) -> Reply {
         self.route_on(id, name, method, args, None)
     }
@@ -1189,6 +1190,19 @@ mod tests {
         }
         let argv = std::fs::read_to_string(&out).unwrap();
         assert!(argv.lines().any(|arg| arg == "--hover-open"));
+        // B0194: the sidebar is started for the output it was invoked from.
+        std::fs::remove_file(&out).unwrap();
+        let reply = host(&dir, &script).route_on(5, "chat", "toggle", &[], Some("DP-1"));
+        assert!(reply.error.is_none());
+        let started = std::time::Instant::now();
+        while !out.exists() && started.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        let argv = std::fs::read_to_string(&out).unwrap();
+        let lines: Vec<_> = argv.lines().collect();
+        let at = lines.iter().position(|arg| *arg == "--output").unwrap();
+        assert_eq!(lines[at + 1], "DP-1");
         let _ = std::fs::remove_dir_all(dir);
     }
     #[test]
@@ -1272,7 +1286,7 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         let worker = std::thread::spawn(move || panel_requests(&host, rx));
         for method in ["hover-open", "hover-leave", "hover-enter"] {
-            tx.send(PanelRequest::Panel("chat", method)).unwrap();
+            tx.send(PanelRequest::Panel("chat", method, "DP-1".into())).unwrap();
         }
         polling.recv_timeout(Duration::from_secs(2)).unwrap();
         assert_eq!(*seen.lock().unwrap(), ["hover-open"]);

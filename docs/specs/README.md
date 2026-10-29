@@ -7,6 +7,7 @@
 | — | [B0188 OSD, toast and workspace-switch motion](0188-osd-toast-motion.md) | Measured — overlay frame interval fix and 120 Hz motion test; prewarm attempt rejected; workspace indicator 60 Hz cadence and live OSD first frame open |
 | — | [B0193 Widget scrim + pause](0193-widget-scrim-pause.md) | Candidate — adaptive widget ink/scrim from wallpaper luminance, `pause_on` fullscreen/lock on the desktop layer, seconds churn removed; live audit pending |
 | — | [B0189 Desktop widgets cost](0189-desktop-widgets-cost.md) | Candidate — canvas semantic damage, tick-eased analog clock (seconds hand opt-in), idle numbers in spec; live audit pending |
+| — | [B0194 Panel output choice](0194-panel-output-choice.md) | Candidate — keyboard/IPC opens use the compositor-focused output, pointer opens the output under the pointer; AI sidebar no longer pinned to the first output; live two-monitor check pending |
 | — | [B0181 Ghost strip after panel close](0181-close-ghost-strip.md) | Complete — shared close pose, 120 Hz scene proof, 12-route smoke and full CI pass; paired compositor visual evidence has a UI-provider gap |
 
 2026-10-21 owner structure/licensing decision is recorded in
