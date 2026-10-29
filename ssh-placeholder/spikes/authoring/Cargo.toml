@@ -1,0 +1,10 @@
+[package]
+name = "bead-authoring-syntax-spike"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+[workspace]
+[dependencies]
+mlua = { version = "=0.12.2", features = ["luau", "vendored"] }
+kdl = "=6.7.1"

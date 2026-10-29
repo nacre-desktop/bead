@@ -1,0 +1,39 @@
+{
+ "version": 1,
+ "note": "Bead overlay (B0045): which registry pages Bead can edit. Pages not listed here show their values read-only. Delete an entry's restriction by adding the page id. orderedLists (B0058): array settings shown as a reorderable list, which also lifts editorOwned. B0063: pages with custom sections (device-content) are listed once their builder exists in nacre-shell settings/pages.rs.",
+ "editable": [
+  "appearance",
+  "notifications",
+  "panels",
+  "windows-workspaces",
+  "date-time-language",
+  "launcher",
+  "apps",
+  "wallpaper",
+  "colors",
+  "lock-login",
+  "privacy",
+  "keyboard-mouse",
+  "power",
+  "system",
+  "nacre-ai",
+  "brain",
+  "addons",
+  "sound",
+  "network",
+  "bluetooth",
+  "displays"
+ ],
+ "orderedLists": [
+  "panels/dashboard/pages.editor.pages",
+  "panels/dashboard/extras.editor.enabled",
+  "panels/dashboard/extras.editor.order",
+  "launcher.sidebar.order",
+  "apps.defaults.browser",
+  "apps.defaults.terminal",
+  "apps.defaults.files",
+  "apps.defaults.mail",
+  "apps.defaults.emoji"
+ ],
+ "default": "appearance"
+}

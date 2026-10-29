@@ -1,0 +1,10 @@
+{
+  "health": {"available": true, "stale": false},
+  "providers": {
+    "items": {
+      "claude": {"name": "Claude", "lines": ["Preview session 40% used", "Resets in 3 h"], "observed_ms": 1709193600000},
+      "codex": {"name": "Codex", "lines": ["Preview weekly 12% used"], "observed_ms": 1709193600000}
+    },
+    "order": ["claude", "codex"]
+  }
+}

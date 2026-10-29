@@ -3,6 +3,7 @@
 | — | [B0187 Launcher input and scroll cost](0187-launcher-input-scroll.md) | Candidate — icon-miss cache cut keypress-to-results from 61 ms to 13 ms and fling frames from 47 ms to 7 ms (nested release, real shell); markup re-evaluation per update remains; lead live gate pending |
 | — | [B0192 Workspace-switch cadence and OSD first frame](0192-workspace-osd-cadence.md) | Candidate — bar ticks at 120 Hz when presentation refresh is unconfirmed (13 -> 24 workspace frames, 8.3 ms p50); OSD cold first content 40 -> 10 ms by starting at the fractional scale; real-key first frame left to the live audit |
 | — | [B0188 OSD, toast and workspace-switch motion](0188-osd-toast-motion.md) | Measured — overlay frame interval fix and 120 Hz motion test; prewarm attempt rejected; workspace indicator 60 Hz cadence and live OSD first frame open |
+| — | [B0193 Widget scrim + pause](0193-widget-scrim-pause.md) | Candidate — adaptive widget ink/scrim from wallpaper luminance, `pause_on` fullscreen/lock on the desktop layer, seconds churn removed; live audit pending |
 | — | [B0189 Desktop widgets cost](0189-desktop-widgets-cost.md) | Candidate — canvas semantic damage, tick-eased analog clock (seconds hand opt-in), idle numbers in spec; live audit pending |
 | — | [B0181 Ghost strip after panel close](0181-close-ghost-strip.md) | Complete — shared close pose, 120 Hz scene proof, 12-route smoke and full CI pass; paired compositor visual evidence has a UI-provider gap |
 

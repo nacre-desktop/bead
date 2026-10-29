@@ -1,0 +1,317 @@
+[
+  {
+    "id": "app-00",
+    "name": "Terminal",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-01",
+    "name": "Files",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-02",
+    "name": "Browser",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-03",
+    "name": "Settings",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-04",
+    "name": "😀 🌈 🚀",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-05",
+    "name": "Editor",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-06",
+    "name": "Music",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-07",
+    "name": "Videos",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-08",
+    "name": "Calendar",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-09",
+    "name": "Terminal",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-10",
+    "name": "Files",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-11",
+    "name": "Browser",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-12",
+    "name": "Settings",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-13",
+    "name": "Multilingual Ελληνικά 日本語 😀 🌈 🚀",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-14",
+    "name": "Editor",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-15",
+    "name": "Music",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-16",
+    "name": "Videos",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-17",
+    "name": "Calendar",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-18",
+    "name": "Terminal",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-19",
+    "name": "Files",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-20",
+    "name": "Browser",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-21",
+    "name": "Settings",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-22",
+    "name": "Multilingual Ελληνικά 日本語 😀 🌈 🚀",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-23",
+    "name": "Editor",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-24",
+    "name": "Music",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-25",
+    "name": "Videos",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-26",
+    "name": "Calendar",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-27",
+    "name": "Terminal",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-28",
+    "name": "Files",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-29",
+    "name": "Browser",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-30",
+    "name": "Settings",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-31",
+    "name": "Multilingual Ελληνικά 日本語 😀 🌈 🚀",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-32",
+    "name": "Editor",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-33",
+    "name": "Music",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-34",
+    "name": "Videos",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-35",
+    "name": "Calendar",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-36",
+    "name": "Terminal",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-37",
+    "name": "Files",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-38",
+    "name": "Browser",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-39",
+    "name": "Settings",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-40",
+    "name": "Multilingual Ελληνικά 日本語 😀 🌈 🚀",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-41",
+    "name": "Editor",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-42",
+    "name": "Music",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-43",
+    "name": "Videos",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-44",
+    "name": "Calendar",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-45",
+    "name": "Terminal",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-46",
+    "name": "Files",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-47",
+    "name": "Browser",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-48",
+    "name": "Settings",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-49",
+    "name": "Multilingual Ελληνικά 日本語 😀 🌈 🚀",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-50",
+    "name": "Editor",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-51",
+    "name": "Music",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-52",
+    "name": "Videos",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-53",
+    "name": "Calendar",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-54",
+    "name": "Terminal",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-55",
+    "name": "Files",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-56",
+    "name": "Browser",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-57",
+    "name": "Settings",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-58",
+    "name": "Multilingual Ελληνικά 日本語 😀 🌈 🚀",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-59",
+    "name": "Editor",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-60",
+    "name": "Music",
+    "icon": "system-file-manager"
+  },
+  {
+    "id": "app-61",
+    "name": "Videos",
+    "icon": "utilities-terminal"
+  },
+  {
+    "id": "app-62",
+    "name": "Calendar",
+    "icon": "system-file-manager"
+  }
+]

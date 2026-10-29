@@ -1,0 +1,166 @@
+-- SPDX-License-Identifier: GPL-3.0-only
+local ui = require("bead.ui")
+local kit = require("bead.kit")
+local T = require("./tokens")
+local VirtualList = require("../kit/virtual-list")
+local kind = ui.resolve_for_check(ui.bind("extras.kind")) or "overview"
+if kind == "wallpaper" then return require("./wallpaper/main") end
+local overview = kind == "overview"
+local shortcuts = kind == "keybindings"
+local screen_w = ui.resolve_for_check(ui.bind("bead.viewport.width")) or T.panel.overview_width
+local screen_h = ui.resolve_for_check(ui.bind("bead.viewport.height")) or T.panel.default_screen_height
+local width = overview and math.min(T.panel.overview_width, screen_w*T.panel.max_width_fraction) or T.panel.search_width
+local configured_body = overview and math.min(T.panel.overview_body_max, math.max(T.panel.body_min, screen_h-T.panel.overview_body_reserve)) or T.panel.search_body_height
+-- SearchSurface has 26px of vertical padding/gaps inside its nominal body height.
+local body_height = configured_body-T.panel.body_internal_loss
+local panel_height = configured_body+T.panel.search_chrome
+local body_width = width-T.panel.horizontal_inset*2
+
+local function row(item, selected)
+  local row_h = shortcuts and T.shortcuts.row_height or T.palette.row_height
+  local row_r = shortcuts and T.shortcuts.row_radius or T.palette.row_radius
+  if shortcuts then
+    return ui.Box{id="shortcut-"..tostring(item.id),width="fill",height=row_h,radius=row_r,fill="surfaceContainer",
+      ui.Text{id="shortcut-key",position="absolute",left=T.shortcuts.padding,top=T.shortcuts.text_top,width=T.shortcuts.key_width,height=T.shortcuts.text_height,
+        text=item.key or "",font_size=T.shortcuts.font,color="primary",family="JetBrains Mono NF"},
+      ui.Text{id="shortcut-description",position="absolute",left=T.shortcuts.description_offset,top=T.shortcuts.text_top,
+        width=body_width-T.shortcuts.description_offset-T.shortcuts.padding,height=T.shortcuts.text_height,text=item.description or "",
+        font_size=T.shortcuts.font,color="onSurface"}}
+  end
+  local activate = item.disabled ~= true and ui.action("extras.do","activate:"..tostring(item.id)) or nil
+  return ui.Button{id="palette-"..tostring(item.id),width="fill",height=row_h,radius=row_r,padding=T.palette.padding,
+    fill=selected and "secondaryContainer" or "surfaceContainer",hover_fill="secondaryContainer",activate_on_release=true,focus_on_pointer=false,on_activate=activate,
+    aria_label=(item.name or "").." "..(item.description or ""),
+    ui.Text{position="absolute",left=T.palette.padding,top=T.palette.icon_top,
+      text=item.kind == "app" and "apps" or item.icon or "apps",family="Material Symbols Rounded",width=T.palette.icon_size,height=T.palette.icon_height,
+      font_size=T.palette.icon_font,color="primary"},
+    ui.Text{id="palette-name",position="absolute",left=T.palette.label_left,top=T.palette.padding,width=body_width-T.palette.label_left-T.palette.padding,
+      text=item.name or "",height=T.palette.name_height,font_size=T.palette.name_font,color="onSurface"},
+    ui.Text{id="palette-description",position="absolute",left=T.palette.label_left,top=T.palette.description_top,width=body_width-T.palette.label_left-T.palette.padding,
+      text=item.description or "",height=T.palette.description_height,font_size=T.palette.description_font,color="onSurfaceVariant"}}
+
+end
+
+local function preview_content(item)
+  if item.preview and (item.preview_width or 0) > 0 and (item.preview_height or 0) > 0 then
+    -- Live capture (B0090): contain-fit inside the preview box, centred.
+    local inset = T.overview.preview_inset
+    local bw, bh = item.tile_width-inset*2, item.preview_height-inset*2
+    local fit = math.min(bw/item.preview_width, bh/item.preview_height)
+    local w, h = item.preview_width*fit, item.preview_height*fit
+    return ui.Image{id="window-preview",position="absolute",left=(item.tile_width-w)/2,top=(item.preview_height-h)/2,
+      width=w,height=h,path=item.preview}
+  end
+  return ui.Text{position="absolute",left=(item.tile_width-T.overview.icon_size)/2,top=(item.preview_height-T.overview.icon_size)/2,
+    text=item.icon or "apps",family="Material Symbols Rounded",font_size=T.overview.icon_size,color="onSurfaceVariant",
+    width=T.overview.icon_size,height=T.overview.icon_size,
+    aria_label=item.title or "Window"}
+end
+
+local function window_tile(item)
+  local selected = item.selected == true
+  return ui.Button{id="window-"..tostring(item.id),width=item.tile_width,height=item.tile_height,
+    radius=T.overview.thumbnail_radius,padding=T.overview.tile_padding,
+    fill="transparent",hover_fill="transparent",
+    activate_on_release=true,focus_on_pointer=false,on_activate=ui.action("extras.do","focus:"..tostring(item.id)),aria_label=item.title or item.app_id or "Window",
+    ui.Box{id="preview",position="absolute",left=0,top=0,width=item.tile_width,height=item.preview_height,
+      radius=T.overview.thumbnail_radius,fill=selected and "secondaryContainer" or "surfaceContainerHigh",
+      preview_content(item)},
+    ui.Text{id="window-title",position="absolute",left=0,top=item.tile_height-T.overview.caption_height,
+      width=item.tile_width,height=T.overview.caption_height,text=item.title or item.app_id or "Window",
+      font_size=T.overview.title_font,color="onSurface",text_align="left"}}
+end
+
+local function workspace_card(group)
+  local ws = group.workspace
+  local count = #group.windows
+  local columns = count == 1 and 1 or T.overview.window_columns
+  local rows = math.ceil(count/columns)
+  local tile_h = count <= 2 and T.overview.two_window_cell_height or T.overview.multi_window_cell_height
+  local tile_extent = math.max(T.overview.thumbnail_height, rows*tile_h)
+  local tiles = {}
+  for i, item in ipairs(group.windows) do
+    item.tile_width = count == 1 and T.overview.single_tile_width or T.overview.multi_tile_width
+    item.tile_height = tile_h-T.overview.tile_cell_inset
+    item.preview_height = item.tile_height-T.overview.title_height-T.overview.title_gap
+    item.selected = item.selected == true
+    tiles[i] = window_tile(item)
+  end
+  local kids = {
+    ui.Button{id="workspace-title",position="absolute",left=T.overview.workspace_title_left,top=T.overview.workspace_title_top,width=T.overview.workspace_title_width,
+      height=T.overview.workspace_title_height,padding=0,radius=T.overview.workspace_title_radius,fill="transparent",
+      activate_on_release=true,focus_on_pointer=false,on_activate=ui.action("extras.do","workspace:"..tostring(ws.index)),aria_label=ws.name or ("Workspace "..tostring(ws.index)),
+      ui.Row{width="fill",height=T.overview.workspace_title_height,gap=T.overview.title_icon_gap,align="center",
+        ui.Text{text="workspaces",family="Material Symbols Rounded",font_size=T.overview.workspace_icon_font,
+          color="primary",width=T.overview.workspace_icon_width,height=T.overview.workspace_title_height},
+        ui.Text{text=tostring(ws.index).." · "..((ws.name and ws.name~="" and ws.name~=tostring(ws.index)) and ws.name or "Workspace"),
+          height=T.overview.workspace_title_height,font_size=T.overview.workspace_title_font,color="primary"}}},
+    ui.Scroll{id="window-grid-extent",position="absolute",left=T.overview.tile_left,top=T.overview.tile_top,
+      scroll=ui.bind("extras.window_scroll."..tostring(math.clamp(ws.index,1,64))),width=T.overview.tile_area_width,height=T.overview.thumbnail_height,
+      ui.Grid{id="window-grid",width=T.overview.tile_area_width,height=tile_extent,
+        columns=columns,row_height=tile_h,
+        gap_x=T.overview.window_gap_x,gap_y=T.overview.window_gap_y,
+        table.unpack(tiles)}},
+  }
+  if count == 0 then
+    kids[#kids+1] = ui.Text{id="workspace-empty",position="absolute",left=T.overview.tile_left,top=T.overview.empty_top,
+      width=T.overview.tile_area_width,height=T.overview.empty_height,text="Empty",
+      font_size=T.overview.empty_font,text_align="center",color="onSurfaceVariant"}
+  end
+  return ui.Box{id="workspace-card-"..tostring(ws.id),width=T.overview.workspace_width,height=T.overview.workspace_height,
+    radius=T.overview.workspace_radius,
+    fill="surfaceContainer",table.unpack(kids)}
+end
+
+local body
+if overview then
+  local groups = ui.resolve_for_check(ui.bind("extras.groups")) or {}
+  local columns = math.max(T.overview.min_columns,math.min(T.overview.max_columns,
+    math.floor((body_width+T.overview.workspace_gap)/(T.overview.workspace_width+T.overview.workspace_gap))))
+  local count = #groups
+  local rows = math.ceil(count/columns)
+  local extent = math.max(body_height,rows*T.overview.workspace_height+math.max(0,rows-1)*T.overview.workspace_gap)
+  body = ui.Scroll{id="overview-scroll",scroll=ui.bind("extras.scroll"),width="fill",height=body_height,
+    ui.Box{id="overview-extent",width=body_width,height=extent,shrink=0,
+      ui.Grid{id="workspace-grid",position="absolute",left=0,top=0,width=body_width,
+        columns=columns,row_height=T.overview.workspace_height,gap_x=T.overview.workspace_gap,gap_y=T.overview.workspace_gap,
+        ui.Repeat{id="workspace-groups",model=ui.bind("extras.groups"),key="id",
+          render=workspace_card}}}}
+else
+  body = VirtualList{id="extras-scroll",scroll=ui.bind("extras.scroll"),width=body_width,height=body_height,
+    gap=shortcuts and T.shortcuts.row_gap or T.palette.row_gap,
+    row_height=shortcuts and T.shortcuts.row_height or T.palette.row_height,
+    model=ui.bind("extras.filtered"),key="id",render=function(item)return row(item,item.selected == true)end}
+
+end
+
+local heading = {
+  ui.Text{id="title",text=ui.bind("extras.title"),width=0,grow=1,height=T.panel.heading_height,font_size=T.panel.heading_font,color="primary"},
+}
+if shortcuts then heading[#heading+1] = kit.IconButton{id="refresh",aria_label="Refresh shortcuts",text="refresh",width=T.panel.refresh_size,height=T.panel.refresh_size,padding=0,
+  activate_on_release=true,on_activate=ui.action("extras.do","refresh")} end
+heading[#heading+1] = kit.Button{id="close",aria_label="Close",width=T.panel.close_width,height=T.panel.close_height,padding=0,
+  radius=T.panel.close_radius,fill="surfaceContainerHigh",hover_fill="surfaceContainerHigh",activate_on_release=true,on_activate=ui.action("extras.close"),
+  ui.Row{width=T.panel.close_width,height=T.panel.close_height,gap=T.panel.close_gap,align="center",justify="center",
+    ui.Text{text="close",family="Material Symbols Rounded",width=T.panel.close_icon,height=T.panel.close_content_height,font_size=T.panel.close_icon,color="onSurface"},
+    ui.Text{text="Close",width=T.panel.close_label_width,height=T.panel.close_content_height,font_size=T.panel.close_font,color="onSurface"}}}
+
+
+return kit.Panel{id="extras",edge=T.panel.edge,open=ui.bind("panel.open"),width=width,height=panel_height,
+  duration=T.panel.duration,transition=T.panel.transition,reveal=T.panel.reveal,fade=T.panel.fade,radius=T.panel.radius,fill="surface",border_width=T.panel.border,border_color="outlineVariant",
+  padding_left=T.panel.horizontal_inset,padding_right=T.panel.horizontal_inset,
+  padding_top=T.panel.heading_top,padding_bottom=T.panel.bottom_inset,gap=T.panel.search_gap,
+  ui.Row{id="heading",width="fill",height=T.panel.heading_height,gap=T.panel.heading_gap,align="center",table.unpack(heading)},
+  kit.TextInput{id="search",focus_ring=false,text=ui.bind("extras.query"),placeholder=ui.bind("extras.placeholder"),width="fill",
+    height=T.panel.search_height,padding_left=T.panel.search_padding,padding_right=T.panel.search_padding,padding_top=T.panel.search_vertical,padding_bottom=T.panel.search_vertical,radius=T.panel.search_radius,font_size=kit.tokens.text.body*4/3,
+    fill="surfaceContainerHigh"},
+  ui.Box{id="body",width="fill",height=body_height,body},
+  ui.Text{id="empty-message",position="absolute",left=T.panel.horizontal_inset,
+    top=T.panel.empty_top+body_height/2-T.panel.empty_height/2,width=body_width,height=T.panel.empty_height,
+    text=ui.bind("extras.empty_message"),visible=shortcuts and ui.bind("extras.empty") or false,font_size=T.panel.empty_font,
+    text_align="center",color="onSurface"},
+  ui.Text{id="status-message",position="absolute",left=T.panel.horizontal_inset,
+    top=T.panel.empty_top+body_height/2-T.panel.empty_height/2,width=body_width,height=T.panel.empty_height,
+    text=ui.bind("extras.status_message"),visible=ui.bind("extras.status_visible"),font_size=T.panel.empty_font,
+    text_align="center",color="onSurfaceVariant"},
+}

@@ -1,0 +1,32 @@
+{
+  "bounds": {
+    "h": 654.0,
+    "w": 1164.0,
+    "x": -32.0,
+    "y": -32.0
+  },
+  "includes": [
+    "legacy-ui/content.json"
+  ],
+  "script": "legacy-ui/behavior.luau",
+  "version": 1,
+  "width": 1100.0,
+  "nodes": [
+    {"draw": {"blur": 10.0, "radius": 12.0, "rect": {"h": 650.0, "w": 1160.0, "x": -30.0, "y": -30.0}, "type": "shadow"}, "id": "node-0"},
+    {"draw": {"border": [[64, 64, 61, 255], 1.0], "fill": [18, 18, 15, 255], "radius": 12.0, "rect": {"h": 590.0, "w": 1100.0, "x": 0.0, "y": 0.0}, "type": "rounded"}, "id": "node-1", "bind": {"fill": "color_surface", "border_color": "color_outlineVariant"}},
+    {"draw": {"border": null, "fill": [26, 25, 23, 255], "radius": 13.0, "rect": {"h": 48.0, "w": 898.0, "x": 182.0, "y": 20.0}, "type": "rounded"}, "id": "search-box", "input": "launcher.search.text", "bind": {"fill": "color_surfaceContainer"}},
+    {"draw": {"border": null, "fill": [26, 25, 23, 255], "radius": 10.0, "rect": {"h": 40.0, "w": 150.0, "x": 12.0, "y": 84.0}, "type": "rounded"}, "id": "node-3", "action": "toggle", "bind": {"fill": "color_surfaceContainer"}},
+    {"draw": {"color": [178, 177, 174, 255], "family": "IBM Plex Sans", "rect": {"h": 32.0, "w": 860.0, "x": 202.0, "y": 30.0}, "size": 18.0, "text": "Search applications…", "type": "text"}, "id": "search-input", "input": "launcher.search.text", "bind": {"color": "color_onSurfaceVariant", "text": "search_label"}},
+    {"draw": {"color": [235, 227, 177, 255], "family": "IBM Plex Sans", "rect": {"h": 26.0, "w": 120.0, "x": 28.0, "y": 93.0}, "size": 16.0, "text": "Home", "type": "text"}, "id": "node-5", "action": "toggle", "bind": {"color": "color_primary"}},
+    {"draw": {"color": [236, 235, 232, 255], "family": "IBM Plex Sans", "rect": {"h": 26.0, "w": 120.0, "x": 28.0, "y": 141.0}, "size": 16.0, "text": "Applications", "type": "text"}, "id": "node-6", "bind": {"color": "color_onSurface"}},
+    {"draw": {"color": [236, 235, 232, 255], "family": "IBM Plex Sans", "rect": {"h": 26.0, "w": 120.0, "x": 28.0, "y": 189.0}, "size": 16.0, "text": "System", "type": "text"}, "id": "node-7", "bind": {"color": "color_onSurface"}},
+    {"draw": {"color": [236, 235, 232, 255], "family": "IBM Plex Sans", "rect": {"h": 26.0, "w": 120.0, "x": 28.0, "y": 237.0}, "size": 16.0, "text": "Settings", "type": "text"}, "id": "node-8", "bind": {"color": "color_onSurface"}},
+    {"draw": {"color": [236, 235, 232, 255], "family": "IBM Plex Sans", "rect": {"h": 26.0, "w": 120.0, "x": 28.0, "y": 285.0}, "size": 16.0, "text": "Files", "type": "text"}, "id": "node-9", "bind": {"color": "color_onSurface"}},
+    {"draw": {"color": [236, 235, 232, 255], "family": "IBM Plex Sans", "rect": {"h": 26.0, "w": 120.0, "x": 28.0, "y": 333.0}, "size": 16.0, "text": "Wallpaper", "type": "text"}, "id": "node-10", "bind": {"color": "color_onSurface"}},
+    {"draw": {"color": [236, 235, 232, 255], "family": "IBM Plex Sans", "rect": {"h": 34.0, "w": 860.0, "x": 202.0, "y": 83.0}, "size": 22.0, "text": "Applications", "type": "text"}, "id": "node-11", "bind": {"color": "color_onSurface"}},
+    {"draw": {"color": [236, 235, 232, 255], "family": "IBM Plex Sans", "rect": {"h": 30.0, "w": 820.0, "x": 202.0, "y": 535.0}, "size": 16.0, "text": "Font fallback: Ελληνικά · العربية · 日本語 · 😀 🌈 🚀", "type": "text"}, "id": "node-66", "bind": {"color": "color_onSurface", "text": "status_label"}},
+    {"draw": {"path": "sample.svg", "rect": {"h": 48.0, "w": 48.0, "x": 28.0, "y": 422.0}, "type": "image"}, "id": "node-67"},
+    {"draw": {"path": "sample.png", "rect": {"h": 48.0, "w": 48.0, "x": 96.0, "y": 422.0}, "type": "image"}, "id": "node-68"},
+    {"draw": {"path": "sample.svg", "rect": {"h": 48.0, "w": 48.0, "x": 62.0, "y": 490.0}, "type": "image"}, "id": "node-69", "icon": "folder"}
+  ]
+}

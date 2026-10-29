@@ -1,0 +1,11 @@
+{
+  "health": {"available": true, "stale": false},
+  "entries": {
+    "items": {
+      "c12": {"kind": "text", "preview": "cargo test --workspace", "created_ms": 1709193600000},
+      "c11": {"kind": "image", "preview": "Image 1280x720", "created_ms": 1709193500000},
+      "c10": {"kind": "text", "preview": "Preview clipboard text", "created_ms": 1709193400000}
+    },
+    "order": ["c12", "c11", "c10"]
+  }
+}

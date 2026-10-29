@@ -1,0 +1,10 @@
+{
+  "health": {"available": true, "stale": false},
+  "items": {
+    "items": {
+      "s2": {"path": "/preview/Pictures/Screenshots/shot-2.png", "created_ms": 1709193600000},
+      "s1": {"path": "/preview/Pictures/Screenshots/shot-1.png", "created_ms": 1709193500000}
+    },
+    "order": ["s2", "s1"]
+  }
+}

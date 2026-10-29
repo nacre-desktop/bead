@@ -1,0 +1,2 @@
+<!-- SPDX-License-Identifier: MIT; deterministic test icon, no theme lookup -->
+<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><rect width="28" height="28" rx="7" fill="#403b20"/><circle cx="14" cy="8" r="2" fill="#ebe3b1"/><path d="M12 12h4v10h-4z" fill="#ebe3b1"/></svg>

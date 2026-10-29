@@ -1,0 +1,14 @@
+{
+  "health": {"available": true, "stale": false},
+  "notes": {
+    "items": {
+      "n1": {"title": "Preview note", "path": "/preview/brain/note.md"},
+      "n2": {"title": "Preview decision", "path": "/preview/brain/decision.md"}
+    },
+    "order": ["n1", "n2"]
+  },
+  "tasks": {
+    "items": {"t1": {"text": "Preview open task", "path": "/preview/brain/note.md"}},
+    "order": ["t1"]
+  }
+}
