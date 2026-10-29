@@ -35,8 +35,50 @@ fn core_audio() -> serde_json::Value {
     })
 }
 
+/// B0185: a mid-slide frame of a route's open scene, in both directions, composites one
+/// flattened content layer instead of repainting the content per frame.
+fn slide_layer_builds(open_scene: &bead::render::Scene, opening: bool) -> usize {
+    use bead::render::{Damage, PixelFormat, Renderer, ShmTarget, tree::TreeCpuRenderer};
+    let scale = 1.5;
+    let mut base = open_scene.clone();
+    base.reveal(1.);
+    let mut worker = bead::render::tree::TreeCache::default();
+    worker.prepare(&base, scale).expect("worker bake");
+    base.prepared
+        .insert(scale.to_bits(), worker.frame.clone().expect("baked frame"));
+    let (w, h) = (
+        (base.bounds.w * scale).ceil() as u32,
+        (base.bounds.h * scale).ceil() as u32,
+    );
+    let mut bytes = vec![0u8; w as usize * h as usize * 4];
+    let mut renderer = TreeCpuRenderer::default();
+    for progress in [0.3, 0.6, 0.9] {
+        let mut scene = base.clone();
+        let (dx, dy) = scene.panel_offset(progress, opening);
+        scene.offset = (scene.offset.0 + dx, scene.offset.1 + dy);
+        renderer
+            .prepare_on_ui(&scene, scale)
+            .expect("prepare_on_ui");
+        renderer
+            .render(
+                &scene,
+                ShmTarget {
+                    bytes: &mut bytes,
+                    width: w,
+                    height: h,
+                    scale,
+                    format: PixelFormat::Rgba,
+                },
+                Damage::full(w, h),
+            )
+            .expect("slide frame renders");
+    }
+    renderer.slide_layer_builds
+}
+
 #[test]
 fn real_shell_panel_routes_open_and_close_with_prepared_scenes() {
+    let mut layered = Vec::new();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
     let palette = root.join("palette.json");
     let colors = bead::render::Palette::read(&palette).expect("shell palette loads");
@@ -254,6 +296,15 @@ fn real_shell_panel_routes_open_and_close_with_prepared_scenes() {
                 "{name}: stage produced no prepared scene"
             );
             if action == "open" {
+                if scene.motion.as_ref().is_some_and(|m| m.reveal) {
+                    for opening in [true, false] {
+                        let builds = slide_layer_builds(&scene, opening);
+                        assert!(builds <= 1, "{name}: {builds} slide layers in one slide");
+                        if builds == 1 {
+                            layered.push((name, opening));
+                        }
+                    }
+                }
                 scene.reveal(0.);
             }
             let mut cache = bead::render::tree::TreeCache::default();
@@ -269,6 +320,14 @@ fn real_shell_panel_routes_open_and_close_with_prepared_scenes() {
                     "{name}: panel.open reflects visibility"
                 );
             }
+        }
+    }
+    for route in ["dashboard", "launcher", "control", "calendar"] {
+        for opening in [true, false] {
+            assert!(
+                layered.contains(&(route, opening)),
+                "{route}: a slide (opening={opening}) must composite its content layer; got {layered:?}"
+            );
         }
     }
 }

@@ -15,6 +15,8 @@ mod extras;
 mod font_sources;
 mod frame_art;
 mod frame_config;
+#[cfg(test)]
+mod frame_cost_bench;
 mod headless;
 mod i18n;
 mod i18n_source;

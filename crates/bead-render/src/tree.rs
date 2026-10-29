@@ -2198,14 +2198,14 @@ fn fill_covers(primitive: &Primitive, offset: (f32, f32), scale: f32, clip: Dama
             || (x >= left + radius + inset && x1 <= right - radius - inset))
 }
 fn opaque_start(
-    frame: &Frame,
+    items: &[Item],
     offset: (f32, f32),
     scale: f32,
     damage: Damage,
     width: u32,
     height: u32,
 ) -> Option<usize> {
-    frame.items.iter().rposition(|item| {
+    items.iter().rposition(|item| {
         item.raster.is_none()
             && matches!(&item.primitive,Primitive::Rounded{fill,..}if fill[3]==255)
             && fill_covers(&item.primitive, offset, scale, damage)
@@ -2449,7 +2449,16 @@ fn paint_with_scratch(
     damage: Damage,
     repair_scratch: &mut RepairScratch,
 ) -> Result<()> {
-    if frame.items.iter().any(|item| item.image.is_some()) {
+    paint_items(&frame.items, offset, target, damage, repair_scratch)
+}
+fn paint_items(
+    items: &[Item],
+    offset: (f32, f32),
+    target: ShmTarget<'_>,
+    damage: Damage,
+    repair_scratch: &mut RepairScratch,
+) -> Result<()> {
+    if items.iter().any(|item| item.image.is_some()) {
         return Err("CPU paint requires worker-materialized dense images".into());
     }
     let ShmTarget {
@@ -2469,7 +2478,7 @@ fn paint_with_scratch(
     if damage_mask_bytes > RepairScratch::CAP {
         return Err("repair mask exceeds budget".into());
     }
-    let start = opaque_start(frame, offset, scale, damage, width, height);
+    let start = opaque_start(items, offset, scale, damage, width, height);
     if start.is_none() {
         let clear_profile = bead_core::profile::Span::new("paint_clear");
         for y in damage.y..damage.y + damage.h {
@@ -2483,7 +2492,7 @@ fn paint_with_scratch(
     let mut mask = Mask::new(width, damage.h).ok_or("damage mask")?;
     let mut mask_clip = None;
     let mut painted = false;
-    for item in &frame.items[start.unwrap_or(0)..] {
+    for item in &items[start.unwrap_or(0)..] {
         let _item_profile = bead_core::profile::Span::new(match item.primitive {
             Primitive::Arc { .. } => "paint_arc",
             Primitive::Polyline { .. } => "paint_polyline",
@@ -3052,6 +3061,95 @@ pub struct TreeCpuRenderer {
     snapshot_layers: usize,
     cpu_preparation: Option<Arc<CpuPreparation>>,
     worker_fingerprint: Option<SnapshotFingerprint>,
+    /// B0185: the content of a sliding panel, flattened once per slide (see [`SlideContent`]).
+    slide_layer: Option<(u64, Raster)>,
+    /// Slide layers flattened (a test hook: one per slide, none per frame).
+    pub slide_layer_builds: usize,
+}
+/// B0185: a panel slide in progress moves its content as one piece: opening, the content above
+/// the growing body slides behind the reveal window; closing, the whole open picture moves.
+/// Painting that content primitive by primitive costs every frame as much as a full repaint
+/// (fills, strokes and blends over the whole panel), so it is flattened once per slide into a
+/// layer, and each frame paints only the body below it and composites the layer at its pose.
+struct SlideContent {
+    /// First content primitive in the scene, and its item in the posed frame (after the body's
+    /// growing-edge pieces).
+    scene_start: usize,
+    posed_start: usize,
+    /// Content offset relative to the scene this frame, and the reveal window clipping it.
+    offset: (f32, f32),
+    window: Option<Rect>,
+}
+impl SlideContent {
+    fn of(scene: &Scene, frame: &Frame) -> Option<Self> {
+        let motion = scene
+            .motion
+            .as_ref()
+            .filter(|m| m.reveal && m.progress < 1.)?;
+        let window = scene.reveal_window();
+        if motion.open && window.is_none() {
+            return None;
+        }
+        // Opening, the body (its parts and whatever lies below them) is reshaped per frame.
+        let scene_start = if motion.open {
+            motion.parts.iter().map(|(index, _)| index + 1).max()?
+        } else {
+            0
+        };
+        let posed_start = scene_start + frame.items.len().checked_sub(scene.primitives.len())?;
+        if scene_start >= scene.primitives.len() || posed_start >= frame.items.len() {
+            return None;
+        }
+        let offset = scene.content_offset(scene_start);
+        // The posed content must be the scene's content at this offset, item for item.
+        let matches = |posed: usize, index: usize| {
+            rect(&frame.items[posed].primitive)
+                == rect(&scene.primitives[index]).translated(offset.0, offset.1)
+        };
+        if !matches(posed_start, scene_start)
+            || !matches(frame.items.len() - 1, scene.primitives.len() - 1)
+        {
+            return None;
+        }
+        Some(Self {
+            scene_start,
+            posed_start,
+            offset,
+            window,
+        })
+    }
+    /// Identity of the content's pixels: its primitives, own clips and rasters at a scale and format.
+    fn key(&self, scene: &Scene, frame: &Frame, scale: f32, format: PixelFormat) -> u64 {
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        (
+            scale.to_bits(),
+            format == PixelFormat::Rgba,
+            self.scene_start,
+        )
+            .hash(&mut hash);
+        for value in [
+            scene.bounds.x,
+            scene.bounds.y,
+            scene.bounds.w,
+            scene.bounds.h,
+        ] {
+            value.to_bits().hash(&mut hash);
+        }
+        for (index, item) in frame.items[self.posed_start..].iter().enumerate() {
+            let index = self.scene_start + index;
+            hash_primitive(&scene.primitives[index], false, &mut hash);
+            if let Some(clip) = scene.clips.get(&index) {
+                [clip.x, clip.y, clip.w, clip.h]
+                    .map(f32::to_bits)
+                    .hash(&mut hash);
+            }
+            item.raster
+                .as_ref()
+                .map(|raster| raster.key)
+                .hash(&mut hash);
+        }
+        hash.finish()
+    }
 }
 enum FlattenedPixels {
     Dense(Pixmap),
@@ -3174,6 +3272,131 @@ impl TreeCpuRenderer {
         );
         self.opacity_builds += 1;
         self.flattened = Some((frame.key, frame.scale, pixels));
+        Ok(())
+    }
+    /// B0185: one slide frame: the body below the content as primitives, then the content layer
+    /// (flattened on the first frame of the slide) at its pose, inside the reveal window.
+    fn paint_slide(
+        &mut self,
+        scene: &Scene,
+        frame: &Frame,
+        slide: &SlideContent,
+        target: ShmTarget<'_>,
+        damage: Damage,
+    ) -> Result<()> {
+        let ShmTarget {
+            bytes,
+            width,
+            height,
+            scale,
+            format,
+        } = target;
+        let key = slide.key(scene, frame, scale, format);
+        if self
+            .slide_layer
+            .as_ref()
+            .is_none_or(|(last, _)| *last != key)
+        {
+            self.slide_layer = None;
+            let _profile = bead_core::profile::Span::new("slide_layer");
+            let (w, h) = (
+                (scene.bounds.w * scale).ceil().max(1.) as u32,
+                (scene.bounds.h * scale).ceil().max(1.) as u32,
+            );
+            let charge = self
+                .group_budget
+                .get_or_insert_with(|| {
+                    bead_core::cache::Budget::new("cpu-composite", 64 * bead_core::cache::MIB)
+                })
+                .reserve(w as usize * h as usize * 4 + 64)?;
+            let mut pixels = Pixmap::new(w, h).ok_or("slide layer size")?;
+            let items: Vec<Item> = frame.items[slide.posed_start..]
+                .iter()
+                .enumerate()
+                .map(|(index, item)| {
+                    let index = slide.scene_start + index;
+                    Item {
+                        id: item.id.clone(),
+                        primitive: scene.primitives[index].clone(),
+                        clip: scene.clips.get(&index).copied(),
+                        raster: item.raster.clone(),
+                        image: None,
+                    }
+                })
+                .collect();
+            // Paint in bands: the repair mask is bounded per call.
+            let band = (RepairScratch::CAP / w as usize).clamp(1, h as usize) as u32;
+            for y in (0..h).step_by(band as usize) {
+                paint_items(
+                    &items,
+                    (-scene.bounds.x, -scene.bounds.y),
+                    ShmTarget {
+                        bytes: pixels.data_mut(),
+                        width: w,
+                        height: h,
+                        scale,
+                        format,
+                    },
+                    Damage {
+                        x: 0,
+                        y,
+                        w,
+                        h: band.min(h - y),
+                    },
+                    &mut self.repair_scratch,
+                )?;
+            }
+            self.slide_layer_builds += 1;
+            self.slide_layer = Some((
+                key,
+                Raster {
+                    changed: Damage::full(w, h),
+                    pixels: Arc::new(pixels),
+                    origin: (0, 0),
+                    key,
+                    base_key: None,
+                    _charge: charge,
+                },
+            ));
+        }
+        paint_items(
+            &frame.items[..slide.posed_start],
+            scene.offset,
+            ShmTarget {
+                bytes: &mut *bytes,
+                width,
+                height,
+                scale,
+                format,
+            },
+            damage,
+            &mut self.repair_scratch,
+        )?;
+        let (_, layer) = self.slide_layer.as_ref().expect("slide layer built");
+        let x = ((scene.offset.0 + slide.offset.0 + scene.bounds.x) * scale).round() as i64;
+        let y = ((scene.offset.1 + slide.offset.1 + scene.bounds.y) * scale).round() as i64;
+        let mut clip = intersection(damage, Damage::full(width, height));
+        if let Some(window) = slide.window {
+            clip = intersection(
+                clip,
+                window
+                    .translated(scene.offset.0, scene.offset.1)
+                    .pixels(scale, width, height),
+            );
+        }
+        let left = i64::from(clip.x).max(x);
+        let top = i64::from(clip.y).max(y);
+        let right = i64::from(clip.x + clip.w).min(x + i64::from(layer.pixels.width()));
+        let bottom = i64::from(clip.y + clip.h).min(y + i64::from(layer.pixels.height()));
+        if right > left && bottom > top {
+            let clip = Damage {
+                x: left as u32,
+                y: top as u32,
+                w: (right - left) as u32,
+                h: (bottom - top) as u32,
+            };
+            blend_over(bytes, width, 0, clip, layer, x, y);
+        }
         Ok(())
     }
     pub fn with_opaque_composition(mode: OpaqueComposition) -> Self {
@@ -3373,14 +3596,20 @@ impl Renderer for TreeCpuRenderer {
             self.direct_composites += 1;
             self.flattened = None;
             self.group_charge = None;
+            let frame = frame.expect("non-snapshot frame checked").clone();
+            if let Some(slide) = SlideContent::of(scene, &frame) {
+                return self.paint_slide(scene, &frame, &slide, target, damage);
+            }
+            self.slide_layer = None;
             return paint_with_scratch(
-                frame.expect("non-snapshot frame checked"),
+                &frame,
                 scene.offset,
                 target,
                 damage,
                 &mut self.repair_scratch,
             );
         }
+        self.slide_layer = None;
         if scene.opacity <= 0. {
             if !self.keep_hidden_group {
                 self.flattened = None;
@@ -4591,6 +4820,150 @@ mod tests {
         };
         assert!(!renderer.reusable_scene(&changed, 1.).unwrap());
         assert!(!renderer.reusable_scene(&scene, 1.5).unwrap());
+    }
+    /// B0185: a sliding panel body below vector content with an own clip.
+    fn sliding_panel(open: bool, progress: f32) -> Scene {
+        let rounded = |rect, fill, border| Primitive::Rounded {
+            rect,
+            radius: 6.,
+            fill,
+            border,
+        };
+        let mut scene = Scene {
+            opacity: 1.,
+            motion: None,
+            resource_revision: 1,
+            asset_data: BTreeMap::new(),
+            clips: BTreeMap::from([(3, Rect::new(20., 20., 60., 30.))]),
+            layers: vec![],
+            prepared: Default::default(),
+            font_files: vec![],
+            width: 200.,
+            slide: None,
+            primitives: vec![
+                Primitive::Shadow {
+                    rect: Rect::new(-30., -30., 260., 160.),
+                    radius: 12.,
+                    blur: 8.,
+                },
+                rounded(Rect::new(0., 0., 200., 100.), [30, 30, 40, 255], None),
+                rounded(
+                    Rect::new(10., 10., 120., 60.),
+                    [90, 60, 200, 200],
+                    Some(([250, 250, 250, 255], 1.5)),
+                ),
+                rounded(Rect::new(30., 30., 90., 40.), [200, 80, 40, 255], None),
+                Primitive::Arc {
+                    rect: Rect::new(140., 20., 40., 40.),
+                    start_angle: 0.,
+                    sweep_angle: 270.,
+                    stroke_width: 4.,
+                    color: [240, 200, 20, 255],
+                    round_caps: true,
+                },
+            ],
+            offset: (32., 32.),
+            bounds: Rect::new(-32., -32., 264., 164.),
+        };
+        scene.motion = Some(crate::Motion {
+            id: "slide-test".into(),
+            open: true,
+            duration: 0.3,
+            return_duration: None,
+            return_curve: None,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: Some(80.),
+            fade: false,
+            reveal: true,
+            progress: 1.,
+            parts: vec![],
+            art: None,
+        });
+        scene.reveal(1.);
+        let mut worker = TreeCache::default();
+        worker.prepare(&scene, 1.5).unwrap();
+        scene
+            .prepared
+            .insert(1.5f32.to_bits(), worker.frame.clone().unwrap());
+        let (_, dy) = scene.panel_offset(progress, open);
+        scene.offset.1 += dy;
+        scene
+    }
+    #[test]
+    fn slide_frames_composite_one_content_layer_matching_primitive_paint() {
+        for open in [true, false] {
+            let mut renderer = TreeCpuRenderer::default();
+            let (w, h) = (396, 246 + 120);
+            for progress in [0.25, 0.5, 0.75] {
+                let scene = sliding_panel(open, progress);
+                renderer.prepare_on_ui(&scene, 1.5).unwrap();
+                let posed = renderer.prepared_frame().unwrap();
+                let slide = SlideContent::of(&scene, &posed).expect("slide content split");
+                assert_eq!(slide.scene_start, if open { 2 } else { 0 });
+                let mut expected = vec![0u8; w * h * 4];
+                paint(
+                    &posed,
+                    scene.offset,
+                    ShmTarget {
+                        bytes: &mut expected,
+                        width: w as u32,
+                        height: h as u32,
+                        scale: 1.5,
+                        format: PixelFormat::Rgba,
+                    },
+                    Damage::full(w as u32, h as u32),
+                )
+                .unwrap();
+                let mut actual = vec![7u8; w * h * 4];
+                renderer
+                    .render(
+                        &scene,
+                        ShmTarget {
+                            bytes: &mut actual,
+                            width: w as u32,
+                            height: h as u32,
+                            scale: 1.5,
+                            format: PixelFormat::Rgba,
+                        },
+                        Damage::full(w as u32, h as u32),
+                    )
+                    .unwrap();
+                let worst = expected
+                    .iter()
+                    .zip(&actual)
+                    .map(|(a, b)| a.abs_diff(*b))
+                    .max()
+                    .unwrap();
+                assert!(
+                    worst <= 2,
+                    "open={open} progress={progress}: channel diff {worst}"
+                );
+            }
+            // One flatten per slide; every later frame only composites it.
+            assert_eq!(renderer.slide_layer_builds, 1, "open={open}");
+            let mut done = sliding_panel(true, 1.);
+            done.motion.as_mut().unwrap().progress = 1.;
+            renderer.prepare_on_ui(&done, 1.5).unwrap();
+            renderer
+                .render(
+                    &done,
+                    ShmTarget {
+                        bytes: &mut vec![0u8; w * h * 4],
+                        width: w as u32,
+                        height: h as u32,
+                        scale: 1.5,
+                        format: PixelFormat::Rgba,
+                    },
+                    Damage::full(w as u32, h as u32),
+                )
+                .unwrap();
+            assert!(
+                renderer.slide_layer.is_none(),
+                "the layer lives only during a slide"
+            );
+        }
     }
     #[test]
     fn compact_svg_upload_reconstructs_exact_dense_pixels() {
@@ -6348,15 +6721,29 @@ mod tests {
                             let damage = logical.pixels(scale, width, height);
                             if n == 0 {
                                 assert_eq!(
-                                    opaque_start(frame, offset, scale, damage, width, height),
+                                    opaque_start(
+                                        &frame.items,
+                                        offset,
+                                        scale,
+                                        damage,
+                                        width,
+                                        height
+                                    ),
                                     Some(1),
                                     "interior test must exercise coverage skip"
                                 );
                             }
                             if n == 3 {
                                 assert!(
-                                    opaque_start(frame, offset, scale, damage, width, height)
-                                        .is_none(),
+                                    opaque_start(
+                                        &frame.items,
+                                        offset,
+                                        scale,
+                                        damage,
+                                        width,
+                                        height
+                                    )
+                                    .is_none(),
                                     "canvas corner must retain shadow/clear"
                                 );
                             }
