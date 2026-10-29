@@ -227,7 +227,8 @@ def sample(env, raw, compositor, stop):
         assert Path(env['NIRI_SOCKET']).resolve().is_relative_to(runtime)
     else:
         assert (runtime / 'hypr' / env['HYPRLAND_INSTANCE_SIGNATURE'] / '.socket.sock').is_socket()
-    daemon = bar = notices = None
+    panel_route_smoke = os.environ.get('BEAD_PREVIEW_PANEL_ROUTE_SMOKE') == '1'
+    daemon = bar = notices = pipewire = None
     ready = False
     directory = tempfile.TemporaryDirectory(prefix="bead-preview-ui-")
     try:
@@ -252,9 +253,15 @@ def sample(env, raw, compositor, stop):
         if os.environ.get('BEAD_PREVIEW_SMOKE') == '1':
             private['BEAD_PROFILE_INPUT'] = 'clocks'
         private.pop('NACRE_QS_CONFIG', None)
+        if panel_route_smoke:
+            private['PIPEWIRE_REMOTE'] = 'bead-private-pw'
+            pipewire = matrix.services.pipewire(private, raw)
         bar_env=dict(private,XDG_STATE_HOME=str(root/'bar-state'))
         notice_env=dict(private,XDG_STATE_HOME=str(root/'notice-state'))
-        daemon = subprocess.Popen([str(helper), 'daemon'], cwd=root, env=private,
+        daemon_args = [str(helper), 'daemon']
+        if panel_route_smoke:
+            daemon_args += ['--notifications=daemon', '--behaviours=daemon']
+        daemon = subprocess.Popen(daemon_args, cwd=root, env=private,
                                   stdout=(raw / 'preview-daemon.log').open('w'), stderr=subprocess.STDOUT,
                                   start_new_session=True)
 
@@ -283,7 +290,6 @@ def sample(env, raw, compositor, stop):
                                    stdout=(raw / 'preview-notices.log').open('w'), stderr=subprocess.STDOUT,
                                    start_new_session=True)
         dashboard_fixtures = os.environ.get('BEAD_PREVIEW_DASHBOARD_FIXTURES') == '1'
-        panel_route_smoke = os.environ.get('BEAD_PREVIEW_PANEL_ROUTE_SMOKE') == '1'
         dashboard_args = ['--dashboard-fixtures', str(root / 'shell/tests/fixtures/dashboard')] if dashboard_fixtures else []
         bar = subprocess.Popen([str(binary), '--bar', '--core-views', '--renderer', 'cpu',
                                 '--panel-renderer', 'cpu', '--daemon-socket', str(endpoint),
@@ -423,12 +429,14 @@ def sample(env, raw, compositor, stop):
 
             results = []
             for route in PANEL_ROUTE_VIEWS:
+                print('PANEL_ROUTE_START ' + route, flush=True)
                 offset = len(matrix.log_text(route_log))
                 panel_call('open', route)
                 wait_panel(lambda state: state.get('target_open') and state.get('resident'), route)
                 wait_presented(offset, route)
                 panel_call('close')
                 wait_panel(lambda state: not state.get('target_open'), route + ' close')
+                wait_panel(lambda state: not state.get('resident'), route + ' retirement')
                 results.append({'route': route, 'opened': True, 'closed': True})
                 assert_clean_ui(route)
 
@@ -499,6 +507,8 @@ def sample(env, raw, compositor, stop):
             stop(bar)
         if notices is not None:
             stop(notices)
+        if pipewire is not None:
+            stop(pipewire)
         clocks.stop_owned_tree(daemon, stop)
         directory.cleanup()
         (raw/'preview-stop.json').write_text(json.dumps({'bar':bar.returncode if bar else None,'notices':notices.returncode if notices else None,'daemon':daemon.returncode if daemon else None},indent=2)+'\n')
