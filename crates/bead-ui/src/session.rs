@@ -1,6 +1,21 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Durable stores, editor/focus state and validate-then-commit reload transactions.
 use super::*;
+#[cfg(test)]
+pub(crate) static RECOVERY_SERIALIZE_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+fn recovery_fingerprint(bundle: &bead_core::recovery::Bundle) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
+    bundle.version.hash(&mut fingerprint);
+    bundle.entry.hash(&mut fingerprint);
+    bundle.palette.hash(&mut fingerprint);
+    for (name, bytes) in &bundle.files {
+        name.hash(&mut fingerprint);
+        bytes.hash(&mut fingerprint);
+    }
+    fingerprint.finish()
+}
 pub(super) struct Pending {
     entry: PathBuf,
     pub(super) generation: Option<Generation>,
@@ -40,7 +55,8 @@ pub struct Session {
     recovery_path: Option<PathBuf>,
     recovered: Option<bead_core::recovery::Restored>,
     recorded_revision: Option<u64>,
-    recovery_pending: std::collections::VecDeque<(u64, bead_core::recovery::Bundle)>,
+    recovery_fingerprint: Option<u64>,
+    recovery_pending: std::collections::VecDeque<(u64, bead_core::recovery::Bundle, u64)>,
     pub(crate) root: PathBuf,
     pub(crate) entry: PathBuf,
     pub(super) palette_path: PathBuf,
@@ -152,6 +168,7 @@ impl Session {
             recovery_path: None,
             recovered: None,
             recorded_revision: None,
+            recovery_fingerprint: None,
             recovery_pending: Default::default(),
             root,
             entry: entry
@@ -228,14 +245,23 @@ impl Session {
         {
             return Ok(());
         }
-        let Some((_, bundle)) = self.recovery_pending.iter().find(|(id, _)| *id == revision) else {
+        let Some((_, bundle, fingerprint)) = self
+            .recovery_pending
+            .iter()
+            .find(|(id, _, _)| *id == revision)
+        else {
             return Ok(());
         };
-        bundle.save(path).map_err(|_| {
-            Diagnostic::new(&self.entry, 1, 1, "last-good bundle could not be saved")
-        })?;
+        if self.recovery_fingerprint != Some(*fingerprint) {
+            #[cfg(test)]
+            RECOVERY_SERIALIZE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            bundle.save(path).map_err(|_| {
+                Diagnostic::new(&self.entry, 1, 1, "last-good bundle could not be saved")
+            })?;
+            self.recovery_fingerprint = Some(*fingerprint);
+        }
         self.recorded_revision = Some(revision);
-        self.recovery_pending.retain(|(id, _)| *id > revision);
+        self.recovery_pending.retain(|(id, _, _)| *id > revision);
         eprintln!("RECOVERY_BUNDLE_RECORDED generation={revision}");
         Ok(())
     }
@@ -251,7 +277,7 @@ impl Session {
         let pending = self
             .recovery_pending
             .iter()
-            .map(|(_, b)| b.palette.len() + b.files.values().map(Vec::len).sum::<usize>())
+            .map(|(_, b, _)| b.palette.len() + b.files.values().map(Vec::len).sum::<usize>())
             .sum::<usize>();
         if size > 8 * 1024 * 1024
             || pending + size > 8 * 1024 * 1024
@@ -437,7 +463,10 @@ impl Session {
                 p.palette_bytes
                     .as_ref()
                     .and_then(|palette| self.capture_bundle(g, palette, &p.entry).ok())
-                    .map(|bundle| (g.revision, bundle))
+                    .map(|bundle| {
+                        let fingerprint = recovery_fingerprint(&bundle);
+                        (g.revision, bundle, fingerprint)
+                    })
             });
         if let Some(capture) = capture {
             self.recovery_pending.push_back(capture);

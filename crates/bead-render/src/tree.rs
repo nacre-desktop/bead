@@ -1617,7 +1617,16 @@ impl TreeCache {
         let mut frame_hash = std::collections::hash_map::DefaultHasher::new();
         let mut raster_scene = None;
         let mut fresh_rasters: BTreeMap<u64, (Arc<Pixmap>, (u32, u32))> = BTreeMap::new();
-        serde_json::to_vec(&scene.bounds)?.hash(&mut frame_hash);
+        // Bounds are four finite f32 values. Hash their bits directly instead of
+        // allocating and JSON-serializing a temporary vector for every frame.
+        for value in [
+            scene.bounds.x,
+            scene.bounds.y,
+            scene.bounds.w,
+            scene.bounds.h,
+        ] {
+            value.to_bits().hash(&mut frame_hash);
+        }
         for (index, primitive) in scene.primitives.iter().enumerate() {
             let kind = match primitive {
                 Primitive::Arc { .. } => "arc",

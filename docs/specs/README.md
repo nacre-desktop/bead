@@ -527,6 +527,10 @@ rendering. Legacy preview route and controls remain unchanged. No new provider,
 producer-availability, device-control, or memory-measurement claim. See
 [spec](0015-daemon-audio-readback-popout.md).
 
+B0183 caches repeated SVG raster crops and gates last-good recovery bundle writes
+on content changes; the 8 MiB LRU and validation are documented in the
+[SVG cache and presented-frame spec](0183-svg-cache-presented.md).
+
 Exact-source full hosted [CI 39388972154](https://github.com/nacre-desktop/bead/actions/runs/39388972154)
 passed on dc8832fe: formatting, Clippy, workspace tests, renderer configurations,
 facade/headless UI/Luau schema, capture-window regressions, private service

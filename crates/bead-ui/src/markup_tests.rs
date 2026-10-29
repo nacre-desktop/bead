@@ -998,6 +998,39 @@ return ui.Box{id="other",width=400,height=100,
 }
 
 #[test]
+fn steady_presentations_do_not_serialize_recovery_bundle_again() {
+    let f = fixture();
+    fs::create_dir_all(f.0.join("other")).unwrap();
+    fs::write(
+        f.0.join("other/behavior.luau"),
+        "return {stores={query='',counter=7},actions={},computed={}}",
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("other/main.luau"),
+        r#"local ui=require("bead.ui") return ui.Box{id="other",width=400,height=100}"#,
+    )
+    .unwrap();
+    let mut s = session(&f);
+    s.enable_recovery(f.0.join("recovery/current.json"));
+    let scene = s
+        .navigate("other/main.luau".into(), BTreeMap::new())
+        .unwrap();
+    let revision = scene.resource_revision;
+    s.commit(scene);
+    let before =
+        super::session::RECOVERY_SERIALIZE_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+    s.presented(revision).unwrap();
+    let after_save =
+        super::session::RECOVERY_SERIALIZE_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+    s.presented(revision).unwrap();
+    let after_steady =
+        super::session::RECOVERY_SERIALIZE_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+    assert_eq!(after_save, before + 1);
+    assert_eq!(after_steady, after_save);
+}
+
+#[test]
 fn clickable_region_can_opt_into_edge_hover() {
     let f = fixture();
     fs::write(f.0.join("ui/main.luau"), r#"local ui=require("bead.ui")

@@ -1807,7 +1807,32 @@ pub fn prewarm_osd_shadows() -> Result<()> {
     Ok(())
 }
 
+const SVG_CACHE_CAP: usize = 8 * 1024 * 1024;
+type SvgCache = std::collections::VecDeque<(u64, usize, std::sync::Arc<Pixmap>)>;
+static SVG_CACHE: std::sync::OnceLock<std::sync::Mutex<SvgCache>> = std::sync::OnceLock::new();
+#[cfg(test)]
+static SVG_RENDER_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 fn svg_pixmap(data: &[u8], w: u32, h: u32) -> Result<Pixmap> {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    data.hash(&mut hasher);
+    w.hash(&mut hasher);
+    h.hash(&mut hasher);
+    let key = hasher.finish();
+    let cache = SVG_CACHE.get_or_init(|| std::sync::Mutex::new(Default::default()));
+    let cached = {
+        let mut entries = cache.lock().unwrap();
+        entries.iter().position(|(k, _, _)| *k == key).map(|found| {
+            let entry = entries.remove(found).expect("SVG cache entry");
+            let pixmap = (*entry.2).clone();
+            entries.push_front(entry);
+            pixmap
+        })
+    };
+    if let Some(pixmap) = cached {
+        return Ok(pixmap);
+    }
     let tree = resvg::usvg::Tree::from_data(data, &resvg::usvg::Options::default())?;
     let mut pix = Pixmap::new(w, h).ok_or("SVG allocation")?;
     let s = tree.size();
@@ -1816,6 +1841,16 @@ fn svg_pixmap(data: &[u8], w: u32, h: u32) -> Result<Pixmap> {
         Transform::from_scale(w as f32 / s.width(), h as f32 / s.height()),
         &mut pix.as_mut(),
     );
+    #[cfg(test)]
+    SVG_RENDER_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let bytes = pix.data().len();
+    if bytes <= SVG_CACHE_CAP {
+        let mut entries = cache.lock().unwrap();
+        while entries.iter().map(|(_, size, _)| *size).sum::<usize>() + bytes > SVG_CACHE_CAP {
+            entries.pop_back();
+        }
+        entries.push_front((key, bytes, std::sync::Arc::new(pix.clone())));
+    }
     Ok(pix)
 }
 /// Rasterize a static vector directly into borrowed compositor memory. This
@@ -1844,6 +1879,18 @@ pub fn svg_into(data: &[u8], target: ShmTarget<'_>) -> Result<()> {
 #[cfg(test)]
 mod borrowed_svg_tests {
     use super::*;
+    #[test]
+    fn svg_raster_cache_skips_second_resvg_render() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="9" height="7"><circle cx="4" cy="3" r="2" fill="#456"/></svg>"##;
+        let before = SVG_RENDER_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+        let first = svg_pixmap(svg, 19, 13).unwrap();
+        let after_first = SVG_RENDER_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+        let second = svg_pixmap(svg, 19, 13).unwrap();
+        let after_second = SVG_RENDER_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(after_first, before + 1);
+        assert_eq!(after_second, after_first);
+        assert_eq!(first.data(), second.data());
+    }
     #[test]
     fn borrowed_svg_respects_pixel_format_and_target_boundaries() {
         let svg=br#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="rgb(40,80,160)"/></svg>"#;
