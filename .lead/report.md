@@ -7,5 +7,5 @@ Axis proof: `vertical_close_keeps_x_fixed_while_side_close_keeps_y_fixed` passed
 B0178 proof: `companion_slide_callbacks_at_120_hz_keep_committing_without_staging` passed.
 Real-shell smoke: `real_shell_panel_routes_open_and_close_with_prepared_scenes` passed for 12 routes; 0 UI_ERROR.
 Full Bead CI: `bash /ci.sh` in task Ubuntu 24.04 container; `FULL_CI_PASS`, exit 0.
-Commit: `f3a64ee1` — author/committer siverteh; `[no-publish]` and Codex Luna trailer.
+Commits: `f3a64ee1`, `9f0ced1d` (code), `b5d52313` (report); author/committer siverteh, `[no-publish]`, Codex Luna trailer.
 CI setup retries: mirror needed git metadata; final run used a task snapshot for git-dependent harnesses.
