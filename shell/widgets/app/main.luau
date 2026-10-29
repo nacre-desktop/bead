@@ -1,6 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 -- The Widgets app is a catalogue first; placement and style edits stay in the page.
 local context=require("../context")
+context.begin()
 local ui,kit=context.ui,context.kit
 local spacing,text=kit.tokens.spacing,kit.tokens.text
 local registry=require("../registry")

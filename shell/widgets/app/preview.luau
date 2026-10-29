@@ -121,7 +121,7 @@ function M.render_bar(document,width,height,factor,selected,style,settings,selec
     regions.centre.inline=true
     regions.right.props={id="right",height=34,gap=12,shrink=0,align="center"}
     regions.right.before={}
-    for _,node in require("../tray") do
+    for _,node in require("../tray")() do
         table.insert(regions.right.before,copy_node(node))
     end
     local function copy_item(item)

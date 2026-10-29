@@ -12,8 +12,8 @@ local function bar(props,settings,_data)
     local content=style=="icon+value" and ui.bind("bead.desktop.audio.label") or style=="icon+text" and "Audio" or nil
     local value=ui.resolve_for_check(ui.bind("bead.desktop.audio.label")) or ""
     local width=content and ui.text_width(style=="icon+value" and value or content,"IBM Plex Sans",t.detail_font) or 0
-    local hit_pad=popouts and t.status_hit_pad or 0
-    return kit.StatusIcon{id="audio",direction="row",height=t.status_height,radius=t.status_radius,gap=style~="icon" and t.item_gap or 0,padding=0,padding_left=t.status_padding+hit_pad,padding_right=t.status_padding+hit_pad,align="center",justify="center",fill="transparent",hover_fill="surfaceContainerHigh",aria_label=popouts and ui.tr("bead.bar.open-sound") or ui.tr("bead.bar.audio-hint"),on_activate=popouts and ui.action("status.pill.open","audio") or ui.action("services.audio"),
+    local hit_pad=popouts() and t.status_hit_pad or 0
+    return kit.StatusIcon{id="audio",direction="row",height=t.status_height,radius=t.status_radius,gap=style~="icon" and t.item_gap or 0,padding=0,padding_left=t.status_padding+hit_pad,padding_right=t.status_padding+hit_pad,align="center",justify="center",fill="transparent",hover_fill="surfaceContainerHigh",aria_label=popouts() and ui.tr("bead.bar.open-sound") or ui.tr("bead.bar.audio-hint"),on_activate=popouts() and ui.action("status.pill.open","audio") or ui.action("services.audio"),
         status_glyph("glyph",ui.bind("bead.desktop.audio"),"audio"),
         content and status_text{id="value",text=content,width=width,font_size=t.detail_font,color="secondary"} or nil,
     }

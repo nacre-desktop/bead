@@ -43,7 +43,7 @@ local function render(props,settings,_data)
             ui.Row{id="favorites",width="fill",height=68,gap=gap,align="end",table.unpack(favorites)}
         })
     end
-    return launcher and kit.Button{id="brand",width=t.brand_size,height=t.brand_size,padding=0,fill="transparent",
+    return launcher() and kit.Button{id="brand",width=t.brand_size,height=t.brand_size,padding=0,fill="transparent",
         aria_label=ui.tr("bead.bar.open-launcher"),on_activate=action,image(nil)} or image("brand")
 end
 local function style(title,preferred,render_fn)

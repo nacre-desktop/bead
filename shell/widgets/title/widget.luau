@@ -37,21 +37,21 @@ return {id="title",title="Title",icon="title",category="bar",data={topics={},act
             assert(min_width<=max_width,"title minimum width exceeds maximum")
             if min_width==title_min_width and max_width==t.title_max_width and display=="window title" and behavior=="hover"
                 and not props.local_layout and props.instance.host=="top_bar" and props.instance.slot.region=="centre" then
-            local animated_width=ui.animate("title.width."..props.instance.iid,title_width,.18,"out-cubic")
+            local animated_width=ui.animate("title.width."..props.instance.iid,title_width(),.18,"out-cubic")
             local animated_cue=math.min(t.title_cue_max,animated_width+t.icon_width+t.title_gap+10)
             -- Keep the bound title reactive; resolve its text only when it exceeds
             -- the configured max-width clipping bound and needs an ellipsis.
-            local shown=title
-            if ui.text_width(title,"IBM Plex Sans",t.title_font)>animated_width then
-                shown=measure.ellipsize(ui.resolve_for_check(title) or "",animated_width,"IBM Plex Sans",t.title_font)
+            local shown=title()
+            if ui.text_width(title(),"IBM Plex Sans",t.title_font)>animated_width then
+                shown=measure.ellipsize(ui.resolve_for_check(title()) or "",animated_width,"IBM Plex Sans",t.title_font)
             end
             return ui.Group{ui.Row{id="title-cue",position="absolute",left="28%",right="28%",top=7,height=36,justify="center",visible=ui.bind("bar.title.cue.visible"),
         ui.Box{id="cue",width=animated_cue+4,height=36,radius=18,fill=ui.alpha("primary",ui.bind("bar.title.cue.halo")),
             ui.Box{id="body",position="absolute",left=2,top=2,width=animated_cue,height=32,radius=16,fill=ui.alpha("primary",ui.bind("bar.title.cue.body")),border_width=1,border_color=ui.alpha("primary",ui.bind("bar.title.cue.border"))},
-            ui.Box{id="title-trace",position="absolute",left=7+(animated_cue-10)*(1-dwell)/2,top=31,width=(animated_cue-10)*dwell,height=t.title_trace_height,radius=1,fill=ui.alpha("primary",ui.bind("bar.title.cue.fade"))},
+            ui.Box{id="title-trace",position="absolute",left=7+(animated_cue-10)*(1-dwell())/2,top=31,width=(animated_cue-10)*dwell(),height=t.title_trace_height,radius=1,fill=ui.alpha("primary",ui.bind("bar.title.cue.fade"))},
         },
     },
-    ui.Button{id="title-band",position="absolute",left="28%",right="28%",top=(header-t.title_height)/2,height=t.title_height,direction="row",justify="center",align="center",fill="transparent",hover_fill="transparent",focus_ring=false,focus_on_pointer=false,activate_on_release=true,edge_hover=true,aria_label=ui.tr("bead.bar.active-window"),on_activate=ui.action("bar.title"),
+    ui.Button{id="title-band",position="absolute",left="28%",right="28%",top=(header()-t.title_height)/2,height=t.title_height,direction="row",justify="center",align="center",fill="transparent",hover_fill="transparent",focus_ring=false,focus_on_pointer=false,activate_on_release=true,edge_hover=true,aria_label=ui.tr("bead.bar.active-window"),on_activate=ui.action("bar.title"),
         -- The drag handle covers the band; it must stay part of the edge-hover target.
         ui.Row{id="title-content",width=animated_width+t.icon_width+t.title_gap,height=t.title_height,justify="center",align="center",gap=t.title_gap,drag_payload=props.instance.iid,edge_hover=true,
             centered_text{id="title-icon",visible=ui.bind("bead.desktop.titlevisible"),text="desktop_windows",width=t.icon_width,height=24,shrink=0,family="Material Symbols Rounded",font_size=20,color="primary"},
@@ -70,7 +70,7 @@ return {id="title",title="Title",icon="title",category="bar",data={topics={},act
             local show_icon=true
             local icon_width=show_icon and t.icon_width or 0
             local gap=show_icon and show_text and t.title_gap or 0
-            local title_text=show_text and (ui.resolve_for_check(title) or "") or ""
+            local title_text=show_text and (ui.resolve_for_check(title()) or "") or ""
             local app=active_app()
             if display=="app only" then title_text=app
             elseif display=="app + title" and app~="" then title_text=app.." · "..title_text end
@@ -97,7 +97,7 @@ return {id="title",title="Title",icon="title",category="bar",data={topics={},act
                 table.insert(kids,ui.Row{id="title-cue",position="absolute",left="28%",right="28%",top=7,height=36,justify="center",visible=ui.bind("bar.title.cue.visible"),
                     ui.Box{id="cue",width=cue+4,height=36,radius=18,fill=ui.alpha("primary",ui.bind("bar.title.cue.halo")),
                         ui.Box{id="body",position="absolute",left=2,top=2,width=cue,height=32,radius=16,fill=ui.alpha("primary",ui.bind("bar.title.cue.body")),border_width=1,border_color=ui.alpha("primary",ui.bind("bar.title.cue.border"))},
-                        ui.Box{id="title-trace",position="absolute",left=7+(cue-10)*(1-dwell)/2,top=31,width=(cue-10)*dwell,height=t.title_trace_height,radius=1,fill=ui.alpha("primary",ui.bind("bar.title.cue.fade"))}}})
+                        ui.Box{id="title-trace",position="absolute",left=7+(cue-10)*(1-dwell())/2,top=31,width=(cue-10)*dwell(),height=t.title_trace_height,radius=1,fill=ui.alpha("primary",ui.bind("bar.title.cue.fade"))}}})
             end
             local content={id="title-content",width=content_width,height=t.title_height,gap=gap,align="center",justify="center",
                 drag_payload=props.instance.iid,edge_hover=behavior=="hover",clip_children=true}
@@ -110,7 +110,7 @@ return {id="title",title="Title",icon="title",category="bar",data={topics={},act
             local row={id=centered and "title-band" or "title-local",height=t.title_height,direction="row",gap=0,align="center",justify="center",
                 edge_hover=behavior=="hover",activate_on_release=true,focus_on_pointer=false,on_activate=action,aria_label=ui.tr("bead.bar.active-window")}
             if centered then
-                row.position="absolute"; row.left="28%"; row.right="28%"; row.top=(header-t.title_height)/2
+                row.position="absolute"; row.left="28%"; row.right="28%"; row.top=(header()-t.title_height)/2
                 row.fill="transparent"; row.hover_fill="transparent"; row.focus_ring=false
             else row.width=content_width end
             table.insert(row,ui.Row(content))

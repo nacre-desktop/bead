@@ -37,7 +37,7 @@ return {id="workspaces",title="Workspaces",icon="view_carousel",category="bar",d
             local hovered=ui.resolve_for_check(ui.bind("bead.hovered")) or ""
             return ui.Row{id="capsule",width=pill_width,height=t.pill_height,padding_left=5,padding_right=5,gap=2,radius=t.pill_radius,fill="surfaceContainer",clip_children=true,align="center",
             -- QML workspaceThread: a 1 px primary -> secondary -> tertiary line at 12 % behind the pearls, inset 16 px.
-            thread and kit.tokens.gradients and ui.Image{id="thread",position="absolute",left=21,right=21,top=(t.pill_height-1)/2,height=1,path="bar/assets/workspace-thread.themed.svg"} or ui.Box{id="thread",width=0,height=0,shrink=0,visible=false},
+            thread() and kit.tokens.gradients and ui.Image{id="thread",position="absolute",left=21,right=21,top=(t.pill_height-1)/2,height=1,path="bar/assets/workspace-thread.themed.svg"} or ui.Box{id="thread",width=0,height=0,shrink=0,visible=false},
             active_left and ui.Box{id="active-capsule",position="absolute",left=ui.animate("workspaces.active.left:"..props.instance.iid,active_left,.18,"out-cubic"),top=(t.pill_height-t.active_height)/2,width=ui.animate("workspaces.active.width:"..props.instance.iid,active_width,.16,"out-cubic"),height=t.active_height,radius=t.active_radius,
                 fill=active_icon_mode and active_accent or ui.tint("surfaceContainer",active_accent,.15),border_width=1,border_color=ui.alpha(active_accent,.24)} or ui.Box{id="active-capsule",width=0,height=0,visible=false,shrink=0},
             ui.Repeat{id="workspaces",model=ui.bind("bead.workspaces"),key="id",render=function(item)
@@ -45,7 +45,7 @@ return {id="workspaces",title="Workspaces",icon="view_carousel",category="bar",d
                 local label=item.label or item.name or ""
                 local on=item.active
                 local pressed_workspace=pressed and string.find(hovered,".k"..item.id..".",1,true)~=nil
-                local activate=ws_on and ui.action("backend.workspace.switch",item.id) or nil
+                local activate=ws_on() and ui.action("backend.workspace.switch",item.id) or nil
                 -- A visiting workspace group starts with its home output's name (QML groupSpace, 48 px).
                 local gs=item.group_start==true and 48 or 0
                 local button
@@ -78,7 +78,7 @@ return {id="workspaces",title="Workspaces",icon="view_carousel",category="bar",d
                             apps[#apps+1]=centered_text{id="app"..slot,text=glyph_name,width=15,height=28,shrink=0,family="Material Symbols Rounded",font_size=t.app_font,text_align="center",color="onSurface"}
                             -- Clicking a glyph focuses its window (window.focus); a sibling, as a button cannot nest in a button.
                             local window=item["win"..slot]
-                            if focus_on and window and window~="" then
+                            if focus_on() and window and window~="" then
                                 overlays[#overlays+1]=kit.Button{id="focus"..slot,position="absolute",left=gs+33+(slot-1)*18,top=0,width=15,height=28,radius=7,padding=0,fill="transparent",hover_fill=ui.alpha("onSurface",0.14),shrink=0,
                                     aria_label=ui.tr("bead.bar.focus-window"),on_activate=ui.action("backend.window.focus",window),
                                     ui.Box{id="hit",width=15,height=28}}

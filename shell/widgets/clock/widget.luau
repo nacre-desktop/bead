@@ -16,7 +16,7 @@ local seconds_max=math.max(ui.text_width("23:59:59",clock_font,t.clock_font),ui.
 local date_max=math.max(ui.text_width("9999-12-31",clock_font,t.detail_font),ui.text_width("8888-88-88",clock_font,t.detail_font),ui.text_width("0000-00-00",clock_font,t.detail_font))+kit.tokens.spacing.hairline
 local date_content_max=time_max+t.item_gap+date_max
 local function reserve_clock(content_width)
-    local hit_pad=popouts and t.status_hit_pad or 0
+    local hit_pad=popouts() and t.status_hit_pad or 0
     return t.status_padding+t.status_count_padding+2*hit_pad+t.status_ink.calendar+t.item_gap+content_width
 end
 local function clock_with_seconds(time,seconds)
@@ -115,12 +115,12 @@ local function clock_content(style,instance_id,available_width)
     return ui.Row{id="time-date",width=width,height=t.status_height,radius=t.status_radius,gap=gap,align="center",time_node,date_node}
 end
 local function bar(props,settings,_data)
-    local hit_pad=popouts and t.status_hit_pad or 0
+    local hit_pad=popouts() and t.status_hit_pad or 0
     local style=props.form_style
     local inner_capacity=props.available_width and math.max(0,props.available_width-t.status_padding-t.status_count_padding-2*hit_pad
         -t.status_ink.calendar-t.item_gap) or nil
     local content=clock_content(style,props.instance and props.instance.iid,inner_capacity)
-    return (popouts and kit.Button or ui.Row){id="clock",height=t.status_height,direction=popouts and "row" or nil,gap=t.item_gap,padding=0,padding_left=t.status_padding+hit_pad,padding_right=t.status_count_padding+hit_pad,align="center",fill=popouts and "transparent" or nil,aria_label=popouts and ui.tr("bead.bar.open-calendar") or nil,on_activate=popouts and ui.action("view.open","calendar") or nil,
+    return (popouts() and kit.Button or ui.Row){id="clock",height=t.status_height,direction=popouts() and "row" or nil,gap=t.item_gap,padding=0,padding_left=t.status_padding+hit_pad,padding_right=t.status_count_padding+hit_pad,align="center",fill=popouts() and "transparent" or nil,aria_label=popouts() and ui.tr("bead.bar.open-calendar") or nil,on_activate=popouts() and ui.action("view.open","calendar") or nil,
         status_glyph("calendar","calendar_month","calendar","tertiary"),content,
     }
 end
@@ -129,7 +129,7 @@ local function desktop(props,_settings,_data)
     local w,h=visual.slot(props.instance,420,190)
     local iid=props.instance and props.instance.iid
     local preview=type(iid)=="string" and string.sub(iid,1,8)=="preview-"
-    local action=popouts and ui.action("view.open","calendar") or nil
+    local action=popouts() and ui.action("view.open","calendar") or nil
     local time=ui.bind("bar.clock.text")
     if style=="seconds" then
         time=clock_with_seconds(ui.resolve_for_check(ui.bind("bar.clock.text")) or "",

@@ -3741,7 +3741,11 @@ fn persistent_build(
 #[test]
 fn persistent_vm_reuses_pure_modules_and_reruns_input_readers() {
     let (frontend, build) = persistent_build(&[
-        ("ui/pure.luau", "return {}"),
+        // Measuring a literal string is a constant of the generation: the module stays loaded.
+        (
+            "ui/pure.luau",
+            "local ui=require('bead.ui')\nreturn {width=ui.text_width('literal','IBM Plex Sans',12)}",
+        ),
         (
             "ui/input.luau",
             "local ui=require('bead.ui')\nreturn ui.resolve_for_check(ui.bind('title'))",

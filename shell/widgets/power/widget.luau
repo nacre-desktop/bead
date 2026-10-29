@@ -8,9 +8,9 @@ local status_glyph=c.status_glyph
 local visual=require("../desktop-visuals")
 local function bar(props,settings,_data)
     local label=props.form_style=="icon+text"
-    local hit_pad=popouts and t.status_hit_pad or 0
-    return (popouts and kit.Button or ui.Row){id="power",height=t.status_height,radius=t.status_radius,width=label and 92+2*hit_pad or t.status_ink.power+2*(t.status_padding+hit_pad),justify="center",direction=popouts and "row" or nil,gap=label and t.item_gap or nil,align="center",padding=0,padding_left=t.status_padding+hit_pad,padding_right=t.status_padding+hit_pad,fill=popouts and "transparent" or nil,
-        aria_label=popouts and ui.tr("bead.bar.open-session") or nil,on_activate=popouts and ui.action("view.open","session") or nil,
+    local hit_pad=popouts() and t.status_hit_pad or 0
+    return (popouts() and kit.Button or ui.Row){id="power",height=t.status_height,radius=t.status_radius,width=label and 92+2*hit_pad or t.status_ink.power+2*(t.status_padding+hit_pad),justify="center",direction=popouts() and "row" or nil,gap=label and t.item_gap or nil,align="center",padding=0,padding_left=t.status_padding+hit_pad,padding_right=t.status_padding+hit_pad,fill=popouts() and "transparent" or nil,
+        aria_label=popouts() and ui.tr("bead.bar.open-session") or nil,on_activate=popouts() and ui.action("view.open","session") or nil,
         status_glyph("glyph","power_settings_new","power","error"),label and ui.Text{id="label",text="Power",font_size=t.detail_font,color="error"} or nil,
     }
 end

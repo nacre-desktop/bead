@@ -1,6 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 -- Internal transaction fixture. No public route opens this behavior host.
 local c=require("../context")
+c.begin()
 local registry=require("../registry")
 local ui=c.ui
 local width=ui.resolve_for_check(ui.bind("bead.viewport.width"))

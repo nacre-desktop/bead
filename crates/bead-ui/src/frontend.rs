@@ -769,7 +769,12 @@ impl FrontEnd for LuauFrontEnd {
             host.set(
                 "text_width",
                 scope.create_function(|_, (input, family, size): (mlua::Value, String, f32)| {
-                    vm.bump();
+                    // A literal string is a constant of the generation (fonts and text
+                    // styles rebuild the VM): measuring it keeps a module loaded. A bound
+                    // text reads a store.
+                    if !matches!(input, mlua::Value::String(_)) {
+                        vm.bump();
+                    }
                     if family.len() > 128 || !(1. ..=256.).contains(&size) {
                         return Err(mlua::Error::runtime("invalid text measurement"));
                     }
