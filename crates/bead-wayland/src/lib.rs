@@ -793,7 +793,13 @@ pub struct Options {
     pub app: Option<Vec<serde_json::Value>>,
     /// Start a panel app directly in a pearl, through the normal detach/dock lifecycle.
     pub app_as_pearl: bool,
+    /// B0194: the output the user is working on (compositor focus). Keyboard and IPC opens
+    /// without an explicit output use it; pointer opens use the output under the pointer.
+    pub focused_output: Option<FocusedOutput>,
+    /// B0194: the output a panel app was started for; its first open lands there.
+    pub panel_output: Option<String>,
 }
+pub type FocusedOutput = std::sync::Arc<dyn Fn() -> Option<String> + Send + Sync>;
 impl Default for Options {
     fn default() -> Self {
         Self {
@@ -844,6 +850,8 @@ impl Default for Options {
             pearls: None,
             app: None,
             app_as_pearl: false,
+            focused_output: None,
+            panel_output: None,
         }
     }
 }
