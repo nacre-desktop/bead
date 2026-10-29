@@ -2653,7 +2653,7 @@ return ui.Panel{id="panel",width=300,height=80,
         fonts.join("FixtureSymbols.ttf"),
     ];
     let picker: crate::transcript::Picker = std::sync::Arc::new(move |_| font_files.clone());
-    let frontend = LuauFrontEnd::new_with_picker(&entry, &sources, Some(picker)).unwrap();
+    let frontend = LuauFrontEnd::new_with_picker(&entry, &sources, Some(picker), None).unwrap();
     let title = RefCell::new("◐ …".to_string());
     let resolve = |name: &str| {
         if name == "title" {
@@ -2735,7 +2735,7 @@ return ui.Panel{id="panel",width=300,height=height,title}"#
         fonts.join("FixtureSymbols.ttf"),
     ];
     let picker: crate::transcript::Picker = std::sync::Arc::new(move |_| font_files.clone());
-    let frontend = LuauFrontEnd::new_with_picker(&entry, &sources, Some(picker)).unwrap();
+    let frontend = LuauFrontEnd::new_with_picker(&entry, &sources, Some(picker), None).unwrap();
     let stores: RefCell<BTreeMap<String, Value>> = RefCell::new(BTreeMap::from([
         ("title".into(), Value::Text("short".into())),
         ("tick".into(), Value::Number(0.)),

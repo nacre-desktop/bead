@@ -204,6 +204,10 @@ impl Session {
             transfer_capture: None,
         }
     }
+    /// The UI root this session loads from (plugin configuration is keyed by it).
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
     pub fn restore_on_start(&mut self, values: BTreeMap<String, Value>) {
         self.restore = Some(values);
     }
@@ -215,6 +219,7 @@ impl Session {
         self.watcher = Some(super::watcher::subscribe(
             self.root.canonicalize()?,
             std::path::absolute(&self.palette_path)?,
+            crate::plugins::config(&self.root).watched(),
             Box::new(move |event| {
                 if event.is_ok() {
                     revision.fetch_add(1, std::sync::atomic::Ordering::SeqCst);

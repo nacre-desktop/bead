@@ -42,6 +42,8 @@ mod tests {
                 // The Settings registry names its label ids in JSON (B0083).
                 || (path.extension().is_some_and(|e| e == "json")
                     && path.parent().is_some_and(|p| p.ends_with("settings/registry")))
+                // First-party plugins name their title ids in plugin.toml (B0203).
+                || path.ends_with("plugin.toml")
             {
                 out.push(path);
             }

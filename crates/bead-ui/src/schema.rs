@@ -29,6 +29,9 @@ pub fn luau() -> String {
         ),
         ("model_count", "(any)->number"),
         ("tr", "(string,any?)->string"),
+        // Present only in bundles that mount plugins (spec 0203).
+        ("plugin_gate", "(string,any)->any"),
+        ("plugin_fault", "(string,string)->()"),
     ] {
         out.push_str(&format!("    {name}:{ty},\n"));
     }

@@ -1,0 +1,16 @@
+# First-party Nacre plugin in the Bead plugin format (spec 0203).
+id = "updates"
+name = "Updates"
+version = "1.0.0"
+author = "Nacre"
+description = "Pending system updates in the bar and on the desktop."
+license = "GPL-3.0-only"
+api = 1
+capabilities = ["topic:bar.updates.", "topic:status.updates_", "action:status.pill.open", "action:updates.open"]
+
+[[widget]]
+id = "updates"
+entry = "widget.luau"
+title_id = "bead.widgets.updates-title"
+description_id = "bead.widgets.updates-description"
+accent = "primary"

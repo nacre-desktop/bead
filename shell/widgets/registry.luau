@@ -3,7 +3,7 @@
 local registry={}
 local context=require("context")
 local ui,kit=context.ui,context.kit
-local ids={"launcher","workspaces","title","pill","updates","sound","wifi","bluetooth","battery","notifications","clock","power"}
+local ids={"launcher","workspaces","title","pill","sound","wifi","bluetooth","battery","notifications","clock","power"}
 local function integer(n,lo,hi)
     return type(n)=="number" and n%1==0 and n>=lo and n<=hi
 end
@@ -111,7 +111,19 @@ local function make_variant(package,placement,form)
             assert(selected,"unknown "..placement.." style "..tostring(name).." for "..package.id)
             local styled=table.clone(props)
             styled.form_style=name
-            local node=selected.render(styled,settings,data)
+            local node
+            if package.plugin then
+                -- Spec 0203: a failing or over-reaching plugin renders nothing and is switched off.
+                local ok,result=pcall(selected.render,styled,settings,data)
+                if ok then ok,result=pcall(ui.plugin_gate,package.plugin,result) end
+                if not ok then
+                    ui.plugin_fault(package.plugin,tostring(result))
+                    return ui.Box{id=package.id,width=0,height=0,shrink=0,visible=false}
+                end
+                node=result
+            else
+                node=selected.render(styled,settings,data)
+            end
             local colour_role=settings.colour_role or package.accent_role
             if node and package.accent_role and colour_role~=package.accent_role then
                 node=map_widget_colour(node,package.accent_role,colour_role)
@@ -151,7 +163,6 @@ local translations={
     power={title="bead.widgets.power-title",description="bead.widgets.power-description"},
     sound={title="bead.widgets.sound-title",description="bead.widgets.sound-description"},
     title={title="bead.widgets.window-title",description="bead.widgets.window-title-description"},
-    updates={title="bead.widgets.updates-title",description="bead.widgets.updates-description"},
     wifi={title="bead.widgets.wifi-title",description="bead.widgets.wifi-description"},
     workspaces={title="bead.widgets.workspaces-title",description="bead.widgets.workspaces-description"},
 }
@@ -170,11 +181,8 @@ local function validate_style(package,item,placement,span)
     end
     return style
 end
-for _,id in ids do
-    local package=require(id.."/widget")
-    package.accent_role=({clock="tertiary",sound="secondary",wifi="secondary"})[id] or "primary"
-    package.title=ui.tr(translations[id].title)
-    package.description=ui.tr(translations[id].description)
+local function install(id,package,accent)
+    package.accent_role=accent
     package.settings.colour_role={type="choice",options={"primary","secondary","tertiary","neutral"},
         segmented=true,label=ui.tr("bead.widgets.colour")}
     package.defaults.colour_role=package.accent_role
@@ -200,7 +208,49 @@ for _,id in ids do
     settings(package.settings,package.defaults)
     registry[id]=package
 end
-local M={catalogue=registry,default=require("default")}
+for _,id in ids do
+    local package=require(id.."/widget")
+    package.title=ui.tr(translations[id].title)
+    package.description=ui.tr(translations[id].description)
+    install(id,package,({clock="tertiary",sound="secondary",wifi="secondary"})[id] or "primary")
+end
+-- Plugins (spec 0203). The generated index lists every discovered plugin; active ones
+-- register here like built-ins. A plugin that fails to load is skipped and switched off.
+local found,index=pcall(function() return require("../plugins/index") end)
+local plugins=found and index.plugins or {}
+local app_api={context=context,measure=require("measure"),visual=require("desktop-visuals")}
+local plugin_widgets={}
+for _,entry in plugins do
+    if not entry.loaded then continue end
+    for _,widget in entry.widgets do
+        local ok,problem=pcall(function()
+            local factory=require("../"..widget.module)
+            assert(type(factory)=="function","plugin entry must return a factory function")
+            local package=factory({ui=ui,kit=kit,plugin={id=entry.id,settings=table.clone(entry.values)},app=app_api})
+            assert(type(package)=="table" and package.id==widget.id,"plugin widget must have id "..widget.id)
+            assert(registry[widget.id]==nil,"widget id "..widget.id.." is already registered")
+            package.plugin=entry.id
+            package.title=widget.title_id~="" and ui.tr(widget.title_id) or entry.name
+            package.description=widget.description_id~="" and ui.tr(widget.description_id) or entry.description
+            package.settings=package.settings or {}
+            package.defaults=package.defaults or {}
+            for key,field in entry.settings or {} do
+                package.settings[key]={type=field.type,label=field.label,options=field.options,min=field.min,max=field.max,step=field.step}
+                package.defaults[key]=entry.values[key]
+            end
+            install(widget.id,package,widget.accent)
+            table.insert(plugin_widgets,widget.id)
+        end)
+        if not ok then
+            entry.loaded=false
+            entry.error=tostring(problem)
+            if registry[widget.id] and registry[widget.id].plugin==entry.id then registry[widget.id]=nil end
+            ui.plugin_fault(entry.id,entry.error)
+        end
+    end
+end
+local M={catalogue=registry,default=require("default"),
+    plugins={list=plugins,widgets=plugin_widgets,notice=found and index.notice or "",user_dir=found and index.user_dir or false}}
 function M.validate(document)
     assert(type(document)=="table" and document.version==1,"unsupported widget layout version")
     assert(type(document.preset)=="string" and type(document.hosts)=="table","invalid widget layout")

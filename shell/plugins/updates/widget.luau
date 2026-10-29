@@ -1,14 +1,16 @@
 -- SPDX-License-Identifier: GPL-3.0-only
-local c=require("../context")
-local ui=c.ui
-local kit=c.kit
+-- First-party plugin (spec 0203): the entry returns a factory over the host API.
+return function(api)
+local c=api.app.context
+local ui=api.ui
+local kit=api.kit
 local t=c.t
-local measure=require("../measure")
+local measure=api.app.measure
 local status_text=c.status_text
 local popouts=c.popouts
 local updates_on=c.updates_on
 local status_glyph=c.status_glyph
-local visual=require("../desktop-visuals")
+local visual=api.app.visual
 local font="IBM Plex Sans"
 local count_max=ui.text_width("999…",font,t.clock_font)
 local function fit_count(value,width)
@@ -79,3 +81,4 @@ return {id="updates",title="Updates",icon="package_2",category="bar",data={topic
         wallpaper={title="Legacy wallpaper count",min_span=1,max_span=1200,preferred_span=280,preferred_height=150,hidden=true,render=desktop}}},
         panel={styles={updates={view="updates"}}}}
 }
+end

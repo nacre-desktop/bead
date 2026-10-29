@@ -38,6 +38,7 @@ mod notifications;
 mod pearls;
 mod placement;
 mod player_art;
+mod plugins;
 mod popouts;
 mod prefs;
 mod prompt;
@@ -109,6 +110,7 @@ fn start(
     ui_started: &mut bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let cli: Vec<String> = std::env::args().skip(1).collect();
+    plugins::configure(Path::new("shell"));
     if cli.first().is_some_and(|a| a == "--check-daemon") {
         return nacre_source::check(
             cli.get(1)

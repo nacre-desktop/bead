@@ -19,6 +19,8 @@ with tempfile.TemporaryDirectory(prefix='bead-luau-') as directory:
         if isinstance(v,dict):return '{'+','.join('['+json.dumps(k)+']='+literal(x) for k,x in v.items())+'}'
         return json.dumps(v)
     (types/'bead_kit.luau').write_text('local ui=require("./bead_ui");local factory=require("./kit_impl");return factory(ui,'+literal(tokens)+')\n')
+    # The host generates plugins/index.luau per bundle (spec 0203); analyze against an empty index.
+    (bundle/'plugins').mkdir(exist_ok=True);(bundle/'plugins/index.luau').write_text('return {api=1,user_dir=false,notice="",plugins={}}\n')
     files=list(bundle.rglob('*.luau'))
     for f in files:
         text=f.read_text()

@@ -199,6 +199,9 @@ local categories={
     {id="yours",label=ui.tr("bead.widgets.category-yours")},
 }
 local widget_nav_ids={"clock","battery","sound","power","notifications","bluetooth","wifi","launcher","updates","workspaces","title","pill"}
+for _,id in registry.plugins.widgets do
+    if not table.find(widget_nav_ids,id) then table.insert(widget_nav_ids,id) end
+end
 local function in_document(widget)
     for group,entry in doc.widgets or {} do
         if entry.widget==widget then return true end
@@ -468,6 +471,8 @@ local function widget_sidebar()
     table.insert(nav,ui.Box{id="widget-nav-rule",width="fill",height=1,shrink=0,fill="outlineVariant"})
     table.insert(nav,label("widget-nav-group",ui.tr("bead.widgets.group-label"),text.caption*4/3,"onSurfaceVariant",
         {width="fill",height=18,shrink=0,padding_left=spacing.sm}))
+    -- Spec 0203: the Plugins page is its own route under the widget list.
+    local plugins_open=string.sub(selected,1,8)=="@plugins"
     for _,id in widget_nav_ids do
         local package=registry.catalogue[id]
         if package and (nav_query=="" or string.find(string.lower(package.title),nav_query,1,true)
@@ -476,6 +481,8 @@ local function widget_sidebar()
             table.insert(nav,row(id,package.title,package.description,package.icon,selected==id,navigate("select",id)))
         end
     end
+    table.insert(nav,ui.Box{id="widget-nav-plugins-rule",width="fill",height=1,shrink=0,fill="outlineVariant"})
+    table.insert(nav,row("plugins","Plugins","Add, enable and configure plugins","extension",plugins_open,navigate("select","@plugins")))
     return ui.Column{id="widget-sidebar",width=RAIL,height="fill",shrink=0,gap=spacing.sm,padding=spacing.md,
         radius=kit.tokens.radii.medium,fill="surfaceContainer",
         label("widget-sidebar-title",ui.tr("bead.widgets.side-title"),text.title*4/3,"onSurface",{height=26}),
@@ -629,6 +636,6 @@ local app_content=ui.Column{id="widgets-app",width="100%",height="100%",fill="su
         ui.Box{id="header-rule",width="fill",height=1,fill="outlineVariant"}},
     ui.Row{id="app-body",width="fill",height="fill",gap=spacing.lg,padding=spacing.lg,
         widget_sidebar(),
-        selected=="" and gallery() or detail()},
+        selected=="" and gallery() or string.sub(selected,1,8)=="@plugins" and require("plugins").page(selected,navigate) or detail()},
 }
 return ui.Box{id="widgets-app-root",width="100%",height="100%",metadata=metadata(),app_content}

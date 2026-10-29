@@ -254,6 +254,8 @@ pub struct LuauFrontEnd {
     vm_build_bytes: std::cell::Cell<usize>,
     vm: RefCell<Option<Vm>>,
     animations: std::rc::Rc<RefCell<Animations>>,
+    /// Active plugins' grants and the UI root their faults are recorded against (spec 0203).
+    plugins: Option<(PathBuf, Arc<BTreeMap<String, crate::plugins::Grants>>)>,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AnimationCurve {
@@ -453,17 +455,19 @@ impl ScalarMotion {
 }
 impl LuauFrontEnd {
     pub fn new(entry: &Path, sources: &Sources) -> Result<Self, Diagnostic> {
-        Self::new_with_picker(entry, sources, None)
+        Self::new_with_picker(entry, sources, None, None)
     }
     pub(super) fn new_with_picker(
         entry: &Path,
         sources: &Sources,
         font_picker: Option<crate::transcript::Picker>,
+        plugins: Option<(PathBuf, crate::plugins::Mount)>,
     ) -> Result<Self, Diagnostic> {
         let compiler = mlua::chunk::Compiler::new();
         let mut compiled = Sources::new();
         let mut size = 0;
-        for (path, bytes) in sources {
+        let mounted = plugins.as_ref().map(|(_, mount)| &mount.sources);
+        for (path, bytes) in sources.iter().chain(mounted.into_iter().flatten()) {
             if path.extension().is_some_and(|ext| ext == "luau") {
                 let code = compiler.compile(bytes).map_err(|e| diagnostic(path, e))?;
                 size += code.len();
@@ -514,6 +518,7 @@ impl LuauFrontEnd {
             materialized: RefCell::new(None),
             prelude,
             animations: Default::default(),
+            plugins: plugins.map(|(root, mount)| (root, mount.grants)),
         })
     }
     fn measured_width(&self, text: &str, family: &str, size: f32) -> f32 {
@@ -638,6 +643,26 @@ impl Vm {
             )?,
         )?;
         sdk.set("tr", crate::i18n::lua_function(&lua)?)?;
+        if let Some((root, grants)) = &frontend.plugins {
+            let checked = grants.clone();
+            sdk.set(
+                "plugin_gate",
+                lua.create_function(move |_, (id, node): (String, mlua::Value)| {
+                    let grants = checked.get(&id).ok_or_else(|| {
+                        mlua::Error::runtime(format!("plugin {id} is not loaded"))
+                    })?;
+                    gate(&id, grants, &node, 0)
+                })?,
+            )?;
+            let root = root.clone();
+            sdk.set(
+                "plugin_fault",
+                lua.create_function(move |_, (id, message): (String, String)| {
+                    crate::plugins::fault(&root, &id, &message);
+                    Ok(())
+                })?,
+            )?;
+        }
         let install: Function = lua
             .load(frontend.prelude.install.as_slice())
             .set_name("@bead.ui")
@@ -850,6 +875,14 @@ impl FrontEnd for LuauFrontEnd {
                     if let mlua::Value::Table(table) = &value
                         && let Ok(name) = table.get::<String>("__bind")
                     {
+                        if let Some((_, grants)) = &self.plugins
+                            && let Some(id) = crate::plugins::owner(&source(lua, entry).file)
+                            && !grants.get(id).is_some_and(|g| g.topic(&name))
+                        {
+                            return Err(mlua::Error::runtime(format!(
+                                "plugin {id} lacks capability topic:{name}"
+                            )));
+                        }
                         return crate::script::value_to_lua(
                             lua,
                             &resolve(&name).map_err(mlua::Error::external)?,
@@ -1029,6 +1062,14 @@ impl FrontEnd for LuauFrontEnd {
                         path.set_extension("luau");
                     }
                     let path = normalize(&path).map_err(mlua::Error::runtime)?;
+                    // A plugin reaches the host API and its own files, never shell internals.
+                    if let Some(id) = crate::plugins::owner(&caller.file)
+                        && !path.starts_with(Path::new(crate::plugins::MOUNT).join(id))
+                    {
+                        return Err(mlua::Error::runtime(format!(
+                            "plugin {id} may not require {name}"
+                        )));
+                    }
                     if let Some(value) = vm.modules.borrow().get(&path) {
                         return Ok(value.clone());
                     }
@@ -1130,6 +1171,52 @@ impl FrontEnd for LuauFrontEnd {
         }
         result
     }
+}
+/// Every store binding and action a plugin's rendered subtree carries must be declared.
+fn gate(
+    id: &str,
+    grants: &crate::plugins::Grants,
+    value: &mlua::Value,
+    depth: usize,
+) -> mlua::Result<mlua::Value> {
+    let mlua::Value::Table(table) = value else {
+        return Ok(value.clone());
+    };
+    if depth > 64 {
+        return Err(mlua::Error::runtime(format!(
+            "plugin {id} output nests too deeply"
+        )));
+    }
+    if let Ok(name) = table.raw_get::<String>("__bind")
+        && !grants.topic(&name)
+    {
+        return Err(mlua::Error::runtime(format!(
+            "plugin {id} lacks capability topic:{name}"
+        )));
+    }
+    for pair in table.pairs::<mlua::Value, mlua::Value>() {
+        let (key, item) = pair?;
+        if let mlua::Value::String(key) = &key
+            && key.to_str()?.starts_with("on_")
+        {
+            let action = match &item {
+                mlua::Value::String(name) => Some(name.to_str()?.to_owned()),
+                mlua::Value::Table(action) => action.raw_get::<Option<String>>("name")?,
+                _ => None,
+            };
+            if let Some(action) = action
+                && !grants.action(&action)
+            {
+                return Err(mlua::Error::runtime(format!(
+                    "plugin {id} lacks capability action:{action}"
+                )));
+            }
+        }
+        if matches!(item, mlua::Value::Table(_)) {
+            gate(id, grants, &item, depth + 1)?;
+        }
+    }
+    Ok(value.clone())
 }
 fn normalize(path: &Path) -> Result<PathBuf, String> {
     let mut result = PathBuf::new();
