@@ -75,7 +75,7 @@ def output_pixels(env: dict[str, str], raw: pathlib.Path) -> None:
     if len(names) != 1:
         raise RuntimeError(f"expected one Labwc headless output, got {names!r}")
     name = names[0]
-    run(["wlr-randr", "--output", name, "--custom-mode", "2880x1800@60Hz"], env=env)
+    run(["wlr-randr", "--output", name, "--custom-mode", "2880x1800@" + os.environ.get("BEAD_DAILY_HZ", "60") + "Hz"], env=env)
     deadline = time.monotonic() + 3
     after = ""
     while time.monotonic() < deadline:
@@ -440,6 +440,8 @@ class Runner:
         shell_env = dict(daemon_env)
         if self.args.wallpaper_live or self.args.wallpaper_open_only:
             shell_env["BEAD_ACCEPTANCE_OPEN_TRACE"] = "1"
+        if self.args.launcher_bench:
+            shell_env.update(BEAD_PROFILE_INPUT="1", BEAD_FRAME_TRACE="1")
         if self.args.wayland_debug:
             shell_env["WAYLAND_DEBUG"] = "client"
         if self.args.slide_trace:
@@ -1676,6 +1678,94 @@ class Runner:
         self._super("space")
         self._key("nacre")
 
+    def launcher_bench(self):
+        """B0187: real-shell typing latency (keypress -> presented) and scroll frame cost, recorded as JSON."""
+        bench = load_module("launcher_bench", HERE / "launcher_bench.py")
+        read = lambda: self.log_path.read_text(errors="replace")
+        out = {"refresh": "nested", "typing": {}, "scroll": {}}
+        self._super("space")
+        self._wait_log("UI_PRESENTED", 10, len(read()) - 1)
+        time.sleep(1.5)
+        deadline = time.monotonic() + 60  # a cold private HOME can hold the daemon's workers for a while
+        while time.monotonic() < deadline:
+            probe = subprocess.run([str(self.args.ctl), "call", "--timeout", "3000", "menu.query",
+                                    json.dumps({"query": "t", "mode": "search"})], env=self.env,
+                                   capture_output=True, text=True, timeout=20)
+            if probe.returncode == 0 and '"items"' in probe.stdout:
+                break
+            time.sleep(1)
+        text_ms, result_ms, stages, rows = [], [], {}, []
+        for round_no in range(int(os.environ.get("BEAD_BENCH_ROUNDS", "4"))):
+            for position, key in enumerate("terminal"):
+                offset = len(read())
+                run(["wtype", "-s", "20", key], env=self.env, timeout=10)
+                time.sleep(.45)
+                row = bench.typing_key(read()[offset:])
+                if row:
+                    rows.append({"round": round_no, "key": position, **row})
+                    if position == 0:
+                        continue  # grid -> results transition is reported separately
+                    text_ms.append(row["text_ms"])
+                    if row["result_ms"] is not None:
+                        result_ms.append(row["result_ms"])
+                    for name, wall in row["stages"].items():
+                        stages.setdefault(name, []).append(wall)
+            for _ in range(8):
+                run(["wtype", "-s", "20", "-k", "BackSpace"], env=self.env, timeout=10)
+                time.sleep(.3)
+        if os.environ.get("BEAD_BENCH_DIAG"):
+            ps = run(["ps", "-eo", "pid,ppid,etimes,stat,wchan:20,args"], env=self.env).stdout
+            (self.evidence / "diag-ps.txt").write_text("\n".join(l for l in ps.splitlines() if "nacre" in l or "PID" in l))
+            probe = subprocess.run([str(self.args.ctl), "call", "--timeout", "8000", "menu.query",
+                                    json.dumps({"query": "t", "mode": "search"})], env=self.env,
+                                   capture_output=True, text=True, timeout=20)
+            (self.evidence / "diag-query.txt").write_text(probe.stdout[:400] + probe.stderr[:400])
+        first = [r for r in rows if r["key"] == 0]
+        out["typing"] = {"first_key_text_ms": bench.percentiles([r["text_ms"] for r in first]),
+                         "first_key_result_ms": bench.percentiles([r["result_ms"] for r in first if r["result_ms"] is not None]),
+                         "keys": rows, "text_ms": bench.percentiles(text_ms), "result_ms": bench.percentiles(result_ms),
+                         "stage_wall_ms": {name: bench.percentiles(v) for name, v in sorted(stages.items())}}
+        run(["wtype", "-s", "20", "a"], env=self.env, timeout=10)
+        time.sleep(1.0)
+        for label, op, count, gap in (("results_wheel", "wheel", 20, 30), ("results_fling", "fling", 120, 8)):
+            self._pointer("move", (1350, 1300))
+            time.sleep(.3)
+            offset = len(read())
+            self.pointer.stdin.write(f"{op} {count} {gap}\n")
+            self.pointer.stdin.flush()
+            self.pointer.stdout.readline()
+            time.sleep(.8)
+            segment = read()[offset:]
+            (self.evidence / f"bench-{label}.log").write_text(segment)
+            out["scroll"][label] = bench.frames(segment)
+            self.pointer.stdin.write(f"{op} {-count} 2\n")  # scroll back, unmeasured
+            self.pointer.stdin.flush()
+            self.pointer.stdout.readline()
+            time.sleep(.3)
+        for _ in range(3):
+            run(["wtype", "-s", "20", "-k", "BackSpace"], env=self.env, timeout=10)
+        time.sleep(.5)
+        for label, op, count, gap in (("grid_wheel", "wheel", 20, 30), ("grid_fling", "fling", 120, 8)):
+            self._pointer("move", (1350, 1300))
+            time.sleep(.3)
+            offset = len(read())
+            self.pointer.stdin.write(f"{op} {count} {gap}\n")
+            self.pointer.stdin.flush()
+            self.pointer.stdout.readline()
+            time.sleep(.8)
+            segment = read()[offset:]
+            (self.evidence / f"bench-{label}.log").write_text(segment)
+            out["scroll"][label] = bench.frames(segment)
+            self.pointer.stdin.write(f"{op} {-count} 2\n")
+            self.pointer.stdin.flush()
+            self.pointer.stdout.readline()
+            time.sleep(.3)
+        out["ui_errors"] = len(re.findall("UI_ERROR", read()))
+        (self.evidence / "launcher-bench.json").write_text(json.dumps(out, indent=2) + "\n")
+        print("LAUNCHER_BENCH " + json.dumps(out), flush=True)
+        self.results.append({"check": "launcher bench UI_ERROR", "result": "PASS" if not out["ui_errors"] else "FAIL",
+                             "count": out["ui_errors"]})
+
     def one_round(self, round_no):
         self.round_no = round_no
         targets = self.profile["bar_targets"]
@@ -1720,6 +1810,10 @@ class Runner:
 
     def run(self):
         self.start()
+        if self.args.launcher_bench:
+            self.launcher_bench()
+            self.write_report()
+            return 0
         if self.args.wallpaper_open_only:
             self.wallpaper_open_only()
             self.write_report()
@@ -1895,6 +1989,8 @@ def main():
     parser.add_argument("--wallpaper-cycles", type=int, default=3)
     parser.add_argument("--wallpaper-gap", type=float, default=.25,
                         help="seconds between selections in the rapid sequence")
+    parser.add_argument("--launcher-bench", action="store_true",
+                        help="B0187: launcher keypress->presented latency and list scroll frame cost")
     parser.add_argument("--quick", action="store_true",
                         help="run one interaction round without the 120-second idle and final repeat")
     parser.add_argument("--focus-dropdown", choices=("updates", "audio", "network", "bluetooth",

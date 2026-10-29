@@ -5141,6 +5141,16 @@ pub(crate) fn resolve_icon_path(icon: &str) -> std::path::PathBuf {
     {
         return path;
     }
+    // B0187: an unresolvable name cost ~12 ms of theme scans on every scene build (every keystroke and
+    // scroll step). Remember misses briefly; a newly installed icon appears within the TTL.
+    static MISSES: OnceLock<Mutex<HashMap<String, std::time::Instant>>> = OnceLock::new();
+    let misses = MISSES.get_or_init(Default::default);
+    if misses.lock().is_ok_and(|map| {
+        map.get(icon)
+            .is_some_and(|at| at.elapsed() < std::time::Duration::from_secs(60))
+    }) {
+        return "@bead-icon-fallback.svg".into();
+    }
     let direct = std::path::PathBuf::from(icon);
     static THEME: OnceLock<String> = OnceLock::new();
     let theme = THEME
@@ -5173,15 +5183,37 @@ pub(crate) fn resolve_icon_path(icon: &str) -> std::path::PathBuf {
             })
         })
         .unwrap_or_else(|| "@bead-icon-fallback.svg".into());
-    if path.as_path() != std::path::Path::new("@bead-icon-fallback.svg")
-        && let Ok(mut map) = cache.lock()
-    {
+    if path.as_path() != std::path::Path::new("@bead-icon-fallback.svg") {
+        if let Ok(mut map) = cache.lock() {
+            if map.len() >= 4096 {
+                map.clear();
+            }
+            map.insert(icon.to_owned(), path.clone());
+        }
+    } else if let Ok(mut map) = misses.lock() {
         if map.len() >= 4096 {
             map.clear();
         }
-        map.insert(icon.to_owned(), path.clone());
+        map.insert(icon.to_owned(), std::time::Instant::now());
     }
     path
+}
+
+#[cfg(test)]
+mod icon_miss_tests {
+    #[test]
+    fn unresolvable_icon_names_are_remembered_instead_of_rescanned() {
+        let name = "bead-b0187-no-such-icon-anywhere";
+        assert_eq!(
+            super::resolve_icon_path(name).as_path(),
+            std::path::Path::new("@bead-icon-fallback.svg")
+        );
+        let started = std::time::Instant::now();
+        for _ in 0..50 {
+            super::resolve_icon_path(name);
+        }
+        assert!(started.elapsed() < std::time::Duration::from_millis(20));
+    }
 }
 impl Runtime {
     fn pointer_feedback(
