@@ -578,7 +578,7 @@ struct Vm {
     /// Modules that read build input while loading: re-run in every build.
     dynamic: RefCell<BTreeSet<PathBuf>>,
     /// Host calls in this VM; a module load that moves it depends on the build.
-    calls: std::cell::Cell<u64>,
+    calls: std::rc::Rc<std::cell::Cell<u64>>,
     /// Thread CPU deadline of the current build and its excluded native time.
     deadline: std::rc::Rc<std::cell::Cell<u64>>,
     native_time: std::rc::Rc<std::cell::Cell<u64>>,
@@ -622,10 +622,14 @@ impl Vm {
         let allowed =
             lua.create_table_from(crate::layout::PROPERTIES.iter().map(|name| (*name, true)))?;
         let animations = frontend.animations.clone();
+        let calls = std::rc::Rc::new(std::cell::Cell::new(0u64));
+        let animated = calls.clone();
         sdk.set(
             "__animate",
             lua.create_function(
                 move |_, (key, target, duration, transition): (String, f64, f64, String)| {
+                    // An animated value depends on time and the build: count it.
+                    animated.set(animated.get() + 1);
                     animations
                         .borrow_mut()
                         .animate(key, target, duration, &transition, Instant::now())
@@ -666,7 +670,7 @@ impl Vm {
             chunks: Default::default(),
             modules: Default::default(),
             dynamic: Default::default(),
-            calls: Default::default(),
+            calls,
             deadline,
             native_time,
             epoch,
