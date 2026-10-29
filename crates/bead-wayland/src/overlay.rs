@@ -157,15 +157,17 @@ impl App {
             .as_ref()
             .is_some_and(|views| views.contains(view))
     }
-    /// The named output when present, else the primary session's, else the first.
+    /// The named output when present, else the invoking one (B0194), else the first.
     fn overlay_output(&self, name: Option<&str>) -> Option<wl_output::WlOutput> {
         let by_name = |wanted: &str| {
             self.output
                 .outputs()
                 .find(|o| self.output.info(o).and_then(|i| i.name).as_deref() == Some(wanted))
         };
-        name.and_then(by_name)
-            .or_else(|| self.active_output.as_deref().and_then(by_name))
+        let resolved = self.invocation_output(name);
+        resolved
+            .as_deref()
+            .and_then(by_name)
             .or_else(|| self.output.outputs().next())
     }
     /// Service offer for an overlay view. A shown view keeps its output (new offers
