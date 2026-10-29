@@ -1029,23 +1029,25 @@ The owner profile identified worker deadlines as the repeated stage source: `wak
 
 # B0180 — 2026-10-29 r2
 
-The rejected panel open path allowed presentation-motion coalescing to hold the
-first `Reload`; the following `PanelVisibility(true)` then wrote `panel.open`
-before the route schema existed. The worker now admits that bootstrap reload
-before deferring later refreshes, preserving `panel.open` as the panel visibility
-state. A Runtime smoke test loads actual shell routes, opens and closes them,
-asserts each prepared CPU scene and verifies `panel.open` true/false across
-12 route entries (including the `sound/core` journal route).
+The laptop rejection's `unknown state panel.open` came from the worker holding
+the first Reload behind presentation-motion coalescing, then processing the
+opening PanelVisibility update before the route schema was committed. The first
+schema-establishing Reload now bypasses coalescing; later refreshes still defer.
 
-After the first primary frame settles, the product schedules low-priority
-preparation for its panel specs using the actual logical output size and scale.
-The renderer stores exact-content CPU layers in a consume-once 2 MiB cache,
-including strong asset references. Headless startup simulation warmed 12/12
-routes and retained 1,429,994 bytes.
+`real_shell_panel_routes_open_and_close_with_prepared_scenes` loads and drives
+the real shell Runtime for dashboard, session, launcher, network, bluetooth,
+battery, sound, sound/core, calendar, chat, control and wallpaper. Each open and
+close produces a CPU-prepared scene and retains the established `panel.open`
+true/false meaning. The B0178 37-commit/300 ms scheduler proof passes.
+
+After the first primary frame, Bead warms real PanelSpec scenes on a nice-10
+worker at the actual output logical size/scale, without mapping surfaces or
+publishing `presented`. Prepared pixels and strong asset references use a
+consume-once 2 MiB cache. Headless smoke warmed 12/12 entries at 1,429,994 bytes.
 
 At 2880×1800/1.5 in the debug test profile, warmed first-content wall time was
 2.74/1.83/1.76 ms for dashboard/control/sound, versus 213.51/140.39/41.27 ms
-at 3b6de41f. Tick p50/p99 were 395.82/606.77, 236.95/384.77 and 1.61/1.61 ms.
-This is a CPU software benchmark, not physical scanout. B0178's 37-commit,
-8.33 ms scheduler proof remains green. Nacre Chrome SVG rasterization and
-per-frame serialization counters are not measured; no live laptop audit was run.
+on 3b6de41f. Tick p50/p99 were 395.82/606.77, 236.95/384.77 and 1.61/1.61 ms.
+This software benchmark does not establish physical scanout. Per-pose Nacre
+Chrome SVG rasterization and presented-state serialization counts remain
+unverified; the owner laptop live audit was not repeated.

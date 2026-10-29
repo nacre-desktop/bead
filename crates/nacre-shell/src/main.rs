@@ -1049,6 +1049,15 @@ fn start(
                 startup_panel_specs.push((name.to_owned(), spec.clone()));
             }
         }
+        if let Some(client) = _ui_provider.clone() {
+            let memory = std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::BTreeMap::new(),
+            ));
+            startup_panel_specs.push((
+                "chat".into(),
+                popouts::chat(client, palette.clone(), colors.clone(), memory, panel_trace)?,
+            ));
+        }
         let prewarm_specs = startup_panel_specs.clone();
         options.panel_prewarm = Some(std::sync::Arc::new(move |viewport, scale| {
             panel_warm::start(prewarm_specs.clone(), viewport, scale);
