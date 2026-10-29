@@ -208,10 +208,12 @@ local function desktop(props,_settings,_data)
                 ui.Text{id="time",text=(hour or visible_time)..(minute and ":"..minute or ""),width="fill",height=math.min(h,100),
                     font_size=80,font_weight=visual.display_weight,family=visual.display_font,color="onSurface",text_align="center"}}
         end
+        local tone=visual.tone(props.instance)
         return ui.Column{id="clock-minimal",width=w,height=h,padding=kit.tokens.spacing.md,justify="center",gap=compact and 0 or kit.tokens.spacing.xs,on_activate=action,
-            visual.display("hour",hour or visible_time,"fill",digit_height,digit_size,"onSurface",true),
-            visual.display("minute",minute or "","fill",digit_height,digit_size,"primary",true),
-            visual.shadow_text("date",weekday,"fill",date_height,date_size,"secondary")}
+            fill=tone.scrim,radius=tone.scrim and visual.radius or nil,
+            visual.display("hour",hour or visible_time,"fill",digit_height,digit_size,tone.ink,tone.shadow),
+            visual.display("minute",minute or "","fill",digit_height,digit_size,"primary",tone.shadow),
+            visual.shadow_text("date",weekday,"fill",date_height,date_size,tone.adapted and tone.secondary or "secondary",tone.shadow or false)}
     end
     local compact=h<=120
     local base_time_size=math.min(148,math.max(h,190)*.72)
@@ -233,9 +235,10 @@ local function desktop(props,_settings,_data)
     local content_height=math.max(1,h-2*padding-2*gap-rule_height)
     local time_height=content_height-date_height
     local time_size=math.min(base_time_size,math.max(1,(time_height-2)/1.2))
-    return ui.Column{id="clock-desktop",width=w,height=h,padding=padding,fill="transparent",justify="center",gap=gap,on_activate=action,
-        visual.display("time",visible_time,"fill",time_height,time_size,"onSurface",true),
-        visual.shadow_text("date",date_line,"fill",date_height,date_size,"onSurface"),
+    local tone=visual.tone(props.instance)
+    return ui.Column{id="clock-desktop",width=w,height=h,padding=padding,fill=tone.scrim or "transparent",radius=tone.scrim and visual.radius or nil,justify="center",gap=gap,on_activate=action,
+        visual.display("time",visible_time,"fill",time_height,time_size,tone.ink,tone.shadow),
+        visual.shadow_text("date",date_line,"fill",date_height,date_size,tone.ink,tone.shadow or false),
         ui.Box{id="accent-rule",width=48,height=rule_height,fill="primary",radius=1.5}}
 end
 local function bar_style(title,style,preferred,requires)

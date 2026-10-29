@@ -839,6 +839,8 @@ struct PairToken {
     pair: ActiveWallpaper,
     selection_generation: Option<u64>,
     optimistic: bool,
+    /// B0193: luminance grid of this raster, computed once with the decode.
+    luma: Arc<crate::wallpaper_luma::Luma>,
 }
 impl Consumer {
     #[cfg(test)]
@@ -951,10 +953,12 @@ impl Consumer {
         output: &str,
     ) -> Option<Arc<dyn std::any::Any + Send + Sync>> {
         let state = self.state().ok()?;
+        let pair = state.outputs.get(output)?.clone();
         Some(Arc::new(PairToken {
             requested_at: None,
             boot: self.client.status().boot.clone()?,
-            pair: state.outputs.get(output)?.clone(),
+            luma: Arc::new(crate::wallpaper_luma::measure(&pair, &[], 0, 0)),
+            pair,
             selection_generation: None,
             optimistic: false,
         }))
@@ -1112,6 +1116,12 @@ impl Consumer {
             wallpaper_switch_phase(selection, decoded.pair.revision, "scale_end");
         }
         let decoded_pair = decoded.pair.clone();
+        let luma = Arc::new(crate::wallpaper_luma::measure(
+            &decoded_pair,
+            &decoded.rgba,
+            decoded.width,
+            decoded.height,
+        ));
         let commit_token: Arc<dyn std::any::Any + Send + Sync> = Arc::new(PairToken {
             requested_at: selection
                 .as_ref()
@@ -1125,6 +1135,7 @@ impl Consumer {
                 .then(|| selection.as_ref().map(|selection| selection.generation))
                 .flatten(),
             optimistic,
+            luma,
         });
         let frame = bead::wayland::WallpaperFrame {
             output: output.clone(),
@@ -1358,6 +1369,7 @@ impl bead::wayland::WallpaperProvider for Consumer {
         {
             self.preview.cancel(selection.generation);
         }
+        crate::wallpaper_luma::publish(output, pair.luma.clone());
         let _ = self
             .motion_commits
             .publish(serde_json::json!({"output":output,"revision":revision}));
@@ -1390,6 +1402,7 @@ impl bead::wayland::WallpaperProvider for Consumer {
     }
     fn discarded(&self, _output: &str, _revision: u64) {}
     fn output_removed(&self, output: &str) {
+        crate::wallpaper_luma::remove(output);
         if let Ok(mut visibility) = self.visibility.lock() {
             visibility.remove(output);
         }

@@ -56,6 +56,7 @@ mod wallpaper_cache;
 mod wallpaper_catalogue_cache;
 #[cfg(test)]
 mod wallpaper_decode;
+mod wallpaper_luma;
 mod wallpaper_motion;
 mod wallpaper_prefetch;
 mod wallpaper_warm;

@@ -125,6 +125,14 @@ fn inputs(windows: &Windows, services: &Services, prefs: Prefs) -> BTreeMap<Stri
         .collect()
 }
 
+/// B0193 `pause_on` fullscreen/lock for the desktop widget layer: the output has a fullscreen
+/// window on its active workspace, or the session is locked or sleeping (the same derivation
+/// that hides the motion wallpaper).
+pub(crate) fn output_hidden(windows: &Windows, services: &Services, output: &str) -> bool {
+    let all = inputs(windows, services, Prefs::default());
+    all.get(output).or_else(|| all.get(ANY)).is_some_and(|input| input.hidden)
+}
+
 fn event_wait(wait: Duration, source_active: bool) -> Duration {
     if source_active {
         wait.min(Duration::from_millis(250))
@@ -439,6 +447,29 @@ mod tests {
         }
         let none = inputs(&Windows::default(), &Services::default(), Prefs::default());
         assert_eq!(none.keys().collect::<Vec<_>>(), [ANY]);
+    }
+
+    /// B0193: the desktop widget layer pauses (pause_on fullscreen/lock) exactly while the
+    /// output has a fullscreen window or the session is locked; a tiled window does not.
+    #[test]
+    fn widgets_pause_on_fullscreen_or_lock_per_output() {
+        let mut windows = desktop();
+        let services = Services::default();
+        assert!(!output_hidden(&windows, &services, "A"));
+        windows.windows.push(window("a1", false, Some(false)));
+        assert!(!output_hidden(&windows, &services, "A"), "tiled is not covered");
+        windows.windows.push(window("a2", true, Some(true)));
+        assert!(!output_hidden(&windows, &services, "A"), "inactive workspace");
+        windows.windows.push(window("b1", false, Some(true)));
+        assert!(output_hidden(&windows, &services, "B"));
+        assert!(!output_hidden(&windows, &services, "A"), "other output stays live");
+        let mut locked = Services::default();
+        locked.session.locked = true;
+        assert!(output_hidden(&desktop(), &locked, "A") && output_hidden(&desktop(), &locked, "B"));
+        locked.session.locked = false;
+        locked.session.sleeping = true;
+        assert!(output_hidden(&desktop(), &locked, "A"));
+        assert!(!output_hidden(&Windows::default(), &Services::default(), "A"));
     }
 
     /// The whole Nacre edge over a real daemon connection: a published motion member starts

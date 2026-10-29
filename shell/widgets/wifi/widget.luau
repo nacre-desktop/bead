@@ -28,10 +28,11 @@ local function desktop(props,_settings,_data)
     local strength=0
     for _,item in rows do if item.group=="connected" then network=item.label or "Connected"; strength=item.strength or 0; break end end
     local signal=ui.animate("wifi-signal",math.clamp(tonumber(strength) or 0,0,100),.2,"out-cubic")
-    return ui.Column{id="network-wallpaper",width=slot.w,height=slot.h,fill="transparent",justify="center",gap=kit.tokens.spacing.xs,
+    local tone=visual.tone(props.instance)
+    return ui.Column{id="network-wallpaper",width=slot.w,height=slot.h,fill=tone.scrim or "transparent",radius=tone.scrim and visual.radius or nil,justify="center",gap=kit.tokens.spacing.xs,
         status_glyph("signal-icon",ui.bind("bead.desktop.network"),"network"),
-        visual.display("network",network,"fill",48,kit.tokens.text.headline*4/3,visual.text,true),
-        visual.shadow_text("strength",tostring(signal).."% signal","fill",22,kit.tokens.text.body*4/3,"onSurfaceVariant")}
+        visual.display("network",network,"fill",48,kit.tokens.text.headline*4/3,tone.ink,tone.shadow),
+        visual.shadow_text("strength",tostring(signal).."% signal","fill",22,kit.tokens.text.body*4/3,tone.secondary,tone.shadow or false)}
 end
 local function style(title,preferred,render) return {title=title,min_span=1,max_span=60,preferred_span=preferred,render=render} end
 return {id="wifi",title="Wi-Fi",icon="wifi",category="bar",data={topics={},actions={}},settings={},defaults={},budget={fps_active=0,fps_idle=0,pause_on={"fullscreen","lock","battery_saver"}},
