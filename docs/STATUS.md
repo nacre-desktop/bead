@@ -1046,9 +1046,9 @@ publishing `presented`. Prepared pixels and strong asset references use a
 consume-once 2 MiB cache. Headless smoke warmed 12/12 entries at 1,429,994 bytes.
 
 At 2880×1800/1.5 in the debug test profile, warmed first-content wall time was
-2.84/1.45/1.74 ms for dashboard/control/sound, versus 213.51/140.39/41.27 ms
-on 3b6de41f. Tick p50/p99 were 398.61/612.80, 238.03/385.71 and 1.60/1.61 ms.
-Full Bead CI passed on code HEAD `ec573ada` (784 passed, 3 ignored; `FULL_CI_OK`).
+3.04/1.46/1.73 ms for dashboard/control/sound, versus 213.51/140.39/41.27 ms
+on 3b6de41f. Tick p50/p99 were 397.08/612.16, 237.45/384.70 and 1.60/1.62 ms.
+Full Bead CI passed on R2 HEAD `0f1d502b` (784 passed, 3 ignored; `FULL_CI_OK`).
 The software benchmark does not establish physical scanout. Per-pose Nacre
 Chrome SVG rasterization and presented-state serialization counts remain
 unverified; the owner laptop live audit was not repeated.
