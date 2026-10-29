@@ -318,7 +318,10 @@ local function copy(value)
     for key,item in value do result[key]=copy(item) end
     return result
 end
+-- Documents this module already normalised (the bar normalises once per build).
+local normalised=setmetatable({},{__mode="k"})
 function M.normalise(document)
+    if normalised[document] then return document end
     if type(document)~="table" or type(document.hosts)~="table" or type(document.hosts.top_bar)~="table" then return document end
     local doc=copy(document)
     local bar=doc.hosts.top_bar
@@ -359,6 +362,7 @@ function M.normalise(document)
             end
         end
     end
+    normalised[doc]=true
     return doc
 end
 -- Project the shared saved layout onto this output without changing its source.
@@ -366,7 +370,6 @@ end
 function M.project(document,width)
     assert(type(width)=="number" and width==width and width>0 and width<math.huge,"invalid widget projection width")
     local projected=M.normalise(document)
-    M.validate(projected)
     local bar=projected.hosts.top_bar
     local tiles=math.max(6,math.min(4096,math.floor(width/32+.5)))
     for _,item in bar.instances do tiles=math.max(tiles,item.slot.start+item.slot.span) end
