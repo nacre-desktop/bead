@@ -1,5 +1,6 @@
 # Bead implementation queue
 
+| — | [B0188 OSD, toast and workspace-switch motion](0188-osd-toast-motion.md) | Measured — overlay frame interval fix and 120 Hz motion test; prewarm attempt rejected; workspace indicator 60 Hz cadence and live OSD first frame open |
 | — | [B0181 Ghost strip after panel close](0181-close-ghost-strip.md) | Complete — shared close pose, 120 Hz scene proof, 12-route smoke and full CI pass; paired compositor visual evidence has a UI-provider gap |
 
 2026-10-21 owner structure/licensing decision is recorded in

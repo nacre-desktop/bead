@@ -417,6 +417,9 @@ class Arm:
                                 '    Super+Ctrl+Space repeat=false hotkey-overlay-title="Nacre:palette" { spawn-sh "true"; }\n'
                                 '    Super+K repeat=false hotkey-overlay-title="Nacre:shortcuts" { spawn-sh "true"; }\n}\n')
             config_text += 'include ' + json.dumps(str(bindings)) + '\n'
+        if os.environ.get('PARITY_NAMED_WORKSPACES') == '1':
+            # B0188: persistent empty workspaces, so workspace switches work without windows.
+            config_text += ''.join(f'workspace "ws{i}"\n' for i in range(1, 5))
         niri_config.write_text(config_text)
         self.env['NACRE_NIRI_CONFIG'] = str(niri_config)
         env = dict(self.env, WAYLAND_DISPLAY=str(socket))
@@ -1019,6 +1022,9 @@ os.execv(real, [real, *args])
                 self.notify(step[1], step[2])
             elif kind == 'sleep':
                 time.sleep(step[1])
+            elif kind == 'niri-action':
+                # B0188: a compositor action in the private nested niri (workspace switches).
+                self.run(['niri', 'msg', 'action', *map(str, step[1:])], check=False)
             elif kind == 'type':
                 self.run(['wtype', '-s', '40', step[1]], check=False)
                 time.sleep(0.8)
