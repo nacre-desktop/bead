@@ -77,6 +77,29 @@ int main(int argc, char **argv) {
         char op[16], extra;
         long x, y;
         if (sscanf(line, "%15s %ld %ld %c", op, &x, &y, &extra) == 1 && !strcmp(op, "quit")) break;
+        if (sscanf(line, "%15s %ld %ld %c", op, &x, &y, &extra) == 3 && (!strcmp(op, "wheel") || !strcmp(op, "fling"))) {
+            /* wheel N MS (N < 0 scrolls up): N notches (axis_discrete) MS apart; fling N MS: N finger pixel steps, then axis_stop. */
+            int wheel = !strcmp(op, "wheel");
+            double sign = x < 0 ? -1.0 : 1.0;
+            for (long i = 0; i < (x < 0 ? -x : x); i++) {
+                uint32_t t = now_ms();
+                zwlr_virtual_pointer_v1_axis_source(pointer, wheel ? WL_POINTER_AXIS_SOURCE_WHEEL : WL_POINTER_AXIS_SOURCE_FINGER);
+                if (wheel) zwlr_virtual_pointer_v1_axis_discrete(pointer, t, WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_double(15.0 * sign), sign < 0 ? -1 : 1);
+                else zwlr_virtual_pointer_v1_axis(pointer, t, WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_double(10.0 * sign));
+                zwlr_virtual_pointer_v1_frame(pointer);
+                wl_display_flush(display);
+                struct timespec nap = { y / 1000, (y % 1000) * 1000000L };
+                nanosleep(&nap, NULL);
+            }
+            if (!wheel) {
+                zwlr_virtual_pointer_v1_axis_stop(pointer, now_ms(), WL_POINTER_AXIS_VERTICAL_SCROLL);
+                zwlr_virtual_pointer_v1_frame(pointer);
+            }
+            if (wl_display_roundtrip(display) < 0) die("axis roundtrip failed");
+            puts("POINTER_ACK");
+            fflush(stdout);
+            continue;
+        }
         if (sscanf(line, "%15s %ld %ld %c", op, &x, &y, &extra) != 3 ||
             (strcmp(op, "move") && strcmp(op, "click") && strcmp(op, "down") && strcmp(op, "up")))
             die("malformed pointer command");

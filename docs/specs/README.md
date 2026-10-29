@@ -1,5 +1,6 @@
 # Bead implementation queue
 
+| — | [B0187 Launcher input and scroll cost](0187-launcher-input-scroll.md) | Candidate — icon-miss cache cut keypress-to-results from 61 ms to 13 ms and fling frames from 47 ms to 7 ms (nested release, real shell); markup re-evaluation per update remains; lead live gate pending |
 | — | [B0181 Ghost strip after panel close](0181-close-ghost-strip.md) | Complete — shared close pose, 120 Hz scene proof, 12-route smoke and full CI pass; paired compositor visual evidence has a UI-provider gap |
 
 2026-10-21 owner structure/licensing decision is recorded in

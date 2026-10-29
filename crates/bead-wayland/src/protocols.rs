@@ -1569,6 +1569,13 @@ impl KeyboardHandler for App {
         event: KeyEvent,
     ) {
         self.last_input_serial = serial;
+        if bead_core::profile::enabled() {
+            println!(
+                "INPUT_RECEIVED monotonic_ns={} cpu_ns={}",
+                bead_core::profile::monotonic_ns(),
+                bead_core::profile::process_cpu_ns()
+            );
+        }
         if let Some(id) = self
             .keyboard_surface
             .clone()
@@ -1580,13 +1587,6 @@ impl KeyboardHandler for App {
         if self.pearl.is_some() && self.modifiers.ctrl && event.keysym == Keysym::w {
             self.close_panel();
             return;
-        }
-        if bead_core::profile::enabled() {
-            println!(
-                "INPUT_RECEIVED monotonic_ns={} cpu_ns={}",
-                bead_core::profile::monotonic_ns(),
-                bead_core::profile::process_cpu_ns()
-            );
         }
         if self.options.trace_state {
             println!(
