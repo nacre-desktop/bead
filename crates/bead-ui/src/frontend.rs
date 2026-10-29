@@ -35,6 +35,7 @@ struct CompiledPrelude {
     kit: Vec<u8>,
     install: Vec<u8>,
     host: Vec<u8>,
+    bridge: Vec<u8>,
     _charge: bead_core::cache::Charge,
 }
 static COMPILED_PRELUDE: Mutex<Weak<CompiledPrelude>> = Mutex::new(Weak::new());
@@ -56,7 +57,8 @@ fn compiled_prelude(
     let host = compiler
         .compile(include_str!("../assets/host.luau"))
         .map_err(|e| diagnostic(entry, e))?;
-    let bytes = kit.capacity() + install.capacity() + host.capacity();
+    let bridge = compiler.compile(BRIDGE).map_err(|e| diagnostic(entry, e))?;
+    let bytes = kit.capacity() + install.capacity() + host.capacity() + bridge.capacity();
     let budget =
         bead_core::cache::Budget::new("compiled-markup-prelude", 8 * bead_core::cache::MIB);
     let charge = budget
@@ -66,6 +68,7 @@ fn compiled_prelude(
         kit,
         install,
         host,
+        bridge,
         _charge: charge,
     });
     *slot = Arc::downgrade(&prelude);
@@ -79,8 +82,30 @@ pub trait FrontEnd {
         resolve: &Resolve<'_>,
     ) -> Result<std::rc::Rc<RawNode>, Diagnostic>;
 }
+/// Long-lived callers (kit, modules, `require`) reach the current build's scoped
+/// host callbacks through these stable functions. Exactly one Luau frame sits
+/// between the caller and the callback; see [`source`].
+const BRIDGE: &str = r#"
+local host = ...
+return function(name)
+    return function(...) return host[name](...) end
+end
+"#;
+/// Host callbacks that read the current build (stores, measurements, fragments).
+const BRIDGED: [&str; 7] = [
+    "text_width",
+    "preview_value",
+    "resolve_for_check",
+    "memo",
+    "model_count",
+    "Repeat",
+    "require",
+];
 const INSTALL: &str = r#"
 return function(ui, constructors, allowed, arrayMarker)
+    -- Nodes built so far; a module that builds nodes while loading is re-run per build.
+    local built = 0
+    ui.__built = function() return built end
     local function string_arg(value, label)
         if type(value) == "number" then return tostring(value) end
         if type(value) ~= "string" or utf8.len(value) == nil then error(label .. " must be a UTF-8 string", 3) end
@@ -113,6 +138,7 @@ return function(ui, constructors, allowed, arrayMarker)
     local inspect = debug.info
     for name, kind in constructors do
         ui[name] = function(props)
+            built += 1
             if type(props) ~= "table" then error("node properties need a table", 2) end
             local plain = getmetatable(props) == nil
             local named = plain and table.clone(props) or {}
@@ -171,7 +197,6 @@ return function(ui, constructors, allowed, arrayMarker)
     end
 end
 "#;
-/// Immutable generation-owned bytecode; evaluation always uses a fresh sandbox.
 struct WidthDependency {
     binding: String,
     family: String,
@@ -227,6 +252,7 @@ pub struct LuauFrontEnd {
     _compiled_charge: bead_core::cache::Charge,
     values_budget: bead_core::cache::Budget,
     vm_build_bytes: std::cell::Cell<usize>,
+    vm: RefCell<Option<Vm>>,
     animations: std::rc::Rc<RefCell<Animations>>,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -484,6 +510,7 @@ impl LuauFrontEnd {
             fragment_budget: bead_core::cache::Budget::new("markup-fragments", 128 * 1024),
             compiled,
             vm_build_bytes: std::cell::Cell::new(0),
+            vm: RefCell::new(None),
             materialized: RefCell::new(None),
             prelude,
             animations: Default::default(),
@@ -531,6 +558,142 @@ impl LuauFrontEnd {
         *self.materialized.borrow_mut() = None;
     }
 }
+/// The generation's Luau VM. The prelude, kit and modules whose loading reads no
+/// build input load once; each build re-runs the entry (and input-reading
+/// modules) with that build's host callbacks behind the stable bridge.
+struct Vm {
+    lua: Lua,
+    sdk: Table,
+    kit: Table,
+    /// Current build's scoped callbacks, reached through [`BRIDGE`] functions.
+    host: Table,
+    built: Function,
+    /// Loaded chunks: re-running one gives fresh module locals without re-reading bytecode.
+    chunks: RefCell<BTreeMap<PathBuf, Function>>,
+    /// Modules whose load made no host call and built no node.
+    modules: RefCell<BTreeMap<PathBuf, mlua::Value>>,
+    /// Modules that read build input while loading: re-run in every build.
+    dynamic: RefCell<BTreeSet<PathBuf>>,
+    /// Host calls in this VM; a module load that moves it depends on the build.
+    calls: std::cell::Cell<u64>,
+    /// Thread CPU deadline of the current build and its excluded native time.
+    deadline: std::rc::Rc<std::cell::Cell<u64>>,
+    native_time: std::rc::Rc<std::cell::Cell<u64>>,
+    /// Catalog/text-style epoch the kit tokens and translations were read at.
+    epoch: u64,
+}
+impl Vm {
+    fn new(frontend: &LuauFrontEnd) -> mlua::Result<Self> {
+        let epoch = crate::i18n::epoch();
+        let lua = Lua::new();
+        let deadline = std::rc::Rc::new(std::cell::Cell::new(0u64));
+        let native_time = std::rc::Rc::new(std::cell::Cell::new(0u64));
+        let (limit, spent) = (deadline.clone(), native_time.clone());
+        let ticks = std::cell::Cell::new(0u32);
+        lua.set_interrupt(move |_| {
+            // The clock is a syscall: sample it every 64th interrupt.
+            ticks.set(ticks.get().wrapping_add(1));
+            if ticks.get().is_multiple_of(64)
+                && bead_core::profile::thread_cpu_ns() > limit.get() + spent.get()
+            {
+                Err(mlua::Error::runtime("markup exceeded 50 ms limit"))
+            } else {
+                Ok(VmState::Continue)
+            }
+        });
+        lua.set_memory_limit(8 * 1024 * 1024)?;
+        lua.sandbox(true)?;
+        let sdk = lua.create_table()?;
+        let host = lua.create_table()?;
+        let bridge: Function = lua
+            .load(frontend.prelude.bridge.as_slice())
+            .set_name("=bead.bridge")
+            .call(host.clone())?;
+        for name in BRIDGED {
+            sdk.set(name, bridge.call::<Function>(name)?)?;
+        }
+        let constructors = lua.create_table()?;
+        for (name, kind) in Widget::constructors() {
+            constructors.set(name, lua.to_value(&kind)?)?;
+        }
+        let allowed =
+            lua.create_table_from(crate::layout::PROPERTIES.iter().map(|name| (*name, true)))?;
+        let animations = frontend.animations.clone();
+        sdk.set(
+            "__animate",
+            lua.create_function(
+                move |_, (key, target, duration, transition): (String, f64, f64, String)| {
+                    animations
+                        .borrow_mut()
+                        .animate(key, target, duration, &transition, Instant::now())
+                        .map_err(mlua::Error::runtime)
+                },
+            )?,
+        )?;
+        sdk.set("tr", crate::i18n::lua_function(&lua)?)?;
+        let install: Function = lua
+            .load(frontend.prelude.install.as_slice())
+            .set_name("@bead.ui")
+            .eval()?;
+        install.call::<()>((sdk.clone(), constructors, allowed, lua.array_metatable()))?;
+        let host_factory: Function = lua
+            .load(frontend.prelude.host.as_slice())
+            .set_name("@bead.host")
+            .eval()?;
+        sdk.set("Host", host_factory.call::<Function>(sdk.clone())?)?;
+        let kit_factory: Function = lua
+            .load(frontend.prelude.kit.as_slice())
+            .set_name("@bead.kit")
+            .eval()?;
+        let mut tokens: serde_json::Value =
+            serde_json::from_str(include_str!("../assets/size-scale.json"))
+                .map_err(mlua::Error::external)?;
+        // The owner's `interfaceGradients` choice; a change bumps the epoch.
+        tokens["gradients"] = crate::text_style::gradients().into();
+        let kit: Table = kit_factory.call((sdk.clone(), lua.to_value(&tokens)?))?;
+        lua.globals()
+            .set("require", sdk.get::<Function>("require")?)?;
+        let built = sdk.get("__built")?;
+        Ok(Self {
+            lua,
+            sdk,
+            kit,
+            host,
+            built,
+            chunks: Default::default(),
+            modules: Default::default(),
+            dynamic: Default::default(),
+            calls: Default::default(),
+            deadline,
+            native_time,
+            epoch,
+        })
+    }
+    fn chunk(&self, path: &Path, bytes: &[u8]) -> mlua::Result<Function> {
+        if let Some(chunk) = self.chunks.borrow().get(path) {
+            return Ok(chunk.clone());
+        }
+        let chunk = self
+            .lua
+            .load(bytes)
+            .set_name(format!("@{}", path.display()))
+            .into_function()?;
+        self.chunks
+            .borrow_mut()
+            .insert(path.to_path_buf(), chunk.clone());
+        Ok(chunk)
+    }
+    fn bump(&self) {
+        self.calls.set(self.calls.get() + 1);
+    }
+    /// Scripts that wrote globals keep their per-build isolation: drop the VM.
+    fn globals_clean(&self) -> bool {
+        self.lua
+            .globals()
+            .pairs::<mlua::Value, mlua::Value>()
+            .all(|pair| matches!(pair, Ok((mlua::Value::String(key), _)) if key == "require"))
+    }
+}
 impl FrontEnd for LuauFrontEnd {
     fn build(
         &self,
@@ -575,327 +738,282 @@ impl FrontEnd for LuauFrontEnd {
         let resolve: &Resolve<'_> = &record;
         let setup_profile = bead_core::profile::Span::new("markup_setup");
         let sources = &self.compiled;
-        let lua = Lua::new();
         // The budget is thread CPU time, not wall time: a suspend/resume, CPU
         // starvation or a descheduled thread must not fail a healthy markup.
         let deadline = bead_core::profile::thread_cpu_ns() + 50_000_000;
-        let native_time = std::rc::Rc::new(std::cell::Cell::new(0u64));
-        let spent = native_time.clone();
-        let ticks = std::cell::Cell::new(0u32);
-        lua.set_interrupt(move |_| {
-            // The clock is a syscall: sample it every 64th interrupt.
-            ticks.set(ticks.get().wrapping_add(1));
-            if ticks.get().is_multiple_of(64)
-                && bead_core::profile::thread_cpu_ns() > deadline + spent.get()
-            {
-                Err(mlua::Error::runtime("markup exceeded 50 ms limit"))
-            } else {
-                Ok(VmState::Continue)
-            }
-        });
-        let result = (|| -> mlua::Result<RawNode> {
-            lua.set_memory_limit(8 * 1024 * 1024)?;
-            lua.sandbox(true)?;
-            lua.scope(|scope| {
-                let sdk = lua.create_table()?;
-                sdk.set(
-                    "text_width",
-                    scope.create_function(
-                        |_, (input, family, size): (mlua::Value, String, f32)| {
-                            if family.len() > 128 || !(1. ..=256.).contains(&size) {
+        let kept = self
+            .vm
+            .borrow_mut()
+            .take()
+            .filter(|vm| vm.epoch == crate::i18n::epoch());
+        let vm = match kept {
+            Some(vm) => Ok(vm),
+            None => Vm::new(self),
+        }
+        .map_err(|error| diagnostic(entry, error))?;
+        vm.deadline.set(deadline);
+        vm.native_time.set(0);
+        let owned = vm;
+        let vm = &owned;
+        let lua = &vm.lua;
+        self.animations.borrow_mut().begin_build();
+        let result = lua.scope(|scope| {
+            let host = &vm.host;
+            host.set(
+                "text_width",
+                scope.create_function(|_, (input, family, size): (mlua::Value, String, f32)| {
+                    vm.bump();
+                    if family.len() > 128 || !(1. ..=256.).contains(&size) {
+                        return Err(mlua::Error::runtime("invalid text measurement"));
+                    }
+                    let (text, binding) = match input {
+                        mlua::Value::String(text) => (text.to_str()?.to_owned(), None),
+                        mlua::Value::Table(table) => {
+                            let binding = table.get::<String>("__bind")?;
+                            if binding.is_empty() || binding.len() > 2048 {
                                 return Err(mlua::Error::runtime("invalid text measurement"));
                             }
-                            let (text, binding) = match input {
-                                mlua::Value::String(text) => (text.to_str()?.to_owned(), None),
-                                mlua::Value::Table(table) => {
-                                    let binding = table.get::<String>("__bind")?;
-                                    if binding.is_empty() || binding.len() > 2048 {
-                                        return Err(mlua::Error::runtime(
-                                            "invalid text measurement",
-                                        ));
-                                    }
-                                    // Memo fragments cache their own read set. Record a bound
-                                    // measurement there so title-driven geometry invalidates
-                                    // the fragment; outside memo it stays a width-only dependency.
-                                    let in_memo = !scopes.borrow().is_empty();
-                                    let measured = if in_memo {
-                                        resolve(&binding)
-                                    } else {
-                                        upstream(&binding)
-                                    };
-                                    let Value::Text(text) =
-                                        measured.map_err(mlua::Error::external)?
-                                    else {
-                                        return Err(mlua::Error::runtime(
-                                            "bound text measurement needs a text store",
-                                        ));
-                                    };
-                                    (text, Some(binding))
-                                }
-                                _ => return Err(mlua::Error::runtime("invalid text measurement")),
-                            };
-                            if text.len() > 16 * 1024 {
-                                return Err(mlua::Error::runtime("invalid text measurement"));
-                            }
-                            let started = bead_core::profile::thread_cpu_ns();
-                            let width = self.measured_width(&text, &family, size);
-                            native_time.set(
-                                native_time.get()
-                                    + bead_core::profile::thread_cpu_ns().saturating_sub(started),
-                            );
-                            if let Some(binding) = binding {
-                                let mut dependencies = widths.borrow_mut();
-                                if !dependencies.iter().any(|dependency| {
-                                    dependency.binding == binding
-                                        && dependency.family == family
-                                        && dependency.size == size
-                                }) {
-                                    if dependencies.len() == 4096 {
-                                        width_overflow.set(true);
-                                    } else {
-                                        dependencies.push(WidthDependency {
-                                            binding,
-                                            family,
-                                            size,
-                                            width,
-                                        });
-                                    }
-                                }
-                            }
-                            Ok(width)
-                        },
-                    )?,
-                )?;
-                let constructors = lua.create_table()?;
-                for (name, kind) in Widget::constructors() {
-                    constructors.set(name, lua.to_value(&kind)?)?;
-                }
-                let allowed = lua.create_table_from(
-                    crate::layout::PROPERTIES.iter().map(|name| (*name, true)),
-                )?;
-                self.animations.borrow_mut().begin_build();
-                let animations = self.animations.clone();
-                sdk.set(
-                    "__animate",
-                    scope.create_function(
-                        move |_, (key, target, duration, transition): (String, f64, f64, String)| {
-                            animations
-                                .borrow_mut()
-                                .animate(key, target, duration, &transition, Instant::now())
-                                .map_err(mlua::Error::runtime)
-                        },
-                    )?,
-                )?;
-                sdk.set(
-                    "preview_value",
-                    scope.create_function(|_, (key, value): (String, f64)| {
-                        if resolve("bead.preview.key").map_err(mlua::Error::external)?
-                            == Value::Text(key)
-                            && let Value::Number(preview) =
-                                resolve("bead.preview.value").map_err(mlua::Error::external)?
-                        {
-                            return Ok(preview);
-                        }
-                        Ok(value)
-                    })?,
-                )?;
-                sdk.set(
-                    "resolve_for_check",
-                    scope.create_function(|lua, value: mlua::Value| {
-                        if let mlua::Value::Table(table) = &value
-                            && let Ok(name) = table.get::<String>("__bind")
-                        {
-                            return crate::script::value_to_lua(
-                                lua,
-                                &resolve(&name).map_err(mlua::Error::external)?,
-                            );
-                        }
-                        Ok(value)
-                    })?,
-                )?;
-                sdk.set(
-                    "memo",
-                    scope.create_function(
-                        |lua, (name, inputs, render): (String, mlua::Value, Function)| {
-                            if name.is_empty() || name.len() > 256 {
-                                return Err(mlua::Error::runtime("memo name exceeds bound"));
-                            }
-                            let json: serde_json::Value = lua.from_value(inputs.clone())?;
-                            let inputs_key =
-                                serde_json::to_string(&json).map_err(mlua::Error::external)?;
-                            if inputs_key.len() > 16 * 1024 {
-                                return render.call::<mlua::Value>(inputs);
-                            }
-                            let key = (name, inputs_key);
-                            let cached = self.fragments.borrow().get(&key).cloned();
-                            let fragment = if let Some(cached) = cached.filter(|cached| {
-                                cached.reads.iter().all(|(name, value)| {
-                                    resolve(name).is_ok_and(|next| next == *value)
-                                })
-                            }) {
-                                cached
+                            // Memo fragments cache their own read set. Record a bound
+                            // measurement there so title-driven geometry invalidates
+                            // the fragment; outside memo it stays a width-only dependency.
+                            let in_memo = !scopes.borrow().is_empty();
+                            let measured = if in_memo {
+                                resolve(&binding)
                             } else {
-                                scopes.borrow_mut().push(BTreeMap::new());
-                                let result = render.call::<mlua::Value>(inputs);
-                                let observed = scopes.borrow_mut().pop().expect("memo read scope");
-                                let mut raw: RawNode = lua.from_value(result?)?;
-                                let mut remaining = 8 * bead_core::cache::MIB;
-                                expand_fragments(&mut raw, &fragments.borrow(), &mut remaining)?;
-                                // Include the Fragment/Rc header as well as owned data.
-                                let bytes = 128
-                                    + crate::layout::raw_bytes(&raw)
-                                    + observed
-                                        .iter()
-                                        .map(|(k, v)| {
-                                            k.capacity() + 64 + bead_core::cache::value_bytes(v)
-                                        })
-                                        .sum::<usize>();
-                                self.fragments.borrow_mut().remove(&key);
-                                let charge = loop {
-                                    match self.fragment_budget.reserve(bytes) {
-                                        Ok(charge) => break Some(charge),
-                                        Err(_) => {
-                                            if self.fragments.borrow_mut().pop_lru().is_none() {
-                                                break None;
-                                            }
+                                upstream(&binding)
+                            };
+                            let Value::Text(text) = measured.map_err(mlua::Error::external)? else {
+                                return Err(mlua::Error::runtime(
+                                    "bound text measurement needs a text store",
+                                ));
+                            };
+                            (text, Some(binding))
+                        }
+                        _ => return Err(mlua::Error::runtime("invalid text measurement")),
+                    };
+                    if text.len() > 16 * 1024 {
+                        return Err(mlua::Error::runtime("invalid text measurement"));
+                    }
+                    let started = bead_core::profile::thread_cpu_ns();
+                    let width = self.measured_width(&text, &family, size);
+                    vm.native_time.set(
+                        vm.native_time.get()
+                            + bead_core::profile::thread_cpu_ns().saturating_sub(started),
+                    );
+                    if let Some(binding) = binding {
+                        let mut dependencies = widths.borrow_mut();
+                        if !dependencies.iter().any(|dependency| {
+                            dependency.binding == binding
+                                && dependency.family == family
+                                && dependency.size == size
+                        }) {
+                            if dependencies.len() == 4096 {
+                                width_overflow.set(true);
+                            } else {
+                                dependencies.push(WidthDependency {
+                                    binding,
+                                    family,
+                                    size,
+                                    width,
+                                });
+                            }
+                        }
+                    }
+                    Ok(width)
+                })?,
+            )?;
+            host.set(
+                "preview_value",
+                scope.create_function(|_, (key, value): (String, f64)| {
+                    vm.bump();
+                    if resolve("bead.preview.key").map_err(mlua::Error::external)?
+                        == Value::Text(key)
+                        && let Value::Number(preview) =
+                            resolve("bead.preview.value").map_err(mlua::Error::external)?
+                    {
+                        return Ok(preview);
+                    }
+                    Ok(value)
+                })?,
+            )?;
+            host.set(
+                "resolve_for_check",
+                scope.create_function(|lua, value: mlua::Value| {
+                    vm.bump();
+                    if let mlua::Value::Table(table) = &value
+                        && let Ok(name) = table.get::<String>("__bind")
+                    {
+                        return crate::script::value_to_lua(
+                            lua,
+                            &resolve(&name).map_err(mlua::Error::external)?,
+                        );
+                    }
+                    Ok(value)
+                })?,
+            )?;
+            host.set(
+                "memo",
+                scope.create_function(
+                    |lua, (name, inputs, render): (String, mlua::Value, Function)| {
+                        vm.bump();
+                        if name.is_empty() || name.len() > 256 {
+                            return Err(mlua::Error::runtime("memo name exceeds bound"));
+                        }
+                        let json: serde_json::Value = lua.from_value(inputs.clone())?;
+                        let inputs_key =
+                            serde_json::to_string(&json).map_err(mlua::Error::external)?;
+                        if inputs_key.len() > 16 * 1024 {
+                            return render.call::<mlua::Value>(inputs);
+                        }
+                        let key = (name, inputs_key);
+                        let cached = self.fragments.borrow().get(&key).cloned();
+                        let fragment = if let Some(cached) = cached.filter(|cached| {
+                            cached
+                                .reads
+                                .iter()
+                                .all(|(name, value)| resolve(name).is_ok_and(|next| next == *value))
+                        }) {
+                            cached
+                        } else {
+                            scopes.borrow_mut().push(BTreeMap::new());
+                            let result = render.call::<mlua::Value>(inputs);
+                            let observed = scopes.borrow_mut().pop().expect("memo read scope");
+                            let mut raw: RawNode = lua.from_value(result?)?;
+                            let mut remaining = 8 * bead_core::cache::MIB;
+                            expand_fragments(&mut raw, &fragments.borrow(), &mut remaining)?;
+                            // Include the Fragment/Rc header as well as owned data.
+                            let bytes = 128
+                                + crate::layout::raw_bytes(&raw)
+                                + observed
+                                    .iter()
+                                    .map(|(k, v)| {
+                                        k.capacity() + 64 + bead_core::cache::value_bytes(v)
+                                    })
+                                    .sum::<usize>();
+                            self.fragments.borrow_mut().remove(&key);
+                            let charge = loop {
+                                match self.fragment_budget.reserve(bytes) {
+                                    Ok(charge) => break Some(charge),
+                                    Err(_) => {
+                                        if self.fragments.borrow_mut().pop_lru().is_none() {
+                                            break None;
                                         }
                                     }
-                                };
-                                let fragment = std::rc::Rc::new(Fragment {
-                                    bytes,
-                                    raw,
-                                    reads: observed,
-                                    _charge: charge,
-                                });
-                                if fragment._charge.is_some() {
-                                    let metadata = key.0.capacity() + key.1.capacity() + 128;
-                                    let _ = self.fragments.borrow_mut().insert(
-                                        key,
-                                        fragment.clone(),
-                                        metadata,
-                                    );
                                 }
-                                fragment
                             };
-                            fragment_remaining.set(
-                                fragment_remaining
-                                    .get()
-                                    .checked_sub(fragment.bytes)
-                                    .ok_or_else(|| {
-                                        mlua::Error::runtime("memo work exceeds 8 MiB")
-                                    })?,
-                            );
-                            let index = fragments.borrow().len();
-                            fragments.borrow_mut().push(fragment);
-                            let marker = lua.create_table()?;
-                            marker.set("kind", "group")?;
-                            let props = lua.create_table()?;
-                            props.set("__memo", index)?;
-                            marker.set("props", props)?;
-                            let children = lua.create_table()?;
-                            children.set_metatable(Some(lua.array_metatable()))?;
-                            marker.set("children", children)?;
-                            marker.set("source", lua.to_value(&source(lua, entry))?)?;
-                            Ok(mlua::Value::Table(marker))
-                        },
-                    )?,
-                )?;
-                sdk.set("tr", crate::i18n::lua_function(&lua)?)?;
-                sdk.set(
-                    "model_count",
-                    scope.create_function(|_, model: Table| {
-                        let name: String = model.get("__bind")?;
-                        match resolve(&name).map_err(mlua::Error::external)? {
-                            Value::List(rows) => Ok(rows.len()),
-                            _ => Err(mlua::Error::runtime(format!("model {name} must be a list"))),
-                        }
-                    })?,
-                )?;
-                let install: Function = lua
-                    .load(self.prelude.install.as_slice())
-                    .set_name("@bead.ui")
-                    .eval()?;
-                install.call::<()>((sdk.clone(), constructors, allowed, lua.array_metatable()))?;
-                let host_factory: Function = lua
-                    .load(self.prelude.host.as_slice())
-                    .set_name("@bead.host")
-                    .eval()?;
-                sdk.set("Host", host_factory.call::<Function>(sdk.clone())?)?;
-                let group: Function = sdk.get("Group")?;
-                sdk.set(
-                    "Repeat",
-                    scope.create_function(move |lua, props: Table| {
-                        let first = props.get::<Option<usize>>("first")?.unwrap_or(0);
-                        let count = props.get::<Option<usize>>("count")?.unwrap_or(2048);
-                        let id: String = props.get("id")?;
-                        let key: String = props.get("key")?;
-                        let model: Table = props.get("model")?;
-                        let name: String = model.get("__bind")?;
-                        let Value::List(rows) = resolve(&name).map_err(mlua::Error::external)?
-                        else {
-                            return Err(mlua::Error::runtime(format!(
-                                "model {name} must be a list"
-                            )));
+                            let fragment = std::rc::Rc::new(Fragment {
+                                bytes,
+                                raw,
+                                reads: observed,
+                                _charge: charge,
+                            });
+                            if fragment._charge.is_some() {
+                                let metadata = key.0.capacity() + key.1.capacity() + 128;
+                                let _ = self.fragments.borrow_mut().insert(
+                                    key,
+                                    fragment.clone(),
+                                    metadata,
+                                );
+                            }
+                            fragment
                         };
-                        let render: Function = props.get("render")?;
+                        fragment_remaining.set(
+                            fragment_remaining
+                                .get()
+                                .checked_sub(fragment.bytes)
+                                .ok_or_else(|| mlua::Error::runtime("memo work exceeds 8 MiB"))?,
+                        );
+                        let index = fragments.borrow().len();
+                        fragments.borrow_mut().push(fragment);
+                        let marker = lua.create_table()?;
+                        marker.set("kind", "group")?;
+                        let props = lua.create_table()?;
+                        props.set("__memo", index)?;
+                        marker.set("props", props)?;
                         let children = lua.create_table()?;
-                        let mut seen = BTreeSet::new();
-                        for (i, item) in rows.iter().enumerate() {
-                            let key = item
-                                .get(&key)
-                                .and_then(|v| v.as_str())
-                                .filter(|key| !key.is_empty() && key.len() <= 256)
-                                .ok_or_else(|| {
-                                    mlua::Error::runtime(format!(
-                                        "{name}: missing string key {} at item {i}",
-                                        key
-                                    ))
-                                })?;
-                            if !seen.insert(key) {
-                                return Err(mlua::Error::runtime(format!(
-                                    "{name}: duplicate key {key}"
-                                )));
-                            }
-                            if i < first || i >= first.saturating_add(count) {
-                                continue;
-                            }
-                            let row: Table = render.call(crate::script::json_value(lua, item)?)?;
-                            let prefix = format!(
-                                "{id}.k{}.",
-                                key.bytes().map(|b| format!("{b:02x}")).collect::<String>()
-                            );
-                            row.set("scope", prefix)?;
-                            children.set(children.raw_len() + 1, row)?;
+                        children.set_metatable(Some(lua.array_metatable()))?;
+                        marker.set("children", children)?;
+                        marker.set("source", lua.to_value(&source(lua, entry))?)?;
+                        Ok(mlua::Value::Table(marker))
+                    },
+                )?,
+            )?;
+            host.set(
+                "model_count",
+                scope.create_function(|_, model: Table| {
+                    vm.bump();
+                    let name: String = model.get("__bind")?;
+                    match resolve(&name).map_err(mlua::Error::external)? {
+                        Value::List(rows) => Ok(rows.len()),
+                        _ => Err(mlua::Error::runtime(format!("model {name} must be a list"))),
+                    }
+                })?,
+            )?;
+            let group: Function = vm.sdk.get("Group")?;
+            host.set(
+                "Repeat",
+                scope.create_function(move |lua, props: Table| {
+                    vm.bump();
+                    let first = props.get::<Option<usize>>("first")?.unwrap_or(0);
+                    let count = props.get::<Option<usize>>("count")?.unwrap_or(2048);
+                    let id: String = props.get("id")?;
+                    let key: String = props.get("key")?;
+                    let model: Table = props.get("model")?;
+                    let name: String = model.get("__bind")?;
+                    let Value::List(rows) = resolve(&name).map_err(mlua::Error::external)? else {
+                        return Err(mlua::Error::runtime(format!("model {name} must be a list")));
+                    };
+                    let render: Function = props.get("render")?;
+                    let children = lua.create_table()?;
+                    let mut seen = BTreeSet::new();
+                    for (i, item) in rows.iter().enumerate() {
+                        let key = item
+                            .get(&key)
+                            .and_then(|v| v.as_str())
+                            .filter(|key| !key.is_empty() && key.len() <= 256)
+                            .ok_or_else(|| {
+                                mlua::Error::runtime(format!(
+                                    "{name}: missing string key {} at item {i}",
+                                    key
+                                ))
+                            })?;
+                        if !seen.insert(key) {
+                            return Err(mlua::Error::runtime(format!(
+                                "{name}: duplicate key {key}"
+                            )));
                         }
-                        let clean = lua.create_table()?;
-                        clean.set("id", id)?;
-                        let origin = source(lua, entry);
-                        let node: Table = group.call(clean)?;
-                        node.set("source", lua.to_value(&origin)?)?;
-                        node.set("children", children)?;
-                        Ok(node)
-                    })?,
-                )?;
-                let modules = RefCell::new(BTreeMap::<PathBuf, mlua::Value>::new());
-                let loading = RefCell::new(BTreeSet::<PathBuf>::new());
-                let entry_parent = entry.parent().unwrap_or(Path::new("")).to_path_buf();
-                let sdk_copy = sdk.clone();
-                let kit_factory: Function = lua
-                    .load(self.prelude.kit.as_slice())
-                    .set_name("@bead.kit")
-                    .eval()?;
-                let mut tokens: serde_json::Value =
-                    serde_json::from_str(include_str!("../assets/size-scale.json"))
-                        .map_err(mlua::Error::external)?;
-                // The owner's `interfaceGradients` choice, read while the scene is built (the host reloads views on a change).
-                tokens["gradients"] = crate::text_style::gradients().into();
-                let kit: Table = kit_factory.call((sdk.clone(), lua.to_value(&tokens)?))?;
-                let require = scope.create_function(move |lua, name: String| {
+                        if i < first || i >= first.saturating_add(count) {
+                            continue;
+                        }
+                        let row: Table = render.call(crate::script::json_value(lua, item)?)?;
+                        let prefix = format!(
+                            "{id}.k{}.",
+                            key.bytes().map(|b| format!("{b:02x}")).collect::<String>()
+                        );
+                        row.set("scope", prefix)?;
+                        children.set(children.raw_len() + 1, row)?;
+                    }
+                    let clean = lua.create_table()?;
+                    clean.set("id", id)?;
+                    let origin = source(lua, entry);
+                    let node: Table = group.call(clean)?;
+                    node.set("source", lua.to_value(&origin)?)?;
+                    node.set("children", children)?;
+                    Ok(node)
+                })?,
+            )?;
+            // Input-reading modules load once per build; the rest stay in `vm.modules`.
+            let modules = RefCell::new(BTreeMap::<PathBuf, mlua::Value>::new());
+            let loading = RefCell::new(BTreeSet::<PathBuf>::new());
+            let entry_parent = entry.parent().unwrap_or(Path::new("")).to_path_buf();
+            host.set(
+                "require",
+                scope.create_function(move |lua, name: String| {
                     if name == "bead.kit" {
-                        return Ok(mlua::Value::Table(kit.clone()));
+                        return Ok(mlua::Value::Table(vm.kit.clone()));
                     }
                     if name == "bead.ui" {
-                        return Ok(mlua::Value::Table(sdk_copy.clone()));
+                        return Ok(mlua::Value::Table(vm.sdk.clone()));
                     }
                     let caller = source(lua, entry);
                     let base = Path::new(&caller.file).parent().unwrap_or(&entry_parent);
@@ -904,7 +1022,12 @@ impl FrontEnd for LuauFrontEnd {
                         path.set_extension("luau");
                     }
                     let path = normalize(&path).map_err(mlua::Error::runtime)?;
+                    if let Some(value) = vm.modules.borrow().get(&path) {
+                        return Ok(value.clone());
+                    }
                     if let Some(value) = modules.borrow().get(&path) {
+                        // The caller now depends on this build's input too.
+                        vm.bump();
                         return Ok(value.clone());
                     }
                     if !loading.borrow_mut().insert(path.clone()) {
@@ -919,36 +1042,38 @@ impl FrontEnd for LuauFrontEnd {
                             path.display()
                         ))
                     })?;
-                    let value: mlua::Value = lua
-                        .load(bytes)
-                        .set_name(format!("@{}", path.display()))
-                        .eval()?;
+                    let before = (vm.calls.get(), vm.built.call::<u64>(())?);
+                    let value: mlua::Value = vm.chunk(&path, bytes)?.call(())?;
                     loading.borrow_mut().remove(&path);
-                    modules.borrow_mut().insert(path, value.clone());
+                    let pure = before == (vm.calls.get(), vm.built.call::<u64>(())?)
+                        && !vm.dynamic.borrow().contains(&path);
+                    if pure {
+                        vm.modules.borrow_mut().insert(path, value.clone());
+                    } else {
+                        vm.bump();
+                        vm.dynamic.borrow_mut().insert(path.clone());
+                        modules.borrow_mut().insert(path, value.clone());
+                    }
                     Ok(value)
-                })?;
-                lua.globals().set("require", require)?;
-                let bytes = sources
-                    .get(entry)
-                    .ok_or_else(|| mlua::Error::runtime("missing entry source"))?;
-                drop(setup_profile);
-                let eval_profile = bead_core::profile::Span::new("markup_eval");
-                let node: mlua::Value = lua
-                    .load(bytes)
-                    .set_name(format!("@{}", entry.display()))
-                    .eval()?;
-                drop(eval_profile);
-                let _serde_profile = bead_core::profile::Span::new("markup_serde");
-                let mut raw: RawNode = lua.from_value(node)?;
-                let mut remaining = (8 * bead_core::cache::MIB)
-                    .checked_sub(crate::layout::raw_bytes(&raw))
-                    .ok_or_else(|| mlua::Error::runtime("markup exceeds 8 MiB"))?;
-                expand_fragments(&mut raw, &fragments.borrow(), &mut remaining)?;
-                Ok(raw)
-            })
-        })();
-        // The markup sandbox is temporary; this is its end-of-build allocation,
-        // not a retained VM or an allocator high-water estimate.
+                })?,
+            )?;
+            let bytes = sources
+                .get(entry)
+                .ok_or_else(|| mlua::Error::runtime("missing entry source"))?;
+            drop(setup_profile);
+            let eval_profile = bead_core::profile::Span::new("markup_eval");
+            let node: mlua::Value = vm.chunk(entry, bytes)?.call(())?;
+            drop(eval_profile);
+            let _serde_profile = bead_core::profile::Span::new("markup_serde");
+            let mut raw: RawNode = lua.from_value(node)?;
+            let mut remaining = (8 * bead_core::cache::MIB)
+                .checked_sub(crate::layout::raw_bytes(&raw))
+                .ok_or_else(|| mlua::Error::runtime("markup exceeds 8 MiB"))?;
+            expand_fragments(&mut raw, &fragments.borrow(), &mut remaining)?;
+            Ok(raw)
+        });
+        // Live VM allocation after this build (retained module state plus
+        // not-yet-collected garbage), not an allocator high-water estimate.
         self.vm_build_bytes.set(lua.used_memory());
         let result = result
             .map(|raw| {
@@ -962,6 +1087,10 @@ impl FrontEnd for LuauFrontEnd {
                     .map_or_else(|| std::rc::Rc::new(raw), |cached| cached.raw.clone())
             })
             .map_err(|error| diagnostic(entry, error));
+        // A failed build may have left modules half-loaded: start the next one fresh.
+        if result.is_ok() && vm.globals_clean() {
+            *self.vm.borrow_mut() = Some(owned);
+        }
         self.animations.borrow_mut().finish_build();
         if let Ok(raw) = &result {
             let reads = reads.into_inner();
@@ -1007,8 +1136,9 @@ fn normalize(path: &Path) -> Result<PathBuf, String> {
     }
     Ok(result)
 }
+/// The Luau caller of a bridged host callback: level 1 is the bridge function.
 fn source(lua: &Lua, fallback: &Path) -> crate::layout::Source {
-    lua.inspect_stack(1, |debug| {
+    lua.inspect_stack(2, |debug| {
         let source = debug.source();
         crate::layout::Source {
             file: source

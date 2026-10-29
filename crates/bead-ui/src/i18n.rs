@@ -39,6 +39,12 @@ struct State {
 }
 static STATE: Mutex<Option<State>> = Mutex::new(None);
 static BUILTIN: OnceLock<Entries> = OnceLock::new();
+/// Bumped whenever views must rebuild for a host input (catalog or text style).
+static EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// Views keep translated text and kit tokens until this changes.
+pub(crate) fn epoch() -> u64 {
+    EPOCH.load(std::sync::atomic::Ordering::Acquire)
+}
 fn with<T>(f: impl FnOnce(&mut State) -> T) -> T {
     let mut guard = STATE.lock().unwrap_or_else(|p| p.into_inner());
     f(guard.get_or_insert_with(State::default))
@@ -61,6 +67,7 @@ pub fn install(revision: u64, entries: Entries) {
         }
         s.revision = revision;
         s.entries = Arc::new(entries);
+        EPOCH.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
         s.listeners.values().cloned().collect()
     });
     for listener in listeners {
@@ -70,6 +77,7 @@ pub fn install(revision: u64, entries: Entries) {
 /// Run the listeners without a catalog change: a host input that every view reads
 /// while laid out (see `text_style`) changed.
 pub(crate) fn refresh() {
+    EPOCH.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
     let listeners: Vec<Listener> = with(|s| s.listeners.values().cloned().collect());
     for listener in listeners {
         listener();

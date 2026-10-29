@@ -3706,3 +3706,120 @@ return ui.Row{id="root",width=200,height=100,
         .unwrap();
     assert_eq!(rect(&fixed.draw).x, 40.);
 }
+
+/// B0191: one VM per generation. Modules whose load reads no build input load once;
+/// input-reading modules (and their importers) and the entry re-run per build.
+fn persistent_build(
+    sources: &[(&str, &str)],
+) -> (
+    crate::frontend::LuauFrontEnd,
+    impl Fn(&crate::frontend::LuauFrontEnd, i64) -> Result<Vec<String>, Diagnostic>,
+) {
+    use crate::frontend::{FrontEnd, LuauFrontEnd};
+    let entry = PathBuf::from("ui/main.luau");
+    let sources: BTreeMap<PathBuf, Vec<u8>> = sources
+        .iter()
+        .map(|(path, body)| (PathBuf::from(path), body.as_bytes().to_vec()))
+        .collect();
+    let frontend = LuauFrontEnd::new(&entry, &sources).unwrap();
+    let build = move |frontend: &LuauFrontEnd, tick: i64| {
+        let resolve = |name: &str| match name {
+            "tick" => Ok(Value::Number(tick as f64)),
+            "title" => Ok(Value::Text(format!("title {tick}"))),
+            _ => Err(Diagnostic::new(&entry, 1, 1, name)),
+        };
+        let raw = frontend.build(&entry, &resolve)?;
+        Ok(raw
+            .children
+            .iter()
+            .map(|child| child.props["text"].as_str().unwrap_or("").to_owned())
+            .collect())
+    };
+    (frontend, build)
+}
+
+#[test]
+fn persistent_vm_reuses_pure_modules_and_reruns_input_readers() {
+    let (frontend, build) = persistent_build(&[
+        ("ui/pure.luau", "return {}"),
+        (
+            "ui/input.luau",
+            "local ui=require('bead.ui')\nreturn ui.resolve_for_check(ui.bind('title'))",
+        ),
+        ("ui/importer.luau", "return {title=require('./input')}"),
+        ("ui/late.luau", "return {title=require('./input')}"),
+        (
+            "ui/main.luau",
+            r#"local ui=require('bead.ui')
+local pure=require('./pure')
+pure.loads=(pure.loads or 0)+1
+local importer=require('./importer')
+local late=require('./late')
+return ui.Column{id='root',ui.Text{id='a',text=tostring(pure.loads)},ui.Text{id='b',text=importer.title},
+ ui.Text{id='c',text=late.title},ui.Text{id='d',text=tostring(ui.resolve_for_check(ui.bind('tick')))}}"#,
+        ),
+    ]);
+    assert_eq!(
+        build(&frontend, 1).unwrap(),
+        ["1", "title 1", "title 1", "1"]
+    );
+    // The pure module's table survives; both importers of the input reader re-run.
+    assert_eq!(
+        build(&frontend, 2).unwrap(),
+        ["2", "title 2", "title 2", "2"]
+    );
+    assert_eq!(
+        build(&frontend, 3).unwrap(),
+        ["3", "title 3", "title 3", "3"]
+    );
+    // A host input every view reads (catalog, text style) starts a new VM.
+    {
+        let _lock = CATALOG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::refresh();
+    }
+    assert_eq!(
+        build(&frontend, 4).unwrap(),
+        ["1", "title 4", "title 4", "4"]
+    );
+}
+
+#[test]
+fn global_writes_and_failed_builds_keep_per_build_isolation() {
+    let (frontend, build) = persistent_build(&[
+        ("ui/pure.luau", "return {}"),
+        (
+            "ui/main.luau",
+            r#"local ui=require('bead.ui')
+local tick=ui.resolve_for_check(ui.bind('tick'))
+local pure=require('./pure')
+pure.loads=(pure.loads or 0)+1
+counter=(counter or 0)+1
+if tick==3 then error('broken view') end
+return ui.Column{id='root',ui.Text{id='a',text=tostring(counter)},ui.Text{id='b',text=tostring(pure.loads)}}"#,
+        ),
+    ]);
+    // A script that writes globals gets a fresh VM every build, as before.
+    assert_eq!(build(&frontend, 1).unwrap(), ["1", "1"]);
+    assert_eq!(build(&frontend, 2).unwrap(), ["1", "1"]);
+    let error = build(&frontend, 3).unwrap_err();
+    assert!(error.message.contains("broken view"), "{}", error.message);
+    assert_eq!(build(&frontend, 4).unwrap(), ["1", "1"]);
+
+    let (frontend, build) = persistent_build(&[
+        ("ui/pure.luau", "return {}"),
+        (
+            "ui/main.luau",
+            r#"local ui=require('bead.ui')
+local tick=ui.resolve_for_check(ui.bind('tick'))
+local pure=require('./pure')
+pure.loads=(pure.loads or 0)+1
+if tick==3 then error('broken view') end
+return ui.Column{id='root',ui.Text{id='b',text=tostring(pure.loads)}}"#,
+        ),
+    ]);
+    assert_eq!(build(&frontend, 1).unwrap(), ["1"]);
+    assert_eq!(build(&frontend, 2).unwrap(), ["2"]);
+    assert!(build(&frontend, 3).is_err());
+    // A failed build may have left module state half-written: the next starts fresh.
+    assert_eq!(build(&frontend, 4).unwrap(), ["1"]);
+}
