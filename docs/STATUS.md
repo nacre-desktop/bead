@@ -1027,10 +1027,25 @@ Started the panel slide frame-cost investigation. The first source change remove
 
 The owner profile identified worker deadlines as the repeated stage source: `wakeup_at` was dispatching empty model events for Luau animation deadlines during Wayland panel motion. The candidate now holds those deadlines until after the authored panel transition. Dashboard input revisions, icon lookup queries, and daemon status are cached/shared; regression tests count unchanged frames. The matched stage+draw benchmark and lead live audit remain outstanding.
 
-# B0180 — 2026-10-29
+# B0180 — 2026-10-29 r2
 
-Panel motion coalesces model/service refreshes, reload notifications, internal timer wakeups and presentation checkpoints until the pose settles. CPU scenes with a contiguous contour prefix prepare the remaining open-pose content once; non-reveal slides reuse one flattened picture at the animated offset. Per-pose frame artwork remains on the existing dynamic `RevealArt` path.
+The rejected panel open path allowed presentation-motion coalescing to hold the
+first `Reload`; the following `PanelVisibility(true)` then wrote `panel.open`
+before the route schema existed. The worker now admits that bootstrap reload
+before deferring later refreshes, preserving `panel.open` as the panel visibility
+state. A Runtime smoke test loads actual shell routes, opens and closes them,
+asserts each prepared CPU scene and verifies `panel.open` true/false across
+12 route entries (including the `sound/core` journal route).
 
-Matched headless CPU tick benchmarks at 2880×1800/1.5 (Cargo `test` profile) improve dashboard p50/p99 from 454.6/728.8 to 394.6/606.6 ms, control centre from 282.3/414.3 to 236.3/381.9 ms, and sound from 40.9/41.9 to 1.60/1.66 ms. First-content wall time grows from 213.5 to 262.2 ms (dashboard), 140.4 to 152.2 ms (control), and 41.3 to 62.0 ms (sound). The retained-layer fixtures use 153,184 / 211,464 / 181,768 bytes. This debug benchmark does not establish release-profile 120 Hz performance or physical scanout timing.
+After the first primary frame settles, the product schedules low-priority
+preparation for its panel specs using the actual logical output size and scale.
+The renderer stores exact-content CPU layers in a consume-once 2 MiB cache,
+including strong asset references. Headless startup simulation warmed 12/12
+routes and retained 1,429,994 bytes.
 
-Full Bead CI passes on pushed HEAD `a372a4bf` (783 passed, 3 ignored; all remaining workflow steps passed). The fractional-scale direct-render comparison allows at most one 8-bit channel step. Startup-idle warming for every panel and a release-profile matched benchmark remain open; the current benchmark fixtures also do not include Nacre `Chrome::svg` artwork, so their zero SVG-rasterization count does not establish production contour behavior.
+At 2880×1800/1.5 in the debug test profile, warmed first-content wall time was
+2.74/1.83/1.76 ms for dashboard/control/sound, versus 213.51/140.39/41.27 ms
+at 3b6de41f. Tick p50/p99 were 395.82/606.77, 236.95/384.77 and 1.61/1.61 ms.
+This is a CPU software benchmark, not physical scanout. B0178's 37-commit,
+8.33 ms scheduler proof remains green. Nacre Chrome SVG rasterization and
+per-frame serialization counters are not measured; no live laptop audit was run.
