@@ -1492,14 +1492,22 @@ impl App {
                     &motion.id,
                     open,
                     now,
-                    if self.options.animate { 1. } else { duration },
+                    if self.options.animate && open {
+                        1.
+                    } else {
+                        duration
+                    },
                     curve,
                 );
                 let (progress, active) = self.animations.value(&motion.id, now).unwrap();
                 motion_clock = Some((
                     motion.id.clone(),
                     now,
-                    if self.options.animate { 1. } else { duration },
+                    if self.options.animate && open {
+                        1.
+                    } else {
+                        duration
+                    },
                 ));
                 // A callback can arrive after the motion expires. Keep it armed
                 // until we have drawn the terminal pose, rather than making the
