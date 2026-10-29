@@ -491,8 +491,9 @@ impl App {
                 .is_some_and(|i| i.name.is_some() && i.logical_size.is_some())
         });
         let names: Vec<_> = ready.iter().map(|i| i.name.as_deref()).collect();
-        let Some(info) = panels::app_start_output(&names, self.options.panel_output.as_deref(), all_known)
-            .map(|at| ready[at].clone())
+        let Some(info) =
+            panels::app_start_output(&names, self.options.panel_output.as_deref(), all_known)
+                .map(|at| ready[at].clone())
         else {
             return;
         };
