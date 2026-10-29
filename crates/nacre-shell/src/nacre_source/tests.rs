@@ -590,6 +590,69 @@ async fn published_menu_calls_and_errors_roundtrip_through_a_fake_daemon() {
         server.await.unwrap();
     }
 }
+/// B0190: a shell that connects right after "Daemon ready" gets a Welcome
+/// without its late topics, so the link refreshes the registry. When that
+/// reply grows the method set, the link publishes while bar routes read
+/// `Client::status()` from the callback. The link thread must stay live and
+/// keep answering the daemon (Ping here, ui.dispatch in the field).
+#[tokio::test(flavor = "current_thread")]
+async fn early_registry_refresh_with_status_reading_subscriber_keeps_link_live() {
+    let lab = Lab::new();
+    let listener = lab.bind();
+    let (published, mut seen) = tokio::sync::mpsc::unbounded_channel();
+    let server = tokio::spawn(async move {
+        let (mut reader, mut writer) = accepted(&listener).await;
+        let Message::Call { id, m, .. } = next(&mut reader).await else {
+            panic!("expected registry call")
+        };
+        assert_eq!(m, "daemon.status");
+        let Message::Welcome { mut methods, .. } = welcome() else {
+            unreachable!()
+        };
+        // The daemon finished starting: a readiness-dependent method appears.
+        methods.insert("workspace.activate".into(), methods["daemon.ping"].clone());
+        let reply = Reply::Ok {
+            ok: serde_json::json!({"methods": methods, "topics": ["compositor", "late"]}),
+        };
+        framing::write(&mut writer, &Message::Ret { id, reply })
+            .await
+            .unwrap();
+        let ping = Id::Text("health".into());
+        framing::write(&mut writer, &Message::Ping { id: ping.clone() })
+            .await
+            .unwrap();
+        // Before the fix the link thread deadlocked on its own status lock here.
+        while next(&mut reader).await != (Message::Pong { id: ping.clone() }) {}
+        (reader, writer)
+    });
+    let client = Client::start(Config::new(lab.socket(), vec!["late".into()])).unwrap();
+    let routes = crate::bar_routes::Routes::new(client.clone());
+    let watch = routes
+        .watch(move |stores| {
+            let _ = published.send(stores["bar.workspace.enabled"].clone());
+        })
+        .unwrap();
+    let saw = tokio::time::timeout(Duration::from_secs(5), async {
+        while seen.recv().await != Some(bead::core::Value::Bool(true)) {}
+    })
+    .await;
+    let answered = match saw {
+        Ok(()) => tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .ok(),
+        Err(_) => None,
+    };
+    let Some(connection) = answered else {
+        // A deadlocked link thread can never be joined; leak it so the test
+        // fails instead of hanging in `Drop`.
+        std::mem::forget((watch, routes, client));
+        panic!("link thread stopped answering after the registry refresh");
+    };
+    let _connection = connection.unwrap();
+    drop(watch);
+    client.stop().await.unwrap();
+}
+
 async fn next(reader: &mut framing::Reader<BufReader<tokio::net::unix::OwnedReadHalf>>) -> Message {
     tokio::time::timeout(Duration::from_secs(5), reader.next())
         .await

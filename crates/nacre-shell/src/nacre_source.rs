@@ -1169,8 +1169,11 @@ async fn run(config: Config, shared: Arc<Shared>, mut commands: mpsc::Receiver<C
                                                     methods: methods.clone(), topics: session.advertised.clone(), frame_ms: None,
                                                 }).is_ok() {
                                                 session.methods = methods.clone();
-                                                let mut status = shared.status.lock().unwrap_or_else(|p| p.into_inner());
-                                                Arc::make_mut(&mut *status).methods = methods;
+                                                // B0190: release the status lock before publishing. Link
+                                                // subscribers (bar routes) read `Client::status()` inside
+                                                // the callback; holding the non-reentrant lock here
+                                                // deadlocked this thread and every ui.dispatch after it.
+                                                Arc::make_mut(&mut *shared.status.lock().unwrap_or_else(|p| p.into_inner())).methods = methods;
                                                 let _ = shared.link.publish(serde_json::json!({"boot":session.boot,"methods":session.methods}));
                                             }
                                             if let Some(topics) = ok.get("topics").and_then(Value::as_array)
