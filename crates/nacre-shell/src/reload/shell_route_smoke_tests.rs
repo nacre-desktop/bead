@@ -262,9 +262,25 @@ fn real_shell_panel_routes_open_and_close_with_prepared_scenes() {
                     .unwrap_or_else(|error| panic!("{name}: CPU content prewarm failed: {error}"));
                 eprintln!("PANEL_SMOKE_WARM route={name} bytes={warm_bytes}");
                 if warm_bytes == 0 {
-                    eprintln!("PANEL_SMOKE_WARM_SKIP route={name} motion={:?} primitives={} bounds={:?}", scene.motion.as_ref().map(|motion| (motion.reveal, motion.open, motion.parts.len())), scene.primitives.len(), scene.bounds);
+                    eprintln!(
+                        "PANEL_SMOKE_WARM_SKIP route={name} motion={:?} primitives={} bounds={:?}",
+                        scene.motion.as_ref().map(|motion| (
+                            motion.reveal,
+                            motion.open,
+                            motion.parts.len()
+                        )),
+                        scene.primitives.len(),
+                        scene.bounds
+                    );
                     if name == "sound-core" {
-                        eprintln!("PANEL_SMOKE_WARM_PARTS {:?}", scene.motion.as_ref().map(|motion| motion.parts.iter().map(|(index, _)| *index).collect::<Vec<_>>()));
+                        eprintln!(
+                            "PANEL_SMOKE_WARM_PARTS {:?}",
+                            scene.motion.as_ref().map(|motion| motion
+                                .parts
+                                .iter()
+                                .map(|(index, _)| *index)
+                                .collect::<Vec<_>>())
+                        );
                     }
                 }
                 if warm_bytes > 0 {
@@ -312,5 +328,7 @@ fn real_shell_panel_routes_open_and_close_with_prepared_scenes() {
     }
     let (_, _, retained) = bead::render::tree::cpu_content_warm_cache_stats();
     assert!(retained <= 2 * bead::core::cache::MIB);
-    eprintln!("PANEL_SMOKE_STARTUP_PREWARM routes={route_count} warmed={warmed} bytes_added={bytes_added} cache_bytes={retained}");
+    eprintln!(
+        "PANEL_SMOKE_STARTUP_PREWARM routes={route_count} warmed={warmed} bytes_added={bytes_added} cache_bytes={retained}"
+    );
 }

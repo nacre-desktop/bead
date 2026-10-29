@@ -3249,9 +3249,9 @@ impl CpuContentWarmCache {
             .filter(|(path, _)| !reveal_art_asset(scene, path))
             .map(|(_, data)| data.clone())
             .collect::<Vec<_>>();
-        let bytes = pixels.bytes().saturating_add(
-            asset_refs.iter().map(|asset| asset.len()).sum::<usize>(),
-        );
+        let bytes = pixels
+            .bytes()
+            .saturating_add(asset_refs.iter().map(|asset| asset.len()).sum::<usize>());
         if bytes > CPU_CONTENT_WARM_LIMIT {
             return 0;
         }
