@@ -3387,13 +3387,24 @@ impl TreeCpuRenderer {
         Ok(())
     }
     /// B0205: start flattening the close layer of a reveal panel resting open, once per content
-    /// key. Any other pose drops it, so nothing is held while the panel is closed or sliding.
-    fn prepare_close_layer(&mut self, scene: &Scene, frame: &Frame, scale: f32, format: PixelFormat) {
+    /// key. The next slide adopts or drops it and a faded pose drops it, so nothing is held
+    /// once the panel has closed.
+    fn prepare_close_layer(
+        &mut self,
+        scene: &Scene,
+        frame: &Frame,
+        scale: f32,
+        format: PixelFormat,
+    ) {
         let Some(slide) = SlideContent::closing_from_rest(scene, frame) else {
             return;
         };
         let key = slide.key(scene, frame, scale, format);
-        if self.close_layer.as_ref().is_some_and(|layer| layer.key == key) {
+        if self
+            .close_layer
+            .as_ref()
+            .is_some_and(|layer| layer.key == key)
+        {
             return;
         }
         // A superseded job finishes on its own; its pixels are dropped unseen.
@@ -5215,14 +5226,23 @@ mod tests {
         let mut rest = sliding_panel(true, 1.);
         rest.motion.as_mut().unwrap().progress = 1.;
         draw(&mut renderer, &rest, &mut vec![0u8; (w * h * 4) as usize]);
-        assert!(renderer.take_transient_timer(), "quiet-time work is scheduled");
+        assert!(
+            renderer.take_transient_timer(),
+            "quiet-time work is scheduled"
+        );
         renderer.idle_work(&rest);
-        assert_eq!(renderer.close_layer_builds, 0, "not before the content is quiet");
+        assert_eq!(
+            renderer.close_layer_builds, 0,
+            "not before the content is quiet"
+        );
         std::thread::sleep(CLOSE_LAYER_QUIET);
         renderer.idle_work(&rest);
         assert_eq!(renderer.close_layer_builds, 1);
         renderer.idle_work(&rest);
-        assert_eq!(renderer.close_layer_builds, 1, "one background flatten per content");
+        assert_eq!(
+            renderer.close_layer_builds, 1,
+            "one background flatten per content"
+        );
         let mut fresh = TreeCpuRenderer::default();
         for progress in [0.25, 0.5, 0.75] {
             let scene = sliding_panel(false, progress);
@@ -5230,10 +5250,16 @@ mod tests {
             draw(&mut renderer, &scene, &mut adopted);
             let mut painted = vec![7u8; (w * h * 4) as usize];
             draw(&mut fresh, &scene, &mut painted);
-            assert!(adopted == painted, "progress {progress}: adopted layer pixels differ");
+            assert!(
+                adopted == painted,
+                "progress {progress}: adopted layer pixels differ"
+            );
         }
         assert_eq!(renderer.close_layer_adoptions, 1);
-        assert_eq!(renderer.slide_layer_builds, 0, "the close slide never flattens on the UI thread");
+        assert_eq!(
+            renderer.slide_layer_builds, 0,
+            "the close slide never flattens on the UI thread"
+        );
         assert_eq!(fresh.slide_layer_builds, 1);
     }
     #[test]
