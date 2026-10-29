@@ -1286,7 +1286,8 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         let worker = std::thread::spawn(move || panel_requests(&host, rx));
         for method in ["hover-open", "hover-leave", "hover-enter"] {
-            tx.send(PanelRequest::Panel("chat", method, "DP-1".into())).unwrap();
+            tx.send(PanelRequest::Panel("chat", method, "DP-1".into()))
+                .unwrap();
         }
         polling.recv_timeout(Duration::from_secs(2)).unwrap();
         assert_eq!(*seen.lock().unwrap(), ["hover-open"]);
