@@ -3094,7 +3094,7 @@ pub struct TreeCpuRenderer {
     slide_layer: Option<(u64, Raster)>,
     /// Slide layers flattened (a test hook: one per slide, none per frame).
     pub slide_layer_builds: usize,
-    /// B0205: the close slide's layer, flattened off the UI thread while the panel rests open.
+    /// B0205: the close slide's layer, flattened on a low-priority thread while the panel rests open.
     background_layer: Option<BackgroundLayer>,
     /// The current slide layer's content, so a changed scene repaints only what changed.
     slide_damage: Option<(LayerShape, crate::damage::FrameDamage)>,
@@ -3114,8 +3114,9 @@ pub struct TreeCpuRenderer {
 }
 /// B0205: an opening ends on the worker-prepared frame at the slide's offset, painted directly
 /// over the whole surface (the window no longer clips any content), which cost a full repaint on
-/// the UI thread (~6 ms one dev-2 core, 40–60 ms live on battery). The same paint runs on other
-/// threads while the opening slides; the settled frames copy their owed regions from it. The
+/// the UI thread (~6 ms one dev-2 core, 40–60 ms live on battery). The same paint runs on one
+/// low-priority thread while the opening slides; the settled frames copy their owed regions from
+/// it once it has finished (never waiting; otherwise they paint directly as before). The
 /// painter is identical and a repair region paints the same pixels as a full paint, so the copy
 /// is pixel-identical to painting directly.
 struct SettledPaint {
@@ -3150,8 +3151,8 @@ struct LayerShape {
 }
 /// B0205: closing, the whole open picture is the slide content, so its layer is known as soon
 /// as the panel rests open. Flattening it on the slide's first frame was the longest UI-thread
-/// stall of a close on battery (~100–140 ms live); a background thread paints it instead, and a
-/// close whose content key matches adopts it (waiting for an unfinished job, never repainting).
+/// stall of a close on battery (~100–140 ms live); one low-priority thread paints it instead,
+/// and a close whose content key matches adopts it if it has finished (never waiting for it).
 struct BackgroundLayer {
     key: u64,
     size: (u32, u32),
@@ -3226,21 +3227,6 @@ impl SlideContent {
                 }
             })
             .collect()
-    }
-    /// An opening reveal drawn without its layer (its first pose): the content its slide flattens.
-    fn opening_ahead(scene: &Scene, frame: &Frame) -> Option<Self> {
-        let motion = scene
-            .motion
-            .as_ref()
-            .filter(|m| m.reveal && m.open && m.progress < 1.)?;
-        let scene_start = motion.parts.iter().map(|(index, _)| index + 1).max()?;
-        let posed_start = scene_start + frame.items.len().checked_sub(scene.primitives.len())?;
-        (scene_start < scene.primitives.len() && posed_start < frame.items.len()).then_some(Self {
-            scene_start,
-            posed_start,
-            offset: (0., 0.),
-            window: None,
-        })
     }
     /// The close slide of a reveal panel resting open: the whole scene is content.
     fn closing_from_rest(scene: &Scene, frame: &Frame) -> Option<Self> {
@@ -3322,61 +3308,6 @@ fn flatten_layer(
         )?;
     }
     Ok(pixels)
-}
-/// [`flatten_layer`] split into horizontal bands painted on up to four threads. Each band
-/// paints into its own lazily zeroed full-size pixmap (only its rows are touched), and the
-/// bands are copied into the first: the same pixels as one pass, sooner.
-fn flatten_layer_parallel(
-    items: &[Item],
-    offset: (f32, f32),
-    (w, h): (u32, u32),
-    scale: f32,
-    format: PixelFormat,
-) -> Option<Pixmap> {
-    let threads = std::thread::available_parallelism()
-        .map_or(1, |n| n.get().min(4))
-        .min(h.div_ceil(64) as usize)
-        .max(1) as u32;
-    let rows = h.div_ceil(threads);
-    let bands: Vec<Option<(Damage, Pixmap)>> = std::thread::scope(|scope| {
-        (0..threads)
-            .map(|band| {
-                scope.spawn(move || {
-                    let y = band * rows;
-                    let region = Damage {
-                        x: 0,
-                        y,
-                        w,
-                        h: rows.min(h.saturating_sub(y)),
-                    };
-                    let mut pixels = Pixmap::new(w, h)?;
-                    repaint_layer(
-                        items,
-                        offset,
-                        &mut pixels,
-                        scale,
-                        format,
-                        region,
-                        &mut RepairScratch::default(),
-                    )
-                    .ok()?;
-                    Some((region, pixels))
-                })
-            })
-            .collect::<Vec<_>>()
-            .into_iter()
-            .map(|band| band.join().ok().flatten())
-            .collect()
-    });
-    let mut bands = bands.into_iter();
-    let (_, mut layer) = bands.next()??;
-    let stride = w as usize * 4;
-    for band in bands {
-        let (region, pixels) = band?;
-        let range = region.y as usize * stride..(region.y + region.h) as usize * stride;
-        layer.data_mut()[range.clone()].copy_from_slice(&pixels.data()[range]);
-    }
-    Some(layer)
 }
 /// Repaint one region of a flattened layer from its items, in bands.
 fn repaint_layer(
@@ -3600,9 +3531,17 @@ impl TreeCpuRenderer {
         };
         let items = slide.items(scene, frame);
         let offset = (-scene.bounds.x, -scene.bounds.y);
-        let job = std::thread::Builder::new()
-            .name("bead-slide-layer".into())
-            .spawn(move || flatten_layer_parallel(&items, offset, size, scale, format));
+        let job = bead_core::thread::spawn_background("bead-close-layer", move || {
+            flatten_layer(
+                &items,
+                offset,
+                size,
+                scale,
+                format,
+                &mut RepairScratch::default(),
+            )
+            .ok()
+        });
         if let Ok(job) = job {
             self.background_layer_builds += 1;
             self.background_layer = Some(BackgroundLayer {
@@ -3613,7 +3552,7 @@ impl TreeCpuRenderer {
             });
         }
     }
-    /// B0205: paint the opening's settled frame on other threads, once per frame, offset and target.
+    /// B0205: paint the opening's settled frame on a low-priority thread, once per opening.
     fn prepare_settled(
         &mut self,
         frame: &Arc<Frame>,
@@ -3622,27 +3561,24 @@ impl TreeCpuRenderer {
         scale: f32,
         format: PixelFormat,
     ) {
-        let target = ShmTarget {
-            bytes: &mut [],
-            width,
-            height,
-            scale,
-            format,
-        };
-        if let Some(settled) = self
-            .settled
-            .as_mut()
-            .filter(|settled| settled.matches(frame, offset, &target))
-        {
+        if let Some(settled) = self.settled.as_mut() {
+            // One paint per opening: a frame replaced mid-slide settles by painting directly
+            // rather than starting a second background paint (total CPU matters on battery).
             settled.used = std::time::Instant::now();
             return;
         }
         let paint = frame.clone();
-        let job = std::thread::Builder::new()
-            .name("bead-settled".into())
-            .spawn(move || {
-                flatten_layer_parallel(&paint.items, offset, (width, height), scale, format)
-            });
+        let job = bead_core::thread::spawn_background("bead-settled", move || {
+            flatten_layer(
+                &paint.items,
+                offset,
+                (width, height),
+                scale,
+                format,
+                &mut RepairScratch::default(),
+            )
+            .ok()
+        });
         self.settled = job.ok().map(|job| {
             self.settled_builds += 1;
             SettledPaint {
@@ -3672,6 +3608,11 @@ impl TreeCpuRenderer {
             return false;
         };
         if let Some(job) = settled.job.take() {
+            if !job.is_finished() {
+                // Never wait for it: paint this frame directly.
+                self.settled = None;
+                return false;
+            }
             settled.pixels = job.join().ok().flatten();
         }
         let Some(pixels) = settled.pixels.as_ref() else {
@@ -3706,7 +3647,9 @@ impl TreeCpuRenderer {
             scale,
             format,
         } = target;
+        // Not on the frame that flattens the layer: the settled paint starts once the slide runs.
         if scene.motion.as_ref().is_some_and(|m| m.open)
+            && self.slide_layer.is_some()
             && let Some(settled) = scene.prepared.get(&scale.to_bits())
         {
             self.prepare_settled(settled, scene.offset, (width, height), scale, format);
@@ -3736,7 +3679,8 @@ impl TreeCpuRenderer {
             let background = self
                 .background_layer
                 .take()
-                .filter(|layer| layer.key == key && layer.size == (w, h))
+                // Never wait: an unfinished job is dropped and the layer flattened here.
+                .filter(|layer| layer.key == key && layer.size == (w, h) && layer.job.is_finished())
                 .and_then(|layer| match layer.job.join() {
                     Ok(Some(pixels)) if (pixels.width(), pixels.height()) == (w, h) => {
                         Some((pixels, layer.charge))
@@ -4059,24 +4003,6 @@ impl Renderer for TreeCpuRenderer {
             return Err("damage outside SHM".into());
         }
         let frozen_snapshot = self.snapshot_fingerprint.is_some();
-        // B0205: an opening's first poses (faded in, or its content still culled) composite no
-        // layer yet; flatten the content its slide will need on another thread meanwhile, from
-        // the worker-prepared frame's rasters. The slide adopts it when the content matches.
-        let sliding = scene.opacity >= 1.
-            && self
-                .cache
-                .frame
-                .as_ref()
-                .is_some_and(|frame| SlideContent::of(scene, frame).is_some());
-        if !frozen_snapshot
-            && !sliding
-            && self.slide_layer.is_none()
-            && self.background_layer.is_none()
-            && let Some(prepared) = scene.prepared.get(&target.scale.to_bits()).cloned()
-            && let Some(slide) = SlideContent::opening_ahead(scene, &prepared)
-        {
-            self.start_background_layer(slide, scene, &prepared, target.scale, target.format);
-        }
         let frame = if frozen_snapshot {
             None
         } else {
@@ -5548,6 +5474,13 @@ mod tests {
         std::thread::sleep(CLOSE_LAYER_QUIET);
         renderer.idle_work(&rest);
         assert_eq!(renderer.background_layer_builds, 1);
+        while !renderer
+            .background_layer
+            .as_ref()
+            .is_some_and(|layer| layer.job.is_finished())
+        {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
         renderer.idle_work(&rest);
         assert_eq!(
             renderer.background_layer_builds, 1,
@@ -5614,48 +5547,6 @@ mod tests {
         }
     }
     #[test]
-    fn an_opening_flattens_its_layer_off_the_ui_thread_before_its_slide() {
-        let (w, h) = (396u32, 246 + 120);
-        let draw = |renderer: &mut TreeCpuRenderer, scene: &Scene| {
-            let mut bytes = vec![7u8; (w * h * 4) as usize];
-            renderer.prepare_on_ui(scene, 1.5).unwrap();
-            renderer
-                .render(
-                    scene,
-                    ShmTarget {
-                        bytes: &mut bytes,
-                        width: w,
-                        height: h,
-                        scale: 1.5,
-                        format: PixelFormat::Rgba,
-                    },
-                    Damage::full(w, h),
-                )
-                .unwrap();
-            bytes
-        };
-        let mut renderer = TreeCpuRenderer::default();
-        // The first pose is still faded out: no layer is composited, one is flattened aside.
-        let mut first = sliding_panel(true, 0.05);
-        first.opacity = 0.;
-        draw(&mut renderer, &first);
-        assert_eq!(renderer.background_layer_builds, 1);
-        for progress in [0.25, 0.5] {
-            let scene = sliding_panel(true, progress);
-            let adopted = draw(&mut renderer, &scene);
-            let fresh = draw(&mut TreeCpuRenderer::default(), &scene);
-            assert!(
-                adopted == fresh,
-                "progress {progress}: adopted layer differs"
-            );
-        }
-        assert_eq!(renderer.background_layer_adoptions, 1);
-        assert_eq!(
-            renderer.slide_layer_builds, 0,
-            "the opening never flattens on the UI thread"
-        );
-    }
-    #[test]
     fn an_opening_settles_from_its_background_paint_pixel_for_pixel() {
         let (w, h) = (396u32, 246 + 120);
         let draw = |renderer: &mut TreeCpuRenderer, scene: &Scene, damage: Damage| {
@@ -5690,6 +5581,14 @@ mod tests {
             renderer.settled_builds, 1,
             "one background paint per opening"
         );
+        while !renderer
+            .settled
+            .as_ref()
+            .and_then(|settled| settled.job.as_ref())
+            .is_some_and(|job| job.is_finished())
+        {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
         let settled = pose(1.);
         for damage in [
             Damage::full(w, h),

@@ -8,6 +8,7 @@ pub mod pearl;
 pub mod profile;
 pub mod recovery;
 pub mod source;
+pub mod thread;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 /// A surface's owning edge; inward vectors also place popouts away from bars.

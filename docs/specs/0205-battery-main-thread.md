@@ -107,12 +107,10 @@ mid-slide (52–120 ms frames, 3–4 per dashboard open), plus the first flatten
   content key changes mid-slide, only the changed items' pixels (≤ 4 merged rectangles) are
   repainted in place; a changed shape (other body split, size, scale or format) still flattens.
   The repaired layer is bit-identical to a fresh flatten (unit test, open and close).
-- **Opening layer off the UI thread.** The first poses of an opening (faded in, or content
-  still culled from the posed frame) composite no layer; on the first of them a background job
-  flattens the content from the worker-prepared frame's rasters, and the first slide frame adopts
-  it when the content key matches (unit test: zero UI-thread flattens, identical pixels).
-- Background flattens (open and close) paint in up to four horizontal bands on scoped threads,
-  each into a lazily zeroed full-size pixmap, then copy the bands together: same pixels, sooner.
+- The opening's first flatten stays on the UI thread (as before B0205). Round 2 also flattened
+  it on four background threads; the live battery audit of 69a4213f showed the dashboard open
+  losing ~15 frames (gaps 32–54 ms): on battery the package power is shared, so parallel bands
+  are not free. Removed (round 3).
 
 One-core bench (`taskset -c 5`, 120 Hz cadence `B0205_CADENCE=1`, mid-slide text change
 `B0205_CHANGE=1`; before = 92755db7 with the same bench), opening slides, UI thread ms:
@@ -128,28 +126,33 @@ one pinned core because the background bands share that core with it; on the lap
 other cores. Memory: the background band pixmaps are transient (each touches only its band); no
 new resident memory.
 
-## Round 3: the settled frame of an opening
+## Round 3: the settled frame of an opening, and less background work
 
-The opening's last frame (progress 1) drops the layer and paints the worker-prepared frame
-directly over the owed regions, which after a reveal is the whole surface (~6 ms one dev-2 core,
-40–60 ms live); the next buffers owe the same region. While the opening slides, the same paint
-(`paint_items` of that frame at the slide's offset, into a surface-sized pixmap, in bands on up
-to four threads) runs off the UI thread; the settled frames copy their owed regions from it while
-the frame (same `Arc`), offset, surface size, scale and format match, and paint directly
-otherwise. A repair region paints the same pixels as a full paint (the existing partial-repaint
-invariant), so the copy is pixel-identical (unit test: full and partial damage against a fresh
-direct paint). The pixmap is transient: it goes 150 ms after its last use (one surface-sized
-buffer while an opening runs, e.g. ~7 MB for the dashboard).
+- Background paints (`bead_core::thread::spawn_background`, a general primitive: a named
+  thread at nice +10) run on ONE low-priority thread, never banded, and nothing waits for them:
+  a close adopts its layer only if the job has finished (else it flattens as before), and the
+  settled frame below uses its paint only if finished (else it paints directly).
+- The opening's last frame (progress 1) paints the worker-prepared frame directly over the owed
+  regions, after a reveal the whole surface (~6 ms one dev-2 core, 40–60 ms live), and the next
+  buffers owe the same region. One background paint per opening (`paint_items` of that frame at
+  the slide's offset into a surface-sized pixmap), started on the second slide frame (not on the
+  frame that flattens the layer), lets the settled frames copy their owed regions while the frame
+  (same `Arc`), offset, surface size, scale and format match. A repair region paints the same
+  pixels as a full paint (the existing partial-repaint invariant), so the copy is pixel-identical
+  (unit test: full and partial damage against a fresh direct paint). A frame replaced mid-slide
+  does not start a second paint; it settles directly. The pixmap goes 150 ms after its last use.
 
-One-core bench (`taskset -c 5`, 120 Hz cadence), worst frame, before = 69a4213f:
+One-core bench (`taskset -c 5`, 120 Hz cadence; dev-2 was loaded, load ~7, so maxima are noisy;
+before = 92755db7, the live build), UI thread ms:
 
-| Panel | open worst before → after | close worst before → after |
-|---|---|---|
-| dashboard | 6.24 → 2.02 | 0.77 → 0.67 |
-| launcher | 2.98 → 1.28 | 0.74 → 0.75 |
-| control centre | 6.93 → 1.62 | 0.47 → 0.42 |
+| Panel | open p95 | open worst | mid-slide change frame p95 (open) | close worst with a change |
+|---|---|---|---|---|
+| dashboard | 1.95–2.06 → 0.86 | 6.2–8.3 → 7.8 | 5.66–5.85 → 0.88 | 6.58–6.67 → 0.66 |
+| launcher | 1.96–2.93 → 0.96–0.97 | 3.0–4.9 → 2.7–2.8 | 2.32–2.33 → 0.98 | 2.44–2.49 → 0.70 |
+| control centre | 3.71–5.72 → 1.09–1.36 | 7.0–11.1 → 6.4–6.8 | 4.30–4.34 → 1.11 | 3.88 → 0.49 |
 
-Open p95 unchanged (0.86 / 0.98 / 1.08–1.16 ms).
+The open worst frame is now the first flatten (unchanged work, done on the UI thread as before);
+the settled frames no longer appear among the expensive ones.
 
 ## Open
 
