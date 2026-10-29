@@ -541,6 +541,10 @@ B0186 makes the 50 ms markup budget thread CPU time (not wall time) and clears a
 reload or render failure notice on the next successful render; see the
 [markup budget spec](0186-markup-budget.md).
 
+B0190 (in review): a shell started right after "Daemon ready" deadlocked its nacre-link thread
+on its own status lock and never answered ui.dispatch; see the
+[startup race spec](0190-startup-race-link-deadlock.md) (daemon safety net: Nacre N0096).
+
 Exact-source full hosted [CI 39388972154](https://github.com/nacre-desktop/bead/actions/runs/39388972154)
 passed on dc8832fe: formatting, Clippy, workspace tests, renderer configurations,
 facade/headless UI/Luau schema, capture-window regressions, private service
