@@ -714,10 +714,10 @@ impl App {
         }
         if let Some(m) = spec.fallback.motion.as_ref().filter(|m| m.reveal) {
             let now = self.started.elapsed().as_secs_f64();
-            let curve = m.curve.unwrap_or(bead_core::animation::Curve::EaseOut);
+            let (duration, curve) = m.transition(open);
             // The reveal holds its first pose until the first frame that shows it is committed.
             self.panel_animations
-                .open_to(&m.id, open, now, m.duration, curve);
+                .open_to(&m.id, open, now, duration, curve);
             bead_core::profile::mark("reveal_admitted");
         }
         self.edges_panel_changed(false);
@@ -783,8 +783,8 @@ impl App {
                 &m.id,
                 0.,
                 self.started.elapsed().as_secs_f64(),
-                m.duration,
-                bead_core::animation::Curve::EaseOut,
+                m.transition(false).0,
+                m.transition(false).1,
             );
         }
         self.panel_epoch = self.next_epoch();
@@ -1011,10 +1011,9 @@ impl App {
             .as_ref()
             .and_then(|spec| spec.fallback.motion.as_ref())
             .filter(|m| m.reveal)
-            .map(|m| (m.id.clone(), m.duration, m.curve));
-        if let Some((id, duration, curve)) = reveal {
+            .map(|m| (m.id.clone(), m.transition(self.panel_target)));
+        if let Some((id, (duration, curve))) = reveal {
             let now = self.started.elapsed().as_secs_f64();
-            let curve = curve.unwrap_or(bead_core::animation::Curve::EaseOut);
             self.panel_animations
                 .open_to(&id, self.panel_target, now, duration, curve);
         }

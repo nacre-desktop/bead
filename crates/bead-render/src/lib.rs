@@ -396,6 +396,29 @@ pub struct Motion {
     pub art: Option<RevealArt>,
 }
 impl Motion {
+    /// Direction-specific animation settings. Exits are deliberately shorter
+    /// and accelerate so the final edge does not crawl along the screen.
+    pub fn transition(&self, opening: bool) -> (f64, bead_core::animation::Curve) {
+        if opening {
+            (
+                self.duration,
+                self.curve.unwrap_or(if self.spring {
+                    bead_core::animation::Curve::Spring
+                } else {
+                    bead_core::animation::Curve::EaseOut
+                }),
+            )
+        } else {
+            (
+                self.return_duration
+                    .unwrap_or((self.duration * 0.7).min(0.22))
+                    .min((self.duration * 0.75).max(0.001)),
+                bead_core::animation::Curve::EmphasizedAccelerate,
+            )
+        }
+    }
+}
+impl Motion {
     /// Scene opacity at a progress: the progress itself when fading, else opaque once any of it is shown.
     pub fn opacity(&self, progress: f32) -> f32 {
         if self.fade || progress <= 0.001 {
@@ -2984,10 +3007,21 @@ mod tests {
             bounds: Rect::new(0., 0., 364., 264.),
         };
         let original = scene.primitives.clone();
-        for frame in 0..=36 {
-            let elapsed = frame as f32 / 120.;
-            let progress = (1. - elapsed / 0.3).clamp(0., 1.);
+        let mut animations = bead_core::animation::Animations::default();
+        animations.open_to("panel", true, 0., 0.3, bead_core::animation::Curve::EaseOut);
+        animations.committed("panel", 0., 0.);
+        assert_eq!(animations.value("panel", 0.3), Some((1., false)));
+        let (duration, curve) = scene.motion.as_ref().unwrap().transition(false);
+        assert!((duration - 0.21).abs() < 0.001);
+        assert_eq!(curve, bead_core::animation::Curve::EmphasizedAccelerate);
+        animations.open_to("panel", false, 0.3, duration, curve);
+        let mut last_positions = Vec::new();
+        for frame in 0..=26 {
+            let now = 0.3 + frame as f64 / 120.;
+            let progress = animations.value("panel", now).unwrap().0;
             let (dx, dy) = scene.panel_offset(progress, false);
+            assert_eq!(dx, 0., "bottom slide keeps x constant at frame {frame}");
+            last_positions.push(dy);
             scene.offset = (32. + dx, 32. + dy);
             assert!(
                 scene.reveal_window().is_none(),
@@ -3013,13 +3047,20 @@ mod tests {
                 ((posed.x + scene.offset.0) - (base.x + 32. + dx)).abs() < 0.01
                     && ((posed.y + scene.offset.1) - (base.y + 32. + dy)).abs() < 0.01
             }));
-            if frame == 36 {
+            animations.committed("panel", now, now);
+            if frame == 26 {
                 assert_eq!(progress, 0.);
                 assert_eq!(scene.motion.as_ref().unwrap().opacity(progress), 0.);
             } else {
                 assert!(scene.motion.as_ref().unwrap().opacity(progress) > 0.);
             }
         }
+        let travel = (last_positions[0] - last_positions[26]).abs();
+        let final_three = (last_positions[23] - last_positions[26]).abs();
+        assert!(
+            final_three >= travel * 0.25,
+            "last three 120 Hz frames moved {final_three}/{travel}"
+        );
     }
     fn font_pool_scene() -> Scene {
         let font = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
