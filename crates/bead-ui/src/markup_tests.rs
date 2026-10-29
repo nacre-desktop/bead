@@ -1000,6 +1000,11 @@ return ui.Box{id="other",width=400,height=100,
 #[test]
 fn navigation_projects_the_fresh_view_after_reconciling_its_route_state() {
     let f = fixture();
+    fs::write(
+        f.0.join("behavior.luau"),
+        r#"return {stores={['search.text']='default',['scroll.y']=0},actions={toggle=function(_)end},computed={label=function(s)return s['search.text']end}}"#,
+    )
+    .unwrap();
     fs::create_dir_all(f.0.join("other")).unwrap();
     fs::write(
         f.0.join("other/behavior.luau"),
