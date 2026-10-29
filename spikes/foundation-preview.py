@@ -357,7 +357,7 @@ def sample(env, raw, compositor, stop):
             assert counts['retained'] >= 1
         assert 'UI_ERROR' not in (raw/'preview-bar.log').read_text(), 'bar reported a UI error'
         assert 'UI_ERROR' not in (raw/'preview-notices.log').read_text(), 'notices reported a UI error'
-        if dashboard_fixtures and os.environ.get('BEAD_PREVIEW_SMOKE') == '1':
+        if dashboard_fixtures and os.environ.get('BEAD_PREVIEW_SMOKE') == '1' and not panel_route_smoke:
             def page_call(method, *args):
                 result=subprocess.run([str(binary),'ipc','--socket',str(commands),'--json','bead.panel',method,*args],cwd=root,env=bar_env,capture_output=True,text=True,timeout=5)
                 if result.returncode:raise RuntimeError('private dashboard panel IPC failed: '+method)
@@ -406,7 +406,11 @@ def sample(env, raw, compositor, stop):
                 if errors:
                     raise AssertionError(f'{route}: shell reported UI errors: {errors[-8:]}')
 
-            wait_panel(lambda state: not state.get('target_open'), 'previous dashboard route close')
+            initial_panel = panel_state()
+            if initial_panel.get('target_open'):
+                panel_call('close')
+            wait_panel(lambda state: not state.get('target_open') and not state.get('resident'),
+                       'initial panel retirement')
 
             def wait_presented(offset, route):
                 matrix.wait_log(
