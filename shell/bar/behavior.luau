@@ -8,10 +8,10 @@ return {stores={["bead.desktop.wallpaper.luma"]={},["widgets.undo"]={},["widgets
     ["widgets.drag.target_origin_x"]=0,["widgets.drag.target_origin_y"]=0,
     ["widgets.drag.app_origin_x"]=0,["widgets.drag.app_origin_y"]=0,["widgets.drag.app_origin_valid"]=false,
     ["widgets.drag.app_width"]=0,["widgets.drag.app_height"]=0,["widgets.drag.target_output_id"]="",
-    ["widgets.group"]="",["widgets.layout"]={},["widgets.rev"]=0,["widgets.outputs"]={},["widgets.screen_width"]=0,["widgets.screen_height"]=0,["widgets.screen_origin_x"]=0,["widgets.screen_origin_y"]=0,["widgets.screen_id"]="",["bar.height"]=50,["bar.notifications.count"]=0,["bar.launcher"]=false,["bar.popouts"]=false,["bar.reconnecting"]=false,["bar.workspace.enabled"]=true,["bar.tray.enabled"]=true,["bar.window.focus.enabled"]=true,["bar.workspace.origins"]={},["bar.dashboard.enabled"]=true,
+    ["widgets.group"]="",["widgets.layout"]={},["widgets.rev"]=0,["widgets.outputs"]={},["widgets.screen_width"]=0,["widgets.screen_height"]=0,["widgets.screen_origin_x"]=0,["widgets.screen_origin_y"]=0,["widgets.screen_id"]="",["bar.height"]=50,["bar.notifications.count"]=0,["bar.launcher"]=false,["bar.popouts"]=false,["bar.reconnecting"]=false,["bar.recording"]=false,["bar.recording.elapsed"]="",["bar.workspace.enabled"]=true,["bar.tray.enabled"]=true,["bar.window.focus.enabled"]=true,["bar.workspace.origins"]={},["bar.dashboard.enabled"]=true,
     ["bar.tray.visible"]=false,["bar.workspace.count"]=6,["bar.workspace.icons"]={},["bar.workspace.hints"]=true,["bar.clock.twelve"]=false,["bar.updates.count"]=0,["bar.updates.enabled"]=true,
     ["bead.edge.dwell"]=0,["bead.edge.fade"]=0,["status.hovered"]="",["status.peek.visible"]=false,["status.peek.kind"]="",
-    ["status.panel.kind"]=""},actions={["launcher.open"]=function(_) end,["widgets.snapshot"]=function(_) end,["widgets.edit"]=function(_) end,["widgets.drag"]=function(_) end},computed={
+    ["status.panel.kind"]=""},actions={["launcher.open"]=function(_) end,["bar.recording.stop"]=function(_) end,["widgets.snapshot"]=function(_) end,["widgets.edit"]=function(_) end,["widgets.drag"]=function(_) end},computed={
     -- desktop.clockFormat: the daemon clock is "HH:MM"; 12-hour shows "h:MM AM/PM".
     ["bar.clock.text"]=function(s)
         local c=s["bead.desktop.clock"]

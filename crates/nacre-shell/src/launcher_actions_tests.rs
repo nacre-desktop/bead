@@ -18,13 +18,18 @@ fn planned(params: Value) -> (Act, bool, Option<MenuView>) {
     let (act, reply) = plan(params.clone()).unwrap_or_else(|e| panic!("{params}: {}", e.message));
     (act, reply.keep_open, reply.view)
 }
-/// Forms Bead has no inline editor for yet (B0197 known gaps: the QML launcher drew them).
-const FORM_GAPS: [&str; 5] = [
-    "reminder",
-    "tui",
-    "webapp",
-    "software-theme-import",
-    "software-extension-import",
+/// The rows Bead answers with an inline form (B0199; the QML launcher drew them): the launcher stays
+/// open and the view names the form, with the row's own question as its text.
+const FORM_ROWS: [(&str, &str, &str); 9] = [
+    ("form", "reminder", "reminder"),
+    ("form", "tui", "tui"),
+    ("form", "webapp", "webapp"),
+    ("form", "software-theme-import", "theme-import"),
+    ("form", "software-extension-import", "extension-import"),
+    ("tool", "record-start", "recording-area"),
+    ("tool", "record-screen", "recording-screen"),
+    ("tool", "install-mise", "confirm-mise"),
+    ("maintenance", "restart", "confirm-restart"),
 ];
 const DAEMON_METHODS: [&str; 18] = [
     "appearance.set_mode",
@@ -95,17 +100,20 @@ fn every_visible_launcher_action_resolves_to_a_supported_route() {
         .collect();
     assert!(rows.len() >= 140, "fixture shrank: {}", rows.len());
     let mut seen = std::collections::BTreeSet::new();
-    let mut gaps = Vec::new();
+    let mut forms = Vec::new();
     for row in rows {
         let operation = row["operation"].as_str().unwrap();
         seen.insert(operation.to_owned());
         let params = json!({"row": row, "catalog_rev": 1});
-        if operation == "form" && FORM_GAPS.contains(&row["value"].as_str().unwrap()) {
-            assert!(plan(params).is_err(), "{row}");
-            gaps.push(row["value"].as_str().unwrap().to_owned());
+        let (act, keep_open, view) = planned(params);
+        if let Some(route) = view.as_ref().and_then(|v| v.route.as_deref())
+            && let Some(kind) = route.strip_prefix(crate::launcher_form::ROUTE)
+        {
+            assert!(matches!(act, Act::View) && keep_open, "{row}");
+            assert!(FORM_ROWS.iter().any(|f| f.2 == kind), "{row}");
+            forms.push(kind.to_owned());
             continue;
         }
-        let (act, _, _) = planned(params);
         match act {
             Act::Shell(call) if call.target == "bead.panel" => {
                 assert!(matches!(call.method.as_str(), "open" | "toggle"), "{row}")
@@ -154,23 +162,41 @@ fn every_visible_launcher_action_resolves_to_a_supported_route() {
             | Act::Ask(_) => {}
         }
     }
-    assert_eq!(gaps.len(), FORM_GAPS.len(), "{gaps:?}");
+    // Every form row of the catalogue opens its form; nothing else does.
+    forms.sort();
+    forms.dedup();
+    let mut expected: Vec<_> = FORM_ROWS.iter().map(|f| f.2.to_owned()).collect();
+    expected.sort();
+    assert_eq!(forms, expected);
     for operation in KNOWN {
         assert!(seen.contains(*operation), "no fixture row for {operation}");
     }
 }
 
 #[test]
-fn recording_and_capture_use_the_recorder_and_wait_for_the_launcher_to_close() {
-    let (act, keep, _) = planned(row("tool", json!("record-start")));
-    assert!(
-        matches!(act, Act::Daemon { method: "recorder.start", ref params, delay: true } if params["mode"] == "region")
-            && !keep
-    );
-    let (act, _, _) = planned(row("tool", json!("record-screen")));
-    assert!(
-        matches!(act, Act::Daemon { method: "recorder.start", ref params, .. } if params["mode"] == "screen")
-    );
+fn form_rows_open_inline_forms_instead_of_running() {
+    for (operation, value, kind) in FORM_ROWS {
+        let mut params = row(operation, json!(value));
+        params["row"]["confirm"] = json!("Sure?");
+        let (act, keep, view) = planned(params);
+        let view = view.unwrap();
+        assert!(matches!(act, Act::View) && keep, "{value}");
+        assert_eq!(view.route.as_deref(), Some(format!("form:{kind}").as_str()));
+        // The row's own confirmation question, else its name.
+        assert_eq!(view.query.as_deref(), Some("Sure?"));
+        assert_eq!(
+            planned(row(operation, json!(value)))
+                .2
+                .unwrap()
+                .query
+                .as_deref(),
+            Some("R")
+        );
+    }
+}
+
+#[test]
+fn recording_stop_and_capture_use_the_recorder_and_wait_for_the_launcher_to_close() {
     let (act, _, _) = planned(row("tool", json!("record-stop")));
     assert!(matches!(
         act,

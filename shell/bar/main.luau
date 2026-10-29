@@ -20,7 +20,9 @@ for name,region in layout.regions do regions[name]=table.clone(region) end
 regions.left.props={id="left",height=34,gap=12,shrink=1,align="center"}
 regions.centre.inline=true
 regions.right.props={id="right",height=34,gap=12,shrink=0,align="center"}
-regions.right.before=require("../widgets/tray")
+-- The recording stop button (only while recording) sits before the tray, as QML put it first in the status column.
+regions.right.before=table.clone(require("./recording"))
+for _,node in require("../widgets/tray") do table.insert(regions.right.before,node) end
 -- B0198 edit mode: while a widget is dragged the bar is a drop zone, highlighted when targeted.
 local drop_target=dragging and drag_phase=="dragging"
 local targeted=drop_target and ui.resolve_for_check(ui.bind("widgets.drag.destination"))=="bar"

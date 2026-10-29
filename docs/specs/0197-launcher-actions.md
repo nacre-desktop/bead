@@ -1,6 +1,6 @@
 # B0197: Every launcher action works on Bead
 
-Status: candidate. The owner hit "Record screen … not supported on Bead". Cause: the daemon's menu engine hands every non-app row to the UI provider (`ui.menu.activate`), and Bead's provider (`ui_provider.rs`) accepted only five operations (`copy`, `copy-clip`, `command`, `power`, `route`). Everything else, about 90% of the Actions, Style, Setup, Health, Learn and Software rows, was refused with "Launcher action is not supported by this UI".
+Status: candidate (B0199 closed the form, recording, search-engine and confirmation gaps). The owner hit "Record screen … not supported on Bead". Cause: the daemon's menu engine hands every non-app row to the UI provider (`ui.menu.activate`), and Bead's provider (`ui_provider.rs`) accepted only five operations (`copy`, `copy-clip`, `command`, `power`, `route`). Everything else, about 90% of the Actions, Style, Setup, Health, Learn and Software rows, was refused with "Launcher action is not supported by this UI".
 
 ## What changed
 - `crates/nacre-shell/src/launcher_actions.rs` (new): the port of QML `NacreMenuContext.execute` and `DesktopActions.execute`. Each operation the engine emits maps to one of three things:
@@ -10,23 +10,31 @@ Status: candidate. The owner hit "Record screen … not supported on Bead". Caus
   Toggles (`dnd`, night light, stay awake, mute, mic, Wi-Fi, Bluetooth) reuse `ControlCenter`'s toggle on a short-lived thread with view leases, so the read and the published call are the control centre's own. Interactive tools (capture, picker, recording) start 320 ms after the reply, as QML's `captureDelay` did, so the launcher has closed. `keep_open` follows QML `keepOpen` (toggles, styles, power profiles, media, outputs and timers keep the launcher open and it re-queries). Unknown operations are still refused with the published message; known ones with a bad operand fail validation (http(s) only for URLs, absolute paths for files, no `..` in ids).
 - `ui_provider.rs`: transport only; the mapping and its tests moved out (+6 −235 lines there).
 - `settings.rs` `page_for`: Settings deep links resolve the registry's `aliases` (`desktop`, `lock`, `time`, `ai`, `maintenance`, `workflows`), which the launcher's Setup rows use. Before, those opened the default page.
-- Screen recording: Record (region) and Record screen start the daemon recorder (the control centre's path; it refuses a second recording); Stop recording calls `recorder.stop`. Output is the helper's (`menu-backend tool record-start`), so files land in `~/Videos/Recordings` like QML.
+- Screen recording: after the B0199 sound choice, Record (region) and Record screen start the daemon recorder (the control centre's path; it refuses a second recording); Stop recording calls `recorder.stop`. Output is the helper's (`menu-backend tool record-start`), so files land in `~/Videos/Recordings` like QML.
 
 ## Tests
 - `launcher_actions_tests::every_visible_launcher_action_resolves_to_a_supported_route`: table-driven over `crates/nacre-shell/tests/launcher-actions.json` (the whole Nacre catalogue at a73934c4, 105 rows, plus one row per `nacre-menu` provider operation, 40 rows). Every row must plan; Shell routes must pass `commands::validate`, Settings pages must exist (or alias onto one), daemon methods must be in the published list, toggles must be control-centre sources; every operation in `KNOWN` must have a fixture row. The only refusals allowed are the five form gaps below.
 - Unit tests for recording/capture timing, view rows, toggles, the web search URL, and fail-closed operands; the published protocol transcript test moved here unchanged.
 
-## Known gaps (not stubs; follow-ups)
-- Inline launcher forms are not drawn by Bead: Set a reminder, Create a TUI app, Create a web app, Import theme, Import extension (5 rows). QML drew them inside the launcher; they need a kit form view in `shell/ui` (follow-up unit). Saved actions/snippets/searches/bookmarks/workspaces/roots open their Settings page instead of the inline form.
-- QML asked for the recording sound (none/system/mixed) before recording; Bead starts with the default (no sound) because `recorder.start` has no audio option yet (daemon follow-up).
-- Bar recording indicator: QML showed a red stop button with elapsed time in the status column. Bead has none yet; stop works from Actions > Stop recording and the control-centre Record tile. Follow-up: a `recording` widget over `controls.recorder.recording`.
-- Brain: `note` rows open the file with `xdg-open` and "Search Nacre Brain" opens the AI sidebar; Bead has no Brain explorer view.
-- Web search uses DuckDuckGo unless the row carries `webUrl`; the launcher's engine preference needs the engine to put `webUrl` on `search-web` rows (Nacre follow-up, one field).
-- QML context-menu operations (`clip-pin`, `clip-delete`, `file-action`, `webapp-remove`, `workflow-remove`, extension update/remove/toggle) are never emitted by the engine as activations; Bead has no secondary-action menu. Out of scope here.
-- `maintenance restart` and `install-mise` carry a `confirm` text; Bead runs them in a visible terminal without an inline confirmation (QML asked first). Power rows still confirm in the session view.
+## Gaps: closed by B0199 unless listed here
+B0197 left these. B0199 (with Nacre N0100) closed the first six; the rest remain.
+- Closed: inline forms. Set a reminder, Create a TUI app, Create a web app, Import theme and Import extension open an inline form (`shell/ui/components/form.luau`, fields in `launcher.form.v1..v4`) that submits to the helper commands QML used (`menu-backend reminder|webapp-create`, `software-library tui-create|theme-import|import`). Validation matches QML (minutes 0.1-1440 and a message; name and http(s) URL; a command line and a known terminal). A helper answer (`message` or `error`) is shown in the launcher; errors stay in the form.
+- Closed: recording sound. Record (region) and Record screen open a sound choice (none / system / system + microphone) and start the daemon recorder with `recorder.start {mode, audio}` after the launcher has closed. The daemon's `audio` is new (N0100); absent means no sound, so an older daemon still records.
+- Closed: bar recording indicator. While `controls.recorder.recording` is true the bar shows QML's red stop button with the elapsed time (`shell/bar/recording.luau`, before the tray); clicking calls `recorder.stop`. Idle cost is one `controls` topic lease on the bar and no ticking: the indicator thread exists only while a recording runs (`bar_recording.rs`).
+- Closed: web search uses the owner's engine. The engine's `search-web` rows now carry `webUrl` (N0100); Bead opens it and keeps DuckDuckGo only for an older daemon.
+- Closed: confirmation for Restart shell and Install mise. Both open a confirmation form (the row's own question, Cancel and Continue) before the terminal runs. Power rows still confirm in the session view.
+- Still open: saved actions/snippets/searches/bookmarks/workspaces/roots open their Settings page instead of an inline form.
+- Still open: Brain: `note` rows open the file with `xdg-open` and "Search Nacre Brain" opens the AI sidebar; Bead has no Brain explorer view.
+- Still open: QML context-menu operations (`clip-pin`, `clip-delete`, `file-action`, `webapp-remove`, `workflow-remove`, extension update/remove/toggle) are never emitted by the engine as activations; Bead has no secondary-action menu.
+
+## B0199 design
+- A form row is answered by the provider with a view whose route is `form:<kind>` and whose query is the row's confirmation text (`launcher_actions::form`); `launcher::activation_changes` turns that into the `launcher.form.*` stores and never touches the engine route. `launcher_form.rs` owns the kinds, the starting values, validation and the backends; the view and its labels are Luau and i18n.
+- Buttons are one host action, `launcher.form` (`submit`/`cancel`); Enter in a one-line field submits. A helper submit runs on its own thread and answers through the menu's wake callback; recording and the confirmations close the launcher at once and run after the 320 ms close delay (QML `captureDelay`).
+- Removed: the B0197 `tool` arms for `record-start`/`record-screen`/`install-mise` and the direct `maintenance restart`; the rows now go through the form.
+- Cost: the recording stop button adds a `controls` topic lease to the bar (daemon-side the same topic the control centre leases); no timer runs unless a recording does. Memory budget <= 1 MiB; measured value is in the B0199 report.
 
 ## Counts
-145 rows: 13 worked before, 127 fixed, 5 remain gaps (forms), 0 removed.
+145 rows: 13 worked before, 127 fixed by B0197, the last 5 (inline forms) fixed by B0199, 0 removed.
 
 ## Every action: before and after
 | Row | Operation | Value | Before (35ac2f88) | After |
@@ -34,14 +42,14 @@ Status: candidate. The owner hit "Record screen … not supported on Bead". Caus
 | actions.capture.area | tool | capture-area | not supported | helper `launcher-workflows capture` after close |
 | actions.capture.screen | tool | capture-screen | not supported | helper `launcher-workflows capture` after close |
 | actions.capture.window | tool | capture-window | not supported | helper `launcher-workflows capture` after close |
-| actions.capture.record | tool | record-start | not supported | daemon `recorder.start` region |
-| actions.capture.record-screen | tool | record-screen | not supported | daemon `recorder.start` screen |
+| actions.capture.record | tool | record-start | not supported | sound choice, then daemon `recorder.start` region (B0199) |
+| actions.capture.record-screen | tool | record-screen | not supported | sound choice, then daemon `recorder.start` screen (B0199) |
 | actions.capture.stop | tool | record-stop | not supported | daemon `recorder.stop` |
 | actions.capture.text | tool | capture-text | not supported | helper `menu-backend tool` after close |
 | actions.capture.qr | tool | capture-qr | not supported | helper `launcher-workflows qr` after close |
 | actions.capture.color | tool | color-picker | not supported | helper `menu-backend tool` after close |
 | actions.calculator | calculator |  | not supported | `= ` prefix |
-| actions.reminders.new | form | reminder | not supported | gap: needs a launcher form (B0197 follow-up) |
+| actions.reminders.new | form | reminder | not supported | inline form (B0199) |
 | actions.reminders.focus | tool | focus-timer | not supported | helper `menu-backend tool focus-timer` |
 | actions.assistant.ai | legacy | tasks | not supported | `nacre-shell tasks` |
 | actions.assistant.new | legacy | new | not supported | `nacre-shell new` |
@@ -90,16 +98,16 @@ Status: candidate. The owner hit "Record screen … not supported on Bead". Caus
 | setup.ai | settings | ai | not supported | Settings `ai` |
 | setup.shortcuts | config | shortcuts | not supported | kitty: helper `menu-backend config` |
 | setup.defaults | config | defaults | not supported | kitty: helper `menu-backend config` |
-| software.development.mise | tool | install-mise | not supported | kitty: `software-package install mise` |
-| software.tui.new | form | tui | not supported | gap: needs a launcher form (B0197 follow-up) |
-| software.webapps.new | form | webapp | not supported | gap: needs a launcher form (B0197 follow-up) |
+| software.development.mise | tool | install-mise | not supported | confirmation (B0199), then kitty: `software-package install mise` |
+| software.tui.new | form | tui | not supported | inline form (B0199) |
+| software.webapps.new | form | webapp | not supported | inline form (B0199) |
 | health.updates | tool | updates | not supported | kitty: helper `menu-backend tool updates` |
 | health.nacre | settings | maintenance | not supported | Settings `maintenance` |
 | health.check | maintenance | check | not supported | kitty: helper `maintenance` |
 | health.status | info | health | not supported | stays selected |
 | health.support-report | tool | support-report | not supported | helper `menu-backend tool support-report` |
 | health.logs | tool | logs | not supported | kitty: helper `menu-backend tool logs` |
-| health.restart | maintenance | restart | not supported | kitty: helper `maintenance` |
+| health.restart | maintenance | restart | not supported | confirmation (B0199), then kitty: helper `maintenance` |
 | health.rollback | settings | maintenance | not supported | Settings `maintenance` |
 | learn.welcome | legacy | welcome | not supported | Welcome app |
 | learn.nacre | info | guide | not supported | stays selected |
@@ -131,9 +139,9 @@ Status: candidate. The owner hit "Record screen … not supported on Bead". Caus
 | actions.dictation.toggle | command |  | works | argv |
 | actions.dictation.setup | command |  | works | argv |
 | actions.share | command |  | works | argv |
-| software.themes.import | form | software-theme-import | not supported | gap: needs a launcher form (B0197 follow-up) |
+| software.themes.import | form | software-theme-import | not supported | inline form (B0199) |
 | software.themes.create | settings | colors | not supported | Settings `colors` |
-| software.extensions.import | form | software-extension-import | not supported | gap: needs a launcher form (B0197 follow-up) |
+| software.extensions.import | form | software-extension-import | not supported | inline form (B0199) |
 | software.packages.review-policy | settings | system | not supported | Settings `system` |
 | actions.bring-visitors | bring-visitors |  | not supported | helper `monitor-workspaces bring` |
 | calculation | copy | 2 | works | wl-copy |

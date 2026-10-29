@@ -351,6 +351,41 @@ mod tests {
             );
         }
     }
+    #[test]
+    fn recording_stop_button_exists_only_while_a_recording_runs() {
+        let rows =
+            vec![serde_json::json!({"id":"fixture-stable-id","name":"1","index":1,"active":true})];
+        let (mut session, scene) = bar_session(rows);
+        session.commit(scene);
+        let stop = |session: &bead::ui::Session| {
+            session
+                .view_nodes()
+                .iter()
+                .filter(|n| n.action.as_deref() == Some("bar.recording.stop"))
+                .filter(|n| bead::ui::rect(&n.draw).w > 0.)
+                .count()
+        };
+        assert_eq!(stop(&session), 0, "idle bar has no stop button");
+        let scene = session
+            .update(crate::bar_recording::values(true, 75))
+            .unwrap()
+            .expect("the button appears");
+        let drawn = |scene: &bead::render::Scene, wanted: &str| {
+            scene.primitives.iter().any(
+                |draw| matches!(draw, bead::render::Primitive::Text { text, .. } if text == wanted),
+            )
+        };
+        assert!(drawn(&scene, "1:15") && drawn(&scene, "stop_circle"));
+        session.commit(scene);
+        assert_eq!(stop(&session), 1);
+        let scene = session
+            .update(crate::bar_recording::values(false, 0))
+            .unwrap()
+            .expect("the button goes away");
+        assert!(!drawn(&scene, "1:15"));
+        session.commit(scene);
+        assert_eq!(stop(&session), 0);
+    }
     /// Widths of the workspace cells and every text drawn, for a set of workspace rows.
     fn capsule(rows: Vec<serde_json::Value>) -> (Vec<f32>, Vec<String>) {
         let (mut session, scene) = bar_session(rows);
