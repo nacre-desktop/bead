@@ -1,0 +1,625 @@
+{
+ "version": 1,
+ "path": "nacrectl ui TARGET METHOD [ARGS...] -> daemon ui.dispatch -> the registered UI provider (QML shell today, Bead after the switch)",
+ "bead_status": "done: Bead handles the route; partial: some arguments only or a stated refusal; gap: Bead has no handler (the spec is the unit to do). Verified against Bead B0068's route_coverage_tests and B0084.",
+ "routes": [
+  {
+   "id": "nacre.launcher",
+   "target": "nacre",
+   "method": "launcher",
+   "examples": [
+    [
+     ""
+    ],
+    [
+     ">wallpaper "
+    ]
+   ],
+   "qml": "NacreShellIpc.qml",
+   "bead": "done",
+   "spec": "B0026, B0100",
+   "note": "Second press closes it (QML openMode toggle). >wallpaper opens the visual wallpaper picker (B0100)."
+  },
+  {
+   "id": "nacre.menu",
+   "target": "nacre",
+   "method": "menu",
+   "examples": [
+    [
+     "home",
+     ""
+    ],
+    [
+     "actions.emoji",
+     ""
+    ],
+    [
+     "learn.shortcuts",
+     ""
+    ]
+   ],
+   "qml": "NacreShellIpc.qml",
+   "bead": "done",
+   "spec": "B0026",
+   "note": "Launcher on the daemon menu route; does not toggle."
+  },
+  {
+   "id": "nacre.clipboard",
+   "target": "nacre",
+   "method": "clipboard",
+   "examples": [
+    []
+   ],
+   "qml": "NacreShellIpc.qml",
+   "bead": "done",
+   "spec": "B0026",
+   "note": "Launcher on actions.clipboard."
+  },
+  {
+   "id": "nacre.mode",
+   "target": "nacre",
+   "method": "mode",
+   "examples": [
+    [
+     "palette"
+    ],
+    [
+     "overview"
+    ]
+   ],
+   "qml": "NacreShellIpc.qml",
+   "bead": "partial",
+   "spec": "B0026, B0077, B0100",
+   "note": "apps/clipboard map to menu routes; wallpaper opens the visual picker (B0100); overview/palette/keys open Bead extras surfaces (B0077); legacy is refused."
+  },
+  {
+   "id": "nacre.hide",
+   "target": "nacre",
+   "method": "hide",
+   "examples": [
+    []
+   ],
+   "qml": "NacreShellIpc.qml",
+   "bead": "done",
+   "spec": "B0028",
+   "note": "Shell-wide hide toggle."
+  },
+  {
+   "id": "nacre.close",
+   "target": "nacre",
+   "method": "close",
+   "examples": [
+    []
+   ],
+   "qml": "NacreShellIpc.qml",
+   "bead": "done",
+   "spec": "B0026",
+   "note": ""
+  },
+  {
+   "id": "nacre.settings",
+   "target": "nacre",
+   "method": "settings",
+   "examples": [
+    [],
+    [
+     "sound"
+    ]
+   ],
+   "qml": "NacreShellIpc.qml",
+   "bead": "done",
+   "spec": "B0045, B0052",
+   "note": "Optional page deep link. QML answers the one-argument form in NacreShellIpc.daemonCall; the zero-argument form is its IpcHandler."
+  },
+  {
+   "id": "nacre.left",
+   "target": "nacre",
+   "method": "left",
+   "examples": [
+    []
+   ],
+   "qml": "NacreShellIpc.qml",
+   "bead": "done",
+   "spec": "B0052",
+   "note": "AI sidebar; Bead starts the chat app on demand."
+  },
+  {
+   "id": "nacre.controls",
+   "target": "nacre",
+   "method": "controls",
+   "examples": [
+    [
+     "home"
+    ],
+    [
+     "edit"
+    ]
+   ],
+   "qml": "NacreShellIpc.qml",
+   "bead": "partial",
+   "spec": "B0049, B0068",
+   "note": "home/edit open the control centre; calendar/network/bluetooth/battery/sound open their panel; session and notifications open their panel views; updates opens its status popout and updater route."
+  },
+  {
+   "id": "nacre.session",
+   "target": "nacre",
+   "method": "session",
+   "examples": [
+    []
+   ],
+   "qml": "NacreShellIpc.qml",
+   "bead": "done",
+   "spec": "B0068",
+   "note": "`nacre session` toggles the session view."
+  },
+  {
+   "id": "drawers.toggle",
+   "target": "drawers",
+   "method": "toggle",
+   "examples": [
+    [
+     "dashboard"
+    ]
+   ],
+   "qml": "NacreShellShortcuts.qml",
+   "bead": "partial",
+   "spec": "B0026, B0049, B0068",
+   "note": "dashboard, left, right, sound, launcher and session map; osd/leftPinned/dashboardPinned/previewOnly are QML preview state and are refused."
+  },
+  {
+   "id": "brightness.step",
+   "target": "brightness",
+   "method": "step",
+   "examples": [
+    [
+     "up"
+    ],
+    [
+     "down"
+    ]
+   ],
+   "qml": "NacreBrightness.qml",
+   "bead": "done",
+   "spec": "B0026",
+   "note": "Daemon brightness.adjust on the focused output."
+  },
+  {
+   "id": "brightness.set",
+   "target": "brightness",
+   "method": "set",
+   "examples": [
+    [
+     "0.5"
+    ]
+   ],
+   "qml": "NacreBrightness.qml",
+   "bead": "done",
+   "spec": "B0068",
+   "note": "Daemon brightness.set on the focused output; X is the QML fraction 0..1."
+  },
+  {
+   "id": "keyboardLight.step",
+   "target": "keyboardLight",
+   "method": "step",
+   "examples": [
+    [
+     "up"
+    ],
+    [
+     "down"
+    ]
+   ],
+   "qml": "NacreKeyboardLight.qml",
+   "bead": "done",
+   "spec": "B0068",
+   "note": "Daemon keyboard_light.adjust (N0036)."
+  },
+  {
+   "id": "pearls.detach",
+   "target": "pearls",
+   "method": "detach",
+   "examples": [
+    []
+   ],
+   "qml": "NacrePearls.qml",
+   "bead": "done",
+   "spec": "B0048",
+   "note": ""
+  },
+  {
+   "id": "pearls.open",
+   "target": "pearls",
+   "method": "open",
+   "examples": [
+    [
+     "launcher"
+    ]
+   ],
+   "qml": "NacrePearls.qml",
+   "bead": "done",
+   "spec": "B0048, B0068",
+   "note": "launcher/ai/dashboard/media/controls map."
+  },
+  {
+   "id": "colorsApp.open",
+   "target": "colorsApp",
+   "method": "open",
+   "examples": [
+    [
+     ""
+    ],
+    [
+     "/tmp/wallpaper.png"
+    ]
+   ],
+   "qml": "NacreColorsApp.qml",
+   "bead": "done",
+   "spec": "B0060",
+   "note": "Colors app (on-demand app process)."
+  },
+  {
+   "id": "welcomeApp.open",
+   "target": "welcomeApp",
+   "method": "open",
+   "examples": [
+    [
+     "home"
+    ],
+    [
+     "shortcuts"
+    ]
+   ],
+   "qml": "NacreWelcomeApp.qml",
+   "bead": "done",
+   "spec": "B0059",
+   "note": "Welcome app (on-demand app process)."
+  },
+  {
+   "id": "welcomeApp.refresh",
+   "target": "welcomeApp",
+   "method": "refresh",
+   "examples": [
+    []
+   ],
+   "qml": "NacreWelcomeApp.qml",
+   "bead": "done",
+   "spec": "B0068",
+   "note": "Acknowledged without work: Bead's Welcome keeps no first-run state to reload."
+  },
+  {
+   "id": "menuPrompt.open",
+   "target": "menuPrompt",
+   "method": "open",
+   "examples": [
+    [
+     "session1"
+    ]
+   ],
+   "qml": "NacreMenuPrompt.qml",
+   "bead": "done",
+   "spec": "B0093",
+   "note": "Starts the on-demand prompt app (`--app prompt ID`): it reads the request with `menu-cli read-request` and answers with `menu-cli respond`."
+  },
+  {
+   "id": "menuPrompt.cancel",
+   "target": "menuPrompt",
+   "method": "cancel",
+   "examples": [
+    [
+     "session1"
+    ]
+   ],
+   "qml": "NacreMenuPrompt.qml",
+   "bead": "done",
+   "spec": "B0093",
+   "note": "Closes the prompt app if one is up (which answers cancelled when nobody did); never starts one."
+  }
+ ],
+ "commands": [
+  {
+   "command": "launcher",
+   "kind": "ui",
+   "route": "nacre.launcher"
+  },
+  {
+   "command": "menu",
+   "kind": "ui",
+   "route": "nacre.menu",
+   "via": "nacre-menu"
+  },
+  {
+   "command": "keys",
+   "kind": "ui",
+   "route": "nacre.menu",
+   "via": "nacre-menu learn.shortcuts"
+  },
+  {
+   "command": "clipboard",
+   "kind": "ui",
+   "route": "nacre.clipboard"
+  },
+  {
+   "command": "palette",
+   "kind": "ui",
+   "route": "nacre.mode"
+  },
+  {
+   "command": "overview",
+   "kind": "ui",
+   "route": "nacre.mode"
+  },
+  {
+   "command": "hide",
+   "kind": "ui",
+   "route": "nacre.hide"
+  },
+  {
+   "command": "close",
+   "kind": "ui",
+   "route": "nacre.close"
+  },
+  {
+   "command": "settings",
+   "kind": "ui",
+   "route": "nacre.settings"
+  },
+  {
+   "command": "left",
+   "kind": "ui",
+   "route": "nacre.left"
+  },
+  {
+   "command": "controls",
+   "kind": "ui",
+   "route": "nacre.controls"
+  },
+  {
+   "command": "session",
+   "kind": "ui",
+   "route": "nacre.session"
+  },
+  {
+   "command": "toggle",
+   "kind": "ui",
+   "route": "drawers.toggle"
+  },
+  {
+   "command": "brightness",
+   "kind": "ui",
+   "route": "brightness.step"
+  },
+  {
+   "command": "keyboard-light",
+   "kind": "ui",
+   "route": "keyboardLight.step"
+  },
+  {
+   "command": "detach",
+   "kind": "ui",
+   "route": "pearls.detach"
+  },
+  {
+   "command": "pearl",
+   "kind": "ui",
+   "route": "pearls.open"
+  },
+  {
+   "command": "wallpaper",
+   "kind": "ui",
+   "route": "nacre.launcher",
+   "note": "Without arguments opens the visual wallpaper picker via nacre.launcher >wallpaper (B0100); with arguments it is the palette publisher."
+  },
+  {
+   "command": "dolphin",
+   "kind": "native",
+   "note": "File-manager helper; no shell route."
+  },
+  {
+   "command": "thunar",
+   "kind": "native",
+   "note": "File-manager helper; no shell route."
+  },
+  {
+   "command": "start",
+   "kind": "native",
+   "note": "Supervisor entry (N-E2)."
+  },
+  {
+   "command": "scheme-mode",
+   "kind": "native",
+   "note": "Palette publisher (nacre_shell)."
+  },
+  {
+   "command": "wallpaper-image",
+   "kind": "native",
+   "note": "Palette publisher (nacre_shell)."
+  },
+  {
+   "command": "doctor",
+   "kind": "native",
+   "note": "Maintenance helper."
+  },
+  {
+   "command": "profile",
+   "kind": "native",
+   "note": "Maintenance helper."
+  },
+  {
+   "command": "check",
+   "kind": "native",
+   "note": "Maintenance helper."
+  },
+  {
+   "command": "rollback",
+   "kind": "native",
+   "note": "Maintenance helper."
+  },
+  {
+   "command": "apps",
+   "kind": "native",
+   "note": "Compositor window list helper."
+  },
+  {
+   "command": "updates",
+   "kind": "native",
+   "note": "desktop-actions helper."
+  },
+  {
+   "command": "wifi",
+   "kind": "native",
+   "note": "desktop-actions helper."
+  },
+  {
+   "command": "bluetooth",
+   "kind": "native",
+   "note": "desktop-actions helper."
+  },
+  {
+   "command": "tasks",
+   "kind": "native",
+   "note": "desktop-actions helper."
+  },
+  {
+   "command": "new",
+   "kind": "native",
+   "note": "desktop-actions helper."
+  },
+  {
+   "command": "resume",
+   "kind": "native",
+   "note": "desktop-actions helper."
+  },
+  {
+   "command": "lock",
+   "kind": "native",
+   "note": "desktop-actions helper (loginctl)."
+  },
+  {
+   "command": "files",
+   "kind": "native",
+   "note": "desktop-actions helper."
+  },
+  {
+   "command": "terminal",
+   "kind": "native",
+   "note": "desktop-actions helper."
+  },
+  {
+   "command": "network",
+   "kind": "native",
+   "note": "desktop-actions helper."
+  },
+  {
+   "command": "audio",
+   "kind": "native",
+   "note": "desktop-actions helper."
+  },
+  {
+   "command": "volume",
+   "kind": "native",
+   "note": "desktop-actions helper (wpctl)."
+  },
+  {
+   "command": "focus",
+   "kind": "native",
+   "note": "desktop-actions helper (compositor)."
+  },
+  {
+   "command": "workspace",
+   "kind": "native",
+   "note": "desktop-actions helper (compositor)."
+  },
+  {
+   "command": "play",
+   "kind": "native",
+   "note": "desktop-actions helper (MPRIS)."
+  },
+  {
+   "command": "next",
+   "kind": "native",
+   "note": "desktop-actions helper (MPRIS)."
+  },
+  {
+   "command": "previous",
+   "kind": "native",
+   "note": "desktop-actions helper (MPRIS)."
+  },
+  {
+   "command": "mute",
+   "kind": "native",
+   "note": "desktop-actions helper (wpctl)."
+  },
+  {
+   "command": "brain",
+   "kind": "native",
+   "note": "Daemon brain.open/brain.capture via the Brain helper."
+  },
+  {
+   "command": "capture",
+   "kind": "native",
+   "note": "Daemon brain.open/brain.capture via the Brain helper."
+  },
+  {
+   "command": "lock-preview",
+   "kind": "qml-only",
+   "note": "Opens the QML lock preview window with `qs -p`. Retire with QML; the secure lock is hyprlock (Bead B0023).",
+   "expiry": "Group F QML deletion pass"
+  }
+ ],
+ "apps": [
+  {
+   "app": "nacre-settings",
+   "route": "nacre.settings"
+  },
+  {
+   "app": "nacre-welcome",
+   "route": "welcomeApp.open"
+  },
+  {
+   "app": "nacre-welcome --enable|--disable",
+   "route": "welcomeApp.refresh"
+  },
+  {
+   "app": "nacre-colors",
+   "route": "colorsApp.open"
+  },
+  {
+   "app": "nacre-menu ROUTE",
+   "route": "nacre.menu"
+  },
+  {
+   "app": "nacre-menu pick|input",
+   "route": "menuPrompt.open"
+  },
+  {
+   "app": "nacre-helper desktop-actions brightness",
+   "route": "brightness.set"
+  }
+ ],
+ "fallbacks": [
+  {
+   "what": "nacrectl ui: `legacy_ui` in crates/nacre-helper/src/daemon/client.rs runs `quickshell ipc -c nacre call` only when the daemon is absent or no UI provider is registered; with Bead registered it is never reached",
+   "expiry": "Group F QML deletion pass"
+  },
+  {
+   "what": "Generated niri `shell.shortcut` binding (niri.rs) calls `qs ipc call nacreCompositor shortcut`; the shipped contract has no such binding",
+   "expiry": "Group F QML deletion pass"
+  },
+  {
+   "what": "QML-internal probes that read or restore QML view state with `qs ipc`: shell_supervisor.rs (only run by `nacre start`; the Bead drop-in replaces that ExecStart), session_watch.rs (CLI; the daemon observer uses ui.dispatch), display_recover.rs (queued only by the QML DisplayRecovery), lock_info.rs `lockWidgets state` (used for labels the lock config does not call live), niri_hover_probe.rs, tools/install.py validate_live, display-recover.py, desktop-actions.py lock widgets",
+   "expiry": "N-E2 supervisor unit; deleted with QML in Group F"
+  },
+  {
+   "what": "lock-info media buttons (`mpris previous|next|playPause`) go through ui.dispatch first and, when the provider refuses (Bead), to the daemon `player.*` methods on the active `dashboard.player` entity (B0084)",
+   "expiry": "none: provider-neutral"
+  }
+ ],
+ "non_route_binds": [
+  {
+   "bind": "Escape (Hyprland only)",
+   "target": "global shortcut nacre_shell:dismissHoverEdges",
+   "bead": "N/A until the frame lips exist (B0047)",
+   "note": "Hyprland global-shortcut protocol answered by the QML Shortcut, not a quickshell ipc call."
+  }
+ ]
+}

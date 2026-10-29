@@ -1,0 +1,4 @@
+{"health":{"available":true,"stale":false},"active":"player-1","players":{"items":{
+"player-1":{"identity":"Preview Player","status":"playing","title":"Preview track","artist":"Preview artist","album":"Preview album","position_ms":42000,"position_updated_ms":1709193600000,"length_ms":180000,"can_control":true,"can_play_pause":true,"can_next":true,"can_previous":false,"can_seek":false},
+"player-2":{"identity":"Preview Stream","status":"stopped","title":"","artist":"","album":"","can_control":false,"can_play_pause":false,"can_next":false,"can_previous":false,"can_seek":false}},
+"order":["player-1","player-2"]}}

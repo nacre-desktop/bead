@@ -479,6 +479,35 @@ fn widget_drag_targets_output(argument: &bead::core::Value, output: Option<&str>
     };
     output == Some(target)
 }
+const CLOCK_SECONDS: &str = "bead.desktop.clock.seconds";
+/// B0193: whether a desktop canvas widget shows seconds. A Luau entry rebuilds on every changed
+/// store, so the 1 Hz seconds key (alive whenever the bar shows seconds) would rebuild the
+/// canvas once a second with no pixel change; the host sends it only to a canvas that uses it.
+fn canvas_needs_seconds(layout: Option<&bead::core::Value>) -> bool {
+    let Some(bead::core::Value::List(documents)) = layout else {
+        return false;
+    };
+    documents
+        .first()
+        .and_then(|doc| doc["hosts"]["canvas"]["instances"].as_array())
+        .is_some_and(|instances| {
+            instances.iter().any(|item| {
+                item["widget"] == "clock"
+                    && matches!(item["style"].as_str(), Some("seconds" | "analog-seconds"))
+            })
+        })
+}
+/// Verbose-log aid: the keys that make a canvas projection differ from the last one sent.
+fn projection_diff(
+    old: Option<&BTreeMap<String, bead::core::Value>>,
+    new: &BTreeMap<String, bead::core::Value>,
+) -> String {
+    new.iter()
+        .filter(|(key, value)| old.and_then(|old| old.get(*key)) != Some(*value))
+        .map(|(key, _)| key.as_str())
+        .collect::<Vec<_>>()
+        .join(",")
+}
 /// Canvas store set by the host while the output is covered (B0193 `pause_on`).
 /// Model key a luminance change sends; the handler swaps it for this output's luma store.
 const WALLPAPER_LUMA_POKE: &str = "bead.desktop.wallpaper.rev";
@@ -2524,6 +2553,10 @@ impl Runtime {
             .map_err(|error| -> Box<dyn Error> { Box::new(error) })?;
         self.finish_scene(scene)
     }
+    /// The host marked this canvas covered (fullscreen window or lock on its output).
+    fn widgets_paused(&self) -> bool {
+        self.session.stores.get(WIDGETS_COVERED) == Some(&bead::core::Value::Bool(true))
+    }
     /// B0193 `pause_on = {fullscreen, lock}` for the desktop layer. Editing and dragging
     /// never pause: the owner is looking at the widgets.
     fn widgets_covered_now(&self) -> bool {
@@ -2672,8 +2705,15 @@ impl Runtime {
             if self.bar && wanted && covered {
                 // Paused: keep the last projection so nothing is rebuilt while covered.
             } else if self.bar && wanted {
-                let projection = canvas_values.clone();
+                let mut projection = canvas_values.clone();
+                if !canvas_needs_seconds(Some(&layout)) {
+                    projection.remove(CLOCK_SECONDS);
+                }
                 if self.widget_canvas_projection.as_ref() != Some(&projection) {
+                    bead::core::vprintln!(
+                        "CANVAS_PROJECTION path=models changed={}",
+                        projection_diff(self.widget_canvas_projection.as_ref(), &projection)
+                    );
                     self.widget_canvas_projection = Some(projection.clone());
                     if let Some(wakeup) = &self.wakeup {
                         wakeup(UiEvent::CanvasModel {
@@ -8453,6 +8493,16 @@ impl SceneSource for Runtime {
                 if let Some(source) = &self.bar_daemon {
                     values.extend(source.values());
                 }
+                if self.widget_canvas {
+                    // B0193: a covered canvas ignores service ticks (the host sends a full
+                    // projection on uncover) and only takes seconds while it leases them.
+                    if self.widgets_paused() {
+                        return Ok(None);
+                    }
+                    if self.clock_seconds_lease.is_none() {
+                        values.remove(CLOCK_SECONDS);
+                    }
+                }
                 if let Some(id) = self.pending_focus.take() {
                     values.insert("bead.focused".into(), bead::core::Value::Text(id));
                 }
@@ -8490,6 +8540,9 @@ impl SceneSource for Runtime {
                 scene
             }
             UiEvent::Backend(snapshot) => {
+                if self.widget_canvas && self.widgets_paused() {
+                    return Ok(None);
+                }
                 let mut values =
                     backend_values(&snapshot, self.output.as_deref(), &self.workspaces)?;
                 let (title, focused_window) = focused_title(
@@ -9968,8 +10021,7 @@ impl SceneSource for Runtime {
                         || (!self.widget_app && (self.bar || self.widget_canvas)
                             && seed["widget_clock_seconds"] == true)))
             });
-            let paused = self.widget_canvas
-                && self.session.stores.get(WIDGETS_COVERED) == Some(&bead::core::Value::Bool(true));
+            let paused = self.widget_canvas && self.widgets_paused();
             if wants_seconds && !paused {
                 if self.clock_seconds_lease.is_none() {
                     self.clock_seconds_lease = self
@@ -10066,8 +10118,15 @@ impl SceneSource for Runtime {
             self.pending_dashboard = None;
             let covered = self.sync_widgets_covered();
             if self.bar && self.widgets_canvas_wanted && !covered {
-                let projection = self.widget_host_values();
+                let mut projection = self.widget_host_values();
+                if !canvas_needs_seconds(self.widgets_canvas_layout.as_ref()) {
+                    projection.remove(CLOCK_SECONDS);
+                }
                 if self.widgets_projection.as_ref() != Some(&projection) {
+                    bead::core::vprintln!(
+                        "CANVAS_PROJECTION path=host changed={}",
+                        projection_diff(self.widgets_projection.as_ref(), &projection)
+                    );
                     self.widgets_projection = Some(projection.clone());
                     if let Some(wakeup) = &self.wakeup {
                         if self.session.stores.get("widgets.editing")

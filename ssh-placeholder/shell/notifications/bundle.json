@@ -1,0 +1,4 @@
+{
+  "modules": ["kit/virtual-list.luau"],
+  "assets": ["notifications/fallback.themed.svg"]
+}

@@ -31,7 +31,10 @@ if QUIET:
     os.environ.pop('BEAD_VERBOSE_LOG', None)
 
 SECONDS = float(os.environ.get('WIDGET_IDLE_SECONDS', '60'))
-STATES = {'widgets-idle': ([('idle-measure', SECONDS)], [], 0), 'widgets-shot': ([('sleep', 3.0)], [], 0)}
+# B0193: widgets-covered measures the same idle while a fullscreen window covers the output,
+# then uncovers it (the screenshot shows the resumed widgets).
+STATES = {'widgets-idle': ([('sleep', 8.0), ('idle-measure', SECONDS)], [], 0), 'widgets-shot': ([('sleep', 3.0)], [], 0),
+          'widgets-covered': ([('cover', 'on'), ('sleep', 8.0), ('idle-measure', SECONDS), ('cover', 'off'), ('sleep', 3.0)], [], 0)}
 m.STATES.update(STATES)
 m.STATE_SETTLE.update({name: .5 for name in STATES})
 
@@ -52,6 +55,16 @@ def _switches(pid):
 
 def idle_steps(self, steps, _steps=m.Arm.steps):
     for step in steps:
+        if step[0] == 'cover':
+            if step[1] == 'on':
+                self.cover = self.spawn(['alacritty', '--class', 'widget-cover', '-e', 'sleep', '900'], 'cover')
+                time.sleep(3.0)
+                self.run(['niri', 'msg', 'action', 'fullscreen-window'], check=False)
+            else:
+                self.run(['niri', 'msg', 'action', 'fullscreen-window'], check=False)
+                time.sleep(1.0)
+                self.cover.terminate()
+            continue
         if step[0] != 'idle-measure':
             _steps(self, [step])
             continue
@@ -116,7 +129,21 @@ def gallery(args, names):
 
 # A stub swaybg (bin dir) keeps the poster step quiet; WIDGET_BG paints the nested
 # compositor background instead (bright values test text contrast on light wallpapers).
-m.NIRI_CONFIG += 'layout { background-color "%s"; }\n' % os.environ.get('WIDGET_BG', '#101418')
+# WIDGET_WALLPAPER=bright|dark: the fixture wallpaper (parity-compare's generated-1.png) is a flat
+# light or dark image, so the real wallpaper pipeline (daemon, decode, luminance) is exercised.
+FLAT = {'bright': (232, 238, 242), 'dark': (16, 20, 24)}
+if os.environ.get('WIDGET_WALLPAPER') in FLAT:
+    from PIL import Image
+    _save = Image.Image.save
+
+    def flat_save(self, fp, *args, **kwargs):
+        if str(fp).endswith('generated-1.png'):
+            self = Image.new('RGB', self.size, FLAT[os.environ['WIDGET_WALLPAPER']])
+        return _save(self, fp, *args, **kwargs)
+    Image.Image.save = flat_save
+_flat = FLAT.get(os.environ.get('WIDGET_WALLPAPER'))
+_bg = os.environ.get('WIDGET_BG') or ('#%02x%02x%02x' % _flat if _flat else '#101418')
+m.NIRI_CONFIG += 'layout { background-color "%s"; }\n' % _bg
 m.Arm.steps = idle_steps
 m.Arm.spawn = spawn
 m.Arm.start_daemon = start_daemon

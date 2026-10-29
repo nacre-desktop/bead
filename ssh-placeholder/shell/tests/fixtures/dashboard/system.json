@@ -1,0 +1,80 @@
+{
+  "health": {
+    "available": true,
+    "stale": false
+  },
+  "processes": {
+    "items": {
+      "process-0": {
+        "pid": 1000,
+        "name": "Browser",
+        "start": "100000",
+        "uid": 1000,
+        "memory": 335544320,
+        "cpu_seconds": 1.0,
+        "parent": 1
+      },
+      "process-1": {
+        "pid": 1001,
+        "name": "Editor",
+        "start": "100001",
+        "uid": 1000,
+        "memory": 268435456,
+        "cpu_seconds": 3.0,
+        "parent": 1
+      },
+      "process-2": {
+        "pid": 1002,
+        "name": "Terminal",
+        "start": "100002",
+        "uid": 1000,
+        "memory": 201326592,
+        "cpu_seconds": 5.0,
+        "parent": 1
+      },
+      "process-3": {
+        "pid": 1003,
+        "name": "Files",
+        "start": "100003",
+        "uid": 1000,
+        "memory": 134217728,
+        "cpu_seconds": 7.0,
+        "parent": 1
+      },
+      "process-4": {
+        "pid": 1004,
+        "name": "Music",
+        "start": "100004",
+        "uid": 1000,
+        "memory": 67108864,
+        "cpu_seconds": 9.0,
+        "parent": 1
+      }
+    },
+    "order": [
+      "process-0",
+      "process-1",
+      "process-2",
+      "process-3",
+      "process-4"
+    ]
+  },
+  "disks": {
+    "items": {
+      "disk-main": {
+        "path": "/",
+        "total": 137438953472,
+        "used": 51539607552
+      },
+      "disk-work": {
+        "path": "/workspace",
+        "total": 274877906944,
+        "used": 98784247808
+      }
+    },
+    "order": [
+      "disk-main",
+      "disk-work"
+    ]
+  }
+}

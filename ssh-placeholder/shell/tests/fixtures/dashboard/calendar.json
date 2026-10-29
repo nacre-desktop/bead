@@ -1,0 +1,20 @@
+{
+  "health": {
+    "available": true,
+    "stale": false
+  },
+  "configured": true,
+  "events": {
+    "items": {
+      "event-1": {
+        "title": "Fixture event",
+        "start": 1800000000,
+        "time": "08:00",
+        "date": "2027-01-15"
+      }
+    },
+    "order": [
+      "event-1"
+    ]
+  }
+}

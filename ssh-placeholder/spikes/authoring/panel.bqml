@@ -1,0 +1,34 @@
+import "bead.ui"
+behavior "./behavior.luau"
+component AppTile(item: App) {
+    Button {
+        id: "tile"; text: item.name; selected: item.selected
+        onActivate: action("select", item.id)
+    }
+}
+Panel {
+    id: "launcher"; width: 800; height: 480; padding: 12
+    Column {
+        gap: 8
+        TextInput { id: "search"; text: bind("launcher.query"); placeholder: "Search applications" }
+        Row {
+            gap: 12; grow: 1
+            Column {
+                width: "20%"; gap: 4
+                Repeat {
+                    id: "nav"; model: bind("launcher.navigation"); key: "id"
+                    Button { id: "entry"; text: item.name; selected: item.selected
+                        onActivate: action("navigate", item.id) }
+                }
+            }
+            Scroll {
+                id: "apps-scroll"; scroll: bind("launcher.scroll"); grow: 1
+                Grid {
+                    columns: 3; gap: 8
+                    Repeat { id: "apps"; model: bind("launcher.apps"); key: "id"
+                        AppTile { item: item } }
+                }
+            }
+        }
+    }
+}

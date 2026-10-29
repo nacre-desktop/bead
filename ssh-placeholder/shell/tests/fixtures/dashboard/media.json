@@ -1,0 +1,42 @@
+{
+  "health": {
+    "available": true,
+    "stale": false
+  },
+  "key": "fixture-track",
+  "lines": {
+    "items": {
+      "line-0": {
+        "time": 0.0,
+        "text": "Morning light across the harbour"
+      },
+      "line-1": {
+        "time": 10.0,
+        "text": "Quiet streets and open skies"
+      },
+      "line-2": {
+        "time": 20.0,
+        "text": "Footsteps on the wooden walkway"
+      },
+      "line-3": {
+        "time": 30.0,
+        "text": "Clouds move slowly past the pier"
+      },
+      "line-4": {
+        "time": 40.0,
+        "text": "Another day begins here"
+      }
+    },
+    "order": [
+      "line-0",
+      "line-1",
+      "line-2",
+      "line-3",
+      "line-4"
+    ]
+  },
+  "plain": "",
+  "palette": {},
+  "lyrics_message": "Preview lyrics",
+  "cache_seconds": 60
+}

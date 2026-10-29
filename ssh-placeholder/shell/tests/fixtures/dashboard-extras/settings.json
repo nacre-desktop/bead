@@ -1,0 +1,1 @@
+{"store":"dashboard-extras","rev":3,"exists":true,"data":{"version":1,"enabled":["focus","clipboard"],"order":["focus","notifications","clipboard","devices","network","ai-usage","screenshots","brain"],"weatherPhotos":true},"dirty":false}
