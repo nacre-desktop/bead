@@ -283,7 +283,7 @@ def sample(env, raw, compositor, stop):
                                    stdout=(raw / 'preview-notices.log').open('w'), stderr=subprocess.STDOUT,
                                    start_new_session=True)
         dashboard_fixtures = os.environ.get('BEAD_PREVIEW_DASHBOARD_FIXTURES') == '1'
-        panel_route_smoke = os.environ.get('BEAD_PREVIEW_SMOKE') == '1'
+        panel_route_smoke = os.environ.get('BEAD_PREVIEW_PANEL_ROUTE_SMOKE') == '1'
         dashboard_args = ['--dashboard-fixtures', str(root / 'shell/tests/fixtures/dashboard')] if dashboard_fixtures else []
         bar = subprocess.Popen([str(binary), '--bar', '--core-views', '--renderer', 'cpu',
                                 '--panel-renderer', 'cpu', '--daemon-socket', str(endpoint),
@@ -374,7 +374,7 @@ def sample(env, raw, compositor, stop):
                     return False
                 matrix.wait_log(raw/'preview-bar.log',lambda t:page_presented(t[offset:]))
             page_call('close')
-        if os.environ.get('BEAD_PREVIEW_SMOKE') == '1':
+        if panel_route_smoke:
             route_log = raw / 'preview-bar.log'
 
             def panel_call(method, *args):

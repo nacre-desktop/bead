@@ -62,7 +62,11 @@ def main():
     parser.add_argument('--legacy', action='store_true', help='old foundation preview: separate notice process, no wallpaper/frame/settings')
     parser.add_argument('--dashboard-fixtures', action='store_true', help='show clearly labeled artificial dashboard data; no dashboard backend calls')
     parser.add_argument('--headless-smoke', action='store_true', help='private compositor test, closes automatically')
+    parser.add_argument('--panel-route-smoke', action='store_true', help='open/close every actual core panel view in the private runtime, then reopen a fresh session')
     args = parser.parse_args()
+    if args.panel_route_smoke:
+        args.headless_smoke = True
+        args.dashboard_fixtures = True
     if args.compositor=='hyprland' and not args.headless_smoke:
         parser.error('The interactive window uses niri; Hyprland supports the private headless smoke here')
     if os.getpriority(os.PRIO_PROCESS, 0) < 10:
@@ -108,6 +112,7 @@ def main():
                    BEAD_PREVIEW_SHELL=str(args.shell.resolve()),
                    BEAD_HARDENING_BINARY=str(args.bead.resolve()),
                    BEAD_PREVIEW_SMOKE='1' if args.headless_smoke else '0',
+                   BEAD_PREVIEW_PANEL_ROUTE_SMOKE='1' if args.panel_route_smoke else '0',
                    BEAD_PREVIEW_DASHBOARD_FIXTURES='1' if args.dashboard_fixtures else '0',
                    BEAD_RAW_DIR=env.get('BEAD_RAW_DIR', str(private / 'logs')),
                    DBUS_SYSTEM_BUS_ADDRESS='unix:path=' + str(private / 'no-system-bus'))
