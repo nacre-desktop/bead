@@ -258,13 +258,7 @@ function M.ghost_node()
         target_width=tonumber(placement.w) or tonumber(style.preferred_span)
         target_height=tonumber(placement.h) or kit.tokens.spacing.huge*3
     end
-    if source.kind=="entry" and phase=="dragging" then
-        target_width,target_height=source_width,source_height
-    elseif phase=="settle" then
-        local entry_width=ui.resolve_for_check(ui.bind("widgets.drag.entry.target_width")) or 0
-        local entry_height=ui.resolve_for_check(ui.bind("widgets.drag.entry.target_height")) or 0
-        if entry_width>0 and entry_height>0 then target_width,target_height=entry_width,entry_height end
-    elseif source.iid~=nil and source.form==form then
+    if source.iid~=nil and source.form==form then
         target_width,target_height=source_width,source_height
     end
     local pointer_x=ui.resolve_for_check(ui.bind("widgets.drag.x")) or 0

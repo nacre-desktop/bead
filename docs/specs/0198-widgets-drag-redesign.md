@@ -62,9 +62,6 @@ Evidence: `.lead/tmp/widgets-after-bad-drag.json` (clock centre/6/4, power right
 renderer's tiles/reservation paths (`local_layout`, `translate_x` slot offsets,
 `flex-reservation` rows), the tiles projection, 6 i18n strings, and 7 tests that asserted
 tile spans/reflow. App behaviour 1331 → ~950 lines; registry −40 lines.
-Known leftover: the Rust "entry flight" path (`widget_entry_source` etc. in `reload.rs`)
-triggered by a `toggle-form enabled=true` request is now unreachable from the UI. Delete it
-(and its 4 tests) within 7 days of this landing, or reuse it for a keyboard "place" action.
 
 ## Real-input findings (round 2)
 - Desktop → bar: the nested compositor confines a Bottom-layer canvas drag to the work area;
@@ -76,9 +73,12 @@ triggered by a `toggle-form enabled=true` request is now unreachable from the UI
 - The bar is its own drop zone (outline on the bar surface while a widget is dragged).
 - The pill width is set, not animated: the shrinking right-anchored pill left stale copies of
   itself in the bar mid-drag (partial damage). The animated-pill test was removed with it.
-- Known gap: the drag overlay paints its desktop/Remove zones (and ghost) 32 px right/down of
-  output coordinates (the layout's 32 px scene margin on the passive overlay canvas); the
-  Remove hit test uses true output coordinates. Needs a bead-wayland/bead-ui fix.
+- The drag overlay (passive canvas) now drops the layout's 32 px shadow margin like the widget
+  canvas (`Runtime::widget_drag_overlay`), so zones and the ghost are drawn in output
+  coordinates and line up with the Remove/bar hit tests (capture with the hit rects overlaid).
+- Removed: the unreachable app "entry flight" path (toggle-form enable → flight from the app to
+  the bar): reload.rs entry structs/state/timers (~700 lines), the Luau entry-seed/entry-flight
+  phases and entry target stores, the entry metadata markers, and their 5 tests.
 
 ## Proof
 - `crates/nacre-shell/src/reload/widget_layout_property_tests.rs`:

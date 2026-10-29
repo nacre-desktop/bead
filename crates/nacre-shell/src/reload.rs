@@ -85,145 +85,6 @@ struct WidgetWriteFeedback {
     previous_revision: u64,
     document: serde_json::Value,
 }
-#[derive(Clone)]
-struct WidgetEntryWrite {
-    event: serde_json::Value,
-    document: serde_json::Value,
-    previous_revision: u64,
-}
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum WidgetEntryTimerPhase {
-    Seed,
-    Retire,
-}
-struct WidgetEntryFlight {
-    event: serde_json::Value,
-    app: (u32, u64),
-    token: u64,
-    phase: WidgetEntryTimerPhase,
-}
-fn widget_entry_ack_matches(
-    entry: &WidgetEntryWrite,
-    success: bool,
-    revision: u64,
-    canonical: Option<&serde_json::Value>,
-) -> bool {
-    success
-        && revision > entry.previous_revision
-        && entry.event["accepted_revision"].as_u64() == Some(revision)
-        && canonical == Some(&entry.document)
-}
-fn widget_entry_flight_continues(
-    flight: &WidgetEntryFlight,
-    current_app: Option<(u32, u64)>,
-    current_lua_epoch: Option<u64>,
-) -> bool {
-    current_app == Some(flight.app) && current_lua_epoch == flight.event["entry_epoch"].as_u64()
-}
-fn widget_entry_outputs_match(app_output: Option<&str>, target_output: &str) -> bool {
-    !target_output.is_empty() && app_output == Some(target_output)
-}
-fn widget_entry_rect(value: &serde_json::Value) -> Option<(f64, f64, f64, f64)> {
-    let rect = (
-        value["x"].as_f64()?,
-        value["y"].as_f64()?,
-        value["w"].as_f64()?,
-        value["h"].as_f64()?,
-    );
-    (rect.0.is_finite()
-        && rect.1.is_finite()
-        && rect.2.is_finite()
-        && rect.3.is_finite()
-        && rect.2 > 0.
-        && rect.3 > 0.)
-        .then_some(rect)
-}
-fn widget_entry_item<'a>(
-    document: &'a serde_json::Value,
-    group: &str,
-    widget: &str,
-    form: &str,
-) -> Option<&'a serde_json::Value> {
-    let host = if form == "desktop" {
-        "canvas"
-    } else {
-        "top_bar"
-    };
-    fn find<'a>(
-        items: &'a [serde_json::Value],
-        group: &str,
-        widget: &str,
-    ) -> Option<&'a serde_json::Value> {
-        for item in items {
-            if item["widget"] == widget
-                && (item["group"]
-                    .as_str()
-                    .unwrap_or(item["iid"].as_str().unwrap_or(""))
-                    == group)
-            {
-                return Some(item);
-            }
-            if let Some(found) = item["children"]
-                .as_array()
-                .and_then(|children| find(children, group, widget))
-            {
-                return Some(found);
-            }
-        }
-        None
-    }
-    document["hosts"][host]["instances"]
-        .as_array()
-        .and_then(|items| find(items, group, widget))
-}
-fn widget_entry_write(
-    source: &serde_json::Value,
-    document: &serde_json::Value,
-    previous_revision: u64,
-) -> Option<WidgetEntryWrite> {
-    source["previous_document"].as_object()?;
-    let widget = source["widget"].as_str()?;
-    let group = source["group"].as_str()?;
-    let form = source["form"].as_str()?;
-    let item = widget_entry_item(document, group, widget, form)?;
-    let target_output = if form == "desktop" {
-        document["widgets"][group]["forms"][form]["placement"]["output"]
-            .as_str()
-            .or_else(|| document["hosts"]["canvas"]["output"].as_str())
-            .or_else(|| {
-                source["target_screen_id"]
-                    .as_str()
-                    .filter(|name| !name.is_empty())
-            })
-            .unwrap_or(source["app_output_id"].as_str()?)
-    } else {
-        source["app_output_id"].as_str()?
-    };
-    if target_output.is_empty() {
-        return None;
-    }
-    let _app_pid = u32::try_from(source["app_pid"].as_u64()?).ok()?;
-    let event = serde_json::json!({
-        "phase":"entry-seed",
-        "source":[{"app":true,"kind":"entry","widget":widget,"group":group,"form":form,
-            "style":item["style"],"settings":item["settings"]}],
-        "target_iid":item["iid"],"target_form":form,
-        "target_output_id":target_output,
-        "accepted_revision":previous_revision.saturating_add(1),
-        "previous_revision":previous_revision,"previous_document":source["previous_document"],
-        "document":document,
-        "source_rect":source["rect"],
-        "app_origin_x":source["app_origin_x"],"app_origin_y":source["app_origin_y"],
-        "app_origin_valid":true,"app_width":source["app_width"],"app_height":source["app_height"],
-        "app_output_id":source["app_output_id"],
-        "target_screen_id":source["target_screen_id"]
-    });
-    Some(WidgetEntryWrite {
-        event,
-        document: document.clone(),
-        previous_revision,
-    })
-}
 enum WidgetWriteResult {
     Pending(crate::nacre_source::CallTicket),
     Saved(u64),
@@ -830,16 +691,14 @@ pub struct Runtime {
     widget_editor: bool,
     widgets_close_on_commit: bool,
     widget_canvas: bool,
+    /// The passive drag overlay paints in output coordinates like the widget canvas (B0198).
+    widget_drag_overlay: bool,
     widgets_projection: Option<BTreeMap<String, bead::core::Value>>,
     widgets_write: Option<crate::nacre_source::CallTicket>,
     widgets_write_document: Option<bead::core::Value>,
     widget_app: bool,
     widgets_write_previous: Option<(bead::core::Value, bead::core::Value, u64)>,
     widget_write_feedback: Option<WidgetWriteFeedback>,
-    widget_write_entry: Option<WidgetEntryWrite>,
-    widget_entry_write_ready: Option<WidgetEntryWrite>,
-    widget_entry_pending: Option<serde_json::Value>,
-    widget_entry_flight: Option<WidgetEntryFlight>,
     widget_drag_pending_epoch: Option<u64>,
     widget_drag_latest_epoch: Option<u64>,
     widgets_drag_write: bool,
@@ -1069,405 +928,7 @@ impl Runtime {
         }
         Some(seed)
     }
-    fn widget_entry_source(&self, argument: &bead::core::Value) -> Option<serde_json::Value> {
-        let bead::core::Value::List(records) = argument else {
-            return None;
-        };
-        let request = records.first()?;
-        if request["op"] != "toggle-form" || request["enabled"] != true {
-            return None;
-        }
-        let widget = request["widget"].as_str()?;
-        let group = request["group"].as_str()?;
-        let form = request["form"].as_str()?;
-        if !matches!(form, "bar" | "desktop") {
-            return None;
-        }
-        let origin_number = |key: &str| match self.session.stores.get(key) {
-            Some(bead::core::Value::Number(value)) if value.is_finite() => Some(*value),
-            _ => None,
-        };
-        if self.session.stores.get("widgets.drag.app_origin_valid")
-            != Some(&bead::core::Value::Bool(true))
-        {
-            return None;
-        }
-        let app_x = origin_number("widgets.drag.app_origin_x")?;
-        let app_y = origin_number("widgets.drag.app_origin_y")?;
-        let app_width = origin_number("widgets.drag.app_width")?;
-        let app_height = origin_number("widgets.drag.app_height")?;
-        if app_width <= 0. || app_height <= 0. {
-            return None;
-        }
-        let app_output = match self.session.stores.get("widgets.drag.app_output_id") {
-            Some(bead::core::Value::Text(output)) if !output.is_empty() => output.clone(),
-            _ => return None,
-        };
-        let node = self.session.view_nodes().iter().find(|node| {
-            matches!(&node.metadata,Some(bead::core::Value::List(markers))
-                if markers.iter().any(|marker| marker["widget_entry_source"]==true
-                    && marker["group"]==group && marker["widget"]==widget
-                    && marker["form"]==form))
-        })?;
-        let rect = bead::render::tree::rect(&node.draw);
-        let (source_x, source_y, source_width, source_height) = (
-            f64::from(rect.x),
-            f64::from(rect.y),
-            f64::from(rect.w),
-            f64::from(rect.h),
-        );
-        if !source_x.is_finite()
-            || !source_y.is_finite()
-            || !source_width.is_finite()
-            || !source_height.is_finite()
-            || source_width <= 0.
-            || source_height <= 0.
-            || source_x < 0.
-            || source_y < 0.
-            || source_x + source_width > app_width
-            || source_y + source_height > app_height
-        {
-            return None;
-        }
-        Some(serde_json::json!({
-            "widget":widget,"group":group,"form":form,"style":node.metadata.as_ref()
-                .and_then(|value| match value {bead::core::Value::List(markers)=>markers.first(),_=>None})
-                .and_then(|marker| marker["style"].as_str()).unwrap_or(""),
-            "rect":{"x":source_x,"y":source_y,"w":source_width,"h":source_height},
-            "app_origin_x":app_x,"app_origin_y":app_y,"app_width":app_width,
-            "app_height":app_height,"app_output_id":app_output,
-            "app_pid":std::process::id(),
-            "target_screen_id":match self.session.stores.get("widgets.screen_id") {
-                Some(bead::core::Value::Text(id))=>id,
-                _=>""
-            },
-            "previous_document":request["document"]
-        }))
-    }
-    fn accept_widget_entry(
-        &mut self,
-        event: serde_json::Value,
-    ) -> Result<Option<Scene>, Box<dyn Error>> {
-        let app = (
-            u32::try_from(event["source_pid"].as_u64().unwrap_or_default()).unwrap_or_default(),
-            event["source_generation"].as_u64().unwrap_or_default(),
-        );
-        let revision = event["accepted_revision"].as_u64().unwrap_or_default();
-        let previous_revision = event["previous_revision"].as_u64().unwrap_or_default();
-        let Some(document) = event["document"].as_object() else {
-            return self.finish_scene(None);
-        };
-        let document = serde_json::Value::Object(document.clone());
-        let current_revision = widget_revision(self.session.stores.values());
-        let current_document = widget_document(self.session.stores.values(), "widgets.layout");
-        if app.0 == 0
-            || app.1 == 0
-            || self.widget_active_app != Some(app)
-            || revision <= previous_revision
-            || event["target_output_id"].as_str() != self.output.as_deref()
-            || event["private_remote"] != true
-            || event["phase"] != "entry-seed"
-        {
-            return self.finish_scene(None);
-        }
-        if self.widgets_write.is_some()
-            || self.session.stores.get("widgets.drag.active")
-                == Some(&bead::core::Value::Bool(true))
-        {
-            return self.finish_scene(None);
-        }
-        if current_revision == revision && current_document.as_ref() == Some(&document) {
-            // The accepted layout can reach the host stores before the renderer has
-            // committed nodes for it. Keep this bounded entry request alive through
-            // one scene commit so bar geometry is resolved from the actual widget
-            // node instead of silently skipping fast enables.
-            if !self.widget_entry_seed_ready(&event) {
-                self.widget_entry_pending = Some(event);
-                let scene = self.session.relayout()?;
-                return self.finish_scene(scene);
-            }
-            let scene = self.start_widget_entry(event)?;
-            return self.finish_scene(scene);
-        }
-        if current_revision == previous_revision
-            && current_document.as_ref() == event.get("previous_document")
-        {
-            self.widget_entry_pending = Some(event);
-        }
-        self.finish_scene(None)
-    }
-    fn widget_entry_seed_ready(&self, event: &serde_json::Value) -> bool {
-        let Some(seed) = self.widget_seed() else {
-            return false;
-        };
-        if seed["document"] != event["document"] {
-            return false;
-        }
-        if event["target_form"] == "desktop" {
-            return widget_entry_item(
-                &event["document"],
-                event["source"][0]["group"].as_str().unwrap_or(""),
-                event["source"][0]["widget"].as_str().unwrap_or(""),
-                "desktop",
-            )
-            .filter(|item| item["iid"] == event["target_iid"])
-            .and_then(|item| widget_entry_rect(&item["slot"]))
-            .is_some();
-        }
-        seed["geometry"].as_array().is_some_and(|rows| {
-            rows.iter()
-                .any(|row| row["iid"] == event["target_iid"] && widget_entry_rect(row).is_some())
-        })
-    }
-    fn receive_widget_entry(
-        &mut self,
-        event: serde_json::Value,
-    ) -> Result<Option<Scene>, Box<dyn Error>> {
-        if event["phase"] != "entry-seed" {
-            return self.finish_scene(None);
-        }
-        self.widget_entry_pending = None;
-        self.widget_entry_flight = None;
-        self.accept_widget_entry(event)
-    }
-    fn start_widget_entry(
-        &mut self,
-        mut event: serde_json::Value,
-    ) -> Result<Option<Scene>, Box<dyn Error>> {
-        let app = (
-            u32::try_from(event["source_pid"].as_u64().unwrap_or_default()).unwrap_or_default(),
-            event["source_generation"].as_u64().unwrap_or_default(),
-        );
-        let revision = event["accepted_revision"].as_u64().unwrap_or_default();
-        let document = event["document"].clone();
-        if self.widget_active_app != Some(app)
-            || widget_revision(self.session.stores.values()) != revision
-            || widget_document(self.session.stores.values(), "widgets.layout").as_ref()
-                != Some(&document)
-        {
-            return Ok(None);
-        }
-        let Some(form) = event["target_form"].as_str().map(str::to_owned) else {
-            return Ok(None);
-        };
-        let Some(target_iid) = event["target_iid"].as_str().map(str::to_owned) else {
-            return Ok(None);
-        };
-        let Some(output_name) = event["target_output_id"]
-            .as_str()
-            .filter(|name| !name.is_empty())
-            .map(str::to_owned)
-        else {
-            return Ok(None);
-        };
-        // Entry motion has no cross-output coordinate handoff. Keep the accepted
-        // enable, but skip its transient effect when the app and destination differ.
-        if !widget_entry_outputs_match(event["app_output_id"].as_str(), &output_name) {
-            return Ok(None);
-        }
-        let Some(seed) = self.widget_seed() else {
-            return Ok(None);
-        };
-        if seed["document"] != document {
-            return Ok(None);
-        }
-        let Some(target_item) = widget_entry_item(
-            &document,
-            event["source"][0]["group"].as_str().unwrap_or(""),
-            event["source"][0]["widget"].as_str().unwrap_or(""),
-            &form,
-        )
-        .filter(|item| item["iid"] == target_iid.as_str()) else {
-            return Ok(None);
-        };
-        let target_rect = if form == "desktop" {
-            widget_entry_rect(&target_item["slot"])
-        } else {
-            seed["geometry"]
-                .as_array()
-                .and_then(|rows| rows.iter().find(|row| row["iid"] == target_iid.as_str()))
-                .and_then(widget_entry_rect)
-        };
-        let Some((target_x, target_y, target_width, target_height)) = target_rect else {
-            return Ok(None);
-        };
-        let outputs = match self.session.stores.get("widgets.outputs") {
-            Some(bead::core::Value::List(outputs)) => outputs,
-            _ => return Ok(None),
-        };
-        let Some(output) = outputs
-            .iter()
-            .find(|output| output["name"].as_str() == Some(output_name.as_str()))
-        else {
-            return Ok(None);
-        };
-        let Some((output_width, output_height)) =
-            crate::widgets::widget_drag::logical_dimensions(output)
-        else {
-            return Ok(None);
-        };
-        let Some(output_x) = output["x"].as_f64().filter(|v| v.is_finite()) else {
-            return Ok(None);
-        };
-        let Some(output_y) = output["y"].as_f64().filter(|v| v.is_finite()) else {
-            return Ok(None);
-        };
-        let Some((source_x, source_y, source_width, source_height)) =
-            widget_entry_rect(&event["source_rect"])
-        else {
-            return Ok(None);
-        };
-        let Some(app_x) = event["app_origin_x"].as_f64().filter(|v| v.is_finite()) else {
-            return Ok(None);
-        };
-        let Some(app_y) = event["app_origin_y"].as_f64().filter(|v| v.is_finite()) else {
-            return Ok(None);
-        };
-        let Some(app_width) = event["app_width"]
-            .as_f64()
-            .filter(|v| v.is_finite() && *v > 0.)
-        else {
-            return Ok(None);
-        };
-        let Some(app_height) = event["app_height"]
-            .as_f64()
-            .filter(|v| v.is_finite() && *v > 0.)
-        else {
-            return Ok(None);
-        };
-        if event["app_origin_valid"] != true
-            || event["app_output_id"]
-                .as_str()
-                .filter(|name| !name.is_empty())
-                .is_none()
-            || source_x < 0.
-            || source_y < 0.
-            || source_x + source_width > app_width
-            || source_y + source_height > app_height
-            || target_width <= 0.
-            || target_height <= 0.
-            || target_x < 0.
-            || target_y < 0.
-            || target_x + target_width > output_width
-            || target_y + target_height > output_height
-        {
-            return Ok(None);
-        }
-        let source_left = app_x + source_x - output_x;
-        let source_top = app_y + source_y - output_y;
-        if !source_left.is_finite()
-            || !source_top.is_finite()
-            || source_left.abs() > 40_000.
-            || source_top.abs() > 40_000.
-        {
-            return Ok(None);
-        }
-        if self.widget_drag_controller.is_none() {
-            self.widget_drag_controller = Some(crate::widgets::widget_drag::Controller::new()?);
-        }
-        event["x"] = serde_json::json!(source_left + source_width / 2.);
-        event["y"] = serde_json::json!(source_top + source_height / 2.);
-        event["width"] = serde_json::json!(source_width);
-        event["height"] = serde_json::json!(source_height);
-        event["grab_x"] = serde_json::json!(source_width / 2.);
-        event["grab_y"] = serde_json::json!(source_height / 2.);
-        event["source_origin_x"] = serde_json::json!(app_x);
-        event["source_origin_y"] = serde_json::json!(app_y);
-        event["source_origin_valid"] = serde_json::Value::Bool(true);
-        event["target_origin_x"] = serde_json::json!(output_x);
-        event["target_origin_y"] = serde_json::json!(output_y);
-        event["target_output_id"] = serde_json::json!(output_name);
-        event["destination"] = serde_json::json!(form);
-        event["snap_x"] = serde_json::json!(target_x);
-        event["snap_y"] = serde_json::json!(target_y);
-        event["target_width"] = serde_json::json!(target_width);
-        event["target_height"] = serde_json::json!(target_height);
-        event["screen_width"] = serde_json::json!(output_width);
-        event["screen_height"] = serde_json::json!(output_height);
-        let current = self.widget_host_values();
-        let values = {
-            let controller = self
-                .widget_drag_controller
-                .as_mut()
-                .expect("controller created");
-            controller.sync(&current)?;
-            controller.drag(bead::core::Value::list(vec![event.clone()]))?
-        };
-        if !matches!(values.get("widgets.write"), Some(bead::core::Value::List(rows)) if rows.is_empty())
-        {
-            return Ok(None);
-        }
-        let lua_epoch = match values.get("widgets.drag.epoch") {
-            Some(bead::core::Value::Number(value)) if value.is_finite() && *value >= 0. => {
-                *value as u64
-            }
-            _ => return Ok(None),
-        };
-        event["entry_epoch"] = serde_json::json!(lua_epoch);
-        let timer_token = self.widget_drag_epoch.wrapping_add(1).max(1u64 << 63);
-        let changes = self.stage_widget_drag_state(&values);
-        let scene = self.session.update(changes)?;
-        self.widget_drag_epoch = timer_token;
-        self.widget_drag_retire_cleanup = false;
-        self.widget_drag_output = Some(output_name);
-        self.widget_drag_model = Some(values);
-        self.widget_entry_flight = Some(WidgetEntryFlight {
-            event,
-            app,
-            token: timer_token,
-            phase: WidgetEntryTimerPhase::Seed,
-        });
-        if !self.schedule_widget_entry_timer(timer_token, std::time::Duration::from_millis(32)) {
-            return Ok(self.clear_widget_entry_scene());
-        }
-        Ok(scene)
-    }
-    fn schedule_widget_entry_timer(&self, token: u64, delay: std::time::Duration) -> bool {
-        let Some(wakeup) = self.wakeup.clone() else {
-            return false;
-        };
-        std::thread::Builder::new()
-            .name("widgets-entry-motion".into())
-            .stack_size(64 * 1024)
-            .spawn(move || {
-                std::thread::sleep(delay);
-                wakeup(UiEvent::Timer { token });
-            })
-            .is_ok()
-    }
-    fn clear_widget_entry_scene(&mut self) -> Option<Scene> {
-        self.widget_entry_flight = None;
-        self.widget_drag_epoch = self.widget_drag_epoch.wrapping_add(1).max(1u64 << 63);
-        let values = self.widget_drag_controller.as_mut().and_then(|controller| {
-            let epoch = controller.drag_epoch();
-            controller
-                .drag(bead::core::Value::list(vec![serde_json::json!({
-                    "phase":"retire","epoch":epoch
-                })]))
-                .ok()
-        });
-        let values = values.unwrap_or_else(|| {
-            self.widget_drag_model
-                .clone()
-                .unwrap_or_else(|| self.widget_host_values())
-        });
-        let changes = self.stage_widget_drag_state(&values);
-        let scene = self.session.update(changes).ok().flatten();
-        self.widget_drag_model = Some(values);
-        self.widget_drag_retire_cleanup = true;
-        self.publish_widget_models();
-        scene
-    }
-    fn clear_widget_entry(&mut self) -> Option<Scene> {
-        self.clear_widget_entry_scene()
-            .and_then(|scene| self.finish_scene(Some(scene)).ok().flatten())
-    }
     fn widget_argument(&self, name: &str, argument: bead::core::Value) -> bead::core::Value {
-        let entry_phase = matches!(&argument,bead::core::Value::List(records)
-            if records.first().is_some_and(|record| record["phase"]=="entry-seed"));
-        if entry_phase {
-            return argument;
-        }
         let argument = if name == "widgets.drag" {
             crate::widgets::widget_drag::prepare_event(
                 &argument,
@@ -1583,19 +1044,6 @@ impl Runtime {
             self.release_widget_compositor_policy_topic();
         } else {
             return false;
-        }
-        if !open
-            && (self
-                .widget_entry_flight
-                .as_ref()
-                .is_some_and(|flight| flight.app == (pid, generation))
-                || self.widget_entry_pending.as_ref().is_some_and(|event| {
-                    event["source_pid"].as_u64() == Some(u64::from(pid))
-                        && event["source_generation"].as_u64() == Some(generation)
-                }))
-        {
-            self.widget_entry_pending = None;
-            let _ = self.clear_widget_entry();
         }
         if open
             && floating
@@ -1859,8 +1307,6 @@ impl Runtime {
             "widgets.drag.start_y",
             "widgets.drag.width",
             "widgets.drag.height",
-            "widgets.drag.entry.target_width",
-            "widgets.drag.entry.target_height",
             "widgets.drag.grab_x",
             "widgets.drag.grab_y",
             "widgets.drag.source_origin_x",
@@ -2391,14 +1837,6 @@ impl Runtime {
                 (
                     "widgets.drag.app_output_id".into(),
                     bead::core::Value::Text(String::new()),
-                ),
-                (
-                    "widgets.drag.entry.target_width".into(),
-                    bead::core::Value::Number(0.),
-                ),
-                (
-                    "widgets.drag.entry.target_height".into(),
-                    bead::core::Value::Number(0.),
                 ),
             ]);
             self.session.stores = self.session.stores.reconcile(&defaults)?;
@@ -3154,16 +2592,13 @@ impl Runtime {
             widget_editor: false,
             widgets_close_on_commit: false,
             widget_canvas: false,
+            widget_drag_overlay: false,
             widgets_projection: None,
             widgets_write: None,
             widgets_write_document: None,
             widget_app: false,
             widgets_write_previous: None,
             widget_write_feedback: None,
-            widget_write_entry: None,
-            widget_entry_write_ready: None,
-            widget_entry_pending: None,
-            widget_entry_flight: None,
             widget_drag_pending_epoch: None,
             widget_drag_latest_epoch: None,
             widgets_drag_write: false,
@@ -3401,6 +2836,7 @@ impl Runtime {
     /// panel state, or host-event publisher of its own.
     pub fn with_widget_drag_preview(mut self) -> Self {
         self.widget_canvas = false;
+        self.widget_drag_overlay = true;
         self.widget_editor = false;
         self.launcher_trigger = false;
         self.state_file = None;
@@ -5121,7 +4557,10 @@ impl Runtime {
             {
                 motion.edge = anchor.edge;
             }
-            if self.widget_canvas {
+            // Canvas surfaces are positioned by content bounds in output coordinates, so the
+            // layout's 32 px shadow margin must not shift their content (or the drag overlay's
+            // zones and ghost) away from the output-local hit tests.
+            if self.widget_canvas || self.widget_drag_overlay {
                 scene.offset = (0., 0.);
             }
             if let Some(base) = self
@@ -6338,7 +5777,6 @@ impl SceneSource for Runtime {
             self.widgets_write = None;
             let document = self.widgets_write_document.take();
             let previous = self.widgets_write_previous.take();
-            let entry_write = self.widget_write_entry.take();
             let success = reply.is_ok();
             let accepted_revision = reply.as_ref().ok().and_then(|reply| reply["rev"].as_u64());
             let reply_error = reply
@@ -6407,15 +5845,6 @@ impl SceneSource for Runtime {
                 changes
             };
             let scene = self.session.update(changes)?;
-            if self.widget_app
-                && success
-                && let Some(mut entry) = entry_write
-                && let Some(revision) = accepted_revision
-                && revision > entry.previous_revision
-            {
-                entry.event["accepted_revision"] = serde_json::json!(revision);
-                self.widget_entry_write_ready = Some(entry);
-            }
             if let Some(feedback) = feedback {
                 send_widget_write_feedback(
                     feedback,
@@ -6614,11 +6043,6 @@ impl SceneSource for Runtime {
             && name == "widgets.drag"
             && !widget_drag_targets_output(argument, self.output.as_deref())
         {
-            if matches!(argument,bead::core::Value::List(records)
-                if records.first().is_some_and(|record|record["phase"]=="entry-seed"))
-            {
-                return Ok(None);
-            }
             return self.retire_widget_drag_on_other_output();
         }
         let mut host_action = match &event {
@@ -6800,27 +6224,6 @@ impl SceneSource for Runtime {
                     argument.clone()
                 };
                 let argument = self.widget_argument(name, argument);
-                let entry_event = match &argument {
-                    bead::core::Value::List(records) => records
-                        .first()
-                        .filter(|record| record["phase"] == "entry-seed")
-                        .cloned(),
-                    _ => None,
-                };
-                if let Some(entry_event) = entry_event {
-                    return self.receive_widget_entry(entry_event);
-                }
-                if matches!(&argument,bead::core::Value::List(records)
-                    if records.first().is_some_and(|record|matches!(record["phase"].as_str(),Some("move"|"drop"|"cancel"))))
-                {
-                    self.widget_entry_pending = None;
-                    if self.widget_entry_flight.is_some() {
-                        let _ = self.clear_widget_entry();
-                        self.widget_drag_controller = None;
-                        self.widget_drag_model = None;
-                        self.widget_drag_retire_cleanup = false;
-                    }
-                }
                 let feedback_target = crate::widgets::widget_drag::terminal_feedback(&argument);
                 if self.widget_drag_controller.is_none() {
                     self.widget_drag_controller =
@@ -7270,7 +6673,6 @@ impl SceneSource for Runtime {
                     .get("widgets.undo")
                     .cloned()
                     .unwrap_or_else(|| bead::core::Value::list(Vec::new()));
-                let entry_source = self.widget_entry_source(&argument);
                 let changes = self
                     .session
                     .action_values(name, self.widget_argument(name, argument))?;
@@ -7293,10 +6695,6 @@ impl SceneSource for Runtime {
                     Some(bead::core::Value::Number(revision)) => *revision as u64,
                     _ => 0,
                 };
-                self.widget_entry_write_ready = None;
-                self.widget_write_entry = entry_source
-                    .as_ref()
-                    .and_then(|source| widget_entry_write(source, &document, old_revision));
                 self.widgets_write_previous =
                     Some((old_layout.clone(), old_undo.clone(), old_revision));
                 let mut changes = changes;
@@ -7356,8 +6754,7 @@ impl SceneSource for Runtime {
                     }
                     Ok(WidgetWriteResult::Saved(rev)) => {
                         self.widgets_write_previous = None;
-                        let scene = self
-                            .session
+                        self.session
                             .update(BTreeMap::from([
                                 (
                                     "widgets.layout".into(),
@@ -7367,18 +6764,10 @@ impl SceneSource for Runtime {
                                 ("widgets.busy".into(), bead::core::Value::Bool(false)),
                                 ("widgets.rev".into(), bead::core::Value::Number(rev as f64)),
                             ]))?
-                            .or(scene);
-                        if let Some(mut entry) = self.widget_write_entry.take()
-                            && rev > entry.previous_revision
-                        {
-                            entry.event["accepted_revision"] = serde_json::json!(rev);
-                            self.widget_entry_write_ready = Some(entry);
-                        }
-                        scene
+                            .or(scene)
                     }
                     Err(error) => {
                         self.widgets_write_previous = None;
-                        self.widget_write_entry = None;
                         self.session
                             .update(BTreeMap::from([
                                 ("widgets.layout".into(), old_layout),
@@ -9275,64 +8664,7 @@ impl SceneSource for Runtime {
                 feedback_scene
             }
             UiEvent::Timer { token } => {
-                if self
-                    .widget_entry_flight
-                    .as_ref()
-                    .is_some_and(|flight| flight.token == token)
-                {
-                    let mut flight = self
-                        .widget_entry_flight
-                        .take()
-                        .expect("matching entry timer");
-                    let revision = flight.event["accepted_revision"]
-                        .as_u64()
-                        .unwrap_or_default();
-                    let document = &flight.event["document"];
-                    let current_lua_epoch = self
-                        .widget_drag_controller
-                        .as_ref()
-                        .map(crate::widgets::widget_drag::Controller::drag_epoch);
-                    if !widget_entry_flight_continues(
-                        &flight,
-                        self.widget_active_app,
-                        current_lua_epoch,
-                    ) || widget_revision(self.session.stores.values()) != revision
-                        || widget_document(self.session.stores.values(), "widgets.layout").as_ref()
-                            != Some(document)
-                    {
-                        self.widget_entry_flight = Some(flight);
-                        self.clear_widget_entry()
-                    } else if flight.phase == WidgetEntryTimerPhase::Seed {
-                        let mut event = flight.event.clone();
-                        event["phase"] = serde_json::json!("entry-flight");
-                        let values = self.widget_drag_controller.as_mut().and_then(|controller| {
-                            controller.drag(bead::core::Value::list(vec![event])).ok()
-                        });
-                        if let Some(values) = values {
-                            let changes = self.stage_widget_drag_state(&values);
-                            let scene = self.session.update(changes)?;
-                            let next = self.widget_drag_epoch.wrapping_add(1).max(1u64 << 63);
-                            self.widget_drag_epoch = next;
-                            flight.token = next;
-                            flight.phase = WidgetEntryTimerPhase::Retire;
-                            self.widget_entry_flight = Some(flight);
-                            self.widget_drag_model = Some(values);
-                            if !self.schedule_widget_entry_timer(
-                                next,
-                                std::time::Duration::from_millis(205),
-                            ) {
-                                return Ok(self.clear_widget_entry());
-                            }
-                            self.finish_scene(scene)?
-                        } else {
-                            self.widget_entry_flight = Some(flight);
-                            self.clear_widget_entry()
-                        }
-                    } else {
-                        self.widget_entry_flight = Some(flight);
-                        self.clear_widget_entry()
-                    }
-                } else if token == self.widget_drag_epoch {
+                if token == self.widget_drag_epoch {
                     if self.widget_app {
                         let epoch = match self.session.stores.get("widgets.drag.epoch") {
                             Some(bead::core::Value::Number(epoch)) => *epoch,
@@ -10011,44 +9343,6 @@ impl SceneSource for Runtime {
                 );
             }
             self.announce_widget_app();
-            if let Some(entry) = self.widget_entry_write_ready.take()
-                && self.widget_app
-                && widget_entry_ack_matches(
-                    &entry,
-                    true,
-                    widget_revision(self.session.stores.values()),
-                    widget_document(self.session.stores.values(), "widgets.layout").as_ref(),
-                )
-            {
-                crate::widgets::widget_drag::app_drag(entry.event);
-            }
-            if let Some(entry) = self.widget_entry_pending.take() {
-                let revision = widget_revision(self.session.stores.values());
-                let document = widget_document(self.session.stores.values(), "widgets.layout");
-                let app = (
-                    u32::try_from(entry["source_pid"].as_u64().unwrap_or_default())
-                        .unwrap_or_default(),
-                    entry["source_generation"].as_u64().unwrap_or_default(),
-                );
-                let accepted = revision == entry["accepted_revision"].as_u64().unwrap_or_default()
-                    && document.as_ref() == entry.get("document")
-                    && self.widget_active_app == Some(app)
-                    && self.session.stores.get("widgets.drag.active")
-                        != Some(&bead::core::Value::Bool(true));
-                if accepted {
-                    if let Ok(Some(scene)) = self.start_widget_entry(entry.clone())
-                        && let Ok(Some(scene)) = self.finish_scene(Some(scene))
-                    {
-                        self.pending = None;
-                        self.session.commit(scene);
-                    }
-                } else if revision == entry["previous_revision"].as_u64().unwrap_or_default()
-                    && document.as_ref() == entry.get("previous_document")
-                    && self.widget_active_app == Some(app)
-                {
-                    self.widget_entry_pending = Some(entry);
-                }
-            }
             let wants_seconds = self.session.view_nodes().iter().any(|node| {
                 matches!(&node.metadata, Some(bead::core::Value::List(records))
                     if records.first().is_some_and(|seed|

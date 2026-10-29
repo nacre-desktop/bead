@@ -164,8 +164,6 @@ local function drag_clear(s)
     s["widgets.drag.original"]={}
     s["widgets.drag.layout"]={}
     s["widgets.drag.revision"]=0
-    s["widgets.drag.entry.target_width"]=0
-    s["widgets.drag.entry.target_height"]=0
 end
 local function current_canonical(s,context)
     local saved=(s["widgets.layout"] or {})[1]
@@ -673,57 +671,6 @@ local function drag(s,args)
     local event=request(args)
     if not event then return end
     local phase=event.phase
-    if phase=="entry-seed" then
-        local source=drag_record(event.source)
-        local document=type(event.document)=="table" and clone(event.document) or current_canonical(s,event)
-        local location=type(event.target_iid)=="string" and locate_document_item(document,event.target_iid) or nil
-        if source and source.app==true and source.kind=="entry" and event.private_remote==true
-            and type(document)=="table" and location and location.item.widget==source.widget
-            and (location.item.group or location.item.iid)==source.group then
-            location.item.drag_placeholder=true
-            local epoch=(tonumber(s["widgets.drag.epoch"]) or 0)+1
-            if epoch>=4503599627370496 then epoch=1 end
-            s["widgets.drag.epoch"]=epoch
-            s["widgets.drag.active"]=true
-            s["widgets.drag.source"]={clone(source)}
-            s["widgets.drag.destination"]=event.target_form
-            s["widgets.drag.phase"]="dragging"
-            s["widgets.drag.layout"]={document}
-            s["widgets.drag.x"]=tonumber(event.x) or 0
-            s["widgets.drag.y"]=tonumber(event.y) or 0
-            s["widgets.drag.start_x"]=tonumber(event.x) or 0
-            s["widgets.drag.start_y"]=tonumber(event.y) or 0
-            s["widgets.drag.width"]=tonumber(event.width) or 0
-            s["widgets.drag.height"]=tonumber(event.height) or 0
-            s["widgets.drag.grab_x"]=tonumber(event.grab_x) or 0
-            s["widgets.drag.grab_y"]=tonumber(event.grab_y) or 0
-            s["widgets.drag.source_origin_x"]=tonumber(event.source_origin_x) or 0
-            s["widgets.drag.source_origin_y"]=tonumber(event.source_origin_y) or 0
-            s["widgets.drag.source_origin_valid"]=true
-            s["widgets.drag.app_origin_x"]=tonumber(event.app_origin_x) or 0
-            s["widgets.drag.app_origin_y"]=tonumber(event.app_origin_y) or 0
-            s["widgets.drag.app_origin_valid"]=true
-            s["widgets.drag.app_width"]=tonumber(event.app_width) or 0
-            s["widgets.drag.app_height"]=tonumber(event.app_height) or 0
-            s["widgets.drag.app_output_id"]=event.app_output_id or ""
-            s["widgets.drag.target_origin_x"]=tonumber(event.target_origin_x) or 0
-            s["widgets.drag.target_origin_y"]=tonumber(event.target_origin_y) or 0
-            s["widgets.drag.target_output_id"]=event.target_output_id or ""
-            s["widgets.drag.snap_x"]=tonumber(event.snap_x) or 0
-            s["widgets.drag.snap_y"]=tonumber(event.snap_y) or 0
-            s["widgets.drag.entry.target_width"]=tonumber(event.target_width) or 0
-            s["widgets.drag.entry.target_height"]=tonumber(event.target_height) or 0
-        end
-        return
-    elseif phase=="entry-flight" then
-        local source=drag_record(s["widgets.drag.source"])
-        if s["widgets.drag.active"]==true and s["widgets.drag.phase"]=="dragging"
-            and source and source.kind=="entry"
-            and tonumber(event.entry_epoch)==tonumber(s["widgets.drag.epoch"]) then
-            s["widgets.drag.phase"]="settle"
-        end
-        return
-    end
     if phase=="move" then
         local source=drag_record(event.source)
         if type(source)~="table" then return end
@@ -871,7 +818,6 @@ return {
         ["widgets.drag.source_origin_x"]=0,["widgets.drag.source_origin_y"]=0,["widgets.drag.source_origin_valid"]=false,
         ["widgets.drag.app_origin_x"]=0,["widgets.drag.app_origin_y"]=0,["widgets.drag.app_origin_valid"]=false,
         ["widgets.drag.app_width"]=0,["widgets.drag.app_height"]=0,
-        ["widgets.drag.entry.target_width"]=0,["widgets.drag.entry.target_height"]=0,
         ["widgets.drag.app_output_id"]="",["widgets.app.open"]=false,
         ["widgets.message"]="",["widgets.error"]="",["widgets.busy"]=false,["widgets.draft"]={},["widgets.undo"]={},
         ["widgets.history.revision"]=0,

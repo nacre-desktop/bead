@@ -86,23 +86,6 @@ local function render_item(package,instance,placement,settings,factor)
     return node
 end
 
-local function group_entry_target(node)
-    local marked,interactive={},{}
-    local function scan(current)
-        if type(current)~="table" then return end
-        local props=current.props
-        if type(props)=="table" then
-            if props.drag_payload~=nil then table.insert(marked,props) end
-            if props.on_activate~=nil then table.insert(interactive,props) end
-        end
-        for _,child in current.children or {} do scan(child) end
-    end
-    scan(node)
-    if #marked==1 then return marked[1] end
-    if #marked>1 then return nil end
-    if #interactive==1 then return interactive[1] end
-end
-
 function M.render_instance(instance,placement,factor)
     local package=instance and registry.catalogue[instance.widget]
     if not package then return nil end
@@ -210,12 +193,6 @@ function M.render_bar(document,width,height,factor,selected,style,settings,selec
             node.props.border_width=2
             node.props.border_color="primary"
             node.props.radius=kit.tokens.radii.small
-        end
-        if node and entry_candidate and item.iid==entry_candidate.group and item.widget==entry_candidate.widget then
-            local marker=node.kind=="group" and group_entry_target(node) or node.props
-            if marker then marker.metadata={{widget_entry_source=true,group=entry_candidate.group,widget=item.widget,
-                form="bar",style=entry_candidate.style}}
-            end
         end
         return node
     end

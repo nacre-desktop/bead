@@ -525,7 +525,6 @@ local function detail()
     for _,node in stage_desktop(stage,desktop_enabled and selected or nil,desktop_source) do table.insert(stage_children,node) end
     if desktop_preview and not desktop_enabled then
         desktop_preview.props=desktop_preview.props or {}
-        desktop_preview.props.metadata={{widget_entry_source=true,group=desktop_group,widget=selected,form="desktop",style=desktop_style}}
         table.insert(stage_children,ui.Box{id="desktop-widget-preview",position="absolute",left=widget_left,top=widget_top,
             width=widget_w,height=widget_h,clip_children=true,visible=true,align="center",justify="center",
             border_width=2,border_color="primary",radius=kit.tokens.radii.small,
