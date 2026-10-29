@@ -393,22 +393,66 @@ local function style_tiles(widget,placement,package,style_id,settings)
     return ui.Grid(tiles)
 end
 
+-- B0198: one live screen preview at the real output aspect: the real bar with its
+-- widgets and every desktop widget at its slot. Large enough that the bar reads.
+local function stage_geometry()
+    local stage_w=math.max(1,width-RAIL-3*spacing.lg)
+    local stage_h=math.max(spacing.huge*4,math.min(stage_w*output_h/output_w,height*.62))
+    local scale=math.min(stage_w/output_w,stage_h/output_h)
+    local mini_w,mini_h=output_w*scale,output_h*scale
+    return {w=stage_w,h=stage_h,scale=scale,mini_w=mini_w,mini_h=mini_h,
+        left=(stage_w-mini_w)/2,top=(stage_h-mini_h)/2,bar_h=math.max(1,get("bar.height",50))}
+end
+local function stage_backdrop(stage)
+    local children={ui.Box{id="stage-background",position="absolute",left=stage.left,top=stage.top,
+        width=stage.mini_w,height=stage.mini_h,fill="surfaceContainerHighest"}}
+    local source=wallpaper~="" and wallpaper or wallpaper_path
+    if source~="" then
+        table.insert(children,ui.Image{id="stage-wallpaper",position="absolute",left=stage.left,top=stage.top,
+            width=stage.mini_w,height=stage.mini_h,icon=source,image_fit="cover"})
+    end
+    table.insert(children,ui.Box{id="stage-tint",position="absolute",left=stage.left,top=stage.top,
+        width=stage.mini_w,height=stage.mini_h,fill=ui.alpha("surface",.08)})
+    return children
+end
+local function stage_desktop(stage,selected_widget,source)
+    local nodes={}
+    local canvas=doc.hosts.canvas
+    for _,item in canvas and canvas.instances or {} do
+        local slot=item.slot
+        local node=preview.render_instance(item,"desktop",stage.scale)
+        if node and slot then
+            local own=item.widget==selected_widget
+            table.insert(nodes,ui.Box{id="stage-desktop-"..tostring(item.iid),position="absolute",
+                left=stage.left+slot.x*stage.scale,top=stage.top+slot.y*stage.scale,
+                width=slot.w*stage.scale,height=slot.h*stage.scale,clip_children=true,
+                radius=kit.tokens.radii.small,border_width=own and 2 or 0,border_color="primary",
+                drag_payload=own and source and {source} or nil,on_drag=own and source and ui.action("widgets.drag") or nil,
+                node})
+        end
+    end
+    return nodes
+end
 local function widget_sidebar()
     local nav={id="widget-list",width="fill",gap=spacing.xs}
     local nav_query=string.lower(searching or "")
-    local function row(id,title,description,icon,active,action)
+    local function row(id,title,description,icon,active,action,accent)
         return ui.Button{id="widget-nav-"..id,width="fill",height=spacing.huge+spacing.xxl,shrink=0,
             padding_left=spacing.sm,padding_right=spacing.xs,radius=kit.tokens.radii.small,
             fill=active and ui.alpha("primary",.15) or "transparent",hover_fill="surfaceContainerHigh",
             selected=active,focus_on_pointer=false,aria_label=title,on_activate=action,
             ui.Row{id="widget-nav-content",width="fill",height="fill",align="center",gap=spacing.sm,
                 ui.Text{id="widget-nav-icon",text=icon or "widgets",family="Material Symbols Rounded",
-                    font_size=kit.tokens.icons.large*4/3,width=24,height=28,color=active and "primary" or "onSurfaceVariant"},
+                    font_size=kit.tokens.icons.large*4/3,width=24,height=28,color=(active or accent) and "primary" or "onSurfaceVariant"},
                 ui.Column{id="widget-nav-copy",width=0,grow=1,height="fill",justify="center",gap=spacing.hairline,
                     label("widget-nav-title",title,text.body*4/3,active and "onSurface" or "onSurfaceVariant",{width="fill",height=18}),
                     type(description)=="string" and description~="" and label("widget-nav-description",description,text.caption*4/3,"onSurfaceVariant",{width="fill",height=30}) or nil}}}
     end
-    table.insert(nav,row("overview",ui.tr("bead.widgets.overview"),"","widgets",selected=="",navigate("back",selected)))
+    -- The Overview is a section of its own: accent icon, then a rule and a group label.
+    table.insert(nav,row("overview",ui.tr("bead.widgets.overview"),"","dashboard",selected=="",navigate("back",selected),true))
+    table.insert(nav,ui.Box{id="widget-nav-rule",width="fill",height=1,shrink=0,fill="outlineVariant"})
+    table.insert(nav,label("widget-nav-group",ui.tr("bead.widgets.group-label"),text.caption*4/3,"onSurfaceVariant",
+        {width="fill",height=18,shrink=0,padding_left=spacing.sm}))
     for _,id in widget_nav_ids do
         local package=registry.catalogue[id]
         if package and (nav_query=="" or string.find(string.lower(package.title),nav_query,1,true)
@@ -441,13 +485,10 @@ local function detail()
     local instance_groups=groups_for(selected)
     local settings=active_settings(package,entry,instance)
     local desktop_available=package.forms.desktop~=nil
-    local detail_width=math.max(1,width-RAIL-3*spacing.lg)
-    local stage_w=math.max(1,detail_width)
-    local stage_h=math.min(stage_w*output_h/output_w,math.max(spacing.huge*4,height*.38))
-    local stage_scale=math.min(stage_w/output_w,stage_h/output_h)
-    local mini_w,mini_h=output_w*stage_scale,output_h*stage_scale
-    local mini_left,mini_top=(stage_w-mini_w)/2,(stage_h-mini_h)/2
-    local bar_h=math.max(1,get("bar.height",50))
+    local stage=stage_geometry()
+    local stage_w,stage_h,stage_scale=stage.w,stage.h,stage.scale
+    local mini_w,mini_h,mini_left,mini_top=stage.mini_w,stage.mini_h,stage.left,stage.top
+    local bar_h=stage.bar_h
     local entry_candidate=not bar_enabled and {
         widget=selected,group=bar_group,style=bar_style,settings=settings,placement=bar_config.placement,
     } or nil
@@ -461,12 +502,6 @@ local function detail()
     local widget_h=math.min(mini_h*.42,design_height*stage_scale)
     local widget_left=mini_left+(mini_w-widget_w)/2
     local widget_top=mini_top+stage_bar_height+math.max(0,(mini_h-stage_bar_height-widget_h)/2)
-    local wallpaper_image
-    if wallpaper~="" then
-        wallpaper_image=ui.Image{id="stage-wallpaper",position="absolute",left=mini_left,top=mini_top,width=mini_w,height=mini_h,icon=wallpaper,image_fit="cover"}
-    elseif wallpaper_path~="" then
-        wallpaper_image=ui.Image{id="stage-wallpaper",position="absolute",left=mini_left,top=mini_top,width=mini_w,height=mini_h,icon=wallpaper_path,image_fit="cover"}
-    end
     local desktop_preview=desktop_available and preview.render(selected,"desktop",desktop_style,settings,widget_w,widget_h)
     local bar_source=dragging.app_payload(doc,selected,"bar",bar_style,settings,bar_group)
     local desktop_source=desktop_available and dragging.app_payload(doc,selected,"desktop",desktop_style,settings,desktop_group)
@@ -483,15 +518,12 @@ local function detail()
     local colour_field=settings_form.row(item,"colour_role",package.settings.colour_role,
         settings.colour_role,form_action(selected,placement,group))
     local advanced_open=get("widgets.advanced.open",false)==true
-    local stage_children={ui.Box{id="stage-background",position="absolute",left=mini_left,top=mini_top,
-        width=mini_w,height=mini_h,fill="surfaceContainerHighest"}}
-    if wallpaper_image then table.insert(stage_children,wallpaper_image) end
-    table.insert(stage_children,ui.Box{id="stage-tint",position="absolute",left=mini_left,top=mini_top,
-        width=mini_w,height=mini_h,fill=ui.alpha("surface",.08)})
-        table.insert(stage_children,ui.Box{id="stage-bar",position="absolute",left=mini_left,top=mini_top,
-            width=mini_w,height=stage_bar_height,clip_children=true,fill="surface",
-            drag_payload={bar_source},on_drag=ui.action("widgets.drag"),bar_node})
-    if desktop_preview then
+    local stage_children=stage_backdrop(stage)
+    table.insert(stage_children,ui.Box{id="stage-bar",position="absolute",left=mini_left,top=mini_top,
+        width=mini_w,height=stage_bar_height,clip_children=true,fill="surface",
+        drag_payload={bar_source},on_drag=ui.action("widgets.drag"),bar_node})
+    for _,node in stage_desktop(stage,desktop_enabled and selected or nil,desktop_source) do table.insert(stage_children,node) end
+    if desktop_preview and not desktop_enabled then
         desktop_preview.props=desktop_preview.props or {}
         desktop_preview.props.metadata={{widget_entry_source=true,group=desktop_group,widget=selected,form="desktop",style=desktop_style}}
         table.insert(stage_children,ui.Box{id="desktop-widget-preview",position="absolute",left=widget_left,top=widget_top,
@@ -506,23 +538,10 @@ local function detail()
         radius=kit.tokens.radii.medium,fill="surfaceContainerHigh"}
     for _,child in stage_children do table.insert(stage_props,child) end
     local content_props={id="detail-content",width="fill",shrink=0,gap=spacing.md,
-        ui.Column{id="colour-role-section",width="fill",shrink=0,gap=spacing.sm,padding=spacing.md,
-            radius=kit.tokens.radii.medium,fill="surfaceContainer",colour_field},
         label("drag-hint",ui.tr("bead.widgets.drag-hint"),text.caption*4/3,"onSurfaceVariant",{width="fill",height=18,shrink=0}),
         ui.Box(stage_props),
-        ui.Row{id="form-enable-row",width="fill",shrink=0,gap=spacing.md,
-            ui.Column{id="bar-placement-actions",width=0,grow=1,gap=spacing.xs,padding=spacing.sm,
-                radius=kit.tokens.radii.medium,fill="surfaceContainer",
-                kit.ToggleRow{id="bar-enabled",width="fill",label=ui.tr("bead.widgets.in-bar"),checked=bar_enabled,enabled=not busy,
-                    on_activate=edit({op="toggle-form",widget=selected,form="bar",enabled=not bar_enabled})},
-                button("bar-placement",ui.tr(bar_enabled and "bead.widgets.remove-bar" or "bead.widgets.add-bar"),
-                    edit({op="toggle-form",widget=selected,form="bar",enabled=not bar_enabled}),{width="fill",enabled=not busy})},
-            desktop_available and ui.Column{id="desktop-placement-actions",width=0,grow=1,gap=spacing.xs,padding=spacing.sm,
-                radius=kit.tokens.radii.medium,fill="surfaceContainer",
-                kit.ToggleRow{id="desktop-enabled",width="fill",label=ui.tr("bead.widgets.on-desktop"),checked=desktop_enabled,enabled=not busy,
-                    on_activate=edit({op="toggle-form",widget=selected,form="desktop",enabled=not desktop_enabled})},
-                button("desktop-placement",ui.tr(desktop_enabled and "bead.widgets.remove-desktop" or "bead.widgets.add-desktop"),
-                    edit({op="toggle-form",widget=selected,form="desktop",enabled=not desktop_enabled}),{width="fill",enabled=not busy})} or nil},
+        ui.Column{id="colour-role-section",width="fill",shrink=0,gap=spacing.sm,padding=spacing.md,
+            radius=kit.tokens.radii.medium,fill="surfaceContainer",colour_field},
         ui.Column{id="dropdown-trigger",width="fill",shrink=0,gap=spacing.xs,padding=spacing.md,
             radius=kit.tokens.radii.medium,fill="surfaceContainer",
             label("trigger-label","Open its dropdown on",text.body*4/3,"onSurface",{height=22}),
@@ -598,7 +617,7 @@ local app_content=ui.Column{id="widgets-app",width="100%",height="100%",fill="su
     border_width=1,border_color=ui.alpha("outlineVariant",.55),clip_children=true,
     ui.Column{id="app-header-box",width="fill",height=65,shrink=0,
         ui.Row{id="app-header",width="fill",height=64,shrink=0,align="center",gap=spacing.lg,padding_left=spacing.xl,padding_right=spacing.xl,
-            ui.Text{id="app-mark",text="widgets",family="Material Symbols Rounded",font_size=kit.tokens.icons.hero,width=44,height=44,color="primary"},
+            ui.Image{id="app-mark",path="widgets/app/assets/nacre-widgets.themed.svg",width=44,height=44,shrink=0,aria_label=ui.tr("bead.widgets.app-title")},
             label("app-title",ui.tr("bead.widgets.app-title"),text.title*4/3,"onSurface",{grow=1,height=30}),
             button("undo","Undo",edit({op="undo"}),{enabled=undo_available and not busy}),
             button("reset","Reset to Nacre default",edit({op="reset"}),{fill="surfaceContainerHigh",enabled=not busy})},

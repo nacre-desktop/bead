@@ -1,5 +1,6 @@
 # Bead implementation queue
 
+| — | [B0198 Widgets drag-only placement](0198-widgets-drag-redesign.md) | Candidate — order-based bar (no tiles), normalise+repair on load, drag-to-Remove, edit-mode drop zones, toggles removed, larger stage with bar; property tests; live gate pending |
 | — | [B0191 Persistent Luau VM](0191-persistent-luau.md) | Candidate — one VM per view generation; per-update markup p50 bar 2.13→1.37 ms, launcher keystroke 0.90→0.50, dashboard 0.68→0.32, notifications 0.58→0.20 (release bench, real shell); bar stays >1 ms (widget context re-runs); lead live gate pending |
 | — | [B0187 Launcher input and scroll cost](0187-launcher-input-scroll.md) | Candidate — icon-miss cache cut keypress-to-results from 61 ms to 13 ms and fling frames from 47 ms to 7 ms (nested release, real shell); markup re-evaluation per update remains; lead live gate pending |
 | — | [B0192 Workspace-switch cadence and OSD first frame](0192-workspace-osd-cadence.md) | Candidate — bar ticks at 120 Hz when presentation refresh is unconfirmed (13 -> 24 workspace frames, 8.3 ms p50); OSD cold first content 40 -> 10 ms by starting at the fractional scale; real-key first frame left to the live audit |

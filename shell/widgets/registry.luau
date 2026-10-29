@@ -273,81 +273,105 @@ function M.validate(document)
     end
     return document
 end
+-- B0198: the bar is order-based. Any saved layout (including one broken by an
+-- older drag) is repaired into one canonical form: natural content packing, full
+-- regions, contiguous starts in saved order and spans from the selected form.
+local REGION_RANK={left=1,centre=2,right=3}
+local function form_span(item)
+    local package=registry[item.widget]
+    local form=package and package.forms[item.host=="canvas" and "desktop" or "bar"]
+    if not form then return math.max(1,math.floor(tonumber(item.slot and item.slot.span) or 1)) end
+    local name=item.style
+    if type(name)~="string" or not form.styles[name] then name=form.default_style end
+    return form.styles[name].min_span
+end
+local function pack(list)
+    local order={}
+    for index,item in list do
+        if type(item)=="table" and type(item.slot)=="table" then
+            if not REGION_RANK[item.slot.region] then item.slot.region="centre" end
+            table.insert(order,{item=item,index=index,start=tonumber(item.slot.start) or 0})
+        end
+    end
+    table.sort(order,function(a,b)
+        local ar,br=REGION_RANK[a.item.slot.region],REGION_RANK[b.item.slot.region]
+        if ar~=br then return ar<br end
+        if a.start~=b.start then return a.start<b.start end
+        return a.index<b.index
+    end)
+    local cursor={left=0,centre=0,right=0}
+    table.clear(list)
+    for _,entry in order do
+        local item,region=entry.item,entry.item.slot.region
+        item.slot.start=cursor[region]
+        item.slot.span=form_span(item)
+        cursor[region]+=item.slot.span
+        -- Only containers keep children (unknown packages keep theirs opaque).
+        if type(item.children)~="table" or (registry[item.widget] and item.widget~="pill") then item.children=nil end
+        if item.children then pack(item.children) end
+        table.insert(list,item)
+    end
+end
+local function copy(value)
+    if type(value)~="table" then return value end
+    local result={}
+    for key,item in value do result[key]=copy(item) end
+    return result
+end
+function M.normalise(document)
+    if type(document)~="table" or type(document.hosts)~="table" or type(document.hosts.top_bar)~="table" then return document end
+    local doc=copy(document)
+    local bar=doc.hosts.top_bar
+    local tiles=integer(bar.tiles,6,4096) and bar.tiles or 60
+    bar.tiles=tiles
+    bar.mode="content"
+    bar.regions={left={start=0,span=tiles},centre={start=0,span=tiles},right={start=0,span=tiles}}
+    if type(bar.instances)=="table" then pack(bar.instances) end
+    local canvas=doc.hosts.canvas
+    if type(canvas)=="table" and type(canvas.instances)=="table" then
+        for _,item in canvas.instances do
+            local slot=type(item)=="table" and item.slot
+            if type(slot)=="table" and finite(canvas.width,1,20000) and finite(canvas.height,1,20000)
+                and finite(slot.w,0.000001,canvas.width) and finite(slot.h,0.000001,canvas.height) then
+                slot.x=math.clamp(tonumber(slot.x) or 0,0,canvas.width-slot.w)
+                slot.y=math.clamp(tonumber(slot.y) or 0,0,canvas.height-slot.h)
+            end
+        end
+    end
+    -- Saved bar placements mirror the live item, or keep a form-sized slot for later.
+    local live={}
+    local function index(items)
+        if type(items)~="table" then return end
+        for _,item in items do
+            if type(item)=="table" then live[item.group or item.iid]=item; index(item.children) end
+        end
+    end
+    if type(bar.instances)=="table" then index(bar.instances) end
+    for group,state in type(doc.widgets)=="table" and doc.widgets or {} do
+        local form=type(state)=="table" and type(state.forms)=="table" and state.forms.bar or nil
+        local placement=type(form)=="table" and form.placement
+        local item=live[group]
+        if type(placement)=="table" then
+            if item and item.host~="canvas" then
+                form.placement={host=item.host,slot=copy(item.slot)}
+            elseif type(placement.slot)=="table" then
+                placement.slot.span=1
+            end
+        end
+    end
+    return doc
+end
 -- Project the shared saved layout onto this output without changing its source.
--- Starts are relative to each region; spans remain tile (about 32 dp) units.
+-- Content rows pack naturally; spans only need to fit the output's tiles.
 function M.project(document,width)
     assert(type(width)=="number" and width==width and width>0 and width<math.huge,"invalid widget projection width")
-    M.validate(document)
-    local original=document.hosts.top_bar
-    local source_tiles=original.tiles
-    local target_tiles=math.max(6,math.min(4096,math.floor(width/32+.5)))
-    local content=original.mode=="content"
-    local required: {[string]: number}={left=0,centre=0,right=0}
-    for _,item in original.instances do
-        local region: string=item.slot.region
-        local extent: number=item.slot.span
-        if content then extent=item.slot.start+item.slot.span end
-        if content then
-            required[region]=math.max(required[region],extent)
-        else
-            required[region]+=item.slot.span
-        end
-    end
-    for _,span in required do target_tiles=math.max(target_tiles,span) end
-    local old_regions=original.regions
-    local projected=table.clone(document)
-    projected.hosts=table.clone(document.hosts)
-    local source=table.clone(original)
-    source.regions=table.clone(original.regions)
-    if #original.instances>0 then
-        source.instances={}
-    end
-    for _,item in original.instances do
-        local projected_item=table.clone(item)
-        projected_item.slot=table.clone(item.slot)
-        table.insert(source.instances,projected_item)
-    end
-    projected.hosts.top_bar=source
-    source.tiles=target_tiles
-    for name,region in source.regions do
-        local old=old_regions[name]
-        region=table.clone(region)
-        local first=math.floor(old.start*target_tiles/source_tiles+.5)
-        local last=math.floor((old.start+old.span)*target_tiles/source_tiles+.5)
-        local span=math.max(1,last-first,required[name] or 0)
-        assert(span<=target_tiles,"widget region cannot fit output projection")
-        region.start=math.max(0,math.min(first,target_tiles-span))
-        region.span=span
-        source.regions[name]=region
-    end
-    if not content then
-        for name,region in source.regions do
-            local old=old_regions[name]
-            local ordered={}
-            for index,item in source.instances do
-                if item.slot.region==name then table.insert(ordered,{item=item,index=index}) end
-            end
-            table.sort(ordered,function(a,b)
-                if a.item.slot.start==b.item.slot.start then return a.index<b.index end
-                return a.item.slot.start<b.item.slot.start
-            end)
-            local tail=0
-            for index=#ordered,1,-1 do
-                tail+=ordered[index].item.slot.span
-                ordered[index].remaining=tail
-            end
-            local cursor=0
-            for _,entry in ordered do
-                local slot=entry.item.slot
-                local desired=math.floor(slot.start*region.span/old.span+.5)
-                local maximum=region.span-entry.remaining
-                assert(maximum>=cursor,"widget spans exceed output region capacity")
-                local start=math.max(cursor,math.min(desired,maximum))
-                slot.start=start
-                cursor=start+slot.span
-            end
-        end
-    end
+    local projected=M.normalise(document)
+    M.validate(projected)
+    local bar=projected.hosts.top_bar
+    local tiles=math.max(6,math.min(4096,math.floor(width/32+.5)))
+    for _,item in bar.instances do tiles=math.max(tiles,item.slot.start+item.slot.span) end
+    bar.tiles=tiles
+    for _,region in bar.regions do region.start=0; region.span=tiles end
     M.validate(projected)
     return projected
 end
@@ -361,58 +385,17 @@ function M.renderer(document)
         for key,value in item.settings or {} do values[key]=value end
         local editing=require("context").ui.resolve_for_check(require("context").ui.bind("widgets.editing"))
         local host=document.hosts[item.host]
-        local top_bar=document.hosts.top_bar
-        local local_layout=item.host~="canvas" and top_bar and top_bar.mode=="tiles"
-        local content_layout=item.host~="canvas" and top_bar and top_bar.mode=="content"
-        local default_content_layout=content_layout and document.preset=="Nacre default"
-        local form=package.forms[item.host=="canvas" and "desktop" or "bar"]
-        local selected=form and item.style
-        if form and (type(selected)~="string" or selected=="") then
-            selected=form.legacy_style_setting and values[form.legacy_style_setting]
-        end
-        if form and (type(selected)~="string" or selected=="") then selected=form.default_style end
-        local reserved: number?=variant.reserve_width and variant.reserve_width(values,selected)
-        local available_width: number?
-        if local_layout and item.slot and type(item.slot.span)=="number" then
-            local viewport=ui.resolve_for_check(ui.bind("bead.viewport.width")) or 0
-            if viewport>0 and top_bar.tiles>0 then available_width=viewport/top_bar.tiles*item.slot.span end
-        elseif content_layout and not default_content_layout and reserved and reserved>0 then
-            available_width=reserved
-        end
-        -- The shipped default keeps its established natural-packing pixels.
-        -- Other content rows use maximum reservations so child growth won't move neighbours.
         local node=variant.render({instance=item,catalogue=registry,render=render,editing=editing,
-            local_layout=local_layout==true,available_width=available_width},values,{})
+            local_layout=false},values,{})
         if not node then return nil end
         node=require("dragging").attach(document,item,node)
-        if item.widget=="pill" and item.host=="top_bar" and host and host.mode=="content" and node.props then
+        if item.widget=="pill" and item.host=="top_bar" and host and node.props then
             local props=node.props
             -- An empty pill stays a visible drop target as wide as it is tall.
             local natural=math.max(measured_width(node,0),require("context").t.pill_height)
             if natural>0 then props.width=ui.animate("pill-width:"..item.iid,natural,.18,"out-cubic") end
             props.clip_children=true
             node.props=props
-        end
-        local centered_title=content_layout and item.widget=="title" and item.host=="top_bar"
-            and item.slot and item.slot.region=="centre"
-        if (local_layout or content_layout and not centered_title and not default_content_layout)
-            and available_width and available_width>0 then
-            local natural: number
-            if content_layout then
-                natural=measured_width(node,0)
-            elseif item.widget=="pill" and item.host=="top_bar" then
-                natural=available_width
-            else
-                natural=reserved and reserved>0 and reserved or measured_width(node,0)
-            end
-            local width=math.min(available_width,natural)
-            if width>0 then
-                local justify="center"
-                if item.slot and item.slot.region=="left" then justify="start"
-                elseif item.slot and item.slot.region=="right" then justify="end" end
-                node=ui.Row{id="flex-reservation-"..tostring(item.iid),width=width,
-                    height=require("context").t.status_height,align="center",justify=justify,clip_children=true,node}
-            end
         end
         -- Dropdown identity follows the instance, including copies and moves out of pills.
         local function own(child)
@@ -428,20 +411,10 @@ function M.renderer(document)
         end
         if item.widget~="pill" then own(node) end
         if editing then node=require("editing").decorate(document,item,node) end
-        if item.host=="top_bar" and host and host.mode=="tiles" and item.slot then
-            local viewport=require("context").ui.resolve_for_check(require("context").ui.bind("bead.viewport.width")) or 0
-            local pitch=viewport/math.max(1,host.tiles)
-            local target=(item.slot.start or 0)*pitch
-            if item.slot.region=="right" then target=-target end
-            local props=node.props or {}
-            props.translate_x=require("context").ui.animate("widget-slot:"..item.iid,target,.18,"out-cubic")-target
-            node.props=props
-        end
-        if item.drag_placeholder==true and item.host=="top_bar" and host then
-            local viewport=require("context").ui.resolve_for_check(require("context").ui.bind("bead.viewport.width")) or 0
-            local width=available_width or (viewport/math.max(1,host.tiles)*(item.slot and item.slot.span or 1))
+        if item.drag_placeholder==true and item.host~="canvas" then
+            local width=measured_width(node,0)
             if width>0 then
-                node=ui.Box{id="widget-snap-slot-"..tostring(item.iid),width=width,
+                node=ui.Box{id="widget-snap-slot-"..tostring(item.iid),width=width+4,
                     height=require("context").t.status_height,padding=2,
                     radius=kit.tokens.radii.large,
                     fill=ui.alpha("primary",.12),border_width=kit.tokens.spacing.hairline*1.5,

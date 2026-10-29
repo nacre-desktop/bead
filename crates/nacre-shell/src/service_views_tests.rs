@@ -1818,11 +1818,7 @@ fn widget_preset_roundtrip_live_move_unknown_preservation_and_atomic_rejection()
             d["hosts"]["top_bar"]["instances"][0]["settings"]["icon"] = json!("invalid");
             d
         },
-        {
-            let mut d = edited.clone();
-            d["hosts"]["top_bar"]["instances"][0]["slot"]["span"] = json!(61);
-            d
-        },
+        // B0198: slot geometry (e.g. span 61) is repaired on load, not rejected.
     ] {
         assert!(h.update(apply(invalid)).is_err());
         assert_eq!(serde_json::to_value(&h.scene().primitives)?, accepted);

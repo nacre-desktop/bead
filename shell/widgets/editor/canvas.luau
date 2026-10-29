@@ -9,8 +9,8 @@ local drag_phase=ui.resolve_for_check(ui.bind("widgets.drag.phase"))
 local dragging=ui.resolve_for_check(ui.bind("widgets.drag.active"))==true
     and (drag_phase=="dragging" or drag_phase=="settle")
 local editing=ui.resolve_for_check(ui.bind("widgets.editing"))
-local document=(dragging and drag_layout and drag_layout[1]) or (editing and draft[1]) or saved[1]
-    or registry.default(ui.resolve_for_check(ui.bind("bead.viewport.width")))
+local document=registry.normalise((dragging and drag_layout and drag_layout[1]) or (editing and draft[1]) or saved[1]
+    or registry.default(ui.resolve_for_check(ui.bind("bead.viewport.width"))))
 local render=registry.renderer(document)
 local canvas=document.hosts.canvas or {width=ui.resolve_for_check(ui.bind("bead.viewport.width")),height=ui.resolve_for_check(ui.bind("bead.viewport.height")),instances={}}
 -- B0193: the host sets `bead.desktop.covered` while a fullscreen window or the lock screen hides

@@ -7079,10 +7079,8 @@ impl SceneSource for Runtime {
                         .unwrap_or_default(),
                     _ => "",
                 };
-                let persistent = matches!(
-                    operation,
-                    "toggle-form" | "style" | "setting" | "undo" | "reset"
-                );
+                let persistent =
+                    matches!(operation, "remove" | "style" | "setting" | "undo" | "reset");
                 if self.widget_drag_controller.is_none() {
                     self.widget_drag_controller =
                         Some(crate::widgets::widget_drag::Controller::new()?);
@@ -10592,6 +10590,8 @@ mod shell_route_smoke_tests;
 mod widget_app_tests;
 #[cfg(test)]
 mod widget_drag_preview_tests;
+#[cfg(test)]
+mod widget_layout_property_tests;
 #[cfg(test)]
 mod widget_startup_tests;
 #[cfg(test)]

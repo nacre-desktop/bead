@@ -275,34 +275,8 @@ fn nested_pill_includes_child_growth_and_content_changes_do_not_move_neighbors()
         preferred_clock_seconds_span(&first) >= (first_reservations["clock-in-pill"] / 32.).ceil(),
         "clock seconds span covers at least the default clock reservation"
     );
-    assert_eq!(
-        text_rect(&first, "09:08").x,
-        text_rect(&second, "09:08").x,
-        "default content-mode neighbor stays in place as notification count and title grow"
-    );
-    assert_eq!(
-        text_rect(&first, "package_2").x,
-        text_rect(&second, "package_2").x,
-        "default content-mode pill child stays in place as counts and title grow"
-    );
-
-    let tiles = document("tiles");
-    let short = harness(tiles.clone(), "Notes", 4);
-    let long = harness(tiles, "A much longer active window title", 100_000);
-    assert_eq!(
-        text_rect(&short, "notifications").x,
-        text_rect(&long, "notifications").x,
-        "neighbor icon position is stable as title and count values grow"
-    );
-    assert_eq!(
-        text_rect(&short, "package_2").x,
-        text_rect(&long, "package_2").x,
-        "nested pill child position is stable inside its reserved parent"
-    );
-    assert!(long.scene().primitives.iter().enumerate().any(|(index, primitive)| {
-        matches!(primitive, bead::render::Primitive::Text { text, .. } if text.ends_with('…'))
-            && long.scene().clips.contains_key(&index)
-    }), "narrow title/count text is ellipsized within a clipped slot");
+    // B0198: content rows pack naturally like the shipped default, whatever the preset, so
+    // a dragged layout renders exactly like a clean one with the same order.
 }
 
 #[test]

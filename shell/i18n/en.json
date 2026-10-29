@@ -875,11 +875,7 @@
   "bead.widgets.colour": "Colour",
   "bead.widgets.find": "Find a widget",
   "bead.widgets.overview": "Overview",
-  "bead.widgets.drag-hint": "Drag from the preview onto the bar or the desktop.",
-  "bead.widgets.add-bar": "Add to bar",
-  "bead.widgets.add-desktop": "Add to desktop",
-  "bead.widgets.remove-bar": "Remove from bar",
-  "bead.widgets.remove-desktop": "Remove from desktop",
+  "bead.widgets.drag-hint": "Drag the preview onto the bar or the desktop. Drag a placed widget onto Remove to take it off.",
   "bead.widgets.launcher-title": "Launcher",
   "bead.widgets.launcher-description": "Apps and favourites",
   "bead.widgets.notifications-title": "Notifications",
@@ -909,6 +905,7 @@
   "bead.widgets.category-system": "System",
   "bead.widgets.category-containers": "Containers",
   "bead.widgets.category-yours": "Your widgets",
-  "bead.widgets.in-bar": "In the bar",
-  "bead.widgets.on-desktop": "On the desktop"
+  "bead.widgets.group-label": "Widgets",
+  "bead.widgets.zone-desktop": "Desktop",
+  "bead.widgets.zone-remove": "Remove"
 }

@@ -99,7 +99,7 @@ function M.seed(document,width,height,placement)
     return {{widget_layout=true,document=document,initial=require("default")(width),rev=ui.resolve_for_check(ui.bind("widgets.rev")),
         widget_clock_seconds=placement~=nil and M.requires(document,placement,"bead.desktop.clock.seconds") or false,
         geometry=geometry,reservations=reservations,canvas_width=width,canvas_height=height,
-        catalogue=descriptors(),snap_distance=sp.lg}}
+        catalogue=descriptors(),snap_distance=sp.lg,remove_zone=require("dragging").remove_zone()}}
 end
 function M.request(_document,extra)
     return ui.action("widgets.edit",{extra})
@@ -139,8 +139,8 @@ local function decorate_target(document,item,target,host,hovered,outlined)
         table.insert(target.children,kit.IconButton{id="remove",position="absolute",right=-sp.xs,top=0,
             width=sp.md,height=sp.md,padding=0,font_size=sp.md,text="close",focus_on_pointer=false,
             aria_label="Remove "..tostring(item.widget),
-            on_activate=M.request(document,{op="toggle-form",widget=item.widget,group=item.group or item.iid,
-                form=host,enabled=false})})
+            on_activate=M.request(document,{op="remove",widget=item.widget,group=item.group or item.iid,
+                form=host})})
     end
 end
 function M.decorate(document,item,node)
@@ -170,8 +170,8 @@ function M.decorate(document,item,node)
         table.insert(props,kit.IconButton{id="remove",position="absolute",right=-sp.xs,top=0,
             width=sp.md,height=sp.md,padding=0,font_size=sp.md,text="close",focus_on_pointer=false,
             aria_label="Remove "..tostring(item.widget),
-            on_activate=M.request(document,{op="toggle-form",widget=item.widget,group=item.group or item.iid,
-                form=host,enabled=false})})
+            on_activate=M.request(document,{op="remove",widget=item.widget,group=item.group or item.iid,
+                form=host})})
     end
     return ui.Box(props)
 end

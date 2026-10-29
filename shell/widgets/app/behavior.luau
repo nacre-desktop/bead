@@ -132,197 +132,6 @@ local function locate_document_item(doc,iid)
         if found then return found end
     end
 end
-local function sync_bar_placement(doc,item,old_host,old_slot)
-    local widgets=doc.widgets
-    if type(widgets)~="table" then return end
-    local state=widgets[item.group or item.iid]
-    if type(state)~="table" or type(state.forms)~="table" then return end
-    local bar=state.forms.bar
-    if type(bar)~="table" or type(bar.placement)~="table" then return end
-    local placement=bar.placement
-    local slot=placement.slot
-    if placement.host==old_host and type(slot)=="table"
-        and slot.region==old_slot.region
-        and tonumber(slot.start)==tonumber(old_slot.start)
-        and tonumber(slot.span)==tonumber(old_slot.span) then
-        slot.region=item.slot.region
-        slot.start=item.slot.start
-        slot.span=item.slot.span
-    end
-end
-local function pack_bar_region(doc,region_name)
-    local host=doc.hosts.top_bar
-    local bounds=host.regions[region_name]
-    if not bounds then return false end
-    local rows={}
-    for _,item in host.instances do if item.slot and item.slot.region==region_name then table.insert(rows,item) end end
-    table.sort(rows,function(a,b) return a.slot.start<b.slot.start end)
-    local start=0
-    for _,item in rows do
-        item.slot.start=start
-        start+=item.slot.span
-    end
-    return start<=bounds.span
-end
-local function reflow_bar_region(doc,region_name,target_item,target_start)
-    local host=doc.hosts.top_bar
-    local bounds=host.regions[region_name]
-    if not bounds then return false end
-    -- A resize passes the existing root by reference; only reject a conflicting IID,
-    -- and append only when this is a genuinely new root.
-    local target_present=false
-    for _,item in host.instances do
-        if item.iid==target_item.iid then
-            if item~=target_item or target_present then return false end
-            target_present=true
-        end
-    end
-    target_start=math.max(0,math.min(bounds.span-target_item.slot.span,target_start))
-    local rows={}
-    for _,item in host.instances do
-        if item~=target_item and item.slot and item.slot.region==region_name then table.insert(rows,item) end
-    end
-    table.sort(rows,function(a,b) return a.slot.start<b.slot.start end)
-    local index=1
-    for i,item in rows do
-        if target_start < item.slot.start+item.slot.span/2 then index=i; break end
-        index=i+1
-    end
-    local before,after={},{}
-    for i,item in rows do table.insert(i<index and before or after,item) end
-    local cursor=target_start+target_item.slot.span
-    for _,item in after do
-        item.slot.start=math.max(item.slot.start,cursor)
-        cursor=item.slot.start+item.slot.span
-    end
-    if cursor>bounds.span then return false end
-    cursor=target_start
-    for i=#before,1,-1 do
-        local item=before[i]
-        item.slot.start=math.min(item.slot.start,cursor-item.slot.span)
-        cursor=item.slot.start
-    end
-    if cursor<0 then return false end
-    target_item.slot.region=region_name
-    target_item.slot.start=target_start
-    if not target_present then table.insert(host.instances,target_item) end
-    return true
-end
-local function reflow_preview_region(doc,region_name,source_iid)
-    local host=doc.hosts.top_bar
-    local bounds=host.regions[region_name]
-    if not bounds then return false end
-    local rows,occupied={},{}
-    for _,item in host.instances do
-        if item.slot and item.slot.region==region_name then
-            table.insert(rows,item)
-        end
-    end
-    table.sort(rows,function(a,b) return a.slot.start<b.slot.start end)
-    local source_item,placeholder
-    for _,item in rows do
-        if item.iid==source_iid then source_item=item end
-        if item.drag_placeholder==true then placeholder=item end
-    end
-    if source_item and placeholder then
-        local source_start,source_end=source_item.slot.start,source_item.slot.start+source_item.slot.span
-        local placeholder_start,placeholder_end=placeholder.slot.start,placeholder.slot.start+placeholder.slot.span
-        if source_start<placeholder_end and placeholder_start<source_end then
-            local left=source_start-placeholder.slot.span
-            local right=source_end
-            if left>=0 and (right+placeholder.slot.span>bounds.span or math.abs(placeholder_start-left)<=math.abs(right-placeholder_start)) then
-                placeholder.slot.start=left
-            else
-                placeholder.slot.start=right
-            end
-        end
-    end
-    occupied={}
-    for _,item in rows do
-        if item.iid==source_iid or item.drag_placeholder==true then
-            for tile=item.slot.start,item.slot.start+item.slot.span-1 do
-                if occupied[tile] then return false end
-                occupied[tile]=true
-            end
-        end
-    end
-    for _,item in rows do
-        if item.iid~=source_iid and item.drag_placeholder~=true then
-            local start=item.slot.start
-            local free=function(at)
-                if at<0 or at+item.slot.span>bounds.span then return false end
-                for tile=at,at+item.slot.span-1 do if occupied[tile] then return false end end
-                return true
-            end
-            while not free(start) and start+item.slot.span<=bounds.span do start+=1 end
-            if not free(start) then return false end
-            item.slot.start=start
-            for tile=start,start+item.slot.span-1 do occupied[tile]=true end
-        end
-    end
-    return true
-end
-local function next_bar_slot(doc,region,span)
-    local host=doc.hosts.top_bar
-    local bounds=host.regions[region]
-    if not bounds or span<1 or span>bounds.span then return nil end
-    local occupied={}
-    local function fill(items)
-        for _,item in items or {} do
-            if item.slot and item.slot.region==region then
-                for n=item.slot.start,item.slot.start+item.slot.span-1 do occupied[n]=true end
-            end
-        end
-    end
-    fill(host.instances)
-    for start=0,bounds.span-span do
-        local free=true
-        for n=start,start+span-1 do if occupied[n] then free=false; break end end
-        if free then return start end
-    end
-end
-local function bar_slot_free(doc,region,start,span)
-    local host=doc.hosts.top_bar
-    local bounds=host.regions[region]
-    if not bounds or start<0 or start+span>bounds.span then return false end
-    local occupied={}
-    for _,item in host.instances do
-        if item.slot and item.slot.region==region then
-            for n=item.slot.start,item.slot.start+item.slot.span-1 do occupied[n]=true end
-        end
-    end
-    for n=start,start+span-1 do if occupied[n] then return false end end
-    return true
-end
-local function insert_bar(doc,item,placement,style)
-    local host=doc.hosts.top_bar
-    local region=placement and placement.slot and placement.slot.region or "left"
-    if not host.regions[region] then region="left" end
-    local span=placement and placement.slot and placement.slot.span or (style and style.preferred_span) or 1
-    span=math.max(1,math.floor(tonumber(span) or 1))
-    if style and (span<style.min_span or span>style.max_span) then span=style.preferred_span end
-    local start=placement and placement.slot and placement.slot.start
-    if type(start)~="number" or not bar_slot_free(doc,region,start,span) then start=next_bar_slot(doc,region,span) end
-    if start==nil then return false end
-    item.host="top_bar"; item.slot={region=region,start=start,span=span}
-    table.insert(host.instances,item)
-    return true
-end
-local function add_desktop(doc,item,placement,style,req)
-    local host=doc.hosts.canvas
-    if not host then
-        host={width=req.screen_width or 1920,height=req.screen_height or 1080,instances={}}
-        doc.hosts.canvas=host
-    end
-    local slot=placement and placement.slot or {}
-    local w=math.clamp(tonumber(slot.w) or style.preferred_span,style.min_span,style.max_span)
-    local h=tonumber(slot.h) or style.preferred_height or 96
-    if w>host.width or h<=0 or h>host.height then return false end
-    item.host="canvas"; item.slot={x=math.clamp(tonumber(slot.x) or 32,0,host.width-w),
-        y=math.clamp(tonumber(slot.y) or 32,0,host.height-h),w=w,h=h}
-    table.insert(host.instances,item)
-    return true
-end
 local function output_dimensions(doc,event,context)
     local canvas=doc.hosts.canvas or {}
     local function dimension(value)
@@ -333,17 +142,6 @@ local function output_dimensions(doc,event,context)
             or dimension(canvas.width) or 1920,
         dimension(event.screen_height) or dimension(context.screen_height) or dimension(context.canvas_height)
             or dimension(canvas.height) or 1080
-end
-local function promote_children(doc,pill)
-    local items=pill.children or {}
-    for _,child in items do
-        child.host="top_bar"
-        local slot={region=child.slot and child.slot.region or "left",span=child.slot and child.slot.span or 1}
-        child.slot=slot
-        if not insert_bar(doc,child,{slot=slot}) then return false end
-    end
-    pill.children={}
-    return true
 end
 local function update_setting(doc,group,state,key,value)
     state.settings=state.settings or {}
@@ -397,11 +195,6 @@ local function contains_identity(item,iid)
     for _,child in item.children or {} do if contains_identity(child,iid) then return true end end
     return false
 end
-local function top_bar_root(doc,iid)
-    for _,item in doc.hosts.top_bar.instances or {} do
-        if contains_identity(item,iid) then return item end
-    end
-end
 local function pill_at_pointer(doc,event,context)
     local explicit=drag_record(event.target)
     local iid=type(explicit)=="table" and (explicit.iid or (type(explicit.target)=="table" and explicit.target.iid)) or nil
@@ -419,195 +212,145 @@ local function pill_at_pointer(doc,event,context)
         end
     end
 end
-local function pill_limits(context,pill)
-    local package=catalogue(context,"pill")
-    local form=package and package.forms and package.forms.bar
-    local style=form and form.styles and form.styles[pill.style or form.default_style]
-    return style and style.min_span or 1,style and style.max_span or (context.tiles or 60)
+-- B0198: the bar is order-based (content packing). Every committed or previewed
+-- document is normalised: per list and region the saved order is kept, starts are
+-- contiguous and spans come from the selected form, so no drag can leave overlaps,
+-- gaps or inflated spans behind. Mirrors registry.normalise for the markup side.
+local REGION_RANK={left=1,centre=2,right=3}
+local function form_span(req,item)
+    local package=catalogue(req,item.widget)
+    local form=package and package.forms and package.forms[item.host=="canvas" and "desktop" or "bar"]
+    local styles=form and form.styles or {}
+    local style=styles[item.style or ""] or styles[form and form.default_style or ""]
+    return style and tonumber(style.min_span) or math.max(1,math.floor(tonumber(item.slot and item.slot.span) or 1))
 end
-local function resize_pill(doc,pill,delta,context)
-    if delta==0 then return true end
-    local minimum,maximum=pill_limits(context,pill)
-    local span=pill.slot.span+delta
-    if span<minimum or span>maximum then return false end
-    local root=top_bar_root(doc,pill.iid)
-    if not root or not root.slot then return false end
-    root.slot.span=span
-    return reflow_bar_region(doc,root.slot.region,root,root.slot.start)
+local function pack_list(req,list)
+    local order={}
+    for index,item in list do
+        if type(item.slot)~="table" then item.slot={} end
+        if not REGION_RANK[item.slot.region] then item.slot.region="centre" end
+        table.insert(order,{item=item,index=index,start=tonumber(item.slot.start) or 0})
+    end
+    table.sort(order,function(a,b)
+        local ar,br=REGION_RANK[a.item.slot.region],REGION_RANK[b.item.slot.region]
+        if ar~=br then return ar<br end
+        if a.start~=b.start then return a.start<b.start end
+        return a.index<b.index
+    end)
+    local cursor={left=0,centre=0,right=0}
+    table.clear(list)
+    for _,entry in order do
+        local item,region=entry.item,entry.item.slot.region
+        item.slot={region=region,start=cursor[region],span=form_span(req,item)}
+        cursor[region]+=item.slot.span
+        if type(item.children)~="table" or (catalogue(req,item.widget) and item.widget~="pill") then item.children=nil end
+        if item.children then pack_list(req,item.children) end
+        table.insert(list,item)
+    end
 end
-local function reflow_pill_child_region(doc,pill,target,span)
+local function normalise(doc,req)
+    local bar=doc.hosts.top_bar
+    local tiles=tonumber(bar.tiles) or 60
+    if tiles<6 or tiles%1~=0 then tiles=60 end
+    bar.tiles=tiles
+    bar.mode="content"
+    bar.regions={left={start=0,span=tiles},centre={start=0,span=tiles},right={start=0,span=tiles}}
+    pack_list(req,bar.instances)
+    local live={}
+    local seen,unique={},true
+    local function index(items)
+        for _,item in items or {} do
+            if seen[item.iid] then unique=false end
+            seen[item.iid]=true
+            live[item.group or item.iid]=item
+            index(item.children)
+        end
+    end
+    for _,host in doc.hosts do index(host.instances) end
+    for group,state in doc.widgets or {} do
+        local form=type(state.forms)=="table" and state.forms.bar
+        local item=live[group]
+        if type(form)=="table" and item and item.host~="canvas" then
+            form.placement={host=item.host,slot=clone(item.slot)}
+        elseif type(form)=="table" and type(form.placement)=="table" and type(form.placement.slot)=="table" then
+            form.placement.slot.span=1
+        end
+    end
+    return unique
+end
+local function remove_located(doc,location)
+    local list=document_location(doc,location)
+    if not list then return nil end
+    return table.remove(list,location.index)
+end
+local function centre_x(context,iid)
+    for _,rect in context.geometry or {} do
+        if rect.iid==iid and type(rect.x)=="number" and type(rect.w)=="number" then return rect.x+rect.w/2 end
+    end
+end
+-- Insert by pointer order among the measured siblings; ties and unmeasured rows keep order.
+local function insert_ordered(list,item,x,region,context,regional)
     local rows={}
-    for _,child in pill.children or {} do
-        if child.slot and child.slot.region==target.slot.region then table.insert(rows,child) end
+    for index,other in list do
+        if not regional or other.slot.region==region then table.insert(rows,{item=other,index=index}) end
     end
-    table.sort(rows,function(a,b) return a.slot.start<b.slot.start end)
-    local found=false
-    local cursor=0
-    for _,child in rows do
-        if child==target then
-            child.slot.span=span
-            cursor=child.slot.start+span
-            found=true
-        elseif found then
-            if child.slot.start<cursor then child.slot.start=cursor end
-            cursor=child.slot.start+child.slot.span
+    table.sort(rows,function(a,b)
+        local ar,br=REGION_RANK[a.item.slot.region],REGION_RANK[b.item.slot.region]
+        if ar~=br then return ar<br end
+        if a.item.slot.start~=b.item.slot.start then return a.item.slot.start<b.item.slot.start end
+        return a.index<b.index
+    end)
+    local before,after,measured,last
+    for _,row in rows do
+        local cx=centre_x(context,row.item.iid)
+        last=row.item
+        if cx then
+            measured=true
+            if x<cx then after=row.item; break end
+            before=row.item
         end
     end
-    local limit=doc.hosts.top_bar.tiles or 60
-    return found and cursor<=limit
-end
-local function preferred_bar_span(current,style)
-    current=math.max(1,math.floor(tonumber(current) or 1))
-    local minimum=math.max(1,math.floor(tonumber(style.min_span) or 1))
-    local maximum=math.max(minimum,math.floor(tonumber(style.max_span) or current))
-    local preferred=math.floor(tonumber(style.preferred_span) or minimum)
-    return math.max(current,minimum,math.min(maximum,preferred))
-end
-local function resize_bar(doc,item,style,context)
-    local old_host=item.host
-    local old_slot=table.clone(item.slot)
-    local current=tonumber(item.slot and item.slot.span) or tonumber(style.min_span) or 1
-    local span=preferred_bar_span(current,style)
-    local delta=span-current
-    if delta<=0 then return true end
-    if item.host=="top_bar" then
-        item.slot.span=span
-        if not reflow_bar_region(doc,item.slot.region,item,item.slot.start) then return false end
+    if not measured then before,after=last,nil end
+    -- Between two regions (inside a pill) the nearer neighbour's region wins; ties join the next.
+    local join_after=after and (regional or not before or before.slot.region==after.slot.region
+        or (centre_x(context,after.iid) or x)-x<=x-(centre_x(context,before.iid) or x))
+    if join_after then
+        item.slot={region=after.slot.region,start=after.slot.start-.5,span=1}
+    elseif before then
+        item.slot={region=before.slot.region,start=before.slot.start+.5,span=1}
     else
-        local location=locate_document_item(doc,item.iid)
-        local parent=location and location.parent and locate_document_item(doc,location.parent)
-        if not parent or parent.item.widget~="pill" then return false end
-        if not reflow_pill_child_region(doc,parent.item,item,span) then return false end
-        if not resize_pill(doc,parent.item,delta,context) then return false end
+        item.slot={region=region,start=math.huge,span=1}
     end
-    sync_bar_placement(doc,item,old_host,old_slot)
-    return true
+    table.insert(list,item)
 end
-local function grow_saved_bar_placement(form_state,style)
-    local placement=form_state.placement
-    local slot=type(placement)=="table" and placement.slot or nil
-    if type(slot)~="table" then return end
-    local current=tonumber(slot.span) or tonumber(style.min_span) or 1
-    local span=preferred_bar_span(current,style)
-    if span>current then slot.span=span end
+local function promote_children(doc,pill)
+    for index,child in pill.children or {} do
+        child.host="top_bar"
+        child.slot={region=pill.slot.region,start=pill.slot.start+index/1000,span=1}
+        table.insert(doc.hosts.top_bar.instances,child)
+    end
+    pill.children={}
 end
-local function child_slot(pill,span,event,context,doc,omit_iid)
-    local x=output_local(event,context)
-    local rect
-    for _,candidate in context.geometry or {} do if candidate.iid==pill.iid then rect=candidate; break end end
-    local region="centre"
-    if rect and rect.w>0 then
-        local fraction=(x-rect.x)/rect.w
-        region=fraction<1/3 and "left" or fraction>2/3 and "right" or "centre"
-    end
-    local tiles=doc.hosts.top_bar.tiles or 60
-    for _,candidate_region in {region,"centre","left","right"} do
-        local occupied={}
-        for _,child in pill.children or {} do
-            if child.iid~=omit_iid and child.slot and child.slot.region==candidate_region then
-                for tile=child.slot.start,child.slot.start+child.slot.span-1 do occupied[tile]=true end
-            end
-        end
-        for start=0,tiles-span do
-            local free=true
-            for tile=start,start+span-1 do if occupied[tile] then free=false; break end end
-            if free then return {region=candidate_region,start=start,span=span} end
-        end
-    end
+-- The removal zone shown by the drag overlay; geometry is derived from the output size.
+local function in_remove_zone(event,context)
+    local zone=context.remove_zone
+    if type(zone)~="table" then return false end
+    local width,height=tonumber(event.screen_width) or tonumber(context.screen_width) or 0,tonumber(event.screen_height) or tonumber(context.screen_height) or 0
+    local x,y=output_local(event,context)
+    local w,h=tonumber(zone.width) or 0,tonumber(zone.height) or 0
+    local left,top=(width-w)/2,height-(tonumber(zone.bottom) or 0)-h
+    return w>0 and h>0 and x>=left and x<left+w and y>=top and y<top+h
 end
-local function tile_document(doc,req)
-    local host=doc.hosts.top_bar
-    if not host or host.mode~="content" then return true end
-    local geometry,reservations={},{}
-    for _,item in req.reservations or {} do reservations[item.iid]=item.width end
-    for _,rect in req.geometry or {} do geometry[rect.iid]=rect end
-    local width=tonumber(req.canvas_width) or tonumber(req.screen_width)
-    if not width or width<=0 or not host.tiles or host.tiles<=0 then return false end
-    local tile=width/host.tiles
-    local function pack(items,bounds,parent_rect,tiles)
-        for _,region in {"left","centre","right"} do
-            local rows={}
-            for _,item in items or {} do if item.slot.region==region then table.insert(rows,item) end end
-            table.sort(rows,function(a,b)
-                local ar,br=geometry[a.iid],geometry[b.iid]
-                local ax=ar and ar.x or a.slot.start*tile
-                local bx=br and br.x or b.slot.start*tile
-                if parent_rect then ax-=parent_rect.x; bx-=parent_rect.x end
-                if region=="right" then
-                    ax=(parent_rect and parent_rect.w or width)-ax-(ar and ar.w or a.slot.span*tile)
-                    bx=(parent_rect and parent_rect.w or width)-bx-(br and br.w or b.slot.span*tile)
-                end
-                return ax<bx
-            end)
-            local region_bounds=bounds[region]
-            local start=region_bounds.start
-            for _,item in rows do
-                local old_host,old_slot=item.host,table.clone(item.slot)
-                local rect=geometry[item.iid]
-                local measured=rect and rect.w or (item.slot.span*tile)
-                if parent_rect and rect then measured=rect.w end
-                measured=math.max(measured or 0,reservations[item.iid] or 0)
-                local span=math.max(1,math.ceil(measured/tile))
-                local position
-                if rect then
-                    local x=rect.x-(parent_rect and parent_rect.x or 0)
-                    if region=="right" then x=(parent_rect and parent_rect.w or width)-x-rect.w end
-                    if region=="centre" then x=x+rect.w/2-span*tile/2 end
-                    position=math.floor(x/tile)
-                else position=item.slot.start end
-                start=math.max(start,region_bounds.start+position)
-                if start+span>region_bounds.start+region_bounds.span then return false end
-                item.slot.start=start-region_bounds.start
-                item.slot.span=span
-                sync_bar_placement(doc,item,old_host,old_slot)
-                start+=span
-                if item.children and #item.children>0 then
-                    local child_width=math.max(rect and rect.w or 0,span*tile)
-                    local child_tiles=math.max(1,math.floor(child_width/tile))
-                    local nested={left={start=0,span=child_tiles},centre={start=0,span=child_tiles},right={start=0,span=child_tiles}}
-                    if not pack(item.children,nested,rect,{tiles=child_tiles}) then return false end
-                end
-            end
-        end
-        return true
+local function remove_instance(doc,group_state,location)
+    local item=remove_located(doc,location)
+    if not item then return false end
+    if item.widget=="pill" and item.children and #item.children>0 then
+        item.slot=item.slot or {region="right",start=0,span=1}
+        promote_children(doc,item)
     end
-    local bounds={}
-    for name,region in host.regions do bounds[name]={start=region.start,span=region.span} end
-    if not pack(host.instances,bounds,nil,host) then return false end
-    host.mode="tiles"
-    doc.preset="Custom"
-    return true
-end
-local function bar_drop_placement(doc,event,context,span)
-    if type(event.slot)=="table" and type(event.slot.region)=="string" and type(event.slot.start)=="number" then
-        local slot=clone(event.slot)
-        slot.span=span
-        return {host="top_bar",slot=slot}
-    end
-    local host=doc.hosts.top_bar
-    local width=tonumber(event.screen_width) or tonumber(context.screen_width) or tonumber(context.canvas_width) or 1920
-    local x=output_local(event,context)
-    local region=x<width/3 and "left" or x>width*2/3 and "right" or "centre"
-    local bounds=host.regions[region]
-    local tile=width/math.max(1,host.tiles)
-    local position=region=="right" and width-x or x
-    if region=="centre" then position-=span*tile/2 end
-    local start=math.floor(position/tile)
-    start=math.max(0,math.min(bounds.span-span,start))
-    return {host="top_bar",slot={region=region,start=start,span=span}}
-end
-local function pill_overlapping_bar_slot(doc,placement)
-    local slot=placement and placement.slot
-    if type(slot)~="table" or type(slot.region)~="string" then return nil end
-    local first=tonumber(slot.start) or 0
-    local last=first+(tonumber(slot.span) or 1)
-    for _,item in doc.hosts.top_bar.instances or {} do
-        if item.widget=="pill" and item.slot and item.slot.region==slot.region then
-            local item_first=tonumber(item.slot.start) or 0
-            local item_last=item_first+(tonumber(item.slot.span) or 1)
-            if first<item_last and item_first<last then return item end
-        end
-    end
+    local form=group_state and group_state.forms and group_state.forms[item.host=="canvas" and "desktop" or "bar"]
+    if form then form.enabled=false; form.placement={host=item.host,slot=clone(item.slot)} end
+    return true,item
 end
 -- Resize previews share the transfer transaction and never change placement form.
 local function drag_resize(s,event,context,base,commit,undo_document,source)
@@ -643,43 +386,22 @@ local function drag_resize(s,event,context,base,commit,undo_document,source)
     end
     return true,doc,item
 end
-local function insert_into_pill(doc,item,pill,event,context,style)
-    if item.iid==pill.iid or contains_identity(item,pill.iid) then return false end
-    local location=item.iid and locate_document_item(doc,item.iid)
-    local old_parent=location and location.parent and locate_document_item(doc,location.parent)
-    if old_parent and old_parent.item.widget~="pill" then return false end
-    if location then
-        local source_list=document_location(doc,location)
-        if not source_list then return false end
-        table.remove(source_list,location.index)
+local function commit_drop(s,doc,previous,commit)
+    if commit~=false then
+        history(s,previous); finish(s,doc)
+        s["widgets.write"]={clone(doc)}
     end
-    local span=location and location.item.slot and location.item.slot.span
-        or (style.preferred_span or style.min_span or 1)
-    span=math.floor(math.clamp(tonumber(span) or style.preferred_span or 1,style.min_span or 1,style.max_span or 60))
-    if old_parent and old_parent.item.iid~=pill.iid then
-        if not resize_pill(doc,old_parent.item,-span,context) then return false end
-    elseif location and not location.parent and location.host=="top_bar" then
-        if not pack_bar_region(doc,location.item.slot.region) then return false end
-    end
-    local slot=child_slot(pill,span,event,context,doc,item.iid)
-    if not slot then return false end
-    pill.children=pill.children or {}
-    item.host=pill.iid
-    item.slot=slot
-    table.insert(pill.children,item)
-    if not old_parent or old_parent.item.iid~=pill.iid then
-        if not resize_pill(doc,pill,span,context) then return false end
-    else
-        local root=top_bar_root(doc,pill.iid)
-        if not root or not reflow_bar_region(doc,root.slot.region,root,root.slot.start) then return false end
-    end
-    return true
 end
+local function unique_iid(doc,stem)
+    local iid,suffix=stem,1
+    while locate_document_item(doc,iid) do suffix+=1; iid=stem..":"..tostring(suffix) end
+    return iid
+end
+-- One placement transaction: detach, place by pointer order, normalise, validate.
+-- Any rejection leaves the base untouched so the ghost snaps back.
 local function drag_drop(s,event,context,base,commit,undo_document)
     local source=drag_record(event.source)
     if type(source)~="table" or type(source.widget)~="string" then return false end
-    -- Canvas resize gestures use the same generic transfer payload but have their own
-    -- transaction semantics; keep them out of the placement/morph path.
     if source.kind=="resize" then return drag_resize(s,event,context,base,commit,undo_document,source) end
     if source.app==true and event.private_remote~=true then return false end
     local destination=event.destination
@@ -688,54 +410,65 @@ local function drag_drop(s,event,context,base,commit,undo_document)
     local id=source.widget
     local req={catalogue=context.catalogue,settings=source.settings,group=source.group}
     local doc=type(base)=="table" and clone(base) or document(s,context)
-    if type(doc)~="table" then return false end
+    if type(doc)~="table" or type(doc.hosts)~="table" or type(doc.hosts.top_bar)~="table" then return false end
+    local previous=undo_document or clone(doc)
+    if not normalise(doc,req) then return false end
+    local live_location=type(source.iid)=="string" and locate_document_item(doc,source.iid) or nil
+    if live_location and live_location.item.widget~=id then return false end
+    local group,state=group_for(doc,id,source.group or source.iid or id,req)
+    if source.app~=true and live_location and destination=="desktop" and in_remove_zone(event,context) then
+        if not remove_instance(doc,state,live_location) or not normalise(doc,req) then return false end
+        commit_drop(s,doc,previous,commit)
+        return true,doc,nil
+    end
     local package=catalogue(req,id)
     local form=destination=="bar" and "bar" or "desktop"
     local descriptor=package and package.forms and package.forms[form]
     if not descriptor then return false end
-    if (source.form=="bar" or form=="bar") and not tile_document(doc,context) then return false end
-    local previous=undo_document or clone(doc)
-    local group,state=group_for(doc,id,source.group or source.iid or id,req)
     local config=state.forms[form] or {enabled=false,style=descriptor.default_style,placement={}}
     state.forms[form]=config
     local style_name=config.style
-    if type(style_name)~="string" or style_name=="" or not descriptor.styles[style_name] then
+    if type(style_name)~="string" or not descriptor.styles[style_name] then
         local legacy=descriptor.legacy_style_setting and source.settings and source.settings[descriptor.legacy_style_setting]
         style_name=descriptor.styles[source.style] and source.style or (descriptor.styles[legacy] and legacy) or descriptor.default_style
     end
-    if not descriptor.styles[style_name] then style_name=descriptor.default_style end
     local style=descriptor.styles[style_name]
     if not style then return false end
-    local source_form=source.form or (source.host=="canvas" and "desktop" or "bar")
-    local live
-    for _,item in group_items(doc,group,id) do if item.iid==source.iid and source.iid then live=item; break end end
-    local live_location=live and locate_document_item(doc,live.iid)
-    local live_parent=live_location and live_location.parent and locate_document_item(doc,live_location.parent)
-    local existing
-    for _,item in group_items(doc,group,id) do if (item.host=="canvas")== (form=="desktop") then existing=item; break end end
-    if live and source_form==form then existing=live end
-    local item=existing or (live and clone(live)) or {
-        iid=form=="desktop" and (group..":desktop") or group,widget=id,group=group,
-        settings=clone(state.settings or source.settings or package.defaults or {}),
-    }
+    local source_form=live_location and (live_location.item.host=="canvas" and "desktop" or "bar") or nil
+    -- A live source moves; an app source reuses the group's instance in this form, if any.
+    local location=live_location
+    if not location or source_form~=form then
+        for _,other in group_items(doc,group,id) do
+            if (other.host=="canvas")==(form=="desktop") then location=locate_document_item(doc,other.iid); break end
+        end
+        if location and location.item==(live_location and live_location.item) then location=nil end
+    end
+    local item
+    if location then
+        item=remove_located(doc,location)
+    elseif live_location then
+        -- Morph: the live instance leaves its old form, which keeps its slot for later.
+        local removed
+        removed,item=remove_instance(doc,state,live_location)
+        if not removed then return false end
+        item.children=nil
+    else
+        item={iid=unique_iid(doc,form=="desktop" and group..":desktop" or group),widget=id,group=group,
+            settings=clone(state.settings or source.settings or package.defaults or {})}
+    end
     item.group=group; item.style=style_name
-    item.settings=item.settings or clone(state.settings or source.settings or package.defaults or {})
+    item.settings=item.settings or {}
     for key,value in source.settings or {} do item.settings[key]=clone(value) end
-    local placement
-    local desktop_context=context
     if form=="desktop" then
         local width,height=output_dimensions(doc,event,context)
-        desktop_context=table.clone(context)
-        desktop_context.screen_width=width; desktop_context.screen_height=height
-        desktop_context.canvas_width=width; desktop_context.canvas_height=height
-        if doc.hosts.canvas then
-            doc.hosts.canvas.width=width
-            doc.hosts.canvas.height=height
-        end
+        local canvas=doc.hosts.canvas or {instances={}}
+        doc.hosts.canvas=canvas
+        canvas.width=width; canvas.height=height
         local x,y=output_local(event,context)
         local configured=config.placement and config.placement.slot or {}
-        local w=tonumber(configured.w) or (existing and existing.slot.w) or style.preferred_span
-        local h=tonumber(configured.h) or (existing and existing.slot.h) or style.preferred_height or 96
+        local previous_slot=item.host=="canvas" and type(item.slot)=="table" and item.slot or {}
+        local w=tonumber(configured.w) or tonumber(previous_slot.w) or style.preferred_span
+        local h=tonumber(configured.h) or tonumber(previous_slot.h) or style.preferred_height or 96
         w=math.clamp(w,style.min_span,style.max_span)
         if w>width or h<=0 or h>height then return false end
         x-=(tonumber(event.grab_x) or 0)*w/math.max(1,tonumber(event.width) or w)
@@ -749,103 +482,36 @@ local function drag_drop(s,event,context,base,commit,undo_document)
             end
             return nearest
         end
-        placement={host="canvas",slot={x=magnet(tonumber(event.slot and event.slot.x) or x,width-w),
-            y=magnet(tonumber(event.slot and event.slot.y) or y,height-h),w=w,h=h}}
+        item.host="canvas"
+        item.children=nil
+        item.slot={x=magnet(tonumber(event.slot and event.slot.x) or x,width-w),
+            y=magnet(tonumber(event.slot and event.slot.y) or y,height-h),w=w,h=h}
+        table.insert(canvas.instances,item)
     else
-        local configured=config.placement and config.placement.slot and config.placement.slot.span
-        local existing_span=existing and existing.slot and existing.slot.span
-        local span=tonumber(configured) or tonumber(existing_span) or style.preferred_span or style.min_span
-        span=math.floor(math.clamp(span,style.min_span or 1,style.max_span or 60))
-        placement=bar_drop_placement(doc,event,context,span)
-    end
-    -- The drag anchor can sit just outside the pill while the destination slot
-    -- overlaps it (large desktop forms make this common). Treat that occupied
-    -- slot as a pill drop so the widget joins the existing pill instead of
-    -- trying to wedge a new top-level item through its reservation.
-    local target_pill=form=="bar" and (pill_at_pointer(doc,event,context)
-        or pill_overlapping_bar_slot(doc,placement)) or nil
-    if target_pill then
-        local source_form=source.form or (source.host=="canvas" and "desktop" or "bar")
-        if live and source_form~=form and not existing then
-            local old=state.forms[source_form]
-            if old then
-            old.enabled=false
-            if not old.placement or type(old.placement.slot)~="table" then
-                old.placement={host=live.host,slot=clone(live.slot)}
-            end
-        end
-        end
-        if not insert_into_pill(doc,item,target_pill,event,context,style) then return false end
-        config.enabled=true; config.style=style_name
-        config.placement={host=target_pill.iid,slot=clone(item.slot)}
-        state.widget=id; state.settings=clone(item.settings or source.settings or state.settings or {})
-        for _,other in group_items(doc,group,id) do other.settings=clone(state.settings) end
-        if commit~=false then
-            history(s,previous); finish(s,doc)
-            s["widgets.write"]={clone(doc)}
-        end
-        return true,doc,item
-    end
-    -- Existing second form stays enabled; moving a live source into an absent form morphs it.
-    if live and source_form~=form and not existing then
-        if live.widget=="pill" and live.children and #live.children>0 and source_form=="bar" then
-            if not promote_children(doc,live) then return false end
-            item.children={}
-        end
-        local old_region=live_location and not live_location.parent and live_location.host=="top_bar"
-            and live.slot and live.slot.region or nil
-        local list=live.host=="canvas" and doc.hosts.canvas.instances or doc.hosts.top_bar.instances
-        local removed=remove_identity(list,live.iid)
-        if not removed then
-            for _,parent in doc.hosts.top_bar.instances do
-                removed=remove_identity(parent.children or {},live.iid)
-                if removed then break end
-            end
-        end
-        if not removed then return false end
-        if live_parent and live_parent.item.widget=="pill" then
-            if not resize_pill(doc,live_parent.item,-(live.slot and live.slot.span or 1),context) then return false end
-        end
-        if old_region and not pack_bar_region(doc,old_region) then return false end
-        local old=state.forms[source_form]
-        if old then
-            old.enabled=false
-            if not old.placement or type(old.placement.slot)~="table" then
-                old.placement={host=live.host,slot=clone(live.slot)}
-            end
-        end
-    elseif existing then item=existing end
-    if form=="desktop" then
-        if existing then
-            item.host="canvas"; item.slot={x=placement.slot.x,y=placement.slot.y,w=placement.slot.w,h=placement.slot.h}
+        local x=output_local(event,context)
+        local pill=pill_at_pointer(doc,event,context)
+        if pill and (pill==item or contains_identity(item,pill.iid) or item.widget=="pill") then pill=nil end
+        if type(event.slot)=="table" and type(event.slot.region)=="string" and type(event.slot.start)=="number" then
+            item.host="top_bar"
+            item.slot={region=event.slot.region,start=event.slot.start-.5,span=1}
+            table.insert(doc.hosts.top_bar.instances,item)
+        elseif pill then
+            item.host=pill.iid
+            pill.children=pill.children or {}
+            insert_ordered(pill.children,item,x,"centre",context,false)
         else
-            if not add_desktop(doc,item,placement,style,desktop_context) then return false end
+            local width=output_dimensions(doc,event,context)
+            local region=x<width/3 and "left" or x>width*2/3 and "right" or "centre"
+            item.host="top_bar"
+            insert_ordered(doc.hosts.top_bar.instances,item,x,region,context,true)
         end
-    else
-        local span=tonumber(placement.slot.span) or tonumber(item.slot and item.slot.span) or style.preferred_span
-        span=math.max(style.min_span,math.min(style.max_span,math.floor(span)))
-        local item_location=item.iid and locate_document_item(doc,item.iid)
-        local item_parent=item_location and item_location.parent and locate_document_item(doc,item_location.parent)
-        local old_region=item_location and not item_location.parent and item_location.host=="top_bar"
-            and item.slot and item.slot.region or nil
-        remove_identity(doc.hosts.top_bar.instances,item.iid)
-        if item_parent and item_parent.item.widget=="pill" then
-            if not resize_pill(doc,item_parent.item,-(item.slot and item.slot.span or 1),context) then return false end
-        end
-        if old_region and not pack_bar_region(doc,old_region) then return false end
-        placement.slot.span=span
-        item.host="top_bar"; item.slot=clone(placement.slot)
-        table.insert(doc.hosts.top_bar.instances,item)
-        if not reflow_bar_region(doc,item.slot.region,item,placement.slot.start) then return false end
     end
-    if form=="bar" then placement.slot=clone(item.slot) end
-    config.enabled=true; config.style=style_name; config.placement=placement
+    config.enabled=true; config.style=style_name
     state.widget=id; state.settings=clone(item.settings or source.settings or state.settings or {})
     for _,other in group_items(doc,group,id) do other.settings=clone(state.settings) end
-    if commit~=false then
-        history(s,previous); finish(s,doc)
-        s["widgets.write"]={clone(doc)}
-    end
+    if not normalise(doc,req) then return false end
+    if form=="desktop" then config.placement={host="canvas",slot=clone(item.slot)} end
+    commit_drop(s,doc,previous,commit)
     return true,doc,item
 end
 local function same_slot(a,b)
@@ -853,57 +519,57 @@ local function same_slot(a,b)
     if a.host=="canvas" then
         return a.slot.x==b.slot.x and a.slot.y==b.slot.y and a.slot.w==b.slot.w and a.slot.h==b.slot.h
     end
-    return a.slot.region==b.slot.region and a.slot.start==b.slot.start and a.slot.span==b.slot.span
+    return a.slot.region==b.slot.region and a.slot.start==b.slot.start
 end
-local function transient_layout(base,candidate,moved,source,epoch)
+-- The preview keeps the dimmed source in place and shows the target as a placeholder.
+local function transient_layout(base,candidate,moved,source,epoch,req)
     if type(moved)~="table" then return candidate end
     local source_location=source.iid and locate_document_item(base,source.iid)
-    if source_location and same_slot(source_location.item,moved) then return candidate end
+    if source_location and same_slot(source_location.item,moved) and source_location.item.host==moved.host then return candidate end
     local preview=clone(candidate)
     local target_location=locate_document_item(preview,moved.iid)
     if not target_location then return candidate end
-    local target_list=document_location(preview,target_location)
-    if not target_list then return candidate end
-    table.remove(target_list,target_location.index)
-    local placeholder=clone(moved)
+    local placeholder=target_location.item
     local stem="drag-preview:"..tostring(epoch)..":"..tostring(moved.iid)
     placeholder.iid=string.sub(stem,1,128)
+    local function taken(iid)
+        local hit=false
+        each_list(preview,function(other) if other~=placeholder and other.iid==iid then hit=true end end)
+        return hit
+    end
     local suffix=0
-    while locate_document_item(preview,placeholder.iid) do
+    while taken(placeholder.iid) do
         suffix+=1
         placeholder.iid=string.sub(stem,1,112)..":"..tostring(suffix)
     end
     placeholder.drag_placeholder=true
-    table.insert(target_list,target_location.index,placeholder)
     if source_location and not locate_document_item(preview,source.iid) then
-        local source_list=document_location(preview,source_location)
-        if source_list then table.insert(source_list,math.min(source_location.index,#source_list+1),clone(source_location.item)) end
-    end
-    if source_location and source_location.parent then
-        local original_parent=locate_document_item(base,source_location.parent)
-        local preview_parent=locate_document_item(preview,source_location.parent)
-        if original_parent and preview_parent and original_parent.item.widget=="pill"
-            and preview_parent.item.slot and original_parent.item.slot then
-            preview_parent.item.slot.span=original_parent.item.slot.span
+        local list=document_location(preview,source_location)
+        if list then
+            local original=clone(source_location.item)
+            if original.slot.region then
+                -- Re-seat the source between its original neighbours.
+                local base_list=document_location(base,source_location) or {}
+                local seated
+                for index=source_location.index-1,1,-1 do
+                    local neighbour=base_list[index]
+                    if neighbour.slot.region~=original.slot.region then break end
+                    seated=locate_document_item(preview,neighbour.iid)
+                    if seated then break end
+                end
+                original.slot.start=seated and seated.item.slot.start+.5 or -.5
+            end
+            table.insert(list,original)
         end
     end
-    local regions={}
-    local target_root=top_bar_root(preview,placeholder.iid)
-    if target_root and target_root.slot then regions[target_root.slot.region]=true end
-    local source_root=source_location and top_bar_root(preview,source.iid)
-    if source_root and source_root.slot then regions[source_root.slot.region]=true end
-    for region in regions do
-        if not reflow_preview_region(preview,region,source.iid) then return clone(base) end
-    end
+    if not normalise(preview,req) then return clone(base) end
     return preview
 end
 local function capture_drag_base(s,event,source,context)
     local original=document(s,context)
-    if type(original)~="table" then return nil end
+    if type(original)~="table" or type(original.hosts)~="table" or type(original.hosts.top_bar)~="table" then return nil end
     local base=clone(original)
-    local needs_bar=source.form=="bar" or source.host=="top_bar" or event.destination=="bar"
-    if needs_bar and base.hosts.top_bar and base.hosts.top_bar.mode=="content"
-        and not tile_document(base,context) then return nil end
+    if not normalise(base,{catalogue=context.catalogue}) then return nil end
     s["widgets.drag.original"]={clone(original)}
     s["widgets.drag.base"]={clone(base)}
     s["widgets.drag.revision"]=tonumber(s["widgets.rev"]) or 0
@@ -979,70 +645,25 @@ local function op(s,args)
         style=descriptor.styles and descriptor.styles[style_name]
         if not style then s["widgets.error"]="invalid style"; return end
         form_state.style=style_name
-        local has_live_form=false
         for _,item in group_items(doc,group,id) do
-            local item_form=item.host=="canvas" and "desktop" or "bar"
-            if item_form==form then
-                has_live_form=true
+            if (item.host=="canvas" and "desktop" or "bar")==form then
                 item.style=style_name
-                if item.host=="canvas" then item.slot.w=style.preferred_span
-                elseif not resize_bar(doc,item,style,req) then s["widgets.error"]="bar has no room for this style"; return end
+                if item.host=="canvas" then item.slot.w=math.min(style.preferred_span,doc.hosts.canvas.width-item.slot.x) end
             end
         end
-        if form=="bar" and not has_live_form then grow_saved_bar_placement(form_state,style) end
-        history(s,previous)
-        finish(s,doc); return
-    elseif kind~="toggle-form" then
+    elseif kind=="remove" then
+        -- Keyboard and edit-mode counterpart of dragging a widget off the bar or desktop.
+        local target
+        for _,item in group_items(doc,group,id) do
+            if (item.host=="canvas")==(form=="desktop") then target=locate_document_item(doc,item.iid); break end
+        end
+        if not target then return end
+        remove_instance(doc,state,target)
+    else
         s["widgets.error"]="unknown widget operation"; return
     end
-    local enabled=req.enabled==true
-    if enabled==form_state.enabled then return end
-    -- All validation and form availability checks happen before detaching a live placement.
-    if enabled and form=="desktop" and not descriptor.styles then s["widgets.error"]="desktop form unavailable"; return end
-    local existing=group_items(doc,group,id)
-    if enabled then
-        local duplicate=false
-        for _,item in existing do if (item.host=="canvas")== (form=="desktop") then duplicate=true end end
-        if not duplicate then
-            local iid=form=="desktop" and (group..":desktop") or group
-            local collision
-            each_list(doc,function(item) if item.iid==iid then collision=true end end)
-            if collision then s["widgets.error"]="widget instance id already exists"; return end
-            local item={iid=iid,widget=id,group=group,settings=clone(state.settings or package.defaults or {}),style=style_name}
-            local placement=form_state.placement
-            if placement and placement.slot then placement=placement end
-            if form=="desktop" then
-                add_desktop(doc,item,placement,style,req)
-            else
-                if not insert_bar(doc,item,placement,style) then s["widgets.error"]="bar has no room for this widget"; return end
-            end
-        end
-    else
-        local target
-        for _,item in existing do
-            if (item.host=="canvas")== (form=="desktop") then target=item; break end
-        end
-        if not target then form_state.enabled=false; finish(s,doc); return end
-        if form=="bar" and target.children and #target.children>0 then
-            if not promote_children(doc,target) then s["widgets.error"]="bar has no room for pill children"; return end
-        end
-        local placement={host=target.host,slot=clone(target.slot)}
-        local list=target.host=="canvas" and doc.hosts.canvas.instances or doc.hosts.top_bar.instances
-        local removed=remove_identity(list,target.iid)
-        if not removed then
-            local function remove_nested(items)
-                for _,item in items or {} do
-                    local nested=remove_identity(item.children or {},target.iid)
-                    if nested then return nested end
-                end
-            end
-            removed=remove_nested(doc.hosts.top_bar.instances)
-        end
-        form_state.placement=placement
-    end
+    if not normalise(doc,req) then s["widgets.error"]="invalid widget layout"; return end
     history(s,previous)
-    form_state.enabled=enabled
-    form_state.style=style_name
     finish(s,doc)
 end
 local function drag(s,args)
@@ -1147,7 +768,7 @@ local function drag(s,args)
         if base then
             local context=type(event.context)=="table" and event.context or event
             local accepted,candidate,moved=drag_drop(s,event,context,base,false)
-            s["widgets.drag.layout"]={accepted and (source.kind=="resize" and candidate or transient_layout(base,candidate,moved,source,s["widgets.drag.epoch"])) or clone(base)}
+            s["widgets.drag.layout"]={accepted and (source.kind=="resize" and candidate or transient_layout(base,candidate,moved,source,s["widgets.drag.epoch"],{catalogue=context.catalogue})) or clone(base)}
         else
             s["widgets.drag.layout"]={}
         end
@@ -1169,18 +790,13 @@ local function drag(s,args)
         if accepted then
             s["widgets.drag.active"]=true
             s["widgets.drag.phase"]="settle"
-            local doc=(s["widgets.draft"] or {})[1]
             local live=moved
             if live and live.host=="canvas" then
                 s["widgets.drag.snap_x"]=tonumber(live.slot.x) or 0
                 s["widgets.drag.snap_y"]=tonumber(live.slot.y) or 0
-            elseif live and live.slot then
-                local host=doc.hosts.top_bar
-                local region=host.regions[live.slot.region]
-                local tiles=host.tiles or 1
-                local position=(region and region.start or 0)+(live.slot.start or 0)
-                if live.slot.region=="right" then position=tiles-position-(live.slot.span or 1) end
-                s["widgets.drag.snap_x"]=position*((tonumber(event.screen_width) or tonumber(context.screen_width) or tiles)/tiles)
+            else
+                -- Bar drops settle where the pointer released them; the bar reflows under it.
+                s["widgets.drag.snap_x"]=(tonumber(s["widgets.drag.x"]) or 0)-(tonumber(s["widgets.drag.grab_x"]) or 0)
                 s["widgets.drag.snap_y"]=0
             end
             if live then

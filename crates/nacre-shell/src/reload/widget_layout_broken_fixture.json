@@ -1,0 +1,223 @@
+{
+ "hosts": {
+  "top_bar": {
+   "instances": [
+    {
+     "host": "top_bar",
+     "iid": "launcher",
+     "settings": {
+      "action": "launcher",
+      "custom_path": "",
+      "icon": "nacre",
+      "route": ""
+     },
+     "slot": {
+      "region": "left",
+      "span": 1,
+      "start": 0
+     },
+     "widget": "launcher"
+    },
+    {
+     "host": "top_bar",
+     "iid": "workspaces",
+     "settings": {},
+     "slot": {
+      "region": "left",
+      "span": 5,
+      "start": 1
+     },
+     "widget": "workspaces"
+    },
+    {
+     "host": "top_bar",
+     "iid": "title",
+     "settings": {},
+     "slot": {
+      "region": "centre",
+      "span": 11,
+      "start": 24
+     },
+     "widget": "title"
+    },
+    {
+     "children": [
+      {
+       "host": "status-pill",
+       "iid": "updates",
+       "settings": {},
+       "slot": {
+        "region": "left",
+        "span": 2,
+        "start": 0
+       },
+       "widget": "updates"
+      },
+      {
+       "host": "status-pill",
+       "iid": "sound",
+       "settings": {},
+       "slot": {
+        "region": "centre",
+        "span": 1,
+        "start": 0
+       },
+       "widget": "sound"
+      },
+      {
+       "host": "status-pill",
+       "iid": "wifi",
+       "settings": {},
+       "slot": {
+        "region": "centre",
+        "span": 1,
+        "start": 1
+       },
+       "widget": "wifi"
+      },
+      {
+       "host": "status-pill",
+       "iid": "bluetooth",
+       "settings": {},
+       "slot": {
+        "region": "centre",
+        "span": 1,
+        "start": 2
+       },
+       "widget": "bluetooth"
+      },
+      {
+       "group": "battery",
+       "host": "status-pill",
+       "iid": "battery",
+       "settings": {},
+       "slot": {
+        "region": "centre",
+        "span": 1,
+        "start": 3
+       },
+       "style": "icon+value",
+       "widget": "battery"
+      },
+      {
+       "host": "status-pill",
+       "iid": "notifications",
+       "settings": {},
+       "slot": {
+        "region": "centre",
+        "span": 2,
+        "start": 4
+       },
+       "widget": "notifications"
+      },
+      {
+       "host": "status-pill",
+       "iid": "power",
+       "settings": {},
+       "slot": {
+        "region": "right",
+        "span": 1,
+        "start": 0
+       },
+       "widget": "power"
+      },
+      {
+       "group": "clock",
+       "host": "status-pill",
+       "iid": "clock",
+       "settings": {
+        "colour_role": "tertiary",
+        "dropdown_trigger": "default"
+       },
+       "slot": {
+        "region": "centre",
+        "span": 4,
+        "start": 6
+       },
+       "style": "time",
+       "widget": "clock"
+      }
+     ],
+     "host": "top_bar",
+     "iid": "status-pill",
+     "settings": {},
+     "slot": {
+      "region": "right",
+      "span": 10,
+      "start": 0
+     },
+     "widget": "pill"
+    }
+   ],
+   "mode": "tiles",
+   "regions": {
+    "centre": {
+     "span": 60,
+     "start": 0
+    },
+    "left": {
+     "span": 60,
+     "start": 0
+    },
+    "right": {
+     "span": 60,
+     "start": 0
+    }
+   },
+   "tiles": 60
+  }
+ },
+ "preset": "Custom",
+ "version": 1,
+ "widgets": {
+  "battery": {
+   "forms": {
+    "bar": {
+     "enabled": true,
+     "placement": {
+      "host": "status-pill",
+      "slot": {
+       "region": "centre",
+       "span": 1,
+       "start": 3
+      }
+     },
+     "style": "icon+value"
+    },
+    "desktop": {
+     "enabled": false,
+     "placement": {},
+     "style": "ring"
+    }
+   },
+   "settings": {},
+   "widget": "battery"
+  },
+  "clock": {
+   "forms": {
+    "bar": {
+     "enabled": true,
+     "placement": {
+      "host": "status-pill",
+      "slot": {
+       "region": "centre",
+       "span": 4,
+       "start": 6
+      }
+     },
+     "style": "time"
+    },
+    "desktop": {
+     "enabled": false,
+     "placement": {},
+     "style": ""
+    }
+   },
+   "settings": {
+    "colour_role": "tertiary",
+    "dropdown_trigger": "default"
+   },
+   "widget": "clock"
+  }
+ }
+}

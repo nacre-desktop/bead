@@ -318,10 +318,64 @@ function M.ghost_node()
         node,marker}
 end
 
+-- B0198 edit mode: while a widget is dragged, the real bar and desktop show where it
+-- can land and a removal target appears for placed widgets. Passive; the drop model
+-- in the app behaviour decides with the same zone geometry (M.remove_zone).
+-- The removal target, centred near the bottom of the output.
+function M.remove_zone()
+    local sp=kit.tokens.spacing
+    return {width=sp.huge*6,height=sp.huge*2,bottom=sp.huge*2}
+end
+local function zone(id,left,top,width,height,label,icon,active,danger)
+    local accent=danger and "error" or "primary"
+    return ui.Box{id=id,position="absolute",left=left,top=top,width=width,height=height,
+        radius=kit.tokens.radii.medium,fill=ui.alpha(accent,active and .16 or .05),
+        border_width=active and 2 or 1.5,border_color=ui.alpha(accent,active and .9 or .45),
+        align="center",justify="center",
+        label and ui.Row{id=id.."-label",height=kit.tokens.spacing.huge,padding_left=kit.tokens.spacing.md,padding_right=kit.tokens.spacing.md,
+            gap=kit.tokens.spacing.xs,align="center",radius=kit.tokens.radii.full,
+            fill=ui.alpha(danger and "errorContainer" or "surfaceContainerHighest",active and .96 or .82),
+            ui.Text{id="icon",text=icon,family="Material Symbols Rounded",font_size=kit.tokens.icons.large,
+                width=kit.tokens.icons.large+kit.tokens.spacing.xs,height=kit.tokens.spacing.xl,color=danger and "onErrorContainer" or accent},
+            ui.Text{id="text",text=label,font_size=kit.tokens.text.body*4/3,
+                width=math.ceil(ui.text_width(label,"IBM Plex Sans",kit.tokens.text.body*4/3))+kit.tokens.spacing.hairline,
+                height=kit.tokens.spacing.xl,color=danger and "onErrorContainer" or "onSurface"}} or nil}
+end
+function M.drop_zones(width,height)
+    if ui.resolve_for_check(ui.bind("widgets.drag.active"))~=true
+        or ui.resolve_for_check(ui.bind("widgets.drag.phase"))~="dragging" then return {} end
+    local value=ui.resolve_for_check(ui.bind("widgets.drag.source"))
+    local source=type(value)=="table" and (value[1] or value) or nil
+    if type(source)~="table" or source.kind=="resize" or type(source.widget)~="string" then return {} end
+    local package=registry.catalogue[source.widget]
+    if not package then return {} end
+    local destination=ui.resolve_for_check(ui.bind("widgets.drag.destination"))
+    local bar_height=ui.resolve_for_check(ui.bind("bar.height")) or t.status_height or 50
+    local inset=kit.tokens.spacing.md
+    local zones={}
+    local remove=M.remove_zone()
+    local remove_left,remove_top=(width-remove.width)/2,height-remove.bottom-remove.height
+    local x=ui.resolve_for_check(ui.bind("widgets.drag.x")) or -1
+    local y=ui.resolve_for_check(ui.bind("widgets.drag.y")) or -1
+    local over_remove=source.iid~=nil and x>=remove_left and x<remove_left+remove.width
+        and y>=remove_top and y<remove_top+remove.height
+    table.insert(zones,zone("drop-zone-bar",0,0,width,bar_height,nil,nil,
+        destination=="bar",false))
+    if package.forms.desktop then
+        table.insert(zones,zone("drop-zone-desktop",inset,bar_height+inset,width-2*inset,height-bar_height-2*inset,
+            ui.tr("bead.widgets.zone-desktop"),"wallpaper",destination=="desktop" and not over_remove,false))
+    end
+    if source.iid~=nil then
+        table.insert(zones,zone("drop-zone-remove",remove_left,remove_top,remove.width,remove.height,
+            ui.tr("bead.widgets.zone-remove"),"delete",over_remove,true))
+    end
+    return zones
+end
 function M.ghost_root()
     local width=ui.resolve_for_check(ui.bind("bead.viewport.width")) or 1
     local height=ui.resolve_for_check(ui.bind("bead.viewport.height")) or 1
     local props={id="widgets-drag-overlay",width=width,height=height}
+    for _,node in M.drop_zones(width,height) do table.insert(props,node) end
     local node=M.ghost_node()
     if node then table.insert(props,node) end
     return ui.Group(props)

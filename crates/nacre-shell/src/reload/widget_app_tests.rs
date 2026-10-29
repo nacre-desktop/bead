@@ -64,6 +64,14 @@ fn document() -> Json {
     })
 }
 
+fn with_desktop_clock(mut doc: Json) -> Json {
+    doc["hosts"]["top_bar"]["instances"][0]["group"] = json!("clock");
+    doc["hosts"]["canvas"] = json!({"width":1920,"height":1080,"instances":[{"iid":"clock:desktop",
+        "widget":"clock","group":"clock","host":"canvas","slot":{"x":32,"y":32,"w":240,"h":96},
+        "settings":{"format":"24","future":"keep"}}]});
+    doc
+}
+
 fn act(harness: &mut Harness, mut request: Json, doc: &Json) {
     request["document"] = doc.clone();
     request["initial"] = doc.clone();
@@ -78,28 +86,9 @@ fn act(harness: &mut Harness, mut request: Json, doc: &Json) {
 #[test]
 fn form_toggle_shared_settings_undo_and_unknown_json_round_trip() {
     let (mut harness, root) = model_harness();
-    let original = document();
-    act(
-        &mut harness,
-        json!({"op":"toggle-form","widget":"clock","form":"desktop","enabled":true}),
-        &original,
-    );
-    let after_toggle = harness.session.stores.get("widgets.draft").unwrap();
-    let Value::List(after_toggle) = after_toggle else {
-        panic!("draft is a document list")
-    };
-    let mut doc = after_toggle[0].clone();
+    // B0198: placement is drag-only; start from a clock already on the bar and desktop.
+    let mut doc = with_desktop_clock(document());
     assert_eq!(doc["future"], json!({"opaque":[7,9]}));
-    assert_eq!(doc["widgets"]["clock"]["forms"]["desktop"]["enabled"], true);
-    assert_eq!(
-        doc["hosts"]["canvas"]["instances"][0]["iid"],
-        "clock:desktop"
-    );
-    assert_eq!(
-        doc["hosts"]["canvas"]["instances"][0]["settings"]["future"],
-        "keep"
-    );
-
     act(
         &mut harness,
         json!({"op":"setting","widget":"clock","form":"bar","key":"format","value":"12"}),
@@ -151,16 +140,7 @@ fn form_toggle_shared_settings_undo_and_unknown_json_round_trip() {
 #[test]
 fn colour_role_is_saved_per_widget_instance_and_shared_by_its_forms() {
     let (mut harness, _root) = model_harness();
-    let original = document();
-    act(
-        &mut harness,
-        json!({"op":"toggle-form","widget":"clock","form":"desktop","enabled":true}),
-        &original,
-    );
-    let Value::List(draft) = harness.session.stores.get("widgets.draft").unwrap() else {
-        panic!("draft missing")
-    };
-    let doc = draft[0].clone();
+    let doc = with_desktop_clock(document());
     act(
         &mut harness,
         json!({"op":"setting","widget":"clock","group":"clock","form":"bar",

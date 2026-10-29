@@ -47,71 +47,6 @@ fn catalogue() -> Json {
         {"id":"network","defaults":{},"forms":{"bar":{"default_style":"icon","styles":{"icon":{"min_span":1,"max_span":2,"preferred_span":2}}}}}
     ])
 }
-fn bar_style_catalogue() -> Json {
-    json!([
-        {"id":"notifications","defaults":{},"forms":{"bar":{"default_style":"icon","styles":{
-            "icon":{"min_span":1,"max_span":8,"preferred_span":1},
-            "icon+value":{"min_span":1,"max_span":8,"preferred_span":2},
-            "icon+text":{"min_span":1,"max_span":8,"preferred_span":3}
-        }}}},
-        {"id":"pill","defaults":{},"forms":{"bar":{"default_style":"pill","styles":{
-            "pill":{"min_span":1,"max_span":10,"preferred_span":1}
-        }}}}
-    ])
-}
-fn bar_style_document(
-    child_span: u32,
-    saved_span: u32,
-    pill_span: u32,
-    region_span: u32,
-    live: bool,
-) -> Json {
-    let notifications = json!({"iid":"notifications","group":"notifications","widget":"notifications",
-        "host":"status-pill","style":"icon","slot":{"region":"centre","start":0,"span":child_span},"settings":{}});
-    let wifi = json!({"iid":"wifi","widget":"wifi","host":"status-pill","style":"icon",
-        "slot":{"region":"centre","start":child_span,"span":1},"settings":{}});
-    let mut children = vec![wifi];
-    if live {
-        children.insert(0, notifications);
-    }
-    json!({
-        "version":1,
-        "widgets":{"notifications":{"widget":"notifications","settings":{"future":"keep"},"forms":{
-            "bar":{"enabled":live,"style":"icon","placement":{"host":"status-pill",
-                "future_placement":"keep","slot":{"region":"centre","start":0,"span":saved_span,"future_slot":"keep"}}},
-            "desktop":{"enabled":false,"style":"summary","placement":{}}}}},
-        "hosts":{"top_bar":{"mode":"tiles","tiles":10,"regions":{
-            "left":{"start":0,"span":region_span},"centre":{"start":0,"span":10},"right":{"start":0,"span":10}},
-            "instances":[
-                {"iid":"status-pill","widget":"pill","host":"top_bar","style":"pill",
-                    "slot":{"region":"left","start":0,"span":pill_span},"settings":{},"children":children},
-                {"iid":"bar-neighbor","widget":"title","host":"top_bar","style":"default",
-                    "slot":{"region":"left","start":pill_span,"span":1},"settings":{}}
-            ]}}
-    })
-}
-fn style_controller(doc: &Json) -> Controller {
-    let mut controller = Controller::new().unwrap();
-    controller
-        .sync(&BTreeMap::from([
-            ("widgets.layout".into(), Value::list(vec![doc.clone()])),
-            ("widgets.rev".into(), Value::Number(1.)),
-        ]))
-        .unwrap();
-    controller
-}
-fn apply_bar_style(
-    controller: &mut Controller,
-    doc: &Json,
-    style: &str,
-) -> BTreeMap<String, Value> {
-    controller
-        .edit(Value::list(vec![
-            json!({"op":"style","widget":"notifications","group":"notifications",
-        "form":"bar","style":style,"document":doc,"catalogue":bar_style_catalogue()}),
-        ]))
-        .unwrap()
-}
 fn context() -> Json {
     json!({"catalogue":catalogue(),"screen_width":1920,"screen_height":1080,
         "geometry":[{"iid":"clock-main","x":0,"y":0,"w":64,"h":40},{"iid":"network-main","x":64,"y":0,"w":64,"h":40}],
@@ -190,22 +125,6 @@ fn pill_transfer(phase: &str, child: bool) -> Value {
         "target_origin_x":0,"target_origin_y":0,"context":pill_context()}),
     ])
 }
-fn desktop_catalogue_context() -> Json {
-    let mut packages = catalogue().as_array().unwrap().clone();
-    packages[0]["forms"]["desktop"] = json!({"default_style":"card","styles":{"card":{"min_span":120,"max_span":480,"preferred_span":240,"preferred_height":120}}});
-    json!({"catalogue":packages,"screen_width":1920,"screen_height":1080,"snap_distance":16,
-        "geometry":[{"iid":"clock-main","x":0,"y":0,"w":64,"h":40}],
-        "reservations":[{"iid":"clock-main","width":64}]})
-}
-fn desktop_transfer(destination: &str, form: &str, x: f64) -> Value {
-    Value::list(vec![
-        json!({"phase":"drop","source":[{"iid":"clock-main","group":"clock-main","widget":"clock",
-        "host":if form=="desktop" {"canvas"} else {"top_bar"},"form":form,"style":if form=="desktop" {"card"} else {"time"},
-        "settings":{"future":"keep"}}],"destination":destination,"x":x,"y":200,"global_x":x,"global_y":200,
-        "screen_width":1920,"screen_height":1080,"width":64,"height":40,"grab_x":16,"grab_y":8,
-        "target_origin_x":0,"target_origin_y":0,"context":desktop_catalogue_context()}),
-    ])
-}
 fn default_widget_fixture() -> Json {
     let nested = |iid: &str, widget: &str, region: &str, start: u32, settings: Json| {
         json!({"iid":iid,"widget":widget,"host":"status-pill",
@@ -279,12 +198,9 @@ fn default_widget_bar_return_transfer_at(phase: &str, x: f64) -> Value {
     event["context"]["reservations"][0]["width"] = json!(352);
     Value::list(vec![event])
 }
-fn default_widget_bar_return_transfer(phase: &str) -> Value {
-    default_widget_bar_return_transfer_at(phase, 400.)
-}
 #[test]
-fn desktop_clock_dropped_on_occupied_pill_slot_writes_at_82_and_90_percent() {
-    for x in [1920. * 0.82, 1920. * 0.90] {
+fn desktop_clock_dropped_inside_the_pill_joins_it_at_86_and_90_percent() {
+    for x in [1920. * 0.86, 1920. * 0.90] {
         let mut original = default_widget_fixture();
         let pill = &mut original["hosts"]["top_bar"]["instances"][3];
         pill["children"]
@@ -333,7 +249,6 @@ fn desktop_clock_dropped_on_occupied_pill_slot_writes_at_82_and_90_percent() {
                 .iter()
                 .any(|item| item["iid"] == "clock")
         );
-        assert!(pill["slot"]["span"].as_f64().unwrap() >= 13.);
         assert!(
             written["hosts"]["canvas"]["instances"]
                 .as_array()
@@ -378,111 +293,6 @@ fn doc_from(values: &BTreeMap<String, Value>, key: &str) -> Json {
         panic!("{key} is a document list")
     };
     rows.first().cloned().expect("document is present")
-}
-
-#[test]
-fn nested_bar_style_growth_reflows_children_and_reserved_pill() {
-    let original = bar_style_document(1, 1, 2, 10, true);
-    let mut controller = style_controller(&original);
-    let values = apply_bar_style(&mut controller, &original, "icon+value");
-    let updated = doc_from(&values, "widgets.draft");
-    assert_unique_iids(&updated);
-    let items = updated["hosts"]["top_bar"]["instances"].as_array().unwrap();
-    let pill = items
-        .iter()
-        .find(|item| item["iid"] == "status-pill")
-        .unwrap();
-    assert_eq!(
-        pill["slot"]["span"], 3,
-        "pill reservation grows with its child"
-    );
-    let children = pill["children"].as_array().unwrap();
-    let notifications = children
-        .iter()
-        .find(|item| item["iid"] == "notifications")
-        .unwrap();
-    let wifi = children.iter().find(|item| item["iid"] == "wifi").unwrap();
-    assert_eq!(notifications["style"], "icon+value");
-    assert_eq!(notifications["slot"]["span"], 2);
-    assert_eq!(
-        wifi["slot"]["start"], 2,
-        "following pill child shifts out of the grown slot"
-    );
-    let neighbor = items
-        .iter()
-        .find(|item| item["iid"] == "bar-neighbor")
-        .unwrap();
-    assert_eq!(
-        neighbor["slot"]["start"], 3,
-        "following bar root shifts with the pill reservation"
-    );
-    let placement = &updated["widgets"]["notifications"]["forms"]["bar"]["placement"];
-    assert_eq!(placement["slot"]["span"], 2);
-    assert_eq!(placement["future_placement"], "keep");
-    assert_eq!(placement["slot"]["future_slot"], "keep");
-}
-
-#[test]
-fn nested_style_change_preserves_a_larger_explicit_bar_span() {
-    let original = bar_style_document(4, 4, 5, 10, true);
-    let mut controller = style_controller(&original);
-    let values = apply_bar_style(&mut controller, &original, "icon+value");
-    let updated = doc_from(&values, "widgets.draft");
-    let items = updated["hosts"]["top_bar"]["instances"].as_array().unwrap();
-    let pill = items
-        .iter()
-        .find(|item| item["iid"] == "status-pill")
-        .unwrap();
-    let child = pill["children"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|item| item["iid"] == "notifications")
-        .unwrap();
-    assert_eq!(child["slot"]["span"], 4);
-    assert_eq!(pill["slot"]["span"], 5);
-    assert_eq!(
-        items
-            .iter()
-            .find(|item| item["iid"] == "bar-neighbor")
-            .unwrap()["slot"]["start"],
-        5
-    );
-    assert_eq!(
-        updated["widgets"]["notifications"]["forms"]["bar"]["placement"]["slot"]["span"],
-        4
-    );
-}
-
-#[test]
-fn disabled_bar_style_change_grows_its_saved_preferred_span() {
-    let original = bar_style_document(1, 1, 2, 10, false);
-    let mut controller = style_controller(&original);
-    let values = apply_bar_style(&mut controller, &original, "icon+value");
-    let updated = doc_from(&values, "widgets.draft");
-    let form = &updated["widgets"]["notifications"]["forms"]["bar"];
-    assert_eq!(form["enabled"], false);
-    assert_eq!(form["style"], "icon+value");
-    assert_eq!(form["placement"]["slot"]["span"], 2);
-    assert_eq!(form["placement"]["future_placement"], "keep");
-    assert_eq!(form["placement"]["slot"]["future_slot"], "keep");
-}
-
-#[test]
-fn failed_nested_style_growth_keeps_the_canonical_layout_unchanged() {
-    let original = bar_style_document(1, 1, 4, 5, true);
-    let mut controller = style_controller(&original);
-    let values = apply_bar_style(&mut controller, &original, "icon+value");
-    assert_eq!(
-        values.get("widgets.error"),
-        Some(&Value::Text("bar has no room for this style".into()))
-    );
-    assert_eq!(
-        values.get("widgets.layout"),
-        Some(&Value::list(vec![original]))
-    );
-    assert_eq!(values.get("widgets.draft"), Some(&Value::list(Vec::new())));
-    assert_eq!(values.get("widgets.write"), Some(&Value::list(Vec::new())));
 }
 
 #[test]
@@ -811,7 +621,7 @@ fn motion_reflows_neighbors_without_write_and_drop_commits_once_from_frozen_base
     let first = controller.drag(event("move", 96.)).unwrap();
     let preview = doc_from(&first, "widgets.drag.layout");
     assert_unique_iids(&preview);
-    assert_eq!(preview["hosts"]["top_bar"]["mode"], "tiles");
+    assert_eq!(preview["hosts"]["top_bar"]["mode"], "content");
     let instances = preview["hosts"]["top_bar"]["instances"].as_array().unwrap();
     assert!(instances.iter().any(|item| item["iid"] == "clock-main"));
     assert!(
@@ -819,29 +629,12 @@ fn motion_reflows_neighbors_without_write_and_drop_commits_once_from_frozen_base
             .iter()
             .any(|item| item["drag_placeholder"] == true)
     );
-    assert_eq!(
-        instances
-            .iter()
-            .find(|item| item["iid"] == "network-main")
-            .unwrap()["slot"]["start"],
-        5
-    );
     assert!(matches!(&first["widgets.write"],Value::List(rows) if rows.is_empty()));
     assert!(matches!(&first["widgets.undo"],Value::List(rows) if rows.is_empty()));
 
     let second = controller.drag(event("move", 128.)).unwrap();
     let second_doc = doc_from(&second, "widgets.drag.layout");
     assert_unique_iids(&second_doc);
-    assert_eq!(
-        second_doc["hosts"]["top_bar"]["instances"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|item| item["iid"] == "network-main")
-            .unwrap()["slot"]["start"],
-        2,
-        "the retained source placeholder occupies its slot while neighbors reflow from the gesture base"
-    );
     let mut fresh = Controller::new().unwrap();
     fresh
         .sync(&BTreeMap::from([
@@ -866,7 +659,7 @@ fn motion_reflows_neighbors_without_write_and_drop_commits_once_from_frozen_base
     let committed = controller.drag(drop).unwrap();
     let written = doc_from(&committed, "widgets.write");
     assert_unique_iids(&written);
-    assert_eq!(written["hosts"]["top_bar"]["mode"], "tiles");
+    assert_eq!(written["hosts"]["top_bar"]["mode"], "content");
     assert!(
         !written["hosts"]["top_bar"]["instances"]
             .as_array()
@@ -922,7 +715,6 @@ fn drag_into_pill_preserves_item_data_and_writes_only_on_drop() {
     assert_eq!(child["settings"]["future"], "keep");
     assert_eq!(child["opaque"]["nested"][1], "preserved");
     assert_eq!(pill["future_field"]["keep"], 7);
-    assert!(pill["slot"]["span"].as_f64().unwrap() >= 8.);
     assert_eq!(
         written["hosts"]["top_bar"]["instances"]
             .as_array()
@@ -994,7 +786,10 @@ fn default_eight_child_pill_drag_to_desktop_keeps_unique_ids_and_real_output_bou
         .filter(|item| item["widget"] == "pill")
         .collect();
     assert_eq!(pills.len(), 1, "the status pill IID remains unique");
-    assert_eq!(pills[0]["slot"]["span"], 7);
+    assert_eq!(
+        pills[0]["slot"]["span"], 1,
+        "B0198: spans come from the form"
+    );
     let children = pills[0]["children"].as_array().unwrap();
     assert_eq!(children.len(), 7);
     assert!(!children.iter().any(|item| item["widget"] == "clock"));
@@ -1016,122 +811,6 @@ fn default_eight_child_pill_drag_to_desktop_keeps_unique_ids_and_real_output_bou
     assert_eq!(written["owner_fixture_sentinel"]["version"], 1);
     assert!(matches!(&dropped["widgets.undo"],Value::List(rows) if rows.len()==1));
     assert!(matches!(&dropped["widgets.write"],Value::List(rows) if rows.len()==1));
-}
-
-#[test]
-fn default_clock_returns_with_geometry_materialized_bar_span() {
-    let mut original = default_widget_fixture();
-    original["hosts"]["top_bar"]["instances"][1]["group"] = json!("opaque-workspaces-group");
-    original["widgets"]["opaque-workspaces-group"] = json!({"forms":17,"future":[1,{"keep":true}]});
-    original["widgets"]["clock"]["forms"]["bar"]["placement"]["future_placement"] =
-        json!("preserved");
-    original["widgets"]["clock"]["forms"]["bar"]["placement"]["slot"]["future_slot"] =
-        json!("preserved");
-    let mut context = default_widget_context();
-    context["geometry"][1]["w"] = json!(68);
-    context["reservations"][1]["width"] = json!(68);
-    let mut to_desktop = default_widget_transfer("drop");
-    let Value::List(events) = &mut to_desktop else {
-        unreachable!()
-    };
-    let events = std::sync::Arc::make_mut(events);
-    events[0]["context"] = context;
-    events[0]["source_origin_valid"] = json!(true);
-
-    let mut controller = Controller::new().unwrap();
-    controller
-        .sync(&BTreeMap::from([
-            ("widgets.layout".into(), Value::list(vec![original])),
-            ("widgets.rev".into(), Value::Number(4.)),
-            ("widgets.screen_width".into(), Value::Number(1920.)),
-            ("widgets.screen_height".into(), Value::Number(1200.)),
-        ]))
-        .unwrap();
-    let desktop = controller.drag(to_desktop).unwrap();
-    assert!(
-        matches!(&desktop["widgets.write"],Value::List(rows) if rows.len()==1),
-        "desktop conversion rejected: error={:?}, message={:?}, phase={:?}",
-        desktop.get("widgets.error"),
-        desktop.get("widgets.message"),
-        desktop.get("widgets.drag.phase")
-    );
-    let desktop_doc = doc_from(&desktop, "widgets.write");
-    assert_eq!(
-        desktop_doc["widgets"]["clock"]["forms"]["bar"]["placement"]["slot"]["span"], 3,
-        "content-mode geometry and reservation materialize the clock's bar span"
-    );
-    assert_eq!(
-        desktop_doc["widgets"]["clock"]["forms"]["bar"]["placement"]["future_placement"],
-        "preserved"
-    );
-    assert_eq!(
-        desktop_doc["widgets"]["clock"]["forms"]["bar"]["placement"]["slot"]["future_slot"],
-        "preserved"
-    );
-    assert_eq!(
-        desktop_doc["widgets"]["opaque-workspaces-group"]["future"][1]["keep"],
-        true
-    );
-    assert_unique_iids(&desktop_doc);
-
-    controller
-        .sync(&BTreeMap::from([
-            (
-                "widgets.layout".into(),
-                Value::list(vec![desktop_doc.clone()]),
-            ),
-            ("widgets.draft".into(), Value::list(Vec::<Json>::new())),
-            ("widgets.rev".into(), Value::Number(5.)),
-        ]))
-        .unwrap();
-    controller
-        .drag(default_widget_bar_return_transfer("move"))
-        .unwrap();
-    let returned = controller
-        .drag(default_widget_bar_return_transfer("drop"))
-        .unwrap();
-    assert!(
-        matches!(&returned["widgets.write"],Value::List(rows) if rows.len()==1),
-        "bar return rejected: error={:?}, message={:?}, phase={:?}, layout={:?}",
-        returned.get("widgets.error"),
-        returned.get("widgets.message"),
-        returned.get("widgets.drag.phase"),
-        returned.get("widgets.drag.layout")
-    );
-    let returned_doc = doc_from(&returned, "widgets.write");
-    assert_unique_iids(&returned_doc);
-    let bar_items = returned_doc["hosts"]["top_bar"]["instances"]
-        .as_array()
-        .unwrap();
-    let clock = bar_items
-        .iter()
-        .find(|item| item["iid"] == "clock")
-        .expect("clock returns as a top-level bar widget");
-    assert_eq!(clock["host"], "top_bar");
-    assert_eq!(clock["slot"]["span"], 3);
-    assert_eq!(
-        clock["settings"]["clock_fixture_sentinel"],
-        "keep-clock-setting"
-    );
-    let pill = bar_items
-        .iter()
-        .find(|item| item["iid"] == "status-pill")
-        .unwrap();
-    assert!(
-        !pill["children"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|item| item["iid"] == "clock")
-    );
-    assert_eq!(
-        returned_doc["widgets"]["clock"]["settings"]["clock_fixture_sentinel"],
-        "keep-clock-setting"
-    );
-    assert_eq!(
-        returned_doc["widgets"]["opaque-workspaces-group"]["future"][1]["keep"],
-        true
-    );
 }
 
 #[test]
@@ -1164,83 +843,9 @@ fn drag_out_of_pill_restores_top_level_and_preserves_opaque_settings() {
     assert_eq!(child["settings"]["future"], "keep");
     assert_eq!(child["opaque"]["nested"][1], "preserved");
     assert!(pill["children"].as_array().unwrap().is_empty());
-    assert_eq!(pill["slot"]["span"].as_f64().unwrap(), 4.);
+    assert_eq!(pill["slot"]["span"].as_f64().unwrap(), 1.);
     assert!(matches!(&moved["widgets.write"],Value::List(rows) if rows.len()==1));
     assert!(matches!(&moved["widgets.undo"],Value::List(rows) if rows.len()==1));
-}
-
-#[test]
-fn configured_bar_span_survives_desktop_form_roundtrip() {
-    let mut doc = document();
-    doc["widgets"] = json!({"clock-main":{"widget":"clock","settings":{"future":"keep"},"forms":{
-        "bar":{"enabled":true,"style":"time","placement":{"host":"top_bar","slot":{"region":"left","start":0,"span":4}}},
-        "desktop":{"enabled":false,"style":"card","placement":{"host":"canvas","slot":{"x":240,"y":160,"w":240,"h":120}}}
-    }}});
-    let mut controller = Controller::new().unwrap();
-    controller
-        .sync(&BTreeMap::from([
-            ("widgets.layout".into(), Value::list(vec![doc])),
-            ("widgets.screen_width".into(), Value::Number(1920.)),
-            ("widgets.screen_height".into(), Value::Number(1080.)),
-        ]))
-        .unwrap();
-    let desktop = controller
-        .drag(desktop_transfer("desktop", "bar", 500.))
-        .unwrap();
-    let desktop_doc = doc_from(&desktop, "widgets.write");
-    let canvas = desktop_doc["hosts"]["canvas"]["instances"]
-        .as_array()
-        .unwrap();
-    assert_eq!(canvas.len(), 1);
-    assert_eq!(canvas[0]["iid"], "clock-main");
-    assert_eq!(canvas[0]["slot"]["w"].as_f64().unwrap(), 240.);
-    assert_eq!(canvas[0]["slot"]["h"].as_f64().unwrap(), 120.);
-    assert_eq!(canvas[0]["settings"]["future"], "keep");
-    assert!(
-        !desktop_doc["hosts"]["top_bar"]["instances"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|item| item["iid"] == "clock-main")
-    );
-
-    // The host acknowledges the first write before the next pointer gesture.
-    controller
-        .sync(&BTreeMap::from([
-            (
-                "widgets.layout".into(),
-                Value::list(vec![desktop_doc.clone()]),
-            ),
-            ("widgets.draft".into(), Value::list(Vec::<Json>::new())),
-            ("widgets.rev".into(), Value::Number(1.)),
-        ]))
-        .unwrap();
-    let Value::List(events) = desktop_transfer("bar", "desktop", 400.) else {
-        unreachable!()
-    };
-    let mut start = events[0].clone();
-    start["phase"] = json!("move");
-    controller.drag(Value::list(vec![start])).unwrap();
-    let back = controller
-        .drag(desktop_transfer("bar", "desktop", 400.))
-        .unwrap();
-    let back_doc = doc_from(&back, "widgets.write");
-    let clock = back_doc["hosts"]["top_bar"]["instances"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|item| item["iid"] == "clock-main")
-        .unwrap();
-    assert_eq!(clock["slot"]["span"].as_f64().unwrap(), 4.);
-    assert_eq!(clock["settings"]["future"], "keep");
-    assert!(
-        !back_doc["hosts"]["canvas"]["instances"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|item| item["iid"] == "clock-main")
-    );
-    assert!(matches!(&back["widgets.write"],Value::List(rows) if rows.len()==1));
 }
 
 #[test]
@@ -1333,7 +938,7 @@ fn cancel_drops_transient_layout_and_never_writes() {
     let cancelled = controller.drag(event("cancel", 96.)).unwrap();
     let layout = doc_from(&cancelled, "widgets.drag.layout");
     assert_eq!(doc_from(&cancelled, "widgets.layout"), document());
-    assert_eq!(layout["hosts"]["top_bar"]["mode"], "tiles");
+    assert_eq!(layout["hosts"]["top_bar"]["mode"], "content");
     assert!(matches!(&cancelled["widgets.write"],Value::List(rows) if rows.is_empty()));
     assert!(matches!(&cancelled["widgets.undo"],Value::List(rows) if rows.is_empty()));
 }
@@ -2691,7 +2296,13 @@ fn largest_rounded_size(scene: &bead::render::Scene) -> (f32, f32) {
         .primitives
         .iter()
         .filter_map(|primitive| match primitive {
-            bead::render::Primitive::Rounded { rect, .. } if rect.w > 0. && rect.h > 0. => {
+            // B0198 drop zones (output-wide areas, the 192x64 removal target) are not the card.
+            bead::render::Primitive::Rounded { rect, .. }
+                if rect.w > 0.
+                    && rect.h > 0.
+                    && rect.w < 1000.
+                    && (rect.w, rect.h) != (192., 64.) =>
+            {
                 Some((rect.w, rect.h))
             }
             _ => None,
@@ -3790,7 +3401,7 @@ fn native_widget_edit_action_uses_the_canonical_save_path() {
             Value::Bool(true),
         )]))
         .unwrap();
-    let request = json!({"op":"toggle-form","widget":"launcher","group":"launcher","form":"bar","enabled":false});
+    let request = json!({"op":"remove","widget":"launcher","group":"launcher","form":"bar"});
     runtime
         .stage(UiEvent::Action {
             name: "widgets.edit".into(),
@@ -3823,9 +3434,14 @@ fn synchronous_native_remove_commits_saved_layout_into_the_real_bar_session() {
             Value::Bool(true),
         )]))
         .unwrap();
-    runtime.stage(UiEvent::Action{name:"widgets.edit".into(),argument:Value::list(vec![json!({
-        "op":"toggle-form","widget":"launcher","group":"launcher","form":"bar","enabled":false
-    })])}).unwrap();
+    runtime
+        .stage(UiEvent::Action {
+            name: "widgets.edit".into(),
+            argument: Value::list(vec![json!({
+                "op":"remove","widget":"launcher","group":"launcher","form":"bar"
+            })]),
+        })
+        .unwrap();
     assert!(
         runtime.commit(),
         "the accepted post-write scene becomes the committed frame"
@@ -3869,9 +3485,14 @@ fn synchronous_native_remove_save_failure_restores_visible_default_and_reports_e
             Value::Bool(true),
         )]))
         .unwrap();
-    runtime.stage(UiEvent::Action{name:"widgets.edit".into(),argument:Value::list(vec![json!({
-        "op":"toggle-form","widget":"launcher","group":"launcher","form":"bar","enabled":false
-    })])}).unwrap();
+    runtime
+        .stage(UiEvent::Action {
+            name: "widgets.edit".into(),
+            argument: Value::list(vec![json!({
+                "op":"remove","widget":"launcher","group":"launcher","form":"bar"
+            })]),
+        })
+        .unwrap();
     assert!(
         runtime.commit(),
         "the rollback/error scene is committed after the filesystem rejects the write"
@@ -4024,7 +3645,7 @@ fn invalid_native_edit_never_reaches_file_persistence() {
     let _ = runtime.stage(UiEvent::Action {
         name: "widgets.edit".into(),
         argument: Value::list(vec![json!({
-            "op":"toggle-form","widget":"launcher","group":"launcher","form":"bar","enabled":false
+            "op":"remove","widget":"launcher","group":"launcher","form":"bar"
         })]),
     });
     assert!(

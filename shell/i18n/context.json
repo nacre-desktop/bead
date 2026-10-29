@@ -860,11 +860,7 @@
   "bead.widgets.colour": "Widgets app per-instance palette role setting label.",
   "bead.widgets.find": "Widgets app search placeholder and accessible name.",
   "bead.widgets.overview": "Widgets app sidebar entry that returns to the widget overview.",
-  "bead.widgets.drag-hint": "Widgets app one-line hint explaining preview drag placement.",
-  "bead.widgets.add-bar": "Widgets app button that adds the current widget to the bar.",
-  "bead.widgets.add-desktop": "Widgets app button that adds the current widget to the desktop.",
-  "bead.widgets.remove-bar": "Widgets app button that removes the current widget from the bar.",
-  "bead.widgets.remove-desktop": "Widgets app button that removes the current widget from the desktop.",
+  "bead.widgets.drag-hint": "Widgets app one-line hint explaining drag placement and drag-off removal.",
   "bead.widgets.launcher-title": "Widgets app sidebar and page title for Launcher.",
   "bead.widgets.launcher-description": "One-line description shown below Launcher and in the widget list.",
   "bead.widgets.notifications-title": "Widgets app sidebar and page title for Notifications.",
@@ -894,6 +890,7 @@
   "bead.widgets.category-system": "Widgets app overview filter for system widgets.",
   "bead.widgets.category-containers": "Widgets app overview filter for containers.",
   "bead.widgets.category-yours": "Widgets app overview filter for widgets already in the layout.",
-  "bead.widgets.in-bar": "Widgets app switch label for the bar placement.",
-  "bead.widgets.on-desktop": "Widgets app switch label for the desktop placement."
+  "bead.widgets.group-label": "Widgets app sidebar group label under Overview, above the individual widgets.",
+  "bead.widgets.zone-desktop": "Drop-zone label shown on the desktop while a widget is dragged.",
+  "bead.widgets.zone-remove": "Drop-zone label for the removal target shown while a placed widget is dragged."
 }
