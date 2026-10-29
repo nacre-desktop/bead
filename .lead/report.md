@@ -1,7 +1,7 @@
 # B0179 r3 report
 
 Status: incomplete; r2 live audit was rejected for fresh-view `panel.open` errors.
-Branch: `task/codex-b0179-shell-idle-r3-20261029` (push pending).
+Branch: `task/codex-b0179-shell-idle-r3-20261029` pushed at `cffae0e8`.
 Fix: per-consumer projection readiness, silent publisher revision advance, and destination-schema reconciliation before route commits.
 Regression tests: fresh consumer projects identical payload once; initialized consumer skips repeats; navigation declares `panel.open` before commit.
 Full CI: `bash run-ci.sh` in task Ubuntu 24.04 container passed; 783 tests passed, 2 ignored; formatting, Clippy, feature checks, release build, and cargo-deny passed.
