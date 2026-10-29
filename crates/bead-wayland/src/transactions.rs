@@ -23,6 +23,9 @@ fn panel_event_belongs_to_host(event: &UiEvent) -> bool {
 
 impl App {
     pub(super) fn ui(&mut self, event: UiEvent) {
+        let _busy = bead_core::profile::Busy::named(|| {
+            format!("ui:{}", bead_core::profile::variant_name(&event)).into()
+        });
         if let UiEvent::NativePearlPlaced {
             id,
             epoch,

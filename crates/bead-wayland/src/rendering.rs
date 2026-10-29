@@ -1113,6 +1113,11 @@ impl App {
         Ok(())
     }
     pub(super) fn draw(&mut self, index: usize, qh: &QueueHandle<Self>) {
+        let _busy = bead_core::profile::Busy::new(if self.surfaces[index].companion {
+            "draw_panel"
+        } else {
+            "draw"
+        });
         if self.hidden {
             return;
         }
@@ -1327,6 +1332,11 @@ impl App {
             let output = self.surfaces[index].output.clone();
             self.position_panel_surface(&self.surfaces[index].layer, &output, scene);
         }
+        let traced_frame = bead_core::profile::frame_trace().then(|| {
+            bead_core::profile::take_splits(0);
+            (monotonic_ns(), bead_core::profile::thread_cpu_ns())
+        });
+        let mut damage_px = 0u64;
         let decoration_result = if self.surfaces[index].companion {
             self.sync_all_decorations()
         } else {
@@ -1337,6 +1347,7 @@ impl App {
             return;
         }
         let frame_started = Instant::now();
+        bead_core::profile::split("decorations");
         if let Err(error) = self.update_companion_policy(index, qh) {
             if !self.prepare_surface_images(index, error.as_ref()) {
                 self.fail(error);
@@ -1665,10 +1676,12 @@ impl App {
                 })
                 .unwrap_or((0., 0.));
             renderer.presentation_motion(opaque_motion);
+            bead_core::profile::split("pose");
             {
                 let _prepare = bead_core::profile::Span::new("present_prepare");
                 renderer.prepare_on_ui(scene, scale)?;
             }
+            bead_core::profile::split("prepare");
             let mut regions = {
                 let _damage = bead_core::profile::Span::new("visual_damage");
                 if self.options.damage {
@@ -1687,6 +1700,11 @@ impl App {
                     vec![Damage::full(w as u32, h as u32)]
                 }
             };
+            bead_core::profile::split("damage");
+            damage_px = regions
+                .iter()
+                .map(|r| u64::from(r.w) * u64::from(r.h))
+                .sum();
             // A replacement is only useful when newer UI content changes pixels.
             // In particular, do not turn animation ticks into extra commits while
             // the original frame callback is outstanding.
@@ -2094,6 +2112,7 @@ impl App {
                 // An explicitly permitted automatic fallback uses the same retained Scene.
                 renderer.prepare_on_ui(scene, scale)?;
             }
+            bead_core::profile::split("gpu_fallback");
             let repair_profile = bead_core::profile::Span::new("repair_setup");
             if !cfg!(target_endian = "little") {
                 return Err("CPU renderer currently requires little endian".into());
@@ -2255,6 +2274,7 @@ impl App {
                 );
             }
             drop(compose_profile);
+            bead_core::profile::split("paint");
             if self.started.elapsed().as_secs_f64() > 2. {
                 s.render_ms.push(start.elapsed().as_secs_f64() * 1000.);
             }
@@ -2344,6 +2364,7 @@ impl App {
             b.pending.clear();
             s.previous = Some(current);
             s.frames += 1;
+            bead_core::profile::split("commit");
             Ok(())
         })();
         if result.is_ok()
@@ -2385,6 +2406,9 @@ impl App {
             // destination has committed accepted content, never on dock request.
             self.panel_cover = None;
         }
+        let motion_label = traced_frame
+            .and(motion_clock.as_ref())
+            .map(|(id, _, _)| id.clone());
         if let Some((id, drawn, duration)) = motion_clock
             && self.surfaces[index].frames > previous_frames
         {
@@ -2416,12 +2440,32 @@ impl App {
         if self.surfaces[index].frames > previous_frames
             && self.started.elapsed().as_secs_f64() > 2.
         {
-            if bead_core::profile::frame_trace() {
+            if let Some((wall, cpu)) = traced_frame {
+                // B0205: the wall split of this frame, its thread CPU, and the gap since
+                // the previous committed frame of the same kind of surface.
+                thread_local!(static LAST: std::cell::Cell<[u64; 2]> = const { std::cell::Cell::new([0; 2]) });
+                let now = monotonic_ns();
+                let kind = usize::from(self.surfaces[index].companion);
+                let gap = LAST.with(|last| {
+                    let mut times = last.get();
+                    let previous = std::mem::replace(&mut times[kind], now);
+                    last.set(times);
+                    previous
+                });
                 println!(
-                    "UI_FRAME monotonic_ns={} render_ms={:.3} companion={}",
-                    monotonic_ns(),
+                    "UI_FRAME monotonic_ns={now} render_ms={:.3} companion={} wall_ms={:.3} cpu_ms={:.3} gap_ms={:.3} serial={} damage_px={damage_px} motion={} split={}",
                     frame_started.elapsed().as_secs_f64() * 1000.,
-                    self.surfaces[index].companion
+                    self.surfaces[index].companion,
+                    now.saturating_sub(wall) as f64 / 1e6,
+                    bead_core::profile::thread_cpu_ns().saturating_sub(cpu) as f64 / 1e6,
+                    if gap == 0 {
+                        0.
+                    } else {
+                        now.saturating_sub(gap) as f64 / 1e6
+                    },
+                    self.surfaces[index].ui_serial,
+                    motion_label.as_deref().unwrap_or("-"),
+                    bead_core::profile::take_splits(wall)
                 );
             }
             if self.options.debug_luau_stall_ms.is_some() {

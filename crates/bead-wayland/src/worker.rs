@@ -365,6 +365,7 @@ impl SceneSource for Source {
             let wakeup: Arc<dyn Fn(UiEvent) + Send + Sync> = Arc::from(wakeup);
             let report = wakeup.clone();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let factory_started = bead_core::profile::monotonic_ns();
                 let mut source = match factory() {
                     Ok(source) => source,
                     Err(error) => {
@@ -381,6 +382,14 @@ impl SceneSource for Source {
                     }
                 };
                 bead_core::profile::mark("runtime_ready");
+                bead_core::profile::trace("worker_session", || {
+                    format!(
+                        "wall_ms={:.3} thread_cpu_ms={:.3}",
+                        bead_core::profile::monotonic_ns().saturating_sub(factory_started) as f64
+                            / 1e6,
+                        bead_core::profile::thread_cpu_ns() as f64 / 1e6
+                    )
+                });
                 let service_wakeup = wakeup.clone();
                 source.services(Box::new(move |event| service_wakeup(event)));
                 let mut cache =
@@ -583,6 +592,14 @@ impl SceneSource for Source {
                             }
                             drop(bake_profile);
                             bead_core::profile::mark("worker_paint_ready");
+                            bead_core::profile::trace("worker_scene", || {
+                                format!(
+                                    "token={token} reload={reload} wall_ms={:.3} thread_cpu_ms={:.3} builds={}",
+                                    started.elapsed().as_secs_f64() * 1000.,
+                                    bead_core::profile::thread_cpu_ns() as f64 / 1e6,
+                                    cache.builds
+                                )
+                            });
                             bead_core::vprintln!(
                                 "WORKER_PREPARE token={token} reload={reload} total_ms={:.3} builds={}",
                                 started.elapsed().as_secs_f64() * 1000.,

@@ -668,6 +668,7 @@ pub fn run_runtime(
     // charged as a stall. No high-frequency heartbeat while idle.
     let result = loop_.run(Some(Duration::from_secs(1)), &mut app, |app| {
         watchdog.beat();
+        bead_core::profile::busy_iteration();
         // A protocol error or a dead socket never recovers, and the Wayland source
         // does not surface every such error: stop once instead of spinning on it.
         if app.failure.is_none()

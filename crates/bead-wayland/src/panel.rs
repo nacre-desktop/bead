@@ -672,6 +672,29 @@ impl App {
     }
     pub(super) fn start_panel(&mut self, output: Option<&str>, open: bool) -> Result<(), String> {
         bead_core::profile::mark("panel_admission");
+        let _busy = bead_core::profile::Busy::new("start_panel");
+        let traced = bead_core::profile::frame_trace().then(|| {
+            (
+                monotonic_ns(),
+                bead_core::profile::thread_cpu_ns(),
+                self.panel_runtime.is_some(),
+            )
+        });
+        let result = self.start_panel_inner(output, open);
+        if let Some((wall, cpu, retained)) = traced {
+            bead_core::profile::trace("start_panel", || {
+                format!(
+                    "name={} open={open} retained={retained} wall_ms={:.3} cpu_ms={:.3} ok={}",
+                    self.panel_name.as_deref().unwrap_or("-"),
+                    monotonic_ns().saturating_sub(wall) as f64 / 1e6,
+                    bead_core::profile::thread_cpu_ns().saturating_sub(cpu) as f64 / 1e6,
+                    result.is_ok()
+                )
+            });
+        }
+        result
+    }
+    fn start_panel_inner(&mut self, output: Option<&str>, open: bool) -> Result<(), String> {
         if open && self.panel_name.as_deref() == Some("wallpaper") {
             eprintln!(
                 "WALLPAPER_OPEN_PANEL_START monotonic_ns={} retained_runtime={}",
@@ -949,6 +972,9 @@ impl App {
         Ok(())
     }
     pub(super) fn panel_ui(&mut self, event: UiEvent) {
+        let _busy = bead_core::profile::Busy::named(|| {
+            format!("panel_ui:{}", bead_core::profile::variant_name(&event)).into()
+        });
         if self.panel_runtime.is_none() || self.companion.is_none() {
             return;
         }
@@ -1023,6 +1049,7 @@ impl App {
     }
     /// The first real scene of a panel has arrived: its reveal restarts from closed, never from a blank fallback's pose.
     pub(super) fn panel_content_ready(&mut self) {
+        bead_core::profile::trace("panel_content_ready", String::new);
         self.panel_ready = true;
         self.panel_animations = Default::default();
         let reveal = self
@@ -1039,6 +1066,10 @@ impl App {
         }
     }
     pub(super) fn close_panel(&mut self) {
+        let _busy = bead_core::profile::Busy::new("close_panel");
+        bead_core::profile::trace("close_panel", || {
+            format!("name={}", self.panel_name.as_deref().unwrap_or("-"))
+        });
         if self.panel_runtime.is_none() {
             return;
         }
@@ -1164,6 +1195,21 @@ impl App {
         self.release_panel_inner(false);
     }
     fn release_panel_inner(&mut self, check_app_lifetime: bool) {
+        let _busy = bead_core::profile::Busy::new("release_panel");
+        let traced = bead_core::profile::frame_trace()
+            .then(|| (monotonic_ns(), bead_core::profile::thread_cpu_ns()));
+        self.release_panel_body(check_app_lifetime);
+        if let Some((wall, cpu)) = traced {
+            bead_core::profile::trace("release_panel", || {
+                format!(
+                    "wall_ms={:.3} cpu_ms={:.3}",
+                    monotonic_ns().saturating_sub(wall) as f64 / 1e6,
+                    bead_core::profile::thread_cpu_ns().saturating_sub(cpu) as f64 / 1e6
+                )
+            });
+        }
+    }
+    fn release_panel_body(&mut self, check_app_lifetime: bool) {
         self.panel_cover = None;
         self.panel_dock_transition = None;
         self.cancel_prepared_native();

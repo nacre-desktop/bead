@@ -42,6 +42,7 @@ pub(super) struct Tiles {
 }
 impl App {
     pub(super) fn sync_all_decorations(&mut self) -> Result<(), String> {
+        let _busy = bead_core::profile::Busy::new("decorations");
         for index in 0..self.surfaces.len() {
             self.sync_decorations(index)?;
         }

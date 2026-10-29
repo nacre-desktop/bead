@@ -108,3 +108,191 @@ pub fn position(stage: &'static str, x: f32, y: f32) {
         );
     }
 }
+
+/// B0205: main-thread attribution under [`frame_trace`]. A guard charges its own
+/// (exclusive) wall and thread-CPU time to `stage`; [`busy_iteration`] prints the
+/// loop iterations that spent at least `BEAD_FRAME_TRACE_BUSY_MS` (default 4) of
+/// either. Nothing is read or allocated when tracing is off.
+pub struct Busy(bool);
+struct BusyFrame {
+    stage: std::borrow::Cow<'static, str>,
+    wall: u64,
+    cpu: u64,
+    child_wall: u64,
+    child_cpu: u64,
+}
+#[derive(Default)]
+struct BusyState {
+    stack: Vec<BusyFrame>,
+    totals: Vec<(std::borrow::Cow<'static, str>, u64, u64, u32)>,
+    last_cpu: u64,
+    marks: Vec<(&'static str, u64)>,
+}
+thread_local! {
+    static BUSY: std::cell::RefCell<BusyState> = Default::default();
+}
+impl Busy {
+    pub fn new(stage: &'static str) -> Self {
+        Self::named(|| stage.into())
+    }
+    /// A stage whose label is only built when tracing is on.
+    pub fn named(stage: impl FnOnce() -> std::borrow::Cow<'static, str>) -> Self {
+        if !frame_trace() {
+            return Self(false);
+        }
+        let frame = BusyFrame {
+            stage: stage(),
+            wall: monotonic_ns(),
+            cpu: thread_cpu_ns(),
+            child_wall: 0,
+            child_cpu: 0,
+        };
+        BUSY.with(|b| b.borrow_mut().stack.push(frame));
+        Self(true)
+    }
+}
+impl Drop for Busy {
+    fn drop(&mut self) {
+        if !self.0 {
+            return;
+        }
+        let (wall, cpu) = (monotonic_ns(), thread_cpu_ns());
+        BUSY.with(|b| {
+            let mut b = b.borrow_mut();
+            let Some(frame) = b.stack.pop() else {
+                return;
+            };
+            let (w, c) = (wall - frame.wall, cpu.saturating_sub(frame.cpu));
+            if let Some(parent) = b.stack.last_mut() {
+                parent.child_wall += w;
+                parent.child_cpu += c;
+            }
+            let (own_w, own_c) = (
+                w.saturating_sub(frame.child_wall),
+                c.saturating_sub(frame.child_cpu),
+            );
+            if let Some(total) = b.totals.iter_mut().find(|t| t.0 == frame.stage) {
+                total.1 += own_w;
+                total.2 += own_c;
+                total.3 += 1;
+            } else {
+                b.totals.push((frame.stage, own_w, own_c, 1));
+            }
+        });
+    }
+}
+/// Call once per event-loop iteration (after dispatch) on the thread that uses [`Busy`].
+pub fn busy_iteration() {
+    if !frame_trace() {
+        return;
+    }
+    static THRESHOLD_NS: OnceLock<u64> = OnceLock::new();
+    let threshold = *THRESHOLD_NS.get_or_init(|| {
+        std::env::var("BEAD_FRAME_TRACE_BUSY_MS")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+            .map_or(4_000_000, |ms| (ms * 1e6) as u64)
+    });
+    let cpu = thread_cpu_ns();
+    BUSY.with(|b| {
+        let mut b = b.borrow_mut();
+        let previous = std::mem::replace(&mut b.last_cpu, cpu);
+        let spent = cpu.saturating_sub(previous);
+        let wall: u64 = b.totals.iter().map(|t| t.1).sum();
+        if previous != 0 && (spent >= threshold || wall >= threshold) {
+            let attributed: u64 = b.totals.iter().map(|t| t.2).sum();
+            let mut totals = std::mem::take(&mut b.totals);
+            totals.sort_by_key(|t| std::cmp::Reverse(t.1.max(t.2)));
+            let stages = totals
+                .iter()
+                .map(|(stage, w, c, n)| {
+                    format!("{stage}:{:.2}/{:.2}x{n}", *w as f64 / 1e6, *c as f64 / 1e6)
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            println!(
+                "MAIN_BUSY monotonic_ns={} cpu_ms={:.2} attributed_wall_ms={:.2} other_cpu_ms={:.2} stages={stages}",
+                monotonic_ns(),
+                spent as f64 / 1e6,
+                wall as f64 / 1e6,
+                spent.saturating_sub(attributed) as f64 / 1e6
+            );
+        } else {
+            b.totals.clear();
+        }
+    });
+}
+/// Per-frame split points for `UI_FRAME` (wall clock, [`frame_trace`] only).
+pub fn split(stage: &'static str) {
+    if frame_trace() {
+        let now = monotonic_ns();
+        BUSY.with(|b| b.borrow_mut().marks.push((stage, now)));
+    }
+}
+/// The splits since `begin` as `stage:ms` deltas, clearing them; empty when tracing is off.
+pub fn take_splits(begin: u64) -> String {
+    if !frame_trace() {
+        return String::new();
+    }
+    BUSY.with(|b| {
+        let mut previous = begin;
+        let marks = std::mem::take(&mut b.borrow_mut().marks);
+        marks
+            .iter()
+            .map(|(stage, at)| {
+                let delta = at.saturating_sub(previous);
+                previous = *at;
+                format!("{stage}:{:.3}", delta as f64 / 1e6)
+            })
+            .collect::<Vec<_>>()
+            .join(",")
+    })
+}
+/// One timeline line (`PANEL_TRACE`) under [`frame_trace`], with the caller's numeric fields.
+pub fn trace(stage: &'static str, fields: impl FnOnce() -> String) {
+    if frame_trace() {
+        println!(
+            "PANEL_TRACE stage={stage} monotonic_ns={} thread={:?} {}",
+            monotonic_ns(),
+            std::thread::current().id(),
+            fields()
+        );
+    }
+}
+/// The leading identifier of a `Debug` rendering (an enum variant's name) without
+/// formatting the rest of the value.
+pub fn variant_name(value: &dyn std::fmt::Debug) -> String {
+    struct Head(String);
+    impl std::fmt::Write for Head {
+        fn write_str(&mut self, s: &str) -> std::fmt::Result {
+            let end = s
+                .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .unwrap_or(s.len());
+            self.0.push_str(&s[..end]);
+            if end < s.len() {
+                Err(std::fmt::Error)
+            } else {
+                Ok(())
+            }
+        }
+    }
+    let mut head = Head(String::new());
+    let _ = std::fmt::write(&mut head, format_args!("{value:?}"));
+    head.0
+}
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn variant_name_stops_at_the_first_field() {
+        #[derive(Debug)]
+        #[allow(dead_code)]
+        enum Event {
+            Plain,
+            Tuple(String),
+            Fields { x: u32 },
+        }
+        assert_eq!(super::variant_name(&Event::Plain), "Plain");
+        assert_eq!(super::variant_name(&Event::Tuple("x".repeat(9))), "Tuple");
+        assert_eq!(super::variant_name(&Event::Fields { x: 1 }), "Fields");
+    }
+}
