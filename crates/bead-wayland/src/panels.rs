@@ -172,6 +172,21 @@ pub(crate) fn invocation_output(
     })
 }
 
+/// B0194: which ready output a panel app opens on at start: the one it was started for; the first
+/// when that one is absent and every output is known; none (retry on the next output event)
+/// while the wanted one may still be announced.
+pub(crate) fn app_start_output(
+    ready: &[Option<&str>],
+    wanted: Option<&str>,
+    all_known: bool,
+) -> Option<usize> {
+    match wanted.and_then(|w| ready.iter().position(|n| *n == Some(w))) {
+        Some(at) => Some(at),
+        None if wanted.is_some() && !all_known => None,
+        None => (!ready.is_empty()).then_some(0),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -246,6 +261,18 @@ mod tests {
             Some("DP-1")
         );
         assert_eq!(pick(None, None, None, None), None);
+    }
+
+    #[test]
+    fn a_panel_app_starts_on_the_output_it_was_started_for() {
+        let two = [Some("eDP-1"), Some("DP-1")];
+        assert_eq!(app_start_output(&two, Some("DP-1"), true), Some(1));
+        assert_eq!(app_start_output(&two, Some("eDP-1"), true), Some(0));
+        assert_eq!(app_start_output(&two, None, true), Some(0));
+        // DP-1 not announced yet: wait; once everything is known, fall back to the first.
+        assert_eq!(app_start_output(&two[..1], Some("DP-1"), false), None);
+        assert_eq!(app_start_output(&two[..1], Some("DP-1"), true), Some(0));
+        assert_eq!(app_start_output(&[], None, true), None);
     }
 
     #[test]

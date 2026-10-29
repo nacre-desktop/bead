@@ -471,11 +471,11 @@ impl App {
         if self.app_pending.is_none() {
             return;
         }
-        let Some(info) = self
+        let ready: Vec<_> = self
             .output
             .outputs()
             .filter_map(|o| self.output.info(&o))
-            .find(|i| {
+            .filter(|i| {
                 i.logical_size.is_some_and(|(w, h)| w > 0 && h > 0)
                     && self
                         .options
@@ -483,6 +483,16 @@ impl App {
                         .as_ref()
                         .is_none_or(|n| i.name.as_ref() == Some(n))
             })
+            .collect();
+        // B0194: the output the app was started for, when it is there; else the first.
+        let all_known = self.output.outputs().all(|o| {
+            self.output
+                .info(&o)
+                .is_some_and(|i| i.name.is_some() && i.logical_size.is_some())
+        });
+        let names: Vec<_> = ready.iter().map(|i| i.name.as_deref()).collect();
+        let Some(info) = panels::app_start_output(&names, self.options.panel_output.as_deref(), all_known)
+            .map(|at| ready[at].clone())
         else {
             return;
         };
