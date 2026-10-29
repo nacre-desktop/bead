@@ -20,7 +20,9 @@ for name,region in layout.regions do regions[name]=table.clone(region) end
 regions.left.props={id="left",height=34,gap=12,shrink=1,align="center"}
 regions.centre.inline=true
 regions.right.props={id="right",height=34,gap=12,shrink=0,align="center"}
-regions.right.before=require("../widgets/tray")
+-- The recording stop button (only while recording) sits before the tray, as QML put it first in the status column.
+regions.right.before=table.clone(require("./recording"))
+for _,node in require("../widgets/tray") do table.insert(regions.right.before,node) end
 return ui.Host{edge="top",id="bar",shape="strip-h",grid={tiles=layout.tiles,mode=layout.mode or "tiles",regions=regions},layout=layout.instances,catalogue=widgets.catalogue,render=render,
     metadata=require("../widgets/editing").seed(canonical,ui.resolve_for_check(ui.bind("bead.viewport.width")),ui.resolve_for_check(ui.bind("widgets.canvas.height")),"bar"),
     width="100%",height=c.header,radius=0,fill="surface",padding_left=15,padding_right=15,align="center",justify="space-between",direction="row",

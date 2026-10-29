@@ -10,11 +10,20 @@ return {
     ["launcher.conversion.value"]="", ["launcher.conversion.description"]="",
     ["launcher.conversion.error"]="", ["launcher.message"]="",
     ["launcher.quick"]={}, ["launcher.quick_error"]="", ["launcher.updates.count"]=-1,
+    -- The inline form (B0199): `launcher_form.rs` opens it (kind, prompt, starting values) and runs its backend.
+    ["launcher.form.kind"]="", ["launcher.form.message"]="", ["launcher.form.error"]="", ["launcher.form.busy"]=false,
+    ["launcher.form.v1"]="", ["launcher.form.v2"]="", ["launcher.form.v3"]="", ["launcher.form.v4"]="",
   },
   actions = {
     select_app = function(s,id) s["launcher.selection"] = id end,
     toggle_favorite = function(s,id) s["launcher.selection"] = id end,
     ["launcher.quick"] = function(_) end,
+    -- Submit and cancel are the host's (`launcher.form`); a choice is only a store write ("<slot>:<value>").
+    ["launcher.form"] = function(_) end,
+    ["launcher.form.choose"] = function(s,arg)
+      local slot,value=tostring(arg):match("^([1-4]):(.+)$")
+      if slot then s["launcher.form.v"..slot]=value end
+    end,
     navigate = function(s,id)
       s["launcher.engine_route"]=(id=="apps" or id=="actions") and "" or id
       s["launcher.route"]=(id=="actions") and id or "apps"
@@ -26,6 +35,7 @@ return {
     toggle = function(s) s["panel.open"] = not s["panel.open"] end,
   },
   computed = {
+    ["launcher.form.has_error"]=function(s) return s["launcher.form.error"]~="" end,
     -- Keep the last accepted model's geometry while its replacement is in flight.
     ["launcher.display_query"]=function(s) return s["launcher.pending"] and s["launcher.result_query"] or s["launcher.search.text"] end,
     ["launcher.quick_allowed"]=function(s) return not s["launcher.display_query"]:match("^%s*=") end,

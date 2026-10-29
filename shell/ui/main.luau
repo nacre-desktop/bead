@@ -5,6 +5,7 @@ local Sidebar = require("./components/sidebar")
 local AppGrid = require("./components/app-grid")
 local Results = require("./components/results")
 local Quick = require("./components/quick")
+local Form = require("./components/form")
 local M = require("./components/metrics")
 local show_quick=M.show(ui.resolve_for_check(ui.bind("bead.viewport.width")),ui.resolve_for_check(ui.bind("launcher.quick_allowed")))
 -- QML NacreAppBrowser prefixHints: five 24 px chips at the search field's right end while the query is empty.
@@ -32,10 +33,17 @@ if has_detail then
         ui.Text{id="engine-guidance",text=message,visible=message~="",font_size=13.333,height=40,color="onSurfaceVariant"},
     }
 end
-return kit.Panel {edge="bottom",id="launcher",width=1100,height=590,max_width="90%",max_height="90%",
+local panel={edge="bottom",id="launcher",width=1100,height=590,max_width="90%",max_height="90%",
     open=ui.bind("panel.open"),transition="ease",duration=.3,return_duration=.18,return_transition="ease",fade=false,reveal=not ui.resolve_for_check(ui.bind("view.detached")),slide_distance=590,
     radius=12,fill="surface",border_width=1,border_color="outlineVariant",
-    padding_left=12,padding_right=20,padding_top=16,padding_bottom=18,gap=15,
+    padding_left=12,padding_right=20,padding_top=16,padding_bottom=18,gap=15}
+-- An inline form (reminder, TUI/web app, imports, recording sound, confirmations) covers the whole launcher, as in QML.
+if ui.resolve_for_check(ui.bind("launcher.form.kind"))~="" then
+    panel.padding_left,panel.padding_right,panel.padding_top,panel.padding_bottom=0,0,0,0
+    panel[1]=Form{}
+    return kit.Panel(panel)
+end
+local body={
     ui.Row{grow=1,
         ui.memo("launcher.sidebar",{},function() return Sidebar{} end),
         ui.Box{width=18,height="fill",
@@ -59,3 +67,5 @@ return kit.Panel {edge="bottom",id="launcher",width=1100,height=590,max_width="9
         height=49,padding=15,radius=10,font_size=16,width="fill"},
     ui.memo("launcher.hints",{},HintRow),
 }
+for index,child in ipairs(body) do panel[index]=child end
+return kit.Panel(panel)

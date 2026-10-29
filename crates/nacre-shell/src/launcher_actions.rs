@@ -85,6 +85,26 @@ fn helper(args: &[&str]) -> Vec<String> {
     argv.extend(strings(args));
     argv
 }
+/// `helper` for the launcher's inline forms (B0199).
+pub(crate) fn helper_argv(args: &[&str]) -> Vec<String> {
+    helper(args)
+}
+/// The command a confirmed form runs (QML ran it once the owner answered yes).
+pub(crate) fn confirmed_argv(kind: &str) -> Option<Vec<String>> {
+    let act = match kind {
+        "confirm-restart" => terminal("Nacre maintenance", &["maintenance", "restart"]),
+        "confirm-mise" => terminal("Install mise", &["software-package", "install", "mise"]),
+        _ => return None,
+    };
+    match act {
+        Act::Run { argv, .. } => Some(argv),
+        _ => None,
+    }
+}
+/// A program on its own process group, never through a shell.
+pub(crate) fn spawn_detached(argv: &[String]) -> Result<(), String> {
+    spawn(argv, None, None)
+}
 fn run(argv: Vec<String>) -> Act {
     Act::Run {
         argv,
@@ -201,6 +221,19 @@ fn legacy(action: &str, value: &str) -> Option<(Act, bool, Option<MenuView>)> {
     };
     Some((act, false, None))
 }
+/// A row Bead answers with an inline form (B0199): the launcher stays open and
+/// `launcher::activation_changes` opens `kind` with `prompt` as its text.
+fn form(kind: &str, prompt: &str) -> Result<(Act, bool, Option<MenuView>), Option<&'static str>> {
+    Ok((
+        Act::View,
+        true,
+        Some(MenuView {
+            route: Some(format!("{}{kind}", crate::launcher_form::ROUTE)),
+            query: Some(prompt.into()),
+            ..MenuView::default()
+        }),
+    ))
+}
 fn query(text: &str) -> Option<MenuView> {
     Some(MenuView {
         query: Some(text.into()),
@@ -277,6 +310,11 @@ fn act(row: &MenuUiRow) -> Result<(Act, bool, Option<MenuView>), Option<&'static
     };
     let done = |act: Act| Ok((act, false, None));
     let stay = |act: Act| Ok((act, true, None));
+    if let Some(kind) = crate::launcher_form::kind_for(&row.operation, text) {
+        // The confirmations show the engine's own question, as QML did.
+        let prompt = row.confirm.as_deref().unwrap_or(&row.name);
+        return form(kind, prompt);
+    }
     match row.operation.as_str() {
         "copy" if matches!(row.value, Some(MenuActionValue::Text(_))) => {
             done(Act::Copy(text.into()))
@@ -387,7 +425,7 @@ fn act(row: &MenuUiRow) -> Result<(Act, bool, Option<MenuView>), Option<&'static
         }
         "bring-visitors" => done(run(helper(&["monitor-workspaces", "bring"]))),
         "tool" => tool(text).map_or(bad, done),
-        "maintenance" if matches!(text, "check" | "restart") => {
+        "maintenance" if text == "check" => {
             done(terminal("Nacre maintenance", &["maintenance", text]))
         }
         "config" if word(text) => done(terminal(
@@ -482,18 +520,10 @@ fn tool(name: &str) -> Option<Act> {
             Some(json!({})),
         ),
         "capture-qr" => later(helper(&["launcher-workflows", "qr", ""]), Some(json!({}))),
-        // The control-centre recorder path: the daemon refuses a second recording and
-        // publishes `controls.recorder.recording` for the bar's stop button.
-        "record-start" | "record-screen" => Act::Daemon {
-            method: "recorder.start",
-            params: json!({"mode": if name == "record-screen" { "screen" } else { "region" }}),
-            delay: true,
-        },
         "record-stop" => daemon("recorder.stop", json!({})),
         "color-picker" | "capture-text" => later(helper(&["menu-backend", "tool", name]), None),
         "updates" => terminal("System updates", &["menu-backend", "tool", name]),
         "logs" => terminal("Nacre logs", &["menu-backend", "tool", name]),
-        "install-mise" => terminal("Install mise", &["software-package", "install", "mise"]),
         name if word(name) => work("menu-backend", "tool", name, json!({})),
         _ => return None,
     })

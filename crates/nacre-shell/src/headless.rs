@@ -2,6 +2,9 @@
 use std::path::Path;
 
 #[cfg(test)]
+#[path = "launcher_form_view_tests.rs"]
+mod launcher_form_view_tests;
+#[cfg(test)]
 #[path = "launcher_pixels_tests.rs"]
 mod launcher_pixels_tests;
 #[cfg(test)]

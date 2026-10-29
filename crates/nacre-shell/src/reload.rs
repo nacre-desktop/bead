@@ -36,10 +36,8 @@ fn scope_recovery(session: &mut bead::ui::Session, output: Option<&str>) {
 fn panel_visibility_changes(open: bool, launcher: bool) -> BTreeMap<String, bead::core::Value> {
     let mut changes = BTreeMap::from([("panel.open".into(), bead::core::Value::Bool(open))]);
     if open && launcher {
-        changes.insert(
-            "bead.focused".into(),
-            bead::core::Value::Text("launcher.search".into()),
-        );
+        // Reopening starts at the results, never inside a form left open (B0199).
+        changes.extend(crate::launcher_form::close());
     }
     changes
 }
@@ -813,6 +811,12 @@ pub struct Runtime {
     /// N0040: the niri `compositor` topic, read only for workspace origins (visitor groups).
     updates_topic: Option<std::sync::Arc<dyn bead::core::source::Source>>,
     updates_subscription: Option<bead::core::source::Subscription>,
+    /// B0199: the daemon's `controls` topic (recorder state) and the client that stops a recording.
+    recording_topic: Option<(
+        std::sync::Arc<dyn bead::core::source::Source>,
+        crate::nacre_source::Client,
+    )>,
+    recording_subscription: Option<bead::core::source::Subscription>,
     bar_daemon: Option<std::sync::Arc<bar_daemon::BarDaemon>>,
     bar_daemon_subscriptions: Vec<bead::core::source::Subscription>,
     widgets_topic: Option<std::sync::Arc<dyn bead::core::source::Source>>,
@@ -3175,6 +3179,8 @@ impl Runtime {
             widgets_subscription: None,
             updates_topic: None,
             updates_subscription: None,
+            recording_topic: None,
+            recording_subscription: None,
             bar_daemon: None,
             bar_daemon_subscriptions: Vec::new(),
             origins_topic: None,
@@ -3511,6 +3517,29 @@ impl Runtime {
         }
         Ok(self)
     }
+    /// B0199: the recording indicator follows `controls.recorder.recording` (one more lease while
+    /// a bar exists; nothing ticks unless a recording runs).
+    pub fn with_bar_recording(
+        mut self,
+        client: &crate::nacre_source::Client,
+    ) -> Result<Self, Box<dyn Error>> {
+        match client.lease_topic("controls") {
+            Ok(topic) => {
+                let on =
+                    crate::bar_recording::recording(&bead::core::source::Source::snapshot(&topic));
+                self.session.stores = self
+                    .session
+                    .stores
+                    .reconcile(&crate::bar_recording::values(on, 0))?;
+                self.recording_topic = Some((std::sync::Arc::new(topic), client.clone()));
+                self.actions
+                    .register("bar.recording.stop", "bar.recording")?;
+                self.actions.grant("bar.recording");
+            }
+            Err(_) => eprintln!("SOURCE_ERROR code=bar_recording_lease"),
+        }
+        Ok(self)
+    }
     /// N0040 visitor groups: on niri the daemon `compositor` topic carries each workspace's home
     /// output and number. Share notifications' subscription when present, otherwise lease
     /// for the bar's lifetime; other backends need nothing.
@@ -3620,6 +3649,7 @@ impl Runtime {
             )]))?;
         self.actions.register("select_app", "launcher")?;
         self.actions.register("toggle_favorite", "launcher")?;
+        self.actions.register("launcher.form", "launcher")?;
         self.actions.grant("launcher");
         self.launcher = Some(menu);
         self.fonts = crate::font_sources::Selector::default().with_ascii();
@@ -5824,6 +5854,25 @@ impl SceneSource for Runtime {
                 Err(_) => eprintln!("SOURCE_ERROR code=widgets_subscription"),
             }
         }
+        if let Some((topic, _)) = &self.recording_topic {
+            let indicator =
+                std::sync::Arc::new(std::sync::Mutex::new(crate::bar_recording::Indicator::new()));
+            let follow = {
+                let (indicator, wakeup) = (indicator.clone(), wakeup.clone());
+                move |snapshot: &bead::core::source::Snapshot| {
+                    let wakeup = wakeup.clone();
+                    if let Ok(mut indicator) = indicator.lock() {
+                        indicator.follow(snapshot, move |values| wakeup(UiEvent::Model(values)));
+                    }
+                }
+            };
+            // A recording that began before this bar did.
+            follow(&topic.snapshot());
+            match topic.subscribe(std::sync::Arc::new(move |snapshot| follow(&snapshot))) {
+                Ok(subscription) => self.recording_subscription = Some(subscription),
+                Err(_) => eprintln!("SOURCE_ERROR code=bar_recording_subscription"),
+            }
+        }
         if let Some(topic) = &self.updates_topic {
             let wakeup = wakeup.clone();
             match topic.subscribe(std::sync::Arc::new(move |snapshot| {
@@ -6665,6 +6714,8 @@ impl SceneSource for Runtime {
                     || name == "launcher.quick"
                     || name == "select_app"
                     || name == "toggle_favorite"
+                    || name == "launcher.form"
+                    || name == "bar.recording.stop"
                     || name == "bar.title"
                     || name == "dashboard.select"
                     || name == "dashboard.do"
@@ -8145,6 +8196,33 @@ impl SceneSource for Runtime {
             let scene = self.session.update(changes)?;
             return self.finish_scene(scene);
         }
+        if let (Some((_, client)), Some((_, name, _))) = (&self.recording_topic, &host_action)
+            && name == "bar.recording.stop"
+            && matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
+        {
+            self.actions.authorize(name)?;
+            let client = client.clone();
+            // The daemon stops the recorder and cleans up its sound mix; the topic then hides the item.
+            std::thread::spawn(move || {
+                let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                else {
+                    return;
+                };
+                if let Err(error) = runtime.block_on(client.call(
+                    "recorder.stop".into(),
+                    serde_json::json!({}),
+                    std::time::Duration::from_secs(5),
+                )) {
+                    eprintln!(
+                        "BAR_ACTION_REFUSED method=recorder.stop reason={}",
+                        error.message
+                    );
+                }
+            });
+            return self.finish_scene(None);
+        }
         if let Some((_, name, _)) = &host_action
             && name == "launcher.open"
             && self.launcher_trigger
@@ -8234,6 +8312,35 @@ impl SceneSource for Runtime {
                     }
                     return Ok(scene);
                 }
+            }
+        }
+        // The launcher's inline form (B0199): its buttons, and Enter in a one-line field.
+        if let Some(menu) = &self.launcher {
+            let form_open = matches!(self.session.stores.get("launcher.form.kind"),
+                Some(bead::core::Value::Text(kind)) if !kind.is_empty());
+            let request = match (&host_action, &event) {
+                (Some((_, name, bead::core::Value::Text(request))), _)
+                    if name == "launcher.form" =>
+                {
+                    (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
+                        || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+                    .then(|| request.clone())
+                }
+                (_, UiEvent::Command { command, .. })
+                    if form_open
+                        && command == "enter"
+                        && self.session.surrounding_text().is_some()
+                        && !self.session.focused_multiline() =>
+                {
+                    Some("submit".to_owned())
+                }
+                _ => None,
+            };
+            if let Some(request) = request {
+                self.actions.authorize("launcher.form")?;
+                let changes = menu.form_act(&request, &self.session.stores);
+                let scene = self.session.update(changes)?;
+                return self.finish_scene(scene);
             }
         }
         let launcher_id = if let Some((_, name, bead::core::Value::Text(id))) = &host_action {

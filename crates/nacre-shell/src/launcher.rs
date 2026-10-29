@@ -274,6 +274,18 @@ async fn query(source: &dyn Source, params: Json, timeout: Duration) -> source::
 pub fn activation_changes(result: MenuActivated) -> BTreeMap<String, Value> {
     let mut changes = BTreeMap::from([("panel.open".into(), Value::Bool(result.keep_open))]);
     if let Some(view) = result.view {
+        // A form row (B0199): the route names the form, the query carries its prompt.
+        if let Some(kind) = view
+            .route
+            .as_deref()
+            .and_then(|r| r.strip_prefix(crate::launcher_form::ROUTE))
+        {
+            changes.extend(crate::launcher_form::open(
+                kind,
+                view.query.as_deref().unwrap_or(""),
+            ));
+            return changes;
+        }
         if let Some(mode) = view.mode {
             if matches!(mode.as_str(), "apps" | "search" | "actions") {
                 changes.insert("launcher.route".into(), Value::Text(mode.clone()));
@@ -804,6 +816,8 @@ pub struct Menu {
     runtime: tokio::runtime::Runtime,
     view: RefCell<View>,
     query_actor: Option<QueryActor>,
+    /// The inline form's helper submit in flight (B0199).
+    form: Arc<crate::launcher_form::Run>,
 }
 impl Menu {
     pub fn new(source: Option<Arc<dyn Source>>) -> Result<Self, String> {
@@ -817,7 +831,84 @@ impl Menu {
                 .map_err(|e| e.to_string())?,
             view: RefCell::new(View::default()),
             query_actor,
+            form: Arc::default(),
         })
+    }
+    /// The inline form's buttons (B0199): `cancel` closes it, `submit` validates the slots and
+    /// runs the form's backend off this thread; the answer comes back through `project`.
+    pub fn form_act(&self, request: &str, stores: &Stores) -> BTreeMap<String, Value> {
+        let text = |key: &str| match stores.get(key) {
+            Some(Value::Text(s)) => s.clone(),
+            _ => String::new(),
+        };
+        if request == "cancel" {
+            return crate::launcher_form::close();
+        }
+        if request != "submit" || stores.get("launcher.form.busy") == Some(&Value::Bool(true)) {
+            return BTreeMap::new();
+        }
+        let kind = text("launcher.form.kind");
+        let slots: [String; crate::launcher_form::SLOTS] =
+            std::array::from_fn(|i| text(&format!("launcher.form.v{}", i + 1)));
+        let fail = |message: String| {
+            BTreeMap::from([("launcher.form.error".into(), Value::Text(message))])
+        };
+        let work = match crate::launcher_form::work(&kind, &slots) {
+            Ok(work) => work,
+            Err(message) => return fail(message),
+        };
+        let Some(actor) = &self.query_actor else {
+            return fail(tr("bead.launcher.service-unavailable", &[]));
+        };
+        let wake = actor.wake.clone();
+        let source = self.source.clone();
+        let run = self.form.clone();
+        let handle = actor.runtime_handle.clone();
+        let closes = work.closes_launcher();
+        let wake_up = move |source: Option<Arc<dyn Source>>| {
+            if let (Some(callback), Some(source)) =
+                (wake.lock().ok().and_then(|slot| slot.clone()), source)
+            {
+                callback(source.snapshot());
+            }
+        };
+        match work {
+            crate::launcher_form::Work::Helper { argv, input } => {
+                std::thread::spawn(move || {
+                    run.finish(crate::launcher_form::run_helper(&argv, &input));
+                    wake_up(source);
+                });
+            }
+            crate::launcher_form::Work::Daemon { method, params } => {
+                handle.spawn(async move {
+                    // The launcher closes first, as QML's `captureDelay` did.
+                    tokio::time::sleep(Duration::from_millis(320)).await;
+                    if let Some(source) = source
+                        && let Err(error) = source
+                            .call(method.into(), params, Duration::from_secs(5))
+                            .await
+                    {
+                        eprintln!("UI_MENU_ACTION_FAILED {}", error.message);
+                    }
+                });
+            }
+            crate::launcher_form::Work::Terminal(argv) => {
+                if let Err(error) = crate::launcher_actions::spawn_detached(&argv) {
+                    eprintln!("UI_MENU_ACTION_FAILED {error}");
+                }
+            }
+        }
+        let mut changes = BTreeMap::new();
+        if closes {
+            changes.extend(crate::launcher_form::close());
+            changes.insert("panel.open".into(), Value::Bool(false));
+        } else {
+            changes.extend([
+                ("launcher.form.busy".into(), Value::Bool(true)),
+                ("launcher.form.error".into(), Value::Text(String::new())),
+            ]);
+        }
+        changes
     }
     pub fn subscribe(
         &self,
@@ -1497,6 +1588,13 @@ impl Menu {
                 "launcher.total_count".into(),
                 Value::Number(view.total as f64),
             );
+        }
+        if let Some(result) = self.form.take() {
+            let (changes, message) = crate::launcher_form::finished(result);
+            delta.extend(changes);
+            if let Some(message) = message {
+                view.message = message;
+            }
         }
         let conversion = view.conversion.as_ref();
         for (key, value) in [

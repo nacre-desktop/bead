@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 mod app;
 mod backends;
+mod bar_recording;
 mod bar_routes;
 mod bar_updates;
 mod calendar;
@@ -24,6 +25,7 @@ mod icon_warm;
 mod key_routes;
 mod launcher;
 mod launcher_actions;
+mod launcher_form;
 mod launcher_panel;
 mod launcher_quick;
 #[cfg(test)]
@@ -1261,6 +1263,7 @@ fn start(
                             .with_bar_routes(client.clone(), tray)?
                             .with_workspace_origins(&client)?
                             .with_bar_updates(&client)?
+                            .with_bar_recording(&client)?
                             .with_widgets(&client)?
                     } else if bar {
                         runtime.with_widget_file()
