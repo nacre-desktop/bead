@@ -569,7 +569,7 @@ impl App {
         let (w, h, stride, size) = buffer_dimensions(o.size.0, o.size.1, o.scale120)?;
         let scene = &mut o.scene;
         let mut animating = false;
-        if let Some(motion) = &scene.motion {
+        if let Some(motion) = scene.motion.clone() {
             o.animations.open_to(
                 &motion.id,
                 o.open,
@@ -586,24 +586,12 @@ impl App {
                 .value(&motion.id, now)
                 .ok_or("motion value missing")?;
             scene.opacity = motion.opacity(progress);
-            let reveal = motion.reveal;
-            let (dx, dy) = if reveal {
-                (0., 0.)
-            } else {
-                motion.edge.closed_offset(
-                    motion.slide_distance.unwrap_or(scene.bounds.w),
-                    motion.slide_distance.unwrap_or(scene.bounds.h),
-                    progress,
-                )
-            };
+            let (dx, dy) = scene.panel_offset(progress, o.open);
             animating = active;
             scene.offset = (32. + dx, 32. + dy);
 
             if matches!(motion.edge, bead_core::Edge::Top | bead_core::Edge::Bottom) {
                 scene.offset.0 = ((o.size.0 as f32 - scene.width) / 2.).max(0.);
-            }
-            if reveal {
-                scene.reveal(progress);
             }
         }
         o.offset = scene.offset;

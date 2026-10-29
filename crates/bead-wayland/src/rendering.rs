@@ -1461,8 +1461,7 @@ impl App {
             }
             s.redraw = false;
             let mut opaque_motion = self.options.animate;
-            let mut reveal_progress = None;
-            if let Some(motion) = &scene.motion {
+            if let Some(motion) = scene.motion.clone() {
                 let now = self.started.elapsed().as_secs_f64();
                 let open = if self.options.animate {
                     ((now - 3.).max(0.) % 2.) >= 1. || now < 3.
@@ -1502,23 +1501,10 @@ impl App {
                 // next input finish the motion and invalidate the whole surface.
                 s.redraw |= active;
                 scene.opacity = motion.opacity(progress);
-                // A revealing panel stays put and is clipped instead (Scene::reveal_window).
-                let (dx, dy) = if motion.reveal {
-                    reveal_progress = Some(progress);
-                    (0., 0.)
-                } else {
-                    motion.edge.closed_offset(
-                        motion.slide_distance.unwrap_or(scene.bounds.w),
-                        motion.slide_distance.unwrap_or(scene.bounds.h),
-                        progress,
-                    )
-                };
-                opaque_motion = active && (dx != 0. || dy != 0. || reveal_progress.is_some());
+                let (dx, dy) = scene.panel_offset(progress, open);
+                opaque_motion = active && (dx != 0. || dy != 0. || (motion.reveal && open));
                 scene.offset.0 = 32. + dx;
                 scene.offset.1 = 32. + dy;
-            }
-            if let Some(progress) = reveal_progress {
-                scene.reveal(progress);
             }
 
             s.background_visible = scene.opacity > 0.001;

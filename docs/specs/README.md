@@ -1,5 +1,7 @@
 # Bead implementation queue
 
+| — | [B0181 Ghost strip after panel close](0181-close-ghost-strip.md) | Complete — shared close pose, 120 Hz scene proof, 12-route smoke and full CI pass; paired compositor visual evidence has a UI-provider gap |
+
 2026-10-21 owner structure/licensing decision is recorded in
 [ADR 0004](../decisions/0004-structure-licensing-generalization.md); the
 planned “Bead for others” milestone and generalization list are in the roadmap.
