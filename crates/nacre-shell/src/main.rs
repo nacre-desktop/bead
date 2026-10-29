@@ -1050,9 +1050,8 @@ fn start(
             }
         }
         if let Some(client) = _ui_provider.clone() {
-            let memory = std::sync::Arc::new(std::sync::Mutex::new(
-                std::collections::BTreeMap::new(),
-            ));
+            let memory =
+                std::sync::Arc::new(std::sync::Mutex::new(std::collections::BTreeMap::new()));
             startup_panel_specs.push((
                 "chat".into(),
                 popouts::chat(client, palette.clone(), colors.clone(), memory, panel_trace)?,
