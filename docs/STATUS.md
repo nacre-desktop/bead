@@ -34,13 +34,14 @@ ceiling. Full Bead CI passes. See [B0157](specs/0157-picker-errors.md).
 
 # Status
 
-## 2026-10-29 — B0179 r3 live-audit repair (validation in progress)
+## 2026-10-29 — B0179 r3 live-audit repair (CI green; panel smoke incomplete)
 
 The r2 live audit exposed a first-projection gap for new panel consumers. The
 repair scopes unchanged-payload projection skips to initialized consumer stores
-and reconciles destination view schemas before route-state commits. The full
-actual-shell route smoke and full Bead CI are running before the r3 push; see
-[B0179](specs/0179-shell-idle-cost.md).
+and reconciles destination view schemas before route-state commits. Both targeted
+regression tests and full Bead CI pass. The actual-shell route smoke opens the
+launcher, but the Sound route stays unprepared and has no first presentation; no
+UI_ERROR or unknown-state error appeared before the smoke stopped. See [B0179](specs/0179-shell-idle-cost.md).
 
 ## 2026-10-29 — B0179 shell idle cost (lead accepted)
 
