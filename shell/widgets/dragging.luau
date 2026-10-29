@@ -361,7 +361,7 @@ function M.drop_zones(width,height)
     local over_remove=source.iid~=nil and x>=remove_left and x<remove_left+remove.width
         and y>=remove_top and y<remove_top+remove.height
     if package.forms.desktop then
-        table.insert(zones,zone("drop-zone-desktop",inset,bar_height+inset,width-2*inset,height-bar_height-2*inset,
+        table.insert(zones,zone("drop-zone-desktop",inset,bar_height*1.5,width-2*inset,height-bar_height*1.5-inset,
             ui.tr("bead.widgets.zone-desktop"),"wallpaper",destination=="desktop" and not over_remove,false))
     end
     if source.iid~=nil then

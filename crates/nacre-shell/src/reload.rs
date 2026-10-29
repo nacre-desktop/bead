@@ -1495,6 +1495,13 @@ impl Runtime {
                         .get("private_remote")
                         .and_then(serde_json::Value::as_bool)
                         == Some(true);
+                    let target_output = event
+                        .get("target_output_id")
+                        .and_then(serde_json::Value::as_str)
+                        .filter(|name| !name.is_empty())
+                        .map(str::to_owned)
+                        .or_else(|| self.output.clone())
+                        .unwrap_or_default();
                     let context = event
                         .entry("context")
                         .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
@@ -1504,6 +1511,17 @@ impl Runtime {
                                 context.insert(key.clone(), value.clone());
                             } else {
                                 context.entry(key.clone()).or_insert_with(|| value.clone());
+                            }
+                        }
+                        // A desktop widget dropped on the bar is placed among the bar's rects.
+                        if self.widget_canvas {
+                            let rects = crate::widgets::widget_drag::bar_geometry(&target_output);
+                            if let Some(list) = context
+                                .entry("geometry")
+                                .or_insert_with(|| serde_json::json!([]))
+                                .as_array_mut()
+                            {
+                                list.extend(rects);
                             }
                         }
                     }
@@ -9980,6 +9998,18 @@ impl SceneSource for Runtime {
     fn commit(&mut self) -> bool {
         if let Some(scene) = self.pending.take() {
             self.session.commit(scene);
+            if self.bar
+                && self.session.stores.get("widgets.drag.active")
+                    == Some(&bead::core::Value::Bool(true))
+                && let Some(geometry) = self
+                    .widget_seed()
+                    .and_then(|seed| seed["geometry"].as_array().cloned())
+            {
+                crate::widgets::widget_drag::note_bar_geometry(
+                    self.output.as_deref().unwrap_or(""),
+                    geometry,
+                );
+            }
             self.announce_widget_app();
             if let Some(entry) = self.widget_entry_write_ready.take()
                 && self.widget_app

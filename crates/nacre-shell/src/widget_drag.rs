@@ -16,6 +16,24 @@ use std::{
     time::Duration,
 };
 
+/// B0198: the bar's measured widget rects per output (output-local), published while a widget
+/// drag is active so a desktop-widget drop onto the bar can find the pill and its neighbours.
+static BAR_GEOMETRY: Mutex<BTreeMap<String, Vec<Json>>> = Mutex::new(BTreeMap::new());
+
+pub fn note_bar_geometry(output: &str, rects: Vec<Json>) {
+    if let Ok(mut map) = BAR_GEOMETRY.lock() {
+        map.insert(output.to_owned(), rects);
+    }
+}
+
+pub fn bar_geometry(output: &str) -> Vec<Json> {
+    BAR_GEOMETRY
+        .lock()
+        .ok()
+        .and_then(|map| map.get(output).cloned())
+        .unwrap_or_default()
+}
+
 /// Headless app behavior used by shell bar/canvas drag hosts. It is intentionally lazy and owns
 /// no services; the app's Luau behavior remains the only placement/settings model.
 pub struct Controller {
@@ -355,6 +373,8 @@ pub fn prepare_event(
             name.clone(),
         ))
     });
+    let from_canvas = !app_source
+        && source_record(&event).is_some_and(|source| source["host"] == "canvas");
     let inside_app = app_source
         && app_width > 0.
         && app_height > 0.
@@ -390,13 +410,18 @@ pub fn prepare_event(
         } else if let Some((local_x, local_y, origin_x, origin_y, width, height, target_name)) =
             destination
         {
+            // B0198: compositors confine a desktop-widget (Bottom layer) drag to the work
+            // area, so its pointer stops at the bottom of the reserved top edge (about 67 px
+            // under a 50 px bar) and never reaches the bar. Within half a bar height below the
+            // bar counts as the bar for those drags (the overlay's desktop zone starts there).
+            let reach = if from_canvas {
+                bar_height * 1.5
+            } else {
+                bar_height
+            };
             object.insert(
                 "destination".into(),
-                json!(if local_y < bar_height {
-                    "bar"
-                } else {
-                    "desktop"
-                }),
+                json!(if local_y < reach { "bar" } else { "desktop" }),
             );
             object.insert("destination_x".into(), json!(local_x));
             object.insert("destination_y".into(), json!(local_y));
@@ -1232,6 +1257,28 @@ mod tests {
         assert_eq!(event["destination_y"], json!(60.));
         assert_eq!(event["destination"], json!("desktop"));
         assert_eq!(source_record(event).unwrap()["group"], json!("clock-main"));
+    }
+
+    #[test]
+    fn a_confined_desktop_widget_drag_reaches_the_bar_from_the_work_area_top() {
+        let stores=bead::core::Stores::default().reconcile(&BTreeMap::from([
+            ("bar.height".into(),Value::Number(50.)),
+            ("widgets.outputs".into(),Value::list(vec![json!({"name":"right","x":0.,"y":0.,"width":1920.,"height":1200.,"scale":1.})])),
+        ])).unwrap();
+        let destination = |host: &str, y: f64| {
+            let event = Value::list(vec![json!({"phase":"drop","x":1879.,"y":y,
+                "source_origin_x":0.,"source_origin_y":0.,"source_origin_valid":true,
+                "source":[{"widget":"clock","group":"clock","host":host}]})]);
+            let Value::List(records) = prepare_event(&event, &stores, false, "right") else {
+                panic!("expected one transfer event")
+            };
+            records[0]["destination"].clone()
+        };
+        // The nested compositor stops the canvas pointer at y=67.3 under a 50 px bar.
+        assert_eq!(destination("canvas", 67.3), json!("bar"));
+        assert_eq!(destination("canvas", 80.), json!("desktop"));
+        assert_eq!(destination("top_bar", 67.3), json!("desktop"));
+        assert_eq!(destination("top_bar", 25.), json!("bar"));
     }
 
     #[test]

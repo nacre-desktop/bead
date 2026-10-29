@@ -206,7 +206,9 @@ local function pill_at_pointer(doc,event,context)
     for _,rect in context.geometry or {} do
         if type(rect.iid)=="string" and type(rect.x)=="number" and type(rect.y)=="number"
             and type(rect.w)=="number" and type(rect.h)=="number"
-            and x>=rect.x and y>=rect.y and x<rect.x+rect.w and y<rect.y+rect.h then
+            -- The bar is a strip: a bar drop over the pill's span joins it at any height
+            -- (desktop drags stop below the bar, B0198).
+            and x>=rect.x and x<rect.x+rect.w and (event.destination=="bar" or y>=rect.y and y<rect.y+rect.h) then
             local found=locate_document_item(doc,rect.iid)
             if found and found.item.widget=="pill" and found.host=="top_bar" and not found.parent then return found.item end
         end
