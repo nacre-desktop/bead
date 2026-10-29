@@ -585,8 +585,7 @@ impl FrontEnd for LuauFrontEnd {
         lua.set_interrupt(move |_| {
             // The clock is a syscall: sample it every 64th interrupt.
             ticks.set(ticks.get().wrapping_add(1));
-            if ticks.get() % 64 == 0
-                && bead_core::profile::thread_cpu_ns() > deadline + spent.get()
+            if ticks.get() % 64 == 0 && bead_core::profile::thread_cpu_ns() > deadline + spent.get()
             {
                 Err(mlua::Error::runtime("markup exceeded 50 ms limit"))
             } else {
