@@ -1,6 +1,6 @@
 // Native pearl chrome is client-rendered, including its transparent bootstrap.
 window-rule {
-    match app-id="^bead[.]pearl$"
+    match app-id="^bead[.]pearl([.]pending)?$"
     open-floating true
     // A transparent prewarm must not take focus from the open panel.
     open-focused false
@@ -9,6 +9,13 @@ window-rule {
     border { off; }
     focus-ring { off; }
     shadow { off; }
+}
+
+// B0200: a prepared target is invisible until release renames it to bead.pearl,
+// including niri's open and move animations while it is placed under the panel.
+window-rule {
+    match app-id="^bead[.]pearl[.]pending$"
+    opacity 0.0
 }
 
 // The Widgets app draws its own rounded outline; do not add compositor chrome.
