@@ -1,5 +1,6 @@
 # Bead implementation queue
 
+| — | [B0191 Persistent Luau VM](0191-persistent-luau.md) | Candidate — one VM per view generation; per-update markup p50 bar 2.13→1.37 ms, launcher keystroke 0.90→0.50, dashboard 0.68→0.32, notifications 0.58→0.20 (release bench, real shell); bar stays >1 ms (widget context re-runs); lead live gate pending |
 | — | [B0187 Launcher input and scroll cost](0187-launcher-input-scroll.md) | Candidate — icon-miss cache cut keypress-to-results from 61 ms to 13 ms and fling frames from 47 ms to 7 ms (nested release, real shell); markup re-evaluation per update remains; lead live gate pending |
 | — | [B0188 OSD, toast and workspace-switch motion](0188-osd-toast-motion.md) | Measured — overlay frame interval fix and 120 Hz motion test; prewarm attempt rejected; workspace indicator 60 Hz cadence and live OSD first frame open |
 | — | [B0189 Desktop widgets cost](0189-desktop-widgets-cost.md) | Candidate — canvas semantic damage, tick-eased analog clock (seconds hand opt-in), idle numbers in spec; live audit pending |

@@ -195,6 +195,11 @@ impl Generation {
             frontend.restore_animations(snapshot);
         }
     }
+    pub(super) fn release_markup_vm(&self) {
+        if let Some(frontend) = &self.markup_frontend {
+            frontend.release_vm();
+        }
+    }
     pub(super) fn markup_resource_bytes(&self) -> (usize, usize, usize) {
         self.markup_frontend
             .as_ref()

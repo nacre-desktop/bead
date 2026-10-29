@@ -190,6 +190,10 @@ fn markup_bench() {
             println!("MARKUP_BENCH view={name} step={i}");
             harness.update(step(i)).expect("update");
         }
+        println!(
+            "MARKUP_BENCH_RESOURCES view={name} {}",
+            harness.session.resource_counts()
+        );
     }
     println!("MARKUP_BENCH done");
 }

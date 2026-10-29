@@ -1038,6 +1038,12 @@ impl Session {
     pub fn asset_snapshot(&self, path: &Path) -> Option<std::sync::Arc<[u8]>> {
         self.current.asset_data.get(path).cloned()
     }
+    /// Free the generation's markup VM; the next build starts a fresh one.
+    pub fn release_markup_vm(&self) {
+        if let Some(generation) = &self.generation {
+            generation.release_markup_vm();
+        }
+    }
     pub fn resource_counts(&self) -> String {
         let (compiled, values, markup_vm) = self
             .generation

@@ -3781,6 +3781,16 @@ return ui.Column{id='root',ui.Text{id='a',text=tostring(pure.loads)},ui.Text{id=
         build(&frontend, 4).unwrap(),
         ["1", "title 4", "title 4", "4"]
     );
+    assert_eq!(
+        build(&frontend, 5).unwrap(),
+        ["2", "title 5", "title 5", "5"]
+    );
+    // A closed view releases its VM; the next build starts fresh.
+    frontend.release_vm();
+    assert_eq!(
+        build(&frontend, 6).unwrap(),
+        ["1", "title 6", "title 6", "6"]
+    );
 }
 
 #[test]
