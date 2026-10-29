@@ -105,16 +105,6 @@ fn clock_pill_document() -> Json {
     doc
 }
 
-fn empty_clock_pill_document() -> Json {
-    let mut doc = clock_pill_document();
-    doc["hosts"]["top_bar"]["instances"]
-        .as_array_mut()
-        .unwrap()
-        .iter_mut()
-        .find(|item| item["widget"] == "pill")
-        .unwrap()["children"] = json!([]);
-    doc
-}
 fn pill_transfer(phase: &str, child: bool) -> Value {
     let (x, y) = if child { (300., 20.) } else { (1700., 20.) };
     Value::list(vec![
