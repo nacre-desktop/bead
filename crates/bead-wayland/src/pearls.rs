@@ -2856,7 +2856,7 @@ mod cover_effect_tests {
         let mut size = Some((740, 485));
         let mut destroyed = vec![];
         assert!(take_cover_effect(&mut effect, &mut size, |e| destroyed.push(e)));
-        assert_eq!((effect, size, destroyed), (None, None, vec![7]));
+        assert_eq!((effect, size, destroyed.clone()), (None, None, vec![7]));
         assert!(!take_cover_effect(&mut effect, &mut size, |e| destroyed.push(e)));
         assert_eq!(destroyed, vec![7], "a second release destroys nothing");
     }
