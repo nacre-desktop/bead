@@ -1002,7 +1002,12 @@ fn navigation_projects_the_fresh_view_after_reconciling_its_route_state() {
     let f = fixture();
     fs::write(
         f.0.join("behavior.luau"),
-        r#"return {stores={['search.text']='default',['scroll.y']=0},actions={toggle=function(_)end},computed={label=function(s)return s['search.text']end}}"#,
+        r#"return {
+ stores={['search.text']='default',['scroll.y']=0},
+ actions={toggle=function(s)s['scroll.y']+=1 end,scroll=function(s,d)s['scroll.y']+=d end,
+   fail=function(s)s['search.text']='lost';error('deliberate action failure')end},
+ computed={label=function(s)return s['search.text']end}
+}"#,
     )
     .unwrap();
     fs::create_dir_all(f.0.join("other")).unwrap();
