@@ -438,3 +438,24 @@ fn centered_title_clamps_min_to_max_and_clips_during_max_shrink_animation() {
     assert_eq!(stored_title["settings"]["min_width"], 300);
     assert_eq!(stored_title["settings"]["max_width"], 240);
 }
+
+/// B0186: a bar update must stay far below the 50 ms markup CPU budget.
+#[test]
+fn bar_markup_stays_well_under_the_budget() {
+    let mut bar = harness(document("content"), "Notes", 4);
+    let mut times = Vec::new();
+    for round in 0..15u64 {
+        let started = bead::core::profile::thread_cpu_ns();
+        bar.update(BTreeMap::from([(
+            "bar.title".into(),
+            Value::Text(format!("Window {round}")),
+        )]))
+        .expect("bar update");
+        times.push(bead::core::profile::thread_cpu_ns() - started);
+    }
+    times.sort_unstable();
+    let median_ms = times[times.len() / 2] as f64 / 1e6;
+    eprintln!("B0186 bar update median {median_ms:.2} ms, max {:.2} ms", times[14] as f64 / 1e6);
+    let limit = if cfg!(debug_assertions) { 40. } else { 10. };
+    assert!(median_ms < limit, "bar update took {median_ms:.2} ms (limit {limit})");
+}

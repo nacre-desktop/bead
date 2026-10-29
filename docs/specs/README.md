@@ -534,6 +534,9 @@ on content changes; the 8 MiB LRU and validation are documented in the
 B0185 (in review, live laptop audit pending): reveal-panel slides flatten their moving content
 once per slide and composite it each frame instead of repainting every primitive; see the
 [frame render cost spec](0185-frame-render-cost.md).
+B0186 makes the 50 ms markup budget thread CPU time (not wall time) and clears a transient
+reload or render failure notice on the next successful render; see the
+[markup budget spec](0186-markup-budget.md).
 
 Exact-source full hosted [CI 39388972154](https://github.com/nacre-desktop/bead/actions/runs/39388972154)
 passed on dc8832fe: formatting, Clippy, workspace tests, renderer configurations,

@@ -58,6 +58,10 @@ pub fn monotonic_ns() -> u64 {
 pub fn process_cpu_ns() -> u64 {
     clock(libc::CLOCK_PROCESS_CPUTIME_ID)
 }
+/// CPU time of the calling thread: unaffected by suspend, scheduling or CPU starvation.
+pub fn thread_cpu_ns() -> u64 {
+    clock(libc::CLOCK_THREAD_CPUTIME_ID)
+}
 pub struct Span {
     stage: &'static str,
     start: Option<(u64, u64)>,

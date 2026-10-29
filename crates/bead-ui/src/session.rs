@@ -73,6 +73,10 @@ pub struct Session {
     pub(super) committed_editors: BTreeMap<String, input::Editor>,
     pub(super) viewport: (f32, f32),
     pub(super) error: Option<String>,
+    /// The last reload failed on the source itself (keeps the notice until a reload succeeds).
+    pub(super) source_fault: bool,
+    /// The last reload only overran the CPU budget: retry it on the next change.
+    pub(super) retry_reload: bool,
     pub(super) attempts: u64,
     pub(super) watcher: Option<super::watcher::Subscription>,
     pub(super) restore: Option<BTreeMap<String, Value>>,
@@ -189,6 +193,8 @@ impl Session {
             editors: BTreeMap::new(),
             committed_editors: BTreeMap::new(),
             error: None,
+            source_fault: false,
+            retry_reload: false,
             attempts: 0,
             watcher: None,
             restore: None,
@@ -310,6 +316,12 @@ impl Session {
     }
     pub fn reload(&mut self) -> Result<Scene, Diagnostic> {
         let result = self.reload_current();
+        let overrun = result
+            .as_ref()
+            .err()
+            .is_some_and(|e| e.message.contains("exceeded 50 ms"));
+        self.source_fault = result.is_err() && !overrun;
+        self.retry_reload = overrun;
         if result.is_ok() || self.generation.is_some() || self.recovered.is_some() {
             return result;
         }
@@ -491,6 +503,11 @@ impl Session {
                 }
                 self.generation = Some(generation);
                 self.error = None;
+                self.source_fault = false;
+                self.retry_reload = false;
+            } else if !self.source_fault {
+                // A later render succeeded: a transient failure's notice is stale.
+                self.error = None;
             }
             self.stores = stores;
             self.palette = palette;
@@ -621,6 +638,10 @@ impl Session {
     }
     /// Stage `stores`; `base` is the revision they were derived from (nothing to paint when it is unchanged).
     fn stage_state_from(&mut self, stores: Stores, base: u64) -> Result<Option<Scene>, Diagnostic> {
+        if self.retry_reload {
+            self.retry_reload = false;
+            return self.reload().map(Some);
+        }
         let checkpoint = self.animation_checkpoint();
         let result = self.stage_state_from_inner(stores, base, checkpoint.clone());
         if result.is_err()
@@ -784,7 +805,7 @@ impl Session {
         }
 
         scene.font_files = self.current.font_files.clone();
-        if self.error.is_some() {
+        if self.error.is_some() && self.source_fault {
             let old = self.current.clone();
             self.current = scene.clone();
             scene = self.error_scene();
