@@ -192,6 +192,33 @@ impl Publisher {
         object(&data)?;
         self.change(Some(Arc::new(data)), true, Some(revision))
     }
+    /// Advance the current snapshot for future subscribers without waking existing
+    /// consumers. Equal daemon snapshots still carry a new source revision; a fresh
+    /// view's immediate subscription callback must see that revision so its first
+    /// projection is not mistaken for already-applied data.
+    pub fn advance_revision_silently(&self, data: Arc<Json>) -> Result<()> {
+        object(&data)?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| Error::new("internal", "source state poisoned", false))?;
+        if !state.snapshot.connected || *data != *state.snapshot.data {
+            drop(state);
+            return self.publish_shared(data);
+        }
+        let revision = state
+            .snapshot
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| Error::new("internal", "source revision exhausted", false))?;
+        state.snapshot = Arc::new(Snapshot {
+            epoch: state.snapshot.epoch.clone(),
+            revision,
+            data,
+            connected: true,
+        });
+        Ok(())
+    }
     fn change(&self, data: Option<Arc<Json>>, connected: bool, origin: Option<u64>) -> Result<()> {
         let (snapshot, callbacks) = {
             let mut state = self
@@ -736,5 +763,33 @@ mod restart_tests {
         );
         assert_eq!(projections, 2);
         assert_eq!(fresh.get("panel.open"), Some(&crate::Value::Bool(true)));
+    }
+
+    #[test]
+    fn silent_revision_advance_does_not_wake_existing_subscribers() {
+        let publisher = Publisher::new("boot-a".into(), serde_json::json!({"ready":true})).unwrap();
+        let existing = Arc::new(Mutex::new(Vec::new()));
+        let observed = existing.clone();
+        let _existing = publisher
+            .subscribe(Arc::new(move |snapshot| {
+                observed.lock().unwrap().push(snapshot.revision);
+            }))
+            .unwrap();
+        let initial = publisher.snapshot();
+        publisher
+            .advance_revision_silently(initial.data.clone())
+            .unwrap();
+        let current = publisher.snapshot();
+        assert_eq!(current.revision, initial.revision + 1);
+        assert_eq!(*existing.lock().unwrap(), vec![initial.revision]);
+
+        let fresh = Arc::new(Mutex::new(Vec::new()));
+        let observed = fresh.clone();
+        let _fresh = publisher
+            .subscribe(Arc::new(move |snapshot| {
+                observed.lock().unwrap().push(snapshot.revision);
+            }))
+            .unwrap();
+        assert_eq!(*fresh.lock().unwrap(), vec![current.revision]);
     }
 }

@@ -864,11 +864,14 @@ fn apply_snapshot(
         });
         let (applied, changed) = mirror.accept_with_change(snapshot, Instant::now())?;
         if applied == Applied::Updated
-            && changed
             && let Some(snapshot) = mirror.snapshot()
             && let Some(publisher) = shared.publisher(topic)
         {
-            publisher.publish_shared(snapshot.data.clone())?;
+            if changed {
+                publisher.publish_shared(snapshot.data.clone())?;
+            } else {
+                publisher.advance_revision_silently(snapshot.data.clone())?;
+            }
         }
     }
     Ok(())

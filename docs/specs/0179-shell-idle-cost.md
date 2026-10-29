@@ -23,7 +23,7 @@ The repeated private CPU capture used the release shell in nested niri at 2880×
 
 ## R3 live-audit repair
 
-The first r2 live audit found that an unchanged transport payload could leave a newly-opened view without its initial source projection. Mirrors now retain projection readiness per consumer stores: a fresh consumer is reconciled once, while repeated identical payloads for an initialized consumer are skipped. View navigation now loads and reconciles the destination schema before committing route state such as `panel.open`. A real-shell route smoke is being added and run against the actual `shell/` tree; its final route count and UI error result are recorded after the nested run.
+The first r2 live audit found that an unchanged transport payload could leave a newly-opened view without its initial source projection. Mirrors retain projection readiness per consumer stores, and the publisher silently advances its current revision without waking initialized subscribers; a new subscriber immediately receives that revision. View navigation loads and reconciles the destination schema before committing route state such as `panel.open`. The real-shell route smoke uses the actual `shell/` tree and exercises each registered core `PanelSpec`; its final route count and UI error result are recorded after the nested run.
 
 ## Acceptance status
 

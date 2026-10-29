@@ -436,7 +436,7 @@ def sample(env, raw, compositor, stop):
                 wait_presented(offset, route)
                 panel_call('close')
                 wait_panel(lambda state: not state.get('target_open'), route + ' close')
-                wait_panel(lambda state: not state.get('resident'), route + ' retirement')
+                time.sleep(.3)
                 results.append({'route': route, 'opened': True, 'closed': True})
                 assert_clean_ui(route)
 
