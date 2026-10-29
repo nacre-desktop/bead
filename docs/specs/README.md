@@ -1,5 +1,6 @@
 # Bead implementation queue
 
+| — | [B0189 Desktop widgets cost](0189-desktop-widgets-cost.md) | Candidate — canvas semantic damage, tick-eased analog clock (seconds hand opt-in), idle numbers in spec; live audit pending |
 | — | [B0181 Ghost strip after panel close](0181-close-ghost-strip.md) | Complete — shared close pose, 120 Hz scene proof, 12-route smoke and full CI pass; paired compositor visual evidence has a UI-provider gap |
 
 2026-10-21 owner structure/licensing decision is recorded in

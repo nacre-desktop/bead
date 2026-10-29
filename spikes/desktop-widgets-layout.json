@@ -1,0 +1,214 @@
+{
+ "version": 1,
+ "preset": "Nacre default",
+ "hosts": {
+  "top_bar": {
+   "tiles": 60,
+   "mode": "content",
+   "regions": {
+    "left": {
+     "start": 0,
+     "span": 60
+    },
+    "centre": {
+     "start": 0,
+     "span": 60
+    },
+    "right": {
+     "start": 0,
+     "span": 60
+    }
+   },
+   "instances": [
+    {
+     "iid": "launcher",
+     "widget": "launcher",
+     "host": "top_bar",
+     "slot": {
+      "region": "left",
+      "start": 0,
+      "span": 1
+     },
+     "settings": {
+      "icon": "nacre",
+      "custom_path": "",
+      "action": "launcher",
+      "route": ""
+     }
+    },
+    {
+     "iid": "workspaces",
+     "widget": "workspaces",
+     "host": "top_bar",
+     "slot": {
+      "region": "left",
+      "start": 1,
+      "span": 1
+     },
+     "settings": {}
+    },
+    {
+     "iid": "title",
+     "widget": "title",
+     "host": "top_bar",
+     "slot": {
+      "region": "centre",
+      "start": 0,
+      "span": 1
+     },
+     "settings": {}
+    },
+    {
+     "iid": "status-pill",
+     "widget": "pill",
+     "host": "top_bar",
+     "slot": {
+      "region": "right",
+      "start": 0,
+      "span": 1
+     },
+     "settings": {},
+     "children": [
+      {
+       "iid": "updates",
+       "widget": "updates",
+       "host": "status-pill",
+       "slot": {
+        "region": "left",
+        "start": 0,
+        "span": 1
+       },
+       "settings": {}
+      },
+      {
+       "iid": "sound",
+       "widget": "sound",
+       "host": "status-pill",
+       "slot": {
+        "region": "centre",
+        "start": 0,
+        "span": 1
+       },
+       "settings": {},
+       "style": "icon+value"
+      },
+      {
+       "iid": "wifi",
+       "widget": "wifi",
+       "host": "status-pill",
+       "slot": {
+        "region": "centre",
+        "start": 1,
+        "span": 1
+       },
+       "settings": {},
+       "style": "icon+value"
+      },
+      {
+       "iid": "bluetooth",
+       "widget": "bluetooth",
+       "host": "status-pill",
+       "slot": {
+        "region": "centre",
+        "start": 2,
+        "span": 1
+       },
+       "settings": {},
+       "style": "icon+value"
+      },
+      {
+       "iid": "battery",
+       "widget": "battery",
+       "host": "status-pill",
+       "slot": {
+        "region": "centre",
+        "start": 3,
+        "span": 1
+       },
+       "settings": {}
+      },
+      {
+       "iid": "notifications",
+       "widget": "notifications",
+       "host": "status-pill",
+       "slot": {
+        "region": "centre",
+        "start": 4,
+        "span": 1
+       },
+       "settings": {}
+      },
+      {
+       "iid": "clock",
+       "widget": "clock",
+       "host": "status-pill",
+       "slot": {
+        "region": "right",
+        "start": 0,
+        "span": 1
+       },
+       "settings": {},
+       "style": "seconds"
+      },
+      {
+       "iid": "power",
+       "widget": "power",
+       "host": "status-pill",
+       "slot": {
+        "region": "right",
+        "start": 1,
+        "span": 1
+       },
+       "settings": {}
+      }
+     ]
+    }
+   ]
+  },
+  "canvas": {
+   "width": 1920,
+   "height": 1200,
+   "instances": [
+    {
+     "iid": "desk-digital",
+     "widget": "clock",
+     "host": "canvas",
+     "style": "digital",
+     "settings": {},
+     "slot": {
+      "x": 96,
+      "y": 96,
+      "w": 420,
+      "h": 220
+     }
+    },
+    {
+     "iid": "desk-analog",
+     "widget": "clock",
+     "host": "canvas",
+     "style": "analog",
+     "settings": {},
+     "slot": {
+      "x": 96,
+      "y": 360,
+      "w": 420,
+      "h": 300
+     }
+    },
+    {
+     "iid": "desk-battery",
+     "widget": "battery",
+     "host": "canvas",
+     "style": "ring",
+     "settings": {},
+     "slot": {
+      "x": 1300,
+      "y": 96,
+      "w": 320,
+      "h": 300
+     }
+    }
+   ]
+  }
+ }
+}

@@ -2231,6 +2231,95 @@ fn configured_form_styles_are_validated_and_seconds_demand_follows_the_visible_h
     Ok(())
 }
 
+/// B0189: analog clocks do not animate between ticks, ease the minute hand for a fraction
+/// of a second once a minute, and give each hand its own tight damage box.
+#[test]
+fn analog_clock_redraws_only_on_ticks_and_hands_hug_their_pixels() -> Result<()> {
+    use serde_json::{Value as Json, json};
+    fn analog(style: &str) -> Json {
+        let mut document: Json =
+            serde_json::from_str(include_str!("../tests/widgets-default.json")).unwrap();
+        document["hosts"]["canvas"] = json!({"width":1920,"height":1080,"instances":[{
+            "iid":"desktop-analog","widget":"clock","host":"canvas","style":style,
+            "settings":{},"slot":{"x":96,"y":96,"w":420,"h":300}}]});
+        document
+    }
+    fn seconds(h: &Harness) -> bool {
+        h.session.view_nodes().iter().any(|node| {
+            matches!(&node.metadata, Some(Value::List(records))
+                if records.first().is_some_and(|seed| seed["widget_clock_seconds"] == true))
+        })
+    }
+    fn clock(time: &str, second: &str) -> BTreeMap<String, Value> {
+        BTreeMap::from([
+            ("bead.desktop.clock".into(), Value::Text(time.into())),
+            (
+                "bead.desktop.clock.seconds".into(),
+                Value::Text(second.into()),
+            ),
+            (
+                "bead.desktop.clock.date".into(),
+                Value::Text("2026-10-29".into()),
+            ),
+        ])
+    }
+    let config = Config {
+        width: 1920,
+        height: 1080,
+        scale: 1.5,
+    };
+    let load = |style: &str| -> Result<Harness> {
+        let mut values = super::initial_models()?;
+        values.extend(clock("12:34", "12:34:56"));
+        values.insert("widgets.layout".into(), Value::list(vec![analog(style)]));
+        values.insert("widgets.editing".into(), Value::Bool(false));
+        Harness::load(
+            &root(),
+            Path::new("widgets/editor/canvas.luau"),
+            &root().join("palette.json"),
+            values,
+            config,
+        )
+    };
+    let mut plain = load("analog")?;
+    assert!(
+        !seconds(&plain),
+        "hour and minute hands need no seconds ticks"
+    );
+    assert!(
+        plain.session.preview_deadline().is_none(),
+        "a settled analog clock schedules no frames"
+    );
+    plain.update(clock("12:35", "12:35:00"))?;
+    let eased = plain
+        .session
+        .preview_deadline()
+        .expect("the minute hand eases after a tick");
+    assert!(
+        eased.saturating_duration_since(std::time::Instant::now())
+            <= std::time::Duration::from_millis(450),
+        "the minute ease lasts a fraction of a second"
+    );
+    let hands: Vec<_> = plain
+        .scene()
+        .primitives
+        .iter()
+        .filter_map(|p| match p {
+            bead::render::Primitive::Polyline { rect, .. } if rect.w < 300. && rect.h < 300. => {
+                Some(*rect)
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(
+        hands.iter().all(|r| r.w * r.h < 0.5 * 284. * 284.),
+        "each hand's box is smaller than half of the dial: {hands:?}"
+    );
+    let ticking = load("analog-seconds")?;
+    assert!(seconds(&ticking), "only the seconds style leases the clock");
+    Ok(())
+}
+
 #[test]
 fn title_width_reservation_uses_configured_instance_settings() -> Result<()> {
     let mut document: serde_json::Value =

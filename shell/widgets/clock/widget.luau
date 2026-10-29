@@ -40,6 +40,27 @@ local function date_parts(iso)
     local month_text=ui.tr(months[month])
     return ui.tr("bead.dashboard.date-line",{weekday=weekday_text,day=day,month=month_text}),weekday_text,day
 end
+-- Days since 1970-01-01 (proleptic Gregorian), so analog hands can use one unwrapped
+-- angle and never sweep backwards at 12 o'clock or 59 minutes.
+local function days_from_civil(y,m,d)
+    if m<=2 then y-=1 end
+    local era=math.floor(y/400)
+    local yoe=y-era*400
+    local doy=math.floor((153*((m+9)%12)+2)/5)+d-1
+    return era*146097+yoe*365+math.floor(yoe/4)-math.floor(yoe/100)+doy-719468
+end
+local function minutes_of_day(time_text)
+    local hours,minutes=string.match(time_text,"^(%d%d?):(%d%d)")
+    hours,minutes=tonumber(hours) or 0,tonumber(minutes) or 0
+    local meridiem=string.match(time_text,"([AaPp])[Mm]%s*$")
+    if meridiem then hours=hours%12+((meridiem=="P" or meridiem=="p") and 12 or 0) end
+    return hours*60+minutes
+end
+local function absolute_minutes(iso,time_text)
+    local y,m,d=string.match(iso,"^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+    local days=y and days_from_civil(tonumber(y),tonumber(m),tonumber(d)) or 0
+    return days*1440+minutes_of_day(time_text)
+end
 local function natural_content_width(style)
     local time=ui.resolve_for_check(ui.bind("bar.clock.text")) or ""
     if style=="time" then
@@ -117,21 +138,35 @@ local function desktop(props,_settings,_data)
     local visible_time=tostring(ui.resolve_for_check(time) or "")
     local iso=ui.resolve_for_check(ui.bind("bead.desktop.clock.date")) or ""
     local date_line,weekday,day=date_parts(iso)
-    if style=="analog" then
-        local seconds=ui.resolve_for_check(ui.bind("bead.desktop.clock.seconds")) or "00:00:00"
-        local hours,minutes=string.match(visible_time,"^(%d%d?):(%d%d)")
-        hours,minutes=tonumber(hours) or 0,tonumber(minutes) or 0
-        local second=tonumber(string.match(seconds,"%d%d$")) or 0
-        local clock_seconds=hours*3600+minutes*60+second
-        local second_angle=ui.animate("wall-clock-second",clock_seconds*6,1,"linear")
-        local minute_angle=ui.animate("wall-clock-minute",clock_seconds*.1,1,"linear")
-        local hour_angle=ui.animate("wall-clock-hour",clock_seconds/120,1,"linear")
+    if style=="analog" or style=="analog-seconds" then
+        -- Hour and minute hands ease once per minute (about 0.4 s of frames); a second
+        -- hand, only when asked for, eases once per second.  Nothing animates between.
+        local iid=tostring(iid or "analog")
+        local minutes=absolute_minutes(iso,visible_time)
+        local with_seconds=style=="analog-seconds"
+        local function angle(key,target,duration,curve)
+            if preview then return target end
+            return ui.animate(key..iid,target,duration,curve)
+        end
+        local hour_angle=angle("analog-hour:",minutes/2,.4,"out-cubic")
+        local minute_angle=angle("analog-minute:",minutes*6,.4,"out-cubic")
+        local second_angle=0
+        if with_seconds then
+            local second=tonumber(string.match(ui.resolve_for_check(ui.bind("bead.desktop.clock.seconds")) or "","%d%d$")) or 0
+            second_angle=angle("analog-second:",(minutes*60+second)*6,.3,"out-back")
+        end
         local dial_size=math.min(w,h)-(preview and 0 or 16)
         local dial_left,dial_top=(w-dial_size)/2,(h-dial_size)/2
+        -- The box hugs the hand, so a moving hand damages only its own pixels.
         local function hand(id,degrees,length,width,color)
             local radians=math.rad(degrees-90)
-            return ui.Polyline{id=id,position="absolute",left=dial_left,top=dial_top,width=dial_size,height=dial_size,
-                points={{.5,.5},{.5+math.cos(radians)*length,.5+math.sin(radians)*length}},
+            local cx,cy=dial_left+dial_size/2,dial_top+dial_size/2
+            local tx,ty=cx+math.cos(radians)*length*dial_size,cy+math.sin(radians)*length*dial_size
+            local pad=width/2+1
+            local left,top=math.min(cx,tx)-pad,math.min(cy,ty)-pad
+            local box_w,box_h=math.abs(tx-cx)+2*pad,math.abs(ty-cy)+2*pad
+            return ui.Polyline{id=id,position="absolute",left=left,top=top,width=box_w,height=box_h,
+                points={{(cx-left)/box_w,(cy-top)/box_h},{(tx-left)/box_w,(ty-top)/box_h}},
                 stroke_width=width,round_caps=true,color=color}
         end
         if preview then
@@ -156,7 +191,7 @@ local function desktop(props,_settings,_data)
             ui.Image{id="dial-ticks",position="absolute",left=dial_left,top=dial_top,width=dial_size,height=dial_size,path="widgets/clock/assets/analog-ticks.themed.svg"},
             hand("hour-hand",hour_angle,.26,7,"onSurface"),
             hand("minute-hand",minute_angle,.37,4.5,"onSurface"),
-            hand("second-hand",second_angle,.42,2,"primary"),
+            with_seconds and hand("second-hand",second_angle,.42,2,"primary") or nil,
             ui.Box{id="hand-pin",position="absolute",left=dial_left+dial_size/2-5,top=dial_top+dial_size/2-5,width=10,height=10,radius=5,fill="primary"},
             ui.Text{id="dial-date",position="absolute",left=dial_left,top=dial_top+dial_size*.72,width=dial_size,height=24,
                 text=day and (string.upper(string.sub(weekday,1,3)).." "..day) or date_line,
@@ -229,7 +264,8 @@ return {id="clock",title="Clock",icon="schedule",category="bar",data={topics={},
         ["time+date"]={title="Stored time and date",min_span=1,max_span=1200,preferred_span=360,preferred_height=92,hidden=true,requires={"bead.desktop.clock.date"},render=function(p,s,d) p.form_style="digital"; return desktop(p,s,d) end},
         seconds={title="Stored seconds",min_span=1,max_span=1200,preferred_span=240,preferred_height=92,hidden=true,requires={"bead.desktop.clock.seconds"},render=function(p,s,d) p.form_style="seconds"; return desktop(p,s,d) end},
         digital=desktop_style("A · Digital","digital",420,{"bead.desktop.clock.date"},220),
-        analog=desktop_style("B · Analog","analog",420,{"bead.desktop.clock.seconds","bead.desktop.clock.date"},300),
+        analog=desktop_style("B · Analog","analog",420,{"bead.desktop.clock.date"},300),
+        ["analog-seconds"]=desktop_style("B2 · Analog + seconds","analog-seconds",420,{"bead.desktop.clock.seconds","bead.desktop.clock.date"},300),
         minimal=desktop_style("C · Minimal","minimal",420,{"bead.desktop.clock.date"}),
     }},panel={styles={calendar={view="calendar"}}}}
 }
