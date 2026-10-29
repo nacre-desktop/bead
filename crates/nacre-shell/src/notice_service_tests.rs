@@ -482,7 +482,10 @@ fn unchanged_osd_level_at_the_limit_reshows_and_extends_the_pill() {
     std::thread::sleep(Duration::from_millis(5));
     deliver(&s, &full());
     let second = s.lock().osd.deadline.expect("still shown");
-    assert!(second > first, "a repeated step at the limit extends the pill");
+    assert!(
+        second > first,
+        "a repeated step at the limit extends the pill"
+    );
     {
         let mut g = s.lock();
         g.osd.shown = None;
