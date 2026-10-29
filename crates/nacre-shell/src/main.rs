@@ -25,6 +25,8 @@ mod key_routes;
 mod launcher;
 mod launcher_panel;
 mod launcher_quick;
+#[cfg(test)]
+mod markup_bench;
 mod memory_policy;
 mod nacre_source;
 mod notice_service;
