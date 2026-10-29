@@ -998,6 +998,46 @@ return ui.Box{id="other",width=400,height=100,
 }
 
 #[test]
+fn navigation_projects_the_fresh_view_after_reconciling_its_route_state() {
+    let f = fixture();
+    fs::create_dir_all(f.0.join("other")).unwrap();
+    fs::write(
+        f.0.join("other/behavior.luau"),
+        r#"return {stores={['panel.open']=false},actions={},computed={}}"#,
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("other/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Box{id="other",width=120,height=60}"#,
+    )
+    .unwrap();
+
+    let mut session = session(&f);
+    assert!(session.stores.get("panel.open").is_none());
+    let projection_calls = std::rc::Rc::new(std::cell::Cell::new(0));
+    let called = projection_calls.clone();
+    session.set_projector(Box::new(move |stores| {
+        assert_eq!(stores.get("panel.open"), Some(&Value::Bool(true)));
+        called.set(called.get() + 1);
+        Ok(BTreeMap::new())
+    }));
+
+    let scene = session
+        .navigate(
+            "other/main.luau".into(),
+            BTreeMap::from([("panel.open".into(), Value::Bool(true))]),
+        )
+        .unwrap();
+    assert_eq!(projection_calls.get(), 1);
+    assert_eq!(session.entry, Path::new("ui/main.luau"));
+    assert!(session.stores.get("panel.open").is_none());
+    session.commit(scene);
+    assert_eq!(session.entry, Path::new("other/main.luau"));
+    assert_eq!(session.stores.get("panel.open"), Some(&Value::Bool(true)));
+}
+
+#[test]
 fn clickable_region_can_opt_into_edge_hover() {
     let f = fixture();
     fs::write(f.0.join("ui/main.luau"), r#"local ui=require("bead.ui")

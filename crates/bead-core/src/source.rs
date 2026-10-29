@@ -352,6 +352,10 @@ pub enum Applied {
 #[derive(Clone)]
 pub struct Mirror {
     snapshot: Option<Arc<Snapshot>>,
+    /// The latest payload projected into this mirror's consumer stores. Transport
+    /// mirrors may accept a snapshot before a newly-created consumer asks for its
+    /// initial projection, so payload equality alone is not enough to skip it.
+    projected: Option<(String, Arc<Json>, BTreeMap<String, crate::Value>)>,
     expected_epoch: Option<String>,
     stale_since: Option<Instant>,
     resync: bool,
@@ -360,6 +364,7 @@ impl Mirror {
     pub fn new(now: Instant) -> Self {
         Self {
             snapshot: None,
+            projected: None,
             expected_epoch: None,
             stale_since: Some(now),
             resync: true,
@@ -523,21 +528,20 @@ impl Mirror {
     ) -> Result<Applied> {
         let mut staged = self.clone();
         let applied = staged.patch(&patch.epoch, patch.base, patch.revision, &patch.data, now)?;
-        if applied == Applied::Updated {
-            let values = projection(
-                &staged
-                    .snapshot
-                    .as_ref()
-                    .ok_or_else(|| Error::new("internal", "missing staged snapshot", false))?
-                    .data,
-            )?;
+        if applied == Applied::Updated && staged.needs_projection(stores) {
+            let snapshot = staged
+                .snapshot
+                .as_ref()
+                .ok_or_else(|| Error::new("internal", "missing staged snapshot", false))?;
+            let values = projection(&snapshot.data)?;
             let mut candidate = stores
                 .reconcile(&values)
                 .map_err(|_| Error::new("validation", "source store schema rejected", false))?;
             candidate
-                .commit(values)
+                .commit(values.clone())
                 .map_err(|_| Error::new("validation", "source store values rejected", false))?;
             *stores = candidate;
+            staged.remember_projection(values);
         }
         *self = staged;
         Ok(applied)
@@ -552,24 +556,44 @@ impl Mirror {
     ) -> Result<Applied> {
         let mut staged = self.clone();
         let (applied, changed) = staged.accept_with_change(snapshot, now)?;
-        if changed {
-            let values = projection(
-                &staged
-                    .snapshot
-                    .as_ref()
-                    .ok_or_else(|| Error::new("internal", "missing staged snapshot", false))?
-                    .data,
-            )?;
+        if changed || staged.needs_projection(stores) {
+            let snapshot = staged
+                .snapshot
+                .as_ref()
+                .ok_or_else(|| Error::new("internal", "missing staged snapshot", false))?;
+            let values = projection(&snapshot.data)?;
             let mut candidate = stores
                 .reconcile(&values)
                 .map_err(|_| Error::new("validation", "source store schema rejected", false))?;
             candidate
-                .commit(values)
+                .commit(values.clone())
                 .map_err(|_| Error::new("validation", "source store values rejected", false))?;
             *stores = candidate;
+            staged.remember_projection(values);
         }
         *self = staged;
         Ok(applied)
+    }
+    fn needs_projection(&self, stores: &crate::Stores) -> bool {
+        let Some(snapshot) = &self.snapshot else {
+            return false;
+        };
+        self.projected.as_ref().is_none_or(|(epoch, data, values)| {
+            epoch != &snapshot.epoch
+                || **data != *snapshot.data
+                || values
+                    .iter()
+                    .any(|(id, value)| stores.get(id) != Some(value))
+        })
+    }
+    fn remember_projection(&mut self, values: BTreeMap<String, crate::Value>) {
+        if let Some(snapshot) = &self.snapshot {
+            self.projected = Some((
+                snapshot.epoch.clone(),
+                snapshot.data.clone(),
+                values,
+            ));
+        }
     }
 }
 #[derive(Default)]
@@ -646,5 +670,69 @@ mod restart_tests {
             connected: true,
         });
         assert_eq!(mirror.accept(different, now).unwrap(), Applied::Updated);
+    }
+
+    #[test]
+    fn identical_payload_projects_once_for_each_consumer_schema() {
+        let now = Instant::now();
+        let make = |revision| {
+            Arc::new(Snapshot {
+                epoch: "boot-a".into(),
+                revision,
+                data: Arc::new(serde_json::json!({"ready":true})),
+                connected: true,
+            })
+        };
+        let mut mirror = Mirror::new(now);
+        assert_eq!(mirror.accept(make(1), now).unwrap(), Applied::Updated);
+        let mut projections = 0;
+        let mut first = crate::Stores::default();
+        assert_eq!(
+            mirror
+                .project(
+                    &mut first,
+                    make(2),
+                    |_| {
+                        projections += 1;
+                        Ok(BTreeMap::from([("panel.open".into(), crate::Value::Bool(true))]))
+                    },
+                    now,
+                )
+                .unwrap(),
+            Applied::Updated
+        );
+        assert_eq!(projections, 1);
+        assert_eq!(first.get("panel.open"), Some(&crate::Value::Bool(true)));
+
+        assert_eq!(
+            mirror
+                .project(
+                    &mut first,
+                    make(3),
+                    |_| panic!("unchanged payload reprojected for an initialized consumer"),
+                    now,
+                )
+                .unwrap(),
+            Applied::Updated
+        );
+        assert_eq!(projections, 1);
+
+        let mut fresh = crate::Stores::default();
+        assert_eq!(
+            mirror
+                .project(
+                    &mut fresh,
+                    make(4),
+                    |_| {
+                        projections += 1;
+                        Ok(BTreeMap::from([("panel.open".into(), crate::Value::Bool(true))]))
+                    },
+                    now,
+                )
+                .unwrap(),
+            Applied::Updated
+        );
+        assert_eq!(projections, 2);
+        assert_eq!(fresh.get("panel.open"), Some(&crate::Value::Bool(true)));
     }
 }

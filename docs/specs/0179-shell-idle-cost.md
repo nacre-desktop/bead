@@ -21,6 +21,10 @@ The repeated private CPU capture used the release shell in nested niri at 2880×
 - `trim_idle_shm` compacted once after startup and once after the minute update; there was no repeating idle compaction.
 - No temporary duplicate code or dependencies were added.
 
+## R3 live-audit repair
+
+The first r2 live audit found that an unchanged transport payload could leave a newly-opened view without its initial source projection. Mirrors now retain projection readiness per consumer stores: a fresh consumer is reconciled once, while repeated identical payloads for an initialized consumer are skipped. View navigation now loads and reconciles the destination schema before committing route state such as `panel.open`. A real-shell route smoke is being added and run against the actual `shell/` tree; its final route count and UI error result are recorded after the nested run.
+
 ## Acceptance status
 
 Unit tests and goldens: full Bead CI passed. The private nested CPU capture passed the <0.5% core target. The lead accepted the 3.33/s all-thread voluntary-switch proxy as meeting the wakeup goal; `perf` was unavailable for a direct scheduler tracepoint count. No live desktop run.

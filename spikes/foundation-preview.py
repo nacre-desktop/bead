@@ -67,6 +67,19 @@ def display_alive(path):
 TOUR = [('bar', None, None), ('launcher', 'nacre', ['launcher', '']), ('dashboard', 'drawers', ['toggle', 'dashboard']),
         ('settings', 'nacre', ['settings']), ('sidebar', 'nacre', ['left']), ('session', 'nacre', ['menu', 'power', ''])]
 
+# Keep this list aligned with the core-view PanelSpecs registered in main.rs.
+# This smoke opens each actual view entry through the shell's panel IPC/runtime.
+PANEL_ROUTE_VIEWS = [
+    'launcher', 'sound', 'calendar', 'peek-calendar',
+    'overview', 'palette', 'keybindings', 'wallpaper', 'session',
+    'network', 'bluetooth', 'battery', 'peek-network', 'peek-bluetooth',
+    'peek-battery', 'peek-audio', 'updates', 'peek-updates',
+    'dashboard-today', 'dashboard-weather', 'dashboard-media', 'dashboard-system',
+    'dashboard-notifications', 'dashboard-devices', 'dashboard-network',
+    'dashboard-clipboard', 'notifications', 'control', 'peek-notifications',
+    'pearl-guide',
+]
+
 
 def sample_full(env, raw, compositor, stop):
     """The whole shell as `bead-shell start` runs it (one process, one UI provider, in-process notices)
@@ -357,6 +370,86 @@ def sample(env, raw, compositor, stop):
                     return False
                 matrix.wait_log(raw/'preview-bar.log',lambda t:page_presented(t[offset:]))
             page_call('close')
+        if os.environ.get('BEAD_PREVIEW_SMOKE') == '1':
+            route_log = raw / 'preview-bar.log'
+
+            def panel_call(method, *args):
+                result = subprocess.run(
+                    [str(binary), 'ipc', '--socket', str(commands), '--json',
+                     'bead.panel', method, *args],
+                    cwd=root, env=bar_env, capture_output=True, text=True, timeout=8)
+                if result.returncode:
+                    raise RuntimeError(f'panel route {method} {args} failed: {result.stderr.strip()}')
+                return json.loads(result.stdout)
+
+            def panel_state():
+                return panel_call('state')['result']
+
+            def wait_panel(predicate, label):
+                deadline = time.monotonic() + 12
+                last = None
+                while time.monotonic() < deadline:
+                    last = panel_state()
+                    if predicate(last):
+                        return last
+                    time.sleep(.05)
+                raise RuntimeError(f'panel route {label} state timeout: {last}')
+
+            def assert_clean_ui(route):
+                text = route_log.read_text()
+                errors = [line for line in text.splitlines()
+                          if line.startswith('UI_ERROR ') or 'unknown state ' in line]
+                if errors:
+                    raise AssertionError(f'{route}: shell reported UI errors: {errors[-8:]}')
+
+            wait_panel(lambda state: not state.get('target_open'), 'previous dashboard route close')
+
+            def wait_presented(offset, route):
+                matrix.wait_log(
+                    route_log,
+                    lambda text: re.search(
+                        r'UI_PRESENTED generation=\d+ [^\n]*companion=true',
+                        text[offset:]) is not None,
+                    timeout=20)
+                assert_clean_ui(route)
+
+            results = []
+            for route in PANEL_ROUTE_VIEWS:
+                offset = len(matrix.log_text(route_log))
+                panel_call('open', route)
+                wait_panel(lambda state: state.get('target_open') and state.get('resident'), route)
+                wait_presented(offset, route)
+                panel_call('close')
+                wait_panel(lambda state: not state.get('target_open'), route + ' close')
+                results.append({'route': route, 'opened': True, 'closed': True})
+                assert_clean_ui(route)
+
+            # Wait for the closed Runtime to retire, then create a fresh session
+            # against the same unchanged private daemon payload and open it again.
+            panel_call('open', 'network')
+            wait_panel(lambda state: state.get('target_open') and state.get('resident'), 'network warmup')
+            panel_call('close')
+            wait_panel(lambda state: not state.get('target_open'), 'network close')
+            wait_panel(lambda state: not state.get('resident'), 'network session retirement')
+            offset = len(matrix.log_text(route_log))
+            panel_call('open', 'network')
+            wait_panel(lambda state: state.get('target_open') and state.get('resident'),
+                       'network fresh session after identical source data')
+            wait_presented(offset, 'network fresh session')
+            panel_call('close')
+            wait_panel(lambda state: not state.get('target_open'), 'network fresh close')
+            assert_clean_ui('fresh session after identical source data')
+            results.append({'route': 'network', 'fresh_session_after_unchanged_source': True})
+            assert 'UI_ERROR' not in (raw / 'preview-notices.log').read_text()
+            (raw / 'panel-route-smoke.json').write_text(json.dumps({
+                'actual_shell_tree': True,
+                'routes': results,
+                'source_updates_injected_between_sessions': 0,
+                'ui_errors': 0,
+                'unknown_state_errors': 0,
+            }, indent=2) + '\n')
+            print('PANEL_ROUTE_SMOKE ' + json.dumps({'routes': len(results), 'ui_errors': 0,
+                                                    'unknown_state_errors': 0}), flush=True)
         ready = True
         if os.environ.get('BEAD_PREVIEW_SMOKE') == '1':
             masks=[]

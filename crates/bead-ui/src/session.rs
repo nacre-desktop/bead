@@ -323,18 +323,18 @@ impl Session {
         entry: PathBuf,
         changes: BTreeMap<String, Value>,
     ) -> Result<Scene, Diagnostic> {
-        let mut stores = self.stores.clone();
-        stores
-            .commit(changes)
-            .map_err(|e| Diagnostic::new(&entry, 1, 1, e))?;
         let previous_entry = std::mem::replace(&mut self.entry, entry);
-        let previous_stores = std::mem::replace(&mut self.stores, stores);
-        let result = self.reload_current();
+        let result = self.reload_current_with(changes);
         self.entry = previous_entry;
-        self.stores = previous_stores;
         result
     }
     fn reload_current(&mut self) -> Result<Scene, Diagnostic> {
+        self.reload_current_with(BTreeMap::new())
+    }
+    fn reload_current_with(
+        &mut self,
+        entry_changes: BTreeMap<String, Value>,
+    ) -> Result<Scene, Diagnostic> {
         self.deferred_gesture = false;
         if self.deferred_action.take().is_some()
             && self.stores.get("bead.pressed") == Some(&Value::Bool(true))
@@ -365,6 +365,12 @@ impl Session {
         )?;
         generation.set_frame_interval(self.frame_interval);
         bead_core::profile::mark("generation_ready");
+        // Route changes belong to the destination view's schema. Reconcile that
+        // schema before committing host state such as `panel.open`; a newly-opened
+        // view may not declare those IDs in the session it is replacing.
+        stores
+            .commit(entry_changes)
+            .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
         if self.generation.is_none()
             && let Some(saved) = &self.restore
         {

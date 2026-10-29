@@ -22,7 +22,7 @@ See [B0173](docs/specs/0173-picker-cold-open.md) for the route timing and
 measured acceptance status.
 
 Idle shell profiling and the fixes for unchanged daemon snapshots, static
-wallpaper wakeups and minute-clock redraws are recorded in [B0179](docs/specs/0179-shell-idle-cost.md).
+wallpaper wakeups and minute-clock redraws are recorded in [B0179](docs/specs/0179-shell-idle-cost.md), including the r3 first-projection repair and full panel-route smoke.
 
 ## How it fits Nacre
 

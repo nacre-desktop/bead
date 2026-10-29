@@ -34,6 +34,14 @@ ceiling. Full Bead CI passes. See [B0157](specs/0157-picker-errors.md).
 
 # Status
 
+## 2026-10-29 — B0179 r3 live-audit repair (validation in progress)
+
+The r2 live audit exposed a first-projection gap for new panel consumers. The
+repair scopes unchanged-payload projection skips to initialized consumer stores
+and reconciles destination view schemas before route-state commits. The full
+actual-shell route smoke and full Bead CI are running before the r3 push; see
+[B0179](specs/0179-shell-idle-cost.md).
+
 ## 2026-10-29 — B0179 shell idle cost (lead accepted)
 
 Repeated identical snapshots advance revision state without restaging subscribers;
