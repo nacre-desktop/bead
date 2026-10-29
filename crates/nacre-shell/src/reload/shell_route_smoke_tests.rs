@@ -304,7 +304,10 @@ fn real_shell_panel_routes_open_and_close_with_prepared_scenes() {
         warmed += usize::from(bytes > 0);
         bytes_added = bytes_added.saturating_add(bytes);
     }
-    assert_eq!(warmed, route_count, "every real shell route has a startup warm entry");
+    assert_eq!(
+        warmed, route_count,
+        "every real shell route has a startup warm entry"
+    );
     let (_, _, retained) = bead::render::tree::cpu_content_warm_cache_stats();
     assert!(retained <= 2 * bead::core::cache::MIB);
     eprintln!(
