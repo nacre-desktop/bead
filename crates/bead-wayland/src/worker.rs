@@ -228,13 +228,30 @@ impl Source {
             .map_err(|_| "script worker disconnected".into())
     }
 }
-impl Drop for Source {
-    fn drop(&mut self) {
+impl Source {
+    /// Stop the worker; the returned handle finishes once its last job and session drop are done.
+    fn stop(&mut self) -> Option<JoinHandle<()>> {
         if let Some(sender) = self.sender.take() {
             let _ = sender.send(Job::Stop);
         }
-        if let Some(worker) = self.thread.take() {
-            let _ = worker.join();
+        self.thread.take()
+    }
+}
+impl Drop for Source {
+    fn drop(&mut self) {
+        // B0205: a worker only sees Stop between jobs, and dropping its session frees the
+        // whole view. Joining here blocked the UI thread for up to ~0.5 s live when a panel
+        // was replaced mid-stage; a reaper thread joins and returns the freed heap instead.
+        if let Some(worker) = self.stop() {
+            let _ = std::thread::Builder::new()
+                .name("bead-reap".into())
+                .spawn(move || {
+                    let _ = worker.join();
+                    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+                    unsafe {
+                        libc::malloc_trim(0);
+                    }
+                });
         }
     }
 }
@@ -1194,7 +1211,9 @@ mod tests {
             }
             let (done, completed) = mpsc::channel();
             let dropper = std::thread::spawn(move || {
-                drop(source);
+                if let Some(worker) = source.stop() {
+                    let _ = worker.join();
+                }
                 let _ = done.send(());
             });
             completed

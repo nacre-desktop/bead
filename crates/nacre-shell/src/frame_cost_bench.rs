@@ -195,6 +195,33 @@ fn slide(open_scene: &Scene, opening: bool) -> Steps {
         frames,
         ..Default::default()
     };
+    if !opening {
+        // B0205: a close starts from the panel resting open; its quiet-time work (the close
+        // layer) runs then, unless `B0205_NO_IDLE` reproduces closing straight away.
+        let mut rest = base.clone();
+        rest.panel_offset(1., true);
+        rest.motion.as_mut().unwrap().progress = 1.;
+        rest.offset = (32., 32.);
+        renderer.prepare_on_ui(&rest, SCALE).expect("rest pose");
+        renderer
+            .render(
+                &rest,
+                ShmTarget {
+                    bytes: &mut bytes,
+                    width: w,
+                    height: h,
+                    scale: SCALE,
+                    format: PixelFormat::Rgba,
+                },
+                Damage::full(w, h),
+            )
+            .expect("rest frame");
+        if std::env::var_os("B0205_NO_IDLE").is_none() {
+            std::thread::sleep(std::time::Duration::from_millis(160));
+            renderer.idle_work(&rest);
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    }
     for frame in 0..=frames {
         let t = frame as f32 / frames.max(1) as f32;
         let eased = ease(curve, t);

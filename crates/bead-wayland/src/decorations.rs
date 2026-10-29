@@ -29,11 +29,12 @@ struct Key {
 }
 /// B0117: decoration tiles already rasterised, per key (idle frame, joined frame of a panel), newest last. Opening
 /// and closing a panel swaps tile sets; rasterising them took 10-20 ms on the main thread right at the animation
-/// start. A set is at most 2 MiB; four are kept.
+/// start. A set is at most 2 MiB (~0.5 MiB for a 1920x1200 frame at 1.5); B0205 keeps six (the idle frame and
+/// five panels), since four thrashed when control centre and a status popout alternated.
 type Raster = (Rect, u32, u32, std::sync::Arc<[u8]>);
 #[derive(Default)]
 pub(super) struct RasterCache(Vec<(Key, Vec<Raster>)>);
-const RASTER_SETS: usize = 4;
+const RASTER_SETS: usize = 6;
 pub(super) struct Tiles {
     key: Key,
     pub bytes: usize,
@@ -69,6 +70,12 @@ impl App {
             return Ok(());
         };
         let on_output = self.panel_output.as_ref() == Some(&surface.output);
+        // B0205: a panel shows nothing until its content (or a ready fallback) arrives, so the
+        // frame keeps its current tiles instead of rasterising a join for the placeholder's shape
+        // that is replaced a moment later (one extra set per open, ~30 ms on battery).
+        if self.panel_target && on_output && !self.panel_ready && !self.panel_fallback_ready {
+            return Ok(());
+        }
         let engaged = self.panel_target
             && on_output
             && self

@@ -3094,6 +3094,24 @@ pub struct TreeCpuRenderer {
     slide_layer: Option<(u64, Raster)>,
     /// Slide layers flattened (a test hook: one per slide, none per frame).
     pub slide_layer_builds: usize,
+    /// B0205: the close slide's layer, flattened off the UI thread while the panel rests open.
+    close_layer: Option<CloseLayer>,
+    /// Close layers flattened in the background, and adopted by a close slide (test hooks).
+    pub close_layer_builds: usize,
+    pub close_layer_adoptions: usize,
+    /// When a reveal panel resting open last rendered new content, at a scale and format.
+    close_due: Option<(std::time::Instant, f32, PixelFormat)>,
+    close_timer: bool,
+}
+/// B0205: closing, the whole open picture is the slide content, so its layer is known as soon
+/// as the panel rests open. Flattening it on the slide's first frame was the longest UI-thread
+/// stall of a close on battery (~100–140 ms live); a background thread paints it instead, and a
+/// close whose content key matches adopts it (waiting for an unfinished job, never repainting).
+struct CloseLayer {
+    key: u64,
+    size: (u32, u32),
+    job: std::thread::JoinHandle<Option<Pixmap>>,
+    charge: bead_core::cache::Charge,
 }
 /// B0185: a panel slide in progress moves its content as one piece: opening, the content above
 /// the growing body slides behind the reveal window; closing, the whole open picture moves.
@@ -3147,6 +3165,37 @@ impl SlideContent {
             window,
         })
     }
+    /// The content items at their scene (unposed) geometry, with the posed frame's rasters.
+    fn items(&self, scene: &Scene, frame: &Frame) -> Vec<Item> {
+        frame.items[self.posed_start..]
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let index = self.scene_start + index;
+                Item {
+                    id: item.id.clone(),
+                    primitive: scene.primitives[index].clone(),
+                    clip: scene.clips.get(&index).copied(),
+                    raster: item.raster.clone(),
+                    image: None,
+                }
+            })
+            .collect()
+    }
+    /// The close slide of a reveal panel resting open: the whole scene is content.
+    fn closing_from_rest(scene: &Scene, frame: &Frame) -> Option<Self> {
+        scene
+            .motion
+            .as_ref()
+            .filter(|m| m.reveal && m.open && m.progress >= 1.)?;
+        let posed_start = frame.items.len().checked_sub(scene.primitives.len())?;
+        (posed_start < frame.items.len()).then_some(Self {
+            scene_start: 0,
+            posed_start,
+            offset: (0., 0.),
+            window: None,
+        })
+    }
     /// Identity of the content's pixels: its primitives, own clips and rasters at a scale and format.
     fn key(&self, scene: &Scene, frame: &Frame, scale: f32, format: PixelFormat) -> u64 {
         let mut hash = std::collections::hash_map::DefaultHasher::new();
@@ -3179,6 +3228,40 @@ impl SlideContent {
         }
         hash.finish()
     }
+}
+/// Paint `items` into a new layer of `size` device pixels, in bands (the repair mask is
+/// bounded per call).
+fn flatten_layer(
+    items: &[Item],
+    offset: (f32, f32),
+    (w, h): (u32, u32),
+    scale: f32,
+    format: PixelFormat,
+    scratch: &mut RepairScratch,
+) -> Result<Pixmap> {
+    let mut pixels = Pixmap::new(w, h).ok_or("slide layer size")?;
+    let band = (RepairScratch::CAP / w as usize).clamp(1, h as usize) as u32;
+    for y in (0..h).step_by(band as usize) {
+        paint_items(
+            items,
+            offset,
+            ShmTarget {
+                bytes: pixels.data_mut(),
+                width: w,
+                height: h,
+                scale,
+                format,
+            },
+            Damage {
+                x: 0,
+                y,
+                w,
+                h: band.min(h - y),
+            },
+            scratch,
+        )?;
+    }
+    Ok(pixels)
 }
 enum FlattenedPixels {
     Dense(Pixmap),
@@ -3303,6 +3386,56 @@ impl TreeCpuRenderer {
         self.flattened = Some((frame.key, frame.scale, pixels));
         Ok(())
     }
+    /// B0205: start flattening the close layer of a reveal panel resting open, once per content
+    /// key. Any other pose drops it, so nothing is held while the panel is closed or sliding.
+    fn prepare_close_layer(&mut self, scene: &Scene, frame: &Frame, scale: f32, format: PixelFormat) {
+        let Some(slide) = SlideContent::closing_from_rest(scene, frame) else {
+            return;
+        };
+        let key = slide.key(scene, frame, scale, format);
+        if self.close_layer.as_ref().is_some_and(|layer| layer.key == key) {
+            return;
+        }
+        // A superseded job finishes on its own; its pixels are dropped unseen.
+        self.close_layer = None;
+        let size = (
+            (scene.bounds.w * scale).ceil().max(1.) as u32,
+            (scene.bounds.h * scale).ceil().max(1.) as u32,
+        );
+        let Ok(charge) = self
+            .group_budget
+            .get_or_insert_with(|| {
+                bead_core::cache::Budget::new("cpu-composite", 64 * bead_core::cache::MIB)
+            })
+            .reserve(size.0 as usize * size.1 as usize * 4 + 64)
+        else {
+            return;
+        };
+        let items = slide.items(scene, frame);
+        let offset = (-scene.bounds.x, -scene.bounds.y);
+        let job = std::thread::Builder::new()
+            .name("bead-close-layer".into())
+            .spawn(move || {
+                flatten_layer(
+                    &items,
+                    offset,
+                    size,
+                    scale,
+                    format,
+                    &mut RepairScratch::default(),
+                )
+                .ok()
+            });
+        if let Ok(job) = job {
+            self.close_layer_builds += 1;
+            self.close_layer = Some(CloseLayer {
+                key,
+                size,
+                job,
+                charge,
+            });
+        }
+    }
     /// B0185: one slide frame: the body below the content as primitives, then the content layer
     /// (flattened on the first frame of the slide) at its pose, inside the reveal window.
     fn paint_slide(
@@ -3325,6 +3458,28 @@ impl TreeCpuRenderer {
             .slide_layer
             .as_ref()
             .is_none_or(|(last, _)| *last != key)
+            && let Some(layer) = self.close_layer.take()
+            && layer.key == key
+            && let Ok(Some(pixels)) = layer.job.join()
+            && (pixels.width(), pixels.height()) == layer.size
+        {
+            self.close_layer_adoptions += 1;
+            self.slide_layer = Some((
+                key,
+                Raster {
+                    changed: Damage::full(layer.size.0, layer.size.1),
+                    pixels: Arc::new(pixels),
+                    origin: (0, 0),
+                    key,
+                    base_key: None,
+                    _charge: layer.charge,
+                },
+            ));
+        }
+        if self
+            .slide_layer
+            .as_ref()
+            .is_none_or(|(last, _)| *last != key)
         {
             self.slide_layer = None;
             let _profile = bead_core::profile::Span::new("slide_layer");
@@ -3338,43 +3493,15 @@ impl TreeCpuRenderer {
                     bead_core::cache::Budget::new("cpu-composite", 64 * bead_core::cache::MIB)
                 })
                 .reserve(w as usize * h as usize * 4 + 64)?;
-            let mut pixels = Pixmap::new(w, h).ok_or("slide layer size")?;
-            let items: Vec<Item> = frame.items[slide.posed_start..]
-                .iter()
-                .enumerate()
-                .map(|(index, item)| {
-                    let index = slide.scene_start + index;
-                    Item {
-                        id: item.id.clone(),
-                        primitive: scene.primitives[index].clone(),
-                        clip: scene.clips.get(&index).copied(),
-                        raster: item.raster.clone(),
-                        image: None,
-                    }
-                })
-                .collect();
-            // Paint in bands: the repair mask is bounded per call.
-            let band = (RepairScratch::CAP / w as usize).clamp(1, h as usize) as u32;
-            for y in (0..h).step_by(band as usize) {
-                paint_items(
-                    &items,
-                    (-scene.bounds.x, -scene.bounds.y),
-                    ShmTarget {
-                        bytes: pixels.data_mut(),
-                        width: w,
-                        height: h,
-                        scale,
-                        format,
-                    },
-                    Damage {
-                        x: 0,
-                        y,
-                        w,
-                        h: band.min(h - y),
-                    },
-                    &mut self.repair_scratch,
-                )?;
-            }
+            let items = slide.items(scene, frame);
+            let pixels = flatten_layer(
+                &items,
+                (-scene.bounds.x, -scene.bounds.y),
+                (w, h),
+                scale,
+                format,
+                &mut self.repair_scratch,
+            )?;
             self.slide_layer_builds += 1;
             self.slide_layer = Some((
                 key,
@@ -3435,16 +3562,41 @@ impl TreeCpuRenderer {
         }
     }
 }
+/// B0205: a resting panel's content is quiet this long before its close layer is flattened,
+/// so hover and live updates do not each start a background paint.
+const CLOSE_LAYER_QUIET: std::time::Duration = std::time::Duration::from_millis(150);
 impl Renderer for TreeCpuRenderer {
     fn take_transient_timer(&mut self) -> bool {
-        if self.repair_scratch.used.is_none() || self.repair_scratch.timer {
-            return false;
-        }
-        self.repair_scratch.timer = true;
-        true
+        let scratch = self.repair_scratch.used.is_some() && !self.repair_scratch.timer;
+        let close = self.close_due.is_some() && !self.close_timer;
+        self.repair_scratch.timer |= scratch;
+        self.close_timer |= close;
+        scratch || close
     }
     fn trim_transient_idle(&mut self) -> Option<std::time::Duration> {
-        self.repair_scratch.trim_idle(std::time::Instant::now())
+        let scratch = self.repair_scratch.trim_idle(std::time::Instant::now());
+        let close = self.close_due.map(|(at, _, _)| {
+            CLOSE_LAYER_QUIET
+                .saturating_sub(at.elapsed())
+                .max(std::time::Duration::from_millis(1))
+        });
+        self.close_timer = close.is_some();
+        match (scratch, close) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        }
+    }
+    fn idle_work(&mut self, scene: &Scene) {
+        let Some((at, scale, format)) = self.close_due else {
+            return;
+        };
+        if at.elapsed() < CLOSE_LAYER_QUIET {
+            return;
+        }
+        self.close_due = None;
+        if let Some(frame) = self.cache.frame.clone() {
+            self.prepare_close_layer(scene, &frame, scale, format);
+        }
     }
     fn prepared_frame(&self) -> Option<std::sync::Arc<crate::tree::Frame>> {
         self.cache.frame.clone()
@@ -3627,9 +3779,16 @@ impl Renderer for TreeCpuRenderer {
             self.group_charge = None;
             let frame = frame.expect("non-snapshot frame checked").clone();
             if let Some(slide) = SlideContent::of(scene, &frame) {
+                self.close_due = None;
                 return self.paint_slide(scene, &frame, &slide, target, damage);
             }
             self.slide_layer = None;
+            if SlideContent::closing_from_rest(scene, &frame).is_some() {
+                self.close_due = Some((std::time::Instant::now(), target.scale, target.format));
+            } else {
+                // The first close frame (progress 1, not yet a slide) keeps the layer for the next.
+                self.close_due = None;
+            }
             return paint_with_scratch(
                 &frame,
                 scene.offset,
@@ -3639,6 +3798,8 @@ impl Renderer for TreeCpuRenderer {
             );
         }
         self.slide_layer = None;
+        self.close_due = None;
+        self.close_layer = None;
         if scene.opacity <= 0. {
             if !self.keep_hidden_group {
                 self.flattened = None;
@@ -5030,6 +5191,50 @@ mod tests {
                 "the layer lives only during a slide"
             );
         }
+    }
+    #[test]
+    fn a_resting_panel_flattens_its_close_layer_off_the_ui_thread() {
+        let (w, h) = (396u32, 246 + 120);
+        let draw = |renderer: &mut TreeCpuRenderer, scene: &Scene, bytes: &mut [u8]| {
+            renderer.prepare_on_ui(scene, 1.5).unwrap();
+            renderer
+                .render(
+                    scene,
+                    ShmTarget {
+                        bytes,
+                        width: w,
+                        height: h,
+                        scale: 1.5,
+                        format: PixelFormat::Rgba,
+                    },
+                    Damage::full(w, h),
+                )
+                .unwrap();
+        };
+        let mut renderer = TreeCpuRenderer::default();
+        let mut rest = sliding_panel(true, 1.);
+        rest.motion.as_mut().unwrap().progress = 1.;
+        draw(&mut renderer, &rest, &mut vec![0u8; (w * h * 4) as usize]);
+        assert!(renderer.take_transient_timer(), "quiet-time work is scheduled");
+        renderer.idle_work(&rest);
+        assert_eq!(renderer.close_layer_builds, 0, "not before the content is quiet");
+        std::thread::sleep(CLOSE_LAYER_QUIET);
+        renderer.idle_work(&rest);
+        assert_eq!(renderer.close_layer_builds, 1);
+        renderer.idle_work(&rest);
+        assert_eq!(renderer.close_layer_builds, 1, "one background flatten per content");
+        let mut fresh = TreeCpuRenderer::default();
+        for progress in [0.25, 0.5, 0.75] {
+            let scene = sliding_panel(false, progress);
+            let mut adopted = vec![7u8; (w * h * 4) as usize];
+            draw(&mut renderer, &scene, &mut adopted);
+            let mut painted = vec![7u8; (w * h * 4) as usize];
+            draw(&mut fresh, &scene, &mut painted);
+            assert!(adopted == painted, "progress {progress}: adopted layer pixels differ");
+        }
+        assert_eq!(renderer.close_layer_adoptions, 1);
+        assert_eq!(renderer.slide_layer_builds, 0, "the close slide never flattens on the UI thread");
+        assert_eq!(fresh.slide_layer_builds, 1);
     }
     #[test]
     fn compact_svg_upload_reconstructs_exact_dense_pixels() {

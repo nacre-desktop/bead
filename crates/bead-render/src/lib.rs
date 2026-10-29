@@ -850,6 +850,9 @@ pub trait Renderer {
     fn trim_transient_idle(&mut self) -> Option<std::time::Duration> {
         None
     }
+    /// Work deferred until the surface has been quiet (see [`Self::take_transient_timer`]),
+    /// given the scene it last rendered.
+    fn idle_work(&mut self, _scene: &Scene) {}
 
     /// Release backend-owned GPU resources while preserving prepared CPU-side
     /// data (including retained tree rasters). Backends without GPU caches do

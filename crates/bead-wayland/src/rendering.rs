@@ -2496,17 +2496,20 @@ impl App {
         if arm_transient {
             let epoch = self.panel_epoch;
             if let Err(error) = self.loop_handle.insert_source(
-                Timer::from_duration(Duration::from_millis(500)),
+                // B0205: the first check also starts quiet-time work (a close layer).
+                Timer::from_duration(Duration::from_millis(150)),
                 move |_, _, app| {
                     // A pearl's renderer is only in `app.companion` while its slot is swapped in.
                     let remaining = if companion {
                         app.with_epoch(epoch, |app| {
-                            app.companion
-                                .as_mut()
-                                .and_then(|(_, r, _)| r.trim_transient_idle())
+                            app.companion.as_mut().and_then(|(scene, r, _)| {
+                                r.idle_work(scene);
+                                r.trim_transient_idle()
+                            })
                         })
                         .flatten()
                     } else {
+                        app.renderer.idle_work(&app.scene);
                         app.renderer.trim_transient_idle()
                     };
                     if remaining.is_none() {
