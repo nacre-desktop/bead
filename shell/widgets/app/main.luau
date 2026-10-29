@@ -257,8 +257,18 @@ local function gallery_card(item)
     local package=registry.catalogue[item.id]
     local bar=preview.render(item.id,"bar",style_name(package,"bar"),package.defaults,PREVIEW_W,36)
     local desktop=package.forms.desktop and preview.render(item.id,"desktop",style_name(package,"desktop"),package.defaults,PREVIEW_W,48)
+    -- B0198b: the Overview's bar and desktop previews are drag sources too (grip at the right).
+    local function source(form,node)
+        local payload=dragging.app_payload(doc,item.id,form,style_name(package,form),package.defaults,nil)
+        return ui.Box{id=form.."-preview-frame",width="fill",height=form=="bar" and 40 or 48,radius=kit.tokens.radii.small,
+            fill="surfaceContainerHighest",clip_children=true,align="center",justify="center",
+            drag_payload=payload and {payload} or nil,on_drag=payload and ui.action("widgets.drag") or nil,
+            node,ui.Text{id="grip",position="absolute",right=spacing.xs,top=spacing.xs,text="drag_indicator",
+                family="Material Symbols Rounded",font_size=kit.tokens.icons.medium,width=kit.tokens.icons.medium+2,
+                height=kit.tokens.icons.medium+2,color="onSurfaceVariant"}}
+    end
     return ui.Button{id="widget-card-"..item.id,width="fill",height=192,shrink=0,padding=spacing.sm,
-        radius=kit.tokens.radii.medium,fill="surfaceContainer",hover_fill="surfaceContainerHigh",
+        radius=kit.tokens.radii.medium,fill="surfaceContainer",hover_fill="surfaceContainerHigh",activate_on_release=true,
         selected=selected==item.id,selected_fill=ui.alpha("primary",.12),focus_on_pointer=false,
         aria_label="Open "..item.title,on_activate=navigate("select",item.id),
         ui.Column{id="card-content",width="fill",height="fill",gap=spacing.xs,
@@ -270,10 +280,10 @@ local function gallery_card(item)
                 ui.Text{id="card-open",text="chevron_right",family="Material Symbols Rounded",font_size=kit.tokens.icons.medium,width=20,height=24,color="onSurfaceVariant"}},
             ui.Row{id="bar-preview-row",width="fill",height=48,gap=spacing.sm,align="center",
                 label("bar-label","Bar",text.caption*4/3,"onSurfaceVariant",{width=50,height=18}),
-                ui.Box{id="bar-preview-frame",width="fill",height=40,radius=kit.tokens.radii.small,fill="surfaceContainerHighest",clip_children=true,bar}},
+                source("bar",bar)},
             ui.Row{id="desktop-preview-row",width="fill",height=56,gap=spacing.sm,align="center",
                 label("desktop-label",desktop and "Desktop" or "Bar only",text.caption*4/3,"onSurfaceVariant",{width=50,height=18}),
-                desktop and ui.Box{id="desktop-preview-frame",width="fill",height=48,radius=kit.tokens.radii.small,fill="surfaceContainerHighest",clip_children=true,desktop}
+                desktop and source("desktop",desktop)
                     or ui.Box{id="desktop-empty",width="fill",height=48,radius=kit.tokens.radii.small,fill="surfaceContainerHigh",
                         label("desktop-empty-copy","This widget stays in the bar",text.caption*4/3,"onSurfaceVariant",{width="fill",height=18,text_align="center"})}},
         }}
@@ -372,11 +382,18 @@ local function style_tile(widget,placement,package,style_id,style,settings,is_se
     local tile_height=STYLE_TILE_HEIGHT
     local tile_preview=preview.render(widget,placement,style_id,settings,preview_width,preview_height)
     local tile_id="style-"..style_id..(placement=="desktop" and "-desktop" or "")
+    -- B0198b: each style card is a drag source (grip in the corner): dragging it adds a new
+    -- copy in that style; a click (released without dragging) selects the style.
+    local payload=dragging.app_payload(doc,widget,placement,style_id,settings,nil)
     return ui.Button{id=tile_id,width=tile_width,height=tile_height,shrink=0,
         radius=kit.tokens.radii.small,fill=is_selected and ui.alpha("primary",.15) or "surfaceContainer",
         border_width=is_selected and 1.5 or 0,border_color=is_selected and "primary" or nil,
         hover_fill="surfaceContainerHigh",selected=is_selected,focus_on_pointer=false,
         aria_label=style.title,on_activate=edit({op="style",widget=widget,form=placement,style=style_id}),
+        drag_payload=payload and {payload} or nil,on_drag=payload and ui.action("widgets.drag") or nil,
+        ui.Text{id="style-grip",position="absolute",right=spacing.xs,top=spacing.xs,text="drag_indicator",
+            family="Material Symbols Rounded",font_size=kit.tokens.icons.medium,width=kit.tokens.icons.medium+2,
+            height=kit.tokens.icons.medium+2,color="onSurfaceVariant"},
         ui.Column{id="style-card",width="fill",height="fill",gap=spacing.xs,align="center",
             ui.Box{id="style-preview",width=preview_width,height=preview_height,align="center",justify="center",
                 radius=kit.tokens.radii.small,fill="surfaceContainerHighest",clip_children=true,tile_preview},
@@ -415,7 +432,7 @@ local function stage_backdrop(stage)
         width=stage.mini_w,height=stage.mini_h,fill=ui.alpha("surface",.08)})
     return children
 end
-local function stage_desktop(stage,selected_widget,source)
+local function stage_desktop(stage,selected_widget)
     local nodes={}
     local canvas=doc.hosts.canvas
     for _,item in canvas and canvas.instances or {} do
@@ -426,9 +443,7 @@ local function stage_desktop(stage,selected_widget,source)
             table.insert(nodes,ui.Box{id="stage-desktop-"..tostring(item.iid),position="absolute",
                 left=stage.left+slot.x*stage.scale,top=stage.top+slot.y*stage.scale,
                 width=slot.w*stage.scale,height=slot.h*stage.scale,clip_children=true,
-                radius=kit.tokens.radii.small,border_width=own and 2 or 0,border_color="primary",
-                drag_payload=own and source and {source} or nil,on_drag=own and source and ui.action("widgets.drag") or nil,
-                node})
+                radius=kit.tokens.radii.small,border_width=own and 2 or 0,border_color="primary",node})
         end
     end
     return nodes
@@ -475,12 +490,11 @@ local function detail()
     if not package then return gallery() end
     local placement=package.forms[form] and form or package.forms.bar and "bar" or "desktop"
     local group,entry,instance=form_state(selected,placement,package,selected_group)
-    local bar_group,_bar_entry,_bar_instance,bar_config,bar_enabled,bar_style=form_state(selected,"bar",package,selected_group)
-    local desktop_group,_desktop_entry,_desktop_instance,_desktop_config,desktop_enabled,desktop_style
+    local bar_group,_bar_entry,_bar_instance,_bar_config,bar_enabled,bar_style=form_state(selected,"bar",package,selected_group)
+    local desktop_style=""
     if package.forms.desktop then
-        desktop_group,desktop_entry,desktop_instance,desktop_config,desktop_enabled,desktop_style=form_state(selected,"desktop",package,selected_group)
-    else
-        desktop_enabled=false; desktop_style=""
+        local _group,_entry,_instance,_config,_enabled
+        _group,_entry,_instance,_config,_enabled,desktop_style=form_state(selected,"desktop",package,selected_group)
     end
     local instance_groups=groups_for(selected)
     local settings=active_settings(package,entry,instance)
@@ -489,22 +503,9 @@ local function detail()
     local stage_w,stage_h,stage_scale=stage.w,stage.h,stage.scale
     local mini_w,mini_h,mini_left,mini_top=stage.mini_w,stage.mini_h,stage.left,stage.top
     local bar_h=stage.bar_h
-    local entry_candidate=not bar_enabled and {
-        widget=selected,group=bar_group,style=bar_style,settings=settings,placement=bar_config.placement,
-    } or nil
     local bar_node=preview.render_bar(doc,output_w,bar_h,stage_scale,
-        bar_enabled and selected or nil,bar_style,settings,bar_group,entry_candidate)
+        bar_enabled and selected or nil,bar_style,settings,bar_group)
     local stage_bar_height=bar_h*stage_scale
-    local desktop_descriptor=package.forms.desktop and package.forms.desktop.styles[desktop_style]
-    local design_width=desktop_descriptor and desktop_descriptor.preferred_span or 320
-    local design_height=desktop_descriptor and desktop_descriptor.preferred_height or 120
-    local widget_w=math.min(mini_w*.45,design_width*stage_scale)
-    local widget_h=math.min(mini_h*.42,design_height*stage_scale)
-    local widget_left=mini_left+(mini_w-widget_w)/2
-    local widget_top=mini_top+stage_bar_height+math.max(0,(mini_h-stage_bar_height-widget_h)/2)
-    local desktop_preview=desktop_available and preview.render(selected,"desktop",desktop_style,settings,widget_w,widget_h)
-    local bar_source=dragging.app_payload(doc,selected,"bar",bar_style,settings,bar_group)
-    local desktop_source=desktop_available and dragging.app_payload(doc,selected,"desktop",desktop_style,settings,desktop_group)
     local settings_package=table.clone(package)
     settings_package.settings={}
     for key,schema in package.settings do
@@ -519,17 +520,10 @@ local function detail()
         settings.colour_role,form_action(selected,placement,group))
     local advanced_open=get("widgets.advanced.open",false)==true
     local stage_children=stage_backdrop(stage)
+    -- B0198b: the stage is a live preview only; the style cards below are the drag sources.
     table.insert(stage_children,ui.Box{id="stage-bar",position="absolute",left=mini_left,top=mini_top,
-        width=mini_w,height=stage_bar_height,clip_children=true,fill="surface",
-        drag_payload={bar_source},on_drag=ui.action("widgets.drag"),bar_node})
-    for _,node in stage_desktop(stage,desktop_enabled and selected or nil,desktop_source) do table.insert(stage_children,node) end
-    if desktop_preview and not desktop_enabled then
-        desktop_preview.props=desktop_preview.props or {}
-        table.insert(stage_children,ui.Box{id="desktop-widget-preview",position="absolute",left=widget_left,top=widget_top,
-            width=widget_w,height=widget_h,clip_children=true,visible=true,align="center",justify="center",
-            border_width=2,border_color="primary",radius=kit.tokens.radii.small,
-            drag_payload={desktop_source},on_drag=ui.action("widgets.drag"),desktop_preview})
-    end
+        width=mini_w,height=stage_bar_height,clip_children=true,fill="surface",bar_node})
+    for _,node in stage_desktop(stage,selected) do table.insert(stage_children,node) end
     table.insert(stage_children,ui.Column{id="stage-caption",position="absolute",left=spacing.md,bottom=spacing.md,gap=spacing.xs,
         label("stage-title","Your screen",text.caption*4/3,"onSurface",{height=18}),
         label("stage-size",tostring(output_w).." × "..tostring(output_h),text.caption*4/3,"onSurfaceVariant",{height=16})})
@@ -538,9 +532,28 @@ local function detail()
     for _,child in stage_children do table.insert(stage_props,child) end
     local content_props={id="detail-content",width="fill",shrink=0,gap=spacing.md,
         label("drag-hint",ui.tr("bead.widgets.drag-hint"),text.caption*4/3,"onSurfaceVariant",{width="fill",height=18,shrink=0}),
-        ui.Box(stage_props),
+        ui.Row{id="form-style-columns",width="fill",height=STYLE_SECTION_HEIGHT,shrink=0,gap=spacing.md,
+            ui.Column{id="bar-style-section",width=0,grow=1,height=STYLE_SECTION_HEIGHT,shrink=0,gap=spacing.sm,padding=spacing.md,
+                radius=kit.tokens.radii.medium,fill="surfaceContainer",
+                ui.Row{id="bar-style-heading-row",width="fill",height=22,shrink=0,align="center",gap=spacing.sm,
+                    label("bar-style-heading","Bar style",text.body*4/3,"onSurface",{height=22}),
+                    ui.Text{id="bar-drag-icon",text="drag_indicator",family="Material Symbols Rounded",font_size=kit.tokens.icons.medium,
+                        width=kit.tokens.icons.medium+2,height=20,color="primary"},
+                    label("bar-drag-hint",ui.tr("bead.widgets.drag-to-bar"),text.caption*4/3,"onSurfaceVariant",{width=0,grow=1,height=18}),
+                    button("bar-add",ui.tr("bead.widgets.add-bar"),edit({op="add",widget=selected,form="bar",style=bar_style}),{height=22,padding=spacing.xs,font_size=text.caption*4/3})},
+                style_tiles(selected,"bar",package,bar_style,settings)},
+            desktop_available and ui.Column{id="desktop-style-section",width=0,grow=1,height=STYLE_SECTION_HEIGHT,shrink=0,gap=spacing.sm,padding=spacing.md,
+                radius=kit.tokens.radii.medium,fill="surfaceContainer",
+                ui.Row{id="desktop-style-heading-row",width="fill",height=22,shrink=0,align="center",gap=spacing.sm,
+                    label("desktop-style-heading","Desktop style",text.body*4/3,"onSurface",{height=22}),
+                    ui.Text{id="desktop-drag-icon",text="drag_indicator",family="Material Symbols Rounded",font_size=kit.tokens.icons.medium,
+                        width=kit.tokens.icons.medium+2,height=20,color="primary"},
+                    label("desktop-drag-hint",ui.tr("bead.widgets.drag-to-desktop"),text.caption*4/3,"onSurfaceVariant",{width=0,grow=1,height=18}),
+                    button("desktop-add",ui.tr("bead.widgets.add-desktop"),edit({op="add",widget=selected,form="desktop",style=desktop_style}),{height=22,padding=spacing.xs,font_size=text.caption*4/3})},
+                style_tiles(selected,"desktop",package,desktop_style,settings)} or nil},
         ui.Column{id="colour-role-section",width="fill",shrink=0,gap=spacing.sm,padding=spacing.md,
             radius=kit.tokens.radii.medium,fill="surfaceContainer",colour_field},
+        ui.Box(stage_props),
         ui.Column{id="dropdown-trigger",width="fill",shrink=0,gap=spacing.xs,padding=spacing.md,
             radius=kit.tokens.radii.medium,fill="surfaceContainer",
             label("trigger-label","Open its dropdown on",text.body*4/3,"onSurface",{height=22}),
@@ -548,14 +561,7 @@ local function detail()
                 button("trigger-click","Click",edit({op="default-trigger",value="click"}),{
                     width=0,grow=1,selected=(doc.dropdown_trigger or "click")=="click"}),
                 button("trigger-hover","Hover",edit({op="default-trigger",value="hover"}),{
-                    width=0,grow=1,selected=doc.dropdown_trigger=="hover"})}},
-        ui.Row{id="form-style-columns",width="fill",height=STYLE_SECTION_HEIGHT,shrink=0,gap=spacing.md,
-            ui.Column{id="bar-style-section",width=0,grow=1,height=STYLE_SECTION_HEIGHT,shrink=0,gap=spacing.sm,padding=spacing.md,
-                radius=kit.tokens.radii.medium,fill="surfaceContainer",
-                label("bar-style-heading","Bar style",text.body*4/3,"onSurface",{height=22}),style_tiles(selected,"bar",package,bar_style,settings)},
-            desktop_available and ui.Column{id="desktop-style-section",width=0,grow=1,height=STYLE_SECTION_HEIGHT,shrink=0,gap=spacing.sm,padding=spacing.md,
-                radius=kit.tokens.radii.medium,fill="surfaceContainer",
-                label("desktop-style-heading","Desktop style",text.body*4/3,"onSurface",{height=22}),style_tiles(selected,"desktop",package,desktop_style,settings)} or nil}}
+                    width=0,grow=1,selected=doc.dropdown_trigger=="hover"})}}}
     if #instance_groups>1 then
         local options={id="instance-options",width="fill",gap=spacing.sm}
         for _,copy in instance_groups do

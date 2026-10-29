@@ -6551,8 +6551,10 @@ impl SceneSource for Runtime {
                         .unwrap_or_default(),
                     _ => "",
                 };
-                let persistent =
-                    matches!(operation, "remove" | "style" | "setting" | "undo" | "reset");
+                let persistent = matches!(
+                    operation,
+                    "add" | "remove" | "style" | "setting" | "undo" | "reset"
+                );
                 if self.widget_drag_controller.is_none() {
                     self.widget_drag_controller =
                         Some(crate::widgets::widget_drag::Controller::new()?);

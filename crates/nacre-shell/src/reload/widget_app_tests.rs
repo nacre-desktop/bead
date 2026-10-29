@@ -311,7 +311,15 @@ fn real_widgets_gallery_shows_descriptions_and_a_persistent_colour_role_control(
             Value::Text("clock".into()),
         )]))
         .unwrap();
-    for (suffix, form) in [("stage-bar", "bar"), ("desktop-widget-preview", "desktop")] {
+    // B0198b: the stage is a live preview only; the style cards are the drag sources.
+    assert!(
+        !harness
+            .session
+            .view_nodes()
+            .iter()
+            .any(|node| node.drag_action.is_some() && node.id.ends_with("stage-bar"))
+    );
+    for (suffix, form) in [("style-time", "bar"), ("style-digital-desktop", "desktop")] {
         let source = harness
             .session
             .view_nodes()
@@ -319,7 +327,7 @@ fn real_widgets_gallery_shows_descriptions_and_a_persistent_colour_role_control(
             .find(|node| {
                 node.drag_action.as_deref() == Some("widgets.drag") && node.id.ends_with(suffix)
             })
-            .unwrap_or_else(|| panic!("{suffix} has an independent widget drag source"));
+            .unwrap_or_else(|| panic!("{suffix} style card is a widget drag source"));
         let rect = bead::ui::rect(&source.draw);
         let candidate = harness
             .session
@@ -362,24 +370,7 @@ fn real_widgets_gallery_shows_descriptions_and_a_persistent_colour_role_control(
         draft[0]["hosts"]["top_bar"]["instances"][3]["children"][6]["settings"]["colour_role"],
         "secondary"
     );
-    let scroll_rect = harness
-        .session
-        .view_nodes()
-        .iter()
-        .find(|node| node.scroll_store.as_deref() == Some("widgets.scroll"))
-        .map(|node| bead::ui::rect(&node.draw))
-        .expect("widget details expose their content scroll region");
-    harness
-        .script([bead_test::Input::Scroll {
-            x: scroll_rect.x + scroll_rect.w / 2.,
-            y: scroll_rect.y + scroll_rect.h / 2.,
-            delta: 900.,
-        }])
-        .unwrap();
-    assert!(
-        matches!(harness.session.stores.get("widgets.scroll"), Some(Value::Number(value)) if *value > 0.),
-        "scrolling reveals the lower style controls"
-    );
+    // B0198b: the style cards (drag sources) sit at the top of the page, no scroll needed.
     let button = harness
         .session
         .view_nodes()
@@ -391,6 +382,10 @@ fn real_widgets_gallery_shows_descriptions_and_a_persistent_colour_role_control(
     let rect = bead::ui::rect(&button.draw);
     let rect = button.clip.map_or(rect, |clip| rect.intersect(clip));
     let (x, y) = (rect.x + rect.w / 2., rect.y + rect.h / 2.);
+    let action = button
+        .action_arg
+        .clone()
+        .expect("the style card selects its style");
     harness
         .script([bead_test::Input::Pointer { x, y }])
         .unwrap();
@@ -407,7 +402,14 @@ fn real_widgets_gallery_shows_descriptions_and_a_persistent_colour_role_control(
             .map(|node| (node.id.clone(), bead::ui::rect(&node.draw)))
             .collect::<Vec<_>>()
     );
-    harness.script([bead_test::Input::Click { x, y }]).unwrap();
+    // B0198b: the card is also a drag source, so its click activates on release through the
+    // host's transfer path (the bar's widget buttons use the same pattern). Activate the
+    // card's own action here; the shell host covers the release routing.
+    let values = harness
+        .session
+        .action_values("widgets.edit", action)
+        .unwrap();
+    harness.update(values).unwrap();
     let Value::List(draft) = harness.session.stores.get("widgets.draft").unwrap() else {
         panic!("draft missing after style selection")
     };
@@ -492,6 +494,10 @@ fn clock_detail_stage_and_style_previews_keep_all_content_inside_their_clips() {
                 .clips
                 .get(&index)
                 .unwrap_or_else(|| panic!("{expected} preview is missing its clipping frame"));
+            // Style cards sit above the stage (B0198b); once scrolled past they are fully clipped.
+            if clip.h <= 0. || clip.w <= 0. {
+                continue;
+            }
             assert!(
                 rect.x >= clip.x - 0.01
                     && rect.y >= clip.y - 0.01

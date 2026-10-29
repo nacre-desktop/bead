@@ -193,6 +193,39 @@ fn drop_event(doc: &Json, iid: &str, destination: &str, x: f64, y: f64, phase: &
     ])
 }
 
+/// A drag from the Widgets app (a style card): always adds a new instance.
+#[allow(clippy::too_many_arguments)]
+fn app_event(
+    doc: &Json,
+    widget: &str,
+    form: &str,
+    settings: Json,
+    destination: &str,
+    x: f64,
+    y: f64,
+    phase: &str,
+) -> Value {
+    let style = if form == "desktop" {
+        if widget == "clock" { "digital" } else { "ring" }
+    } else if widget == "clock" {
+        "time"
+    } else {
+        "icon+value"
+    };
+    let (width, height) = if form == "desktop" {
+        (240., 120.)
+    } else {
+        (64., 34.)
+    };
+    Value::list(vec![
+        json!({"phase":phase,"source":[{"app":true,"widget":widget,"form":form,"style":style,"settings":settings,
+        "host":if form=="desktop" {"canvas"} else {"top_bar"}}],"destination":destination,"x":x,"y":y,
+        "global_x":x,"global_y":y,"destination_x":x,"destination_y":y,"output_origin_x":0,"output_origin_y":0,
+        "screen_width":WIDTH,"screen_height":HEIGHT,"width":width,"height":height,"grab_x":width/2.,"grab_y":height/2.,
+        "private_remote":true,"source_origin_valid":true,"target_origin_x":0,"target_origin_y":0,"context":context(doc)}),
+    ])
+}
+
 struct Model {
     controller: Controller,
     doc: Json,
@@ -219,10 +252,36 @@ impl Model {
     /// One real gesture: move then drop, then retire. Returns whether it committed.
     fn drag(&mut self, iid: &str, destination: &str, x: f64, y: f64) -> bool {
         let before = self.doc.clone();
-        let moved = self
-            .controller
-            .drag(drop_event(&before, iid, destination, x, y, "move"))
-            .unwrap();
+        self.gesture(|phase| drop_event(&before, iid, destination, x, y, phase))
+    }
+
+    /// Drag a new copy in from the app.
+    fn add(
+        &mut self,
+        widget: &str,
+        form: &str,
+        settings: Json,
+        destination: &str,
+        x: f64,
+        y: f64,
+    ) -> bool {
+        let before = self.doc.clone();
+        self.gesture(|phase| {
+            app_event(
+                &before,
+                widget,
+                form,
+                settings.clone(),
+                destination,
+                x,
+                y,
+                phase,
+            )
+        })
+    }
+
+    fn gesture(&mut self, event: impl Fn(&str) -> Value) -> bool {
+        let moved = self.controller.drag(event("move")).unwrap();
         if let Some(Value::Number(epoch)) = moved.get("widgets.drag.epoch") {
             self.epoch = *epoch;
         }
@@ -231,10 +290,7 @@ impl Model {
         {
             assert_valid(preview, true);
         }
-        let dropped = self
-            .controller
-            .drag(drop_event(&before, iid, destination, x, y, "drop"))
-            .unwrap();
+        let dropped = self.controller.drag(event("drop")).unwrap();
         self.controller
             .drag(Value::list(vec![
                 json!({"phase":"retire","epoch":self.epoch}),
@@ -254,6 +310,20 @@ impl Model {
                 false
             }
         }
+    }
+
+    fn edit(&mut self, request: Json) -> Json {
+        let mut request = request;
+        request["catalogue"] = catalogue();
+        request["screen_width"] = json!(WIDTH);
+        request["screen_height"] = json!(HEIGHT);
+        let values = self.controller.edit(Value::list(vec![request])).unwrap();
+        let Some(Value::List(draft)) = values.get("widgets.draft") else {
+            panic!("edit produces a draft")
+        };
+        self.doc = draft[0].clone();
+        assert_valid(&self.doc, false);
+        self.doc.clone()
     }
 
     fn undo(&mut self) -> Json {
@@ -431,7 +501,28 @@ fn random_drag_sequences_keep_a_valid_layout_that_renders_like_a_clean_one() {
         for _ in 0..8 {
             let iids = bar_iids(&model.doc);
             let iid = rng.pick(&iids).to_owned();
-            match rng.next() % 4 {
+            match rng.next() % 5 {
+                // A new copy from the app, onto the bar or the desktop.
+                4 => {
+                    let widget = if rng.next().is_multiple_of(2) {
+                        "clock"
+                    } else {
+                        "battery"
+                    };
+                    if rng.next().is_multiple_of(2) {
+                        let at = rng.x();
+                        model.add(widget, "bar", json!({}), "bar", at, 17.);
+                    } else {
+                        model.add(
+                            widget,
+                            "desktop",
+                            json!({}),
+                            "desktop",
+                            300. + (rng.next() % 900) as f64,
+                            500.,
+                        );
+                    }
+                }
                 // Into the pill, between its children.
                 0 => {
                     let (x, w) = rect(&model.doc, "status-pill").unwrap();
@@ -444,7 +535,7 @@ fn random_drag_sequences_keep_a_valid_layout_that_renders_like_a_clean_one() {
                     model.drag(&iid, "bar", at, 17.);
                 }
                 // To the desktop and back (desktop-capable widgets), else a bar move.
-                _ => {
+                3 => {
                     let item = locate(&model.doc, &iid).unwrap().clone();
                     if matches!(item["widget"].as_str(), Some("clock" | "battery")) {
                         model.drag(&iid, "desktop", 700., 500.);
@@ -457,6 +548,7 @@ fn random_drag_sequences_keep_a_valid_layout_that_renders_like_a_clean_one() {
                         model.drag(&iid, "bar", at, 17.);
                     }
                 }
+                _ => unreachable!(),
             }
         }
         assert_valid(&model.doc, false);
@@ -571,4 +663,99 @@ fn a_layout_broken_by_an_old_drag_is_repaired_on_load() {
     let mut model = Model::new(broken);
     assert!(model.drag("power", "bar", 1900., 17.));
     assert_valid(&model.doc, false);
+}
+
+fn instances_of<'a>(doc: &'a Json, widget: &str) -> Vec<&'a Json> {
+    fn walk<'a>(items: &'a [Json], widget: &str, out: &mut Vec<&'a Json>) {
+        for item in items {
+            if item["widget"] == widget {
+                out.push(item);
+            }
+            if let Some(children) = item["children"].as_array() {
+                walk(children, widget, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for host in doc["hosts"].as_object().unwrap().values() {
+        walk(host["instances"].as_array().unwrap(), widget, &mut out);
+    }
+    out
+}
+
+#[test]
+fn dragging_from_the_app_adds_copies_with_their_own_settings() {
+    let mut model = Model::new(default_layout());
+    // Two more clocks on the bar: one into the pill, one on the left.
+    let (px, pw) = rect(&model.doc, "status-pill").unwrap();
+    assert!(model.add(
+        "clock",
+        "bar",
+        json!({"colour_role":"secondary"}),
+        "bar",
+        px + pw / 2.,
+        17.
+    ));
+    assert!(model.add("clock", "bar", json!({}), "bar", 300., 17.));
+    let clocks = instances_of(&model.doc, "clock");
+    assert_eq!(clocks.len(), 3, "the original clock stays: {}", model.doc);
+    let groups: std::collections::HashSet<_> = clocks
+        .iter()
+        .map(|item| {
+            item["group"]
+                .as_str()
+                .unwrap_or(item["iid"].as_str().unwrap())
+                .to_owned()
+        })
+        .collect();
+    assert_eq!(groups.len(), 3, "every copy has its own group");
+    assert!(locate(&model.doc, "clock").is_some_and(|item| item["host"] == "status-pill"));
+    assert_eq!(
+        model.doc["widgets"]["clock-2"]["settings"]["colour_role"],
+        "secondary"
+    );
+    // Settings are per copy.
+    model.edit(json!({"op":"setting","widget":"clock","group":"clock-3","form":"bar","key":"colour_role","value":"neutral"}));
+    assert_eq!(
+        locate(&model.doc, "clock-3").unwrap()["settings"]["colour_role"],
+        "neutral"
+    );
+    assert_ne!(
+        locate(&model.doc, "clock-2").unwrap()["settings"]["colour_role"],
+        "neutral"
+    );
+    assert!(locate(&model.doc, "clock").unwrap()["settings"]["colour_role"].is_null());
+    // A second battery on the desktop, moved, then one removed; undo restores it exactly.
+    assert!(model.add("battery", "desktop", json!({}), "desktop", 600., 500.));
+    assert!(model.add("battery", "desktop", json!({}), "desktop", 1200., 500.));
+    let canvas: Vec<_> = model.doc["hosts"]["canvas"]["instances"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(canvas.len(), 2);
+    let moved_iid = canvas[1]["iid"].as_str().unwrap().to_owned();
+    assert!(model.drag(&moved_iid, "desktop", 900., 300.));
+    assert_eq!(instances_of(&model.doc, "battery").len(), 3);
+    let before_remove = model.doc.clone();
+    assert!(model.drag(&moved_iid, "desktop", WIDTH / 2., HEIGHT - 64. - 32.));
+    assert!(locate(&model.doc, &moved_iid).is_none());
+    assert!(
+        model.doc["widgets"][&moved_iid].is_null(),
+        "a removed copy leaves no settings behind"
+    );
+    assert_eq!(model.undo(), before_remove);
+    // The non-drag path adds a copy too.
+    model.edit(json!({"op":"add","widget":"clock","group":"clock","form":"bar","style":"time"}));
+    assert_eq!(instances_of(&model.doc, "clock").len(), 4);
+    model.edit(
+        json!({"op":"add","widget":"battery","group":"battery","form":"desktop","style":"ring"}),
+    );
+    assert_eq!(
+        model.doc["hosts"]["canvas"]["instances"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
+    assert_eq!(render_bar(&model.doc), render_bar(&clean(&model.doc)));
 }

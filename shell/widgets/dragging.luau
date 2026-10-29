@@ -304,11 +304,14 @@ function M.ghost_node()
     local marker=form=="bar" and ui.Box{id="widget-snap-marker",position="absolute",right=0,top=0,
         width=kit.tokens.spacing.xs,height=height,radius=kit.tokens.radii.small,
         fill=ui.alpha("primary",.9)} or nil
+    -- A bar widget has no card of its own, so its ghost gets one; a desktop widget is its own
+    -- card, and a second rectangle behind its rounded glass showed as a background artifact.
+    local carded=form=="bar"
     return ui.Box{id="widgets-drag-ghost",position="absolute",
         left=left,top=top,width=width,height=height,clip_children=true,
-        radius=kit.tokens.radii.medium,fill=ui.alpha("surfaceContainerHighest",.96),
-        border_width=ui.animate("widgets.drag.ghost.border",phase=="settle" and 2.5 or 1.5,
-            preparing and 0 or .14,"out-cubic"),border_color="primary",
+        radius=carded and kit.tokens.radii.medium or 0,fill=carded and ui.alpha("surfaceContainerHighest",.96) or "transparent",
+        border_width=carded and ui.animate("widgets.drag.ghost.border",phase=="settle" and 2.5 or 1.5,
+            preparing and 0 or .14,"out-cubic") or 0,border_color="primary",
         node,marker}
 end
 
@@ -324,7 +327,9 @@ end
 local function zone(id,left,top,width,height,label,icon,active,danger)
     local accent=danger and "error" or "primary"
     return ui.Box{id=id,position="absolute",left=left,top=top,width=width,height=height,
-        radius=kit.tokens.radii.medium,fill=ui.alpha(accent,active and .16 or .05),
+        -- B0198b: outline only for the large desktop zone; a tinted fill over the whole
+        -- desktop read as a stray background colour during drags. Remove keeps a light tint.
+        radius=kit.tokens.radii.medium,fill=danger and ui.alpha(accent,active and .16 or .05) or "transparent",
         border_width=active and 2 or 1.5,border_color=ui.alpha(accent,active and .9 or .45),
         align="center",justify="center",
         label and ui.Row{id=id.."-label",height=kit.tokens.spacing.huge,padding_left=kit.tokens.spacing.md,padding_right=kit.tokens.spacing.md,

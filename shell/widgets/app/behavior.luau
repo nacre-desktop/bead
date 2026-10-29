@@ -256,6 +256,9 @@ local function normalise(doc,req)
     bar.mode="content"
     bar.regions={left={start=0,span=tiles},centre={start=0,span=tiles},right={start=0,span=tiles}}
     pack_list(req,bar.instances)
+    for _,item in doc.hosts.canvas and doc.hosts.canvas.instances or {} do
+        if type(item.children)~="table" or item.widget~="pill" then item.children=nil end
+    end
     local live={}
     local seen,unique={},true
     local function index(items)
@@ -350,7 +353,28 @@ local function remove_instance(doc,group_state,location)
     end
     local form=group_state and group_state.forms and group_state.forms[item.host=="canvas" and "desktop" or "bar"]
     if form then form.enabled=false; form.placement={host=item.host,slot=clone(item.slot)} end
+    -- An added copy that is no longer placed anywhere leaves no settings behind.
+    local group=item.group or item.iid
+    if group~=item.widget and doc.widgets and doc.widgets[group] and #group_items(doc,group,item.widget)==0 then
+        doc.widgets[group]=nil
+    end
     return true,item
+end
+-- B0198b: every placement from the app adds a new instance with its own group, so copies
+-- keep their own settings, styles and colour. Ids are the widget id, then widget-2, -3, ...
+local function new_group(doc,id,settings,forms,form,style)
+    local taken={}
+    for name in doc.widgets or {} do taken[name]=true end
+    each_list(doc,function(item) taken[item.iid]=true; if item.group then taken[item.group]=true end end)
+    local group,index=id,1
+    while taken[group] or taken[group..":desktop"] do index+=1; group=id.."-"..tostring(index) end
+    local state={widget=id,settings=clone(settings or {}),forms={}}
+    for name,descriptor in forms or {} do
+        state.forms[name]={enabled=name==form,style=name==form and style or descriptor.default_style,placement={}}
+    end
+    doc.widgets=doc.widgets or {}
+    doc.widgets[group]=state
+    return group,state
 end
 -- Resize previews share the transfer transaction and never change placement form.
 local function drag_resize(s,event,context,base,commit,undo_document,source)
@@ -415,45 +439,50 @@ local function drag_drop(s,event,context,base,commit,undo_document)
     if not normalise(doc,req) then return false end
     local live_location=type(source.iid)=="string" and locate_document_item(doc,source.iid) or nil
     if live_location and live_location.item.widget~=id then return false end
-    local group,state=group_for(doc,id,source.group or source.iid or id,req)
+    local package=catalogue(req,id)
+    local form=destination=="bar" and "bar" or "desktop"
+    local descriptor=package and package.forms and package.forms[form]
+    local group,state
+    if live_location then
+        group,state=group_for(doc,id,live_location.item.group or live_location.item.iid,req)
+    elseif source.app==true then
+        if not descriptor then return false end
+        local name=descriptor.styles[source.style] and source.style or descriptor.default_style
+        group,state=new_group(doc,id,source.settings or package.defaults,package.forms,form,name)
+    else
+        group,state=group_for(doc,id,source.group or id,req)
+    end
     if source.app~=true and live_location and destination=="desktop" and in_remove_zone(event,context) then
         if not remove_instance(doc,state,live_location) or not normalise(doc,req) then return false end
         commit_drop(s,doc,previous,commit)
         return true,doc,nil
     end
-    local package=catalogue(req,id)
-    local form=destination=="bar" and "bar" or "desktop"
-    local descriptor=package and package.forms and package.forms[form]
     if not descriptor then return false end
+    local source_form=live_location and (live_location.item.host=="canvas" and "desktop" or "bar") or nil
     local config=state.forms[form] or {enabled=false,style=descriptor.default_style,placement={}}
     state.forms[form]=config
-    local style_name=config.style
+    -- A moved instance keeps its own style; a new one uses the dragged style.
+    local style_name=live_location and source_form==form and live_location.item.style or config.style
     if type(style_name)~="string" or not descriptor.styles[style_name] then
         local legacy=descriptor.legacy_style_setting and source.settings and source.settings[descriptor.legacy_style_setting]
         style_name=descriptor.styles[source.style] and source.style or (descriptor.styles[legacy] and legacy) or descriptor.default_style
     end
     local style=descriptor.styles[style_name]
     if not style then return false end
-    local source_form=live_location and (live_location.item.host=="canvas" and "desktop" or "bar") or nil
-    -- A live source moves; an app source reuses the group's instance in this form, if any.
-    local location=live_location
-    if not location or source_form~=form then
-        for _,other in group_items(doc,group,id) do
-            if (other.host=="canvas")==(form=="desktop") then location=locate_document_item(doc,other.iid); break end
-        end
-        if location and location.item==(live_location and live_location.item) then location=nil end
-    end
+    -- A placed instance moves itself (or changes form); an app source always adds a copy.
     local item
-    if location then
-        item=remove_located(doc,location)
+    if live_location and source_form==form then
+        item=remove_located(doc,live_location)
     elseif live_location then
         -- Morph: the live instance leaves its old form, which keeps its slot for later.
         local removed
         removed,item=remove_instance(doc,state,live_location)
         if not removed then return false end
         item.children=nil
+        doc.widgets=doc.widgets or {}
+        doc.widgets[group]=state
     else
-        item={iid=unique_iid(doc,form=="desktop" and group..":desktop" or group),widget=id,group=group,
+        item={iid=unique_iid(doc,group),widget=id,group=group,
             settings=clone(state.settings or source.settings or package.defaults or {})}
     end
     item.group=group; item.style=style_name
@@ -653,12 +682,46 @@ local function op(s,args)
         end
     elseif kind=="remove" then
         -- Keyboard and edit-mode counterpart of dragging a widget off the bar or desktop.
-        local target
-        for _,item in group_items(doc,group,id) do
-            if (item.host=="canvas")==(form=="desktop") then target=locate_document_item(doc,item.iid); break end
+        local target=type(req.iid)=="string" and locate_document_item(doc,req.iid) or nil
+        if target and target.item.widget~=id then target=nil end
+        if not target then
+            for _,item in group_items(doc,group,id) do
+                if (item.host=="canvas")==(form=="desktop") then target=locate_document_item(doc,item.iid); break end
+            end
         end
         if not target then return end
-        remove_instance(doc,state,target)
+        remove_instance(doc,target.item.group and doc.widgets and doc.widgets[target.item.group] or state,target)
+    elseif kind=="add" then
+        -- Non-drag path: a new copy at the end of the status pill (or the bar's right side),
+        -- or cascaded at the centre of the desktop.
+        local new_id,new_state=new_group(doc,id,state.settings or package.defaults,package.forms,form,style_name)
+        local item={iid=new_id,widget=id,group=new_id,style=style_name,settings=clone(new_state.settings)}
+        s["widgets.group"]=new_id
+        if form=="desktop" then
+            local width=tonumber(req.screen_width) or 1920
+            local height=tonumber(req.screen_height) or 1080
+            local canvas=doc.hosts.canvas or {width=width,height=height,instances={}}
+            doc.hosts.canvas=canvas
+            local w=math.min(style.preferred_span,canvas.width)
+            local h=math.min(style.preferred_height or 96,canvas.height)
+            local step=#canvas.instances*24
+            item.host="canvas"
+            item.slot={x=math.clamp((canvas.width-w)/2+step,0,canvas.width-w),
+                y=math.clamp((canvas.height-h)/2+step,0,canvas.height-h),w=w,h=h}
+            table.insert(canvas.instances,item)
+            new_state.forms.desktop.placement={host="canvas",slot=clone(item.slot)}
+        else
+            local pill
+            for _,root in doc.hosts.top_bar.instances do if root.widget=="pill" then pill=root; break end end
+            if pill and id~="pill" then
+                item.host=pill.iid; item.slot={region="centre",start=math.huge,span=1}
+                pill.children=pill.children or {}
+                table.insert(pill.children,item)
+            else
+                item.host="top_bar"; item.slot={region="right",start=math.huge,span=1}
+                table.insert(doc.hosts.top_bar.instances,item)
+            end
+        end
     else
         s["widgets.error"]="unknown widget operation"; return
     end
@@ -854,7 +917,8 @@ return {
         ["widgets.navigate"]=function(s,args)
             local req=request(args)
             if not req then return end
-            if req.op=="select" then s["widgets.selected"]=req.value or ""
+            if req.op=="select" then s["widgets.selected"]=req.value or ""; s["widgets.group"]=""
+            elseif req.op=="instance" then s["widgets.group"]=req.value or ""
             elseif req.op=="back" then s["widgets.selected"]=""
             elseif req.op=="category" then s["widgets.category"]=req.value or "all"; s["widgets.selected"]=""
             elseif req.op=="form" then
