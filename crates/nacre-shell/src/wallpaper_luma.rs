@@ -115,7 +115,11 @@ fn state() -> &'static Mutex<State> {
 pub(crate) fn publish(output: &str, luma: Arc<Luma>) {
     let watchers: Vec<Watcher> = {
         let mut state = state().lock().unwrap_or_else(|p| p.into_inner());
-        if state.committed.get(output).is_some_and(|old| **old == *luma) {
+        if state
+            .committed
+            .get(output)
+            .is_some_and(|old| **old == *luma)
+        {
             return;
         }
         state.committed.insert(output.to_owned(), luma);
@@ -182,7 +186,12 @@ mod tests {
         let colours = BTreeMap::from([("onSurface".to_owned(), "#ffffff".to_owned())]);
         assert!((role(&colours, "onSurface", 0.) - 1.).abs() < 1e-3);
         assert_eq!(role(&colours, "surface", 0.25), 0.25);
-        let Value::List(row) = (Luma { on_surface: 1., surface: 0., cells }).store_value() else {
+        let Value::List(row) = (Luma {
+            on_surface: 1.,
+            surface: 0.,
+            cells,
+        })
+        .store_value() else {
             panic!("list")
         };
         assert_eq!(row[0]["cells"].as_array().map(Vec::len), Some(COLS * ROWS));

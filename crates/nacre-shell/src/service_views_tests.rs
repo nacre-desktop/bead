@@ -2396,8 +2396,10 @@ fn desktop_clock_ink_follows_wallpaper_luminance() -> Result<()> {
     const ON: [u8; 4] = [0xec, 0xeb, 0xe8, 255];
     const SURF: [u8; 4] = [0x12, 0x12, 0x0f, 255];
     fn luma(cell: f64) -> Value {
-        Value::list(vec![json!({"cols":16,"rows":9,"on_surface":ON_SURFACE,"surface":SURFACE,
-            "cells":(0..16 * 9).map(|_| cell).collect::<Vec<_>>()})])
+        Value::list(vec![
+            json!({"cols":16,"rows":9,"on_surface":ON_SURFACE,"surface":SURFACE,
+            "cells":(0..16 * 9).map(|_| cell).collect::<Vec<_>>()}),
+        ])
     }
     fn ink(h: &Harness) -> ([u8; 4], bool) {
         let ink = h
@@ -2451,11 +2453,19 @@ fn desktop_clock_ink_follows_wallpaper_luminance() -> Result<()> {
     set(&mut canvas, 0.02)?;
     assert_eq!(ink(&canvas), (ON, false), "dark wallpaper keeps light ink");
     set(&mut canvas, 0.9)?;
-    assert_eq!(ink(&canvas), (SURF, false), "bright wallpaper switches to dark ink");
+    assert_eq!(
+        ink(&canvas),
+        (SURF, false),
+        "bright wallpaper switches to dark ink"
+    );
     set(&mut canvas, 0.2)?;
     assert!(ink(&canvas).1, "mid luminance reads on neither role: scrim");
     set(&mut canvas, 0.02)?;
-    assert_eq!(ink(&canvas), (ON, false), "a wallpaper change brings the light ink back");
+    assert_eq!(
+        ink(&canvas),
+        (ON, false),
+        "a wallpaper change brings the light ink back"
+    );
     Ok(())
 }
 
