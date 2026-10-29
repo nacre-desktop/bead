@@ -2396,7 +2396,9 @@ fn sliced_art(
     }
     Some(out)
 }
-/// Premultiplied source-over of a raster into a damage strip (identical results to tiny-skia's pipeline); opaque and empty source pixels short-circuit, which is most of a panel artwork.
+/// Premultiplied source-over of a raster into a damage strip (identical results to tiny-skia's
+/// pipeline). B0202: rows are walked as runs; opaque runs are copied with `memcpy`, transparent
+/// runs skipped, and only partially covered pixels are blended, in exact integer arithmetic.
 fn blend_over(
     strip: &mut [u8],
     width: u32,
@@ -2413,25 +2415,52 @@ fn blend_over(
             ((i64::from(row) - dy) as usize * source_width + (i64::from(clip.x) - dx) as usize) * 4;
         let to = ((row - strip_y) as usize * width as usize + clip.x as usize) * 4;
         let len = clip.w as usize * 4;
-        let (source, target) = (&source[from..from + len], &mut strip[to..to + len]);
-        for (s, d) in source
-            .as_chunks::<4>()
-            .0
+        blend_row(&source[from..from + len], &mut strip[to..to + len]);
+    }
+}
+/// Length of the leading run of pixels whose alpha is `alpha`, checked eight pixels at a time.
+fn alpha_run(pixels: &[[u8; 4]], alpha: u8) -> usize {
+    let mut n = 0;
+    for chunk in pixels.as_chunks::<8>().0 {
+        if !chunk.iter().fold(true, |all, p| all & (p[3] == alpha)) {
+            break;
+        }
+        n += 8;
+    }
+    n + pixels[n..].iter().take_while(|p| p[3] == alpha).count()
+}
+fn blend_row(source: &[u8], target: &mut [u8]) {
+    let (source, target) = (source.as_chunks::<4>().0, target.as_chunks_mut::<4>().0);
+    let mut i = 0;
+    while i < source.len() {
+        let opaque = alpha_run(&source[i..], 255);
+        if opaque > 0 {
+            target[i..i + opaque].copy_from_slice(&source[i..i + opaque]);
+            i += opaque;
+            continue;
+        }
+        let clear = alpha_run(&source[i..], 0);
+        if clear > 0 {
+            i += clear;
+            continue;
+        }
+        let partial = source[i..]
             .iter()
-            .zip(target.as_chunks_mut::<4>().0)
+            .take_while(|p| p[3] != 0 && p[3] != 255)
+            .count();
+        // tiny-skia's float `s + d * (1 - a/255)` rounded: d * (255 - a) / 255 is never exactly
+        // k + 1/2, so the rounded rational below matches the float result bit for bit.
+        for (s, d) in source[i..i + partial]
+            .iter()
+            .zip(&mut target[i..i + partial])
         {
-            match s[3] {
-                255 => *d = *s,
-                0 => {}
-                alpha => {
-                    // tiny-skia's float pipeline, bit for bit: source + destination x (1 - alpha), rounded.
-                    let inverse = 1. - f32::from(alpha) / 255.;
-                    for c in 0..4 {
-                        d[c] = (f32::from(d[c]) * inverse + f32::from(s[c]) + 0.5) as u8;
-                    }
-                }
+            let inverse = 255 - u32::from(s[3]);
+            for c in 0..4 {
+                let blended = u32::from(s[c]) + (2 * u32::from(d[c]) * inverse + 255) / 510;
+                d[c] = blended.min(255) as u8;
             }
         }
+        i += partial;
     }
 }
 pub fn paint(
@@ -3850,6 +3879,43 @@ fn blit_with_opacity(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn integer_blend_matches_the_float_source_over_exactly() {
+        // B0202: every (alpha, source channel, destination channel) against the float formula,
+        // and a mixed row (opaque, clear and partial runs, unaligned lengths).
+        for alpha in 1..255u8 {
+            for s in 0..=255u8 {
+                let source: Vec<u8> = (0..=255u8).flat_map(|_| [s, s, s, alpha]).collect();
+                let mut target: Vec<u8> = (0..=255u8).flat_map(|d| [d, d, d, d]).collect();
+                blend_row(&source, &mut target);
+                let inverse = 1. - f32::from(alpha) / 255.;
+                for d in 0..=255u8 {
+                    let expected = (f32::from(d) * inverse + f32::from(s) + 0.5) as u8;
+                    let expected_alpha = (f32::from(d) * inverse + f32::from(alpha) + 0.5) as u8;
+                    let got = &target[d as usize * 4..d as usize * 4 + 4];
+                    assert_eq!(
+                        got,
+                        [expected, expected, expected, expected_alpha],
+                        "a={alpha} s={s} d={d}"
+                    );
+                }
+            }
+        }
+        let alphas = [
+            255, 255, 0, 0, 0, 7, 255, 128, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 3,
+        ];
+        let source: Vec<u8> = alphas.iter().flat_map(|&a| [a / 2, a / 3, a, a]).collect();
+        let mut target = vec![90u8; source.len()];
+        blend_row(&source, &mut target);
+        for (k, &a) in alphas.iter().enumerate() {
+            let inverse = 1. - f32::from(a) / 255.;
+            let want: Vec<u8> = [a / 2, a / 3, a, a]
+                .iter()
+                .map(|&c| (90. * inverse + f32::from(c) + 0.5) as u8)
+                .collect();
+            assert_eq!(&target[k * 4..k * 4 + 4], &want[..], "pixel {k}");
+        }
+    }
     #[test]
     fn cpu_snapshot_accept_falls_back_when_native_view_budget_is_full() {
         let scene = scene();

@@ -30,6 +30,47 @@ pub(super) fn build_calls() -> usize {
 pub type Sources = BTreeMap<PathBuf, Vec<u8>>;
 pub type Resolve<'a> = dyn Fn(&str) -> Result<Value, Diagnostic> + 'a;
 
+/// B0202: Luau bytecode keyed by the source text, shared by every generation, session and
+/// script in the process. Reopening a panel builds a new `Session` (a new generation), which
+/// used to compile every module of its bundle again, twice (validation and markup). The key is
+/// two independent 64-bit SipHash digests plus the length; compiler options are fixed.
+type BytecodeKey = (u64, u64, usize);
+static BYTECODE: Mutex<Option<bead_core::cache::Lru<BytecodeKey, Arc<[u8]>>>> = Mutex::new(None);
+#[cfg(test)]
+thread_local! {
+    static COMPILES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+#[cfg(test)]
+pub(crate) fn compiles() -> usize {
+    COMPILES.get()
+}
+
+/// Bytecode for `source`, compiled once per distinct source text (default compiler options,
+/// the same as `Lua::load` of text).
+pub(crate) fn bytecode(source: &[u8]) -> mlua::Result<Arc<[u8]>> {
+    use std::hash::{Hash, Hasher};
+    let digest = |salt: u64| {
+        let mut hasher = std::hash::DefaultHasher::new();
+        salt.hash(&mut hasher);
+        source.hash(&mut hasher);
+        hasher.finish()
+    };
+    let key = (digest(0), digest(0x9e37_79b9_7f4a_7c15), source.len());
+    let mut slot = BYTECODE.lock().unwrap_or_else(|p| p.into_inner());
+    let cache = slot.get_or_insert_with(|| {
+        bead_core::cache::Lru::new("markup-bytecode", 4 * bead_core::cache::MIB)
+    });
+    if let Some(code) = cache.get(&key) {
+        return Ok(code.clone());
+    }
+    #[cfg(test)]
+    COMPILES.set(COMPILES.get() + 1);
+    let code: Arc<[u8]> = mlua::chunk::Compiler::new().compile(source)?.into();
+    // Over budget, the bytecode is still returned, just not kept.
+    let _ = cache.insert(key, code.clone(), code.len() + 64);
+    Ok(code)
+}
+
 /// Fixed embedded compiler inputs shared while at least one frontend is alive.
 struct CompiledPrelude {
     kit: Vec<u8>,
@@ -469,7 +510,7 @@ impl LuauFrontEnd {
         let mounted = plugins.as_ref().map(|(_, mount)| &mount.sources);
         for (path, bytes) in sources.iter().chain(mounted.into_iter().flatten()) {
             if path.extension().is_some_and(|ext| ext == "luau") {
-                let code = compiler.compile(bytes).map_err(|e| diagnostic(path, e))?;
+                let code = bytecode(bytes).map_err(|e| diagnostic(path, e))?.to_vec();
                 size += code.len();
                 if size > 8 * 1024 * 1024 {
                     return Err(Diagnostic::new(
