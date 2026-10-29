@@ -66,3 +66,29 @@ the owner's geometry) and the mapped-surface replay (`spikes/tests/test_detach_g
   back), not a compositor window drag.
 - Prewarm now costs one extra helper call and 400 ms before the target is admitted;
   an earlier release uses the covered fallback (existing behaviour). No memory change.
+
+## Follow-up: ghosts during the drag (live audit of 16dd77bc)
+
+After release the live session was clean, but during a drag the owner saw (1) a small
+ghost travelling from the left of the screen to the panel on the Super press and (2) a
+ghost at the docked spot until release. Both are the prepared native target: niri maps
+it at the top-left, the prewarm `place` animates it under the docked body, and on the
+owner's session it is not invisible (the nested CPU session shows nothing, so the
+exact cause, likely the GL prepare path, was not reproduced; nested GL drags did not
+detach in this harness).
+
+Fix: the target is made invisible by the compositor, not by its buffer. Prepared and
+covered-fallback windows carry app id `bead.pearl.pending`; `shell/niri-pearls.kdl`
+gives that app id `opacity 0.0` (plus the existing floating/no-border rules, now
+matching both ids). Release switches to `bead.pearl` in the same commit as the first
+content (`activate_prepared_native`; `native_pearl_placed` for the covered path), so
+niri re-evaluates the rule with that frame. The docked layer stays the only visible
+panel during the drag and is unmapped after the native commit (unchanged).
+
+Evidence (`drag-*.png`, `drag-report.json`; 2 s held drag, 60 ms full-output frames):
+mid-drag niri lists the target as `bead.pearl.pending` under the docked body, after
+release as `bead.pearl`; no stray content during the drag, no blank frame at release;
+only the pearl window mapped after detach; clean after close; 0 `UI_ERROR`.
+Deployment: the live `bead-pearls.kdl` is copied from this file and must be updated
+with it (the window-rule change is required; without it the pending window behaves as
+before).
