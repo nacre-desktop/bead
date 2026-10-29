@@ -28,3 +28,5 @@ All seven captures are private nested-session screenshots at 2880×1800 physical
 ## B0182 — final visual leftovers
 
 The digital desktop clock now fits its time and date line boxes within the slot's measured height, including padding, gaps and accent rule; text scales to each line box. The Overview row omits its empty description line so its icon centers with the title. The recaptured [battery page](evidence/0172/b0176/battery-page.png) and [desktop edit mode](evidence/0172/b0176/desktop-edit-mode.png) show the full date inside the outline and the aligned Overview icon. Both are private nested CPU captures at 2880×1800, scale 1.5; no test goldens changed.
+
+B0184 restores the digital clock's normal body-sized date and grows its box to fit; battery-page and desktop-edit captures use the 2026-10-29 date fixture at 2880×1800, scale 1.5.

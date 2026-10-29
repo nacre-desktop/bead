@@ -179,8 +179,8 @@ local function desktop(props,_settings,_data)
             visual.shadow_text("date",weekday,"fill",date_height,date_size,"secondary")}
     end
     local compact=h<=120
-    local base_time_size=compact and h*.46 or math.min(148,h*.72)
-    local base_date_size=compact and kit.tokens.text.caption*4/3 or kit.tokens.text.body*4/3
+    local base_time_size=math.min(148,math.max(h,190)*.72)
+    local base_date_size=kit.tokens.text.body*4/3
     local padding=kit.tokens.spacing.md
     local gap=kit.tokens.spacing.sm
     local rule_height=compact and 2 or 3
@@ -188,9 +188,14 @@ local function desktop(props,_settings,_data)
     padding*=vertical_scale
     gap*=vertical_scale
     rule_height=math.min(rule_height,h*.04)
+    local date_size=base_date_size
+    local date_height=math.max(compact and 12 or 28,(date_size*1.2)+2)
+    local required_height=2*padding+2*gap+rule_height+date_height+math.max(1,base_time_size*1.2+2)
+    if required_height>h and props.instance and props.instance.slot then
+        h=required_height
+        props.instance.slot.h=h
+    end
     local content_height=math.max(1,h-2*padding-2*gap-rule_height)
-    local date_height=math.min(compact and 12 or 28,content_height*.26)
-    local date_size=math.min(base_date_size,math.max(1,(date_height-2)/1.2))
     local time_height=content_height-date_height
     local time_size=math.min(base_time_size,math.max(1,(time_height-2)/1.2))
     return ui.Column{id="clock-desktop",width=w,height=h,padding=padding,fill="transparent",justify="center",gap=gap,on_activate=action,
@@ -223,7 +228,7 @@ return {id="clock",title="Clock",icon="schedule",category="bar",data={topics={},
         time={title="Stored time",min_span=1,max_span=1200,preferred_span=220,preferred_height=92,hidden=true,render=function(p,s,d) p.form_style="digital"; return desktop(p,s,d) end},
         ["time+date"]={title="Stored time and date",min_span=1,max_span=1200,preferred_span=360,preferred_height=92,hidden=true,requires={"bead.desktop.clock.date"},render=function(p,s,d) p.form_style="digital"; return desktop(p,s,d) end},
         seconds={title="Stored seconds",min_span=1,max_span=1200,preferred_span=240,preferred_height=92,hidden=true,requires={"bead.desktop.clock.seconds"},render=function(p,s,d) p.form_style="seconds"; return desktop(p,s,d) end},
-        digital=desktop_style("A · Digital","digital",420,{"bead.desktop.clock.date"}),
+        digital=desktop_style("A · Digital","digital",420,{"bead.desktop.clock.date"},220),
         analog=desktop_style("B · Analog","analog",420,{"bead.desktop.clock.seconds","bead.desktop.clock.date"},300),
         minimal=desktop_style("C · Minimal","minimal",420,{"bead.desktop.clock.date"}),
     }},panel={styles={calendar={view="calendar"}}}}
