@@ -222,7 +222,25 @@ fn slide(open_scene: &Scene, opening: bool) -> Steps {
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
     }
+    let change = std::env::var_os("B0205_CHANGE").is_some();
+    // B0205: `B0205_CADENCE` spaces frames at 120 Hz like the compositor's callbacks, so work
+    // another thread does between frames is not charged to the UI thread.
+    let cadence = std::env::var_os("B0205_CADENCE").is_some();
     for frame in 0..=frames {
+        let frame_start = Instant::now();
+        if change && frame == frames / 2 {
+            // B0205: a new worker scene lands mid-slide (one label's text changes, like a clock).
+            if let Some(bead::render::Primitive::Text { text, .. }) =
+                base.primitives.iter_mut().rev().find(
+                    |p| matches!(p, bead::render::Primitive::Text { text, .. } if !text.is_empty()),
+                )
+            {
+                text.push('1');
+            }
+            cache.prepare(&base, SCALE).expect("worker bake");
+            base.prepared
+                .insert(SCALE.to_bits(), cache.frame.clone().expect("baked frame"));
+        }
         let t = frame as f32 / frames.max(1) as f32;
         let eased = ease(curve, t);
         let progress = if opening { eased } else { 1. - eased };
@@ -275,6 +293,15 @@ fn slide(open_scene: &Scene, opening: bool) -> Steps {
                 .expect("render");
         }
         steps.paint.push(ms(start));
+        if change && frame == frames / 2 {
+            println!(
+                "B0205_CHANGE dir={} prepare_ms={:.3} paint_ms={:.3} layer_flattens={}",
+                if opening { "open" } else { "close" },
+                steps.prepare[frame],
+                steps.paint[frame],
+                renderer.slide_layer_builds
+            );
+        }
         steps.pixels.push(
             owed.iter()
                 .map(|d| f64::from(d.w) * f64::from(d.h))
@@ -283,6 +310,11 @@ fn slide(open_scene: &Scene, opening: bool) -> Steps {
         );
         std::hint::black_box(&bytes);
         previous = regions;
+        if cadence {
+            std::thread::sleep(
+                std::time::Duration::from_micros(8_333).saturating_sub(frame_start.elapsed()),
+            );
+        }
     }
     steps
 }

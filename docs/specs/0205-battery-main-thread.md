@@ -97,12 +97,44 @@ dashboard and 60–63 ms launcher close frame of the capture.
 - `bead-wayland` worker shutdown test now stops and joins explicitly.
 - Full Bead CI (ubuntu:24.04, ci.yml steps) including the real-shell route test.
 
+## Round 2: opening slides
+
+Live, an opening flattened its layer again whenever a new worker scene or new rasters landed
+mid-slide (52–120 ms frames, 3–4 per dashboard open), plus the first flatten (~20 ms).
+
+- **Repair, not re-flatten.** A slide layer keeps the semantic damage state of its own items
+  (`damage::FrameDamage` over a bare `Frame` of the layer's items, same layout shape). When the
+  content key changes mid-slide, only the changed items' pixels (≤ 4 merged rectangles) are
+  repainted in place; a changed shape (other body split, size, scale or format) still flattens.
+  The repaired layer is bit-identical to a fresh flatten (unit test, open and close).
+- **Opening layer off the UI thread.** The first poses of an opening (faded in, or content
+  still culled from the posed frame) composite no layer; on the first of them a background job
+  flattens the content from the worker-prepared frame's rasters, and the first slide frame adopts
+  it when the content key matches (unit test: zero UI-thread flattens, identical pixels).
+- Background flattens (open and close) paint in up to four horizontal bands on scoped threads,
+  each into a lazily zeroed full-size pixmap, then copy the bands together: same pixels, sooner.
+
+One-core bench (`taskset -c 5`, 120 Hz cadence `B0205_CADENCE=1`, mid-slide text change
+`B0205_CHANGE=1`; before = 92755db7 with the same bench), opening slides, UI thread ms:
+
+| Panel | p95 before → after | mid-slide change frame before → after | worst before → after | first frame before → after |
+|---|---|---|---|---|
+| dashboard | 1.84 → 0.85 | 5.64 → 0.16 | 6.04 → 6.10 (terminal frame) | 0.08–0.90 → 0.13–3.1 |
+| launcher | 1.86 → 0.82 | 2.06 → 0.75 | 2.89 → 2.86 (terminal frame) | 0.06–0.08 → 0.09–1.8 |
+| control centre | 3.65 → 1.00 | 4.15 → 0.92 | 6.93 → 6.84 (terminal frame) | 0.03 → 0.08 |
+
+The worst frame is now the terminal frame (below), not a flatten. The first frame costs more on
+one pinned core because the background bands share that core with it; on the laptop they run on
+other cores. Memory: the background band pixmaps are transient (each touches only its band); no
+new resident memory.
+
 ## Open
 
 - Acceptance is the lead's live battery audit (`PANEL_SLIDE` plus `UI_FRAME`/`MAIN_BUSY` with
   `BEAD_FRAME_TRACE=1`).
-- Opens: re-flatten when a new worker scene (or new rasters) lands mid-slide, and the ~20 ms
-  first open flatten. Next steps: repaint only the changed items into the open layer, or let the
-  first open frame wait for a background flatten like the close.
+- Opens (round 2 below): the terminal open frame (progress 1) still repaints the whole panel
+  directly (dashboard 5.9 ms, control 6.8 ms on one dev-2 core; 40–60 ms live): the layer is
+  dropped and the settled picture is painted primitive by primitive. Next: keep compositing the
+  layer for the terminal frame when its offset is pixel-exact.
 - Retaining several closed panels (control/popouts are released whenever another panel opens)
   was not done; with the join off the UI thread, the remaining cost of a release is ~9 ms CPU.
