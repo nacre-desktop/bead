@@ -3095,19 +3095,32 @@ pub struct TreeCpuRenderer {
     /// Slide layers flattened (a test hook: one per slide, none per frame).
     pub slide_layer_builds: usize,
     /// B0205: the close slide's layer, flattened off the UI thread while the panel rests open.
-    close_layer: Option<CloseLayer>,
-    /// Close layers flattened in the background, and adopted by a close slide (test hooks).
-    pub close_layer_builds: usize,
-    pub close_layer_adoptions: usize,
+    background_layer: Option<BackgroundLayer>,
+    /// The current slide layer's content, so a changed scene repaints only what changed.
+    slide_damage: Option<(LayerShape, crate::damage::FrameDamage)>,
+    /// Slide layers repaired in place instead of flattened again (a test hook).
+    pub slide_layer_repairs: usize,
+    /// Layers flattened in the background, and adopted by a slide (test hooks).
+    pub background_layer_builds: usize,
+    pub background_layer_adoptions: usize,
     /// When a reveal panel resting open last rendered new content, at a scale and format.
     close_due: Option<(std::time::Instant, f32, PixelFormat)>,
     close_timer: bool,
+}
+/// What a slide layer's pixels are laid out for; a repair needs the same shape.
+#[derive(Clone, Copy, PartialEq)]
+struct LayerShape {
+    scene_start: usize,
+    size: (u32, u32),
+    origin: (u32, u32),
+    scale: u32,
+    rgba: bool,
 }
 /// B0205: closing, the whole open picture is the slide content, so its layer is known as soon
 /// as the panel rests open. Flattening it on the slide's first frame was the longest UI-thread
 /// stall of a close on battery (~100–140 ms live); a background thread paints it instead, and a
 /// close whose content key matches adopts it (waiting for an unfinished job, never repainting).
-struct CloseLayer {
+struct BackgroundLayer {
     key: u64,
     size: (u32, u32),
     job: std::thread::JoinHandle<Option<Pixmap>>,
@@ -3181,6 +3194,21 @@ impl SlideContent {
                 }
             })
             .collect()
+    }
+    /// An opening reveal drawn without its layer (its first pose): the content its slide flattens.
+    fn opening_ahead(scene: &Scene, frame: &Frame) -> Option<Self> {
+        let motion = scene
+            .motion
+            .as_ref()
+            .filter(|m| m.reveal && m.open && m.progress < 1.)?;
+        let scene_start = motion.parts.iter().map(|(index, _)| index + 1).max()?;
+        let posed_start = scene_start + frame.items.len().checked_sub(scene.primitives.len())?;
+        (scene_start < scene.primitives.len() && posed_start < frame.items.len()).then_some(Self {
+            scene_start,
+            posed_start,
+            offset: (0., 0.),
+            window: None,
+        })
     }
     /// The close slide of a reveal panel resting open: the whole scene is content.
     fn closing_from_rest(scene: &Scene, frame: &Frame) -> Option<Self> {
@@ -3262,6 +3290,124 @@ fn flatten_layer(
         )?;
     }
     Ok(pixels)
+}
+/// [`flatten_layer`] split into horizontal bands painted on up to four threads. Each band
+/// paints into its own lazily zeroed full-size pixmap (only its rows are touched), and the
+/// bands are copied into the first: the same pixels as one pass, sooner.
+fn flatten_layer_parallel(
+    items: &[Item],
+    offset: (f32, f32),
+    (w, h): (u32, u32),
+    scale: f32,
+    format: PixelFormat,
+) -> Option<Pixmap> {
+    let threads = std::thread::available_parallelism()
+        .map_or(1, |n| n.get().min(4))
+        .min(h.div_ceil(64) as usize)
+        .max(1) as u32;
+    let rows = h.div_ceil(threads);
+    let bands: Vec<Option<(Damage, Pixmap)>> = std::thread::scope(|scope| {
+        (0..threads)
+            .map(|band| {
+                scope.spawn(move || {
+                    let y = band * rows;
+                    let region = Damage {
+                        x: 0,
+                        y,
+                        w,
+                        h: rows.min(h.saturating_sub(y)),
+                    };
+                    let mut pixels = Pixmap::new(w, h)?;
+                    repaint_layer(
+                        items,
+                        offset,
+                        &mut pixels,
+                        scale,
+                        format,
+                        region,
+                        &mut RepairScratch::default(),
+                    )
+                    .ok()?;
+                    Some((region, pixels))
+                })
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|band| band.join().ok().flatten())
+            .collect()
+    });
+    let mut bands = bands.into_iter();
+    let (_, mut layer) = bands.next()??;
+    let stride = w as usize * 4;
+    for band in bands {
+        let (region, pixels) = band?;
+        let range = region.y as usize * stride..(region.y + region.h) as usize * stride;
+        layer.data_mut()[range.clone()].copy_from_slice(&pixels.data()[range]);
+    }
+    Some(layer)
+}
+/// Repaint one region of a flattened layer from its items, in bands.
+fn repaint_layer(
+    items: &[Item],
+    offset: (f32, f32),
+    pixels: &mut Pixmap,
+    scale: f32,
+    format: PixelFormat,
+    region: Damage,
+    scratch: &mut RepairScratch,
+) -> Result<()> {
+    let (w, h) = (pixels.width(), pixels.height());
+    let region = intersection(region, Damage::full(w, h));
+    if region.w == 0 || region.h == 0 {
+        return Ok(());
+    }
+    let band = (RepairScratch::CAP / w as usize).clamp(1, region.h as usize) as u32;
+    for y in (region.y..region.y + region.h).step_by(band as usize) {
+        paint_items(
+            items,
+            offset,
+            ShmTarget {
+                bytes: pixels.data_mut(),
+                width: w,
+                height: h,
+                scale,
+                format,
+            },
+            Damage {
+                x: region.x,
+                y,
+                w: region.w,
+                h: band.min(region.y + region.h - y),
+            },
+            scratch,
+        )?;
+    }
+    Ok(())
+}
+fn layer_raster(pixels: Pixmap, key: u64, charge: bead_core::cache::Charge) -> Raster {
+    Raster {
+        changed: Damage::full(pixels.width(), pixels.height()),
+        pixels: Arc::new(pixels),
+        origin: (0, 0),
+        key,
+        base_key: None,
+        _charge: charge,
+    }
+}
+impl Frame {
+    /// A bare frame of `items` (no budget, assets or layers), for semantic damage of a layer.
+    fn of_items(items: Vec<Item>, scale: f32) -> Self {
+        Self {
+            items,
+            scale,
+            key: 0,
+            native_resource_budget: None,
+            _assets: Vec::new(),
+            layer_count: 0,
+            layers: Vec::new(),
+            _accounting: None,
+        }
+    }
 }
 enum FlattenedPixels {
     Dense(Pixmap),
@@ -3389,26 +3535,24 @@ impl TreeCpuRenderer {
     /// B0205: start flattening the close layer of a reveal panel resting open, once per content
     /// key. The next slide adopts or drops it and a faded pose drops it, so nothing is held
     /// once the panel has closed.
-    fn prepare_close_layer(
+    fn start_background_layer(
         &mut self,
+        slide: SlideContent,
         scene: &Scene,
         frame: &Frame,
         scale: f32,
         format: PixelFormat,
     ) {
-        let Some(slide) = SlideContent::closing_from_rest(scene, frame) else {
-            return;
-        };
         let key = slide.key(scene, frame, scale, format);
         if self
-            .close_layer
+            .background_layer
             .as_ref()
             .is_some_and(|layer| layer.key == key)
         {
             return;
         }
         // A superseded job finishes on its own; its pixels are dropped unseen.
-        self.close_layer = None;
+        self.background_layer = None;
         let size = (
             (scene.bounds.w * scale).ceil().max(1.) as u32,
             (scene.bounds.h * scale).ceil().max(1.) as u32,
@@ -3425,21 +3569,11 @@ impl TreeCpuRenderer {
         let items = slide.items(scene, frame);
         let offset = (-scene.bounds.x, -scene.bounds.y);
         let job = std::thread::Builder::new()
-            .name("bead-close-layer".into())
-            .spawn(move || {
-                flatten_layer(
-                    &items,
-                    offset,
-                    size,
-                    scale,
-                    format,
-                    &mut RepairScratch::default(),
-                )
-                .ok()
-            });
+            .name("bead-slide-layer".into())
+            .spawn(move || flatten_layer_parallel(&items, offset, size, scale, format));
         if let Ok(job) = job {
-            self.close_layer_builds += 1;
-            self.close_layer = Some(CloseLayer {
+            self.background_layer_builds += 1;
+            self.background_layer = Some(BackgroundLayer {
                 key,
                 size,
                 job,
@@ -3468,63 +3602,85 @@ impl TreeCpuRenderer {
         if self
             .slide_layer
             .as_ref()
-            .is_none_or(|(last, _)| *last != key)
-            && let Some(layer) = self.close_layer.take()
-            && layer.key == key
-            && let Ok(Some(pixels)) = layer.job.join()
-            && (pixels.width(), pixels.height()) == layer.size
+            .is_some_and(|(last, _)| *last == key)
         {
-            self.close_layer_adoptions += 1;
-            self.slide_layer = Some((
-                key,
-                Raster {
-                    changed: Damage::full(layer.size.0, layer.size.1),
-                    pixels: Arc::new(pixels),
-                    origin: (0, 0),
-                    key,
-                    base_key: None,
-                    _charge: layer.charge,
-                },
-            ));
-        }
-        if self
-            .slide_layer
-            .as_ref()
-            .is_none_or(|(last, _)| *last != key)
-        {
-            self.slide_layer = None;
+            self.background_layer = None;
+        } else {
             let _profile = bead_core::profile::Span::new("slide_layer");
             let (w, h) = (
                 (scene.bounds.w * scale).ceil().max(1.) as u32,
                 (scene.bounds.h * scale).ceil().max(1.) as u32,
             );
-            let charge = self
-                .group_budget
-                .get_or_insert_with(|| {
-                    bead_core::cache::Budget::new("cpu-composite", 64 * bead_core::cache::MIB)
-                })
-                .reserve(w as usize * h as usize * 4 + 64)?;
-            let items = slide.items(scene, frame);
-            let pixels = flatten_layer(
-                &items,
-                (-scene.bounds.x, -scene.bounds.y),
-                (w, h),
-                scale,
-                format,
-                &mut self.repair_scratch,
-            )?;
-            self.slide_layer_builds += 1;
-            self.slide_layer = Some((
-                key,
-                Raster {
-                    changed: Damage::full(w, h),
-                    pixels: Arc::new(pixels),
-                    origin: (0, 0),
-                    key,
-                    base_key: None,
-                    _charge: charge,
-                },
-            ));
+            let shape = LayerShape {
+                scene_start: slide.scene_start,
+                size: (w, h),
+                origin: (scene.bounds.x.to_bits(), scene.bounds.y.to_bits()),
+                scale: scale.to_bits(),
+                rgba: format == PixelFormat::Rgba,
+            };
+            let offset = (-scene.bounds.x, -scene.bounds.y);
+            let content = Frame::of_items(slide.items(scene, frame), scale);
+            let background = self
+                .background_layer
+                .take()
+                .filter(|layer| layer.key == key && layer.size == (w, h))
+                .and_then(|layer| match layer.job.join() {
+                    Ok(Some(pixels)) if (pixels.width(), pixels.height()) == (w, h) => {
+                        Some((pixels, layer.charge))
+                    }
+                    _ => None,
+                });
+            if let Some((pixels, charge)) = background {
+                self.background_layer_adoptions += 1;
+                self.slide_layer = Some((key, layer_raster(pixels, key, charge)));
+                let mut damage = crate::damage::FrameDamage::default();
+                damage.update(&content, offset, 1., w, h)?;
+                self.slide_damage = Some((shape, damage));
+            } else if let (Some((last, layer)), Some((current, damage))) =
+                (self.slide_layer.as_mut(), self.slide_damage.as_mut())
+                && *current == shape
+            {
+                // B0205: a new scene or new rasters mid-slide repaint only the content that
+                // changed (semantic damage of the layer's own items), never the whole layer.
+                let regions = damage.update(&content, offset, 1., w, h)?;
+                let pixels = Arc::make_mut(&mut layer.pixels);
+                for region in regions {
+                    repaint_layer(
+                        &content.items,
+                        offset,
+                        pixels,
+                        scale,
+                        format,
+                        region,
+                        &mut self.repair_scratch,
+                    )?;
+                }
+                *last = key;
+                layer.key = key;
+                self.slide_layer_repairs += 1;
+            } else {
+                self.slide_layer = None;
+                self.slide_damage = None;
+                let charge = self
+                    .group_budget
+                    .get_or_insert_with(|| {
+                        bead_core::cache::Budget::new("cpu-composite", 64 * bead_core::cache::MIB)
+                    })
+                    .reserve(w as usize * h as usize * 4 + 64)?;
+                let pixels = flatten_layer(
+                    &content.items,
+                    offset,
+                    (w, h),
+                    scale,
+                    format,
+                    &mut self.repair_scratch,
+                )?;
+                self.slide_layer_builds += 1;
+                self.slide_layer = Some((key, layer_raster(pixels, key, charge)));
+                let mut damage = crate::damage::FrameDamage::default();
+                damage.update(&content, offset, 1., w, h)?;
+                self.slide_damage = Some((shape, damage));
+            }
         }
         paint_items(
             &frame.items[..slide.posed_start],
@@ -3605,8 +3761,10 @@ impl Renderer for TreeCpuRenderer {
             return;
         }
         self.close_due = None;
-        if let Some(frame) = self.cache.frame.clone() {
-            self.prepare_close_layer(scene, &frame, scale, format);
+        if let Some(frame) = self.cache.frame.clone()
+            && let Some(slide) = SlideContent::closing_from_rest(scene, &frame)
+        {
+            self.start_background_layer(slide, scene, &frame, scale, format);
         }
     }
     fn prepared_frame(&self) -> Option<std::sync::Arc<crate::tree::Frame>> {
@@ -3774,6 +3932,24 @@ impl Renderer for TreeCpuRenderer {
             return Err("damage outside SHM".into());
         }
         let frozen_snapshot = self.snapshot_fingerprint.is_some();
+        // B0205: an opening's first poses (faded in, or its content still culled) composite no
+        // layer yet; flatten the content its slide will need on another thread meanwhile, from
+        // the worker-prepared frame's rasters. The slide adopts it when the content matches.
+        let sliding = scene.opacity >= 1.
+            && self
+                .cache
+                .frame
+                .as_ref()
+                .is_some_and(|frame| SlideContent::of(scene, frame).is_some());
+        if !frozen_snapshot
+            && !sliding
+            && self.slide_layer.is_none()
+            && self.background_layer.is_none()
+            && let Some(prepared) = scene.prepared.get(&target.scale.to_bits()).cloned()
+            && let Some(slide) = SlideContent::opening_ahead(scene, &prepared)
+        {
+            self.start_background_layer(slide, scene, &prepared, target.scale, target.format);
+        }
         let frame = if frozen_snapshot {
             None
         } else {
@@ -3794,6 +3970,7 @@ impl Renderer for TreeCpuRenderer {
                 return self.paint_slide(scene, &frame, &slide, target, damage);
             }
             self.slide_layer = None;
+            self.slide_damage = None;
             if SlideContent::closing_from_rest(scene, &frame).is_some() {
                 self.close_due = Some((std::time::Instant::now(), target.scale, target.format));
             } else {
@@ -3809,8 +3986,8 @@ impl Renderer for TreeCpuRenderer {
             );
         }
         self.slide_layer = None;
+        self.slide_damage = None;
         self.close_due = None;
-        self.close_layer = None;
         if scene.opacity <= 0. {
             if !self.keep_hidden_group {
                 self.flattened = None;
@@ -5232,15 +5409,15 @@ mod tests {
         );
         renderer.idle_work(&rest);
         assert_eq!(
-            renderer.close_layer_builds, 0,
+            renderer.background_layer_builds, 0,
             "not before the content is quiet"
         );
         std::thread::sleep(CLOSE_LAYER_QUIET);
         renderer.idle_work(&rest);
-        assert_eq!(renderer.close_layer_builds, 1);
+        assert_eq!(renderer.background_layer_builds, 1);
         renderer.idle_work(&rest);
         assert_eq!(
-            renderer.close_layer_builds, 1,
+            renderer.background_layer_builds, 1,
             "one background flatten per content"
         );
         let mut fresh = TreeCpuRenderer::default();
@@ -5255,12 +5432,95 @@ mod tests {
                 "progress {progress}: adopted layer pixels differ"
             );
         }
-        assert_eq!(renderer.close_layer_adoptions, 1);
+        assert_eq!(renderer.background_layer_adoptions, 1);
         assert_eq!(
             renderer.slide_layer_builds, 0,
             "the close slide never flattens on the UI thread"
         );
         assert_eq!(fresh.slide_layer_builds, 1);
+    }
+    #[test]
+    fn a_scene_changing_mid_slide_repairs_only_its_changed_content_in_the_layer() {
+        let (w, h) = (396u32, 246 + 120);
+        let draw = |renderer: &mut TreeCpuRenderer, scene: &Scene| {
+            let mut bytes = vec![7u8; (w * h * 4) as usize];
+            renderer.prepare_on_ui(scene, 1.5).unwrap();
+            renderer
+                .render(
+                    scene,
+                    ShmTarget {
+                        bytes: &mut bytes,
+                        width: w,
+                        height: h,
+                        scale: 1.5,
+                        format: PixelFormat::Rgba,
+                    },
+                    Damage::full(w, h),
+                )
+                .unwrap();
+            bytes
+        };
+        for open in [true, false] {
+            let mut renderer = TreeCpuRenderer::default();
+            draw(&mut renderer, &sliding_panel(open, 0.25));
+            let mut changed = sliding_panel(open, 0.5);
+            changed.primitives[3] = Primitive::Rounded {
+                rect: Rect::new(30., 30., 90., 40.),
+                radius: 6.,
+                fill: [20, 160, 90, 255],
+                border: None,
+            };
+            let repaired = draw(&mut renderer, &changed);
+            assert_eq!(renderer.slide_layer_builds, 1, "open={open}");
+            assert_eq!(renderer.slide_layer_repairs, 1, "open={open}");
+            let fresh = draw(&mut TreeCpuRenderer::default(), &changed);
+            assert!(
+                repaired == fresh,
+                "open={open}: repaired layer differs from a fresh flatten"
+            );
+        }
+    }
+    #[test]
+    fn an_opening_flattens_its_layer_off_the_ui_thread_before_its_slide() {
+        let (w, h) = (396u32, 246 + 120);
+        let draw = |renderer: &mut TreeCpuRenderer, scene: &Scene| {
+            let mut bytes = vec![7u8; (w * h * 4) as usize];
+            renderer.prepare_on_ui(scene, 1.5).unwrap();
+            renderer
+                .render(
+                    scene,
+                    ShmTarget {
+                        bytes: &mut bytes,
+                        width: w,
+                        height: h,
+                        scale: 1.5,
+                        format: PixelFormat::Rgba,
+                    },
+                    Damage::full(w, h),
+                )
+                .unwrap();
+            bytes
+        };
+        let mut renderer = TreeCpuRenderer::default();
+        // The first pose is still faded out: no layer is composited, one is flattened aside.
+        let mut first = sliding_panel(true, 0.05);
+        first.opacity = 0.;
+        draw(&mut renderer, &first);
+        assert_eq!(renderer.background_layer_builds, 1);
+        for progress in [0.25, 0.5] {
+            let scene = sliding_panel(true, progress);
+            let adopted = draw(&mut renderer, &scene);
+            let fresh = draw(&mut TreeCpuRenderer::default(), &scene);
+            assert!(
+                adopted == fresh,
+                "progress {progress}: adopted layer differs"
+            );
+        }
+        assert_eq!(renderer.background_layer_adoptions, 1);
+        assert_eq!(
+            renderer.slide_layer_builds, 0,
+            "the opening never flattens on the UI thread"
+        );
     }
     #[test]
     fn compact_svg_upload_reconstructs_exact_dense_pixels() {
