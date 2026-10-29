@@ -2875,6 +2875,7 @@ impl Runtime {
         self.state_file = None;
         self.session.restore_on_start(BTreeMap::new());
         self.actions.register("widgets.navigate", "ui.widgets")?;
+        self.actions.register("plugins.do", "ui.widgets")?;
         for action in ["view.open", "status.pill.open", "launcher.open"] {
             self.actions.register(action, "ui.widgets")?;
         }
@@ -6508,6 +6509,24 @@ impl SceneSource for Runtime {
             }
             let scene = self.session.update(changes)?;
             return self.finish_scene(scene);
+        }
+        if let Some((_, name, bead::core::Value::Text(argument))) = &host_action
+            && name == "plugins.do"
+            && self.widget_app
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            let source = match self.session.stores.get("plugins.source") {
+                Some(bead::core::Value::Text(text)) => text.clone(),
+                _ => String::new(),
+            };
+            let changes = crate::plugins::act(self.session.root(), argument, &source);
+            // Enable/disable/settings change the mounted plugins: rebuild from disk now; other
+            // views follow through the watched plugin state file.
+            self.session.stores.commit(changes)?;
+            let scene = self.session.reload()?;
+            return self.finish_scene(Some(scene));
         }
         if let Some((_, name, argument)) = &host_action
             && name == "widgets.navigate"

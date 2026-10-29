@@ -477,6 +477,7 @@ impl Generation {
         // Optional shared modules are explicit, root-relative snapshots. This keeps
         // sibling views out of the bundle unless the application actually reuses them.
         let manifest = entry.parent().unwrap_or(Path::new("")).join("bundle.json");
+        let mut plugins = None;
         if loader.root.join(&manifest).is_file() {
             #[derive(serde::Deserialize)]
             #[serde(deny_unknown_fields)]
@@ -484,8 +485,14 @@ impl Generation {
                 modules: Vec<PathBuf>,
                 #[serde(default)]
                 assets: Vec<PathBuf>,
+                /// Mount the enabled plugins' Luau under `plugins/` (spec 0203).
+                #[serde(default)]
+                plugins: bool,
             }
             let bundle: Bundle = loader.json(&manifest)?;
+            if bundle.plugins {
+                plugins = Some((loader.root.clone(), crate::plugins::mount(&loader.root)));
+            }
             if bundle.modules.len() + bundle.assets.len() + loader.sources.len() > 256 {
                 return Err(Diagnostic::new(
                     &manifest,
@@ -603,6 +610,7 @@ impl Generation {
             entry,
             &loader.sources,
             font_picker,
+            plugins,
         )?);
         let generation = Self {
             script,

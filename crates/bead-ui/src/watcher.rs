@@ -11,7 +11,7 @@ use std::{
 };
 type Callback = Box<dyn Fn(Result<(), String>) + Send>;
 type Subscribers = Arc<Mutex<BTreeMap<u64, Arc<Mutex<Callback>>>>>;
-type Key = (PathBuf, PathBuf);
+type Key = (PathBuf, PathBuf, Vec<PathBuf>);
 type Registry = Mutex<BTreeMap<Key, Weak<Bus>>>;
 struct Bus {
     _watcher: Mutex<notify::RecommendedWatcher>,
@@ -33,15 +33,18 @@ impl Drop for Subscription {
         lock(&self.bus.subscribers).remove(&self.id);
     }
 }
+/// `extra` are further watched paths (spec 0203: plugin directories, recursively, and
+/// the plugin state file, exactly).
 pub(super) fn subscribe(
     root: PathBuf,
     palette: PathBuf,
+    extra: Vec<PathBuf>,
     wakeup: Callback,
 ) -> Result<Subscription, Box<dyn std::error::Error>> {
     static REGISTRY: OnceLock<Registry> = OnceLock::new();
     let mut registry = lock(REGISTRY.get_or_init(Default::default));
     registry.retain(|_, bus| bus.strong_count() != 0);
-    let key = (root.clone(), palette.clone());
+    let key = (root.clone(), palette.clone(), extra.clone());
     let bus = match registry.get(&key).and_then(Weak::upgrade) {
         Some(bus) => bus,
         None => {
@@ -49,6 +52,7 @@ pub(super) fn subscribe(
             let callbacks = subscribers.clone();
             let watched_root = root.clone();
             let watched_palette = palette.clone();
+            let watched_extra = extra.clone();
             let mut watcher =
                 notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
                     let event = match event {
@@ -58,6 +62,14 @@ pub(super) fn subscribe(
                                     || event.paths.is_empty()
                                     || event.paths.iter().any(|path| {
                                         path == &watched_palette
+                                            || watched_extra.iter().any(|extra| {
+                                                path == extra
+                                                    || (extra.is_dir()
+                                                        && path.starts_with(extra)
+                                                        && path.extension().is_some_and(|ext| {
+                                                            ext == "luau" || ext == "toml"
+                                                        }))
+                                            })
                                             || (path.starts_with(&watched_root)
                                                 && (path.is_dir()
                                                     || path.extension().is_none()
@@ -93,6 +105,16 @@ pub(super) fn subscribe(
                     }
                 })?;
             watcher.watch(&root, notify::RecursiveMode::Recursive)?;
+            for path in &extra {
+                if path.starts_with(&root) {
+                    continue;
+                }
+                if path.is_dir() {
+                    watcher.watch(path, notify::RecursiveMode::Recursive)?;
+                } else if let Some(parent) = path.parent().filter(|p| p.is_dir()) {
+                    watcher.watch(parent, notify::RecursiveMode::NonRecursive)?;
+                }
+            }
             if !palette.starts_with(&root) {
                 watcher.watch(
                     palette.parent().ok_or("palette parent unavailable")?,
@@ -126,6 +148,7 @@ mod tests {
         let first = subscribe(
             root.clone(),
             palette.clone(),
+            vec![],
             Box::new(move |v| {
                 let _ = a.send(v);
             }),
@@ -135,6 +158,7 @@ mod tests {
         let second = subscribe(
             root.clone(),
             palette.clone(),
+            vec![],
             Box::new(move |v| {
                 let _ = b.send(v);
             }),

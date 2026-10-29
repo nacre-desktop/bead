@@ -11,6 +11,7 @@ mod local_range;
 pub use local_range::LocalRangeFeedback;
 pub mod markdown;
 mod materialized;
+pub mod plugins;
 pub mod recovery;
 pub mod schema;
 pub mod script;

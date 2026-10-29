@@ -124,6 +124,8 @@ export type SDK = {
     text_width:(string|{__bind:string},string,number)->number,
     model_count:(any)->number,
     tr:(string,any?)->string,
+    plugin_gate:(string,any)->any,
+    plugin_fault:(string,string)->(),
 }
 local sdk:SDK = {} :: any
 return sdk

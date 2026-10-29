@@ -408,6 +408,7 @@ dependencies = [
  "serde",
  "serde_json",
  "taffy",
+ "toml",
  "unicode-segmentation",
 ]
 

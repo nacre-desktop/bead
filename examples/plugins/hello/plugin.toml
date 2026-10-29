@@ -1,0 +1,28 @@
+# Example third-party Bead plugin (spec 0203). Copy this folder, change the id, and add it
+# from the Plugins page ("Git URL or absolute folder path"). It starts disabled.
+id = "hello"
+name = "Hello"
+version = "0.1.0"
+author = "Example author"
+description = "A small bar widget that greets you."
+license = "MIT OR Apache-2.0"
+api = 1
+# Only framework interaction state is readable without a topic: capability; this widget
+# needs no other access.
+capabilities = []
+
+[[widget]]
+id = "hello"
+entry = "widget.luau"
+accent = "secondary"
+
+[settings.greeting]
+type = "choice"
+label = "Greeting"
+options = ["Hello", "Hi", "Hey"]
+default = "Hello"
+
+[settings.show_icon]
+type = "toggle"
+label = "Show icon"
+default = true
