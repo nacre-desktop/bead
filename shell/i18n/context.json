@@ -893,8 +893,6 @@
   "bead.widgets.group-label": "Widgets app sidebar group label under Overview, above the individual widgets.",
   "bead.widgets.zone-desktop": "Drop-zone label shown on the desktop while a widget is dragged.",
   "bead.widgets.zone-remove": "Drop-zone label for the removal target shown while a placed widget is dragged.",
-  "bead.widgets.in-bar": "Widgets app switch label for the bar placement.",
-  "bead.widgets.on-desktop": "Widgets app switch label for the desktop placement.",
   "bead.launcher.form-reminder": "Launcher form: title of the reminder form.",
   "bead.launcher.form-reminder-button": "Launcher form: submit button of the reminder form.",
   "bead.launcher.form-minutes": "Launcher form: label of the reminder duration field.",
