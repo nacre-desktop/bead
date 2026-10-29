@@ -588,11 +588,7 @@ impl Mirror {
     }
     fn remember_projection(&mut self, values: BTreeMap<String, crate::Value>) {
         if let Some(snapshot) = &self.snapshot {
-            self.projected = Some((
-                snapshot.epoch.clone(),
-                snapshot.data.clone(),
-                values,
-            ));
+            self.projected = Some((snapshot.epoch.clone(), snapshot.data.clone(), values));
         }
     }
 }
@@ -694,7 +690,10 @@ mod restart_tests {
                     make(2),
                     |_| {
                         projections += 1;
-                        Ok(BTreeMap::from([("panel.open".into(), crate::Value::Bool(true))]))
+                        Ok(BTreeMap::from([(
+                            "panel.open".into(),
+                            crate::Value::Bool(true),
+                        )]))
                     },
                     now,
                 )
@@ -725,7 +724,10 @@ mod restart_tests {
                     make(4),
                     |_| {
                         projections += 1;
-                        Ok(BTreeMap::from([("panel.open".into(), crate::Value::Bool(true))]))
+                        Ok(BTreeMap::from([(
+                            "panel.open".into(),
+                            crate::Value::Bool(true),
+                        )]))
                     },
                     now,
                 )
