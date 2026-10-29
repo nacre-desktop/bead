@@ -576,11 +576,18 @@ impl FrontEnd for LuauFrontEnd {
         let setup_profile = bead_core::profile::Span::new("markup_setup");
         let sources = &self.compiled;
         let lua = Lua::new();
-        let deadline = Instant::now() + Duration::from_millis(50);
-        let native_time = std::rc::Rc::new(std::cell::Cell::new(Duration::ZERO));
+        // The budget is thread CPU time, not wall time: a suspend/resume, CPU
+        // starvation or a descheduled thread must not fail a healthy markup.
+        let deadline = bead_core::profile::thread_cpu_ns() + 50_000_000;
+        let native_time = std::rc::Rc::new(std::cell::Cell::new(0u64));
         let spent = native_time.clone();
+        let ticks = std::cell::Cell::new(0u32);
         lua.set_interrupt(move |_| {
-            if Instant::now() > deadline + spent.get() {
+            // The clock is a syscall: sample it every 64th interrupt.
+            ticks.set(ticks.get().wrapping_add(1));
+            if ticks.get() % 64 == 0
+                && bead_core::profile::thread_cpu_ns() > deadline + spent.get()
+            {
                 Err(mlua::Error::runtime("markup exceeded 50 ms limit"))
             } else {
                 Ok(VmState::Continue)
@@ -630,9 +637,12 @@ impl FrontEnd for LuauFrontEnd {
                             if text.len() > 16 * 1024 {
                                 return Err(mlua::Error::runtime("invalid text measurement"));
                             }
-                            let started = Instant::now();
+                            let started = bead_core::profile::thread_cpu_ns();
                             let width = self.measured_width(&text, &family, size);
-                            native_time.set(native_time.get() + started.elapsed());
+                            native_time.set(
+                                native_time.get()
+                                    + bead_core::profile::thread_cpu_ns().saturating_sub(started),
+                            );
                             if let Some(binding) = binding {
                                 let mut dependencies = widths.borrow_mut();
                                 if !dependencies.iter().any(|dependency| {

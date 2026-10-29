@@ -407,6 +407,46 @@ fn failed_actions_and_schema_migrations_roll_back() {
     assert_eq!(session.stores.values(), &before);
 }
 #[test]
+fn a_budget_overrun_is_retried_and_its_notice_clears() {
+    let fixture = Fixture::new();
+    let mut session = fixture.session();
+    fixture.behavior("default");
+    let good = fs::read(fixture.0.join("behavior.luau")).unwrap();
+    fs::write(
+        fixture.0.join("behavior.luau"),
+        "local n = 0\nwhile true do n += 1 end\nreturn {stores={},actions={},computed={}}",
+    )
+    .unwrap();
+    let error = session.reload().err().unwrap();
+    assert!(error.message.contains("exceeded 50 ms"), "{error}");
+    session.reject(error.to_string());
+    assert!(session.error.is_some());
+    // The overrun was transient: the next change retries the reload and clears the notice.
+    fs::write(fixture.0.join("behavior.luau"), good).unwrap();
+    let scene = session.update(BTreeMap::new()).unwrap().unwrap();
+    session.commit(scene);
+    assert!(session.error.is_none());
+    assert!(!session.retry_reload && !session.source_fault);
+}
+#[test]
+fn a_failed_render_notice_clears_after_a_later_render_but_a_broken_source_keeps_it() {
+    let fixture = Fixture::new();
+    let mut session = fixture.session();
+    session.reject("transient render overrun".into());
+    let scene = session
+        .update(BTreeMap::from([("scroll.y".into(), Value::Number(1.))]))
+        .ok()
+        .flatten();
+    if let Some(scene) = scene {
+        session.commit(scene);
+        assert!(session.error.is_none());
+    }
+    fs::write(fixture.0.join("content.json"), "{\n broken").unwrap();
+    let error = session.reload().err().unwrap();
+    session.reject(error.to_string());
+    assert!(session.source_fault && session.error.is_some());
+}
+#[test]
 fn cycles_script_errors_and_changes_during_staging_are_rejected() {
     let fixture = Fixture::new();
     let mut session = fixture.session();

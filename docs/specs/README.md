@@ -531,6 +531,10 @@ B0183 caches repeated SVG raster crops and gates last-good recovery bundle write
 on content changes; the 8 MiB LRU and validation are documented in the
 [SVG cache and presented-frame spec](0183-svg-cache-presented.md).
 
+B0186 makes the 50 ms markup budget thread CPU time (not wall time) and clears a transient
+reload or render failure notice on the next successful render; see the
+[markup budget spec](0186-markup-budget.md).
+
 Exact-source full hosted [CI 39388972154](https://github.com/nacre-desktop/bead/actions/runs/39388972154)
 passed on dc8832fe: formatting, Clippy, workspace tests, renderer configurations,
 facade/headless UI/Luau schema, capture-window regressions, private service
