@@ -867,6 +867,7 @@ mod tests {
             );
         }
         Ok(())
+    }
 
     /// B0207: a pill that appears is filled at its level from the first frame; a repeat at the
     /// limit does not move the fill.
@@ -925,10 +926,12 @@ mod tests {
                 harness.update(BTreeMap::new())?;
                 harness.update(BTreeMap::from([("osd.value".into(), Value::Number(1.0))]))?;
                 let repeat = fill_width(&harness).expect("OSD fill image");
-                assert!((repeat - track).abs() < 0.01, "{kind}: no fill motion at the limit");
+                assert!(
+                    (repeat - track).abs() < 0.01,
+                    "{kind}: no fill motion at the limit"
+                );
             }
         }
         Ok(())
-    }
     }
 }
