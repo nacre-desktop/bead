@@ -2,6 +2,8 @@
 
 These captures use a private labwc parent and nested Niri at 2880×1800 physical pixels and scale 1.5. The selected output is 1920×1200 logical; Bead uses its CPU renderer and a generated wallpaper fixture. The existing B0172 images and goldens remain unchanged.
 
+B0182 recaptured `battery-page.png` and `desktop-edit-mode.png` with the same geometry and renderer. The other B0176 images remain unchanged.
+
 | Image | Review point |
 | --- | --- |
 | `app-home.png` | Settings-sized sidebar icons, centered row alignment and shortened descriptions. |

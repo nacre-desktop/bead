@@ -406,7 +406,7 @@ local function widget_sidebar()
                     font_size=kit.tokens.icons.large*4/3,width=24,height=28,color=active and "primary" or "onSurfaceVariant"},
                 ui.Column{id="widget-nav-copy",width=0,grow=1,height="fill",justify="center",gap=spacing.hairline,
                     label("widget-nav-title",title,text.body*4/3,active and "onSurface" or "onSurfaceVariant",{width="fill",height=18}),
-                    label("widget-nav-description",description or "",text.caption*4/3,"onSurfaceVariant",{width="fill",height=30})}}}
+                    type(description)=="string" and description~="" and label("widget-nav-description",description,text.caption*4/3,"onSurfaceVariant",{width="fill",height=30}) or nil}}}
     end
     table.insert(nav,row("overview",ui.tr("bead.widgets.overview"),"","widgets",selected=="",navigate("back",selected)))
     for _,id in widget_nav_ids do

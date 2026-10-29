@@ -179,14 +179,24 @@ local function desktop(props,_settings,_data)
             visual.shadow_text("date",weekday,"fill",date_height,date_size,"secondary")}
     end
     local compact=h<=120
-    local time_size=compact and h*.46 or math.min(148,h*.72)
-    local time_height=compact and h*.5 or h*.62
-    local date_height=compact and 12 or 28
-    local date_size=compact and kit.tokens.text.caption*4/3 or kit.tokens.text.body*4/3
-    return ui.Column{id="clock-desktop",width=w,height=h,padding=kit.tokens.spacing.md,fill="transparent",justify="center",gap=kit.tokens.spacing.sm,on_activate=action,
+    local base_time_size=compact and h*.46 or math.min(148,h*.72)
+    local base_date_size=compact and kit.tokens.text.caption*4/3 or kit.tokens.text.body*4/3
+    local padding=kit.tokens.spacing.md
+    local gap=kit.tokens.spacing.sm
+    local rule_height=compact and 2 or 3
+    local vertical_scale=math.min(1,h/math.max(1,2*padding+2*gap+rule_height))
+    padding*=vertical_scale
+    gap*=vertical_scale
+    rule_height=math.min(rule_height,h*.04)
+    local content_height=math.max(1,h-2*padding-2*gap-rule_height)
+    local date_height=math.min(compact and 12 or 28,content_height*.26)
+    local date_size=math.min(base_date_size,math.max(1,(date_height-2)/1.2))
+    local time_height=content_height-date_height
+    local time_size=math.min(base_time_size,math.max(1,(time_height-2)/1.2))
+    return ui.Column{id="clock-desktop",width=w,height=h,padding=padding,fill="transparent",justify="center",gap=gap,on_activate=action,
         visual.display("time",visible_time,"fill",time_height,time_size,"onSurface",true),
         visual.shadow_text("date",date_line,"fill",date_height,date_size,"onSurface"),
-        ui.Box{id="accent-rule",width=48,height=compact and 2 or 3,fill="primary",radius=1.5}}
+        ui.Box{id="accent-rule",width=48,height=rule_height,fill="primary",radius=1.5}}
 end
 local function bar_style(title,style,preferred,requires)
     local descriptor={title=title,min_span=1,max_span=60,preferred_span=preferred,requires=requires,render=function(props,settings,data)
