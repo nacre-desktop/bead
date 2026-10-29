@@ -901,10 +901,15 @@ impl Settings {
         out
     }
 
-    /// The page shown for `settings.page`, or the registry default for anything unknown.
+    /// The page shown for `settings.page`, or the registry default for anything unknown. QML
+    /// page ids (`desktop`, `lock`, `time`, ...) resolve through the registry's `aliases` (B0197).
     pub fn page_for(&self, requested: &str) -> String {
-        if self.registry.page(requested).is_some() {
-            requested.into()
+        let resolved = self.registry.navigation["aliases"][requested]
+            .as_str()
+            .unwrap_or(requested);
+        let page = resolved.split('#').next().unwrap_or_default();
+        if self.registry.page(page).is_some() {
+            page.into()
         } else {
             self.registry.first_page()
         }

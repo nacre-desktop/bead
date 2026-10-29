@@ -23,6 +23,7 @@ mod i18n_source;
 mod icon_warm;
 mod key_routes;
 mod launcher;
+mod launcher_actions;
 mod launcher_panel;
 mod launcher_quick;
 #[cfg(test)]
