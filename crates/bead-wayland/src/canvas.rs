@@ -455,17 +455,11 @@ impl App {
                 return;
             }
         };
-        let scale120 = self
-            .surfaces
-            .iter()
-            .find(|surface| surface.output == output && !surface.companion && surface.configured)
-            .map(|surface| surface.scale120)
-            .or_else(|| {
-                self.output
-                    .info(&output)
-                    .map(|info| info.scale_factor.max(1) as u32 * 120)
-            })
-            .unwrap_or(120);
+        let scale120 = self.initial_scale120(
+            "canvas",
+            &output,
+            self.fractional.is_some() && self.viewporter.is_some(),
+        );
         self.canvases.insert(
             key.clone(),
             Canvas {

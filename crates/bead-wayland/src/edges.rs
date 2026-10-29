@@ -70,18 +70,18 @@ struct Geometry {
     input: bool,
 }
 pub(super) struct EdgeSurface {
-    output: wl_output::WlOutput,
+    pub(super) output: wl_output::WlOutput,
     output_name: String,
     kind: Kind,
     geometry: Geometry,
     pub(super) layer: LayerSurface,
     viewport: WpViewport,
-    fractional: Option<WpFractionalScaleV1>,
+    pub(super) fractional: Option<WpFractionalScaleV1>,
     pool: SlotPool,
     buffer: Option<Buffer>,
     size: (u32, u32),
-    scale120: u32,
-    configured: bool,
+    pub(super) scale120: u32,
+    pub(super) configured: bool,
     drawn: Option<(u32, (u32, u32), u32)>,
 }
 impl Drop for EdgeSurface {
@@ -291,10 +291,7 @@ impl App {
         layer.set_exclusive_zone(geometry.exclusive);
         layer.set_keyboard_interactivity(KeyboardInteractivity::None);
         layer.commit();
-        let scale120 = self
-            .output
-            .info(output)
-            .map_or(120, |i| i.scale_factor.max(1) as u32 * 120);
+        let scale120 = self.initial_scale120("edge", output, fractional.is_some());
         Ok(EdgeSurface {
             output: output.clone(),
             output_name: name.to_owned(),

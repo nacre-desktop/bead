@@ -13,7 +13,7 @@ pub(super) struct Overlay {
     name: String,
     epoch: u64,
     layer: LayerSurface,
-    output: wl_output::WlOutput,
+    pub(super) output: wl_output::WlOutput,
     source: Box<dyn SceneSource>,
     scene: Scene,
     renderer: Box<dyn Renderer>,
@@ -28,7 +28,7 @@ pub(super) struct Overlay {
     asked: (u32, u32),
     size: (u32, u32),
     configured: bool,
-    scale120: u32,
+    pub(super) scale120: u32,
     fractional: Option<WpFractionalScaleV1>,
     viewport: Option<WpViewport>,
     /// Target visibility; false while the close animation runs.
@@ -301,21 +301,7 @@ impl App {
         // the 16 ms default every other slot already overrides.
         source.frame_interval(self.output_frame_interval(&output));
         let renderer = bead_render::renderer(RendererKind::Cpu).map_err(|e| e.to_string())?;
-        // B0192: start at the scale the output's own surfaces already use. The integer wl_output factor
-        // (2 at 1.5x) made the first prepare raster everything at the wrong scale (shadow template 30 ms)
-        // before the fractional-scale event corrected it.
-        let scale120 = if fractional.is_some()
-            && let Some(known) = self
-                .surfaces
-                .iter()
-                .find(|s| s.output == output && s.fractional.is_some())
-        {
-            known.scale120
-        } else {
-            self.output
-                .info(&output)
-                .map_or(120, |i| i.scale_factor.max(1) as u32 * 120)
-        };
+        let scale120 = self.initial_scale120("overlay", &output, fractional.is_some());
         self.overlay = Some(Overlay {
             name: view.to_owned(),
             epoch,

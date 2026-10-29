@@ -739,7 +739,68 @@ pub fn run_runtime(
     }
     Ok(())
 }
+/// B0195: a fractional scale already known for the output wins over the integer `wl_output` factor.
+fn choose_initial_scale120(known: Option<u32>, integer_factor: Option<i32>) -> u32 {
+    known
+        .filter(|scale| *scale > 0)
+        .unwrap_or_else(|| integer_factor.map_or(120, |factor| factor.max(1) as u32 * 120))
+}
+
 impl App {
+    /// B0195: the scale a new surface on `output` starts at. With wp_fractional_scale, a surface of
+    /// this output that already received its fractional scale knows the real one; the integer
+    /// wl_output factor (2 at 1.5x) would raster the first frame at the wrong scale. Without a known
+    /// surface (first on the output) or without the protocol, the integer factor.
+    pub(super) fn initial_scale120(
+        &self,
+        kind: &str,
+        output: &wl_output::WlOutput,
+        fractional: bool,
+    ) -> u32 {
+        let known = fractional
+            .then(|| {
+                let mine = self
+                    .surfaces
+                    .iter()
+                    .filter(|s| s.fractional.is_some() && s.configured)
+                    .map(|s| (&s.output, s.scale120));
+                let slots = self.slots.iter().flat_map(|g| {
+                    g.surfaces
+                        .iter()
+                        .filter(|s| s.fractional.is_some() && s.configured)
+                        .map(|s| (&s.output, s.scale120))
+                });
+                let edges = self
+                    .edge_surfaces
+                    .iter()
+                    .filter(|s| s.fractional.is_some() && s.configured)
+                    .map(|s| (&s.output, s.scale120));
+                let canvases = self
+                    .canvases
+                    .values()
+                    .filter(|c| c.fractional.is_some() && c.configured)
+                    .map(|c| (&c.output, c.scale120));
+                let overlay = self
+                    .overlay
+                    .iter()
+                    .filter(|o| o.has_fractional())
+                    .map(|o| (&o.output, o.scale120));
+                mine.chain(slots)
+                    .chain(edges)
+                    .chain(canvases)
+                    .chain(overlay)
+                    .find(|(o, _)| *o == output)
+                    .map(|(_, scale)| scale)
+            })
+            .flatten();
+        let integer = self.output.info(output).map(|i| i.scale_factor);
+        let scale120 = choose_initial_scale120(known, integer);
+        eprintln!(
+            "INITIAL_SCALE kind={kind} scale120={scale120} known={}",
+            known.is_some()
+        );
+        scale120
+    }
     pub(super) fn output_frame_interval(&self, output: &wl_output::WlOutput) -> Duration {
         self.output
             .info(output)
@@ -2389,10 +2450,11 @@ impl App {
                 self.position_panel_surface(&layer, &output, scene);
             }
             layer.commit();
-            let scale120 = self
-                .output
-                .info(&output)
-                .map_or(120, |i| i.scale_factor.max(1) as u32 * 120);
+            let scale120 = self.initial_scale120(
+                if companion { "panel" } else { "bar" },
+                &output,
+                fractional.is_some(),
+            );
             Ok(Surface {
                 pointer_visual: None,
                 decorations: None,
@@ -2858,5 +2920,26 @@ mod palette_barrier_tests {
         );
         assert!(aborted_palette_retry_outputs("DP-1", false, &frames, &palette).is_empty());
         assert!(aborted_palette_retry_outputs("DP-1", true, &frames, &other_palette).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod initial_scale_tests {
+    use super::choose_initial_scale120;
+
+    #[test]
+    fn known_fractional_scale_beats_the_integer_factor() {
+        // 1.5x output: wl_output says 2, its other surfaces already use 180.
+        assert_eq!(choose_initial_scale120(Some(180), Some(2)), 180);
+        // A scale-1 second monitor keeps its own value, not the 1.5x output's.
+        assert_eq!(choose_initial_scale120(Some(120), Some(1)), 120);
+    }
+
+    #[test]
+    fn unknown_output_falls_back_to_the_integer_factor() {
+        assert_eq!(choose_initial_scale120(None, Some(2)), 240);
+        assert_eq!(choose_initial_scale120(None, Some(0)), 120);
+        assert_eq!(choose_initial_scale120(None, None), 120);
+        assert_eq!(choose_initial_scale120(Some(0), Some(1)), 120);
     }
 }

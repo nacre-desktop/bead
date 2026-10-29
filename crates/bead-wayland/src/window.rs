@@ -413,6 +413,9 @@ impl App {
             _ => spec.size,
         };
         source.viewport(size.0, size.1);
+        let scale120 = selected_output.as_ref().map_or(120, |output| {
+            self.initial_scale120("window", output, fractional.is_some())
+        });
         let renderer = bead_render::renderer(RendererKind::Cpu).map_err(|e| e.to_string())?;
         self.window = Some(Win {
             window,
@@ -428,7 +431,7 @@ impl App {
             geometry: (0, 0),
             size,
             preferred_size: size,
-            scale120: 120,
+            scale120,
             fractional,
             viewport,
             configured: false,

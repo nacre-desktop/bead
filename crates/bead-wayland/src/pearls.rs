@@ -246,7 +246,7 @@ pub(crate) struct Group {
     pub(crate) info: Option<Info>,
     reserved_pearl_id: Option<u32>,
     prewarm_attempted: bool,
-    surfaces: Vec<Surface>,
+    pub(super) surfaces: Vec<Surface>,
 }
 impl Group {
     fn empty(epoch: u64, name: Option<String>, spec: Option<PanelSpec>) -> Self {
