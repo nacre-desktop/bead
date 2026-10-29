@@ -85,6 +85,7 @@ jobs:
           nice -n 10 python3 -m unittest discover -s spikes/tests -p test_fake_system.py
           nice -n 10 python3 -m unittest discover -s spikes/tests -p test_fullscreen_lips.py
           nice -n 10 python3 -m unittest discover -s spikes/tests -p test_pearl_release_proof.py
+          nice -n 10 python3 -m unittest discover -s spikes/tests -p test_detach_ghost_proof.py
           nice -n 10 python3 -m unittest discover -s spikes/tests -p test_launcher_icons_proof.py
           nice -n 10 python3 -m unittest discover -s spikes/tests -p test_launcher_memory_proof.py
           nice -n 10 python3 -m unittest discover -s spikes/tests -p test_scrolling_proof.py

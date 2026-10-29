@@ -102,13 +102,32 @@ fn native_options(client: Option<crate::nacre_source::Client>) -> NativePearlOpt
                 |placement: NativePearlPlacement, complete: NativePearlPrewarmComplete| {
                     std::thread::spawn(move || {
                         let rect = (|| {
-                            let output = std::process::Command::new(crate::prompt::helper_binary())
+                            let pid = std::process::id().to_string();
+                            let rect = placement.rect;
+                            // B0200: niri maps the transparent target on its
+                            // active output. Move it under the docked body
+                            // first, so the release offset stays on that output.
+                            std::process::Command::new(crate::prompt::helper_binary())
                                 .args([
                                     "pearl-window",
-                                    "geometry",
+                                    "place",
                                     &placement.title,
-                                    &std::process::id().to_string(),
+                                    &pid,
+                                    &rect.x.round().to_string(),
+                                    &rect.y.round().to_string(),
+                                    &rect.w.round().to_string(),
+                                    &rect.h.round().to_string(),
                                 ])
+                                .stdin(std::process::Stdio::null())
+                                .stdout(std::process::Stdio::null())
+                                .status()
+                                .ok()
+                                .filter(|status| status.success())?;
+                            // The same settle barrier as `place`: IPC reports the
+                            // target before the (invisible) movement spring ends.
+                            std::thread::sleep(std::time::Duration::from_millis(400));
+                            let output = std::process::Command::new(crate::prompt::helper_binary())
+                                .args(["pearl-window", "geometry", &placement.title, &pid])
                                 .output()
                                 .ok()?;
                             if !output.status.success() {
