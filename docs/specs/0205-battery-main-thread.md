@@ -128,13 +128,32 @@ one pinned core because the background bands share that core with it; on the lap
 other cores. Memory: the background band pixmaps are transient (each touches only its band); no
 new resident memory.
 
+## Round 3: the settled frame of an opening
+
+The opening's last frame (progress 1) drops the layer and paints the worker-prepared frame
+directly over the owed regions, which after a reveal is the whole surface (~6 ms one dev-2 core,
+40–60 ms live); the next buffers owe the same region. While the opening slides, the same paint
+(`paint_items` of that frame at the slide's offset, into a surface-sized pixmap, in bands on up
+to four threads) runs off the UI thread; the settled frames copy their owed regions from it while
+the frame (same `Arc`), offset, surface size, scale and format match, and paint directly
+otherwise. A repair region paints the same pixels as a full paint (the existing partial-repaint
+invariant), so the copy is pixel-identical (unit test: full and partial damage against a fresh
+direct paint). The pixmap is transient: it goes 150 ms after its last use (one surface-sized
+buffer while an opening runs, e.g. ~7 MB for the dashboard).
+
+One-core bench (`taskset -c 5`, 120 Hz cadence), worst frame, before = 69a4213f:
+
+| Panel | open worst before → after | close worst before → after |
+|---|---|---|
+| dashboard | 6.24 → 2.02 | 0.77 → 0.67 |
+| launcher | 2.98 → 1.28 | 0.74 → 0.75 |
+| control centre | 6.93 → 1.62 | 0.47 → 0.42 |
+
+Open p95 unchanged (0.86 / 0.98 / 1.08–1.16 ms).
+
 ## Open
 
 - Acceptance is the lead's live battery audit (`PANEL_SLIDE` plus `UI_FRAME`/`MAIN_BUSY` with
   `BEAD_FRAME_TRACE=1`).
-- Opens (round 2 below): the terminal open frame (progress 1) still repaints the whole panel
-  directly (dashboard 5.9 ms, control 6.8 ms on one dev-2 core; 40–60 ms live): the layer is
-  dropped and the settled picture is painted primitive by primitive. Next: keep compositing the
-  layer for the terminal frame when its offset is pixel-exact.
 - Retaining several closed panels (control/popouts are released whenever another panel opens)
   was not done; with the join off the UI thread, the remaining cost of a release is ~9 ms CPU.

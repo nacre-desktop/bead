@@ -3100,12 +3100,44 @@ pub struct TreeCpuRenderer {
     slide_damage: Option<(LayerShape, crate::damage::FrameDamage)>,
     /// Slide layers repaired in place instead of flattened again (a test hook).
     pub slide_layer_repairs: usize,
+    /// B0205: the settled open picture, painted off the UI thread while the opening slides.
+    settled: Option<SettledPaint>,
+    /// Settled pictures painted in the background, and repairs served from them (test hooks).
+    pub settled_builds: usize,
+    pub settled_repairs: usize,
     /// Layers flattened in the background, and adopted by a slide (test hooks).
     pub background_layer_builds: usize,
     pub background_layer_adoptions: usize,
     /// When a reveal panel resting open last rendered new content, at a scale and format.
     close_due: Option<(std::time::Instant, f32, PixelFormat)>,
     close_timer: bool,
+}
+/// B0205: an opening ends on the worker-prepared frame at the slide's offset, painted directly
+/// over the whole surface (the window no longer clips any content), which cost a full repaint on
+/// the UI thread (~6 ms one dev-2 core, 40–60 ms live on battery). The same paint runs on other
+/// threads while the opening slides; the settled frames copy their owed regions from it. The
+/// painter is identical and a repair region paints the same pixels as a full paint, so the copy
+/// is pixel-identical to painting directly.
+struct SettledPaint {
+    frame: Arc<Frame>,
+    offset: (u32, u32),
+    target: (u32, u32, u32, bool),
+    job: Option<std::thread::JoinHandle<Option<Pixmap>>>,
+    pixels: Option<Pixmap>,
+    used: std::time::Instant,
+}
+impl SettledPaint {
+    fn matches(&self, frame: &Frame, offset: (f32, f32), target: &ShmTarget<'_>) -> bool {
+        std::ptr::eq(Arc::as_ptr(&self.frame), frame)
+            && self.offset == (offset.0.to_bits(), offset.1.to_bits())
+            && self.target
+                == (
+                    target.width,
+                    target.height,
+                    target.scale.to_bits(),
+                    target.format == PixelFormat::Rgba,
+                )
+    }
 }
 /// What a slide layer's pixels are laid out for; a repair needs the same shape.
 #[derive(Clone, Copy, PartialEq)]
@@ -3581,6 +3613,82 @@ impl TreeCpuRenderer {
             });
         }
     }
+    /// B0205: paint the opening's settled frame on other threads, once per frame, offset and target.
+    fn prepare_settled(
+        &mut self,
+        frame: &Arc<Frame>,
+        offset: (f32, f32),
+        (width, height): (u32, u32),
+        scale: f32,
+        format: PixelFormat,
+    ) {
+        let target = ShmTarget {
+            bytes: &mut [],
+            width,
+            height,
+            scale,
+            format,
+        };
+        if let Some(settled) = self
+            .settled
+            .as_mut()
+            .filter(|settled| settled.matches(frame, offset, &target))
+        {
+            settled.used = std::time::Instant::now();
+            return;
+        }
+        let paint = frame.clone();
+        let job = std::thread::Builder::new()
+            .name("bead-settled".into())
+            .spawn(move || {
+                flatten_layer_parallel(&paint.items, offset, (width, height), scale, format)
+            });
+        self.settled = job.ok().map(|job| {
+            self.settled_builds += 1;
+            SettledPaint {
+                frame: frame.clone(),
+                offset: (offset.0.to_bits(), offset.1.to_bits()),
+                target: (width, height, scale.to_bits(), format == PixelFormat::Rgba),
+                job: Some(job),
+                pixels: None,
+                used: std::time::Instant::now(),
+            }
+        });
+    }
+    /// B0205: serve a direct repair of a settled frame from its background paint, if one matches.
+    fn repair_from_settled(
+        &mut self,
+        frame: &Frame,
+        offset: (f32, f32),
+        target: &mut ShmTarget<'_>,
+        damage: Damage,
+    ) -> bool {
+        let Some(settled) = self
+            .settled
+            .as_mut()
+            .filter(|settled| settled.matches(frame, offset, target))
+        else {
+            self.settled = None;
+            return false;
+        };
+        if let Some(job) = settled.job.take() {
+            settled.pixels = job.join().ok().flatten();
+        }
+        let Some(pixels) = settled.pixels.as_ref() else {
+            self.settled = None;
+            return false;
+        };
+        settled.used = std::time::Instant::now();
+        let damage = intersection(damage, Damage::full(target.width, target.height));
+        let stride = target.width as usize * 4;
+        for row in damage.y..damage.y + damage.h {
+            let start = row as usize * stride + damage.x as usize * 4;
+            let range = start..start + damage.w as usize * 4;
+            target.bytes[range.clone()].copy_from_slice(&pixels.data()[range]);
+        }
+        self.settled_repairs += 1;
+        true
+    }
     /// B0185: one slide frame: the body below the content as primitives, then the content layer
     /// (flattened on the first frame of the slide) at its pose, inside the reveal window.
     fn paint_slide(
@@ -3598,6 +3706,11 @@ impl TreeCpuRenderer {
             scale,
             format,
         } = target;
+        if scene.motion.as_ref().is_some_and(|m| m.open)
+            && let Some(settled) = scene.prepared.get(&scale.to_bits())
+        {
+            self.prepare_settled(settled, scene.offset, (width, height), scale, format);
+        }
         let key = slide.key(scene, frame, scale, format);
         if self
             .slide_layer
@@ -3735,18 +3848,32 @@ const CLOSE_LAYER_QUIET: std::time::Duration = std::time::Duration::from_millis(
 impl Renderer for TreeCpuRenderer {
     fn take_transient_timer(&mut self) -> bool {
         let scratch = self.repair_scratch.used.is_some() && !self.repair_scratch.timer;
-        let close = self.close_due.is_some() && !self.close_timer;
+        let close = (self.close_due.is_some() || self.settled.is_some()) && !self.close_timer;
         self.repair_scratch.timer |= scratch;
         self.close_timer |= close;
         scratch || close
     }
     fn trim_transient_idle(&mut self) -> Option<std::time::Duration> {
         let scratch = self.repair_scratch.trim_idle(std::time::Instant::now());
-        let close = self.close_due.map(|(at, _, _)| {
-            CLOSE_LAYER_QUIET
-                .saturating_sub(at.elapsed())
-                .max(std::time::Duration::from_millis(1))
-        });
+        // The settled paint serves the frames that still owe the opening's last damage (one
+        // per buffer), then goes once the surface is quiet.
+        if self.settled.as_ref().is_some_and(|settled| {
+            settled.job.as_ref().is_none_or(|job| job.is_finished())
+                && settled.used.elapsed() >= CLOSE_LAYER_QUIET
+        }) {
+            self.settled = None;
+        }
+        let close = self
+            .close_due
+            .map(|(at, _, _)| at)
+            .into_iter()
+            .chain(self.settled.as_ref().map(|settled| settled.used))
+            .map(|at| {
+                CLOSE_LAYER_QUIET
+                    .saturating_sub(at.elapsed())
+                    .max(std::time::Duration::from_millis(1))
+            })
+            .min();
         self.close_timer = close.is_some();
         match (scratch, close) {
             (Some(a), Some(b)) => Some(a.min(b)),
@@ -3976,6 +4103,12 @@ impl Renderer for TreeCpuRenderer {
             } else {
                 // The first close frame (progress 1, not yet a slide) keeps the layer for the next.
                 self.close_due = None;
+            }
+            let mut target = target;
+            if self.settled.is_some()
+                && self.repair_from_settled(&frame, scene.offset, &mut target, damage)
+            {
+                return Ok(());
             }
             return paint_with_scratch(
                 &frame,
@@ -5521,6 +5654,60 @@ mod tests {
             renderer.slide_layer_builds, 0,
             "the opening never flattens on the UI thread"
         );
+    }
+    #[test]
+    fn an_opening_settles_from_its_background_paint_pixel_for_pixel() {
+        let (w, h) = (396u32, 246 + 120);
+        let draw = |renderer: &mut TreeCpuRenderer, scene: &Scene, damage: Damage| {
+            let mut bytes = vec![7u8; (w * h * 4) as usize];
+            renderer.prepare_on_ui(scene, 1.5).unwrap();
+            renderer
+                .render(
+                    scene,
+                    ShmTarget {
+                        bytes: &mut bytes,
+                        width: w,
+                        height: h,
+                        scale: 1.5,
+                        format: PixelFormat::Rgba,
+                    },
+                    damage,
+                )
+                .unwrap();
+            bytes
+        };
+        let base = sliding_panel(true, 0.25);
+        let pose = |progress: f32| {
+            let mut scene = base.clone();
+            scene.panel_offset(progress, true);
+            scene
+        };
+        let mut renderer = TreeCpuRenderer::default();
+        for progress in [0.25, 0.5, 0.75] {
+            draw(&mut renderer, &pose(progress), Damage::full(w, h));
+        }
+        assert_eq!(
+            renderer.settled_builds, 1,
+            "one background paint per opening"
+        );
+        let settled = pose(1.);
+        for damage in [
+            Damage::full(w, h),
+            Damage {
+                x: 13,
+                y: 21,
+                w: 200,
+                h: 90,
+            },
+        ] {
+            let served = draw(&mut renderer, &settled, damage);
+            let direct = draw(&mut TreeCpuRenderer::default(), &settled, damage);
+            assert!(
+                served == direct,
+                "{damage:?}: settled paint differs from direct paint"
+            );
+        }
+        assert_eq!(renderer.settled_repairs, 2);
     }
     #[test]
     fn compact_svg_upload_reconstructs_exact_dense_pixels() {
