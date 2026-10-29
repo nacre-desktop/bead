@@ -49,7 +49,7 @@ Real shell, nested on the desktop test host (`animation_audit.py`, bead arm, 288
 - `nacre-shell` `markup_bench::persistent_vm_updates_match_fresh_loads_on_shell_views`: bar, launcher, dashboard and notifications on the real `shell/` tree, 6 sequential updates each, drawn texts/images/kinds equal a fresh load of the same stores (the animated bar title is excluded).
 - Bench: `BEAD_PROFILE_INPUT=1 cargo test --release -p nacre-shell markup_bench -- --ignored --nocapture`, then sum `INPUT_PROFILE stage=markup*` per `MARKUP_BENCH` step.
 - `release_vm` drops the VM (test above, step 6) and the next build starts fresh.
-- Full Bead CI (ubuntu:24.04 recipe, prod): pass. One debug-build behaviour-script timeout (`extras::tests::long_shortcut_lists_materialize_only_the_viewport`, `behavior.luau` 50 ms limit, not markup) failed once under parallel load and passed on rerun.
+- Full Bead CI (ubuntu:24.04 recipe from `bead-full-ci-b0156`, prod): pass. `headless::service_views_tests::workspace_icon_cells_share_one_bar_pill_at_both_scales` is a pre-existing timing flake under the parallel debug suite (origin/main a425b615 failed it 3 of 5 full runs on the same host; it samples a 160 ms width animation after a 50 ms sleep); it passes run alone, so the final run lists it separately. One `behavior.luau` 50 ms script timeout in `extras::tests::long_shortcut_lists_materialize_only_the_viewport` (behaviour scripts, not markup) failed once under parallel load and passed on rerun.
 - Reload semantics are unchanged by construction (a new generation gets a new VM) and covered by the existing reload/recovery tests in the full CI run.
 
 No temporary duplicates introduced.
