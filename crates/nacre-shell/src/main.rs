@@ -1547,4 +1547,6 @@ mod tests {
 }
 
 #[cfg(test)]
+mod host_context_tests;
+#[cfg(test)]
 mod widget_flex_tests;

@@ -357,6 +357,19 @@ fn canvas_needs_seconds(layout: Option<&bead::core::Value>) -> bool {
         })
 }
 /// Verbose-log aid: the keys that make a canvas projection differ from the last one sent.
+/// Host store ids the bar publishes for widget surfaces; other views may not declare them.
+fn is_bar_widget_context(key: &str) -> bool {
+    key.starts_with("bar.")
+        || key.starts_with("bead.desktop.")
+        || matches!(
+            key,
+            "bead.workspaces"
+                | "bead.windows"
+                | "bead.focused_title"
+                | "bead.viewport.width"
+                | "bead.viewport.height"
+        )
+}
 fn projection_diff(
     old: Option<&BTreeMap<String, bead::core::Value>>,
     new: &BTreeMap<String, bead::core::Value>,
@@ -1124,19 +1137,7 @@ impl Runtime {
             .stores
             .values()
             .iter()
-            .filter(|(key, _)| {
-                key.starts_with("widgets.")
-                    || key.starts_with("bar.")
-                    || key.starts_with("bead.desktop.")
-                    || matches!(
-                        key.as_str(),
-                        "bead.workspaces"
-                            | "bead.windows"
-                            | "bead.focused_title"
-                            | "bead.viewport.width"
-                            | "bead.viewport.height"
-                    )
-            })
+            .filter(|(key, _)| key.starts_with("widgets.") || is_bar_widget_context(key))
             .map(|(key, value)| (key.clone(), value.clone()))
             .collect()
     }
@@ -7956,9 +7957,12 @@ impl SceneSource for Runtime {
                         );
                     }
                 }
-                // The host's edge cue only reaches views that declare it.
+                // The host's edge cue and the bar's widget context (`bar.*`, `bead.desktop.*`,
+                // workspaces, windows, title, viewport) only reach views that declare them: the
+                // widget live projection is offered to whichever panel is open.
                 values.retain(|id, _| {
-                    !id.starts_with("bead.edge.") || self.session.stores.get(id).is_some()
+                    !(id.starts_with("bead.edge.") || is_bar_widget_context(id))
+                        || self.session.stores.get(id).is_some()
                 });
                 if !self.dock_status.is_empty()
                     && (values.contains_key("cc.page") || values.contains_key("cc.detail"))
