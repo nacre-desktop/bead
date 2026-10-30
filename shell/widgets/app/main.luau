@@ -608,8 +608,8 @@ local function metadata()
         viewport_width=width,viewport_height=height}}
 end
 
-local app_content=ui.Column{id="widgets-app",width="100%",height="100%",fill="surface",radius=kit.tokens.radii.large,
-    border_width=1,border_color=ui.alpha("outlineVariant",.55),clip_children=true,
+-- B0210: an ordinary window: niri draws (and clips to) the rounded border and focus ring.
+local app_content=ui.Column{id="widgets-app",width="100%",height="100%",fill="surface",clip_children=true,
     ui.Column{id="app-header-box",width="fill",height=65,shrink=0,
         ui.Row{id="app-header",width="fill",height=64,shrink=0,align="center",gap=spacing.lg,padding_left=spacing.xl,padding_right=spacing.xl,
             ui.Image{id="app-mark",path="widgets/app/assets/nacre-widgets.themed.svg",width=44,height=44,shrink=0,aria_label=ui.tr("bead.widgets.app-title")},

@@ -52,24 +52,6 @@ pub struct NativePearlOptions {
     pub prewarm: Option<NativePearlPrewarm>,
 }
 
-/// B0209: the old layer's compositor blur belongs to the layer, not to the window that
-/// replaces it. Left alive under the cover it keeps blurring the wallpaper over the
-/// docked spot (an opaque ghost) until the cover retires. Returns whether one was released.
-fn take_cover_effect<E>(
-    effect: &mut Option<E>,
-    size: &mut Option<(i32, i32)>,
-    destroy: impl FnOnce(E),
-) -> bool {
-    *size = None;
-    effect.take().map(destroy).is_some()
-}
-fn release_cover_effect(s: &mut Surface) {
-    if take_cover_effect(&mut s.background, &mut s.background_size, |e| e.destroy()) {
-        // The destroy applies on the layer's next commit; the cover buffer is unchanged.
-        s.layer.commit();
-    }
-}
-
 /// Pins the old layer's last frame, including fractional viewport and renderer
 /// resources, until a placed native content frame replaces it in one flush.
 pub(crate) struct Handoff {
@@ -982,7 +964,6 @@ impl App {
             .map(|(i, _)| i)
             .collect();
         for i in indices {
-            release_cover_effect(&mut self.surfaces[i]);
             let surface = self.compositor.create_surface(&qh);
             let fractional = if self.viewporter.is_some() {
                 self.fractional
@@ -1039,8 +1020,8 @@ impl App {
                 #[cfg(feature = "native-gl")]
                 gl: s.gl.take(),
                 decorations: s.decorations.take(),
-                background: None,
-                background_size: None,
+                background: s.background.take(),
+                background_size: s.background_size.take(),
                 size: (s.width, s.height),
                 scale120: s.scale120,
             });
@@ -1754,7 +1735,6 @@ impl App {
         }
         for i in indices {
             let s = &mut self.surfaces[i];
-            release_cover_effect(s);
             let mut prepared = s.prepared_native.take().unwrap();
             let window = prepared.window.as_ref().unwrap();
             window.set_app_id("bead.pearl");
@@ -1809,8 +1789,8 @@ impl App {
                 #[cfg(feature = "native-gl")]
                 gl: s.gl.take(),
                 decorations: s.decorations.take(),
-                background: None,
-                background_size: None,
+                background: s.background.take(),
+                background_size: s.background_size.take(),
                 size: (s.width, s.height),
                 scale120: s.scale120,
             };
@@ -2843,21 +2823,5 @@ mod placement_tests {
         }
         assert_eq!(previous, to);
         assert_eq!(interpolate_dock_rect(from, to, 0.), from);
-    }
-}
-
-#[cfg(test)]
-mod cover_effect_tests {
-    use super::take_cover_effect;
-
-    #[test]
-    fn handoff_releases_the_cover_blur_at_once() {
-        let mut effect = Some(7);
-        let mut size = Some((740, 485));
-        let mut destroyed = vec![];
-        assert!(take_cover_effect(&mut effect, &mut size, |e| destroyed.push(e)));
-        assert_eq!((effect, size, destroyed.clone()), (None, None, vec![7]));
-        assert!(!take_cover_effect(&mut effect, &mut size, |e| destroyed.push(e)));
-        assert_eq!(destroyed, vec![7], "a second release destroys nothing");
     }
 }

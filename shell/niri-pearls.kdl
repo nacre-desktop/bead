@@ -9,6 +9,9 @@ window-rule {
     border { off; }
     focus-ring { off; }
     shadow { off; }
+    // B0210: a session-wide window blur would draw the blurred wallpaper (xray) behind the
+    // invisible prewarm and the client-rendered pearl: a ghost block at the docked spot.
+    background-effect { blur false; }
 }
 
 // B0200: a prepared target is invisible until release renames it to bead.pearl,
@@ -18,9 +21,10 @@ window-rule {
     opacity 0.0
 }
 
-// The Widgets app draws its own rounded outline; do not add compositor chrome.
+// B0210: the Widgets app is an ordinary window (niri's border and focus ring light on focus).
+// Its background is opaque, so a session-wide xray blur adds nothing but the blurred
+// wallpaper showing through while the window animates open.
 window-rule {
     match app-id="^nacre-widgets$"
-    border { off; }
-    focus-ring { off; }
+    background-effect { blur false; }
 }
