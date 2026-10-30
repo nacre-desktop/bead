@@ -1,6 +1,7 @@
 # B0210 Widgets round 2: smooth drags, free bar, ordinary Widgets window, pearl blur
 
 Status: candidate on `task/claude-b0210-widgets-r2-20261030`; lead live gate pending.
+Bar model (section gaps, centre row, insertion slot) superseded by B0211 (anchored offsets).
 Pairs with Nacre N0103 (`task/claude-n0103-pearl-rule-order-20261030`: the generated session
 includes `bead-pearls.kdl` after `desktop.kdl`, whose session-wide window rule otherwise wins).
 
