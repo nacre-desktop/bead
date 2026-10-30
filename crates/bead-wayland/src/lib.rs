@@ -339,6 +339,14 @@ pub enum UiEvent {
         output: Option<String>,
         values: std::collections::BTreeMap<String, bead_core::Value>,
     },
+    /// Place a canvas whose scene is drawn relative to an anchor (a pointer-following
+    /// drag visual) at this output-space anchor. The surface moves; nothing repaints.
+    CanvasTranslate {
+        view: String,
+        output: Option<String>,
+        x: f32,
+        y: f32,
+    },
     CompanionModel(std::collections::BTreeMap<String, bead_core::Value>),
     /// A child view projects durable edit state onto its output's primary view.
     HostModel(std::collections::BTreeMap<String, bead_core::Value>),
@@ -722,6 +730,8 @@ pub struct PanelSpec {
 pub enum CanvasLayer {
     #[default]
     Desktop,
+    /// Above windows, below overlay canvases (drop zones under a drag visual).
+    Top,
     Overlay,
 }
 #[derive(Clone)]

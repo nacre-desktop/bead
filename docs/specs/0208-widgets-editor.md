@@ -1,6 +1,8 @@
 # B0208 Widgets editor: edit mode, bar sections, desktop grid
 
 Status: candidate on `task/claude-b0208-widgets-editor-20261030`; lead live gate pending.
+Desktop grid and the desktop-drag design superseded by B0210 (free placement, ghost moved by
+surface position, bar gaps).
 Builds on B0198/B0198b (drag-only placement, copies) and B0203 (plugins v1).
 
 ## Owner feedback (2026-10-29 late)

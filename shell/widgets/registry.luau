@@ -355,6 +355,8 @@ local function pack(list)
         local item,region=entry.item,entry.item.slot.region
         item.slot.start=cursor[region]
         item.slot.span=form_span(item)
+        local gap=tonumber(item.slot.gap)
+        item.slot.gap=gap and gap>0 and region~="centre" and math.floor(gap) or nil
         cursor[region]+=item.slot.span
         -- Only containers keep children (unknown packages keep theirs opaque).
         if type(item.children)~="table" or (registry[item.widget] and item.widget~="pill") then item.children=nil end
@@ -510,6 +512,14 @@ function M.renderer(document)
                     fill=ui.alpha("primary",.12),border_width=kit.tokens.spacing.hairline*1.5,
                     border_color="primary",node}
             end
+        end
+        -- B0210: a side-section widget keeps its gap toward the section's edge.
+        local gap=item.host=="top_bar" and tonumber(item.slot and item.slot.gap)
+        if gap and gap>0 then
+            local spacer=ui.Box{id="widget-gap-"..tostring(item.iid),width=gap,height=1,shrink=0}
+            local left=item.slot.region=="left"
+            node=ui.Row{id="widget-gapped-"..tostring(item.iid),gap=0,align="center",shrink=0,
+                left and spacer or node,left and node or spacer}
         end
         -- Preserve historic IDs for the first copy; additional copies get stable scopes.
         if item.drag_placeholder==true then

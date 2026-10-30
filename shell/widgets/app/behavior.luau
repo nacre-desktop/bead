@@ -165,6 +165,7 @@ local function drag_clear(s)
     s["widgets.drag.layout"]={}
     s["widgets.drag.revision"]=0
     s["widgets.drag.preview"]=""
+    s["widgets.drag.over_remove"]=false
 end
 local function current_canonical(s,context)
     local saved=(s["widgets.layout"] or {})[1]
@@ -242,7 +243,9 @@ local function pack_list(req,list)
     table.clear(list)
     for _,entry in order do
         local item,region=entry.item,entry.item.slot.region
-        item.slot={region=region,start=cursor[region],span=form_span(req,item)}
+        local gap=tonumber(item.slot.gap)
+        item.slot={region=region,start=cursor[region],span=form_span(req,item),
+            gap=gap and gap>0 and region~="centre" and math.floor(gap) or nil}
         cursor[region]+=item.slot.span
         if type(item.children)~="table" or (catalogue(req,item.widget) and item.widget~="pill") then item.children=nil end
         if item.children then pack_list(req,item.children) end
@@ -291,6 +294,46 @@ local function centre_x(context,iid)
     for _,rect in context.geometry or {} do
         if rect.iid==iid and type(rect.x)=="number" and type(rect.w)=="number" then return rect.x+rect.w/2 end
     end
+end
+-- B0210: the space a dropped bar widget keeps toward its section's edge: from the previous
+-- widget (left section) or to the next one (right section), measured from the bar's own
+-- geometry and rounded to 4 px. The dragged widget's own rect is ignored.
+local function bar_gap(list,item,event,x,width,context)
+    local region=item.slot.region
+    if region=="centre" then return nil end
+    local function rect(iid)
+        if iid==item.iid then return nil end
+        for _,r in context.geometry or {} do
+            if r.iid==iid and type(r.x)=="number" and type(r.w)=="number" then return r end
+        end
+    end
+    local spacing=tonumber(context.bar_gap) or 12
+    local inset=tonumber(context.bar_inset) or 15
+    local w=tonumber(event.width) or 0
+    local left=x-(tonumber(event.grab_x) or w/2)
+    local siblings={}
+    for _,other in list do
+        if other~=item and other.slot.region==region then table.insert(siblings,other) end
+    end
+    table.sort(siblings,function(a,b) return a.slot.start<b.slot.start end)
+    local gap
+    if region=="left" then
+        local edge=inset
+        for _,other in siblings do
+            local r=other.slot.start<item.slot.start and rect(other.iid)
+            if r then edge=math.max(edge,r.x+r.w+spacing) end
+        end
+        gap=left-edge
+    else
+        local edge=width-inset
+        for _,other in siblings do
+            local r=other.slot.start>item.slot.start and rect(other.iid)
+            if r then edge=math.min(edge,r.x-spacing) end
+        end
+        gap=edge-(left+w)
+    end
+    gap=math.floor(gap/4)*4
+    return gap>0 and gap or nil
 end
 -- Insert by pointer order among the measured siblings; ties and unmeasured rows keep order.
 local function insert_ordered(list,item,x,region,context,regional)
@@ -422,40 +465,39 @@ local function unique_iid(doc,stem)
     while locate_document_item(doc,iid) do suffix+=1; iid=stem..":"..tostring(suffix) end
     return iid
 end
--- B0208: the desktop is a snapping grid (cell from the seed's `grid_cell` token). A widget
--- lands on the nearest free cell; if that overlaps another widget it moves to the closest
--- free cell, searched ring by ring.
+-- B0210: free desktop placement (no grid). A drop lands where the ghost is; only if it would
+-- overlap another widget does it slide to the nearest free spot beside that widget.
 local function overlaps(slot,others)
     for _,other in others do
         local o=other.slot
         if type(o)=="table" and slot.x<o.x+o.w and o.x<slot.x+slot.w and slot.y<o.y+o.h and o.y<slot.y+slot.h then
-            return true
+            return o
         end
     end
-    return false
+    return nil
 end
-local function desktop_landing(others,x,y,w,h,width,height,cell)
-    cell=math.max(1,tonumber(cell) or 32)
-    local function snap(value,extent) return math.clamp(math.floor(value/cell+.5)*cell,0,math.max(0,extent)) end
-    local slot={x=snap(x,width-w),y=snap(y,height-h),w=w,h=h}
-    if not overlaps(slot,others) then return slot end
+local function desktop_landing(others,x,y,w,h,width,height,gap)
+    local function place(px,py)
+        return {x=math.floor(math.clamp(px,0,math.max(0,width-w))+.5),
+            y=math.floor(math.clamp(py,0,math.max(0,height-h))+.5),w=w,h=h}
+    end
+    local slot=place(x,y)
+    local hit=overlaps(slot,others)
+    if not hit then return slot end
+    gap=tonumber(gap) or 8
     local best,best_distance
-    for ring=1,16 do
-        for dx=-ring,ring do
-            for dy=-ring,ring do
-                if math.max(math.abs(dx),math.abs(dy))==ring then
-                    local candidate={x=math.clamp(slot.x+dx*cell,0,math.max(0,width-w)),
-                        y=math.clamp(slot.y+dy*cell,0,math.max(0,height-h)),w=w,h=h}
-                    local distance=(candidate.x-x)^2+(candidate.y-y)^2
-                    if not overlaps(candidate,others) and (not best or distance<best_distance) then
-                        best,best_distance=candidate,distance
-                    end
+    for _,o in others do
+        local o=o.slot
+        if type(o)=="table" then
+            for _,candidate in {place(o.x-w-gap,y),place(o.x+o.w+gap,y),place(x,o.y-h-gap),place(x,o.y+o.h+gap)} do
+                local distance=(candidate.x-x)^2+(candidate.y-y)^2
+                if not overlaps(candidate,others) and (not best or distance<best_distance) then
+                    best,best_distance=candidate,distance
                 end
             end
         end
-        if best then return best end
     end
-    return slot
+    return best or slot
 end
 local function desktop_size(state,item_slot,style)
     local configured=state and state.forms and state.forms.desktop and state.forms.desktop.placement
@@ -545,7 +587,7 @@ local function drag_drop(s,event,context,base,commit,undo_document)
         item.host="canvas"
         item.children=nil
         item.slot=desktop_landing(canvas.instances,tonumber(event.slot and event.slot.x) or x,
-            tonumber(event.slot and event.slot.y) or y,w,h,width,height,context.grid_cell)
+            tonumber(event.slot and event.slot.y) or y,w,h,width,height,context.desktop_gap)
         table.insert(canvas.instances,item)
     else
         local x=output_local(event,context)
@@ -560,10 +602,14 @@ local function drag_drop(s,event,context,base,commit,undo_document)
             pill.children=pill.children or {}
             insert_ordered(pill.children,item,x,"centre",context,false)
         else
+            -- B0210: the bar is free along its width. The centre band (28-72 %, the centre
+            -- section) centres its row; in the side sections a widget keeps the gap to its
+            -- neighbour toward the section's edge, so it lands where it is dropped.
             local width=output_dimensions(doc,event,context)
-            local region=x<width/3 and "left" or x>width*2/3 and "right" or "centre"
+            local region=x<width*.28 and "left" or x>width*.72 and "right" or "centre"
             item.host="top_bar"
             insert_ordered(doc.hosts.top_bar.instances,item,x,region,context,true)
+            item.slot.gap=bar_gap(doc.hosts.top_bar.instances,item,event,x,width,context)
         end
     end
     config.enabled=true; config.style=style_name
@@ -761,26 +807,6 @@ local function op(s,args)
     history(s,previous)
     finish(s,doc)
 end
-local function desktop_preview(base,event,context,source)
-    local package=catalogue(context,source.widget)
-    local descriptor=package and package.forms and package.forms.desktop
-    if not descriptor then return nil end
-    local live=type(source.iid)=="string" and locate_document_item(base,source.iid) or nil
-    local state=base.widgets and base.widgets[(live and (live.item.group or live.item.iid)) or source.group or ""]
-    local style_name=live and live.host=="canvas" and live.item.style or source.style
-    local style=descriptor.styles[style_name or ""] or descriptor.styles[descriptor.default_style]
-    if not style then return nil end
-    local w,h=desktop_size(state,live and live.host=="canvas" and live.item.slot or nil,style)
-    local width,height=output_dimensions(base,event,context)
-    local x,y=output_local(event,context)
-    x-=(tonumber(event.grab_x) or 0)*w/math.max(1,tonumber(event.width) or w)
-    y-=(tonumber(event.grab_y) or 0)*h/math.max(1,tonumber(event.height) or h)
-    local others={}
-    for _,item in base.hosts.canvas and base.hosts.canvas.instances or {} do
-        if item.iid~=source.iid then table.insert(others,item) end
-    end
-    return desktop_landing(others,x,y,w,h,width,height,context.grid_cell)
-end
 local function drag(s,args)
     s["widgets.write"]={}
     local event=request(args)
@@ -830,15 +856,11 @@ local function drag(s,args)
         s["widgets.drag.target_origin_y"]=target_y
         s["widgets.drag.target_output_id"]=event.target_output_id or event.app_output_id or ""
         local context=type(event.context)=="table" and event.context or event
+        s["widgets.drag.over_remove"]=source.iid~=nil and event.destination=="desktop" and in_remove_zone(event,context)
         if base and event.destination=="desktop" and source.kind~="resize" then
-            -- B0208: a desktop move is a cheap transform. The layout stays the frozen base (the
-            -- source dims in place) so no host re-renders per motion; only the landing cell
-            -- for the ghost's outline is computed. The layout changes once, on drop.
-            local landing=desktop_preview(base,event,context,source)
-            if landing then
-                s["widgets.drag.snap_x"]=landing.x
-                s["widgets.drag.snap_y"]=landing.y
-            end
+            -- B0208/B0210: a desktop move is a pure transform. The layout stays the frozen
+            -- base (the source dims in place) and nothing but the ghost surface moves per
+            -- motion; the layout changes once, on drop.
             local layout=(s["widgets.drag.layout"] or {})[1]
             if start or s["widgets.drag.preview"]~="desktop" or type(layout)~="table" then
                 s["widgets.drag.layout"]={clone(base)}
@@ -939,7 +961,7 @@ return {
         ["status.hovered"]="",["status.peek.visible"]=false,["status.peek.kind"]="",["status.panel.kind"]="",
         ["widgets.drag.active"]=false,["widgets.drag.source"]={},["widgets.drag.destination"]="",
         ["widgets.drag.x"]=0,["widgets.drag.y"]=0,["widgets.drag.start_x"]=0,["widgets.drag.start_y"]=0,
-        ["widgets.drag.phase"]="",["widgets.drag.epoch"]=0,["widgets.drag.snap_x"]=0,["widgets.drag.snap_y"]=0,
+        ["widgets.drag.phase"]="",["widgets.drag.epoch"]=0,["widgets.drag.snap_x"]=0,["widgets.drag.snap_y"]=0,["widgets.drag.over_remove"]=false,
         ["widgets.drag.base"]={},["widgets.drag.original"]={},["widgets.drag.layout"]={},
         ["widgets.drag.revision"]=0,["widgets.drag.preview"]="",
         ["widgets.drag.width"]=0,["widgets.drag.height"]=0,["widgets.drag.grab_x"]=0,["widgets.drag.grab_y"]=0,

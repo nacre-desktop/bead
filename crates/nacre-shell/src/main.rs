@@ -1011,6 +1011,15 @@ fn start(
                     widgets::drag_preview(
                         palette.clone(),
                         colors.clone(),
+                        widget_inputs.clone(),
+                        panel_trace,
+                    )?,
+                ),
+                (
+                    "widgets-zones".into(),
+                    widgets::drag_zones(
+                        palette.clone(),
+                        colors.clone(),
                         widget_inputs,
                         panel_trace,
                     )?,
@@ -1020,6 +1029,9 @@ fn start(
         options
             .canvas_layers
             .insert("widgets-drag".into(), bead::wayland::CanvasLayer::Overlay);
+        options
+            .canvas_layers
+            .insert("widgets-zones".into(), bead::wayland::CanvasLayer::Top);
         frame_gate.configure_frame(frame_config, views.keys().cloned());
         // B0048: detachable panels, remembered beside the other durable panel state.
         options.pearls = Some(pearls::options(

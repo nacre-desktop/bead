@@ -99,7 +99,7 @@ function M.seed(document,width,height,placement)
     return {{widget_layout=true,document=document,initial=require("default")(width),rev=ui.resolve_for_check(ui.bind("widgets.rev")),
         widget_clock_seconds=placement~=nil and M.requires(document,placement,"bead.desktop.clock.seconds") or false,
         geometry=geometry,reservations=reservations,canvas_width=width,canvas_height=height,
-        catalogue=descriptors(),grid_cell=require("dragging").grid_cell(),remove_zone=require("dragging").remove_zone()}}
+        catalogue=descriptors(),desktop_gap=kit.tokens.spacing.sm,remove_zone=require("dragging").remove_zone()}}
 end
 function M.request(_document,extra)
     return ui.action("widgets.edit",{extra})

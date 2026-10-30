@@ -2,6 +2,7 @@
   "plugins": true,
   "modules": [
     "widgets/drag/ghost.luau",
+    "widgets/drag/zones.luau",
     "widgets/dragging.luau",
     "widgets/app/preview.luau",
     "widgets/measure.luau",

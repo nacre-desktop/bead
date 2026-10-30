@@ -320,6 +320,33 @@ fn apply_widget_floating(
     };
     action(action_to_apply).is_ok()
 }
+/// B0210: the drag model without the pointer (and, while dragging, without the transient
+/// bar preview the ghost does not draw): what the ghost and zone canvases render from.
+fn widget_drag_content(
+    values: &BTreeMap<String, bead::core::Value>,
+) -> BTreeMap<String, bead::core::Value> {
+    let dragging = matches!(values.get("widgets.drag.phase"),
+        Some(bead::core::Value::Text(phase)) if phase == "dragging");
+    values
+        .iter()
+        .filter(|(key, _)| {
+            !matches!(key.as_str(), "widgets.drag.x" | "widgets.drag.y")
+                && !(dragging && key.as_str() == "widgets.drag.layout")
+        })
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect()
+}
+/// The ghost canvas's anchor: the pointer in output coordinates.
+fn widget_drag_pointer(values: &BTreeMap<String, bead::core::Value>) -> Option<(f32, f32)> {
+    match (values.get("widgets.drag.x"), values.get("widgets.drag.y")) {
+        (Some(bead::core::Value::Number(x)), Some(bead::core::Value::Number(y)))
+            if x.is_finite() && y.is_finite() =>
+        {
+            Some((*x as f32, *y as f32))
+        }
+        _ => None,
+    }
+}
 fn widget_drag_targets_output(argument: &bead::core::Value, output: Option<&str>) -> bool {
     let bead::core::Value::List(records) = argument else {
         return false;
@@ -710,6 +737,7 @@ pub struct Runtime {
     widget_canvas: bool,
     /// The passive drag overlay paints in output coordinates like the widget canvas (B0198).
     widget_drag_overlay: bool,
+    widget_drag_follows: bool,
     widgets_projection: Option<BTreeMap<String, bead::core::Value>>,
     widgets_write: Option<crate::nacre_source::CallTicket>,
     widgets_write_document: Option<bead::core::Value>,
@@ -1243,8 +1271,6 @@ impl Runtime {
             "widgets.drag.phase",
             "widgets.drag.layout",
             "widgets.drag.destination",
-            "widgets.drag.x",
-            "widgets.drag.y",
             "widgets.drag.width",
             "widgets.drag.height",
             "widgets.drag.grab_x",
@@ -1306,6 +1332,7 @@ impl Runtime {
             "widgets.drag.epoch",
             "widgets.drag.snap_x",
             "widgets.drag.snap_y",
+            "widgets.drag.over_remove",
             "widgets.drag.x",
             "widgets.drag.y",
             "widgets.drag.start_x",
@@ -1375,38 +1402,58 @@ impl Runtime {
                 }
             })
             .or_else(|| self.output.clone());
-        if let Some(wakeup) = &self.wakeup {
-            if self.widget_drag_wanted && (!active || self.widget_drag_output != output) {
+        // B0210: the ghost follows the pointer by surface position only. Its content (and the
+        // drop zones) re-render only when something other than the pointer changes.
+        let content = widget_drag_content(&drag_values);
+        let Some(wakeup) = &self.wakeup else {
+            return;
+        };
+        if self.widget_drag_wanted && (!active || self.widget_drag_output != output) {
+            for view in ["widgets-drag", "widgets-zones"] {
                 wakeup(UiEvent::CanvasOffer {
-                    view: "widgets-drag".into(),
+                    view: view.into(),
                     output: self.widget_drag_output.clone(),
                     open: false,
                     values: drag_values.clone(),
                 });
-                self.widget_drag_wanted = false;
-                self.widget_drag_output = None;
-                self.widget_drag_projection = None;
             }
-            if active && (!self.widget_drag_wanted || self.widget_drag_output != output) {
+            self.widget_drag_wanted = false;
+            self.widget_drag_output = None;
+            self.widget_drag_projection = None;
+        }
+        if active && (!self.widget_drag_wanted || self.widget_drag_output != output) {
+            for view in ["widgets-drag", "widgets-zones"] {
                 wakeup(UiEvent::CanvasOffer {
-                    view: "widgets-drag".into(),
+                    view: view.into(),
                     output: output.clone(),
                     open: true,
                     values: drag_values.clone(),
                 });
-                self.widget_drag_wanted = true;
-                self.widget_drag_output = output.clone();
-                self.widget_drag_projection = Some(drag_values.clone());
             }
-            if self.widget_drag_wanted && self.widget_drag_projection.as_ref() != Some(&drag_values)
-            {
-                self.widget_drag_projection = Some(drag_values.clone());
+            self.widget_drag_wanted = true;
+            self.widget_drag_output = output.clone();
+            self.widget_drag_projection = Some(content.clone());
+        }
+        if !self.widget_drag_wanted {
+            return;
+        }
+        if self.widget_drag_projection.as_ref() != Some(&content) {
+            self.widget_drag_projection = Some(content);
+            for view in ["widgets-drag", "widgets-zones"] {
                 wakeup(UiEvent::CanvasModel {
-                    view: "widgets-drag".into(),
+                    view: view.into(),
                     output: self.widget_drag_output.clone(),
-                    values: drag_values,
+                    values: drag_values.clone(),
                 });
             }
+        }
+        if let Some((x, y)) = widget_drag_pointer(&drag_values) {
+            wakeup(UiEvent::CanvasTranslate {
+                view: "widgets-drag".into(),
+                output: self.widget_drag_output.clone(),
+                x,
+                y,
+            });
         }
     }
     fn widget_drag_preview(
@@ -1582,12 +1629,21 @@ impl Runtime {
         let Some(wakeup) = &self.wakeup else {
             return false;
         };
+        let anchor = widget_drag_pointer(&values);
         wakeup(UiEvent::CanvasPrepare {
             view: "widgets-drag".into(),
             output: Some(key.output.clone()),
             values,
             initial_bounds: Some(key.initial_bounds),
         });
+        if let Some((x, y)) = anchor {
+            wakeup(UiEvent::CanvasTranslate {
+                view: "widgets-drag".into(),
+                output: Some(key.output.clone()),
+                x,
+                y,
+            });
+        }
         true
     }
     fn widget_drag_is_active(&self) -> bool {
@@ -2598,6 +2654,7 @@ impl Runtime {
             widgets_close_on_commit: false,
             widget_canvas: false,
             widget_drag_overlay: false,
+            widget_drag_follows: false,
             widgets_projection: None,
             widgets_write: None,
             widgets_write_document: None,
@@ -2841,9 +2898,12 @@ impl Runtime {
     /// Marks this scene as a passive drag preview, not a host.
     /// The bar/canvas supplies its models; the ghost has no direct subscriptions,
     /// panel state, or host-event publisher of its own.
-    pub fn with_widget_drag_preview(mut self) -> Self {
+    /// `follows`: the ghost (drawn relative to the pointer and moved by surface position);
+    /// otherwise the static drop zones.
+    pub fn with_widget_drag_preview(mut self, follows: bool) -> Self {
         self.widget_canvas = false;
         self.widget_drag_overlay = true;
+        self.widget_drag_follows = follows;
         self.widget_editor = false;
         self.launcher_trigger = false;
         self.state_file = None;
@@ -4599,6 +4659,15 @@ impl Runtime {
             // zones and ghost) away from the output-local hit tests.
             if self.widget_canvas || self.widget_drag_overlay {
                 scene.offset = (0., 0.);
+            }
+            // B0210: the ghost is drawn relative to the pointer it was rendered at; the
+            // compositor surface carries the live pointer position (CanvasTranslate).
+            if self.widget_drag_follows {
+                let number = |key: &str| match self.session.stores.get(key) {
+                    Some(bead::core::Value::Number(value)) if value.is_finite() => *value as f32,
+                    _ => 0.,
+                };
+                scene.offset = (-number("widgets.drag.x"), -number("widgets.drag.y"));
             }
             if let Some(base) = self
                 .desktop
@@ -8155,6 +8224,7 @@ impl SceneSource for Runtime {
             | UiEvent::CanvasPrepare { .. }
             | UiEvent::CanvasOffer { .. }
             | UiEvent::CanvasModel { .. }
+            | UiEvent::CanvasTranslate { .. }
             | UiEvent::CompanionAction { .. }
             | UiEvent::CompanionMotionAction { .. }
             | UiEvent::HostModel(_)

@@ -604,7 +604,7 @@ end
 
 local function metadata()
     return {{widget_layout=true,widget_clock_preview_seconds=selected=="clock",document=doc,initial=initial,rev=rev,catalogue=catalogue,
-        screen_width=screen_w,screen_height=screen_h,grid_cell=dragging.grid_cell(),
+        screen_width=screen_w,screen_height=screen_h,desktop_gap=spacing.sm,
         viewport_width=width,viewport_height=height}}
 end
 

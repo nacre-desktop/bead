@@ -14,6 +14,7 @@ fn canvas_event_belongs_to_host(event: &UiEvent) -> bool {
             | UiEvent::CanvasPrepare { .. }
             | UiEvent::CanvasOffer { .. }
             | UiEvent::CanvasModel { .. }
+            | UiEvent::CanvasTranslate { .. }
     )
 }
 
@@ -54,6 +55,8 @@ pub(super) struct Canvas {
     pub(super) frame_pending: bool,
     pub(super) dirty: bool,
     pub(super) refresh_ns: u32,
+    /// B0210: output-space anchor of a pointer-following canvas; its scene is anchor-relative.
+    translate: Option<(f32, f32)>,
 }
 
 impl Drop for Canvas {
@@ -513,6 +516,7 @@ impl App {
                 frame_pending: false,
                 dirty: false,
                 refresh_ns: 0,
+                translate: None,
             },
         );
         if let Some(palette) = self.wallpaper_palette.clone() {
@@ -632,8 +636,11 @@ impl App {
                 }
                 canvas.lifecycle.accept_scene(warmup_response);
                 let hidden_prepare = !canvas.lifecycle.open && canvas.initial_bounds.is_some();
-                let mut bounds =
-                    visible_bounds(&scene, (!hidden_prepare).then_some(canvas.viewport_size));
+                let anchor = canvas.translate;
+                let mut bounds = visible_bounds(
+                    &scene,
+                    (!hidden_prepare && anchor.is_none()).then_some(canvas.viewport_size),
+                );
                 if canvas.interactive {
                     for region in canvas
                         .source
@@ -693,14 +700,16 @@ impl App {
                     canvas.reserved_size = reserve_canvas_size(canvas.initial_bounds, Some(bounds));
                 }
                 bounds = canvas_bounds_with_reserve(bounds, canvas.reserved_size);
+                canvas.source_offset = scene.offset;
+                canvas.scene = crop_scene(scene, bounds);
+                let (dx, dy) = anchor.unwrap_or_default();
+                let bounds = bounds.translated(dx.round(), dy.round());
                 let surface_bounds = canvas_surface_bounds(
                     canvas.lifecycle.open,
                     bounds,
                     canvas.initial_bounds,
                     canvas.reserved_size,
                 );
-                canvas.source_offset = scene.offset;
-                canvas.scene = crop_scene(scene, bounds);
                 canvas.bounds = Some(bounds);
                 canvas.render_size = (bounds.w as u32, bounds.h as u32);
                 canvas.dirty = true;
@@ -757,6 +766,52 @@ impl App {
             self.canvas_ui(&key, event);
         }
     }
+    /// B0210: move an anchored canvas with its anchor: a margin change and an empty commit,
+    /// no new buffer, no repaint and no layout pass (pointer-following drag visuals).
+    pub(super) fn canvas_translate(&mut self, view: &str, output: Option<&str>, to: (f32, f32)) {
+        for (key, canvas) in self.canvases.iter_mut() {
+            if key.1 != view || output.is_some_and(|output| output != key.0) {
+                continue;
+            }
+            let from = canvas.translate.replace(to).unwrap_or(to);
+            let (dx, dy) = (to.0.round() - from.0.round(), to.1.round() - from.1.round());
+            if dx == 0. && dy == 0. {
+                continue;
+            }
+            canvas.bounds = canvas.bounds.map(|bounds| bounds.translated(dx, dy));
+            let (Some(mapped), Some(layer)) = (canvas.mapped_bounds, canvas.layer.as_ref()) else {
+                continue;
+            };
+            let mapped = mapped.translated(dx, dy);
+            canvas.mapped_bounds = Some(mapped);
+            layer.set_margin(mapped.y.round() as i32, 0, 0, mapped.x.round() as i32);
+            if bead_core::profile::frame_trace()
+                && let Some(presentation) = &self.presentation
+            {
+                presentation.feedback(
+                    layer.wl_surface(),
+                    &self.qh,
+                    PresentationData {
+                        source_epoch: canvas.epoch,
+                        visibility: 0,
+                        update: canvas.scene.resource_revision,
+                        surface: layer.wl_surface().clone(),
+                        generation: canvas.scene.resource_revision,
+                    },
+                );
+            }
+            layer.commit();
+            if bead_core::profile::frame_trace() {
+                println!(
+                    "CANVAS_MOVE view={} monotonic_ns={} x={} y={}",
+                    key.1,
+                    monotonic_ns(),
+                    to.0,
+                    to.1
+                );
+            }
+        }
+    }
     fn canvas_map_bounds(
         &mut self,
         key: &(String, String),
@@ -809,6 +864,7 @@ impl App {
                 surface,
                 match self.options.canvas_layers.get(&key.1) {
                     Some(CanvasLayer::Overlay) => Layer::Overlay,
+                    Some(CanvasLayer::Top) => Layer::Top,
                     _ => Layer::Bottom,
                 },
                 Some(&self.options.namespace),

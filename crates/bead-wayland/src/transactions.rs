@@ -14,6 +14,7 @@ fn panel_event_belongs_to_host(event: &UiEvent) -> bool {
             | UiEvent::CanvasPrepare { .. }
             | UiEvent::CanvasOffer { .. }
             | UiEvent::CanvasModel { .. }
+            | UiEvent::CanvasTranslate { .. }
             | UiEvent::CompanionVisibility(true)
             | UiEvent::ShellHidden(_)
             | UiEvent::LivePalette(_)
@@ -301,6 +302,10 @@ impl App {
             for key in keys {
                 self.canvas_ui(&key, UiEvent::Model(values.clone()));
             }
+            return;
+        }
+        if let UiEvent::CanvasTranslate { view, output, x, y } = event {
+            self.canvas_translate(&view, output.as_deref(), (x, y));
             return;
         }
         if let UiEvent::CanvasOffer {

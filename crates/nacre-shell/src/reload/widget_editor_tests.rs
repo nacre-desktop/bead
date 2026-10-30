@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! B0208 widgets editor: owner-shaped layout migration, bar sections, edit-mode inspection,
-//! per-instance styles, the desktop grid, drag-frame cost, the gallery and the app scroll.
+//! per-instance styles, free desktop placement and bar placement (B0210), drag-frame cost,
+//! the gallery and the app scroll.
 use super::widget_layout_property_tests::{
     HEIGHT, Model, WIDTH, default_layout, drop_event, locate,
 };
@@ -174,15 +175,16 @@ fn a_style_change_restyles_only_the_clicked_copy() {
 }
 
 #[test]
-fn desktop_drops_snap_to_the_grid_and_never_overlap() {
+fn desktop_drops_land_where_dropped_without_a_grid_and_never_overlap() {
     let mut model = Model::new(default_layout());
     assert!(model.add("clock", "desktop", json!({}), "desktop", 405., 307.));
     let first = model.doc["hosts"]["canvas"]["instances"][0]["slot"].clone();
-    for axis in ["x", "y"] {
-        let value = first[axis].as_f64().unwrap();
-        assert_eq!(value % 32., 0., "{axis}={value} lies on the 32 px grid");
-    }
-    // A second widget dropped on top of the first moves to the nearest free cell.
+    // Free placement: the ghost's top-left (pointer minus the grab point), not a grid cell.
+    assert_eq!(
+        (first["x"].as_f64(), first["y"].as_f64()),
+        (Some(285.), Some(247.))
+    );
+    // A second widget dropped on top of the first slides beside it.
     assert!(model.add("battery", "desktop", json!({}), "desktop", 410., 310.));
     let slots: Vec<Json> = model.doc["hosts"]["canvas"]["instances"]
         .as_array()
@@ -199,10 +201,13 @@ fn desktop_drops_snap_to_the_grid_and_never_overlap() {
         && f(b, "y") < f(a, "y") + f(a, "h");
     assert!(!overlap, "collision handling separates {a} and {b}");
     assert!(f(b, "x") <= WIDTH && f(b, "y") <= HEIGHT);
+    // No grid is drawn or seeded any more.
+    let dragging = std::fs::read_to_string(shell().join("widgets/dragging.luau")).unwrap();
+    assert!(!dragging.contains("grid"), "the drag overlay draws no grid");
 }
 
 #[test]
-fn desktop_motion_is_a_cheap_transform_and_writes_only_on_drop() {
+fn desktop_motion_moves_only_the_ghost_surface_and_writes_only_on_drop() {
     let mut model = Model::new(default_layout());
     assert!(model.add("clock", "desktop", json!({}), "desktop", 400., 300.));
     let doc = model.doc.clone();
@@ -210,12 +215,10 @@ fn desktop_motion_is_a_cheap_transform_and_writes_only_on_drop() {
         .as_str()
         .unwrap()
         .to_owned();
-    let mut layout = None;
-    let mut costs = Vec::new();
-    let mut landings = std::collections::BTreeSet::new();
+    let mut content = None;
+    let mut anchors = Vec::new();
     for step in 0..120 {
         let x = 400. + step as f64 * 3.;
-        let started = std::time::Instant::now();
         let values = model
             .controller
             .drag(drop_event(
@@ -227,62 +230,29 @@ fn desktop_motion_is_a_cheap_transform_and_writes_only_on_drop() {
                 "move",
             ))
             .unwrap();
-        costs.push(started.elapsed());
         assert!(
             matches!(values.get("widgets.write"), Some(Value::List(rows)) if rows.is_empty()),
             "no layout write before the drop"
         );
-        let current = values.get("widgets.drag.layout").cloned();
-        if let Some(previous) = &layout {
+        let drag: BTreeMap<String, Value> = values
+            .into_iter()
+            .filter(|(key, _)| key.starts_with("widgets.drag."))
+            .collect();
+        // What the ghost and zone canvases render from: unchanged by pointer motion, so
+        // no content repaint and no layout pass; only the surface anchor moves.
+        let current = super::widget_drag_content(&drag);
+        if step > 0 {
             assert_eq!(
-                Some(previous),
-                current.as_ref(),
-                "the hosts' layout stays frozen while the pointer moves"
+                content.as_ref(),
+                Some(&current),
+                "motion {step} changed content"
             );
         }
-        layout = current;
-        if let (Some(Value::Number(x)), Some(Value::Number(y))) = (
-            values.get("widgets.drag.snap_x"),
-            values.get("widgets.drag.snap_y"),
-        ) {
-            assert_eq!(
-                (x % 32., y % 32.),
-                (0., 0.),
-                "the landing cell is on the grid"
-            );
-            landings.insert((*x as i64, *y as i64));
-        }
+        content = Some(current);
+        anchors.push(super::widget_drag_pointer(&drag).unwrap());
     }
-    assert!(
-        landings.len() > 5,
-        "the landing outline follows the pointer: {landings:?}"
-    );
-    costs.sort();
-    let median = costs[costs.len() / 2];
-    // Reference: the same pointer path over the bar runs the full placement transaction.
-    let mut bar_costs = Vec::new();
-    for step in 0..60 {
-        let started = std::time::Instant::now();
-        model
-            .controller
-            .drag(drop_event(
-                &doc,
-                &iid,
-                "bar",
-                200. + step as f64 * 20.,
-                20.,
-                "move",
-            ))
-            .unwrap();
-        bar_costs.push(started.elapsed());
-    }
-    bar_costs.sort();
-    let bar_median = bar_costs[bar_costs.len() / 2];
-    eprintln!("B0208_MOTION desktop_median={median:?} bar_median={bar_median:?}");
-    assert!(
-        median <= bar_median,
-        "a desktop motion costs no more than a bar placement: {median:?} vs {bar_median:?}"
-    );
+    assert_eq!(anchors.len(), 120);
+    assert!(anchors.windows(2).all(|pair| pair[1].0 > pair[0].0));
     let dropped = model
         .controller
         .drag(drop_event(&doc, &iid, "desktop", 700., 500., "drop"))
@@ -290,6 +260,186 @@ fn desktop_motion_is_a_cheap_transform_and_writes_only_on_drop() {
     assert!(
         matches!(dropped.get("widgets.write"), Some(Value::List(rows)) if rows.len() == 1),
         "the drop commits once"
+    );
+}
+
+#[test]
+fn the_ghost_is_drawn_relative_to_the_pointer() {
+    let ghost = std::fs::read_to_string(shell().join("widgets/dragging.luau")).unwrap();
+    // The ghost root holds only the ghost; zones are their own canvas.
+    assert!(ghost.contains("function M.zones_root()"));
+    let root = &ghost[ghost.find("function M.ghost_root()").unwrap()..];
+    let root = &root[..root.find("\nend").unwrap()];
+    assert!(!root.contains("drop_zones"), "{root}");
+}
+
+fn bar_rects_after(doc: &Json) -> BTreeMap<String, bead::render::Rect> {
+    instance_rects(&bar_harness(doc, false))
+}
+
+#[test]
+fn the_bar_takes_a_widget_anywhere_along_its_width() {
+    // Far left: before the launcher.
+    let mut model = Model::new(owner_layout());
+    assert!(model.drag("clock", "bar", 20., 20.));
+    let clock = locate(&model.doc, "clock").unwrap();
+    assert_eq!(clock["host"], "top_bar");
+    assert_eq!(
+        (
+            clock["slot"]["region"].as_str(),
+            clock["slot"]["start"].as_f64()
+        ),
+        (Some("left"), Some(0.))
+    );
+    let rects = bar_rects_after(&model.doc);
+    assert!(rects["clock"].x < rects["launcher"].x);
+
+    // Left of centre, in the left section: it keeps a gap after the workspaces.
+    let mut model = Model::new(owner_layout());
+    assert!(model.drag("clock", "bar", WIDTH * 0.22, 20.));
+    let clock = locate(&model.doc, "clock").unwrap();
+    assert_eq!(clock["slot"]["region"], "left");
+    let gap = clock["slot"]["gap"].as_f64().unwrap();
+    assert!(gap > 150., "gap {gap}");
+    let rects = bar_rects_after(&model.doc);
+    let workspaces = rects["workspaces"];
+    assert!(
+        rects["clock"].x >= workspaces.x + workspaces.w + gap as f32,
+        "{:?} after {workspaces:?} by {gap}",
+        rects["clock"]
+    );
+    assert!(rects["clock"].x + rects["clock"].w < (WIDTH * 0.28) as f32);
+
+    // Just left of the centre: the centre section, before the title.
+    let mut model = Model::new(owner_layout());
+    assert!(model.drag("clock", "bar", WIDTH * 0.40, 20.));
+    let clock = locate(&model.doc, "clock").unwrap();
+    assert_eq!(clock["slot"]["region"], "centre");
+    let rects = bar_rects_after(&model.doc);
+    assert!(rects["clock"].x + rects["clock"].w <= rects["title"].x);
+
+    // Between two right-side widgets (inside the status pill): between wifi and bluetooth.
+    let mut model = Model::new(owner_layout());
+    let (wifi, bluetooth) = (
+        pill_child_x(&model.doc, "wifi"),
+        pill_child_x(&model.doc, "bluetooth"),
+    );
+    assert!(model.drag("clock", "bar", (wifi + bluetooth) / 2. + 32., 20.));
+    let pill = locate(&model.doc, "status-pill").unwrap();
+    let order: Vec<&str> = pill["children"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|child| child["iid"].as_str().unwrap())
+        .collect();
+    let at = |iid: &str| order.iter().position(|other| *other == iid).unwrap();
+    assert_eq!(at("clock"), at("wifi") + 1, "{order:?}");
+    assert_eq!(at("bluetooth"), at("clock") + 1, "{order:?}");
+
+    // A saved gap survives normalisation and reload (the owner's file shape).
+    let mut model = Model::new(owner_layout());
+    assert!(model.drag("clock", "bar", WIDTH * 0.22, 20.));
+    let reloaded = Model::new(model.doc.clone());
+    assert_eq!(
+        locate(&reloaded.doc, "clock").unwrap()["slot"]["gap"],
+        locate(&model.doc, "clock").unwrap()["slot"]["gap"]
+    );
+}
+
+fn pill_child_x(doc: &Json, iid: &str) -> f64 {
+    super::widget_layout_property_tests::context(doc)["geometry"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|rect| rect["iid"] == iid)
+        .map(|rect| rect["x"].as_f64().unwrap())
+        .unwrap()
+}
+
+#[test]
+fn a_bar_drag_shows_the_insertion_slot_under_the_pointer() {
+    let doc = owner_layout();
+    let mut model = Model::new(doc.clone());
+    let values = model
+        .controller
+        .drag(drop_event(&doc, "clock", "bar", WIDTH * 0.22, 20., "move"))
+        .unwrap();
+    let Some(Value::List(preview)) = values.get("widgets.drag.layout") else {
+        panic!("a bar motion previews the insertion");
+    };
+    let mut stores = crate::desktop::values(&Default::default(), "");
+    stores.insert("widgets.layout".into(), Value::list(vec![doc.clone()]));
+    stores.insert("widgets.drag.layout".into(), Value::List(preview.clone()));
+    stores.insert("widgets.drag.active".into(), Value::Bool(true));
+    stores.insert("widgets.drag.phase".into(), Value::Text("dragging".into()));
+    stores.insert("widgets.drag.destination".into(), Value::Text("bar".into()));
+    stores.insert("bead.focused_title".into(), Value::Text("Notes".into()));
+    stores.insert("bead.windows".into(), Value::list(Vec::new()));
+    stores.insert("bead.workspaces".into(), Value::list(Vec::new()));
+    let harness = Harness::load(
+        &shell(),
+        Path::new("bar/main.luau"),
+        &shell().join("palette.json"),
+        stores,
+        Config {
+            width: WIDTH as u32,
+            height: 50,
+            scale: 1.,
+        },
+    )
+    .unwrap();
+    // The insertion slot: the placeholder's outlined box (registry, `widget-snap-slot-`).
+    let slot = harness
+        .scene()
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            bead::render::Primitive::Rounded {
+                rect,
+                border: Some((_, width)),
+                ..
+            } if *width > 1. && rect.x > 200. && rect.x < (WIDTH * 0.28) as f32 => Some(*rect),
+            _ => None,
+        })
+        .expect("the insertion slot renders on the bar");
+    let pointer = (WIDTH * 0.22) as f32;
+    assert!(
+        slot.x <= pointer && pointer <= slot.x + slot.w + 80.,
+        "slot {slot:?} sits under the pointer at {pointer}"
+    );
+}
+
+#[test]
+fn niri_rules_keep_pearls_unblurred_and_the_widgets_app_an_ordinary_window() {
+    let rules = std::fs::read_to_string(shell().join("niri-pearls.kdl")).unwrap();
+    let rule = |app: &str| -> String {
+        let start = rules.find(&format!("match app-id=\"{app}\"")).unwrap();
+        let end = rules[start..].find("\n}").unwrap();
+        rules[start..start + end].to_owned()
+    };
+    let pearl = rule("^bead[.]pearl([.]pending)?$");
+    for line in [
+        "border { off; }",
+        "focus-ring { off; }",
+        "shadow { off; }",
+        "background-effect { blur false; }",
+    ] {
+        assert!(pearl.contains(line), "pearl rule lacks {line}");
+    }
+    let widgets = rule("^nacre-widgets$");
+    assert!(
+        !widgets.contains("border") && !widgets.contains("focus-ring"),
+        "{widgets}"
+    );
+    assert!(widgets.contains("background-effect { blur false; }"));
+    // Balanced braces: a parse-level sanity check (niri itself validates it in the captures).
+    assert_eq!(rules.matches('{').count(), rules.matches('}').count());
+    let app = std::fs::read_to_string(shell().join("widgets/app/main.luau")).unwrap();
+    let root = &app[app.find("local app_content=").unwrap()..];
+    let root = &root[..root.find('\n').unwrap()];
+    assert!(
+        !root.contains("border_width") && !root.contains("radius"),
+        "{root}"
     );
 }
 

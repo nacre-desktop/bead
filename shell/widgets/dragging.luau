@@ -6,7 +6,6 @@ local registry=require("registry")
 local preview=require("app/preview")
 local t=context.t
 local M={}
-local landing
 
 local function document_value(value)
     if type(value)~="table" then return nil end
@@ -220,8 +219,10 @@ function M.ghost_node()
     if not origin_valid and not (source_is_app and app_origin_valid) then return nil end
     local phase=ui.resolve_for_check(ui.bind("widgets.drag.phase"))
     local active=ui.resolve_for_check(ui.bind("widgets.drag.active"))==true
-    local document=(active and (phase=="dragging" or phase=="settle")
-        and document_value(ui.resolve_for_check(ui.bind("widgets.drag.layout"))))
+    -- While dragging the ghost draws from the frozen base: the transient bar preview changes
+    -- with the pointer and is not part of the ghost (B0210).
+    local document=(active and phase=="dragging" and document_value(ui.resolve_for_check(ui.bind("widgets.drag.base"))))
+        or (active and phase=="settle" and document_value(ui.resolve_for_check(ui.bind("widgets.drag.layout"))))
         or document_value(ui.resolve_for_check(ui.bind("widgets.draft")))
         or document_value(ui.resolve_for_check(ui.bind("widgets.layout")))
     if not document then return nil end
@@ -277,18 +278,17 @@ function M.ghost_node()
     local height=preparing and target_height or animated_height
     local scale_x=animated_width/source_width
     local scale_y=animated_height/source_height
-    local pointer_left,pointer_top=pointer_x-grab_x*scale_x,pointer_y-grab_y*scale_y
-    local left_target,top_target=pointer_left,pointer_top
+    -- B0210: the ghost canvas is drawn relative to the pointer it was rendered at and its
+    -- surface follows the live pointer (the host moves it), so a pointer motion repaints
+    -- nothing. Positions here are pointer-relative offsets; only a drop animates them.
+    local dx_target,dy_target=-grab_x*scale_x,-grab_y*scale_y
     if phase=="settle" or phase=="return" then
-        local snap_x=ui.resolve_for_check(ui.bind("widgets.drag.snap_x")) or pointer_left
-        local snap_y=ui.resolve_for_check(ui.bind("widgets.drag.snap_y")) or pointer_top
-        left_target,top_target=snap_x,snap_y
+        dx_target=(ui.resolve_for_check(ui.bind("widgets.drag.snap_x")) or pointer_x+dx_target)-pointer_x
+        dy_target=(ui.resolve_for_check(ui.bind("widgets.drag.snap_y")) or pointer_y+dy_target)-pointer_y
     end
     local settling=phase=="settle" or phase=="return"
-    local position_duration=preparing and 0 or settling and .22 or .06
-    local position_curve=settling and "out-back" or "out-cubic"
-    local left=ui.animate("widgets.drag.ghost.left",left_target,position_duration,position_curve)
-    local top=ui.animate("widgets.drag.ghost.top",top_target,position_duration,position_curve)
+    local left=pointer_x+ui.animate("widgets.drag.ghost.dx",dx_target,settling and .22 or 0,"out-back")
+    local top=pointer_y+ui.animate("widgets.drag.ghost.dy",dy_target,settling and .22 or 0,"out-back")
     local children
     if source.iid~=nil then
         local function find(items)
@@ -314,35 +314,8 @@ function M.ghost_node()
         border_width=carded and ui.animate("widgets.drag.ghost.border",phase=="settle" and 2.5 or 1.5,
             preparing and 0 or .14,"out-cubic") or 0,border_color="primary",
         node,marker}
-    if phase=="dragging" and destination=="desktop" then
-        return ui.Group{id="widgets-drag-desktop",landing(target_width,target_height),ghost}
-    end
     return ghost
 end
--- B0208: the desktop snapping grid. Cell size is a spacing token; the drop model reads it
--- from the host seed (`grid_cell`). While dragging, the grid shows around the landing cell
--- (a few cells each way, so the overlay stays small) with the landing outline on top.
-function M.grid_cell() return kit.tokens.spacing.huge end
-landing=function(width,height)
-    local cell=M.grid_cell()
-    local x=ui.resolve_for_check(ui.bind("widgets.drag.snap_x")) or 0
-    local y=ui.resolve_for_check(ui.bind("widgets.drag.snap_y")) or 0
-    local reach=3*cell
-    local left,top=x-reach,y-reach
-    local w,h=width+2*reach,height+2*reach
-    local lines={id="widgets-drag-grid",position="absolute",left=left,top=top,width=w,height=h,clip_children=true}
-    local line=ui.alpha("onSurface",.16)
-    for i=0,math.ceil(w/cell) do
-        table.insert(lines,ui.Box{id="grid-v-"..i,position="absolute",left=i*cell,top=0,width=1,height=h,fill=line})
-    end
-    for i=0,math.ceil(h/cell) do
-        table.insert(lines,ui.Box{id="grid-h-"..i,position="absolute",left=0,top=i*cell,width=w,height=1,fill=line})
-    end
-    return ui.Group{id="widgets-drag-landing",ui.Box(lines),
-        ui.Box{id="widgets-drag-landing-cell",position="absolute",left=x,top=y,width=width,height=height,
-            radius=kit.tokens.radii.medium,fill=ui.alpha("primary",.10),border_width=2,border_color=ui.alpha("primary",.8)}}
-end
-
 -- B0198 edit mode: while a widget is dragged, the desktop shows where it
 -- can land and a removal target appears for placed widgets; the bar outlines itself
 -- (bar/main.luau, drawn on the bar surface). Passive; the drop model
@@ -383,10 +356,7 @@ function M.drop_zones(width,height)
     local zones={}
     local remove=M.remove_zone()
     local remove_left,remove_top=(width-remove.width)/2,height-remove.bottom-remove.height
-    local x=ui.resolve_for_check(ui.bind("widgets.drag.x")) or -1
-    local y=ui.resolve_for_check(ui.bind("widgets.drag.y")) or -1
-    local over_remove=source.iid~=nil and x>=remove_left and x<remove_left+remove.width
-        and y>=remove_top and y<remove_top+remove.height
+    local over_remove=ui.resolve_for_check(ui.bind("widgets.drag.over_remove"))==true
     if package.forms.desktop then
         table.insert(zones,zone("drop-zone-desktop",inset,bar_height*1.5,width-2*inset,height-bar_height*1.5-inset,
             ui.tr("bead.widgets.zone-desktop"),"wallpaper",destination=="desktop" and not over_remove,false))
@@ -397,13 +367,18 @@ function M.drop_zones(width,height)
     end
     return zones
 end
+-- The ghost and the zones are separate canvases: the ghost surface moves with the pointer,
+-- the zones stay put (B0210).
 function M.ghost_root()
     local width=ui.resolve_for_check(ui.bind("bead.viewport.width")) or 1
     local height=ui.resolve_for_check(ui.bind("bead.viewport.height")) or 1
-    local props={id="widgets-drag-overlay",width=width,height=height}
+    return ui.Group{id="widgets-drag-overlay",width=width,height=height,M.ghost_node()}
+end
+function M.zones_root()
+    local width=ui.resolve_for_check(ui.bind("bead.viewport.width")) or 1
+    local height=ui.resolve_for_check(ui.bind("bead.viewport.height")) or 1
+    local props={id="widgets-drag-zones",width=width,height=height}
     for _,node in M.drop_zones(width,height) do table.insert(props,node) end
-    local node=M.ghost_node()
-    if node then table.insert(props,node) end
     return ui.Group(props)
 end
 

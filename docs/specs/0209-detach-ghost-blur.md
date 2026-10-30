@@ -1,5 +1,9 @@
 # B0209 - Detach ghost: cover blur
 
+Superseded by B0210 (2026-10-30): the ghost was niri's session-wide window blur behind the
+invisible prewarm; the fix is `background-effect { blur false; }` in the pearl rule, and the
+cover-blur release below was reverted.
+
 Live evidence (laptop, 2026-10-29, 23:10): after `PEARL_DETACHED` the dragged window is
 already visible while an opaque, stretched, blurred wallpaper rectangle sits at the docked
 spot over the terminals for ~1.4 s. niri's layer list shows the panel's `bead-dev` Overlay

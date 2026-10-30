@@ -548,6 +548,23 @@ pub fn drag_preview(
     )
 }
 
+/// B0210: the static drop zones shown during a widget drag (above windows, input-empty).
+pub fn drag_zones(
+    palette: std::path::PathBuf,
+    colors: bead::render::Palette,
+    inputs: Inputs,
+    trace: bool,
+) -> Result<bead::wayland::PanelSpec, Box<dyn std::error::Error>> {
+    canvas_spec(
+        palette,
+        colors,
+        inputs,
+        trace,
+        "widgets/drag/zones.luau",
+        true,
+    )
+}
+
 fn canvas_spec(
     palette: std::path::PathBuf,
     colors: bead::render::Palette,
@@ -613,7 +630,7 @@ pub(crate) fn canvas_spec_with_root(
             let result = if passive {
                 Ok(crate::reload::Runtime::new(session)
                     .with_trace(trace)
-                    .with_widget_drag_preview())
+                    .with_widget_drag_preview(entry == "widgets/drag/ghost.luau"))
             } else {
                 (|| -> Result<_, Box<dyn std::error::Error>> {
                     let mut runtime =

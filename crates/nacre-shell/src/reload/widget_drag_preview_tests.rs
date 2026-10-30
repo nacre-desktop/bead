@@ -2526,8 +2526,21 @@ fn canvas_and_passive_ghost_use_distinct_declared_host_model_contracts() {
         UiEvent::CanvasOffer {view,open:true,..} if view=="widgets-drag")));
     assert!(bar_events.iter().any(|event| matches!(event,
         UiEvent::CanvasModel {view,..} if view=="widgets-canvas")));
-    assert!(bar_events.iter().any(|event| matches!(event,
+    // B0210: a pointer-only change moves the ghost surface; its content is not re-sent.
+    assert!(!bar_events.iter().any(|event| matches!(event,
         UiEvent::CanvasModel {view,..} if view=="widgets-drag")));
+    assert!(bar_events.iter().any(|event| matches!(event,
+        UiEvent::CanvasTranslate {view,x,..} if view=="widgets-drag" && *x==432.)));
+    assert_eq!(
+        bar_events
+            .iter()
+            .filter(
+                |event| matches!(event, UiEvent::CanvasModel {view,..} if view=="widgets-canvas")
+            )
+            .count(),
+        1,
+        "the desktop canvas does not rebuild for pointer motion"
+    );
 
     // A desktop canvas can publish its passive drag ghost, but the bar remains
     // the owner that publishes the canvas document and live model.
@@ -2559,8 +2572,7 @@ fn canvas_and_passive_ghost_use_distinct_declared_host_model_contracts() {
     assert!(canvas_events.iter().any(|event| matches!(event,
         UiEvent::CanvasOffer {view,open:true,..} if view=="widgets-drag")));
     assert!(canvas_events.iter().any(|event| matches!(event,
-        UiEvent::CanvasModel {view,values,..} if view=="widgets-drag"
-            && values.get("widgets.drag.x")==Some(&Value::Number(448.)))));
+        UiEvent::CanvasTranslate {view,x,..} if view=="widgets-drag" && *x==448.)));
 
     let ghost_host_events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let canvas_host_events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -2584,13 +2596,14 @@ fn canvas_and_passive_ghost_use_distinct_declared_host_model_contracts() {
     );
     let bar_delivered = deliver_widget_surface_models(&bar_events, &mut *canvas, &mut *ghost);
     let canvas_delivered = deliver_widget_surface_models(&canvas_events, &mut *canvas, &mut *ghost);
+    // B0210: a pointer-only update reaches the ghost as a surface move, not a Model.
     assert!(
-        bar_delivered >= 4,
+        bar_delivered >= 3,
         "bar offers and updates reach both surfaces"
     );
     assert!(
-        canvas_delivered >= 2,
-        "canvas drag ghost models reach the passive surface"
+        canvas_delivered >= 1,
+        "canvas drag ghost offers reach the passive surface"
     );
     assert!(
         !canvas_host_events
