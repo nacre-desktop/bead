@@ -242,7 +242,7 @@ impl App {
         data: &PresentationData,
         event: &wp_presentation_feedback::Event,
     ) -> bool {
-        let Some(canvas) = self.canvases.values_mut().find(|canvas| {
+        let Some((key, canvas)) = self.canvases.iter_mut().find(|(_, canvas)| {
             canvas.epoch == data.source_epoch
                 && canvas
                     .layer
@@ -251,6 +251,18 @@ impl App {
         }) else {
             return false;
         };
+        if let wp_presentation_feedback::Event::Presented {
+            tv_sec_hi,
+            tv_sec_lo,
+            tv_nsec,
+            ..
+        } = event
+            && bead_core::profile::frame_trace()
+        {
+            let ns = ((u64::from(*tv_sec_hi) << 32) | u64::from(*tv_sec_lo)) * 1_000_000_000
+                + u64::from(*tv_nsec);
+            println!("CANVAS_PRESENTED view={} monotonic_ns={ns}", key.1);
+        }
         if let wp_presentation_feedback::Event::Presented { refresh, .. } = event
             && *refresh > 0
         {
@@ -824,6 +836,18 @@ impl App {
             }
             let size_changed =
                 previous.is_none_or(|previous| previous.w != bounds.w || previous.h != bounds.h);
+            if bead_core::profile::frame_trace() {
+                println!(
+                    "CANVAS_MAP view={} monotonic_ns={} x={} y={} w={} h={} resize={}",
+                    key.1,
+                    monotonic_ns(),
+                    bounds.x,
+                    bounds.y,
+                    bounds.w,
+                    bounds.h,
+                    u8::from(size_changed)
+                );
+            }
             canvas.mapped_bounds = Some(bounds);
             if size_changed {
                 canvas.pool = None;
@@ -941,6 +965,7 @@ impl App {
                 .commit();
             return Ok(());
         };
+        let draw_started = std::time::Instant::now();
         canvas.renderer.prepare(&canvas.scene, scale)?;
         // Repaint only what changed since each buffer was last painted. The frame
         // diff is independent of buffer age; the per-slot history carries it.
@@ -1056,6 +1081,19 @@ impl App {
             .ok_or("canvas layer missing")?
             .commit();
         canvas.buffer_attached = true;
+        if bead_core::profile::frame_trace() {
+            println!(
+                "CANVAS_FRAME view={} monotonic_ns={} draw_ms={:.3} x={} y={} w={} h={} damage_px={}",
+                key.1,
+                monotonic_ns(),
+                draw_started.elapsed().as_secs_f64() * 1000.,
+                bounds.x,
+                bounds.y,
+                bounds.w,
+                bounds.h,
+                u64::from(damage.w) * u64::from(damage.h)
+            );
+        }
         Ok(())
     }
     pub(super) fn canvas_configure(&mut self, layer: &LayerSurface, size: (u32, u32)) {

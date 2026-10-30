@@ -6288,6 +6288,7 @@ impl SceneSource for Runtime {
                         Some(crate::widgets::widget_drag::Controller::new()?);
                 }
                 self.widget_drag_controller_primed = false;
+                let drag_started = std::time::Instant::now();
                 let current = self.widget_host_values();
                 let values = {
                     let controller = self
@@ -6324,6 +6325,14 @@ impl SceneSource for Runtime {
                             .map_err(|error| -> Box<dyn Error> { Box::new(error) })
                             .and_then(|scene| self.finish_scene(scene))
                     };
+                if bead::core::profile::frame_trace() {
+                    println!(
+                        "WIDGET_DRAG_HOST monotonic_ns={} canvas={} ms={:.3}",
+                        bead::core::profile::monotonic_ns(),
+                        self.widget_canvas,
+                        drag_started.elapsed().as_secs_f64() * 1000.
+                    );
+                }
                 let mut accepted = true;
                 let mut scene = match preflight {
                     Ok(scene) => scene,
@@ -9482,6 +9491,23 @@ impl SceneSource for Runtime {
     fn commit(&mut self) -> bool {
         if let Some(scene) = self.pending.take() {
             self.session.commit(scene);
+            if self.widget_drag_overlay && bead::core::profile::frame_trace() {
+                // B0210: the ghost's drawn origin per committed overlay scene (harness only).
+                if let Some(node) = self
+                    .session
+                    .view_nodes()
+                    .iter()
+                    .find(|node| node.id.ends_with("widgets-drag-ghost"))
+                {
+                    let rect = bead::ui::rect(&node.draw);
+                    println!(
+                        "WIDGET_GHOST monotonic_ns={} x={:.2} y={:.2}",
+                        bead::core::profile::monotonic_ns(),
+                        rect.x,
+                        rect.y
+                    );
+                }
+            }
             if self.bar
                 && self.session.stores.get("widgets.drag.active")
                     == Some(&bead::core::Value::Bool(true))
