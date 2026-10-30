@@ -15,7 +15,9 @@ local function descriptors()
             for style_name,style in form.styles do
                 local descriptor={title=style.title,view=style.view,min_span=style.min_span,max_span=style.max_span,
                     preferred_span=style.preferred_span,preferred_height=style.preferred_height,
-                    requires=style.requires and table.clone(style.requires) or nil}
+                    requires=style.requires and table.clone(style.requires) or nil,
+                    -- B0211: the bar width a new or morphed widget lands with.
+                    reserve_width=name=="bar" and style.reserve_width and style.reserve_width(table.clone(package.defaults),style_name) or nil}
                 styles[style_name]=descriptor
             end
             local clean={default_style=form.default_style,styles=styles}
@@ -99,7 +101,8 @@ function M.seed(document,width,height,placement)
     return {{widget_layout=true,document=document,initial=require("default")(width),rev=ui.resolve_for_check(ui.bind("widgets.rev")),
         widget_clock_seconds=placement~=nil and M.requires(document,placement,"bead.desktop.clock.seconds") or false,
         geometry=geometry,reservations=reservations,canvas_width=width,canvas_height=height,
-        catalogue=descriptors(),desktop_gap=kit.tokens.spacing.sm,remove_zone=require("dragging").remove_zone()}}
+        catalogue=descriptors(),desktop_gap=kit.tokens.spacing.sm,bar_gap=kit.tokens.spacing.xs,
+        title_min=c.t.title_height*4+c.t.icon_width+c.t.title_gap,remove_zone=require("dragging").remove_zone()}}
 end
 function M.request(_document,extra)
     return ui.action("widgets.edit",{extra})

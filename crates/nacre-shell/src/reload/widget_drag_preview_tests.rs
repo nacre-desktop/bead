@@ -578,7 +578,7 @@ fn parent_runtime_policy_tracks_open_and_matching_close_generations() {
 }
 
 #[test]
-fn motion_reflows_neighbors_without_write_and_drop_commits_once_from_frozen_base() {
+fn motion_keeps_the_frozen_layout_without_write_and_drop_commits_once() {
     let mut controller = Controller::new().unwrap();
     controller
         .sync(&BTreeMap::from([
@@ -593,8 +593,9 @@ fn motion_reflows_neighbors_without_write_and_drop_commits_once_from_frozen_base
     assert_eq!(preview["hosts"]["top_bar"]["mode"], "content");
     let instances = preview["hosts"]["top_bar"]["instances"].as_array().unwrap();
     assert!(instances.iter().any(|item| item["iid"] == "clock-main"));
+    // B0211: no insertion placeholder; the bar keeps its layout until the drop.
     assert!(
-        instances
+        !instances
             .iter()
             .any(|item| item["drag_placeholder"] == true)
     );
@@ -619,6 +620,7 @@ fn motion_reflows_neighbors_without_write_and_drop_commits_once_from_frozen_base
         doc_from(&direct, "widgets.drag.layout"),
         "motion path must not accumulate edits"
     );
+    assert_eq!(second_doc, preview, "a motion changes nothing on the bar");
     let epoch = controller.drag_epoch();
     let mut drop = event("drop", 128.);
     let Value::List(records) = &mut drop else {
@@ -2824,7 +2826,7 @@ fn launcher_transfer(phase: &str, x: f64) -> Json {
 }
 
 #[test]
-fn real_bar_session_receives_live_transient_neighbor_reflow() {
+fn real_bar_session_keeps_its_layout_until_the_drop() {
     let dir = std::env::temp_dir().join(format!("widget-drag-live-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -2860,7 +2862,7 @@ fn real_bar_session_receives_live_transient_neighbor_reflow() {
         .unwrap();
     assert!(instances.iter().any(|item| item["iid"] == "launcher"));
     assert!(
-        instances
+        !instances
             .iter()
             .any(|item| item["drag_placeholder"] == true)
     );

@@ -15,15 +15,16 @@ local canonical=widgets.normalise(document)
 document=widgets.project(canonical,ui.resolve_for_check(ui.bind("bead.viewport.width")))
 local render=widgets.renderer(document)
 local layout=document.hosts.top_bar
+local width=ui.resolve_for_check(ui.bind("bead.viewport.width"))
 local regions=widgets.bar_regions(layout)
+local flow,placed=widgets.bar_layout(layout,render,width)
 -- The recording stop button (only while recording) sits before the tray, as QML put it first in the status column.
 regions.right.before=table.clone(require("./recording"))
 for _,node in require("../widgets/tray") do table.insert(regions.right.before,node) end
--- B0198 edit mode: while a widget is dragged the bar is a drop zone, highlighted when targeted.
-local drop_target=dragging and drag_phase=="dragging"
-local targeted=drop_target and ui.resolve_for_check(ui.bind("widgets.drag.destination"))=="bar"
-return ui.Host{edge="top",id="bar",border_width=drop_target and 2 or 0,
-    border_color=ui.alpha("primary",targeted and .9 or .45),shape="strip-h",grid={tiles=layout.tiles,mode="content",regions=regions},layout=layout.instances,catalogue=widgets.catalogue,render=render,
-    metadata=require("../widgets/editing").seed(canonical,ui.resolve_for_check(ui.bind("bead.viewport.width")),ui.resolve_for_check(ui.bind("widgets.canvas.height")),"bar"),
+-- Placed widgets come after the title's band so they sit above it for input.
+regions.centre.after=placed
+-- B0211: drags draw nothing on the bar (no outline, no insertion slot); the ghost is the preview.
+return ui.Host{edge="top",id="bar",shape="strip-h",grid={tiles=layout.tiles,mode="content",regions=regions},layout=flow,catalogue=widgets.catalogue,render=render,
+    metadata=require("../widgets/editing").seed(canonical,width,ui.resolve_for_check(ui.bind("widgets.canvas.height")),"bar"),
     width="100%",height=c.header,radius=0,fill="surface",padding_left=15,padding_right=15,align="center",justify="space-between",direction="row",
 }

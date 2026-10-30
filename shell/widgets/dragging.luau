@@ -81,19 +81,12 @@ local function group_drag_target(node)
 end
 
 local prepared_renders=setmetatable({}, {__mode="k"})
-local function prepare_node(node,alpha,spacer)
+local function prepare_node(node,alpha)
     if type(node)~="table" then return end
     local props=node.props
     if type(props)=="table" then
         local kind=type(node.kind)=="string" and string.lower(node.kind :: string) or ""
-        if spacer then
-            props.on_activate=nil
-            props.on_drag=nil
-            props.on_drop=nil
-            props.drag_payload=nil
-            props.activate_on_release=nil
-            if kind=="button" then props.focus_on_pointer=false end
-        elseif kind=="button" and props.on_activate~=nil then
+        if kind=="button" and props.on_activate~=nil then
             -- Preserve the original route, but activate it on release so a
             -- threshold drag cannot also open the widget's click action.
             props.activate_on_release=true
@@ -112,12 +105,12 @@ local function prepare_node(node,alpha,spacer)
             local render=props.render
             local variants=prepared_renders[render]
             if not variants then variants=setmetatable({}, {__mode="v"}); prepared_renders[render]=variants end
-            local mode=spacer and "spacer" or alpha==nil and "normal" or "alpha:"..tostring(alpha)
+            local mode=alpha==nil and "normal" or "alpha:"..tostring(alpha)
             local wrapper=variants[mode]
             if not wrapper then
                 wrapper=function(...)
                     local generated=render(...)
-                    prepare_node(generated,alpha,spacer)
+                    prepare_node(generated,alpha)
                     return generated
                 end
                 variants[mode]=wrapper
@@ -125,7 +118,7 @@ local function prepare_node(node,alpha,spacer)
             props.render=wrapper
         end
     end
-    for _,child in node.children or {} do prepare_node(child,alpha,spacer) end
+    for _,child in node.children or {} do prepare_node(child,alpha) end
 end
 
 local function hovered(item)
@@ -165,10 +158,6 @@ end
 function M.attach(document,item,node)
     if not node or type(node.props)~="table" then return node end
     local source=frozen_source(item.iid)
-    if item.drag_placeholder==true then
-        prepare_node(node,0,true)
-        return node
-    end
     local payload=M.payload(document,item)
     if payload then
         if node.kind=="group" then
@@ -190,7 +179,7 @@ function M.attach(document,item,node)
     end
     local marker=node.kind=="group" and group_drag_target(node) or node.props
     if marker then marker.metadata={{widget_instance=true,iid=item.iid}} end
-    prepare_node(node,source and source.kind~="resize" and .3 or nil,false)
+    prepare_node(node,source and source.kind~="resize" and .3 or nil)
     local handle=resize_handle(document,item)
     if handle then table.insert(node.children,handle) end
     return node
@@ -302,70 +291,44 @@ function M.ghost_node()
     end
     local node=preview.render(source.widget,form,style_name,settings,width,height,true,children)
     if not node then return nil end
-    local marker=form=="bar" and ui.Box{id="widget-snap-marker",position="absolute",right=0,top=0,
-        width=kit.tokens.spacing.xs,height=height,radius=kit.tokens.radii.small,
-        fill=ui.alpha("primary",.9)} or nil
-    -- A bar widget has no card of its own, so its ghost gets one; a desktop widget is its own
-    -- card, and a second rectangle behind its rounded glass showed as a background artifact.
+    -- A bar widget has no card of its own, so its ghost gets a quiet one (B0211: no accent
+    -- outline); a desktop widget is its own card.
     local carded=form=="bar"
     local ghost=ui.Box{id="widgets-drag-ghost",position="absolute",
         left=left,top=top,width=width,height=height,clip_children=true,
         radius=carded and kit.tokens.radii.medium or 0,fill=carded and ui.alpha("surfaceContainerHighest",.96) or "transparent",
-        border_width=carded and ui.animate("widgets.drag.ghost.border",phase=="settle" and 2.5 or 1.5,
-            preparing and 0 or .14,"out-cubic") or 0,border_color="primary",
-        node,marker}
+        border_width=carded and kit.tokens.spacing.hairline or 0,border_color="outlineVariant",
+        node}
     return ghost
 end
--- B0198 edit mode: while a widget is dragged, the desktop shows where it
--- can land and a removal target appears for placed widgets; the bar outlines itself
--- (bar/main.luau, drawn on the bar surface). Passive; the drop model
--- in the app behaviour decides with the same zone geometry (M.remove_zone).
--- The removal target, centred near the bottom of the output.
+-- B0198 edit mode: while a placed widget is dragged a removal target appears near the bottom
+-- of the output (B0211: the only drag zone; no outlines on the desktop or the bar). Passive;
+-- the drop model in the app behaviour decides with the same geometry (M.remove_zone).
 function M.remove_zone()
     local sp=kit.tokens.spacing
     return {width=sp.huge*6,height=sp.huge*2,bottom=sp.huge*2}
-end
-local function zone(id,left,top,width,height,label,icon,active,danger)
-    local accent=danger and "error" or "primary"
-    return ui.Box{id=id,position="absolute",left=left,top=top,width=width,height=height,
-        -- B0198b: outline only for the large desktop zone; a tinted fill over the whole
-        -- desktop read as a stray background colour during drags. Remove keeps a light tint.
-        radius=kit.tokens.radii.medium,fill=danger and ui.alpha(accent,active and .16 or .05) or "transparent",
-        border_width=active and 2 or 1.5,border_color=ui.alpha(accent,active and .9 or .45),
-        align="center",justify="center",
-        label and ui.Row{id=id.."-label",height=kit.tokens.spacing.huge,padding_left=kit.tokens.spacing.md,padding_right=kit.tokens.spacing.md,
-            gap=kit.tokens.spacing.xs,align="center",radius=kit.tokens.radii.full,
-            fill=ui.alpha(danger and "errorContainer" or "surfaceContainerHighest",active and .96 or .82),
-            ui.Text{id="icon",text=icon,family="Material Symbols Rounded",font_size=kit.tokens.icons.large,
-                width=kit.tokens.icons.large+kit.tokens.spacing.xs,height=kit.tokens.spacing.xl,color=danger and "onErrorContainer" or accent},
-            ui.Text{id="text",text=label,font_size=kit.tokens.text.body*4/3,
-                width=math.ceil(ui.text_width(label,"IBM Plex Sans",kit.tokens.text.body*4/3))+kit.tokens.spacing.hairline,
-                height=kit.tokens.spacing.xl,color=danger and "onErrorContainer" or "onSurface"}} or nil}
 end
 function M.drop_zones(width,height)
     if ui.resolve_for_check(ui.bind("widgets.drag.active"))~=true
         or ui.resolve_for_check(ui.bind("widgets.drag.phase"))~="dragging" then return {} end
     local value=ui.resolve_for_check(ui.bind("widgets.drag.source"))
     local source=type(value)=="table" and (value[1] or value) or nil
-    if type(source)~="table" or source.kind=="resize" or type(source.widget)~="string" then return {} end
-    local package=registry.catalogue[source.widget]
-    if not package then return {} end
-    local destination=ui.resolve_for_check(ui.bind("widgets.drag.destination"))
-    local bar_height=ui.resolve_for_check(ui.bind("bar.height")) or t.status_height or 50
-    local inset=kit.tokens.spacing.md
-    local zones={}
-    local remove=M.remove_zone()
-    local remove_left,remove_top=(width-remove.width)/2,height-remove.bottom-remove.height
-    local over_remove=ui.resolve_for_check(ui.bind("widgets.drag.over_remove"))==true
-    if package.forms.desktop then
-        table.insert(zones,zone("drop-zone-desktop",inset,bar_height*1.5,width-2*inset,height-bar_height*1.5-inset,
-            ui.tr("bead.widgets.zone-desktop"),"wallpaper",destination=="desktop" and not over_remove,false))
-    end
-    if source.iid~=nil then
-        table.insert(zones,zone("drop-zone-remove",remove_left,remove_top,remove.width,remove.height,
-            ui.tr("bead.widgets.zone-remove"),"delete",over_remove,true))
-    end
-    return zones
+    if type(source)~="table" or source.kind=="resize" or source.iid==nil
+        or not registry.catalogue[source.widget] then return {} end
+    local sp=kit.tokens.spacing
+    local zone=M.remove_zone()
+    local active=ui.resolve_for_check(ui.bind("widgets.drag.over_remove"))==true
+    local label=ui.tr("bead.widgets.zone-remove")
+    return {ui.Box{id="drop-zone-remove",position="absolute",left=(width-zone.width)/2,top=height-zone.bottom-zone.height,
+        width=zone.width,height=zone.height,radius=kit.tokens.radii.medium,fill=ui.alpha("error",active and .16 or .05),
+        border_width=active and 2 or 1.5,border_color=ui.alpha("error",active and .9 or .45),align="center",justify="center",
+        ui.Row{id="drop-zone-remove-label",height=sp.huge,padding_left=sp.md,padding_right=sp.md,
+            gap=sp.xs,align="center",radius=kit.tokens.radii.full,fill=ui.alpha("errorContainer",active and .96 or .82),
+            ui.Text{id="icon",text="delete",family="Material Symbols Rounded",font_size=kit.tokens.icons.large,
+                width=kit.tokens.icons.large+sp.xs,height=sp.xl,color="onErrorContainer"},
+            ui.Text{id="text",text=label,font_size=kit.tokens.text.body*4/3,
+                width=math.ceil(ui.text_width(label,"IBM Plex Sans",kit.tokens.text.body*4/3))+sp.hairline,
+                height=sp.xl,color="onErrorContainer"}}}}
 end
 -- The ghost and the zones are separate canvases: the ghost surface moves with the pointer,
 -- the zones stay put (B0210).

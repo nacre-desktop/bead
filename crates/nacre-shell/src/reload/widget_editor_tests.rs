@@ -101,31 +101,6 @@ fn owner_layout_loads_unchanged_with_the_title_as_a_widget() {
 }
 
 #[test]
-fn a_widget_dropped_in_the_middle_sits_beside_the_title_never_on_top() {
-    let mut model = Model::new(owner_layout());
-    let title_x = WIDTH / 2.;
-    // Drop the clock just right of the centre: it joins the centre section after the title.
-    assert!(model.drag("clock", "bar", title_x + 140., 20.));
-    let clock = locate(&model.doc, "clock").unwrap();
-    assert_eq!(clock["host"], "top_bar");
-    assert_eq!(clock["slot"]["region"], "centre");
-    let harness = bar_harness(&model.doc, false);
-    let rects = instance_rects(&harness);
-    let (title, clock) = (rects["title"], rects["clock"]);
-    let overlap = title.x < clock.x + clock.w && clock.x < title.x + title.w;
-    assert!(!overlap, "clock {clock:?} lands beside the title {title:?}");
-    let band = ((WIDTH * 0.28) as f32, (WIDTH * 0.72) as f32);
-    for rect in [title, clock] {
-        assert!(
-            rect.x >= band.0 - 0.5 && rect.x + rect.w <= band.1 + 0.5,
-            "{rect:?} stays in the centre section"
-        );
-    }
-    // Left and right sections keep their own packing.
-    assert!(rects["workspaces"].x < band.0 && rects["power"].x > band.1);
-}
-
-#[test]
 fn edit_mode_clicks_inspect_the_placed_instance_instead_of_its_dropdown() {
     let doc = owner_layout();
     let normal = bar_harness(&doc, false);
@@ -273,198 +248,237 @@ fn the_ghost_is_drawn_relative_to_the_pointer() {
     assert!(!root.contains("drop_zones"), "{root}");
 }
 
+/// The bar as it renders `doc`, measured like the live seed (`widget_instance` markers).
 fn bar_rects_after(doc: &Json) -> BTreeMap<String, bead::render::Rect> {
     instance_rects(&bar_harness(doc, false))
 }
 
-#[test]
-fn the_bar_takes_a_widget_anywhere_along_its_width() {
-    // Far left: before the launcher.
-    let mut model = Model::new(owner_layout());
-    assert!(model.drag("clock", "bar", 20., 20.));
-    let clock = locate(&model.doc, "clock").unwrap();
-    assert_eq!(clock["host"], "top_bar");
-    assert_eq!(
-        (
-            clock["slot"]["region"].as_str(),
-            clock["slot"]["start"].as_f64()
-        ),
-        (Some("left"), Some(0.))
-    );
-    let rects = bar_rects_after(&model.doc);
-    assert!(rects["clock"].x < rects["launcher"].x);
-
-    // Left of centre, in the left section: it keeps a gap after the workspaces.
-    let mut model = Model::new(owner_layout());
-    assert!(model.drag("clock", "bar", WIDTH * 0.22, 20.));
-    let clock = locate(&model.doc, "clock").unwrap();
-    assert_eq!(clock["slot"]["region"], "left");
-    let gap = clock["slot"]["gap"].as_f64().unwrap();
-    assert!(gap > 150., "gap {gap}");
-    let rects = bar_rects_after(&model.doc);
-    let workspaces = rects["workspaces"];
-    assert!(
-        rects["clock"].x >= workspaces.x + workspaces.w + gap as f32,
-        "{:?} after {workspaces:?} by {gap}",
-        rects["clock"]
-    );
-    assert!(rects["clock"].x + rects["clock"].w < (WIDTH * 0.28) as f32);
-
-    // Just left of the centre: the centre section, before the title.
-    let mut model = Model::new(owner_layout());
-    assert!(model.drag("clock", "bar", WIDTH * 0.40, 20.));
-    let clock = locate(&model.doc, "clock").unwrap();
-    assert_eq!(clock["slot"]["region"], "centre");
-    let rects = bar_rects_after(&model.doc);
-    assert!(rects["clock"].x + rects["clock"].w <= rects["title"].x);
-
-    // Between two right-side widgets (inside the status pill): between wifi and bluetooth.
-    let mut model = Model::new(owner_layout());
-    let (wifi, bluetooth) = (
-        pill_child_x(&model.doc, "wifi"),
-        pill_child_x(&model.doc, "bluetooth"),
-    );
-    assert!(model.drag("clock", "bar", (wifi + bluetooth) / 2. + 32., 20.));
-    let pill = locate(&model.doc, "status-pill").unwrap();
-    let order: Vec<&str> = pill["children"]
-        .as_array()
-        .unwrap()
+/// A real gesture on the owner's bar: the drop model sees the bar's own rendered geometry and
+/// the dragged widget's real size, as the live seed provides them.
+fn real_drag(doc: &Json, iid: &str, x: f64) -> Option<Json> {
+    let rects = bar_rects_after(doc);
+    let source = rects[iid];
+    let geometry: Vec<Json> = rects
         .iter()
-        .map(|child| child["iid"].as_str().unwrap())
+        .map(|(iid, r)| json!({"iid":iid,"x":r.x,"y":r.y,"w":r.w,"h":r.h}))
         .collect();
-    let at = |iid: &str| order.iter().position(|other| *other == iid).unwrap();
-    assert_eq!(at("clock"), at("wifi") + 1, "{order:?}");
-    assert_eq!(at("bluetooth"), at("clock") + 1, "{order:?}");
-
-    // Moved again within the left section, it keeps its neighbours in place.
-    let mut model = Model::new(owner_layout());
-    assert!(model.drag("clock", "bar", 20., 20.));
-    assert!(model.drag("clock", "bar", WIDTH * 0.22, 20.));
-    let bar = model.doc["hosts"]["top_bar"]["instances"]
-        .as_array()
-        .unwrap();
-    let left: Vec<&str> = bar
-        .iter()
-        .filter(|item| item["slot"]["region"] == "left")
-        .map(|item| item["iid"].as_str().unwrap())
-        .collect();
-    assert_eq!(left, ["launcher", "workspaces", "clock"], "{bar:?}");
-
-    // Many motions whose geometry comes from the live preview (neighbours pushed right by the
-    // dragged widget's gap) still insert after them: geometry is frozen per gesture.
-    let mut model = Model::new(owner_layout());
-    assert!(model.drag("clock", "bar", 20., 20.));
-    let doc = model.doc.clone();
-    let mut shifted = super::widget_layout_property_tests::context(&doc);
-    for rect in shifted["geometry"].as_array_mut().unwrap() {
-        if rect["iid"] == "launcher" || rect["iid"] == "workspaces" {
-            let x = rect["x"].as_f64().unwrap();
-            rect["x"] = json!(x + 600.);
-        }
-    }
-    let event = |x: f64, phase: &str, context: &Json| {
-        let Value::List(rows) = drop_event(&doc, "clock", "bar", x, 20., phase) else {
+    let event = |phase: &str| {
+        let Value::List(rows) = drop_event(doc, iid, "bar", x, 20., phase) else {
             unreachable!()
         };
         let mut row = rows[0].clone();
-        row["context"] = context.clone();
+        row["context"]["geometry"] = json!(geometry);
+        row["width"] = json!(source.w);
+        row["grab_x"] = json!(source.w / 2.);
         Value::list(vec![row])
     };
-    let plain = super::widget_layout_property_tests::context(&doc);
-    model.controller.drag(event(40., "move", &plain)).unwrap();
-    for step in 1..20 {
-        model
-            .controller
-            .drag(event(40. + step as f64 * 20., "move", &shifted))
-            .unwrap();
+    let mut model = Model::new(doc.clone());
+    model.controller.drag(event("move")).unwrap();
+    let dropped = model.controller.drag(event("drop")).unwrap();
+    match dropped.get("widgets.write") {
+        Some(Value::List(rows)) if rows.len() == 1 => Some(rows[0].clone()),
+        _ => None,
     }
-    let dropped = model
-        .controller
-        .drag(event(WIDTH * 0.22, "drop", &shifted))
-        .unwrap();
-    let Some(Value::List(written)) = dropped.get("widgets.write") else {
-        panic!("the drop writes")
-    };
-    let left: Vec<&str> = written[0]["hosts"]["top_bar"]["instances"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|item| item["slot"]["region"] == "left")
-        .map(|item| item["iid"].as_str().unwrap())
-        .collect();
-    assert_eq!(left, ["launcher", "workspaces", "clock"]);
-
-    // A saved gap survives normalisation and reload (the owner's file shape).
-    let mut model = Model::new(owner_layout());
-    assert!(model.drag("clock", "bar", WIDTH * 0.22, 20.));
-    let reloaded = Model::new(model.doc.clone());
-    assert_eq!(
-        locate(&reloaded.doc, "clock").unwrap()["slot"]["gap"],
-        locate(&model.doc, "clock").unwrap()["slot"]["gap"]
-    );
 }
 
-fn pill_child_x(doc: &Json, iid: &str) -> f64 {
-    super::widget_layout_property_tests::context(doc)["geometry"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|rect| rect["iid"] == iid)
-        .map(|rect| rect["x"].as_f64().unwrap())
-        .unwrap()
+fn centre(rect: bead::render::Rect) -> f32 {
+    rect.x + rect.w / 2.
 }
 
 #[test]
-fn a_bar_drag_shows_the_insertion_slot_under_the_pointer() {
+fn bar_drops_stay_exactly_where_released_and_the_title_stays_centred() {
+    let doc = owner_layout();
+    let before = bar_rects_after(&doc);
+    let clock_w = before["clock"].w;
+    let title = centre(before["title"]);
+    assert!(
+        (title - WIDTH as f32 / 2.).abs() < 1.,
+        "the title starts centred"
+    );
+    // Far left at an arbitrary offset, just left of the title, and on the right.
+    for (x, anchor) in [
+        (433., "left"),
+        (WIDTH / 2. - 170., "centre"),
+        (WIDTH - 437., "right"),
+    ] {
+        let doc = real_drag(&doc, "clock", x).expect("the drop lands");
+        let clock = locate(&doc, "clock").unwrap();
+        assert_eq!(clock["host"], "top_bar");
+        assert_eq!(clock["slot"]["region"], anchor);
+        let after = bar_rects_after(&doc);
+        let landed = after["clock"];
+        // The ghost's edge (or centre) at release is where the widget's anchored edge lands;
+        // outside the pill its own padding may differ by a few px, so compare that edge.
+        let released = x as f32 - clock_w / 2.;
+        let (got, want) = match anchor {
+            "left" => (landed.x, released),
+            "right" => (landed.x + landed.w, released + clock_w),
+            _ => (centre(landed), x as f32),
+        };
+        assert!(
+            (got - want).abs() <= 1.,
+            "{anchor}: the clock stands where it was released ({want}): {landed:?}"
+        );
+        assert!(
+            (centre(after["title"]) - title).abs() <= 1.,
+            "{anchor}: the title stays at the centre: {:?}",
+            after["title"]
+        );
+        for iid in ["launcher", "workspaces", "status-pill"] {
+            if iid != "status-pill" {
+                assert_eq!(after[iid], before[iid], "{anchor}: {iid} does not move");
+            }
+        }
+        // It stays put across reloads (normalisation keeps the offset).
+        let reloaded = Model::new(doc.clone());
+        assert_eq!(
+            locate(&reloaded.doc, "clock").unwrap()["slot"],
+            clock["slot"]
+        );
+    }
+}
+
+#[test]
+fn a_drop_over_a_neighbour_snaps_flush_beside_it_and_pushes_nothing() {
+    let doc = owner_layout();
+    let before = bar_rects_after(&doc);
+    // Released over the workspaces: it slides to the nearest free side, nothing moves.
+    let over = centre(before["workspaces"]) as f64 + 4.;
+    let doc = real_drag(&doc, "clock", over).expect("the drop snaps, not refused");
+    let after = bar_rects_after(&doc);
+    let (clock, workspaces) = (after["clock"], after["workspaces"]);
+    assert_eq!(workspaces, before["workspaces"]);
+    assert_eq!(after["launcher"], before["launcher"]);
+    let gap = if clock.x >= workspaces.x + workspaces.w {
+        clock.x - (workspaces.x + workspaces.w)
+    } else {
+        workspaces.x - (clock.x + clock.w)
+    };
+    assert!(
+        (0. ..=5.).contains(&gap),
+        "flush beside the workspaces: {clock:?} {workspaces:?}"
+    );
+    // Released on the title: beside its centre band, the title stays put.
+    let doc = owner_layout();
+    let doc = real_drag(&doc, "clock", WIDTH / 2.).expect("snaps beside the title");
+    let after = bar_rects_after(&doc);
+    assert!((centre(after["title"]) - WIDTH as f32 / 2.).abs() <= 1.);
+    let clock = after["clock"];
+    let title = after["title"];
+    assert!(
+        clock.x + clock.w <= title.x || clock.x >= title.x + title.w,
+        "{clock:?} beside {title:?}"
+    );
+}
+
+#[test]
+fn moving_a_packed_widget_pins_the_ones_beyond_it() {
+    let doc = owner_layout();
+    let before = bar_rects_after(&doc);
+    // The launcher leaves the left row: the workspaces stay where they were.
+    let doc = real_drag(&doc, "launcher", WIDTH * 0.6).expect("lands right of centre");
+    let after = bar_rects_after(&doc);
+    assert_eq!(after["workspaces"], before["workspaces"]);
+    assert_eq!(after["status-pill"], before["status-pill"]);
+    assert!((centre(after["title"]) - WIDTH as f32 / 2.).abs() <= 1.);
+}
+
+#[test]
+fn bar_motion_changes_no_layout_until_the_drop() {
     let doc = owner_layout();
     let mut model = Model::new(doc.clone());
-    let values = model
-        .controller
-        .drag(drop_event(&doc, "clock", "bar", WIDTH * 0.22, 20., "move"))
-        .unwrap();
-    let Some(Value::List(preview)) = values.get("widgets.drag.layout") else {
-        panic!("a bar motion previews the insertion");
-    };
-    let mut stores = crate::desktop::values(&Default::default(), "");
-    stores.insert("widgets.layout".into(), Value::list(vec![doc.clone()]));
-    stores.insert("widgets.drag.layout".into(), Value::List(preview.clone()));
-    stores.insert("widgets.drag.active".into(), Value::Bool(true));
-    stores.insert("widgets.drag.phase".into(), Value::Text("dragging".into()));
-    stores.insert("widgets.drag.destination".into(), Value::Text("bar".into()));
-    stores.insert("bead.focused_title".into(), Value::Text("Notes".into()));
-    stores.insert("bead.windows".into(), Value::list(Vec::new()));
-    stores.insert("bead.workspaces".into(), Value::list(Vec::new()));
-    let harness = Harness::load(
-        &shell(),
-        Path::new("bar/main.luau"),
-        &shell().join("palette.json"),
-        stores,
-        Config {
-            width: WIDTH as u32,
-            height: 50,
-            scale: 1.,
-        },
-    )
-    .unwrap();
-    // The insertion slot: the placeholder's outlined box (registry, `widget-snap-slot-`).
-    let slot = harness
-        .scene()
-        .primitives
-        .iter()
-        .find_map(|primitive| match primitive {
-            bead::render::Primitive::Rounded {
-                rect,
-                border: Some((_, width)),
-                ..
-            } if *width > 1. && rect.x > 200. && rect.x < (WIDTH * 0.28) as f32 => Some(*rect),
-            _ => None,
-        })
-        .expect("the insertion slot renders on the bar");
-    let pointer = (WIDTH * 0.22) as f32;
+    let mut layouts = Vec::new();
+    for step in 0..60 {
+        let values = model
+            .controller
+            .drag(drop_event(
+                &doc,
+                "clock",
+                "bar",
+                200. + step as f64 * 20.,
+                20.,
+                "move",
+            ))
+            .unwrap();
+        assert!(
+            matches!(values.get("widgets.write"), Some(Value::List(rows)) if rows.is_empty()),
+            "no layout write before the drop"
+        );
+        layouts.push(values.get("widgets.drag.layout").cloned());
+        let drag: BTreeMap<String, Value> = values
+            .into_iter()
+            .filter(|(key, _)| key.starts_with("widgets.drag."))
+            .collect();
+        assert!(super::widget_drag_pointer(&drag).is_some());
+    }
+    assert!(layouts[0].is_some());
     assert!(
-        slot.x <= pointer && pointer <= slot.x + slot.w + 80.,
-        "slot {slot:?} sits under the pointer at {pointer}"
+        layouts
+            .iter()
+            .all(|layout| layout.is_none() || *layout == layouts[0]),
+        "the bar layout is frozen while the pointer moves"
     );
+}
+
+#[test]
+fn drag_visuals_are_quiet_and_drag_surfaces_are_layer_canvases() {
+    let dragging = std::fs::read_to_string(shell().join("widgets/dragging.luau")).unwrap();
+    let ghost = &dragging[dragging.find("function M.ghost_node()").unwrap()..];
+    let ghost = &ghost[..ghost.find("\nend").unwrap()];
+    assert!(
+        !ghost.contains("\"primary\""),
+        "no accent outline on the ghost"
+    );
+    let zones = &dragging[dragging.find("function M.drop_zones(").unwrap()..];
+    let zones = &zones[..zones.find("\nend").unwrap()];
+    assert!(!zones.contains("primary") && !zones.contains("drop-zone-desktop"));
+    let bar = std::fs::read_to_string(shell().join("bar/main.luau")).unwrap();
+    assert!(
+        !bar.contains("border_width"),
+        "the bar draws no drag outline"
+    );
+    let registry = std::fs::read_to_string(shell().join("widgets/registry.luau")).unwrap();
+    assert!(!registry.contains("drag_placeholder"));
+    // The ghost and the zones are layer-shell canvases (no compositor border, focus ring or
+    // shadow applies to layer surfaces), above windows.
+    let main =
+        std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/main.rs")).unwrap();
+    assert!(
+        main.contains(r#".insert("widgets-drag".into(), bead::wayland::CanvasLayer::Overlay)"#)
+    );
+    assert!(main.contains(r#".insert("widgets-zones".into(), bead::wayland::CanvasLayer::Top)"#));
+    let rules = std::fs::read_to_string(shell().join("niri-pearls.kdl")).unwrap();
+    assert!(!rules.contains("widgets-drag") && !rules.contains("widgets-zones"));
+}
+
+#[test]
+fn the_owner_layout_migrates_pixel_identically() {
+    // Measured from origin/main 6802f81e (B0210, the live bar) with the same fixture and harness.
+    let expected = [
+        ("launcher", 15., 32.),
+        ("workspaces", 59., 10.),
+        ("title", 923., 75.),
+        ("status-pill", 1570., 335.),
+        ("updates", 1576., 34.),
+        ("sound", 1622., 21.),
+        ("wifi", 1655., 24.),
+        ("bluetooth", 1691., 16.),
+        ("battery", 1719., 26.),
+        ("notifications", 1757., 31.),
+        ("clock", 1800., 65.),
+        ("power", 1877., 22.),
+    ];
+    let mut harness = bar_harness(&owner_layout(), false);
+    let rects = instance_rects(&harness);
+    for (iid, x, w) in expected {
+        assert_eq!((rects[iid].x, rects[iid].w), (x, w), "{iid}");
+    }
+    let pixels = harness.render().unwrap().pixels;
+    let hash = pixels.iter().fold(0u64, |hash, byte| {
+        hash.wrapping_mul(1099511628211)
+            .wrapping_add(u64::from(*byte))
+    });
+    assert_eq!(hash, 5901862793837364301, "same pixels as the B0210 bar");
 }
 
 #[test]

@@ -164,7 +164,6 @@ local function drag_clear(s)
     s["widgets.drag.original"]={}
     s["widgets.drag.layout"]={}
     s["widgets.drag.revision"]=0
-    s["widgets.drag.preview"]=""
     s["widgets.drag.over_remove"]=false
 end
 local function current_canonical(s,context)
@@ -226,7 +225,7 @@ local function form_span(req,item)
     local style=styles[item.style or ""] or styles[form and form.default_style or ""]
     return style and tonumber(style.min_span) or math.max(1,math.floor(tonumber(item.slot and item.slot.span) or 1))
 end
-local function pack_list(req,list)
+local function pack_list(req,list,top)
     local order={}
     for index,item in list do
         if type(item.slot)~="table" then item.slot={} end
@@ -243,12 +242,12 @@ local function pack_list(req,list)
     table.clear(list)
     for _,entry in order do
         local item,region=entry.item,entry.item.slot.region
-        local gap=tonumber(item.slot.gap)
+        local offset=tonumber(item.slot.offset)
         item.slot={region=region,start=cursor[region],span=form_span(req,item),
-            gap=gap and gap>0 and region~="centre" and math.floor(gap) or nil}
+            offset=top and offset and offset==offset and math.abs(offset)<20000 and math.round(offset) or nil}
         cursor[region]+=item.slot.span
         if type(item.children)~="table" or (catalogue(req,item.widget) and item.widget~="pill") then item.children=nil end
-        if item.children then pack_list(req,item.children) end
+        if item.children then pack_list(req,item.children,false) end
         table.insert(list,item)
     end
 end
@@ -259,7 +258,7 @@ local function normalise(doc,req)
     bar.tiles=tiles
     bar.mode="content"
     bar.regions={left={start=0,span=tiles},centre={start=0,span=tiles},right={start=0,span=tiles}}
-    pack_list(req,bar.instances)
+    pack_list(req,bar.instances,true)
     for _,item in doc.hosts.canvas and doc.hosts.canvas.instances or {} do
         if type(item.children)~="table" or item.widget~="pill" then item.children=nil end
     end
@@ -295,64 +294,68 @@ local function centre_x(context,iid)
         if rect.iid==iid and type(rect.x)=="number" and type(rect.w)=="number" then return rect.x+rect.w/2 end
     end
 end
--- B0210: the space a dropped bar widget keeps toward its section's edge: from the previous
--- widget (left section) or to the next one (right section), measured from the bar's own
--- geometry and rounded to 4 px. The dragged widget's own rect is ignored.
-local function bar_gap(list,item,event,x,width,context)
-    local region=item.slot.region
-    if region=="centre" then return nil end
-    local function rect(iid)
-        if iid==item.iid then return nil end
-        for _,r in context.geometry or {} do
-            if r.iid==iid and type(r.x)=="number" and type(r.w)=="number" then return r end
-        end
-    end
-    local spacing=tonumber(context.bar_gap) or 12
-    local inset=tonumber(context.bar_inset) or 15
-    local w=tonumber(event.width) or 0
-    local left=x-(tonumber(event.grab_x) or w/2)
-    local siblings={}
-    for _,other in list do
-        if other~=item and other.slot.region==region then table.insert(siblings,other) end
-    end
-    table.sort(siblings,function(a,b) return a.slot.start<b.slot.start end)
-    local gap
-    if region=="left" then
-        local edge=inset
-        for _,other in siblings do
-            local r=other.slot.start<item.slot.start and rect(other.iid)
-            if r then edge=math.max(edge,r.x+r.w+spacing) end
-        end
-        gap=left-edge
-    else
-        local edge=width-inset
-        for _,other in siblings do
-            local r=other.slot.start>item.slot.start and rect(other.iid)
-            if r then edge=math.min(edge,r.x-spacing) end
-        end
-        gap=edge-(left+w)
-    end
-    -- A widget moved within its section: its old rect shifted the neighbours it stood before.
-    local own
+-- B0211: a bar drop outside a pill stands exactly where the ghost was released: the nearest
+-- anchor (output thirds) and its px offset from it. A drop over a neighbour slides flush beside
+-- it (the nearest free side); it never pushes or reorders anything; with no room it is refused.
+local function bar_rects(doc,context,skip,width)
+    local top={}
+    for _,item in doc.hosts.top_bar.instances do if item.iid~=skip then top[item.iid]=item end end
+    local rects={}
     for _,r in context.geometry or {} do
-        if r.iid==item.iid and type(r.x)=="number" and type(r.w)=="number" then own=r end
-    end
-    if own then
-        for _,other in siblings do
-            local r=rect(other.iid)
-            if r and region=="left" and other.slot.start<item.slot.start and own.x<r.x then gap+=own.w+spacing; break end
-            if r and region=="right" and other.slot.start>item.slot.start and own.x>r.x then gap+=own.w+spacing; break end
+        local item=top[r.iid]
+        if item and type(r.x)=="number" and type(r.w)=="number" then
+            if item.widget=="title" and item.slot.offset==nil then
+                -- The title narrows for neighbours; its minimum stays free around the centre.
+                local keep=tonumber(context.title_min) or 120
+                table.insert(rects,{x=width/2-keep/2,w=keep})
+            else
+                table.insert(rects,{x=r.x,w=r.w})
+            end
         end
     end
-    gap=math.floor(gap/4)*4
-    return gap>0 and gap or nil
+    return rects
+end
+local function bar_landing(rects,left,w,width,gap)
+    local function free(x)
+        if x<0 or x+w>width then return false end
+        for _,r in rects do if x<r.x+r.w+gap and r.x<x+w+gap then return false end end
+        return true
+    end
+    if free(left) then return left end
+    local best
+    for _,r in rects do
+        for _,x in {r.x-gap-w,r.x+r.w+gap} do
+            if free(x) and (not best or math.abs(x-left)<math.abs(best-left)) then best=x end
+        end
+    end
+    return best
+end
+local function anchor_slot(left,w,width)
+    local centre=left+w/2
+    if centre<width/3 then return {region="left",start=math.huge,span=1,offset=math.round(left)} end
+    if centre>width*2/3 then return {region="right",start=-1,span=1,offset=math.round(width-left-w)} end
+    return {region="centre",start=math.huge,span=1,offset=math.round(centre-width/2)}
+end
+-- A packed (offset-less) widget leaving its row would let the ones beyond it slide toward the
+-- anchor; they are pinned where they stand instead, so a move never shifts its neighbours.
+local function pin_row(doc,moved,context,width)
+    if moved.slot.offset~=nil then return end
+    local rects={}
+    for _,r in context.geometry or {} do if type(r.iid)=="string" then rects[r.iid]=r end end
+    for _,other in doc.hosts.top_bar.instances do
+        local r=rects[other.iid]
+        local slot=other.slot
+        if other~=moved and slot.offset==nil and slot.region==moved.slot.region and other.widget~="title" and r then
+            if slot.region=="left" and slot.start>moved.slot.start then slot.offset=math.round(r.x)
+            elseif slot.region=="right" and slot.start<moved.slot.start then slot.offset=math.round(width-r.x-r.w)
+            elseif slot.region=="centre" then slot.offset=math.round(r.x+r.w/2-width/2) end
+        end
+    end
 end
 -- Insert by pointer order among the measured siblings; ties and unmeasured rows keep order.
-local function insert_ordered(list,item,x,region,context,regional)
+local function insert_ordered(list,item,x,context)
     local rows={}
-    for index,other in list do
-        if not regional or other.slot.region==region then table.insert(rows,{item=other,index=index}) end
-    end
+    for index,other in list do table.insert(rows,{item=other,index=index}) end
     table.sort(rows,function(a,b)
         local ar,br=REGION_RANK[a.item.slot.region],REGION_RANK[b.item.slot.region]
         if ar~=br then return ar<br end
@@ -371,14 +374,14 @@ local function insert_ordered(list,item,x,region,context,regional)
     end
     if not measured then before,after=last,nil end
     -- Between two regions (inside a pill) the nearer neighbour's region wins; ties join the next.
-    local join_after=after and (regional or not before or before.slot.region==after.slot.region
+    local join_after=after and (not before or before.slot.region==after.slot.region
         or (centre_x(context,after.iid) or x)-x<=x-(centre_x(context,before.iid) or x))
     if join_after then
         item.slot={region=after.slot.region,start=after.slot.start-.5,span=1}
     elseif before then
         item.slot={region=before.slot.region,start=before.slot.start+.5,span=1}
     else
-        item.slot={region=region,start=math.huge,span=1}
+        item.slot={region="centre",start=math.huge,span=1}
     end
     table.insert(list,item)
 end
@@ -550,6 +553,9 @@ local function drag_drop(s,event,context,base,commit,undo_document)
     else
         group,state=group_for(doc,id,source.group or id,req)
     end
+    local width=output_dimensions(doc,event,context)
+    local landing
+    if live_location and live_location.host=="top_bar" then pin_row(doc,live_location.item,context,width) end
     if source.app~=true and live_location and destination=="desktop" and in_remove_zone(event,context) then
         if not remove_instance(doc,state,live_location) or not normalise(doc,req) then return false end
         commit_drop(s,doc,previous,commit)
@@ -612,16 +618,20 @@ local function drag_drop(s,event,context,base,commit,undo_document)
         elseif pill then
             item.host=pill.iid
             pill.children=pill.children or {}
-            insert_ordered(pill.children,item,x,"centre",context,false)
+            insert_ordered(pill.children,item,x,context)
         else
-            -- B0210: the bar is free along its width. The centre band (28-72 %, the centre
-            -- section) centres its row; in the side sections a widget keeps the gap to its
-            -- neighbour toward the section's edge, so it lands where it is dropped.
-            local width=output_dimensions(doc,event,context)
-            local region=x<width*.28 and "left" or x>width*.72 and "right" or "centre"
+            -- The ghost's left edge: a moved bar widget keeps its size; another form takes the
+            -- style's bar reservation (the ghost scales its grab point the same way).
+            local w=tonumber(event.width) or 0
+            if source_form~="bar" or source.app==true or w<=0 then
+                w=tonumber(style.reserve_width) or (tonumber(style.preferred_span) or 1)*32
+            end
+            local left=x-(tonumber(event.grab_x) or w/2)*w/math.max(1,tonumber(event.width) or w)
+            landing=bar_landing(bar_rects(doc,context,item.iid,width),left,w,width,tonumber(context.bar_gap) or 4)
+            if not landing then return false end
             item.host="top_bar"
-            insert_ordered(doc.hosts.top_bar.instances,item,x,region,context,true)
-            item.slot.gap=bar_gap(doc.hosts.top_bar.instances,item,event,x,width,context)
+            item.slot=anchor_slot(landing,w,width)
+            table.insert(doc.hosts.top_bar.instances,item)
         end
     end
     config.enabled=true; config.style=style_name
@@ -630,58 +640,7 @@ local function drag_drop(s,event,context,base,commit,undo_document)
     if not normalise(doc,req) then return false end
     if form=="desktop" then config.placement={host="canvas",slot=clone(item.slot)} end
     commit_drop(s,doc,previous,commit)
-    return true,doc,item
-end
-local function same_slot(a,b)
-    if a.host~=b.host then return false end
-    if a.host=="canvas" then
-        return a.slot.x==b.slot.x and a.slot.y==b.slot.y and a.slot.w==b.slot.w and a.slot.h==b.slot.h
-    end
-    return a.slot.region==b.slot.region and a.slot.start==b.slot.start
-end
--- The preview keeps the dimmed source in place and shows the target as a placeholder.
-local function transient_layout(base,candidate,moved,source,epoch,req)
-    if type(moved)~="table" then return candidate end
-    local source_location=source.iid and locate_document_item(base,source.iid)
-    if source_location and same_slot(source_location.item,moved) and source_location.item.host==moved.host then return candidate end
-    local preview=clone(candidate)
-    local target_location=locate_document_item(preview,moved.iid)
-    if not target_location then return candidate end
-    local placeholder=target_location.item
-    local stem="drag-preview:"..tostring(epoch)..":"..tostring(moved.iid)
-    placeholder.iid=string.sub(stem,1,128)
-    local function taken(iid)
-        local hit=false
-        each_list(preview,function(other) if other~=placeholder and other.iid==iid then hit=true end end)
-        return hit
-    end
-    local suffix=0
-    while taken(placeholder.iid) do
-        suffix+=1
-        placeholder.iid=string.sub(stem,1,112)..":"..tostring(suffix)
-    end
-    placeholder.drag_placeholder=true
-    if source_location and not locate_document_item(preview,source.iid) then
-        local list=document_location(preview,source_location)
-        if list then
-            local original=clone(source_location.item)
-            if original.slot.region then
-                -- Re-seat the source between its original neighbours.
-                local base_list=document_location(base,source_location) or {}
-                local seated
-                for index=source_location.index-1,1,-1 do
-                    local neighbour=base_list[index]
-                    if neighbour.slot.region~=original.slot.region then break end
-                    seated=locate_document_item(preview,neighbour.iid)
-                    if seated then break end
-                end
-                original.slot.start=seated and seated.item.slot.start+.5 or -.5
-            end
-            table.insert(list,original)
-        end
-    end
-    if not normalise(preview,req) then return clone(base) end
-    return preview
+    return true,doc,item,landing
 end
 local function capture_drag_base(s,event,source,context)
     local original=document(s,context)
@@ -819,27 +778,6 @@ local function op(s,args)
     history(s,previous)
     finish(s,doc)
 end
--- B0210: during one gesture every widget is measured where it stood when first seen, so the
--- insertion preview (which shifts its neighbours by the dropped widget's gap) cannot feed back
--- into the insertion point.
-local function steady_context(s,context)
-    local epoch=tonumber(s["widgets.drag.epoch"]) or 0
-    local frozen=s["widgets.drag.geometry"]
-    if type(frozen)~="table" or s["widgets.drag.geometry_epoch"]~=epoch then frozen={} end
-    local seen={}
-    for _,rect in frozen do seen[rect.iid]=true end
-    for _,rect in context.geometry or {} do
-        if type(rect)=="table" and type(rect.iid)=="string" and not seen[rect.iid] then
-            seen[rect.iid]=true
-            table.insert(frozen,rect)
-        end
-    end
-    s["widgets.drag.geometry"]=frozen
-    s["widgets.drag.geometry_epoch"]=epoch
-    local steady=table.clone(context)
-    steady.geometry=frozen
-    return steady
-end
 local function drag(s,args)
     s["widgets.write"]={}
     local event=request(args)
@@ -888,21 +826,17 @@ local function drag(s,args)
         s["widgets.drag.target_origin_x"]=target_x
         s["widgets.drag.target_origin_y"]=target_y
         s["widgets.drag.target_output_id"]=event.target_output_id or event.app_output_id or ""
-        local context=steady_context(s,type(event.context)=="table" and event.context or event)
+        local context=type(event.context)=="table" and event.context or event
         s["widgets.drag.over_remove"]=source.iid~=nil and event.destination=="desktop" and in_remove_zone(event,context)
-        if base and event.destination=="desktop" and source.kind~="resize" then
-            -- B0208/B0210: a desktop move is a pure transform. The layout stays the frozen
-            -- base (the source dims in place) and nothing but the ghost surface moves per
-            -- motion; the layout changes once, on drop.
+        if base and source.kind~="resize" then
+            -- B0208-B0211: a move is a pure transform on the bar and the desktop alike. The
+            -- layout stays the frozen base (the source dims in place), the ghost surface is
+            -- the only thing that moves, and the layout changes once, on drop.
             local layout=(s["widgets.drag.layout"] or {})[1]
-            if start or s["widgets.drag.preview"]~="desktop" or type(layout)~="table" then
-                s["widgets.drag.layout"]={clone(base)}
-            end
-            s["widgets.drag.preview"]="desktop"
+            if start or type(layout)~="table" then s["widgets.drag.layout"]={clone(base)} end
         elseif base then
-            s["widgets.drag.preview"]="bar"
-            local accepted,candidate,moved=drag_drop(s,event,context,base,false)
-            s["widgets.drag.layout"]={accepted and (source.kind=="resize" and candidate or transient_layout(base,candidate,moved,source,s["widgets.drag.epoch"],{catalogue=context.catalogue})) or clone(base)}
+            local accepted,candidate=drag_drop(s,event,context,base,false)
+            s["widgets.drag.layout"]={accepted and candidate or clone(base)}
         else
             s["widgets.drag.layout"]={}
         end
@@ -911,14 +845,14 @@ local function drag(s,args)
     if phase=="drop" then
         local source=drag_record(event.source)
         local accepted=false
-        local context=steady_context(s,type(event.context)=="table" and event.context or event)
+        local context=type(event.context)=="table" and event.context or event
         local base=(s["widgets.drag.base"] or {})[1]
         local original=(s["widgets.drag.original"] or {})[1]
         if type(source)=="table" and not base then base=capture_drag_base(s,event,source,context); original=(s["widgets.drag.original"] or {})[1] end
-        local candidate,moved
+        local candidate,moved,landing
         local stale=base~=nil and drag_revision_stale(s)
         if not stale and type(source)=="table" and (source.app~=true or event.private_remote==true) and base then
-            accepted,candidate,moved=drag_drop(s,event,context,base,true,original)
+            accepted,candidate,moved,landing=drag_drop(s,event,context,base,true,original)
             if accepted then s["widgets.drag.layout"]={clone(candidate)} end
         end
         if accepted then
@@ -929,8 +863,9 @@ local function drag(s,args)
                 s["widgets.drag.snap_x"]=tonumber(live.slot.x) or 0
                 s["widgets.drag.snap_y"]=tonumber(live.slot.y) or 0
             else
-                -- Bar drops settle where the pointer released them; the bar reflows under it.
-                s["widgets.drag.snap_x"]=(tonumber(s["widgets.drag.x"]) or 0)-(tonumber(s["widgets.drag.grab_x"]) or 0)
+                -- Bar drops settle where they land: the release point, or flush beside the
+                -- neighbour they would have covered.
+                s["widgets.drag.snap_x"]=landing or (tonumber(s["widgets.drag.x"]) or 0)-(tonumber(s["widgets.drag.grab_x"]) or 0)
                 s["widgets.drag.snap_y"]=0
             end
             if live then
@@ -958,7 +893,6 @@ local function drag(s,args)
             s["widgets.drag.layout"]={stale and current_canonical(s,context) or (base and clone(base) or current_canonical(s,context))}
         end
     end
-    if phase=="drop" or phase=="cancel" then s["widgets.drag.geometry"]={}; s["widgets.drag.geometry_epoch"]=-1 end
     if phase=="cancel" then
         local base=(s["widgets.drag.base"] or {})[1]
         local stale=base~=nil and drag_revision_stale(s)
@@ -995,9 +929,9 @@ return {
         ["status.hovered"]="",["status.peek.visible"]=false,["status.peek.kind"]="",["status.panel.kind"]="",
         ["widgets.drag.active"]=false,["widgets.drag.source"]={},["widgets.drag.destination"]="",
         ["widgets.drag.x"]=0,["widgets.drag.y"]=0,["widgets.drag.start_x"]=0,["widgets.drag.start_y"]=0,
-        ["widgets.drag.phase"]="",["widgets.drag.epoch"]=0,["widgets.drag.snap_x"]=0,["widgets.drag.snap_y"]=0,["widgets.drag.over_remove"]=false,["widgets.drag.geometry"]={},["widgets.drag.geometry_epoch"]=-1,
+        ["widgets.drag.phase"]="",["widgets.drag.epoch"]=0,["widgets.drag.snap_x"]=0,["widgets.drag.snap_y"]=0,["widgets.drag.over_remove"]=false,
         ["widgets.drag.base"]={},["widgets.drag.original"]={},["widgets.drag.layout"]={},
-        ["widgets.drag.revision"]=0,["widgets.drag.preview"]="",
+        ["widgets.drag.revision"]=0,
         ["widgets.drag.width"]=0,["widgets.drag.height"]=0,["widgets.drag.grab_x"]=0,["widgets.drag.grab_y"]=0,
         ["widgets.drag.target_origin_x"]=0,["widgets.drag.target_origin_y"]=0,
         ["widgets.drag.target_output_id"]="",

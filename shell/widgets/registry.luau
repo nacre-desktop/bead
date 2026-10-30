@@ -277,7 +277,8 @@ function M.validate(document)
         for _,item in list do
             local package=claim(item,host,"bar")
             local slot=item.slot
-            assert(type(slot)=="table" and occupied[slot.region] and integer(slot.start,0,tiles-1) and integer(slot.span,1,tiles) and slot.start+slot.span<=tiles,"invalid widget slot")
+            assert(type(slot)=="table" and occupied[slot.region] and integer(slot.start,0,tiles-1) and integer(slot.span,1,tiles) and slot.start+slot.span<=tiles
+                and (slot.offset==nil or depth==0 and host=="top_bar" and finite(slot.offset,-20000,20000)),"invalid widget slot")
             for tile=slot.start,slot.start+slot.span-1 do
                 assert(not occupied[slot.region][tile],"overlapping widget slots")
                 occupied[slot.region][tile]=true
@@ -335,7 +336,7 @@ local function form_span(item)
     if type(name)~="string" or not form.styles[name] then name=form.default_style end
     return form.styles[name].min_span
 end
-local function pack(list)
+local function pack(list,top)
     local order={}
     for index,item in list do
         if type(item)=="table" and type(item.slot)=="table" then
@@ -355,12 +356,13 @@ local function pack(list)
         local item,region=entry.item,entry.item.slot.region
         item.slot.start=cursor[region]
         item.slot.span=form_span(item)
-        local gap=tonumber(item.slot.gap)
-        item.slot.gap=gap and gap>0 and region~="centre" and math.floor(gap) or nil
+        item.slot.gap=nil
+        local offset=tonumber(item.slot.offset)
+        item.slot.offset=top and offset and offset==offset and math.abs(offset)<20000 and math.round(offset) or nil
         cursor[region]+=item.slot.span
         -- Only containers keep children (unknown packages keep theirs opaque).
         if type(item.children)~="table" or (registry[item.widget] and item.widget~="pill") then item.children=nil end
-        if item.children then pack(item.children) end
+        if item.children then pack(item.children,false) end
         table.insert(list,item)
     end
 end
@@ -381,7 +383,7 @@ function M.normalise(document)
     bar.tiles=tiles
     bar.mode="content"
     bar.regions={left={start=0,span=tiles},centre={start=0,span=tiles},right={start=0,span=tiles}}
-    if type(bar.instances)=="table" then pack(bar.instances) end
+    if type(bar.instances)=="table" then pack(bar.instances,true) end
     local canvas=doc.hosts.canvas
     if type(canvas)=="table" and type(canvas.instances)=="table" then
         for _,item in canvas.instances do
@@ -431,38 +433,89 @@ function M.project(document,width)
     M.validate(projected)
     return projected
 end
--- B0208: the bar has three real sections. A lone title keeps its centred QML band
--- (absolute, unchanged pixels); any other centre content is a centred row, so a widget
--- dropped in the middle lands beside the title, never on top of it.
-function M.centre_shared(layout)
-    local count,title=0,false
-    for _,item in layout.instances or {} do
-        if type(item.slot)=="table" and item.slot.region=="centre" then
-            count+=1
-            title=title or item.widget=="title"
-        end
-    end
-    return count>1 or (count==1 and not title)
-end
+-- B0211: placement along the bar. A widget whose slot has an `offset` stands exactly there:
+-- `region` is its anchor (left/right: px from that output edge to its near edge; centre: px from
+-- the output centre to its own centre). Widgets without one keep the packed row of their side,
+-- so saved layouts load with unchanged pixels. The title stays at the true centre: placed
+-- neighbours only narrow it, and older centre neighbours sit beside its widest band.
 function M.bar_regions(layout)
     local regions={}
     for name,region in layout.regions do regions[name]=table.clone(region) end
-    local gap=context.t.status_gap or 12
     regions.left.props={id="left",height=34,gap=12,shrink=1,align="center"}
-    if M.centre_shared(layout) then
-        regions.centre.props={id="centre",position="absolute",left="28%",right="28%",top=0,height="100%",
-            gap=gap,align="center",justify="center"}
-    else
-        regions.centre.inline=true
-    end
+    regions.centre.inline=true
     regions.right.props={id="right",height=34,gap=12,shrink=0,align="center"}
     return regions
+end
+local function title_reserve(item)
+    local package=registry[item.widget]
+    local style=package and package.forms.bar.styles[item.style or package.forms.bar.default_style]
+    local settings=table.clone(package and package.defaults or {})
+    for key,value in item.settings or {} do settings[key]=value end
+    return style and style.reserve_width and style.reserve_width(settings) or 0
+end
+-- Splits `layout.instances` into the Host's packed rows and absolutely placed nodes.
+function M.bar_layout(layout,render,width)
+    local gap=context.t.status_gap or 12
+    local flow,placed,before,after={},{},{},{}
+    local title
+    for _,item in layout.instances do
+        if item.widget=="title" and item.slot.region=="centre" and item.slot.offset==nil then title=item end
+    end
+    for _,item in layout.instances do
+        if type(item.slot.offset)=="number" then table.insert(placed,item)
+        elseif item.slot.region=="centre" and item~=title then
+            table.insert(title and item.slot.start<title.slot.start and before or after,item)
+        else table.insert(flow,item) end
+    end
+    local nodes={}
+    local room=math.huge
+    local function variant(item)
+        local package=registry[item.widget]
+        return package and package.variants.bar
+    end
+    for _,item in placed do
+        local chosen=variant(item)
+        local node=chosen and render(item,chosen)
+        if node then
+            local offset,w=item.slot.offset,measured_width(node,0)
+            local box={id="placed-"..item.iid,position="absolute",top=0,height="100%",align="center",node}
+            if item.slot.region=="left" then
+                box.left=offset
+                room=math.min(room,width/2-(offset+w))
+            elseif item.slot.region=="right" then
+                box.right=offset
+                room=math.min(room,width/2-(offset+w))
+            else
+                box.left=0; box.width=width; box.justify="center"
+                box.padding_left=math.max(0,2*offset); box.padding_right=math.max(0,-2*offset)
+                room=math.min(room,math.abs(offset)-w/2)
+            end
+            table.insert(nodes,ui.Row(box))
+        end
+    end
+    local reserve=title and title_reserve(title) or 0
+    local half=reserve/2+gap
+    for _,side in {{"before",before},{"after",after}} do
+        if #side[2]>0 then
+            local row={id="beside-title-"..side[1],position="absolute",top=0,height="100%",align="center",gap=gap}
+            if side[1]=="before" then row.right=width/2+half else row.left=width/2+half end
+            for _,item in side[2] do
+                local chosen=variant(item)
+                local node=chosen and render(item,chosen)
+                if node then table.insert(row,node) end
+            end
+            table.insert(nodes,ui.Row(row))
+        end
+    end
+    -- Placed neighbours narrow the title (only when they reach its widest band) instead of moving it.
+    room=2*(room-gap)
+    layout.title_room=room<reserve and math.max(0,room) or nil
+    return flow,nodes
 end
 function M.renderer(document)
     M.validate(document)
     local copies={}
     local bar_layout=document.hosts.top_bar
-    local shared_centre=bar_layout and M.centre_shared(bar_layout)
     local render
     render=function(item,variant)
         local package=registry[item.widget]
@@ -471,7 +524,8 @@ function M.renderer(document)
         local editing=require("context").ui.resolve_for_check(require("context").ui.bind("widgets.editing"))
         local host=document.hosts[item.host]
         local node=variant.render({instance=item,catalogue=registry,render=render,editing=editing,
-            local_layout=shared_centre and item.host=="top_bar" and item.slot.region=="centre"},values,{})
+            local_layout=item.host=="top_bar" and (item.slot.offset~=nil or item.slot.region=="centre" and item.widget~="title"),
+            available_width=item.widget=="title" and bar_layout and bar_layout.title_room or nil},values,{})
         if not node then return nil end
         node=require("dragging").attach(document,item,node)
         if item.widget=="pill" and item.host=="top_bar" and host and node.props then
@@ -503,31 +557,9 @@ function M.renderer(document)
         end
         if item.widget~="pill" then own(node) end
         if editing then node=require("editing").decorate(document,item,node) end
-        if item.drag_placeholder==true and item.host~="canvas" then
-            local width=measured_width(node,0)
-            if width>0 then
-                node=ui.Box{id="widget-snap-slot-"..tostring(item.iid),width=width+4,
-                    height=require("context").t.status_height,padding=2,
-                    radius=kit.tokens.radii.large,
-                    fill=ui.alpha("primary",.12),border_width=kit.tokens.spacing.hairline*1.5,
-                    border_color="primary",node}
-            end
-        end
-        -- B0210: a side-section widget keeps its gap toward the section's edge.
-        local gap=item.host=="top_bar" and tonumber(item.slot and item.slot.gap)
-        if gap and gap>0 then
-            local spacer=ui.Box{id="widget-gap-"..tostring(item.iid),width=gap,height=1,shrink=0}
-            local left=item.slot.region=="left"
-            node=ui.Row{id="widget-gapped-"..tostring(item.iid),gap=0,align="center",shrink=0,
-                left and spacer or node,left and node or spacer}
-        end
         -- Preserve historic IDs for the first copy; additional copies get stable scopes.
-        if item.drag_placeholder==true then
-            node.scope="drag-preview."..item.iid.."."
-        else
-            if copies[item.widget] then node.scope="widget."..item.iid.."." end
-            copies[item.widget]=true
-        end
+        if copies[item.widget] then node.scope="widget."..item.iid.."." end
+        copies[item.widget]=true
         return node
     end
     return render

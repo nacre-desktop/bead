@@ -36,7 +36,7 @@ return {id="title",title="Title",icon="title",category="bar",data={topics={},act
             -- Keep today's bar path byte-for-byte equivalent for the Nacre defaults.
             assert(min_width<=max_width,"title minimum width exceeds maximum")
             if min_width==title_min_width and max_width==t.title_max_width and display=="window title" and behavior=="hover"
-                and not props.local_layout and props.instance.host=="top_bar" and props.instance.slot.region=="centre" then
+                and not props.local_layout and not props.available_width and props.instance.host=="top_bar" and props.instance.slot.region=="centre" then
             local animated_width=ui.animate("title.width."..props.instance.iid,title_width,.18,"out-cubic")
             local animated_cue=math.min(t.title_cue_max,animated_width+t.icon_width+t.title_gap+10)
             -- Keep the bound title reactive; resolve its text only when it exceeds

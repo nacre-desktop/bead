@@ -87,7 +87,6 @@ function M.render_bar(document,width,height,factor,selected,selected_group)
     if not layout then return nil end
     local scale=factor or 1
     local regions=registry.bar_regions(layout)
-    local shared_centre=registry.centre_shared(layout)
     regions.right.before={}
     for _,node in require("../tray") do
         table.insert(regions.right.before,copy_node(node))
@@ -104,6 +103,7 @@ function M.render_bar(document,width,height,factor,selected,selected_group)
     for _,item in layout.instances or {} do
         table.insert(instances,copy_item(item))
     end
+    local placement={instances=instances}
     local render
     render=function(item,variant)
         local package=registry.catalogue[item.widget]
@@ -111,7 +111,8 @@ function M.render_bar(document,width,height,factor,selected,selected_group)
         local values=table.clone(package.defaults)
         for key,value in item.settings or {} do values[key]=value end
         local node=variant.render({instance=item,catalogue=registry.catalogue,render=render,editing=false,
-            local_layout=shared_centre and item.host=="top_bar" and item.slot.region=="centre"},values,{})
+            local_layout=item.host=="top_bar" and (item.slot.offset~=nil or item.slot.region=="centre" and item.widget~="title"),
+            available_width=item.widget=="title" and placement.title_room or nil},values,{})
         if node and item.widget==selected and (selected_group==nil or (item.group or item.iid)==selected_group) then
             node.props=node.props or {}
             node.props.border_width=2
@@ -120,9 +121,11 @@ function M.render_bar(document,width,height,factor,selected,selected_group)
         end
         return node
     end
+    local flow
+    flow,regions.centre.after=registry.bar_layout(placement,render,width)
     local node=ui.Host{edge="top",id="stage-top-bar",shape="strip-h",width=width,height=height,
         radius=0,fill="surface",padding_left=15,padding_right=15,align="center",justify="space-between",direction="row",
-        layout=instances,catalogue=registry.catalogue,render=render,
+        layout=flow,catalogue=registry.catalogue,render=render,
         grid={tiles=layout.tiles,mode=layout.mode,regions=regions}}
     return prepare(node,scale)
 end
