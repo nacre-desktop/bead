@@ -138,7 +138,9 @@ function M.ring(id,diameter,value,caption,detail)
         ui.Arc{id="track",position="absolute",left=8,top=8,width=diameter-16,height=diameter-16,
             start_angle=-90,sweep_angle=360,stroke_width=16,color=ui.alpha("onSurface",.16),round_caps=true},
         ui.Arc{id="value",position="absolute",left=8,top=8,width=diameter-16,height=diameter-16,
-            start_angle=-90,sweep_angle=ui.animate(id.."-sweep",fraction*360,.24,"out-cubic"),
+            -- B0211: set, not eased: a 1 % change animated 240 ms of full-ring CPU repaints
+            -- (2 arcs, ~7.5 ms a frame on the laptop) for an invisible sweep.
+            start_angle=-90,sweep_angle=fraction*360,
             stroke_width=16,color="primary",round_caps=true},
         ui.Column{id="ring-copy",position="absolute",left=12,top=diameter*.28,width=diameter-24,height=diameter*.46,
             align="center",justify="center",gap=sp.xs,
