@@ -332,6 +332,18 @@ local function bar_gap(list,item,event,x,width,context)
         end
         gap=edge-(left+w)
     end
+    -- A widget moved within its section: its old rect shifted the neighbours it stood before.
+    local own
+    for _,r in context.geometry or {} do
+        if r.iid==item.iid and type(r.x)=="number" and type(r.w)=="number" then own=r end
+    end
+    if own then
+        for _,other in siblings do
+            local r=rect(other.iid)
+            if r and region=="left" and other.slot.start<item.slot.start and own.x<r.x then gap+=own.w+spacing; break end
+            if r and region=="right" and other.slot.start>item.slot.start and own.x>r.x then gap+=own.w+spacing; break end
+        end
+    end
     gap=math.floor(gap/4)*4
     return gap>0 and gap or nil
 end
