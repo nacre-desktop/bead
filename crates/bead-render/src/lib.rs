@@ -1122,52 +1122,75 @@ fn dimensions(rect: Rect, scale: f32) -> (u32, u32) {
         (rect.h * scale).ceil().max(1.) as u32,
     )
 }
+/// Three box widths whose successive passes approximate a Gaussian of `sigma`.
+fn shadow_boxes(sigma: f32) -> [usize; 3] {
+    let variance = 12. * sigma * sigma;
+    let mut lower = ((variance / 3. + 1.).sqrt().floor() as usize).max(1);
+    if lower.is_multiple_of(2) {
+        lower -= 1;
+    }
+    let lower_f = lower as f32;
+    let narrow = ((variance - 3. * lower_f * lower_f - 12. * lower_f - 9.) / (-4. * lower_f - 4.))
+        .round()
+        .clamp(0., 3.) as usize;
+    std::array::from_fn(|pass| if pass < narrow { lower } else { lower + 2 })
+}
+/// One zero-padded running-sum box pass along a line of `len` samples `step` apart.
+fn box_line(src: &[u8], dst: &mut [u8], start: usize, step: usize, len: usize, width: usize) {
+    let radius = width / 2;
+    let size = width as u32;
+    let at = |index: usize| u32::from(src[start + index * step]);
+    let mut sum: u32 = (0..=radius.min(len - 1)).map(at).sum();
+    for index in 0..len {
+        dst[start + index * step] = ((sum + size / 2) / size) as u8;
+        if index + radius + 1 < len {
+            sum += at(index + radius + 1);
+        }
+        if index >= radius {
+            sum -= at(index - radius);
+        }
+    }
+}
+/// B0211: the glow behind desktop-widget text. Three running-sum box passes per axis (a
+/// Gaussian approximation) cost the same at any radius; the direct 49-tap Gaussian took
+/// ~13 ms for a 148 px clock face at 1.5x, once per minute tick.
 fn blur_text_shadow(pix: &mut Pixmap, shadow: TextShadow, scale: f32) {
     let width = pix.width() as usize;
     let height = pix.height() as usize;
-    let source_alpha = pix
+    let mut alpha = pix
         .data()
         .as_chunks::<4>()
         .0
         .iter()
         .map(|pixel| pixel[3])
         .collect::<Vec<_>>();
-    let radius = (shadow.blur * scale).ceil().clamp(1., 64.) as isize;
-    let sigma = (shadow.blur * scale / 3.).max(0.5);
-    let mut kernel = (-radius..=radius)
-        .map(|step| (-(step * step) as f32 / (2. * sigma * sigma)).exp())
-        .collect::<Vec<_>>();
-    let total = kernel.iter().sum::<f32>();
-    kernel.iter_mut().for_each(|weight| *weight /= total);
-    let mut horizontal = vec![0u8; width * height];
-    for y in 0..height {
-        for x in 0..width {
-            let coverage: f32 = (-radius..=radius)
-                .zip(&kernel)
-                .filter_map(|(step, weight)| {
-                    let sx = x as isize + step;
-                    (0..width as isize)
-                        .contains(&sx)
-                        .then(|| f32::from(source_alpha[y * width + sx as usize]) * weight)
-                })
-                .sum();
-            horizontal[y * width + x] = coverage.round().clamp(0., 255.) as u8;
+    let mut scratch = vec![0u8; alpha.len()];
+    let boxes = shadow_boxes((shadow.blur * scale / 3.).clamp(0.5, 64. / 3.));
+    for size in boxes {
+        for y in 0..height {
+            box_line(&alpha, &mut scratch, y * width, 1, width, size);
         }
+        std::mem::swap(&mut alpha, &mut scratch);
+    }
+    for size in boxes {
+        for x in 0..width {
+            box_line(&alpha, &mut scratch, x, width, height, size);
+        }
+        std::mem::swap(&mut alpha, &mut scratch);
     }
     let offset = (shadow.offset_y * scale).round() as isize;
     let pixels = pix.data_mut();
     for y in 0..height {
+        let sy = y as isize - offset;
+        if !(0..height as isize).contains(&sy) {
+            continue;
+        }
         for x in 0..width {
-            let coverage: f32 = (-radius..=radius)
-                .zip(&kernel)
-                .filter_map(|(step, weight)| {
-                    let sy = y as isize + step - offset;
-                    (0..height as isize)
-                        .contains(&sy)
-                        .then(|| f32::from(horizontal[sy as usize * width + x]) * weight)
-                })
-                .sum();
-            let alpha = (coverage * f32::from(shadow.color[3]) / 255.).round() as u8;
+            let coverage = u16::from(alpha[sy as usize * width + x]);
+            let alpha = ((coverage * u16::from(shadow.color[3]) + 127) / 255) as u8;
+            if alpha == 0 {
+                continue;
+            }
             let inverse = 255 - alpha;
             let index = (y * width + x) * 4;
             let pixel = &mut pixels[index..index + 4];
@@ -3254,6 +3277,32 @@ mod tests {
         assert!(
             halo[3] > 0 && halo[3] < 255,
             "shadow edge must stay softly blurred: {halo:?}"
+        );
+    }
+    #[test]
+    fn text_shadow_blur_cost_does_not_grow_with_its_radius() {
+        let blur = |radius: f32| {
+            let mut pixmap = Pixmap::new(640, 320).unwrap();
+            pixmap.fill(tiny_skia::Color::from_rgba8(240, 240, 240, 255));
+            let started = std::time::Instant::now();
+            for _ in 0..3 {
+                blur_text_shadow(
+                    &mut pixmap,
+                    TextShadow {
+                        color: [0, 0, 0, 128],
+                        blur: radius,
+                        offset_y: 2.,
+                    },
+                    1.5,
+                );
+            }
+            started.elapsed()
+        };
+        let (small, large) = (blur(2.), blur(40.));
+        // The old direct Gaussian scaled with the tap count (about 13x here).
+        assert!(
+            large < small * 3,
+            "radius 40 took {large:?}, radius 2 took {small:?}"
         );
     }
     #[test]
