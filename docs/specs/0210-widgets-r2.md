@@ -53,6 +53,9 @@ Design: **the ghost is its own canvas drawn relative to the pointer and moved by
   of centre, between any two widgets or pill children. The centre band centres its row
   (a drop just left of centre sits left of the title). Gaps survive normalisation on both VMs
   and reloads; the renderer adds a spacer on the edge side. No spacer widget was needed.
+- **Steady geometry:** within one gesture each widget is measured where it first stood
+  (`widgets.drag.geometry`), so the preview, which shifts neighbours by the gap, cannot feed back
+  into the insertion point (a real-input capture caught the clock pushing the launcher ahead of it).
 - **Insertion indicator:** while a widget is over the bar, the bar shows the existing outlined
   placeholder at the computed slot and gap, so it follows the pointer across the whole width.
 - Likely why drops "only attached top right" before: regions were output thirds with order-only

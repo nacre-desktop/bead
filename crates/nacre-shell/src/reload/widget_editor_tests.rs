@@ -336,6 +336,64 @@ fn the_bar_takes_a_widget_anywhere_along_its_width() {
     assert_eq!(at("clock"), at("wifi") + 1, "{order:?}");
     assert_eq!(at("bluetooth"), at("clock") + 1, "{order:?}");
 
+    // Moved again within the left section, it keeps its neighbours in place.
+    let mut model = Model::new(owner_layout());
+    assert!(model.drag("clock", "bar", 20., 20.));
+    assert!(model.drag("clock", "bar", WIDTH * 0.22, 20.));
+    let bar = model.doc["hosts"]["top_bar"]["instances"]
+        .as_array()
+        .unwrap();
+    let left: Vec<&str> = bar
+        .iter()
+        .filter(|item| item["slot"]["region"] == "left")
+        .map(|item| item["iid"].as_str().unwrap())
+        .collect();
+    assert_eq!(left, ["launcher", "workspaces", "clock"], "{bar:?}");
+
+    // Many motions whose geometry comes from the live preview (neighbours pushed right by the
+    // dragged widget's gap) still insert after them: geometry is frozen per gesture.
+    let mut model = Model::new(owner_layout());
+    assert!(model.drag("clock", "bar", 20., 20.));
+    let doc = model.doc.clone();
+    let mut shifted = super::widget_layout_property_tests::context(&doc);
+    for rect in shifted["geometry"].as_array_mut().unwrap() {
+        if rect["iid"] == "launcher" || rect["iid"] == "workspaces" {
+            let x = rect["x"].as_f64().unwrap();
+            rect["x"] = json!(x + 600.);
+        }
+    }
+    let event = |x: f64, phase: &str, context: &Json| {
+        let Value::List(rows) = drop_event(&doc, "clock", "bar", x, 20., phase) else {
+            unreachable!()
+        };
+        let mut row = rows[0].clone();
+        row["context"] = context.clone();
+        Value::list(vec![row])
+    };
+    let plain = super::widget_layout_property_tests::context(&doc);
+    model.controller.drag(event(40., "move", &plain)).unwrap();
+    for step in 1..20 {
+        model
+            .controller
+            .drag(event(40. + step as f64 * 20., "move", &shifted))
+            .unwrap();
+    }
+    let dropped = model
+        .controller
+        .drag(event(WIDTH * 0.22, "drop", &shifted))
+        .unwrap();
+    let Some(Value::List(written)) = dropped.get("widgets.write") else {
+        panic!("the drop writes")
+    };
+    let left: Vec<&str> = written[0]["hosts"]["top_bar"]["instances"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| item["slot"]["region"] == "left")
+        .map(|item| item["iid"].as_str().unwrap())
+        .collect();
+    assert_eq!(left, ["launcher", "workspaces", "clock"]);
+
     // A saved gap survives normalisation and reload (the owner's file shape).
     let mut model = Model::new(owner_layout());
     assert!(model.drag("clock", "bar", WIDTH * 0.22, 20.));

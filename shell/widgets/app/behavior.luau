@@ -807,6 +807,27 @@ local function op(s,args)
     history(s,previous)
     finish(s,doc)
 end
+-- B0210: during one gesture every widget is measured where it stood when first seen, so the
+-- insertion preview (which shifts its neighbours by the dropped widget's gap) cannot feed back
+-- into the insertion point.
+local function steady_context(s,context)
+    local epoch=tonumber(s["widgets.drag.epoch"]) or 0
+    local frozen=s["widgets.drag.geometry"]
+    if type(frozen)~="table" or s["widgets.drag.geometry_epoch"]~=epoch then frozen={} end
+    local seen={}
+    for _,rect in frozen do seen[rect.iid]=true end
+    for _,rect in context.geometry or {} do
+        if type(rect)=="table" and type(rect.iid)=="string" and not seen[rect.iid] then
+            seen[rect.iid]=true
+            table.insert(frozen,rect)
+        end
+    end
+    s["widgets.drag.geometry"]=frozen
+    s["widgets.drag.geometry_epoch"]=epoch
+    local steady=table.clone(context)
+    steady.geometry=frozen
+    return steady
+end
 local function drag(s,args)
     s["widgets.write"]={}
     local event=request(args)
@@ -855,7 +876,7 @@ local function drag(s,args)
         s["widgets.drag.target_origin_x"]=target_x
         s["widgets.drag.target_origin_y"]=target_y
         s["widgets.drag.target_output_id"]=event.target_output_id or event.app_output_id or ""
-        local context=type(event.context)=="table" and event.context or event
+        local context=steady_context(s,type(event.context)=="table" and event.context or event)
         s["widgets.drag.over_remove"]=source.iid~=nil and event.destination=="desktop" and in_remove_zone(event,context)
         if base and event.destination=="desktop" and source.kind~="resize" then
             -- B0208/B0210: a desktop move is a pure transform. The layout stays the frozen
@@ -878,7 +899,7 @@ local function drag(s,args)
     if phase=="drop" then
         local source=drag_record(event.source)
         local accepted=false
-        local context=type(event.context)=="table" and event.context or event
+        local context=steady_context(s,type(event.context)=="table" and event.context or event)
         local base=(s["widgets.drag.base"] or {})[1]
         local original=(s["widgets.drag.original"] or {})[1]
         if type(source)=="table" and not base then base=capture_drag_base(s,event,source,context); original=(s["widgets.drag.original"] or {})[1] end
@@ -925,6 +946,7 @@ local function drag(s,args)
             s["widgets.drag.layout"]={stale and current_canonical(s,context) or (base and clone(base) or current_canonical(s,context))}
         end
     end
+    if phase=="drop" or phase=="cancel" then s["widgets.drag.geometry"]={}; s["widgets.drag.geometry_epoch"]=-1 end
     if phase=="cancel" then
         local base=(s["widgets.drag.base"] or {})[1]
         local stale=base~=nil and drag_revision_stale(s)
@@ -961,7 +983,7 @@ return {
         ["status.hovered"]="",["status.peek.visible"]=false,["status.peek.kind"]="",["status.panel.kind"]="",
         ["widgets.drag.active"]=false,["widgets.drag.source"]={},["widgets.drag.destination"]="",
         ["widgets.drag.x"]=0,["widgets.drag.y"]=0,["widgets.drag.start_x"]=0,["widgets.drag.start_y"]=0,
-        ["widgets.drag.phase"]="",["widgets.drag.epoch"]=0,["widgets.drag.snap_x"]=0,["widgets.drag.snap_y"]=0,["widgets.drag.over_remove"]=false,
+        ["widgets.drag.phase"]="",["widgets.drag.epoch"]=0,["widgets.drag.snap_x"]=0,["widgets.drag.snap_y"]=0,["widgets.drag.over_remove"]=false,["widgets.drag.geometry"]={},["widgets.drag.geometry_epoch"]=-1,
         ["widgets.drag.base"]={},["widgets.drag.original"]={},["widgets.drag.layout"]={},
         ["widgets.drag.revision"]=0,["widgets.drag.preview"]="",
         ["widgets.drag.width"]=0,["widgets.drag.height"]=0,["widgets.drag.grab_x"]=0,["widgets.drag.grab_y"]=0,
