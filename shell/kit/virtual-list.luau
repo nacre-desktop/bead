@@ -3,8 +3,10 @@
 -- supports long lists without exceeding the SDK's 20,000px dimension limit.
 local ui = require("bead.ui")
 return function(p)
-  local total = ui.model_count(p.model)
   local variable = type(p.row_height)=="function"
+  local total = ui.model_count(p.model)
+  -- Fixed-pitch providers may publish a total beyond their currently loaded prefix.
+  if not variable and p.total_count then total=math.max(total,ui.resolve_for_check(p.total_count)) end
   local pitch = not variable and p.row_height+p.gap or 0
   local offsets = {0}
   if variable then

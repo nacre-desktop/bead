@@ -4,7 +4,7 @@ Status: candidate; remote CI, refreshed goldens and paired visual review pending
 
 ## Changes and root cause
 
-The results grid fixed every row at 55 px and its description at 16 px. Text still wrapped, so a second line overflowed the reserved box and row. There is no launcher gradient/fade mask over that text. Results now reserve a single ellipsized title and up to two measured description lines, preserving explicit newlines and adding an ellipsis beyond the limit. At the default font sizes the row is 74 px (21 + 2×17 + 3 + 16 padding). Grid labels use one ellipsized line; grid height also grows for larger font settings. Each text line is separately measured and painted, with no text overlay.
+The results grid fixed every row at 55 px and its description at 16 px. Text still wrapped, so a second line overflowed the reserved box and row. There is no launcher gradient/fade mask over that text. Results reuse the existing bounded-spacer virtual list (including the engine total beyond a loaded prefix), avoiding the 20,000 px single-dimension limit for tall lists. They reserve a single ellipsized title and up to two measured description lines, preserving explicit newlines and adding an ellipsis beyond the limit. At the default font sizes the row is 74 px (21 + 2×17 + 3 + 16 padding). Grid labels use one ellipsized line; grid height also grows for larger font settings. Each text line is separately measured and painted, with no text overlay.
 
 The general `ui.text_line_height(family,size)` primitive exposes the renderer's 1.4× line pitch after the host's font-size adjustment; launcher row height follows it. This prevents a larger text setting from reintroducing the cutoff. No renderer/slide change or engine-specific framework primitive was added.
 

@@ -1,13 +1,13 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 local ui=require("bead.ui")
-local kit=require("bead.kit")
+local VirtualList=require("../../kit/virtual-list")
 local M=require("./metrics")
 local Icon=require("./item-icon")
 local Lines=require("./text-lines")
 local Row=ui.component("ResultRow",{item={id="string",name="string",icon="string",selected="boolean",description="string",favorite="boolean",favoriteId="string"}},function(p)
     local item=p.item
     local width=M.content_width(ui.resolve_for_check(ui.bind("bead.viewport.width")),ui.resolve_for_check(ui.bind("launcher.quick_allowed")))-12-42-M.result_icon-11
-    return ui.Box{id="result-wrap",width="fill",height="fill",
+    return ui.Box{id="result-wrap",width="fill",height=M.result_row_height,
       ui.Button{id="result",width="fill",height="fill",radius=10,padding_left=12,padding_right=42,padding_top=8,padding_bottom=8,fill="transparent",selected=item.selected,
         selected_fill=ui.tint("surface","onSurface",.09),hover_fill=ui.tint("surface","onSurface",.04),
         on_activate=ui.action("select_app",item.id),aria_label=item.name,
@@ -32,6 +32,6 @@ end)
 return ui.component("Results",{},function(_)
     local viewport=ui.resolve_for_check(ui.bind("bead.viewport.width"))
     local width=M.content_width(viewport,ui.resolve_for_check(ui.bind("launcher.quick_allowed")))
-    return kit.VirtualGrid{id="results",scroll=ui.bind("launcher.scroll.y"),width=width,height=400,min_cell_width=width,
-        gap_x=0,gap_y=3,row_height=M.result_row_height,total_count=ui.bind("launcher.total_count"),model=ui.bind("launcher.apps"),key="id",render=function(item)return Row{item=item}end}
+    return VirtualList{id="results",scroll=ui.bind("launcher.scroll.y"),width=width,height=400,grow=1,
+        gap=3,row_height=M.result_row_height,total_count=ui.bind("launcher.total_count"),model=ui.bind("launcher.apps"),key="id",render=function(item)return Row{item=item}end}
 end)
