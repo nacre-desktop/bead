@@ -24,7 +24,7 @@ Bead retains rewritten framework guides/contracts, MIT text, upstream font/vendo
 ## Migration status
 
 - Step 3: completed. Product history was imported into Nacre under `crates/nacre-shell/`, `shell/`, and `bead-shell/` paths.
-- Step 4: implementation completed in this unit. Product paths, product-only checks, and product history were removed from Bead. Exact-commit CI verification is pending lead review; the framework workspace and minimal-shell must remain independent of a Nacre checkout.
+- Step 4: completed. Product paths, product-only checks, and product history were removed from Bead. Full framework CI passed on `b18cec0ce64378a9db8218f227eeeb75b289fb13` without a Nacre checkout. The dependency guard also rejected actual import, former shell-path and command fixtures before passing on the restored tree.
 - Step 5: closure checks remain. Confirm the pinned Nacre source and installer/bundle compatibility through the owning lead workflow; this does not change either repository's installation state.
 
 Nacre's product specifications and historical evidence are maintained at [Nacre `bead-shell/docs`](https://github.com/nacre-desktop/nacre/tree/main/bead-shell/docs). Bead retains only reusable framework contracts listed in the [spec index](README.md).

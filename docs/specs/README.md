@@ -13,4 +13,4 @@ This index contains current framework contracts and repository-boundary decision
 | [0203 — Plugins v1](0203-plugins-v1.md) | Plugin format, capabilities, and lifecycle |
 | [0214 — Framework split](0214-framework-split.md) | Ownership boundary and migration completion |
 
-Step 3 (history import into Nacre) and step 4 (product removal from Bead) are implemented; exact-commit CI verification is pending lead review. Step 5 closure checks remain with the lead. No product implementation plan is maintained here.
+Step 3 (history import into Nacre) and step 4 (product removal from Bead) are complete. The full framework CI workflow passed on `b18cec0ce64378a9db8218f227eeeb75b289fb13` without a Nacre checkout, including all 12 independent dependency/license roots and minimal-shell proofs. Step 5 closure checks remain with the lead. No product implementation plan is maintained here.
