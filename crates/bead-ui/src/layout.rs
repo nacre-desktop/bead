@@ -492,7 +492,10 @@ impl ViewSpec {
                 return Err(source
                     .error("Arc angles must be within -360..360 and stroke_width within 1..64"));
             }
-            let family = crate::text_style::family(&text(p, "family", "IBM Plex Sans", source)?);
+            let family = crate::theme::with_sans_family(|default_family| {
+                text(p, "family", default_family, source)
+            })?;
+            let family = crate::text_style::family(&family);
             let font_size = crate::text_style::size(font_size, &family);
             let visible = boolean(p, "visible", true, source)?;
             let mut style = Style {

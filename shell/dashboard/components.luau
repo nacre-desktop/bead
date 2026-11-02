@@ -36,7 +36,7 @@ function M.lines(id,model,width,height,empty,act,enabled,scroll)
             on_activate=enabled and ui.action("dashboard.do",item.act) or nil,body}
     end
     if scroll then
-        local VirtualList=require("../kit/virtual-list")
+        local VirtualList=require("bead.widgets.kit.virtual-list")
         return VirtualList{id=id,scroll=scroll,width=width,height=height,gap=4,row_height=act and 40 or 32,model=ui.bind(model),key="id",
             repeat_id="items",render=render}
     end

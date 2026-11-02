@@ -21,7 +21,7 @@ return function(ui, tokens)
             font_size=tokens.text.body*4/3,fill="surfaceContainer",color="onSurface",hover_fill="surfaceContainerHigh"}))
     end
     function kit.IconButton(p)
-        return kit.Button(props(p,{width=40,padding=tokens.spacing.xs,family="Material Symbols Rounded",font_size=tokens.icons.large*4/3}))
+        return kit.Button(props(p,{width=40,padding=tokens.spacing.xs,family=tokens.fonts.icon,font_size=tokens.icons.large*4/3}))
     end
     function kit.StatusIcon(p) return kit.Button(p) end
     function kit.Switch(p)
@@ -36,7 +36,7 @@ return function(ui, tokens)
                 fill=ui.alpha(checked and "onPrimaryContainer" or "onSurfaceVariant",opacity)}}
         return kit.Button(out)
     end
-    -- QML NacreControlSlider: a 6 px rounded track, a filled part up to the value and an 8x16 handle, all inset 6 px.
+    -- A rounded track, filled part, and handle, all inset 6 px.
     -- A horizontal two-colour fill (QML `Gradient` blending the accent into `secondary`): a flat `from` bar with
     -- round ends, and, while `tokens.gradients` is on (the `interfaceGradients` setting) and the bar is long
     -- enough, the interior blended in equal steps by laying `to` over it at rising alpha. Roles are palette
@@ -145,9 +145,9 @@ return function(ui, tokens)
     end
     local function glyph(id,name,color,size)
         size=size or glyph_size
-        return ui.Text{id=id,text=name,family="Material Symbols Rounded",font_size=size,width=size+2,height=24,shrink=0,color=color}
+        return ui.Text{id=id,text=name,family=tokens.fonts.icon,font_size=size,width=size+2,height=24,shrink=0,color=color}
     end
-    -- Geometry of the QML NacreControlTile: icon at 14, text from 44, 8 px right margin (24 more for a navigation
+    -- Tile geometry: icon at 14, text from 44, 8 px right margin (24 more for a navigation
     -- chevron that sits 12 from the edge), 3 px between label and detail, a 1 px outline, radius 24 (20 stacked).
     local tile_glyph=(tokens.icons.large-1)*4/3
     local function tile(p,kind)
@@ -160,7 +160,7 @@ return function(ui, tokens)
         local body
         if p.stacked then
             body=ui.Column{id="body",width=main_w,height=p.height,padding_top=9,gap=tokens.spacing.xs,align="center",
-                ui.Text{id="icon",text=p.icon,family="Material Symbols Rounded",font_size=tile_glyph,width=main_w,height=24,text_align="center",color=color},
+                ui.Text{id="icon",text=p.icon,family=tokens.fonts.icon,font_size=tile_glyph,width=main_w,height=24,text_align="center",color=color},
                 ui.Text{id="label",text=p.label,width=main_w-2*tokens.spacing.xs,height=18,font_size=small,font_weight=500,text_align="center",color=color}}
         else
             local text_x=44
@@ -176,7 +176,7 @@ return function(ui, tokens)
             local children={glyph("icon",p.icon,color,tile_glyph),ui.Column(props(labels,{id="labels",width=text_w,gap=3}))}
             if kind=="link" then
                 children[3]=ui.Text{id="chevron",position="absolute",left=main_w-12-tile_glyph,top=(p.height-24)/2,
-                    text="chevron_right",family="Material Symbols Rounded",font_size=tile_glyph,width=tile_glyph+2,height=24,color=color}
+                    text="chevron_right",family=tokens.fonts.icon,font_size=tile_glyph,width=tile_glyph+2,height=24,color=color}
             end
             body=ui.Row{id="body",width=main_w,height=p.height,padding_left=pad,gap=text_x-pad-tile_glyph-2,align="center",table.unpack(children)}
         end
@@ -194,7 +194,7 @@ return function(ui, tokens)
     function kit.ToggleTile(p) return tile(p,"toggle") end
     function kit.LinkTile(p) return tile(props(p,{on=false,detail_lines=true}),"link") end
     function kit.ButtonTile(p) return tile(props(p,{on=false,stacked=true}),"button") end
-    -- Level control (QML `NacreControlLevels`, 56 tall, radius 18): the caption (`caption`, else `label`) on top at 46, a
+    -- Level control (56 tall, radius 18): the caption (`caption`, else `label`) on top at 46, a
     -- 32 px icon button (mute) at 8, the stepped slider at 42, the value text 40 from the right and the details
     -- chevron 4 from it. The slider is drawn dimmed and takes no input when no `on_change` action is given.
     function kit.SliderTile(p)
@@ -362,7 +362,7 @@ return function(ui, tokens)
         local label_width=label~="" and math.ceil(p.label_width or #label*size*.55)+tokens.spacing.hairline or 0
         local children={}
         if p.glyph and p.glyph~="" then
-            table.insert(children,ui.Text{id="icon",text=p.glyph,family="Material Symbols Rounded",font_size=icon,width=icon,height=24,color=ink})
+            table.insert(children,ui.Text{id="icon",text=p.glyph,family=tokens.fonts.icon,font_size=icon,width=icon,height=24,color=ink})
         end
         if p.label and p.label~="" then
             table.insert(children,ui.Text{id="label",text=p.label,font_size=size,width=label_width,height=24,color=ink})
@@ -391,7 +391,7 @@ return function(ui, tokens)
         out.aria_label=label
         out.on_activate=confirming and p.on_confirm or p.on_activate
         out[1]=ui.Row{id=(p.id or "confirm").."-row",height=24,gap=tokens.spacing.md,align="center",
-            p.glyph and ui.Text{id="glyph",text=p.glyph,width=24,height=24,shrink=0,family="Material Symbols Rounded",font_size=tokens.icons.large*4/3,color=ink} or nil,
+            p.glyph and ui.Text{id="glyph",text=p.glyph,width=24,height=24,shrink=0,family=tokens.fonts.icon,font_size=tokens.icons.large*4/3,color=ink} or nil,
             ui.Text{id="label",text=label,height=24,grow=1,font_size=tokens.text.body*4/3,color=ink}}
         return kit.Button(out)
     end
@@ -555,7 +555,7 @@ return function(ui, tokens)
         local head={id=p.slider and "head" or p.id,width="fill",height=56,shrink=0,gap=sp.md,align="center",padding_left=sp.sm,padding_right=sp.sm,
             radius=tokens.radii.small}
         if p.icon then
-            head[#head+1]=ui.Text{id="icon",text=p.icon,width=24,height=24,shrink=0,family="Material Symbols Rounded",font_size=tokens.icons.large*4/3,color="onSurfaceVariant"}
+            head[#head+1]=ui.Text{id="icon",text=p.icon,width=24,height=24,shrink=0,family=tokens.fonts.icon,font_size=tokens.icons.large*4/3,color="onSurfaceVariant"}
         end
         head[#head+1]=ui.Column{id="labels",grow=1,gap=sp.hairline,justify="center",
             ui.Text{id="label",text=p.title,font_size=tx.body*4/3,height=20,color=on and "onSurface" or "onSurfaceVariant"},
@@ -614,7 +614,7 @@ return function(ui, tokens)
             ui.Text{id="pending",text=p.text,grow=1,shrink=1,height=20,font_size=tx.caption*4/3,color="onSecondaryContainer"},
             button("apply",p.apply_label,p.on_apply,true),button("discard",p.discard_label,p.on_discard,false)}
     end
-    -- A drop-down (QML `NacreSelect`): a field (`text` is the chosen option's label) with the list under it
+    -- A drop-down: a field (`text` is the chosen option's label) with the list under it
     -- while `open`. The kit has no overlay layer, so the list is part of the layout and the rows below move
     -- down. `options`: `{id,label,selected,enabled}`; a click sends `on_change` with the option id, `on_toggle`
     -- opens and closes. The caller keeps `open` (and the list's `scroll` store) and closes it on a choice and
@@ -630,7 +630,7 @@ return function(ui, tokens)
             border_color=open and "primary" or "outline",aria_label=p.aria_label or p.label,on_activate=maybe(p.on_toggle,on),
             ui.Row{id="field-row",width=width,height=SELECT_ROW,align="center",padding_left=sp.md,padding_right=sp.sm,
                 ui.Text{id="value",text=p.text or "",grow=1,shrink=1,height=24,font_size=tx.body*4/3,color=on and "onSurface" or "onSurfaceVariant"},
-                ui.Text{id="indicator",text="expand_more",family="Material Symbols Rounded",font_size=tokens.icons.medium*4/3,
+                ui.Text{id="indicator",text="expand_more",family=tokens.fonts.icon,font_size=tokens.icons.medium*4/3,
                     width=tokens.icons.medium*4/3+2,height=24,shrink=0,color=on and "onSurface" or "onSurfaceVariant"}}}
         if not open then return field,nil,width end
         local searchable=p.field~=nil
@@ -717,7 +717,7 @@ return function(ui, tokens)
     end
     -- Colour pieces (B0060). Colours are RGBA arrays from the caller (any fill accepts them); labels,
     -- actions and sizes are plain arguments, so nothing here knows a palette role set or a product.
-    local mono="JetBrainsMono Nerd Font"
+    local mono=tokens.fonts.mono
     -- A swatch over a small caption, one button; `selected` draws the ring.
     function kit.ColorSample(p)
         return kit.Button{id=p.id,width=p.width,grow=p.width and 0 or 1,shrink=p.width and 0 or 1,height=p.height or 60,padding=0,radius=tokens.radii.small,fill="transparent",

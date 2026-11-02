@@ -4,7 +4,7 @@
 -- title and one text field with Cancel / Continue (input). Geometry is in tokens.luau.
 local ui=require("bead.ui")
 local kit=require("bead.kit")
-local VirtualList=require("../kit/virtual-list")
+local VirtualList=require("bead.widgets.kit.virtual-list")
 local T=require("./tokens")
 local P,L,E,F=T.panel,T.list,T.empty,T.form
 local function get(name) return ui.resolve_for_check(ui.bind(name)) end

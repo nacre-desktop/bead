@@ -137,7 +137,7 @@ pub fn tree_with_scene_for_app(
             else {
                 continue;
             };
-            if text.is_empty() || color[3] == 0 || family.starts_with("Material Symbols") {
+            if text.is_empty() || color[3] == 0 || crate::text_style::is_icon_family(family) {
                 continue;
             }
             let Some(mut bounds) = intersection(*rect, scene.bounds) else {

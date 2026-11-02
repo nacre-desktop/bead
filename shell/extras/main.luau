@@ -2,7 +2,7 @@
 local ui = require("bead.ui")
 local kit = require("bead.kit")
 local T = require("./tokens")
-local VirtualList = require("../kit/virtual-list")
+local VirtualList = require("bead.widgets.kit.virtual-list")
 local kind = ui.resolve_for_check(ui.bind("extras.kind")) or "overview"
 if kind == "wallpaper" then return require("./wallpaper/main") end
 local overview = kind == "overview"

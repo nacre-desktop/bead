@@ -483,6 +483,52 @@ fn session(f: &Fixture) -> Session {
     session
 }
 
+#[test]
+fn host_theme_reaches_default_text_and_embedded_kit_icons() {
+    let f = fixture();
+    write_palette(&f);
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+local kit=require("bead.kit")
+local measure=require("bead.widgets.measure")
+return ui.Column{id="root",width=200,height=100,
+ ui.Text{id="gradient-policy",text=kit.tokens.gradients and "gradients" or "flat",height=20},
+ ui.Text{id="default-family",text=measure.ellipsize("host-sans",100),width=kit.tokens.spacing.md,height=24},
+ kit.IconButton{id="icon",text="host-icon"}}"#,
+    )
+    .unwrap();
+    let mut tokens = crate::theme::defaults();
+    tokens["spacing"]["md"] = 73.into();
+    tokens["fonts"]["sans"] = "Alternate Host Sans".into();
+    tokens["fonts"]["icon"] = "Alternate Host Icons".into();
+    tokens["gradients"] = false.into();
+    crate::theme::with_test_tokens(tokens, || {
+        let session = session(&f);
+        let text = session
+            .current
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                Primitive::Text {
+                    rect, text, family, ..
+                } if text == "host-sans" => Some((*rect, family.as_str())),
+                _ => None,
+            })
+            .expect("default text node");
+        assert_eq!(text.0.w, 73.);
+        assert_eq!(text.1, "Alternate Host Sans");
+        assert!(session.current.primitives.iter().any(|primitive| matches!(
+            primitive, Primitive::Text { text, .. } if text == "flat"
+        )));
+        assert!(session.current.primitives.iter().any(|primitive| matches!(
+            primitive,
+            Primitive::Text { text, family, .. }
+                if text == "host-icon" && family == "Alternate Host Icons"
+        )));
+    });
+}
+
 fn nested_scroll_session(inner_content: &str) -> (Fixture, Session) {
     let f = fixture();
     fs::write(
@@ -923,7 +969,7 @@ fn text_measurement_uses_each_sessions_own_font_picker() {
         let f = fixture();
         fs::write(
             f.0.join("ui/main.luau"),
-            "local ui=require('bead.ui')\nreturn ui.Panel{id='root',width=ui.text_width('A','IBM Plex Sans',16),height=40}",
+            "local ui=require('bead.ui')\nreturn ui.Panel{id='root',width=ui.text_width('A','Example Sans',16),height=40}",
         )
         .unwrap();
         let mut session = f.session();
@@ -2029,8 +2075,7 @@ return kit.Panel{edge="left",id="kit",width=420,height=680,open=ui.bind("open"),
                 .any(|p| matches!(p,Primitive::Image{blur,..} if *blur == 6.))
         );
     }
-    let scale: serde_json::Value =
-        serde_json::from_str(include_str!("../assets/size-scale.json")).unwrap();
+    let scale: serde_json::Value = serde_json::from_str(bead_kit::DEFAULT_SCALE).unwrap();
     assert_eq!(scale["spacing"]["md"], 12);
     assert_eq!(scale["radii"]["medium"], 16);
 }
@@ -2647,7 +2692,7 @@ fn frontend_reuses_raw_node_for_equal_width_bound_title_markup() {
     let sources = BTreeMap::from([(
         entry.clone(),
         br#"local ui=require("bead.ui")
-local width=math.ceil(ui.text_width(ui.bind("title"),"IBM Plex Sans",16))
+local width=math.ceil(ui.text_width(ui.bind("title"),"Example Sans",16))
 return ui.Panel{id="panel",width=300,height=80,
  ui.Text{id="title",text=ui.bind("title"),width=width,height=32}}"#
             .to_vec(),
@@ -2727,7 +2772,7 @@ fn memo_invalidates_bound_text_measurement_when_another_store_rebuilds_outer_mar
         entry.clone(),
         br#"local ui=require("bead.ui")
 local title=ui.memo("title",{},function()
- local width=math.ceil(ui.text_width(ui.bind("title"),"IBM Plex Sans",16))
+ local width=math.ceil(ui.text_width(ui.bind("title"),"Example Sans",16))
  return ui.Text{id="title",text=ui.bind("title"),width=width,height=32}
 end)
 local height=40+ui.resolve_for_check(ui.bind("tick"))

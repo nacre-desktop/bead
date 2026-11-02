@@ -1,7 +1,7 @@
--- SPDX-License-Identifier: GPL-3.0-only
+-- SPDX-License-Identifier: MIT
 -- Small best-effort logical-size measurement for passive widget previews.
-local context=require("context")
-local ui,kit=context.ui,context.kit
+local ui=require("bead.ui")
+local kit=require("bead.kit")
 local M={}
 
 local function number(value)
@@ -43,7 +43,7 @@ function M.width(node,depth)
     if explicit and explicit>=0 then return explicit end
     if node_kind=="text" then
         local value=ui.resolve_for_check(props.text or "") or ""
-        return ui.text_width(tostring(value),props.family or "IBM Plex Sans",
+        return ui.text_width(tostring(value),props.family or kit.tokens.fonts.sans,
             number(props.font_size) or kit.tokens.text.body*4/3)
     elseif node_kind=="image" then
         return number(props.height) or 0
@@ -77,7 +77,7 @@ end
 function M.ellipsize(value,width,font,size)
     value=tostring(ui.resolve_for_check(value) or "")
     width=number(width) or 0
-    font=font or "IBM Plex Sans"
+    font=font or kit.tokens.fonts.sans
     size=number(size) or kit.tokens.text.body*4/3
     if width<=0 then return "" end
     -- Text advances and row capacities can differ by a few floating-point ulps

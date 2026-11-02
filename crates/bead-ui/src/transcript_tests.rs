@@ -4,7 +4,7 @@ use crate::transcript::{Entry, Meter, Style, Transcript};
 #[test]
 fn five_hundred_markdown_messages_materialize_only_the_viewport_window() {
     let mut transcript = Transcript::new(
-        Style::new(420., "IBM Plex Sans", "JetBrainsMono Nerd Font"),
+        Style::new(420., "Fixture Sans", "Fixture Mono"),
         Meter::fixed(Vec::new()),
     );
     let entries: Vec<_> = (0..500)

@@ -309,6 +309,19 @@ fn static_text_has_stable_accesskit_content_without_pointer_or_focus_nodes() -> 
 
 #[test]
 fn static_text_bounds_follow_clip_and_offset_and_decorative_text_is_omitted() -> Result<()> {
+    // This fixture host declares its decorative font; the framework has no
+    // application-specific font-name rules.
+    struct ResetStyle;
+    impl Drop for ResetStyle {
+        fn drop(&mut self) {
+            bead_ui::text_style::set(Default::default());
+        }
+    }
+    bead_ui::text_style::set(bead_ui::text_style::TextStyle {
+        fixed_size_families: ["Fixture Icons".to_owned()].into(),
+        ..Default::default()
+    });
+    let _reset = ResetStyle;
     let h = test()?;
     let mut scene = h.scene().clone();
     let (index, r) = scene
@@ -354,7 +367,7 @@ fn static_text_bounds_follow_clip_and_offset_and_decorative_text_is_omitted() ->
             if mode == 0 {
                 color[3] = 0;
             } else if mode == 1 {
-                *family = "Material Symbols Rounded".into();
+                *family = "Fixture Icons".into();
             }
         }
         if mode == 2 {

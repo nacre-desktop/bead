@@ -18,6 +18,7 @@ pub mod script;
 mod session;
 pub mod status_pill;
 pub mod text_style;
+pub mod theme;
 mod themed;
 pub mod transcript;
 #[cfg(test)]

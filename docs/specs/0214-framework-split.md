@@ -1,5 +1,78 @@
 # B0214 — Independent MIT Bead framework
 
+## Step 1c — theme and widget boundaries, 2026-11-02
+
+Base `d21f8065` includes B0212 (`b4349488`) and B0213. `bead-kit` owns the
+existing reusable kit; `bead-widgets` owns the extracted forms, ordered slot
+packing, drag payload/tree/ghost geometry, measurement, virtual lists and atomic
+revisioned JSON storage. Replaced active copies are deleted. The owner requested
+MIT extraction of this code; its path histories list only siverteh as author.
+No third-party GPL reference implementation is transferred into framework code.
+
+`bead_ui::theme::set` validates host scale/font/gradient inputs before replacement
+and uses the existing refresh epoch. Nacre supplies its exact scale and font
+choices, catalogue, host geometry, bindings/actions, animation settings and
+storage locations. Its storage adapter preserves diagnostics and revision/CAS
+behavior. Existing IPC remains app-supplied. The new built-in widget modules
+retain the existing restriction on plugin imports; they add no capabilities.
+All existing golden bytes must remain unchanged. Remote validation is recorded
+in the final handoff; no live or physical-presentation claim is made.
+
+### Step 3 readiness (read-only; no import performed)
+
+Use filter-repo on a disposable clone, freeze the accepted source commit, and
+select exactly the following paths. Directory entries include all descendants;
+`examples/*.png` selects the 15 historical root-level example images. Archive
+records remain historical; Bead retains/replaces its framework-facing docs.
+
+| Export selection | Nacre destination |
+| --- | --- |
+| `crates/nacre-shell/`, `shell/` | Same top-level paths |
+| `packaging/`, `scripts/`, `spikes/`, `ssh-placeholder/` | Same suffix beneath `bead-shell/` |
+| `tools/daily-acceptance/`, `tools/bake-welcome-demo.py`, `tools/i18n-sync.py`, `tools/check-luau.py` | Same suffix beneath `bead-shell/` |
+| `examples/README.md`, `examples/*.png`, `examples/hyprland.lua`, `examples/hyprland-backend.lua`, `examples/niri.kdl`, `examples/niri-backend.kdl` | Same suffix beneath `bead-shell/` |
+| `docs/`, `FEASIBILITY.md`, `README.md`, `LICENSE.md`, `LICENSE-MIT`, `LICENSE-GPL-3.0` | Historical records/notices at same suffix beneath `bead-shell/` |
+| `deny.toml` | `bead-shell/deny-product.toml`, reconcile for Nacre's graph |
+
+Retain `crates/bead*`, `vendor/`, `examples/minimal-shell/`,
+`examples/plugins/hello/`, framework CI and framework tooling in Bead.
+`tools/sync-size-scale.py` has been removed, not exported. Do not overwrite
+Nacre's root Cargo files, policies, README, recipes or workflow by importing
+Bead's corresponding root files. Reconcile them in a follow-up commit.
+
+Read-only collision check used a disposable public Nacre clone at origin/main
+`9c96a20ced21be08cdb4dfd40015f1db078334ef`: `crates/nacre-shell/`, top-level
+`shell/` and `bead-shell/` are all absent, so every mapped destination above has
+zero tracked-file collisions. Recheck at execution. Existing Nacre root Cargo,
+packaging, tools and docs paths do collide conceptually and must be reconciled.
+
+Required build/CI changes: add nacre-shell to Nacre's workspace, with explicit
+edition 2024 / Rust 1.99 overrides (Nacre workspace defaults are 2021 / 1.87;
+its helper already overrides Rust 1.99). Pin
+`bead`, `bead-test`, `bead-wallpaper`, `bead-widgets` to one exact Bead rev;
+keep local `[patch]` overrides out of committed shipping configuration. Nacre
+already uses bead-services and patches system-tray from Bead rev `a6d42338`;
+review/update that helper pin and align both vendor patches to the accepted
+framework rev, then run Nacre's full CI as well. Reconcile locked features and
+release profiles: Nacre currently uses serde_json `preserve_order`, thin LTO
+and strip, unlike the current UI build. Preserve the published protocol pin
+until a separately reviewed schema bump.
+
+Extend Nacre `.github/workflows/check.yml`, `tools/check.py`,
+`packaging/arch/{build.py,recipe.py,stage.py,check.py,test-installed.py}` and
+`packaging/packages.json` for the shell binaries, native dependencies, Luau/
+goldens/private-bus/product proof suites and pinned Bead source. Adapt relocated
+scripts' product-root paths and the analyzer's explicit framework-root input.
+Move product checks out of Bead CI only after Nacre's replacements pass.
+Nacre already installs `/usr/bin/nacre-shell` as its QML control wrapper: keep
+the Bead executable in its private lib/bundle location, not over that wrapper.
+Keep the three-executable + `shell/` artifact shape and journaled ui-shell
+install/switch/rollback API unchanged. The lead updates preview source manifests
+and archive inputs; this worker does not run or modify preview/install tooling.
+
+Step 3 may start only after this extraction is accepted and current target
+collisions/build contracts are rechecked. No external Nacre checkout was touched.
+
 ## Phase 2 — approved continuation, 2026-11-02
 
 The lead approved the migration plan as written. This continuation implements

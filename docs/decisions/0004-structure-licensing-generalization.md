@@ -66,6 +66,10 @@ permissive and compositor-neutral by design.
 
 ## Future milestone: Bead for others
 
+- B0214c: `bead-kit` and `bead-widgets` extract existing components/placement/
+  forms/drag/storage; applications inject validated tokens/fonts, catalogue,
+  bindings, routes, animation policy and paths. Product copies are removed.
+
 - B0214: application accessibility label, notification server identity/policy
   extension, and pending/visible pearl app IDs are host inputs; Nacre keeps its
   compatibility interface in the product. Minimal-shell proves independent hosting.

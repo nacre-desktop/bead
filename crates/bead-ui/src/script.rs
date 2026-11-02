@@ -116,6 +116,31 @@ impl Script {
         let exports = (|| -> mlua::Result<Table> {
             lua.set_memory_limit(8 * 1024 * 1024)?;
             lua.globals().set("tr", crate::i18n::lua_function(&lua)?)?;
+            // Behavior VMs share the pure widget algorithms, never a view SDK.
+            // Keep the existing Luau resolver for other names and cache embedded
+            // modules within this VM just as ordinary require does.
+            let original_require: Function = lua.globals().get("require")?;
+            let modules = lua.create_table()?;
+            lua.globals().set(
+                "require",
+                lua.create_function(move |lua, name: String| {
+                    let Some(module) = name.strip_prefix("bead.widgets.") else {
+                        return original_require.call::<mlua::Value>(name);
+                    };
+                    let cached: mlua::Value = modules.get(name.as_str())?;
+                    if !cached.is_nil() {
+                        return Ok(cached);
+                    }
+                    let source = bead_widgets::behavior_source(module).ok_or_else(|| {
+                        mlua::Error::runtime(format!("{name} is not a behavior module"))
+                    })?;
+                    let code = crate::frontend::bytecode(source.as_bytes())?;
+                    let value: mlua::Value =
+                        lua.load(&*code).set_name(format!("@{name}")).eval()?;
+                    modules.set(name, value.clone())?;
+                    Ok(value)
+                })?,
+            )?;
             // Luau protects serde's array metatable from table.clone/getmetatable.
             // JSON copying preserves empty containers without exposing that metatable.
             lua.globals().set(
@@ -463,6 +488,27 @@ mod budget_tests {
             Value::Number(42.)
         );
     }
+    #[test]
+    fn behavior_imports_share_pure_widget_modules_without_exposing_view_modules() {
+        let script = Script::load(
+            br#"local geometry=require("bead.widgets.drag-geometry")
+assert(geometry==require("bead.widgets.drag-geometry"))
+local slot=geometry.desktop_landing({},2,3,4,5,100,100,8)
+return {stores={x=slot.x,y=slot.y},actions={},computed={}}"#,
+            Path::new("behavior.luau"),
+        )
+        .unwrap();
+        assert_eq!(script.schema().unwrap().get("x"), Some(&Value::Number(2.)));
+        assert_eq!(script.schema().unwrap().get("y"), Some(&Value::Number(3.)));
+        assert!(
+            Script::load(
+                br#"require("bead.widgets.measure"); return {stores={},actions={},computed={}}"#,
+                Path::new("behavior.luau"),
+            )
+            .is_err()
+        );
+    }
+
     #[test]
     fn separate_small_evaluations_share_the_same_fifty_millisecond_allowance() {
         let script=Script::load(b"return {stores={},actions={},computed={answer=function(s) local n=s.n; for i=1,10000 do n+=i end; return n end}}",Path::new("budget.luau")).unwrap();

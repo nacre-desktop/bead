@@ -49,7 +49,7 @@ fn contrast(a: [u8; 4], b: [u8; 4]) -> f64 {
     let (a, b) = (luminance(a), luminance(b));
     (a.max(b) + 0.05) / (a.min(b) + 0.05)
 }
-/// `NacreLogo`'s lift: blend toward the readable ink in 20 steps until the colour reaches `minimum` contrast on `bg`.
+/// Blend toward readable ink in 20 steps until the colour reaches `minimum` contrast on `bg`.
 fn lift(value: [u8; 4], bg: [u8; 4], fg: [u8; 4], minimum: f64) -> [u8; 4] {
     if contrast(value, bg) >= minimum {
         return value;

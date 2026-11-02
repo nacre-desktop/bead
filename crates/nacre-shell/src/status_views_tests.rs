@@ -813,7 +813,7 @@ fn status_registry_keeps_only_cold_metadata_and_never_starts_another_service() -
     let palette = Arc::new(root().join("palette.json"));
     let colors = Arc::new(bead::render::Palette::read(&palette)?);
     let scale: serde_json::Value =
-        serde_json::from_str(include_str!("../../bead-ui/assets/size-scale.json"))?;
+        serde_json::from_str(include_str!("../../../shell/size-scale.json"))?;
     let radius = scale["radii"]["medium"]
         .as_f64()
         .ok_or("shared radius missing")? as f32;

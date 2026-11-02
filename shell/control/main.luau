@@ -306,7 +306,7 @@ local function notifications_page()
         header(ui.tr("bead.panel.control-notifications"),ui.action("page","home")),
         {group,group_height}},T.spacing.lg)
     local height=math.max(1,get("cc.max_height")-TOP-PAD)
-    local list=require("../kit/virtual-list"){id="history-scroll",scroll=ui.bind("cc.scroll"),
+    local list=require("bead.widgets.kit.virtual-list"){id="history-scroll",scroll=ui.bind("cc.scroll"),
         width=INNER,height=height,model=ui.bind("cc.notices"),key="id",row_height=NOTICE_H,gap=T.spacing.md,
         before=prefix,before_height=prefix_height,before_gap=#get("cc.notices")>0 and T.spacing.md or 0,render=notice_card}
     return list,height
@@ -366,7 +366,7 @@ if popup then
     -- Keep DND/Clear visible; construct only the viewport's retained cards.
     local available=math.max(0,math.min(10*ROW,get("cc.max_height")-TOP-PAD-heading[2]-GAP))
     local visible=math.min(available,list_height)
-    local list=require("../kit/virtual-list"){id="scroll",scroll=ui.bind("cc.scroll"),
+    local list=require("bead.widgets.kit.virtual-list"){id="scroll",scroll=ui.bind("cc.scroll"),
         width=INNER,height=visible,model=ui.bind("cc.notices"),key="id",row_height=NOTICE_H,gap=GAP,
         before=prefix,before_height=prefix_height,before_gap=prefix_gap,render=notice_card}
     body,content=stack("history-content",{heading,{list,visible}},GAP)

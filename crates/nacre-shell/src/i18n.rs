@@ -2,6 +2,7 @@
 //! Shell strings: the built-in English table and `tr` for Rust-side text.
 //! The same table backs the Luau `tr`, so a daemon-less preview reads correctly.
 pub fn init() {
+    crate::theme::init();
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| bead::ui::i18n::set_builtin(include_str!("../../../shell/i18n/en.json")));
 }
@@ -61,6 +62,13 @@ mod tests {
             for (at, _) in text.match_indices("\"bead.") {
                 let rest = &text[at + 1..];
                 let id = &rest[..rest.find('"').unwrap_or(0)];
+                // Embedded widget module names are imports, not message IDs.
+                if id
+                    .strip_prefix("bead.widgets.")
+                    .is_some_and(|name| bead::widgets::source(name).is_some())
+                {
+                    continue;
+                }
                 let mut parts = id.split('.');
                 let (_, surface, name) = (parts.next(), parts.next(), parts.next());
                 if surface.is_some_and(|s| SURFACES.contains(&s)) && name.is_some() {

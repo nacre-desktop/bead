@@ -99,7 +99,7 @@ elseif section=="chats" then
         add(ui.Text{id="note",position="absolute",left=E,top=LT,width=INNER,height=3*T.spacing.xxl,text=note,font_size=T.text.title*4/3-4,color="onSurfaceVariant"})
     end
     local RH=BTN+T.spacing.xxl-5
-    add(require("../kit/virtual-list"){id="saved",scroll=ui.bind("chat.qscroll"),position="absolute",left=E,top=LT,
+    add(require("bead.widgets.kit.virtual-list"){id="saved",scroll=ui.bind("chat.qscroll"),position="absolute",left=E,top=LT,
         width=INNER,height=H-LT-E,model=ui.bind("chat.saved"),key="id",row_height=RH,gap=T.spacing.xs+2,repeat_id="rows",
         render=function(item)
             return kit.Button{id="row",width=INNER,height=RH,padding=T.spacing.sm+1,radius=T.spacing.md,fill="surfaceContainer",aria_label=item.t,

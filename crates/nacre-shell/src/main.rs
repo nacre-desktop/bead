@@ -55,6 +55,7 @@ mod shell_control;
 mod sound;
 mod state;
 mod status_views;
+mod theme;
 mod tray;
 mod ui_provider;
 mod wallpaper;
@@ -692,7 +693,7 @@ fn start(
                 let gate = gate.clone();
                 std::sync::Arc::new(move |p: &prefs::Prefs| {
                     bead::core::animation::set_reduced_motion(p.reduce_motion);
-                    bead::ui::text_style::set(p.text_style());
+                    theme::apply(p);
                     placement::set_sheen(p.frame_sheen);
                     // The live frame first: the gate's watchers rebuild from it.
                     placement::Frame::set_current(placement::Frame::from_settings(
@@ -845,7 +846,7 @@ fn start(
         let status_colors = std::sync::Arc::new(colors.clone());
         let status_palette = std::sync::Arc::new(palette.clone());
         let status_scale: serde_json::Value =
-            serde_json::from_str(include_str!("../../bead-ui/assets/size-scale.json"))?;
+            serde_json::from_str(include_str!("../../../shell/size-scale.json"))?;
         let status_radius = status_scale["radii"]["medium"]
             .as_f64()
             .ok_or("status radius missing from shared scale")? as f32;

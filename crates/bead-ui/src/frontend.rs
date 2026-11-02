@@ -90,7 +90,7 @@ fn compiled_prelude(
         return Ok(prelude);
     }
     let kit = compiler
-        .compile(include_str!("../assets/kit.luau"))
+        .compile(bead_kit::source())
         .map_err(|e| diagnostic(entry, e))?;
     let install = compiler
         .compile(INSTALL)
@@ -719,11 +719,12 @@ impl Vm {
             .load(frontend.prelude.kit.as_slice())
             .set_name("@bead.kit")
             .eval()?;
-        let mut tokens: serde_json::Value =
-            serde_json::from_str(include_str!("../assets/size-scale.json"))
-                .map_err(mlua::Error::external)?;
-        // The owner's `interfaceGradients` choice; a change bumps the epoch.
-        tokens["gradients"] = crate::text_style::gradients().into();
+        let mut tokens = crate::theme::current();
+        // Explicit host tokens can disable gradients; retain the existing
+        // text-style switch as an additional compatibility opt-out.
+        tokens["gradients"] = (tokens["gradients"].as_bool().unwrap_or(true)
+            && crate::text_style::gradients())
+        .into();
         let kit: Table = kit_factory.call((sdk.clone(), lua.to_value(&tokens)?))?;
         lua.globals()
             .set("require", sdk.get::<Function>("require")?)?;
@@ -1109,12 +1110,19 @@ impl FrontEnd for LuauFrontEnd {
                         return Ok(mlua::Value::Table(vm.sdk.clone()));
                     }
                     let caller = source(lua, entry);
-                    let base = Path::new(&caller.file).parent().unwrap_or(&entry_parent);
-                    let mut path = base.join(&name);
-                    if path.extension().is_none() {
-                        path.set_extension("luau");
-                    }
-                    let path = normalize(&path).map_err(mlua::Error::runtime)?;
+                    let embedded = name
+                        .strip_prefix("bead.widgets.")
+                        .and_then(bead_widgets::source);
+                    let path = if embedded.is_some() {
+                        PathBuf::from(format!("@bead.widgets/{name}.luau"))
+                    } else {
+                        let base = Path::new(&caller.file).parent().unwrap_or(&entry_parent);
+                        let mut path = base.join(&name);
+                        if path.extension().is_none() {
+                            path.set_extension("luau");
+                        }
+                        normalize(&path).map_err(mlua::Error::runtime)?
+                    };
                     // A plugin reaches the host API and its own files, never shell internals.
                     if let Some(id) = crate::plugins::owner(&caller.file)
                         && !path.starts_with(Path::new(crate::plugins::MOUNT).join(id))
@@ -1137,12 +1145,18 @@ impl FrontEnd for LuauFrontEnd {
                             path.display()
                         )));
                     }
-                    let bytes = sources.get(&path).ok_or_else(|| {
-                        mlua::Error::runtime(format!(
-                            "import {} is outside the tracked UI bundle",
-                            path.display()
-                        ))
-                    })?;
+                    let owned;
+                    let bytes = if let Some(source) = embedded {
+                        source.as_bytes()
+                    } else {
+                        owned = sources.get(&path).ok_or_else(|| {
+                            mlua::Error::runtime(format!(
+                                "import {} is outside the tracked UI bundle",
+                                path.display()
+                            ))
+                        })?;
+                        owned.as_slice()
+                    };
                     let before = (vm.calls.get(), vm.built.call::<u64>(())?);
                     let value: mlua::Value = vm.chunk(&path, bytes)?.call(())?;
                     loading.borrow_mut().remove(&path);

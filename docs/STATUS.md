@@ -8,6 +8,16 @@ The authorized CI continuation refreshed and individually reviewed eight launche
 the wrapped-row render test covers scales 1 and 1.5. The full-CI result is in the unit report;
 QML/live parity and memory evidence remain pending. No live run or deployment occurred.
 [Audit and validation handoff](specs/0213-launcher.md).
+## 2026-11-02 — B0214c: theme and widget boundary extraction
+
+The accepted phase-2 code and B0212/B0213 form the base. Existing kit and widget
+algorithms now live in MIT bead-kit/bead-widgets; Nacre supplies its exact theme,
+catalogue, actions and paths. Replaced active copies and the scale-sync tool are
+removed. Goldens remain unchanged; remote validation is in progress. The
+[B0214 readiness note](specs/0214-framework-split.md) lists the exact step-3
+export selections, target collisions and Nacre build/CI changes. No import or
+live operation is performed in this unit.
+
 ## 2026-11-02 — B0214 phase 2: framework independence
 
 The lead approved the split plan. Identity hooks preserve Nacre behavior through

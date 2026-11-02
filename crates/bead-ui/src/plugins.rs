@@ -254,7 +254,7 @@ impl Manifest {
     }
 }
 
-/// Where plugins and their state live. Paths are configuration, never Nacre-specific.
+/// Where plugins and their state live. Paths are supplied by the host.
 #[derive(Clone, Debug, Default)]
 pub struct Config {
     /// Bundled (first-party) plugin directories: enabled unless the user disabled them.

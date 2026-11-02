@@ -1,6 +1,6 @@
 -- SPDX-License-Identifier: GPL-3.0-only
 local ui=require("bead.ui")
-local VirtualList=require("../../kit/virtual-list")
+local VirtualList=require("bead.widgets.kit.virtual-list")
 local M=require("./metrics")
 local Icon=require("./item-icon")
 local Lines=require("./text-lines")

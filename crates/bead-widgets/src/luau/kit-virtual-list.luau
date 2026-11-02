@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: GPL-3.0-only
+-- SPDX-License-Identifier: MIT
 -- Generic single-column viewport list. Auto-sized content plus bounded spacers
 -- supports long lists without exceeding the SDK's 20,000px dimension limit.
 local ui = require("bead.ui")

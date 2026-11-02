@@ -26,133 +26,8 @@ local function settings(schema,values)
         end
     end
 end
-local colour_fields={fill=true,color=true,border_color=true,hover_fill=true,selected_fill=true,
-    focus_color=true,shadow_color=true,from=true,to=true}
-local function map_role(role,from,to)
-    if type(role)~="string" then return role end
-    local from_cap=from:sub(1,1):upper()..from:sub(2)
-    local to_cap=to~="neutral" and to:sub(1,1):upper()..to:sub(2) or ""
-    if role==from then return to=="neutral" and "surfaceVariant" or to end
-    if role=="on"..from_cap then return to=="neutral" and "onSurfaceVariant" or "on"..to_cap end
-    if role==from_cap.."Container" then return to=="neutral" and "surfaceContainerHigh" or to_cap.."Container" end
-    if role=="on"..from_cap.."Container" then return to=="neutral" and "onSurface" or "on"..to_cap.."Container" end
-    return role
-end
-local function map_colour(value,from,to)
-    if type(value)=="string" then return map_role(value,from,to) end
-    if type(value)~="table" then return value end
-    local copy=table.clone(value)
-    for key,item in copy do
-        if key=="role" or key=="base" or key=="over" or key=="from" or key=="to" then
-            copy[key]=map_colour(item,from,to)
-        elseif type(item)=="table" then
-            copy[key]=map_colour(item,from,to)
-        end
-    end
-    return copy
-end
-local function map_widget_colour(node,from,to)
-    if type(node)~="table" then return node end
-    local props=node.props
-    if type(props)=="table" then
-        for key in colour_fields do
-            if props[key]~=nil then props[key]=map_colour(props[key],from,to) end
-        end
-        if type(props.render)=="function" then
-            local render=props.render
-            props.render=function(...) return map_widget_colour(render(...),from,to) end
-        end
-    end
-    for _,child in node.children or {} do map_widget_colour(child,from,to) end
-    return node
-end
-local function make_variant(package,placement,form)
-    assert(type(form)=="table" and type(form.styles)=="table" and type(form.default_style)=="string",
-        "invalid "..placement.." forms: "..package.id)
-    local default=form.styles[form.default_style]
-    assert(type(default)=="table","missing default "..placement.." style: "..package.id)
-    local minimum,maximum=math.huge,0
-    local has_reservation=false
-    for name,style in form.styles do
-        assert(type(name)=="string" and type(style)=="table" and type(style.title)=="string"
-            and type(style.render)=="function","invalid "..placement.." style: "..package.id.."/"..tostring(name))
-        assert(integer(style.min_span,1,20000) and integer(style.max_span,style.min_span,20000)
-            and integer(style.preferred_span,style.min_span,style.max_span),
-            "invalid "..placement.." size contract: "..package.id.."/"..name)
-        if style.reserve_width then assert(type(style.reserve_width)=="function","invalid style width reservation") end
-        if style.requires then
-            assert(type(style.requires)=="table","invalid style requirements")
-            for _,requirement in style.requires do assert(type(requirement)=="string","style requirement must name a data binding") end
-        end
-        minimum=math.min(minimum,style.min_span)
-        maximum=math.max(maximum,style.max_span)
-        if style.reserve_width then has_reservation=true end
-    end
-    assert(default.min_span and default.max_span and default.preferred_span,"incomplete default style")
-    return {
-        min_span=minimum,max_span=maximum,preferred_span=default.preferred_span,
-        reserve_width=has_reservation and function(values,style_name)
-            local selected=style_name and form.styles[style_name]
-            if selected then return selected.reserve_width and selected.reserve_width(values) or nil end
-            local reserved=0
-            for _,style in form.styles do
-                if style.reserve_width then reserved=math.max(reserved,style.reserve_width(values)) end
-            end
-            return reserved
-        end or nil,
-        render=function(props,settings,data)
-            local instance=props.instance or {}
-            local name=instance.style
-            if type(name)~="string" or name=="" then
-                name=form.legacy_style_setting and settings[form.legacy_style_setting]
-            end
-            if type(name)~="string" or name=="" then name=form.default_style end
-            local selected=form.styles[name]
-            assert(selected,"unknown "..placement.." style "..tostring(name).." for "..package.id)
-            local styled=table.clone(props)
-            styled.form_style=name
-            local node
-            if package.plugin then
-                -- Spec 0203: a failing or over-reaching plugin renders nothing and is switched off.
-                local ok,result=pcall(selected.render,styled,settings,data)
-                if ok then ok,result=pcall(ui.plugin_gate,package.plugin,result) end
-                if not ok then
-                    ui.plugin_fault(package.plugin,tostring(result))
-                    return ui.Box{id=package.id,width=0,height=0,shrink=0,visible=false}
-                end
-                node=result
-            else
-                node=selected.render(styled,settings,data)
-            end
-            local colour_role=settings.colour_role or package.accent_role
-            if node and package.accent_role and colour_role~=package.accent_role then
-                node=map_widget_colour(node,package.accent_role,colour_role)
-            end
-            return node
-        end,
-    }
-end
-local function validate_panel_form(package)
-    local form=package.forms.panel
-    if form==nil then return end
-    assert(type(form)=="table" and type(form.styles)=="table","invalid panel forms: "..package.id)
-    for name,descriptor in form.styles do
-        assert(type(name)=="string" and type(descriptor)=="table" and type(descriptor.view)=="string"
-            and #descriptor.view>0,"panel styles only describe a view: "..package.id.."/"..tostring(name))
-        for key in descriptor do assert(key=="view","panel descriptors contain view only") end
-    end
-end
-local function install_variants(package)
-    assert(type(package.forms)=="table" and package.forms.bar,"missing bar forms: "..package.id)
-    for placement in package.forms do
-        assert(placement=="bar" or placement=="desktop" or placement=="panel",
-            "unsupported widget form placement (only bar, desktop, and panel exist): "..tostring(placement))
-    end
-    validate_panel_form(package)
-    package.variants={bar=make_variant(package,"bar",package.forms.bar)}
-    if package.forms.desktop then package.variants.canvas=make_variant(package,"desktop",package.forms.desktop) end
-end
-local measured_width=require("measure").width
+local install_variants=require("bead.widgets.forms").install
+local measured_width=require("bead.widgets.measure").width
 local translations={
     battery={title="bead.widgets.battery-title",description="bead.widgets.battery-description"},
     bluetooth={title="bead.widgets.bluetooth-title",description="bead.widgets.bluetooth-description"},
@@ -190,7 +65,7 @@ local function install(id,package,accent)
         package.settings.dropdown_trigger={type="choice",options={"default","click","hover"}}
         package.defaults.dropdown_trigger="default"
     end
-    install_variants(package)
+    install_variants(package,ui)
     assert(package.id==id and type(package.title)=="string" and type(package.icon)=="string" and type(package.category)=="string","invalid widget identity: "..id)
     assert(type(package.data)=="table" and type(package.data.topics)=="table" and type(package.data.actions)=="table","invalid widget data: "..id)
     assert(type(package.settings)=="table" and type(package.defaults)=="table" and type(package.budget)=="table","invalid widget metadata: "..id)
@@ -218,7 +93,7 @@ end
 -- register here like built-ins. A plugin that fails to load is skipped and switched off.
 local found,index=pcall(function() return require("../plugins/index") end)
 local plugins=found and index.plugins or {}
-local app_api={context=context,measure=require("measure"),visual=require("desktop-visuals")}
+local app_api={context=context,measure=require("bead.widgets.measure"),visual=require("desktop-visuals")}
 local plugin_widgets={}
 for _,entry in plugins do
     if not entry.loaded then continue end
@@ -327,51 +202,20 @@ end
 -- B0198: the bar is order-based. Any saved layout (including one broken by an
 -- older drag) is repaired into one canonical form: natural content packing, full
 -- regions, contiguous starts in saved order and spans from the selected form.
-local REGION_RANK={left=1,centre=2,right=3}
-local function form_span(item)
-    local package=registry[item.widget]
-    local form=package and package.forms[item.host=="canvas" and "desktop" or "bar"]
-    if not form then return math.max(1,math.floor(tonumber(item.slot and item.slot.span) or 1)) end
-    local name=item.style
-    if type(name)~="string" or not form.styles[name] then name=form.default_style end
-    return form.styles[name].min_span
-end
-local function pack(list,top)
-    local order={}
-    for index,item in list do
-        if type(item)=="table" and type(item.slot)=="table" then
-            if not REGION_RANK[item.slot.region] then item.slot.region="centre" end
-            table.insert(order,{item=item,index=index,start=tonumber(item.slot.start) or 0})
-        end
-    end
-    table.sort(order,function(a,b)
-        local ar,br=REGION_RANK[a.item.slot.region],REGION_RANK[b.item.slot.region]
-        if ar~=br then return ar<br end
-        if a.start~=b.start then return a.start<b.start end
-        return a.index<b.index
-    end)
-    local cursor={left=0,centre=0,right=0}
-    table.clear(list)
-    for _,entry in order do
-        local item,region=entry.item,entry.item.slot.region
-        item.slot.start=cursor[region]
-        item.slot.span=form_span(item)
-        item.slot.gap=nil
-        local offset=tonumber(item.slot.offset)
-        item.slot.offset=top and offset and offset==offset and math.abs(offset)<20000 and math.round(offset) or nil
-        cursor[region]+=item.slot.span
-        -- Only containers keep children (unknown packages keep theirs opaque).
-        if type(item.children)~="table" or (registry[item.widget] and item.widget~="pill") then item.children=nil end
-        if item.children then pack(item.children,false) end
-        table.insert(list,item)
-    end
-end
-local function copy(value)
-    if type(value)~="table" then return value end
-    local result={}
-    for key,item in value do result[key]=copy(item) end
-    return result
-end
+local placement=require("bead.widgets.placement")({
+    region_rank={left=1,centre=2,right=3},default_region="centre",
+    span=function(item)
+        local package=registry[item.widget]
+        local form=package and package.forms[item.host=="canvas" and "desktop" or "bar"]
+        if not form then return math.max(1,math.floor(tonumber(item.slot and item.slot.span) or 1)) end
+        local name=item.style
+        if type(name)~="string" or not form.styles[name] then name=form.default_style end
+        return form.styles[name].min_span
+    end,
+    keep_children=function(item) return type(item.children)=="table" and (not registry[item.widget] or item.widget=="pill") end,
+})
+local pack=placement.pack
+local copy=placement.copy
 -- Documents this module already normalised (the bar normalises once per build).
 local normalised=setmetatable({},{__mode="k"})
 function M.normalise(document)

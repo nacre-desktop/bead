@@ -70,7 +70,7 @@ local function rail()
         kit.TextInput{id="search",text=ui.bind("colors.query"),placeholder=ui.tr("bead.colors.find-wallpaper"),width="fill",
             aria_label=ui.tr("bead.colors.find-wallpaper")},
         ui.Text{id="empty",visible=ui.bind("colors.empty"),text=ui.tr("bead.colors.no-matches"),width="fill",height=40,font_size=px(10),color="onSurfaceVariant"},
-        require("../kit/virtual-list"){id="entries",scroll=ui.bind("colors.rail.scroll"),width="fill",grow=1,
+        require("bead.widgets.kit.virtual-list"){id="entries",scroll=ui.bind("colors.rail.scroll"),width="fill",grow=1,
             window_height=window_height,model=ui.bind("colors.entries"),key="id",row_height=88,gap=6,repeat_id="items",render=entry}}
 end
 local function studio(v)

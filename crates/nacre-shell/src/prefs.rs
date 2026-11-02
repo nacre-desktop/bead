@@ -239,6 +239,8 @@ impl Prefs {
             .into_iter()
             .flatten()
             .collect(),
+            fixed_size_families: Default::default(),
+            fixed_size_prefixes: Default::default(),
             size_offset: self.text_offset as f32,
             solid: !self.interface_gradients,
         }

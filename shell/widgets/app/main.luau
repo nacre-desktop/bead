@@ -5,7 +5,7 @@ local ui,kit=context.ui,context.kit
 local spacing,text=kit.tokens.spacing,kit.tokens.text
 local registry=require("../registry")
 local preview=require("preview")
-local settings_form=require("../settings-form")
+local settings_form=require("bead.widgets.settings-form")(context,{choice_route="widgets.choice",select_binding=ui.bind("widgets.select"),field_binding=ui.bind("widgets.field")})
 local dragging=require("../dragging")
 
 local function catalogue_descriptors()

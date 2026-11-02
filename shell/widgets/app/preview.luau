@@ -3,7 +3,7 @@
 local context=require("../context")
 local ui,kit=context.ui,context.kit
 local registry=require("../registry")
-local measure=require("../measure")
+local measure=require("bead.widgets.measure")
 local M={}
 
 local scaled={width=true,height=true,min_width=true,max_width=true,left=true,right=true,top=true,bottom=true,

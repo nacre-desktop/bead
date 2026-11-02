@@ -5,7 +5,7 @@ local context=require("../context")
 local ui,kit=context.ui,context.kit
 local spacing,text=kit.tokens.spacing,kit.tokens.text
 local registry=require("../registry")
-local settings_form=require("../settings-form")
+local settings_form=require("bead.widgets.settings-form")(context,{choice_route="widgets.choice",select_binding=ui.bind("widgets.select"),field_binding=ui.bind("widgets.field")})
 local M={}
 
 local TRUST={"Plugins run Luau code with the access they declare; the shell checks it where it controls access.",

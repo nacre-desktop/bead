@@ -37,7 +37,7 @@ local count=ui.model_count(model)
 if count>0 then
     local row_height=T.spacing.xxl*2+T.spacing.md
     local list_height=math.min(count*(row_height+T.spacing.xs)-T.spacing.xs,T.spacing.huge*7)
-    add(require("../kit/virtual-list"){id="packages",model=model,key="id",scroll=ui.bind("status.updates_scroll"),
+    add(require("bead.widgets.kit.virtual-list"){id="packages",model=model,key="id",scroll=ui.bind("status.updates_scroll"),
         width=content,height=list_height,row_height=row_height,gap=T.spacing.xs,render=function(item)
             local badge=item.repo~="" and math.min(content/3,ui.text_width(item.repo,"IBM Plex Sans",caption)+T.spacing.md) or 0
             local inner=content-T.spacing.sm*2

@@ -2,7 +2,7 @@
 local c=require("../context")
 local ui=c.ui
 local kit=c.kit
-local measure=require("../measure")
+local measure=require("bead.widgets.measure")
 local status_text=c.status_text
 local popouts=c.popouts
 local t=c.t

@@ -1379,7 +1379,7 @@ async fn network_core_lease_exists_only_for_open_runtime() {
                 .unwrap();
             let palette = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json");
             let colors = Arc::new(bead::render::Palette::read(&palette).unwrap());
-            let scale_json = include_str!("../../../bead-ui/assets/size-scale.json");
+            let scale_json = include_str!("../../../../shell/size-scale.json");
             let scale: Value = serde_json::from_str(scale_json).unwrap();
             let radius = scale["radii"]["medium"].as_f64().unwrap() as f32;
             let spec = crate::popouts::status(
@@ -1647,7 +1647,7 @@ async fn bluetooth_core_lease_exists_only_for_open_runtime() {
                 .unwrap();
             let palette = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json");
             let colors = Arc::new(bead::render::Palette::read(&palette).unwrap());
-            let scale_json = include_str!("../../../bead-ui/assets/size-scale.json");
+            let scale_json = include_str!("../../../../shell/size-scale.json");
             let scale: Value = serde_json::from_str(scale_json).unwrap();
             let radius = scale["radii"]["medium"].as_f64().unwrap() as f32;
             let spec = crate::popouts::status(
@@ -3384,7 +3384,7 @@ async fn battery_core_lease_exists_only_for_open_runtime() {
                 .unwrap();
             let palette = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell/palette.json");
             let colors = Arc::new(bead::render::Palette::read(&palette).unwrap());
-            let scale_json = include_str!("../../../bead-ui/assets/size-scale.json");
+            let scale_json = include_str!("../../../../shell/size-scale.json");
             let scale: Value = serde_json::from_str(scale_json).unwrap();
             let radius = scale["radii"]["medium"].as_f64().unwrap() as f32;
             let spec = crate::popouts::status(

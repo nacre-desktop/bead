@@ -837,7 +837,7 @@ pub fn run(cli: &[String]) -> Result<(), Box<dyn Error>> {
             Arc::new(move |p: &prefs::Prefs| {
                 prefs_gate.apply(p);
                 bead::core::animation::set_reduced_motion(p.reduce_motion);
-                bead::ui::text_style::set(p.text_style());
+                crate::theme::apply(p);
                 placement::set_sheen(p.frame_sheen);
                 placement::Frame::set_current(placement::Frame::from_settings(&p.frame_settings()));
                 let _ = first.try_send(());

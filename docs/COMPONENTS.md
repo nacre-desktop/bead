@@ -1,16 +1,24 @@
 # Framework components
 
-Luau views import `bead.kit`; components are embedded in the permissive
-bead-ui framework rather than copied between shell views. `bead.ui` remains
+Luau views import `bead.kit`; components are embedded from the MIT `bead-kit`
+crate through bead-ui rather than copied between shell views. `bead.ui` remains
 available for custom primitives. The existing Orient palette supplies color
 roles; no second palette engine is introduced.
 
-`assets/size-scale.json` mirrors Nacre's `nacre/shell/widgets/size-scale.json`:
-spacing, radii, text and icons share named values. Text/icon point sizes convert
-to logical pixels at 96 DPI (4/3); physical pixels still follow output scale.
-Motion color/state/text durations match NacreTokens at 200/120/400 ms.
-Use `python3 tools/sync-size-scale.py SOURCE --check` to detect source drift;
-without `--check` it updates only the framework scale mirror.
+Hosts inject complete scale, gradient and `fonts.sans/mono/icon` values with
+`bead::ui::theme::set`; invalid data leaves the previous theme active. The
+framework provides neutral defaults. Nacre owns `shell/size-scale.json` and
+its font choices in the application adapter; the old synchronization tool is
+removed. Text/icon point sizes convert to logical pixels at 96 DPI (4/3);
+physical pixels still follow output scale. Existing motion defaults remain
+200/120/400 ms.
+
+`bead-widgets` supplies embedded `bead.widgets.{forms,settings-form,placement,
+drag,drag-geometry,measure,kit.virtual-list}` modules and `LayoutStore` for opaque
+atomic JSON/revision persistence. Hosts supply catalogues, bindings, actions,
+geometry policies, animation settings and paths. Nacre's adapters keep its
+content, storage locations, routes and diagnostics. These host modules are not
+additional plugin capabilities.
 
 The kit exposes Button, IconButton, StatusIcon, Slider, Switch, Tile, SegmentedControl,
 List/ListRow, Card, Popover/Peek, Tooltip and TextInput. Slider uses a bounded

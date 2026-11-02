@@ -572,7 +572,7 @@ impl Session {
                     "Reload failed — old UI kept\n{}",
                     error.chars().take(500).collect::<String>()
                 ),
-                family: "IBM Plex Sans".into(),
+                family: crate::theme::sans_family(),
                 weight: 400,
                 align: None,
                 size: 14.,

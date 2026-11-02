@@ -34,8 +34,7 @@ pub struct Scale {
 }
 impl Scale {
     pub fn builtin() -> Self {
-        let scale: Value = serde_json::from_str(include_str!("../assets/size-scale.json"))
-            .expect("size scale is valid JSON");
+        let scale = crate::theme::current();
         let n = |group: &str, name: &str| scale[group][name].as_f64().unwrap_or(0.) as f32;
         let px = |name: &str| n("text", name) * 4. / 3.;
         Self {
@@ -163,11 +162,7 @@ impl Meter {
     /// different output scale can never wrap into an unreserved extra line.
     pub fn lines(&self, text: &str, family: &str, size: f32, width: f32) -> usize {
         self.prepare(text, [family, family]);
-        let family = if self.fixed.is_some() {
-            "IBM Plex Sans".to_owned()
-        } else {
-            crate::text_style::family(family)
-        };
+        let family = crate::text_style::family(family);
         let size = crate::text_style::size(size, &family);
         let mut hash = std::collections::hash_map::DefaultHasher::new();
         (text, &family, size.to_bits(), width.to_bits()).hash(&mut hash);

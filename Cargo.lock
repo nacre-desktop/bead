@@ -318,10 +318,12 @@ version = "0.1.0"
 dependencies = [
  "bead-backends",
  "bead-core",
+ "bead-kit",
  "bead-render",
  "bead-services",
  "bead-ui",
  "bead-wayland",
+ "bead-widgets",
  "futures-util",
  "serde_json",
  "tokio",
@@ -344,6 +346,10 @@ dependencies = [
  "serde_json",
  "tokio",
 ]
+
+[[package]]
+name = "bead-kit"
+version = "0.1.0"
 
 [[package]]
 name = "bead-minimal-shell"
@@ -410,7 +416,9 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "bead-core",
+ "bead-kit",
  "bead-render",
+ "bead-widgets",
  "mlua",
  "notify",
  "serde",
@@ -446,6 +454,14 @@ dependencies = [
  "smithay-client-toolkit",
  "wayland-client",
  "wayland-protocols",
+]
+
+[[package]]
+name = "bead-widgets"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde_json",
 ]
 
 [[package]]
@@ -1793,6 +1809,7 @@ dependencies = [
  "bead",
  "bead-test",
  "bead-wallpaper",
+ "bead-widgets",
  "calloop",
  "fast_image_resize",
  "fontconfig",

@@ -5,8 +5,7 @@
     "status/battery-body.luau",
     "status/body.luau",
     "sound/body.luau",
-    "control/vpn-body.luau",
-    "kit/virtual-list.luau"
+    "control/vpn-body.luau"
   ],
   "assets": ["notifications/fallback.themed.svg"]
 }
