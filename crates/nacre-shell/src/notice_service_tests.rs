@@ -53,9 +53,8 @@ fn notification_history_scroll_preserves_touchpad_pixels_and_shared_wheel_distan
         .view_nodes()
         .into_iter()
         .find(|node| node.scroll_store.as_deref() == Some("notifications.scroll.y"))
-        .expect("notification history viewport")
-        .draw;
-    let region = bead::ui::rect(&region);
+        .map(|node| bead::ui::rect(&node.draw))
+        .expect("notification history viewport");
     for (delta, expected) in [(23.5, 23.5), (54., 77.5)] {
         h.script([bead_test::Input::Scroll {
             x: region.x + region.w / 2.,

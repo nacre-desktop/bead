@@ -511,9 +511,8 @@ fn settings_items_scroll_preserves_touchpad_pixels_and_shared_wheel_distance() {
         .view_nodes()
         .into_iter()
         .find(|node| node.scroll_store.as_deref() == Some("settings.scroll"))
-        .expect("settings item viewport")
-        .draw;
-    let region = bead::ui::rect(&region);
+        .map(|node| bead::ui::rect(&node.draw))
+        .expect("settings item viewport");
     for (delta, expected) in [(23.5, 23.5), (54., 77.5)] {
         h.script([bead_test::Input::Scroll {
             x: region.x + region.w / 2.,
