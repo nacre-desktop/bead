@@ -477,7 +477,7 @@ fn launcher_two_line_copy_is_inside_its_row_and_clip() -> Result<()> {
             "first\nsecond\nthird".to_owned(),
         ];
         let rows = descriptions.iter().enumerate().map(|(index, description)| serde_json::json!({
-            "id":format!("wrapped-{index}"), "name":["Explicit newline", "Wrapped description", "Bounded overflow"][index],
+            "id":format!("wrapped-{index}"), "name":(["Explicit newline", "Wrapped description", "Bounded overflow"][index]),
             "description":description, "icon":"fixture", "selected":false, "favorite":false,
             "favoriteId":format!("wrapped-{index}")
         })).collect();
