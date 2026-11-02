@@ -3751,7 +3751,3 @@ dependencies = [
  "syn 3.0.9",
  "winnow",
 ]
-
-[[patch.unused]]
-name = "fontconfig"
-version = "0.11.0"
