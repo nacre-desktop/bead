@@ -1254,7 +1254,7 @@ fn center_symbol_crop(pix: &Pixmap, target_w: u32, target_h: u32) -> Result<Pixm
 fn symbol_raster_extent(target: u32, font_size: f32, scale: f32) -> u32 {
     let minimum = (font_size * scale * 1.5).ceil().max(target as f32) as u32;
     let minimum = minimum.max(1);
-    if (minimum - target) % 2 == 0 {
+    if (minimum - target).is_multiple_of(2) {
         minimum
     } else {
         minimum + 1
