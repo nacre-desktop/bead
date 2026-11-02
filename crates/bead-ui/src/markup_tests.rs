@@ -28,6 +28,14 @@ return ui.Panel {id="panel",width=400,height=240,padding=12,
     f
 }
 
+fn write_palette(f: &Fixture) {
+    fs::write(
+        f.0.join("palette.json"),
+        r#"{"formatVersion":1,"mode":"dark","colours":{"surface":"202020","surfaceContainer":"282828","surfaceContainerHigh":"303030","surfaceContainerHighest":"383838","onSurface":"eeeeee","onSurfaceVariant":"b0b0b0","primary":"90c0f0","secondary":"a0d0b0","primaryContainer":"405060","onPrimaryContainer":"eeeeee","outline":"707070","outlineVariant":"606060","shadow":"000000"}}"#,
+    )
+    .unwrap();
+}
+
 fn transfer_fixture() -> (Fixture, Session) {
     let f = fixture();
     fs::write(f.0.join("ui/main.luau"),r#"local ui=require("bead.ui")
@@ -1907,22 +1915,28 @@ fn overflowing_scroll_grid_keeps_rows_visible_beyond_its_assigned_container_box(
 fn framework_kit_shared_scale_edges_and_independent_tile_actions() {
     let f = Fixture::new();
     fs::create_dir_all(f.0.join("kit")).unwrap();
-    fs::write(
-        f.0.join("palette.json"),
-        include_str!("../../../shell/palette.json"),
-    )
-    .unwrap();
+    write_palette(&f);
+    // Neutral one-pixel image fixture; no product artwork or font is involved.
     fs::write(
         f.0.join("sample.png"),
-        include_bytes!("../../../shell/sample.png"),
+        include_bytes!("../assets/test-fixture.png"),
     )
     .unwrap();
     fs::write(
         f.0.join("kit/behavior.luau"),
-        include_str!("../../../shell/kit/behavior.luau"),
+        r#"return {stores={open=true,enabled=false,volume=25,choice="quiet",scroll=0,details=0},actions={toggle=function(s) s.enabled=not s.enabled end,detail=function(s) s.details=s.details+1 end,set_volume=function(s,n) s.volume=n end,select=function(s,id) s.choice=id end},computed={}}"#,
     )
     .unwrap();
-    let source = include_str!("../../../shell/kit/main.luau");
+    let source = r#"local ui=require("bead.ui")
+local kit=require("bead.kit")
+return kit.Panel{edge="left",id="kit",width=420,height=680,open=ui.bind("open"),padding=16,
+ kit.Card{id="controls",gap=8,
+  kit.Tile{id="tile",text="Toggle and details",on_toggle=ui.action("toggle"),on_detail=ui.action("detail")},
+  kit.Slider{id="slider",value=ui.bind("volume"),step=5,on_change="set_volume",width=320},
+  kit.SegmentedControl{id="segments",value=ui.bind("choice"),on_change="select",items={{id="quiet",label="Quiet"},{id="normal",label="Normal"}}},
+  kit.BlurredArtwork{id="artwork",path="sample.png",width=96,height=64,blur=6},
+ },
+}"#;
     for edge in ["left", "right"] {
         fs::write(
             f.0.join("kit/main.luau"),
@@ -2029,16 +2043,7 @@ fn edge_motion_opens_inward_and_top_bar_stays_horizontal() {
         (0., 0.)
     );
     let f = fixture();
-    fs::write(
-        f.0.join("palette.json"),
-        include_str!("../../../shell/palette.json"),
-    )
-    .unwrap();
-    fs::write(
-        f.0.join("palette.json"),
-        include_str!("../../../shell/palette.json"),
-    )
-    .unwrap();
+    write_palette(&f);
     fs::write(f.0.join("ui/main.luau"),r#"local ui=require("bead.ui"); local kit=require("bead.kit")
 return kit.Bar{id="bar",edge="top",width=400,height=50,kit.Button{id="a",text="A",on_activate=ui.action("select","a")},kit.Button{id="b",text="B",on_activate=ui.action("select","b")}}"#).unwrap();
     let session = session(&f);
@@ -3276,11 +3281,7 @@ fn local_feedback_restores_projector_after_invalid_focus() {
 #[test]
 fn kit_slider_feedback_is_continuous_and_scoped_to_its_instance() {
     let f = fixture();
-    fs::write(
-        f.0.join("palette.json"),
-        include_str!("../../../shell/palette.json"),
-    )
-    .unwrap();
+    write_palette(&f);
     fs::write(
         f.0.join("ui/main.luau"),
         r#"local ui=require("bead.ui")
@@ -3391,11 +3392,7 @@ return ui.Column{id="ranges",width=400,height=80,
 #[test]
 fn kit_slider_exact_pointer_arguments_and_source_acknowledgement() {
     let f = fixture();
-    fs::write(
-        f.0.join("palette.json"),
-        include_str!("../../../shell/palette.json"),
-    )
-    .unwrap();
+    write_palette(&f);
     fs::write(
         f.0.join("ui/main.luau"),
         r#"local ui=require("bead.ui")
@@ -3493,11 +3490,7 @@ return kit.Slider{id="slider",width=200,value=ui.bind("scroll"),step=5,
 #[test]
 fn kit_slider_release_before_frame_acceptance_and_quantized_readback() {
     let f = fixture();
-    fs::write(
-        f.0.join("palette.json"),
-        include_str!("../../../shell/palette.json"),
-    )
-    .unwrap();
+    write_palette(&f);
     fs::write(
         f.0.join("ui/main.luau"),
         r#"local ui=require("bead.ui")
