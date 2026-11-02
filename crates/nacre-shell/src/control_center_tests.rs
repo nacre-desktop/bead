@@ -3055,6 +3055,118 @@ fn local_slider_drag_defers_projection_and_releases_once() -> bead_test::Result<
     Ok(())
 }
 
+#[test]
+fn downward_slider_drag_ignores_full_and_delayed_echoes_until_final_readback()
+-> bead_test::Result<()> {
+    for (source, tile) in [
+        ("audio.output", "volume"),
+        ("audio.input", "mic-volume"),
+        ("brightness.level", "brightness"),
+    ] {
+        let mut model = base();
+        model.insert("cc.saved".into(), ids(vec![tile]));
+        let Value::List(rows) = model["cc.src"].clone() else {
+            panic!("sources")
+        };
+        let rows: Vec<_> = rows
+            .iter()
+            .map(|row| {
+                let mut row = row.clone();
+                if row["id"] == source {
+                    row["set"] = json!(true);
+                    row["value"] = json!(100.);
+                }
+                row
+            })
+            .collect();
+        model.insert("cc.src".into(), Value::list(rows.clone()));
+        let mut h = harness(model, "home", 1.)?;
+        let node = h
+            .session
+            .view_nodes()
+            .iter()
+            .find(|node| {
+                node.action_arg.as_ref().is_some_and(
+                    |arg| matches!(arg, Value::Text(text) if text == &format!("set:{source}:100")),
+                )
+            })
+            .expect("armed slider hit");
+        let id = node.id.clone();
+        let slider = id.rsplit_once(".hits.").unwrap().0;
+        let bounds = h.session.paint_bounds(slider).unwrap();
+        let thumb = format!("{slider}.thumb");
+        let start = bounds.x + 10.;
+        let travel = bounds.w - 20.;
+        let press = h
+            .session
+            .pointer_focus_id(&id, true, Some(start + travel))?
+            .unwrap();
+        h.session.commit(press);
+        let mut previous = 101.;
+        for motion in 1..=40 {
+            let value = 100. - motion as f32 * 2.;
+            let x = start + travel * value / 100.;
+            let frame = h.session.pointer_focus_id(&id, false, Some(x))?.unwrap();
+            h.session.commit(frame);
+            // Includes full-scale, older writes and even a matching echo while
+            // held: none may retire the pointer's preview before release.
+            for echo in [100., (value + 12.).min(100.), value] {
+                let mut delayed = rows.clone();
+                for row in &mut delayed {
+                    if row["id"] == source {
+                        row["value"] = json!(echo);
+                    }
+                }
+                if let Some(frame) = h
+                    .session
+                    .update_model(BTreeMap::from([("cc.src".into(), Value::list(delayed))]))?
+                {
+                    h.session.commit(frame);
+                }
+                let painted = h.session.paint_bounds(&thumb).unwrap();
+                let shown = (painted.x + painted.w / 2. - start) / travel * 100.;
+                assert!(
+                    (shown - value).abs() < 1.,
+                    "{source} motion={motion} echo={echo} shown={shown}"
+                );
+                assert!(shown <= previous && shown < 100.);
+                previous = shown;
+            }
+        }
+        // Release with an older value in the topic: wait for the final 20%.
+        let echo = |value| {
+            let mut delayed = rows.clone();
+            for row in &mut delayed {
+                if row["id"] == source {
+                    row["value"] = json!(value);
+                }
+            }
+            BTreeMap::from([("cc.src".into(), Value::list(delayed))])
+        };
+        let frame = h.session.update_model(echo(100.))?.unwrap();
+        h.session.commit(frame);
+        let frame = h.session.release()?.unwrap();
+        h.session.commit(frame);
+        for stale in [80., 100.] {
+            let frame = h.session.update_model(echo(stale))?.unwrap();
+            h.session.commit(frame);
+            let painted = h.session.paint_bounds(&thumb).unwrap();
+            let shown = (painted.x + painted.w / 2. - start) / travel * 100.;
+            assert!((shown - 20.).abs() < 1., "late post-release echo {stale}");
+        }
+        assert!(
+            matches!(h.session.stores.get("bead.preview.key"), Some(Value::Text(key)) if !key.is_empty())
+        );
+        let frame = h.session.update_model(echo(20.))?.unwrap();
+        h.session.commit(frame);
+        assert_eq!(
+            h.session.stores.get("bead.preview.key"),
+            Some(&Value::Text(String::new()))
+        );
+    }
+    Ok(())
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn local_slider_ticks_send_latest_level_while_held_and_after_release() {
     async fn next_call(control: &ControlCenter, lab: &mut Lab) -> (String, Json) {

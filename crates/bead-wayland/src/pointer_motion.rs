@@ -327,6 +327,29 @@ fn same_skin(a: &bead_render::Primitive, b: &bead_render::Primitive) -> bool {
         _ => false,
     }
 }
+// Apply this to every submitted parent frame, including CPU replacements while
+// a callback is pending. The retained source may still contain the pre-drag fill.
+fn parent_scene(original: &Scene, spec: &DragVisual) -> Option<Scene> {
+    let mut scene = original.clone();
+    let removed = scene
+        .layers
+        .iter()
+        .find(|layer| layer.id == spec.id)?
+        .own
+        .clone();
+    let fill = spec
+        .fill
+        .as_ref()
+        .and_then(|fill| scene.layers.iter().find(|layer| layer.id == fill.id))
+        .map(|layer| layer.own.start..layer.subtree_end);
+    let mut index = 0;
+    scene.retain_primitives(|_| {
+        let keep = !removed.contains(&index) && !fill.as_ref().is_some_and(|r| r.contains(&index));
+        index += 1;
+        keep
+    });
+    Some(scene)
+}
 impl App {
     pub(super) fn pointer_visual_begin(&mut self, index: usize, x: f32, y: f32) {
         if !self.surfaces[index].companion
@@ -715,7 +738,7 @@ impl App {
             .and_then(|source| source.drag_visuals().into_iter().find(|v| v.id == id));
         let s = &mut self.surfaces[index];
         let visual = s.pointer_visual.as_mut()?;
-        let mut scene = self.companion.as_ref()?.0.clone();
+        let scene = &self.companion.as_ref()?.0;
         let layer = scene.layers.iter().find(|layer| layer.id == visual.spec.id);
         visual.retiring |= !self.panel_target
             || (s.prepared_native.is_some() && self.pearl.is_some())
@@ -728,7 +751,7 @@ impl App {
                 v.grab != visual.spec.grab || !fill_skin(&v.fill, &visual.spec.fill)
             })
             || !overlay_safe(
-                &scene,
+                scene,
                 &visual.spec,
                 if visual.spec.fill.is_some() {
                     visual.bounds
@@ -742,7 +765,7 @@ impl App {
                     )
                 },
             )
-            || !painted_layer(&scene, &visual.spec.id)
+            || !painted_layer(scene, &visual.spec.id)
                 .as_ref()
                 .is_some_and(|draw| same_skin(draw, &visual.draw))
             || (visual.released
@@ -767,22 +790,7 @@ impl App {
             // restore the parent's copy, then destroy only after that parent commits.
             return None;
         }
-        let layer = layer.unwrap();
-        let removed = layer.own.clone();
-        let fill = visual
-            .spec
-            .fill
-            .as_ref()
-            .and_then(|fill| scene.layers.iter().find(|l| l.id == fill.id))
-            .map(|l| l.own.start..l.subtree_end);
-        let mut index = 0;
-        scene.retain_primitives(|_| {
-            let keep =
-                !removed.contains(&index) && !fill.as_ref().is_some_and(|r| r.contains(&index));
-            index += 1;
-            keep
-        });
-        Some(scene)
+        parent_scene(scene, &visual.spec)
     }
     pub(super) fn pointer_visual_retire(&mut self, index: usize) -> Vec<UiEvent> {
         if !self.surfaces[index]
@@ -812,6 +820,177 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pending_parent_repaints_never_restore_full_fill_during_downward_drag() {
+        use bead_render::{Primitive, SceneLayer, tree::TreeCpuRenderer};
+
+        let bounds = Rect::new(0., 0., 108., 16.);
+        let rounded = |rect, fill| Primitive::Rounded {
+            rect,
+            radius: 0.,
+            fill,
+            border: None,
+        };
+        // The retained parent starts at 100%; local label frames and delayed
+        // service echoes do not necessarily update its slider geometry.
+        let original = Scene {
+            opacity: 1.,
+            motion: None,
+            resource_revision: 1,
+            asset_data: Default::default(),
+            clips: Default::default(),
+            layers: vec![
+                SceneLayer {
+                    id: "track".into(),
+                    parent: None,
+                    own: 0..1,
+                    subtree_end: 1,
+                    bounds,
+                },
+                SceneLayer {
+                    id: "fill".into(),
+                    parent: None,
+                    own: 1..2,
+                    subtree_end: 3,
+                    bounds,
+                },
+                SceneLayer {
+                    id: "fill.gradient".into(),
+                    parent: Some("fill".into()),
+                    own: 2..3,
+                    subtree_end: 3,
+                    bounds,
+                },
+                SceneLayer {
+                    id: "thumb".into(),
+                    parent: None,
+                    own: 3..4,
+                    subtree_end: 4,
+                    bounds,
+                },
+            ],
+            prepared: Default::default(),
+            font_files: vec![],
+            width: 108.,
+            slide: None,
+            primitives: vec![
+                rounded(bounds, [32, 32, 32, 255]),
+                rounded(Rect::new(0., 5., 104., 6.), [0, 220, 0, 255]),
+                rounded(Rect::new(50., 5., 54., 6.), [0, 240, 0, 255]),
+                rounded(Rect::new(100., 0., 8., 16.), [0, 220, 0, 255]),
+            ],
+            offset: (0., 0.),
+            bounds,
+        };
+        let spec = DragVisual {
+            id: "thumb".into(),
+            grab: bounds,
+            travel: (0., 100.),
+            pointer: (4., 104.),
+            release_serial: 0,
+            local_feedback: true,
+            fill: Some(crate::DragFill {
+                id: "fill".into(),
+                rect: Rect::new(0., 5., 104., 6.),
+                minimum: 4.,
+                radius: 3.,
+                gradient_min: 16.,
+                from: [0, 220, 0, 255],
+                to: [0, 240, 0, 255],
+            }),
+        };
+        for scale in [1_f32, 1.5] {
+            let width = (108. * scale) as u32;
+            let height = (16. * scale) as u32;
+            let mut renderer = TreeCpuRenderer::default();
+            let mut retained = original.clone();
+            renderer.prepare(&retained, scale).unwrap();
+            if let Some(frame) = renderer.prepared_frame() {
+                retained.prepared.insert(scale.to_bits(), frame);
+            }
+            let mut baseline = vec![0; width as usize * height as usize * 4];
+            renderer
+                .draw(
+                    &retained,
+                    RenderTarget::Shm(ShmTarget {
+                        bytes: &mut baseline,
+                        width,
+                        height,
+                        scale,
+                        format: PixelFormat::Bgra,
+                    }),
+                    Damage::full(width, height),
+                )
+                .unwrap();
+            let tail = ((8. * scale) as usize * width as usize + (106. * scale) as usize) * 4;
+            assert_eq!(
+                &baseline[tail..tail + 4],
+                &[0, 220, 0, 255],
+                "the old unmasked pending-callback path exposes the full parent slider"
+            );
+            let mut callbacks = crate::policy::Callbacks::default();
+            let epoch = callbacks.request();
+            let mut previous_end = width;
+            for motion in 1..=40 {
+                // A label repaint arrives before the compositor's callback.
+                assert!(callbacks.pending);
+                assert!(callbacks.can_replace_pending_ui(true));
+                let parent = parent_scene(&retained, &spec).unwrap();
+                let mut pixels = vec![0; width as usize * height as usize * 4];
+                renderer.prepare(&parent, scale).unwrap();
+                renderer
+                    .draw(
+                        &parent,
+                        RenderTarget::Shm(ShmTarget {
+                            bytes: &mut pixels,
+                            width,
+                            height,
+                            scale,
+                            format: PixelFormat::Bgra,
+                        }),
+                        Damage::full(width, height),
+                    )
+                    .unwrap();
+                let x = 100. - motion as f32 * 2.;
+                let mut child = vec![0; pixels.len()];
+                paint_child(
+                    &mut ShmTarget {
+                        bytes: &mut child,
+                        width,
+                        height,
+                        scale,
+                        format: PixelFormat::Bgra,
+                    },
+                    &spec,
+                    &retained.primitives[3],
+                    bounds,
+                    x,
+                    1.,
+                )
+                .unwrap();
+                // Any green beyond the child's final handle would be the old
+                // parent fill. It was full-scale before every one of these frames.
+                let y = (8. * scale) as usize;
+                let mut end = 0;
+                for px in 0..width as usize {
+                    let index = (y * width as usize + px) * 4;
+                    assert_eq!(&pixels[index..index + 4], &[32, 32, 32, 255]);
+                    if child[index + 3] > 0 {
+                        end = px as u32;
+                    }
+                }
+                assert!(
+                    end < previous_end,
+                    "non-monotonic motion {motion} at {scale}"
+                );
+                assert!(end <= ((x + 8.) * scale).ceil() as u32);
+                previous_end = end;
+            }
+            assert!(callbacks.accept(epoch));
+            assert_eq!(retained.primitives.len(), 4, "source scene stays intact");
+        }
+    }
+
     #[test]
     fn absolute_pose_clamps_without_step_quantization_or_delta_drift() {
         let spec = DragVisual {

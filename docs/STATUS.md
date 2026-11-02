@@ -1,3 +1,15 @@
+## 2026-11-02 — B0215 slider drag repaint
+
+CPU label repaints could restore the retained parent slider fill while a frame
+callback was pending, beneath the pointer-driven child. Every parent repaint
+now masks that fill and thumb. The existing drag/readback acknowledgement remains;
+regressions cover 40 downward motions, stale/full echoes through release, and
+pixel masking at scales 1 and 1.5. Nacre N0106 keeps cached key-step levels out
+of the authoritative audio topic while preserving instant OSD. Container CI
+results are in the unit report. Nested desktop connection timed out; physical
+120 Hz acceptance and deployment remain with the lead. See
+[B0215](specs/0215-slider-flash.md).
+
 ## 2026-11-02 — B0213 launcher candidate (headless goldens reviewed)
 
 Result descriptions reserve two measured lines with bounded overflow; Plugins and Widgets
