@@ -3187,73 +3187,6 @@ mod tests {
         assert!((100..=102).contains(&maximum), "alpha {maximum}");
     }
     #[test]
-    fn outfit_thin_digit_has_solid_ink_inside_the_stem() {
-        let font = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../nacre-shell/assets/fonts/Outfit-Variable.ttf");
-        let scene = Scene {
-            opacity: 1.,
-            motion: None,
-            resource_revision: 1,
-            asset_data: Default::default(),
-            clips: Default::default(),
-            layers: vec![],
-            prepared: Default::default(),
-            font_files: vec![font],
-            width: 240.,
-            slide: None,
-            offset: (0., 0.),
-            bounds: Rect::new(0., 0., 240., 180.),
-            primitives: vec![Primitive::Text {
-                rect: Rect::new(0., 0., 240., 180.),
-                text: "1".into(),
-                family: "Outfit".into(),
-                size: 120.,
-                color: [238, 246, 243, 255],
-                weight: 200,
-                align: Some(TextAlign::Center),
-                shadow: None,
-            }],
-        };
-        let mut renderer = CpuRenderer::default();
-        renderer.prepare(&scene, 1.).unwrap();
-        let pixmap = renderer
-            .textures
-            .get(&key(&scene.primitives[0], 1.))
-            .unwrap();
-        let pixels = pixmap.data().as_chunks::<4>().0;
-        let mut best = None;
-        for (y, row) in pixels.chunks_exact(pixmap.width() as usize).enumerate() {
-            let mut start = None;
-            for x in 0..=row.len() {
-                let ink = row.get(x).is_some_and(|pixel| pixel[3] > 220);
-                if ink && start.is_none() {
-                    start = Some(x);
-                } else if !ink && let Some(begin) = start.take() {
-                    let length = x - begin;
-                    if best.is_none_or(|(_, _, largest)| length > largest) {
-                        best = Some((begin, y, length));
-                    }
-                }
-            }
-        }
-        let (begin, y, run) = best.expect("the Outfit digit must contain fully covered pixels");
-        assert!(
-            run >= 2,
-            "digit has no solid interior scanline, longest run {run}"
-        );
-        let x = begin + run / 2;
-        let center = pixels[y * pixmap.width() as usize + x];
-        assert!(
-            center[3] > 220,
-            "digit center pixel ({x},{y}) alpha {}",
-            center[3]
-        );
-        assert!(
-            center[0] > 210 && center[1] > 220 && center[2] > 215,
-            "digit center pixel ({x},{y}) is not Outfit text color: {center:?}"
-        );
-    }
-    #[test]
     fn glyph_text_shadow_is_soft_and_stays_behind_solid_ink() {
         let mut pixmap = Pixmap::new(64, 64).unwrap();
         for y in 24..40 {
@@ -3475,6 +3408,21 @@ mod tests {
     }
     #[test]
     fn aged_partial_buffers_match_full_redraw_in_both_formats() {
+        struct TemporaryImage(std::path::PathBuf);
+        impl Drop for TemporaryImage {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
+        static NEXT_IMAGE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let image_path = TemporaryImage(std::env::temp_dir().join(format!(
+            "bead-render-damage-image-{}-{}.png",
+            std::process::id(),
+            NEXT_IMAGE.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        )));
+        let mut image = Pixmap::new(1, 1).unwrap();
+        image.fill(tiny_skia::Color::from_rgba8(32, 64, 96, 255));
+        std::fs::write(&image_path.0, image.encode_png().unwrap()).unwrap();
         for format in [PixelFormat::Rgba, PixelFormat::Bgra] {
             let mut renderer = CpuRenderer::default();
             let mut reference = CpuRenderer::default();
@@ -3522,8 +3470,7 @@ mod tests {
                             fit: crate::ImageFit::Fill,
                             clip_polygon: None,
                             rect: Rect::new(14., 8., 15., 15.),
-                            path: Path::new(env!("CARGO_MANIFEST_DIR"))
-                                .join("../../shell/sample.png"),
+                            path: image_path.0.clone(),
                         },
                         Primitive::Shadow {
                             rect: Rect::new(0., 0., 40., 30.),

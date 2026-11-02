@@ -228,3 +228,87 @@ fn load(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bead::render::{
+        CpuRenderer, Damage, PixelFormat, Primitive, Rect, Renderer, Scene, ShmTarget, TextAlign,
+    };
+
+    #[test]
+    fn bundled_outfit_thin_digit_has_solid_ink_inside_the_stem() {
+        let mut scene = Scene {
+            opacity: 1.,
+            motion: None,
+            resource_revision: 1,
+            asset_data: Default::default(),
+            clips: Default::default(),
+            layers: vec![],
+            prepared: Default::default(),
+            font_files: vec![],
+            width: 240.,
+            slide: None,
+            offset: (0., 0.),
+            bounds: Rect::new(0., 0., 240., 180.),
+            primitives: vec![Primitive::Text {
+                rect: Rect::new(0., 0., 240., 180.),
+                text: "1".into(),
+                family: "Outfit".into(),
+                size: 120.,
+                color: [238, 246, 243, 255],
+                weight: 200,
+                align: Some(TextAlign::Center),
+                shadow: None,
+            }],
+        };
+        scene.font_files = Selector::default().select(&scene).unwrap();
+        let mut renderer = CpuRenderer::default();
+        renderer.prepare(&scene, 1.).unwrap();
+        let mut pixels = vec![0; 240 * 180 * 4];
+        renderer
+            .render(
+                &scene,
+                ShmTarget {
+                    bytes: &mut pixels,
+                    width: 240,
+                    height: 180,
+                    scale: 1.,
+                    format: PixelFormat::Rgba,
+                },
+                Damage::full(240, 180),
+            )
+            .unwrap();
+        let mut best = None;
+        for (y, row) in pixels.as_chunks::<960>().0.iter().enumerate() {
+            let mut start = None;
+            for x in 0..=240 {
+                let ink = row.get(x * 4 + 3).is_some_and(|alpha| *alpha > 220);
+                if ink && start.is_none() {
+                    start = Some(x);
+                } else if !ink && let Some(begin) = start.take() {
+                    let length = x - begin;
+                    if best.is_none_or(|(_, _, largest)| length > largest) {
+                        best = Some((begin, y, length));
+                    }
+                }
+            }
+        }
+        let (begin, y, run) = best.expect("the Outfit digit must contain fully covered pixels");
+        assert!(
+            run >= 2,
+            "digit has no solid interior scanline, longest run {run}"
+        );
+        let x = begin + run / 2;
+        let center = &pixels[(y * 240 + x) * 4..][..4];
+        assert!(
+            center[3] > 220,
+            "digit center pixel ({x},{y}) alpha {}",
+            center[3]
+        );
+        assert!(
+            center[0] > 210 && center[1] > 220 && center[2] > 215,
+            "digit center pixel ({x},{y}) is not Outfit text color: {center:?}"
+        );
+    }
+}
