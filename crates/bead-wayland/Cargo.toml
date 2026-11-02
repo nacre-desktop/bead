@@ -18,6 +18,7 @@ bead-backends = { path = "../bead-backends" }
 bead-services = { path = "../bead-services" }
 image = { version = "0.25", default-features = false, features = ["png"] }
 wayland-protocols = { version = "=0.32.13", features = ["client", "staging", "unstable"] }
+wayland-scanner = "=0.31.11"
 
 raw-window-handle = {version="=0.6.2",optional=true}
 
@@ -26,6 +27,9 @@ version="=0.25.1"
 
 [dependencies.accesskit_unix]
 version="=0.24.0"
+
+[dev-dependencies]
+wayland-server = "=0.31.11"
 
 [features]
 default = ["native-gl"]

@@ -1318,6 +1318,19 @@ impl App {
         {
             return;
         }
+        if self.surfaces[index].layer_motion_active {
+            let wanted_open = if self.surfaces[index].companion {
+                self.panel_target
+            } else {
+                self.scene.motion.as_ref().is_some_and(|motion| motion.open)
+            };
+            if self.surfaces[index].layer_motion_open == Some(wanted_open)
+                && self.surfaces[index].layer_motion_ui_serial == self.surfaces[index].ui_serial
+            {
+                // No frame callbacks or source work while the compositor owns the timeline.
+                return;
+            }
+        }
         if self.surfaces[index]
             .handoff
             .as_ref()
@@ -1358,6 +1371,10 @@ impl App {
         let mut busy = false;
         // The motion this frame shows and the clock of its pose; a committed frame starts a held clock.
         let mut motion_clock: Option<(String, f64, f64)> = None;
+        let mut layer_motion_opening = None;
+        let mut layer_motion_active = false;
+        let mut layer_motion_source_scene = None;
+        let mut layer_motion_pose = (0., 0.);
         let result = (|| -> Result<(), Box<dyn Error>> {
             #[cfg(feature = "native-gl")]
             if self.surfaces[index].companion
@@ -1367,13 +1384,23 @@ impl App {
             }
             let s = &mut self.surfaces[index];
             let wl_surface = s.wl_surface().clone();
+            let compositor_motion_candidate = s.companion
+                && s.layer_motion.is_some()
+                && !bead_core::animation::reduced_motion()
+                && self.companion.as_ref().is_some_and(|(scene, _, kind)| {
+                    *kind == RendererKind::Cpu
+                        && scene.slide.is_none()
+                        && scene
+                            .motion
+                            .as_ref()
+                            .is_some_and(|motion| !self.panel_target || !motion.reveal)
+                });
             if s.configured
                 && !s.callbacks.pending
                 && !s.scale_relayout_pending
-                && let Some(handoff) = s
-                    .handoff
-                    .as_ref()
-                    .filter(|handoff| handoff.has_prepared_frame())
+                && let Some(handoff) = s.handoff.as_ref().filter(|handoff| {
+                    !(s.companion && compositor_motion_candidate) && handoff.has_prepared_frame()
+                })
             {
                 let generation = self
                     .companion
@@ -1511,6 +1538,9 @@ impl App {
                     curve,
                 );
                 let (progress, active) = self.animations.value(&motion.id, now).unwrap();
+                layer_motion_opening = Some(open);
+                layer_motion_active = active;
+                layer_motion_source_scene = Some(scene.clone());
                 motion_clock = Some((
                     motion.id.clone(),
                     now,
@@ -1526,6 +1556,7 @@ impl App {
                 s.redraw |= active;
                 scene.opacity = motion.opacity(progress);
                 let (dx, dy) = scene.panel_offset(progress, open);
+                layer_motion_pose = (dx, dy);
                 opaque_motion = active && (dx != 0. || dy != 0. || (motion.reveal && open));
                 // A vertical exit retains the open x origin instead of
                 // re-centering from the live surface width every frame.
@@ -1675,6 +1706,154 @@ impl App {
                     })
                 })
                 .unwrap_or((0., 0.));
+            if layer_motion_active
+                && let Some(opening) = layer_motion_opening
+                && s.layer_motion_active
+                && s.layer_motion_open != Some(opening)
+                && let Some(plan) = s.layer_motion_plan.as_mut()
+            {
+                let (duration, curve) = scene
+                    .motion
+                    .as_ref()
+                    .expect("active layer motion has a scene motion")
+                    .transition(opening);
+                for plane in &mut plan.planes {
+                    std::mem::swap(&mut plane.from, &mut plane.to);
+                }
+                plan.duration = Duration::from_secs_f64(duration);
+                plan.curve = curve;
+                plan.retarget = true;
+                if s.layer_motion.as_mut().unwrap().queue(plan).is_none() {
+                    return Ok(());
+                }
+                // The attached atlas remains valid, including for a reverse into
+                // a rounded reveal route. The server samples the current group.
+                wl_surface.commit();
+                s.layer_motion_open = Some(opening);
+                s.layer_motion_ui_serial = s.ui_serial;
+                s.redraw = false;
+                s.frames += 1;
+                return Ok(());
+            }
+            if _kind == RendererKind::Cpu
+                && layer_motion_active
+                && let Some(opening) = layer_motion_opening
+                && let Some(mut source_scene) = layer_motion_source_scene
+                && s.layer_motion.is_some()
+                && (!s.layer_motion_active
+                    || s.layer_motion_open != Some(opening)
+                    || s.layer_motion_ui_serial != s.ui_serial)
+            {
+                source_scene.offset = (
+                    scene.offset.0 - layer_motion_pose.0,
+                    scene.offset.1 - layer_motion_pose.1,
+                );
+                // Panel presentation opacity starts from its complete resting
+                // pose; the compositor applies the configured opacity mode.
+                source_scene.opacity = 1.;
+                if let Some(mut plan) = bead_render::layer_motion::LayerMotionPlan::for_slide(
+                    &source_scene,
+                    opening,
+                    s.width,
+                    s.height,
+                    scale,
+                    format,
+                    renderer.as_mut(),
+                )? {
+                    let changed_target =
+                        s.layer_motion_active && s.layer_motion_open != Some(opening);
+                    plan.retarget = changed_target;
+                    let motion = s.layer_motion.as_mut().unwrap();
+                    if motion.needs_recreation(&plan) {
+                        if s.layer_motion_active {
+                            // A source layout cannot change under an active animation.
+                            // Let its current target finish, then recreate on the next draw.
+                            return Ok(());
+                        }
+                        drop(s.layer_motion.take());
+                        s.layer_motion = self
+                            .layer_motion_manager
+                            .as_ref()
+                            .map(|manager| manager.create(&wl_surface, qh));
+                    }
+                    let submit_animation = !s.layer_motion_active || changed_target;
+                    if submit_animation && s.layer_motion.as_mut().unwrap().queue(&plan).is_none() {
+                        return Ok(());
+                    }
+                    let pixels = plan.atlas.take_pixels();
+                    let buffer_format = if plan.atlas.format == PixelFormat::Rgba {
+                        wl_shm::Format::Abgr8888
+                    } else {
+                        wl_shm::Format::Argb8888
+                    };
+                    let atlas_geometry = (plan.atlas.width as i32, plan.atlas.height as i32);
+                    if s.geometry != atlas_geometry || s.format != plan.atlas.format {
+                        s.buffers.clear();
+                        let pool_bytes = (plan.atlas.stride as usize)
+                            .checked_mul(plan.atlas.height as usize)
+                            .ok_or("layer motion buffer size overflow")?;
+                        s.pool = SlotPool::new(pool_bytes.next_multiple_of(64) * 3, &self.shm)?;
+                        s.geometry = atlas_geometry;
+                        s.format = plan.atlas.format;
+                    }
+                    let reusable = s.buffers.iter().position(|buffer| {
+                        !buffer.buffer.slot().has_active_buffers()
+                            && buffer.buffer.height() == plan.atlas.height as i32
+                            && buffer.buffer.stride() == plan.atlas.stride as i32
+                    });
+                    let slot = if let Some(slot) = reusable {
+                        let target = s.buffers[slot]
+                            .buffer
+                            .canvas(&mut s.pool)
+                            .ok_or("layer motion buffer is still compositor-owned")?;
+                        target.copy_from_slice(&pixels);
+                        s.buffers[slot].pending.clear();
+                        s.buffers[slot].painted = true;
+                        slot
+                    } else {
+                        let (buffer, bytes) = s.pool.create_buffer(
+                            plan.atlas.width as i32,
+                            plan.atlas.height as i32,
+                            plan.atlas.stride as i32,
+                            buffer_format,
+                        )?;
+                        bytes.copy_from_slice(&pixels);
+                        s.buffers.push(Reusable {
+                            buffer,
+                            pending: Vec::new(),
+                            painted: true,
+                        });
+                        s.buffers.len() - 1
+                    };
+                    if let Some(viewport) = &s.viewport {
+                        wl_surface.set_buffer_scale(1);
+                        viewport.set_destination(s.width as i32, s.height as i32);
+                    } else {
+                        wl_surface.set_buffer_scale((s.scale120 / 120) as i32);
+                    }
+                    s.buffers[slot].buffer.attach_to(&wl_surface)?;
+                    wl_surface.damage_buffer(
+                        0,
+                        0,
+                        plan.atlas.width as i32,
+                        plan.atlas.height as i32,
+                    );
+                    wl_surface.commit();
+                    s.layer_motion_active = true;
+                    s.layer_motion_open = Some(opening);
+                    s.layer_motion_ui_serial = s.ui_serial;
+                    s.layer_motion_plan = Some(plan);
+                    s.panel_unmapped = false;
+                    s.redraw = false;
+                    s.frames += 1;
+                    return Ok(());
+                } else if s.layer_motion_active {
+                    // Do not apply a second set of CPU transforms over a surface
+                    // the compositor still owns. The completion event wakes the
+                    // settled CPU path.
+                    return Ok(());
+                }
+            }
             renderer.presentation_motion(opaque_motion);
             bead_core::profile::split("pose");
             {
