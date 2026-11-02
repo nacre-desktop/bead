@@ -11,6 +11,9 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell")
 }
 fn harness(query: &str, scroll: f64) -> Result<Harness> {
+    harness_at_scale(query, scroll, 1.5)
+}
+fn harness_at_scale(query: &str, scroll: f64, scale: f32) -> Result<Harness> {
     crate::i18n::init();
     let update = std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1");
     let selected = std::env::var_os("BEAD_ROW_REFERENCE_BUNDLE");
@@ -42,7 +45,7 @@ fn harness(query: &str, scroll: f64) -> Result<Harness> {
         Config {
             width: 1920,
             height: 1200,
-            scale: 1.5,
+            scale,
         },
         BTreeMap::from([("fixture".into(), root.join("tests/icon.svg"))]),
     )
@@ -466,61 +469,85 @@ fn pending_query_keeps_the_accepted_model_geometry_until_replacement() -> Result
 
 #[test]
 fn launcher_two_line_copy_is_inside_its_row_and_clip() -> Result<()> {
-    let mut h = harness("a", 0.)?;
-    for description in [
-        "First readable line\nSecond readable line".to_owned(),
-        "A long readable description with words and emoji 🌊 ".repeat(30),
-        "first\nsecond\nthird".to_owned(),
-    ] {
+    for scale in [1., 1.5] {
+        let mut h = harness_at_scale("a", 0., scale)?;
+        let descriptions = [
+            "First readable line\nSecond readable line".to_owned(),
+            "A long readable description with words and emoji 🌊 ".repeat(30),
+            "first\nsecond\nthird".to_owned(),
+        ];
+        let rows = descriptions.iter().enumerate().map(|(index, description)| serde_json::json!({
+            "id":format!("wrapped-{index}"), "name":["Explicit newline", "Wrapped description", "Bounded overflow"][index],
+            "description":description, "icon":"fixture", "selected":false, "favorite":false,
+            "favoriteId":format!("wrapped-{index}")
+        })).collect();
         h.update(BTreeMap::from([
-            (
-                "launcher.apps".into(),
-                Value::list(vec![serde_json::json!({
-                    "id":"wrapped", "name":"Readable title", "description":description,
-                    "icon":"fixture", "selected":false, "favorite":false, "favoriteId":"wrapped"
-                })]),
-            ),
-            ("launcher.total_count".into(), Value::Number(1.)),
-            ("launcher.result_count".into(), Value::Number(1.)),
+            ("launcher.apps".into(), Value::list(rows)),
+            ("launcher.total_count".into(), Value::Number(3.)),
+            ("launcher.result_count".into(), Value::Number(3.)),
         ]))?;
         let nodes = h.session.view_nodes();
-        let row = nodes
-            .iter()
-            .find(|n| n.action.as_deref() == Some("select_app"))
-            .unwrap();
-        let row_rect = bead::ui::rect(&row.draw);
-        let lines = nodes
-            .iter()
-            .filter(|n| n.id.contains("description.line-"))
-            .collect::<Vec<_>>();
-        assert_eq!(lines.len(), 2);
-        for line in &lines {
-            let rect = bead::ui::rect(&line.draw);
-            assert!(rect.y >= row_rect.y && rect.y + rect.h <= row_rect.y + row_rect.h);
-            assert!(
-                line.clip
-                    .is_none_or(|c| rect.y >= c.y && rect.y + rect.h <= c.y + c.h)
-            );
-            if let bead::render::Primitive::Text {
-                text,
-                family,
-                size,
-                color,
-                ..
-            } = &line.draw
-            {
-                assert!(bead::render::text_width(h.scene(), text, family, *size)? <= rect.w);
-                assert!(rect.h >= size * 1.4);
-                assert_eq!(color[3], 255, "no dark text mask");
-            } else {
-                panic!("description must be text");
+        for (index, description) in descriptions.iter().enumerate() {
+            let id = Value::Text(format!("wrapped-{index}"));
+            let row = nodes
+                .iter()
+                .find(|n| {
+                    n.action.as_deref() == Some("select_app") && n.action_arg.as_ref() == Some(&id)
+                })
+                .unwrap();
+            let row_rect = bead::ui::rect(&row.draw);
+            let lines = nodes
+                .iter()
+                .filter(|n| n.id.contains("description.line-"))
+                .filter(|n| {
+                    let rect = bead::ui::rect(&n.draw);
+                    rect.y >= row_rect.y && rect.y < row_rect.y + row_rect.h
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(lines.len(), 2, "scale {scale}, row {index}");
+            for line in &lines {
+                let rect = bead::ui::rect(&line.draw);
+                assert!(rect.y >= row_rect.y && rect.y + rect.h <= row_rect.y + row_rect.h);
+                assert!(
+                    line.clip
+                        .is_none_or(|c| rect.y >= c.y && rect.y + rect.h <= c.y + c.h)
+                );
+                if let bead::render::Primitive::Text {
+                    text,
+                    family,
+                    size,
+                    color,
+                    ..
+                } = &line.draw
+                {
+                    assert!(bead::render::text_width(h.scene(), text, family, *size)? <= rect.w);
+                    assert!(rect.h >= size * 1.4);
+                    assert_eq!(color[3], 255, "no dark text mask");
+                } else {
+                    panic!("description must be text");
+                }
+            }
+            if description.contains("third") || description.len() > 100 {
+                assert!(
+                    matches!(&lines[1].draw, bead::render::Primitive::Text { text, .. } if text.ends_with('…'))
+                );
             }
         }
-        if description.contains("third") || description.len() > 100 {
-            assert!(
-                matches!(&lines[1].draw, bead::render::Primitive::Text { text, .. } if text.ends_with('…'))
-            );
+        let frame = h.render()?;
+        let golden = root()
+            .join("tests/goldens")
+            .join(format!("launcher-two-line-{scale}.png"));
+        if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+            frame.save(&golden)?;
         }
+        frame.compare(
+            &golden,
+            bead_test::Tolerance {
+                channel: 0,
+                changed_fraction: 0.,
+            },
+            &std::env::temp_dir().join("bead-launcher-two-line"),
+        )?;
     }
     Ok(())
 }
