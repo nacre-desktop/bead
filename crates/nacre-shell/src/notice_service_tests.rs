@@ -8,6 +8,66 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 #[test]
+fn notification_history_scroll_preserves_touchpad_pixels_and_shared_wheel_distance()
+-> bead_test::Result<()> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell");
+    let rows = (0..30)
+        .map(|index| {
+            serde_json::json!({
+                "id": format!("notice-{index}"),
+                "key": format!("notice-{index}|1"),
+                "app": "Fixture",
+                "summary": format!("Notification {index}"),
+                "body": "A history row for scroll distance checks",
+                "icon": "",
+                "time_str": "now",
+                "urgency": 1,
+                "expanded": false,
+                "actions": [],
+                "default": "",
+                "history": false,
+            })
+        })
+        .collect();
+    let mut h = Harness::load(
+        &root,
+        Path::new("notifications/main.luau"),
+        &root.join("palette.json"),
+        BTreeMap::from([
+            ("notifications.open".into(), bead::core::Value::Bool(true)),
+            ("panel.open".into(), bead::core::Value::Bool(true)),
+            ("notifications.scroll.y".into(), bead::core::Value::Number(0.)),
+            ("notifications.rows".into(), bead::core::Value::list(rows)),
+        ]),
+        Config {
+            width: 600,
+            height: 480,
+            scale: 1.,
+        },
+    )?;
+    let region = h
+        .session
+        .view_nodes()
+        .into_iter()
+        .find(|node| node.scroll_store.as_deref() == Some("notifications.scroll.y"))
+        .expect("notification history viewport")
+        .draw;
+    let region = bead::ui::rect(&region);
+    for (delta, expected) in [(23.5, 23.5), (54., 77.5)] {
+        h.script([bead_test::Input::Scroll {
+            x: region.x + region.w / 2.,
+            y: region.y + region.h / 2.,
+            delta,
+        }])?;
+        assert_eq!(
+            h.session.stores.get("notifications.scroll.y"),
+            Some(&bead::core::Value::Number(expected))
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn notification_icon_selection_falls_through_unresolved_sources() {
     assert_eq!(icon_fields(Some("nacre"), None, None)["icon_path"], "");
     let selected = choose_icon_path(

@@ -752,6 +752,57 @@ pub(crate) fn harness(out: BTreeMap<String, Value>, scale: f32) -> bead_test::Re
         },
     )
 }
+
+#[test]
+fn transcript_scroll_preserves_touchpad_pixels_and_shared_wheel_distance() {
+    let text = "scroll fixture ".repeat(80);
+    let messages: Vec<_> = (0..30)
+        .map(|index| {
+            (
+                format!("message-{index}"),
+                if index % 2 == 0 { "user" } else { "assistant" }.to_owned(),
+                text.clone(),
+            )
+        })
+        .collect();
+    let borrowed: Vec<_> = messages
+        .iter()
+        .map(|(id, role, body)| (id.as_str(), role.as_str(), body.as_str()))
+        .collect();
+    let (_source, chat) = offline(topic(&borrowed, state(false, "", None)));
+    let mut projected = chat.project(&Stores::default());
+    projected.insert("chat.scroll".into(), Value::Number(0.));
+    let mut h = harness(projected, 1.).unwrap();
+    let region = h
+        .session
+        .view_nodes()
+        .into_iter()
+        .find(|node| node.scroll_store.as_deref() == Some("chat.scroll"))
+        .expect("chat transcript viewport")
+        .draw;
+    let region = bead::ui::rect(&region);
+    assert!(
+        h.session
+            .view_nodes()
+            .iter()
+            .find(|node| node.scroll_store.as_deref() == Some("chat.scroll"))
+            .and_then(|node| node.scroll_limit)
+            .is_some_and(|limit| limit > 100.)
+    );
+    for (delta, expected) in [(23.5, 23.5), (54., 77.5)] {
+        h.script([bead_test::Input::Scroll {
+            x: region.x + region.w / 2.,
+            y: region.y + region.h / 2.,
+            delta,
+        }])
+        .unwrap();
+        assert_eq!(
+            h.session.stores.get("chat.scroll"),
+            Some(&Value::Number(expected))
+        );
+    }
+}
+
 fn golden(name: &str, h: &mut Harness, scale: f32) -> bead_test::Result<()> {
     let frame = h.render()?;
     let path = root().join(format!("tests/goldens/chat-{name}-{scale}.png"));
