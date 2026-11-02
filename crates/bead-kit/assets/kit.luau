@@ -21,7 +21,7 @@ return function(ui, tokens)
             font_size=tokens.text.body*4/3,fill="surfaceContainer",color="onSurface",hover_fill="surfaceContainerHigh"}))
     end
     function kit.IconButton(p)
-        return kit.Button(props(p,{width=40,padding=tokens.spacing.xs,family=tokens.fonts.icon,font_size=tokens.icons.large*4/3}))
+        return kit.Button(props(p,{width=40,padding=0,text_align="center",family=tokens.fonts.icon,font_size=tokens.icons.large*4/3}))
     end
     function kit.StatusIcon(p) return kit.Button(p) end
     function kit.Switch(p)
@@ -377,6 +377,9 @@ return function(ui, tokens)
         local out=props(p,{width=width,height=math.max(34,size+tokens.spacing.md),padding=0,radius=tokens.radii.full,activate_on_release=true,focus_ring=false,
             fill=ui.alpha(base,alpha),hover_fill=p.on_activate and ui.tint(base,"onSurface",pressed and .12 or .08) or ui.alpha(base,alpha),aria_label=p.label},
             {label=true,label_width=true,glyph=true,compact=true,selected=true})
+        if has_icon and label=="" then
+            return kit.IconButton(props(out,{text=p.glyph,family="Material Symbols Rounded",font_size=icon,color=ink,text_align="center"}))
+        end
         local gap=label~="" and has_icon and (compact and tokens.spacing.xs or tokens.spacing.sm) or 0
         local inset=math.max(0,(out.width-text_width-(has_icon and icon or 0)-gap)/2)
         out[1]=ui.Row{id="content",width=out.width,height=out.height,align="center",justify="center",padding_left=inset,

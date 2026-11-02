@@ -2079,6 +2079,139 @@ return kit.Panel{edge="left",id="kit",width=420,height=680,open=ui.bind("open"),
     assert_eq!(scale["spacing"]["md"], 12);
     assert_eq!(scale["radii"]["medium"], 16);
 }
+
+#[test]
+fn kit_icon_button_variants_center_rendered_symbol_ink() {
+    use bead_render::Renderer;
+
+    let f = fixture();
+    write_palette(&f);
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        "return {stores={},actions={activate=function()end},computed={}}",
+    )
+    .unwrap();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui");local kit=require("bead.kit")
+return ui.Row{id="buttons",width=400,height=40,gap=4,
+ kit.IconButton{id="default",text="check",aria_label="Check",on_activate=ui.action("activate")},
+ kit.IconButton{id="compact",text="wifi",aria_label="Wi-Fi",width=32,height=32,on_activate=ui.action("activate")},
+ kit.IconButton{id="selected",text="play_arrow",aria_label="Play",width=30,height=30,selected=true,on_activate=ui.action("activate")},
+ kit.IconButton{id="disabled",text="close",aria_label="Close"},
+ kit.IconButton{id="transparent",text="settings",aria_label="Settings",fill="transparent",hover_fill="transparent",on_activate=ui.action("activate")},
+ kit.PillButton{id="pill-icon",glyph="volume_up",label="",on_activate=ui.action("activate")},
+ kit.StatusIcon{id="status",text="bluetooth",family="Material Symbols Rounded",font_size=20,width=28,height=32,padding=0,text_align="center",aria_label="Bluetooth",on_activate=ui.action("activate")}}
+"#,
+    )
+    .unwrap();
+    let mut session = f.session();
+    session.entry = "ui/main.luau".into();
+    let scene = session.reload().unwrap();
+    session.check_sources().unwrap();
+    session.commit(scene.clone());
+    for (id, glyph) in [
+        ("default", "check"),
+        ("compact", "wifi"),
+        ("selected", "play_arrow"),
+        ("disabled", "close"),
+        ("transparent", "settings"),
+        ("pill-icon", "volume_up"),
+        ("status", "bluetooth"),
+    ] {
+        let layer = scene
+            .layers
+            .iter()
+            .find(|layer| layer.id.ends_with(id))
+            .unwrap_or_else(|| panic!("missing {id} kit button layer"));
+        let button = layer.bounds;
+        let mut icons = scene
+            .layers
+            .iter()
+            .filter(|child| child.id == layer.id || child.id.starts_with(&format!("{}.", layer.id)))
+            .flat_map(|child| scene.primitives[child.own.clone()].iter())
+            .filter_map(|primitive| match primitive {
+                Primitive::Text { text, .. } if text == glyph => Some((*primitive).clone()),
+                _ => None,
+            });
+        let mut icon = icons
+            .next()
+            .unwrap_or_else(|| panic!("missing {glyph} text for {id}"));
+        assert!(
+            icons.next().is_none(),
+            "{id} produced duplicate {glyph} text"
+        );
+        let Primitive::Text {
+            family,
+            color,
+            shadow,
+            ..
+        } = &mut icon
+        else {
+            unreachable!()
+        };
+        family.clear();
+        family.push_str("Bead Test Symbols");
+        *color = [255; 4];
+        *shadow = None;
+        let mut isolated = scene.clone();
+        isolated.primitives = vec![icon];
+        isolated.layers.clear();
+        isolated.clips.clear();
+        isolated.prepared.clear();
+        isolated.motion = None;
+        isolated.slide = None;
+        isolated.offset = (0., 0.);
+        isolated.opacity = 1.;
+        isolated.font_files = vec![
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../bead-test/fonts/FixtureSymbols.ttf"),
+        ];
+        for scale in [1., 1.5] {
+            let width = ((isolated.bounds.x + isolated.bounds.w) * scale).ceil() as u32;
+            let height = ((isolated.bounds.y + isolated.bounds.h) * scale).ceil() as u32;
+            let mut pixels = vec![0; (width * height * 4) as usize];
+            let mut renderer = bead_render::CpuRenderer::default();
+            renderer.prepare(&isolated, scale).unwrap();
+            renderer
+                .render(
+                    &isolated,
+                    bead_render::ShmTarget {
+                        bytes: &mut pixels,
+                        width,
+                        height,
+                        scale,
+                        format: bead_render::PixelFormat::Rgba,
+                    },
+                    bead_render::Damage::full(width, height),
+                )
+                .unwrap();
+            let (mut left, mut top, mut right, mut bottom) = (width, height, 0, 0);
+            for y in 0..height {
+                for x in 0..width {
+                    if pixels[((y * width + x) * 4 + 3) as usize] != 0 {
+                        left = left.min(x);
+                        top = top.min(y);
+                        right = right.max(x);
+                        bottom = bottom.max(y);
+                    }
+                }
+            }
+            assert!(left <= right && top <= bottom, "{id}: missing icon ink");
+            let x = (left + right + 1) as f32 / (2. * scale);
+            let y = (top + bottom + 1) as f32 / (2. * scale);
+            let expected_x = button.x + button.w / 2.;
+            let expected_y = button.y + button.h / 2.;
+            let icon_box = match &isolated.primitives[0] {
+                Primitive::Text { rect, .. } => *rect,
+                _ => unreachable!(),
+            };
+            assert!(
+                (x - expected_x).abs() <= 0.5 && (y - expected_y).abs() <= 0.5,
+                "{id}: ink centre ({x:.3}, {y:.3}) differs from shape centre ({expected_x:.3}, {expected_y:.3}) by more than 0.5 logical px at scale {scale}; shape={button:?}, icon_box={icon_box:?}"
+            );
+        }
+    }
+}
 #[test]
 fn edge_motion_opens_inward_and_top_bar_stays_horizontal() {
     assert!(bead_core::Edge::Left.closed_offset(100., 200., 0.).0 < 0.);
