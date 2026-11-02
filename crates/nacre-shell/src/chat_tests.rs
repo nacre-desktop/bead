@@ -776,7 +776,7 @@ fn transcript_scroll_preserves_touchpad_pixels_and_shared_wheel_distance() {
     let region = h
         .session
         .view_nodes()
-        .into_iter()
+        .iter()
         .find(|node| node.scroll_store.as_deref() == Some("chat.scroll"))
         .map(|node| bead::ui::rect(&node.draw))
         .expect("chat transcript viewport");

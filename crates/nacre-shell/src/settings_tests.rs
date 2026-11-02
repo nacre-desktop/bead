@@ -509,7 +509,7 @@ fn settings_items_scroll_preserves_touchpad_pixels_and_shared_wheel_distance() {
     let region = h
         .session
         .view_nodes()
-        .into_iter()
+        .iter()
         .find(|node| node.scroll_store.as_deref() == Some("settings.scroll"))
         .map(|node| bead::ui::rect(&node.draw))
         .expect("settings item viewport");
