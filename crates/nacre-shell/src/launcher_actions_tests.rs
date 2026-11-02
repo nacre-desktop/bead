@@ -87,7 +87,7 @@ fn published_rows_map_to_the_operations_bead_can_do_and_refuse_the_rest() {
 /// one row per provider operation) resolves to a route Bead serves. The only refusals are the
 /// listed form gaps, and each resolved route is one Bead or the daemon actually publishes.
 #[test]
-fn every_visible_launcher_action_resolves_to_a_supported_route() {
+fn every_audited_supported_launcher_action_resolves_to_a_supported_route() {
     let fixture: Value =
         serde_json::from_str(include_str!("../tests/launcher-actions.json")).unwrap();
     let navigation: Value = serde_json::from_str(include_str!(
@@ -136,7 +136,56 @@ fn every_visible_launcher_action_resolves_to_a_supported_route() {
                     );
                 }
             }
-            Act::Run { argv, .. } => assert!(!argv.is_empty() && !argv[0].is_empty(), "{row}"),
+            Act::Run { argv, .. } => {
+                assert!(!argv.is_empty() && !argv[0].is_empty(), "{row}");
+                // User/app commands are literal engine-provided argv, not fixed launcher routes.
+                if matches!(operation, "command" | "ai-terminal") {
+                    continue;
+                }
+                let helper = helper_argv(&[]);
+                if let Some(index) = argv.iter().position(|arg| arg == &helper[0]) {
+                    // Exact command/verb pairs inspected in the pinned Nacre helper dispatchers;
+                    // this catches a nonempty argv whose helper target does not exist.
+                    let tool = argv.get(index + 1).map(String::as_str).unwrap_or("");
+                    let verb = argv.get(index + 2).map(String::as_str).unwrap_or("");
+                    assert!(
+                        matches!(
+                            (tool, verb),
+                            (
+                                "menu-backend",
+                                "tool" | "config" | "cancel-reminder" | "webapp-create" | "remove"
+                            ) | ("launcher-workflows", "capture" | "qr" | "activate")
+                                | ("wallpaper-media", "theme")
+                                | (
+                                    "software-library",
+                                    "open"
+                                        | "install-builtin"
+                                        | "system-open"
+                                        | "tui-launch"
+                                        | "tui-remove"
+                                        | "extension-theme"
+                                        | "bundle-apply"
+                                )
+                                | ("software-environments", "run")
+                                | ("software-package", "install")
+                                | ("maintenance", "check")
+                        ),
+                        "{row}: missing helper target {argv:?}"
+                    );
+                } else {
+                    assert!(
+                        [
+                            "nacre-shell",
+                            "nacre-menu",
+                            "nacre-app",
+                            "kitty",
+                            "xdg-open"
+                        ]
+                        .contains(&argv[0].as_str()),
+                        "{row}: {argv:?}"
+                    );
+                }
+            }
             Act::Daemon { method, .. } => assert!(DAEMON_METHODS.contains(&method), "{method}"),
             Act::Toggle(source) => assert!(
                 [
@@ -159,7 +208,8 @@ fn every_visible_launcher_action_resolves_to_a_supported_route() {
             | Act::Desktop(..)
             | Act::Preset(_)
             | Act::Wallpaper(_)
-            | Act::Ask(_) => {}
+            | Act::Ask(_)
+            | Act::ExtensionToggle(_) => {}
         }
     }
     // Every form row of the catalogue opens its form; nothing else does.
@@ -276,4 +326,38 @@ fn search_uses_the_engine_url_and_encodes_the_fallback() {
     assert!(
         matches!(act, Act::Run { ref argv, .. } if argv[2] == "https://search.brave.com/search?q=a")
     );
+}
+
+#[test]
+fn extension_rows_use_existing_helper_routes_and_authoritative_state() {
+    let (act, keep, _) = planned(row("software-extension-toggle", json!("user.fixture")));
+    assert!(matches!(act, Act::ExtensionToggle(ref id) if id == "user.fixture") && keep);
+    for (enabled, expected) in [(false, "enable"), (true, "disable")] {
+        let data = json!({"extensions":[{"id":"user.fixture","enabled":enabled}]});
+        assert_eq!(
+            extension_toggle_operation(&data, "user.fixture").unwrap(),
+            expected
+        );
+    }
+    assert!(extension_toggle_operation(&json!({}), "user.fixture").is_err());
+    let (panel, _, _) = planned(row("software-extension-open", json!("user.fixture")));
+    assert!(matches!(panel, Act::Run { ref input, .. } if input.as_deref() == Some("{}")));
+    assert!(plan(row("software-extension-action", json!("user.fixture"))).is_err());
+    let mut params = row("software-extension-action", json!("user.fixture"));
+    params["row"]["extensionAction"] = json!("launch");
+    let (act, _, _) = planned(params);
+    assert!(matches!(act, Act::Run { ref argv, ref input, .. }
+        if argv[1..] == ["software-library", "open", "user.fixture"]
+        && input.as_deref() == Some("{\"action\":\"launch\"}")));
+}
+
+#[test]
+fn software_open_is_an_explicit_nacre_contract_proposal_not_a_fake_route() {
+    let table: Value =
+        serde_json::from_str(include_str!("../tests/launcher-actions.json")).unwrap();
+    for entry in table["blocked"].as_array().unwrap() {
+        let error = plan(json!({"row":entry,"catalog_rev":1})).unwrap_err();
+        assert_eq!(error.code, "unavailable");
+        assert!(entry["proposal"].as_str().is_some_and(|s| !s.is_empty()));
+    }
 }

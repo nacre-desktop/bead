@@ -8,7 +8,8 @@ local Quick = require("./components/quick")
 local Form = require("./components/form")
 local Plugins = require("./components/plugins")
 local M = require("./components/metrics")
-local show_quick=M.show(ui.resolve_for_check(ui.bind("bead.viewport.width")),ui.resolve_for_check(ui.bind("launcher.quick_allowed")))
+local plugin_active=ui.resolve_for_check(ui.bind("launcher.plugin.active"))
+local show_quick=not plugin_active and M.show(ui.resolve_for_check(ui.bind("bead.viewport.width")),ui.resolve_for_check(ui.bind("launcher.quick_allowed")))
 -- QML NacreAppBrowser prefixHints: five 24 px chips at the search field's right end while the query is empty.
 local function HintRow()
     local hints={"> "..ui.tr("bead.launcher.hint-actions"),"= "..ui.tr("bead.launcher.hint-calculate"),"# "..ui.tr("bead.launcher.hint-brain"),": "..ui.tr("bead.launcher.hint-files"),"? "..ui.tr("bead.launcher.hint-ai")}
@@ -55,7 +56,7 @@ local body={
             ui.Text{text=ui.bind("launcher.subtitle"),color="onSurfaceVariant",font_size=13.333,height=20},
             ui.Text{id="source-error",text=ui.bind("launcher.error"),visible=ui.bind("launcher.failed"),color="error",font_size=13.333,height=20},
             detail,
-            ui.Text{id="no-results",text=ui.bind("launcher.empty_text"),visible=ui.bind("launcher.empty"),color="onSurfaceVariant",font_size=13.333,height=20},
+            ui.Text{id="no-results",text=ui.bind("launcher.empty_text"),visible=not plugin_active and ui.bind("launcher.empty"),color="onSurfaceVariant",font_size=13.333,height=20},
             ui.resolve_for_check(ui.bind("launcher.plugin.active")) and Plugins()
                 or detail_only and ui.Box{grow=1} or ui.resolve_for_check(ui.bind("launcher.grid"))
                 and ui.Box{id="grid-host",grow=1,AppGrid{}}

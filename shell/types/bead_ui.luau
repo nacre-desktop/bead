@@ -122,6 +122,7 @@ export type SDK = {
     resolve_for_check:(any)->any,
     preview_value:(string,number)->number,
     text_width:(string|{__bind:string},string,number)->number,
+    text_line_height:(string,number)->number,
     model_count:(any)->number,
     tr:(string,any?)->string,
     plugin_gate:(string,any)->any,

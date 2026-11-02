@@ -4,13 +4,13 @@ return {
     ["bead.scroll.wheel_step"] = 100,
     ["view.detached"]=false,["panel.open"] = true, ["launcher.apps"] = {},
     ["launcher.mode"]="apps", ["launcher.error"]="", ["launcher.pending"]=false, ["launcher.icon_placeholder"]=false, ["launcher.result_count"]=0, ["launcher.total_count"]=0,
-    ["launcher.rail.order"]={}, ["launcher.rail.hidden"]={}, ["launcher.groups"]={},
+    ["launcher.rail.scroll"]=0, ["launcher.rail.order"]={}, ["launcher.rail.hidden"]={}, ["launcher.groups"]={},
     ["launcher.selection"] = "", ["launcher.route"] = "apps", ["launcher.engine_route"]="",
     ["launcher.search.text"] = "", ["launcher.result_query"] = "", ["launcher.scroll.y"] = 0,
     ["launcher.conversion.value"]="", ["launcher.conversion.description"]="",
     ["launcher.conversion.error"]="", ["launcher.message"]="",
     ["launcher.quick"]={}, ["launcher.quick_error"]="", ["launcher.updates.count"]=-1,
-    ["launcher.plugin.active"]=false, ["launcher.plugin.source"]="", ["launcher.plugin.rows"]={},
+    ["launcher.plugin.scroll"]=0, ["launcher.plugin.active"]=false, ["launcher.plugin.source"]="", ["launcher.plugin.rows"]={},
     ["launcher.plugin.notice"]="", ["plugins.message"]="",
     -- The inline form (B0199): `launcher_form.rs` opens it (kind, prompt, starting values) and runs its backend.
     ["launcher.form.kind"]="", ["launcher.form.message"]="", ["launcher.form.error"]="", ["launcher.form.busy"]=false,
@@ -21,6 +21,7 @@ return {
     toggle_favorite = function(s,id) s["launcher.selection"] = id end,
     ["launcher.quick"] = function(_) end,
     -- B0208: `>plugin` mode; the host installs, enables and updates (spec 0203 plugin state).
+    ["launcher.app"] = function(_) end,
     ["plugins.do"] = function(_) end,
     -- Submit and cancel are the host's (`launcher.form`); a choice is only a store write ("<slot>:<value>").
     ["launcher.form"] = function(_) end,
@@ -29,12 +30,13 @@ return {
       if slot then s["launcher.form.v"..slot]=value end
     end,
     navigate = function(s,id)
-      s["launcher.engine_route"]=(id=="apps" or id=="actions") and "" or id
+      s["launcher.engine_route"]=(id=="apps" or id=="actions" or id=="plugins") and "" or id
       s["launcher.route"]=(id=="actions") and id or "apps"
       s["launcher.mode"]=(id=="actions") and "search" or "apps"
-      s["launcher.search.text"]=id=="actions" and "> " or ""
+      s["launcher.search.text"]=id=="plugins" and ">plugin " or id=="actions" and "> " or ""
       s["launcher.selection"]=""
       s["launcher.scroll.y"]=0
+      s["launcher.plugin.scroll"]=0
     end,
     toggle = function(s) s["panel.open"] = not s["panel.open"] end,
   },
@@ -47,12 +49,13 @@ return {
     ["launcher.home"]=function(s) return (s["launcher.engine_route"]:match("^[^.]+"))=="home" and s["launcher.display_query"]:match("^%s*$")~=nil end,
     ["launcher.hints"]=function(s) return s["launcher.display_query"]=="" end,
     ["launcher.empty_text"]=function(s) return (s["launcher.engine_route"]:match("^[^.]+"))=="home" and s["launcher.display_query"]:match("^%s*$")~=nil and tr("bead.launcher.home-empty") or tr("bead.launcher.no-results") end,
-    ["launcher.subtitle"]=function(s) if s["launcher.home"] then return tr("bead.launcher.favorites") end return s["launcher.grid"] and tr("bead.launcher.apps") or tr("bead.launcher.results") end,
+    ["launcher.subtitle"]=function(s) if s["launcher.plugin.active"] then return tr("bead.launcher.plugins-subtitle") end if s["launcher.home"] then return tr("bead.launcher.favorites") end return s["launcher.grid"] and tr("bead.launcher.apps") or tr("bead.launcher.results") end,
     ["launcher.grid"]=function(s) return s["launcher.mode"]=="apps" and s["launcher.display_query"]:match("^%s*$")~=nil end,
     ["launcher.has_detail"]=function(s) return s["launcher.conversion.value"]~="" or s["launcher.conversion.description"]~="" or s["launcher.conversion.error"]~="" or s["launcher.message"]~="" end,
     ["launcher.empty"]=function(s) return s["launcher.result_count"]==0 and s["launcher.error"]=="" and not s["launcher.pending"] and not s["launcher.has_detail"] end,
     ["launcher.failed"]=function(s) return s["launcher.error"]~="" end,
     ["launcher.route_title"] = function(s)
+      if s["launcher.plugin.active"] then return tr("bead.launcher.plugins") end
       local group=s["launcher.engine_route"]:match("^[^.]+")
       if group then
         for _,entry in ipairs(s["launcher.groups"]) do
@@ -66,13 +69,18 @@ return {
       local rows={}
       local route=s["launcher.engine_route"]
       if route=="" then route=s["launcher.route"] end
-      local active=route:match("^[^.]+") or route
+      local active=(s["launcher.search.text"]==">plugin" or s["launcher.search.text"]:match("^>plugin%s")) and "plugins" or route:match("^[^.]+") or route
       -- The engine's `menu.groups` rail (Nacre's default order); before it arrives, or from an older daemon,
       -- the groups every engine has.
       local groups=s["launcher.groups"]
       if #groups==0 then
         groups={{id="home",name=tr("bead.launcher.favorites"),icon="home"},{id="apps",name=tr("bead.launcher.apps"),icon="apps"},{id="actions",name=tr("bead.launcher.actions"),icon="bolt"}}
       end
+      groups=table.clone(groups)
+      local present={}
+      for _,entry in ipairs(groups) do present[entry.id]=true end
+      if not present.widgets then table.insert(groups,{id="widgets",name=tr("bead.launcher.widgets"),icon="widgets"}) end
+      if not present.plugins then table.insert(groups,{id="plugins",name=tr("bead.launcher.plugins"),icon="extension"}) end
       -- launcher-layout as Nacre's rail(): Home, the configured order, then the defaults; hidden ids drop out
       -- (Home never); unranked rows go last in their own order.
       local hidden={}
@@ -82,7 +90,7 @@ return {
       local function place(id) if not rank[id] then count+=1 rank[id]=count end end
       place("home")
       for _,entry in ipairs(s["launcher.rail.order"]) do place(entry.id) end
-      for _,id in ipairs({"home","apps","actions","style","setup","software","health","learn","power"}) do place(id) end
+      for _,id in ipairs({"home","apps","actions","widgets","plugins","style","setup","software","health","learn","power"}) do place(id) end
       local ranked={}
       for index,item in ipairs(groups) do
         if not hidden[item.id] then
