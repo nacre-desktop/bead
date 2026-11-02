@@ -48,6 +48,7 @@ struct Shared {
     closing: AtomicBool,
     center: Mutex<Center>,
     changed: Notify,
+    information: ServerInformation,
 }
 impl Shared {
     fn with<T>(&self, f: impl FnOnce(&mut Center) -> Result<T, String>) -> zbus::fdo::Result<T> {
@@ -63,6 +64,111 @@ impl Shared {
         f(&mut center).map_err(zbus::fdo::Error::InvalidArgs)
     }
 }
+/// Operations exposed by an app-owned private notification policy interface.
+#[derive(Clone)]
+pub struct Policy {
+    shared: Arc<Shared>,
+    sender: mpsc::Sender<Request>,
+}
+impl Policy {
+    pub fn set_do_not_disturb(&self, value: bool) -> zbus::fdo::Result<()> {
+        self.shared.with(|c| {
+            c.set_dnd(value);
+            Ok(())
+        })?;
+        self.shared.changed.notify_one();
+        Ok(())
+    }
+    pub fn inhibit(&self, owner: String, reason: String) -> zbus::fdo::Result<u32> {
+        let id = self.shared.with(|c| c.inhibit(owner, reason))?;
+        self.shared.changed.notify_one();
+        Ok(id)
+    }
+    pub fn uninhibit(&self, owner: &str, cookie: u32) -> zbus::fdo::Result<()> {
+        self.shared.with(|c| c.uninhibit(owner, cookie))?;
+        self.shared.changed.notify_one();
+        Ok(())
+    }
+    pub fn history(&self) -> zbus::fdo::Result<String> {
+        self.shared
+            .with(|c| serde_json::to_string(&c.retained()).map_err(|e| e.to_string()))
+    }
+    pub fn invoke_action(&self, id: u32, key: String) -> zbus::fdo::Result<()> {
+        self.shared.with(|c| c.action(id, &key).map(|_| ()))?;
+        self.sender
+            .try_send(Request::new(Control::Action(id, key)))
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+    }
+    pub fn dismiss(&self, id: u32) -> zbus::fdo::Result<()> {
+        self.sender
+            .try_send(Request::new(Control::Dismiss(id)))
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+    }
+    pub fn clear_history(&self) -> zbus::fdo::Result<()> {
+        self.sender
+            .try_send(Request::new(Control::ClearHistory))
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+    }
+    pub fn show_osd(&self, channel: String, value: f64, muted: bool) -> zbus::fdo::Result<()> {
+        if !["volume", "brightness", "microphone", "capslock"].contains(&channel.as_str())
+            || !value.is_finite()
+            || !(0. ..=1.).contains(&value)
+        {
+            return Err(zbus::fdo::Error::InvalidArgs(
+                "invalid OSD channel/level".into(),
+            ));
+        }
+        self.sender
+            .try_send(Request::new(Control::Osd {
+                channel,
+                value,
+                muted,
+            }))
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+    }
+    pub fn inhibited(&self) -> zbus::fdo::Result<bool> {
+        self.shared.with(|c| Ok(c.suppressed()))
+    }
+}
+
+/// Extra app-owned D-Bus interface, used for compatibility APIs.
+/// Implementations must undo any partial registration before returning `Err`.
+pub trait PolicyExtension: Send + Sync {
+    fn register(
+        &self,
+        connection: zbus::Connection,
+        policy: Policy,
+    ) -> futures_util::future::BoxFuture<'static, Result<(), String>>;
+    fn unregister(
+        &self,
+        connection: zbus::Connection,
+    ) -> futures_util::future::BoxFuture<'static, Result<(), String>>;
+    fn interface_name(&self) -> &'static str;
+}
+
+#[derive(Clone, Debug)]
+pub struct ServerInformation {
+    pub name: String,
+    pub vendor: String,
+    pub version: String,
+    pub spec_version: String,
+}
+impl Default for ServerInformation {
+    fn default() -> Self {
+        Self {
+            name: "Bead".into(),
+            vendor: "Bead contributors".into(),
+            version: "0.1.0".into(),
+            spec_version: "1.2".into(),
+        }
+    }
+}
+#[derive(Clone, Default)]
+pub struct Options {
+    pub information: ServerInformation,
+    pub policy_extension: Option<Arc<dyn PolicyExtension>>,
+}
+
 struct Interface(Arc<Shared>);
 #[zbus::interface(name = "org.freedesktop.Notifications")]
 impl Interface {
@@ -70,7 +176,12 @@ impl Interface {
         vec!["actions", "body", "persistence"]
     }
     fn get_server_information(&self) -> (&str, &str, &str, &str) {
-        ("Bead", "Nacre", "0.1.0", "1.2")
+        (
+            &self.0.information.name,
+            &self.0.information.vendor,
+            &self.0.information.version,
+            &self.0.information.spec_version,
+        )
     }
     #[allow(clippy::too_many_arguments)]
     fn notify(
@@ -161,16 +272,11 @@ impl Interface {
         action_key: &str,
     ) -> zbus::Result<()>;
 }
-struct Policy(Arc<Shared>, mpsc::Sender<Request>);
-#[zbus::interface(name = "org.nacre.Bead.Notifications")]
-impl Policy {
+struct NeutralPolicy(Policy);
+#[zbus::interface(name = "org.bead.Notifications")]
+impl NeutralPolicy {
     fn set_do_not_disturb(&self, value: bool) -> zbus::fdo::Result<()> {
-        self.0.with(|c| {
-            c.set_dnd(value);
-            Ok(())
-        })?;
-        self.0.changed.notify_one();
-        Ok(())
+        self.0.set_do_not_disturb(value)
     }
     fn inhibit(
         &self,
@@ -181,9 +287,7 @@ impl Policy {
             .sender()
             .ok_or_else(|| zbus::fdo::Error::Failed("missing owner".into()))?
             .to_string();
-        let id = self.0.with(|c| c.inhibit(owner, reason))?;
-        self.0.changed.notify_one();
-        Ok(id)
+        self.0.inhibit(owner, reason)
     }
     fn uninhibit(
         &self,
@@ -194,50 +298,26 @@ impl Policy {
             .sender()
             .ok_or_else(|| zbus::fdo::Error::Failed("missing owner".into()))?
             .to_string();
-        self.0.with(|c| c.uninhibit(&owner, cookie))?;
-        self.0.changed.notify_one();
-        Ok(())
+        self.0.uninhibit(&owner, cookie)
     }
     fn get_history(&self) -> zbus::fdo::Result<String> {
-        self.0
-            .with(|c| serde_json::to_string(&c.retained()).map_err(|e| e.to_string()))
+        self.0.history()
     }
     fn invoke_action(&self, id: u32, key: String) -> zbus::fdo::Result<()> {
-        self.0.with(|c| c.action(id, &key).map(|_| ()))?;
-        self.1
-            .try_send(Request::new(Control::Action(id, key)))
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+        self.0.invoke_action(id, key)
     }
     fn dismiss(&self, id: u32) -> zbus::fdo::Result<()> {
-        self.1
-            .try_send(Request::new(Control::Dismiss(id)))
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+        self.0.dismiss(id)
     }
     fn clear_history(&self) -> zbus::fdo::Result<()> {
-        self.1
-            .try_send(Request::new(Control::ClearHistory))
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+        self.0.clear_history()
     }
     fn show_osd(&self, channel: String, value: f64, muted: bool) -> zbus::fdo::Result<()> {
-        if !["volume", "brightness", "microphone", "capslock"].contains(&channel.as_str())
-            || !value.is_finite()
-            || !(0. ..=1.).contains(&value)
-        {
-            return Err(zbus::fdo::Error::InvalidArgs(
-                "invalid OSD channel/level".into(),
-            ));
-        }
-        self.1
-            .try_send(Request::new(Control::Osd {
-                channel,
-                value,
-                muted,
-            }))
-            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
+        self.0.show_osd(channel, value, muted)
     }
     #[zbus(property)]
     fn inhibited(&self) -> zbus::fdo::Result<bool> {
-        self.0.with(|c| Ok(c.suppressed()))
+        self.0.inhibited()
     }
 }
 async fn signal<T: serde::Serialize + zbus::zvariant::DynamicType>(
@@ -328,6 +408,9 @@ impl Drop for Handle {
     }
 }
 pub async fn start(config: Config) -> Result<Handle, String> {
+    start_with_options(config, Options::default()).await
+}
+pub async fn start_with_options(config: Config, options: Options) -> Result<Handle, String> {
     let (sender, receiver) = mpsc::channel(64);
     let (publish, snapshots) = watch::channel(Value::Null);
     let (ready, answer) = oneshot::channel();
@@ -338,6 +421,7 @@ pub async fn start(config: Config) -> Result<Handle, String> {
         serve(
             config.connection,
             &config.history,
+            options,
             move |value| {
                 publish.send_replace(value);
             },
@@ -530,6 +614,23 @@ impl Server {
         callback: impl Fn(Value) + Send + Sync + 'static,
         on_stop: impl Fn() + Send + 'static,
     ) -> Result<Self, String> {
+        Self::start_with_options(socket, history, Options::default(), callback, on_stop)
+    }
+    pub fn start_configured(
+        socket: PathBuf,
+        history: PathBuf,
+        options: Options,
+        callback: impl Fn(Value) + Send + Sync + 'static,
+    ) -> Result<Self, String> {
+        Self::start_with_options(socket, history, options, callback, || {})
+    }
+    pub fn start_with_options(
+        socket: PathBuf,
+        history: PathBuf,
+        options: Options,
+        callback: impl Fn(Value) + Send + Sync + 'static,
+        on_stop: impl Fn() + Send + 'static,
+    ) -> Result<Self, String> {
         let (ready, answer) = std::sync::mpsc::sync_channel(1);
         let thread = std::thread::Builder::new()
             .name("bead-notifications".into())
@@ -542,10 +643,13 @@ impl Server {
                         .map_err(|e| e.to_string())?;
                     let bus = PrivateBus::start(socket)?;
                     runtime.block_on(async {
-                        let service = start(Config {
-                            connection: bus.connect().await?,
-                            history,
-                        })
+                        let service = start_with_options(
+                            Config {
+                                connection: bus.connect().await?,
+                                history,
+                            },
+                            options,
+                        )
                         .await?;
                         let mut updates = service.subscribe();
                         callback(service.snapshot());
@@ -592,9 +696,11 @@ impl Drop for Server {
         }
     }
 }
+#[allow(clippy::too_many_arguments)]
 async fn serve(
     connection: zbus::Connection,
     history: &Path,
+    options: Options,
     callback: impl Fn(Value) + Send + Sync + 'static,
     sender: mpsc::Sender<Request>,
     mut receiver: mpsc::Receiver<Request>,
@@ -622,17 +728,24 @@ async fn serve(
         closing: AtomicBool::new(false),
         center: Mutex::new(center),
         changed: Notify::new(),
+        information: options.information.clone(),
     });
-    let (mut installed, mut policy_installed, mut owned) = (false, false, false);
+    let (mut installed, mut policy_installed, mut extension_installed, mut owned) =
+        (false, false, false, false);
     let result = async {
     if !connection.object_server().at(PATH, Interface(shared.clone())).await.map_err(|e| e.to_string())? {
         return Err("notification interface already installed".into());
     }
     installed = true;
-    if !connection.object_server().at(PATH, Policy(shared.clone(), sender)).await.map_err(|e| e.to_string())? {
+    let policy = Policy { shared: shared.clone(), sender };
+    if !connection.object_server().at(PATH, NeutralPolicy(policy.clone())).await.map_err(|e| e.to_string())? {
         return Err("notification policy already installed".into());
     }
     policy_installed = true;
+    if let Some(extension) = options.policy_extension.as_ref() {
+        extension.register(connection.clone(), policy.clone()).await?;
+        extension_installed = true;
+    }
     // Never replace an existing server, even if that server permits replacement.
     let ownership = connection.request_name_with_flags(INTERFACE, zbus::fdo::RequestNameFlags::DoNotQueue.into()).await.map_err(|e| e.to_string())?;
     if ownership != zbus::fdo::RequestNameReply::PrimaryOwner { return Err("notification name already owned".into()); }
@@ -647,7 +760,7 @@ async fn serve(
     let mut osd = Value::Null;
     let mut osd_deadline = None;
     let mut persisted = String::new();
-    let mut last_inhibited = None;
+        let mut last_inhibited = None;
     let mut ready = Some(ready);
     loop {
         let (snapshot, deadline, history_json) = {
@@ -682,6 +795,7 @@ async fn serve(
         if last_inhibited != Some(inhibited) {
             let changed =
                 HashMap::from([("Inhibited", zbus::zvariant::OwnedValue::from(inhibited))]);
+            let changed_for_extension = changed.clone();
             connection
                 .emit_signal(
                     None::<&str>,
@@ -689,13 +803,19 @@ async fn serve(
                     "org.freedesktop.DBus.Properties",
                     "PropertiesChanged",
                     &(
-                        "org.nacre.Bead.Notifications",
+                        "org.bead.Notifications",
                         changed,
                         Vec::<String>::new(),
                     ),
                 )
                 .await
                 .map_err(|e| e.to_string())?;
+            if let Some(extension) = options.policy_extension.as_ref() {
+                connection.emit_signal(
+                    None::<&str>, PATH, "org.freedesktop.DBus.Properties", "PropertiesChanged",
+                    &(extension.interface_name(), changed_for_extension, Vec::<String>::new()),
+                ).await.map_err(|e| e.to_string())?;
+            }
             last_inhibited = Some(inhibited);
         }
         callback(snapshot);
@@ -762,12 +882,24 @@ async fn serve(
             .await;
     }
     if policy_installed {
-        let _ = connection.object_server().remove::<Policy, _>(PATH).await;
+        let _ = connection
+            .object_server()
+            .remove::<NeutralPolicy, _>(PATH)
+            .await;
     }
+    let extension_cleanup = if extension_installed {
+        if let Some(extension) = options.policy_extension.as_ref() {
+            extension.unregister(connection.clone()).await
+        } else {
+            Ok(())
+        }
+    } else {
+        Ok(())
+    };
     if owned {
         let _ = connection.release_name(INTERFACE).await;
     }
-    result.and(flushed)
+    result.and(flushed).and(extension_cleanup)
 }
 async fn apply(
     shared: &Shared,
@@ -904,6 +1036,10 @@ mod shutdown_tests {
                 .object_server()
                 .interface::<_, Interface>(PATH)
                 .await?;
+            assert_eq!(
+                interface.get().await.get_server_information(),
+                ("Bead", "Bead contributors", "0.1.0", "1.2")
+            );
             interface.get().await.0.with(|c| {
                 c.set_dnd(true);
                 Ok(())
@@ -931,6 +1067,121 @@ mod shutdown_tests {
             let saved: Value = serde_json::from_slice(&std::fs::read(history)?)?;
             assert_eq!(saved["dnd"], true);
             assert!(interface.get().await.0.with(|_| Ok(())).is_err());
+            Ok::<(), Box<dyn std::error::Error>>(())
+        })
+    }
+
+    #[derive(Clone)]
+    struct TestExtension {
+        registered: Arc<AtomicBool>,
+        unregistered: Arc<AtomicBool>,
+    }
+    struct TestPolicy(Policy);
+    #[zbus::interface(name = "org.example.Notifications")]
+    impl TestPolicy {
+        fn set_do_not_disturb(&self, value: bool) -> zbus::fdo::Result<()> {
+            self.0.set_do_not_disturb(value)
+        }
+    }
+    impl PolicyExtension for TestExtension {
+        fn register(
+            &self,
+            connection: zbus::Connection,
+            policy: Policy,
+        ) -> futures_util::future::BoxFuture<'static, Result<(), String>> {
+            let registered = self.registered.clone();
+            Box::pin(async move {
+                let installed = connection
+                    .object_server()
+                    .at(PATH, TestPolicy(policy))
+                    .await
+                    .map_err(|error| error.to_string())?;
+                if !installed {
+                    return Err("test extension already installed".into());
+                }
+                registered.store(true, Ordering::Release);
+                Ok(())
+            })
+        }
+        fn unregister(
+            &self,
+            connection: zbus::Connection,
+        ) -> futures_util::future::BoxFuture<'static, Result<(), String>> {
+            let unregistered = self.unregistered.clone();
+            Box::pin(async move {
+                connection
+                    .object_server()
+                    .remove::<TestPolicy, _>(PATH)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                unregistered.store(true, Ordering::Release);
+                Ok(())
+            })
+        }
+        fn interface_name(&self) -> &'static str {
+            "org.example.Notifications"
+        }
+    }
+
+    #[test]
+    fn policy_extension_is_cleaned_up_after_stop_and_startup_failure()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let root =
+            std::env::temp_dir().join(format!("bead-policy-extension-{}", std::process::id()));
+        std::fs::create_dir(&root)?;
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))?;
+        struct Cleanup(PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _cleanup = Cleanup(root.clone());
+        let bus = PrivateBus::start(root.join("bus"))?;
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        runtime.block_on(async {
+            let extension = || {
+                Arc::new(TestExtension {
+                    registered: Arc::new(AtomicBool::new(false)),
+                    unregistered: Arc::new(AtomicBool::new(false)),
+                })
+            };
+            let first = extension();
+            let first_service = start_with_options(
+                Config {
+                    connection: bus.connect().await?,
+                    history: root.join("first.json"),
+                },
+                Options {
+                    policy_extension: Some(first.clone()),
+                    ..Default::default()
+                },
+            )
+            .await?;
+            assert!(first.registered.load(Ordering::Acquire));
+
+            let second = extension();
+            assert!(
+                start_with_options(
+                    Config {
+                        connection: bus.connect().await?,
+                        history: root.join("second.json"),
+                    },
+                    Options {
+                        policy_extension: Some(second.clone()),
+                        ..Default::default()
+                    }
+                )
+                .await
+                .is_err()
+            );
+            assert!(second.registered.load(Ordering::Acquire));
+            assert!(second.unregistered.load(Ordering::Acquire));
+
+            first_service.stop().await?;
+            assert!(first.unregistered.load(Ordering::Acquire));
             Ok::<(), Box<dyn std::error::Error>>(())
         })
     }

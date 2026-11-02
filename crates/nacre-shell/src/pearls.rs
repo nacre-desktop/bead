@@ -63,6 +63,8 @@ pub fn options(
     client: Option<crate::nacre_source::Client>,
 ) -> PearlOptions {
     PearlOptions {
+        pending_app_id: "bead.pearl.pending".into(),
+        visible_app_id: "bead.pearl".into(),
         tuning: Default::default(),
         frame: Arc::new(move |_, _| {
             let frame = crate::placement::Frame::current();

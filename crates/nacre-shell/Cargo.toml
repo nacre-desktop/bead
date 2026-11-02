@@ -38,6 +38,7 @@ skrifa = "=0.44.0"
 
 nacre-protocol = { git = "https://github.com/nacre-desktop/nacre", rev = "6abe2498a86fc5ce93662f98849c6fc24f06207f" }
 tokio = { version = "1", features = ["rt", "sync", "net", "io-util", "time", "macros"] }
+zbus = { version = "=5.19.0", default-features = false, features = ["tokio"] }
 
 [features]
 default=["native-gl"]

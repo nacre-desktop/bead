@@ -10,9 +10,12 @@ pub fn id(key: &str) -> NodeId {
     NodeId(hash | 1 << 63)
 }
 pub fn tree(views: &[Node], stores: &Stores) -> TreeUpdate {
+    tree_for_app(views, stores, "Bead")
+}
+pub fn tree_for_app(views: &[Node], stores: &Stores, app_label: &str) -> TreeUpdate {
     let root = NodeId(1);
     let mut parent = accesskit::Node::new(Role::Window);
-    parent.set_label("Nacre Shell");
+    parent.set_label(app_label);
     let mut nodes = Vec::new();
     let mut children = Vec::new();
     let mut focus = root;
@@ -69,9 +72,17 @@ pub fn tree(views: &[Node], stores: &Stores) -> TreeUpdate {
 /// nodes. Layer IDs keep text identity stable across value changes; owned ranges
 /// avoid exposing the same primitive twice or duplicating a control's own text.
 pub fn tree_with_scene(views: &[Node], stores: &Stores, scene: &bead_render::Scene) -> TreeUpdate {
+    tree_with_scene_for_app(views, stores, scene, "Bead")
+}
+pub fn tree_with_scene_for_app(
+    views: &[Node],
+    stores: &Stores,
+    scene: &bead_render::Scene,
+    app_label: &str,
+) -> TreeUpdate {
     use bead_render::{Primitive, Rect};
     use std::collections::{BTreeMap, BTreeSet};
-    let mut update = tree(views, stores);
+    let mut update = tree_for_app(views, stores, app_label);
     if scene.layers.is_empty() {
         return update;
     }
@@ -164,4 +175,19 @@ pub fn tree_with_scene(views: &[Node], stores: &Stores, scene: &bead_render::Sce
         }
     }
     update
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn application_label_is_used_for_accessible_window_root() {
+        let stores = Stores::default();
+        let generic = tree(&[], &stores);
+        assert_eq!(generic.nodes[0].1.label(), Some("Bead"));
+
+        let host = tree_for_app(&[], &stores, "Example Shell");
+        assert_eq!(host.nodes[0].1.label(), Some("Example Shell"));
+    }
 }

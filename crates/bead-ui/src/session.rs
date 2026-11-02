@@ -43,6 +43,7 @@ impl Drop for PointerInput {
 }
 /// The state owner survives every view/script replacement.
 pub struct Session {
+    pub(super) accessibility_label: String,
     font_picker: Option<crate::transcript::Picker>,
     projector: Option<Projector>,
     pointer_input: std::rc::Rc<std::cell::Cell<bool>>,
@@ -100,6 +101,10 @@ pub(super) struct DeferredAction {
     pub(super) pointer: (f32, f32),
 }
 impl Session {
+    /// Set the application label exposed for this session's accessible window root.
+    pub fn set_accessibility_label(&mut self, label: impl Into<String>) {
+        self.accessibility_label = label.into();
+    }
     /// Keep the returned guard alive while routing an intercepted pointer action.
     pub fn pointer_input(&self) -> PointerInput {
         PointerInput {
@@ -160,6 +165,7 @@ impl Session {
         fallback: Scene,
     ) -> Self {
         Self {
+            accessibility_label: "Bead".into(),
             font_picker: None,
             projector: None,
             pointer_input: Default::default(),

@@ -158,6 +158,9 @@ impl PreparedNative {
 /// What the application decides about pearls.
 #[derive(Clone)]
 pub struct PearlOptions {
+    /// Application IDs used while a detached window is prepared and after it is admitted.
+    pub pending_app_id: String,
+    pub visible_app_id: String,
     pub tuning: Tuning,
     /// Reserved edge space of an output (bar, frame) by output name and logical size.
     pub frame: FrameInsets,
@@ -204,11 +207,14 @@ pub(crate) struct Info {
     pub rect: pearl::Rect,
 }
 
-/// B0200: a prepared (not yet released) native target carries this app id, so a
-/// compositor rule can keep it invisible (`shell/niri-pearls.kdl`: opacity 0)
-/// while it maps and moves. Release switches to `bead.pearl` in the same commit
-/// as its first content.
-const PENDING_APP_ID: &str = "bead.pearl.pending";
+/// Select the host's identity for a prepared target or an admitted pearl.
+fn pearl_app_id(options: &PearlOptions, pending: bool) -> &str {
+    if pending {
+        &options.pending_app_id
+    } else {
+        &options.visible_app_id
+    }
+}
 
 fn placement_monitor<'a>(
     rect: pearl::Rect,
@@ -872,7 +878,10 @@ impl App {
                 &qh,
             );
             window.set_title((native.title)(id, &name));
-            window.set_app_id(PENDING_APP_ID);
+            window.set_app_id(pearl_app_id(
+                self.options.pearls.as_ref().expect("pearl options checked"),
+                true,
+            ));
             let body = self
                 .companion
                 .as_ref()
@@ -986,7 +995,10 @@ impl App {
             );
             let title = (native.title)(id, &name);
             window.set_title(title);
-            window.set_app_id(PENDING_APP_ID);
+            window.set_app_id(pearl_app_id(
+                self.options.pearls.as_ref().expect("pearl options checked"),
+                true,
+            ));
             window.set_min_size(Some((1, 1)));
             if let Some((scene, _, _)) = &self.companion
                 && let Some([x, y, w, h]) = rendering::content_window_rect(scene)
@@ -1737,7 +1749,10 @@ impl App {
             let s = &mut self.surfaces[i];
             let mut prepared = s.prepared_native.take().unwrap();
             let window = prepared.window.as_ref().unwrap();
-            window.set_app_id("bead.pearl");
+            window.set_app_id(pearl_app_id(
+                self.options.pearls.as_ref().expect("pearl options checked"),
+                false,
+            ));
             let surface = window.wl_surface().clone();
             surface.set_opaque_region(None);
             let dx = (rect.x - prepared.anchor.x).round() as i32;
@@ -1914,7 +1929,10 @@ impl App {
             self.surfaces[i].handoff.as_mut().unwrap().gate.placed(rect);
             // Placed: the next draw commits the first content with the visible app id.
             if let Some(window) = &self.surfaces[i].native {
-                window.set_app_id("bead.pearl");
+                window.set_app_id(pearl_app_id(
+                    self.options.pearls.as_ref().expect("pearl options checked"),
+                    false,
+                ));
             }
             self.surfaces[i].input_visible = None;
             self.surfaces[i].redraw = true;
@@ -2755,6 +2773,24 @@ impl App {
 #[cfg(test)]
 mod placement_tests {
     use super::*;
+
+    #[test]
+    fn pearl_window_ids_come_from_the_application_configuration() {
+        let options = PearlOptions {
+            pending_app_id: "example.pearl.preparing".into(),
+            visible_app_id: "example.pearl".into(),
+            tuning: Default::default(),
+            frame: std::sync::Arc::new(|_, _| Insets::default()),
+            guide_view: None,
+            store: None,
+            max: 1,
+            test_any_press: false,
+            native: None,
+        };
+
+        assert_eq!(pearl_app_id(&options, true), "example.pearl.preparing");
+        assert_eq!(pearl_app_id(&options, false), "example.pearl");
+    }
 
     #[test]
     fn a_released_rect_selects_its_new_output_before_the_origin_fallback() {
