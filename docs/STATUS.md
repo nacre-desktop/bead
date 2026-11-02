@@ -1,11 +1,12 @@
-## 2026-11-02 — B0213 launcher candidate (remote validation pending)
+## 2026-11-02 — B0213 launcher candidate (headless goldens reviewed)
 
 Result descriptions reserve two measured lines with bounded overflow; Plugins and Widgets
 are discoverable from the rail. Built-in symbol icons bypass desktop-theme lookups, and
 extension toggle/action activations have existing-helper routes. The source audit found
 one Nacre-side `software-open` contract gap; it remains an explicit N-unit proposal.
-Full CI, refreshed launcher goldens, visual parity and memory evidence are pending because
-the authorized remote hosts were unavailable. No live run or deployment occurred.
+The authorized CI continuation refreshed and individually reviewed eight launcher goldens;
+the wrapped-row render test covers scales 1 and 1.5. The full-CI result is in the unit report;
+QML/live parity and memory evidence remain pending. No live run or deployment occurred.
 [Audit and validation handoff](specs/0213-launcher.md).
 
 ## 2026-10-27 — B0161 widget reference replacement (review fixes and captures complete; acceptance gates open)
