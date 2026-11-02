@@ -302,6 +302,9 @@ fn notification_and_clipboard_pages_match_viewport_goldens() -> Result<()> {
                 "tests/goldens/dashboard-{}-{scale}.png",
                 page.name()
             ));
+            if std::env::var("BEAD_UPDATE_GOLDENS").as_deref() == Ok("1") {
+                frame.save(&golden)?;
+            }
             frame.compare(
                 &golden,
                 Default::default(),

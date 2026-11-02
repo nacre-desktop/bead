@@ -453,7 +453,7 @@ fn drag_visuals_are_quiet_and_drag_surfaces_are_layer_canvases() {
 
 #[test]
 fn the_owner_layout_migrates_pixel_identically() {
-    // Measured from origin/main 6802f81e (B0210, the live bar) with the same fixture and harness.
+    // Geometry from B0210; the pixel hash includes the deliberately recentered B0216 glyphs.
     let expected = [
         ("launcher", 15., 32.),
         ("workspaces", 59., 10.),
@@ -478,7 +478,7 @@ fn the_owner_layout_migrates_pixel_identically() {
         hash.wrapping_mul(1099511628211)
             .wrapping_add(u64::from(*byte))
     });
-    assert_eq!(hash, 5901862793837364301, "same pixels as the B0210 bar");
+    assert_eq!(hash, 18423201540532204938, "B0216 icon-centred bar pixels");
 }
 
 #[test]
