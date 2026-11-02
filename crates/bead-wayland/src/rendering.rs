@@ -1204,13 +1204,13 @@ impl App {
             }
             std::mem::swap(&mut self.animations, &mut self.panel_animations);
             let previous_frames = self.surfaces[index].frames;
-            let original = if !self.surfaces[index].callbacks.pending {
-                self.pointer_visual_position(index);
-                self.pointer_visual_scene(index)
-                    .map(|scene| std::mem::replace(&mut self.companion.as_mut().unwrap().0, scene))
-            } else {
-                None
-            };
+            // CPU label repaints may replace a frame while its callback is still
+            // pending. Every parent submission must omit the child-owned slider;
+            // otherwise the retained pre-drag fill flashes underneath its pose.
+            self.pointer_visual_position(index);
+            let original = self
+                .pointer_visual_scene(index)
+                .map(|scene| std::mem::replace(&mut self.companion.as_mut().unwrap().0, scene));
             self.draw_current(index, qh);
             if let Some(scene) = original {
                 self.companion.as_mut().unwrap().0 = scene;
