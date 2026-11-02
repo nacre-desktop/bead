@@ -16,7 +16,7 @@ FORBIDDEN = re.compile(r"nacre", re.IGNORECASE)
 
 
 def run(*args: str) -> str:
-    return subprocess.check_output(args, cwd=ROOT, text=True, stderr=subprocess.STDOUT)
+    return subprocess.check_output(args, cwd=ROOT, text=True)
 
 
 def dependency_violations(metadata: dict) -> list[str]:
