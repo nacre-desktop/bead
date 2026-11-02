@@ -27,6 +27,7 @@ pub fn luau() -> String {
             "text_width",
             "(string|{__bind:string},string,number)->number",
         ),
+        ("text_line_height", "(string,number)->number"),
         ("model_count", "(any)->number"),
         ("tr", "(string,any?)->string"),
         // Present only in bundles that mount plugins (spec 0203).

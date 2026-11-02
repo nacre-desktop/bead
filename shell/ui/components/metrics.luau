@@ -12,8 +12,15 @@ end
 -- matching offscreen warm scene rather than duplicating layout constants.
 M.grid_icon=36
 M.result_icon=30
+M.result_title_font=(T.text.body-1)*4/3
+M.result_description_font=(T.text.caption-1)*4/3
+M.result_title_height=math.ceil(ui.text_line_height("IBM Plex Sans",M.result_title_font))
+M.result_description_height=math.ceil(ui.text_line_height("IBM Plex Sans",M.result_description_font))
+M.result_row_height=M.result_title_height+2*M.result_description_height+3+2*S.sm
 M.grid_cell_width=110
-M.grid_row_height=76.2
+M.grid_label_font=T.text.caption*4/3
+M.grid_label_height=math.max(28,math.ceil(ui.text_line_height("IBM Plex Sans",M.grid_label_font)))
+M.grid_row_height=math.max(76.2,7+M.grid_icon+4+M.grid_label_height)
 M.grid_gap_x=6
 M.grid_gap_y=5
 M.quick_width=S.xl*13

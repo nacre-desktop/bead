@@ -48,6 +48,8 @@ pub(crate) enum Act {
     },
     /// Flip a control-centre source; `ControlCenter` reads it and makes the published call.
     Toggle(&'static str),
+    /// Read the helper's current extension state before changing it (not a stale UI checkbox).
+    ExtensionToggle(String),
     /// Flip a boolean in the desktop settings store (QML: `set(key, data[key] === false)`).
     Flip(String),
     /// Write one desktop settings key.
@@ -282,6 +284,8 @@ pub(crate) const KNOWN: &[&str] = &[
     "settings",
     "software-extension-install",
     "software-extension-open",
+    "software-extension-action",
+    "software-extension-toggle",
     "software-theme",
     "system-action",
     "timer-cancel",
@@ -485,12 +489,19 @@ fn act(row: &MenuUiRow) -> Result<(Act, bool, Option<MenuView>), Option<&'static
         "software-extension-install" if word(text) => {
             done(work("software-library", "install-builtin", text, json!({})))
         }
-        "software-extension-open" if word(text) => done(work(
-            "software-library",
-            "open",
-            text,
-            json!({"action": row.extension_action.as_deref().unwrap_or("")}),
-        )),
+        "software-extension-toggle" if word(text) => stay(Act::ExtensionToggle(text.into())),
+        op @ ("software-extension-open" | "software-extension-action")
+            if word(text)
+                && (op == "software-extension-open"
+                    || row.extension_action.as_deref().is_some_and(word)) =>
+        {
+            let payload = row
+                .extension_action
+                .as_deref()
+                .filter(|s| !s.is_empty())
+                .map_or_else(|| json!({}), |action| json!({"action": action}));
+            done(work("software-library", "open", text, payload))
+        }
         "workflow" if word(text) => done(work(
             "launcher-workflows",
             "activate",
@@ -617,6 +628,30 @@ fn spawn(argv: &[String], dir: Option<PathBuf>, input: Option<String>) -> Result
         let _ = child.wait();
     });
     Ok(())
+}
+/// The protocol's UI row intentionally omits checkbox state; read the authoritative
+/// helper snapshot rather than guessing whether activation should enable or disable.
+fn extension_toggle_operation(data: &Value, id: &str) -> Result<&'static str, String> {
+    data["extensions"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["id"] == id))
+        .and_then(|row| row["enabled"].as_bool())
+        .map(|enabled| if enabled { "disable" } else { "enable" })
+        .ok_or_else(|| "Extension state is unavailable".into())
+}
+fn toggle_extension(id: &str) -> Result<(), String> {
+    let argv = helper(&["software-library", "load"]);
+    let output = bead::services::process::command(&argv[0])
+        .args(&argv[1..])
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err("Extension state is unavailable".into());
+    }
+    let data: Value = serde_json::from_slice(&output.stdout).map_err(|e| e.to_string())?;
+    let operation = extension_toggle_operation(&data, id)?;
+    spawn(&helper(&["software-library", operation, id]), None, None)
 }
 async fn call(client: &Option<Client>, method: &str, params: Value) -> Result<Value, String> {
     client
@@ -749,6 +784,7 @@ pub(crate) async fn execute(act: Act, client: Option<Client>, shell: PathBuf) {
             Some(client) => blocking(move || toggle(client, source)).await,
             None => Err("daemon client unavailable".into()),
         },
+        Act::ExtensionToggle(id) => blocking(move || toggle_extension(&id)).await,
         Act::Flip(key) => desktop(&client, &key, None).await,
         Act::Desktop(key, value) => desktop(&client, &key, Some(value)).await,
         Act::Preset(name) => {

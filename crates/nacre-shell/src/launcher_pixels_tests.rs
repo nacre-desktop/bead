@@ -382,25 +382,27 @@ fn launcher_rail_follows_layout_order_and_hidden_ids() -> Result<()> {
             .collect())
     };
     let all = [
-        "home", "apps", "actions", "style", "setup", "software", "health", "learn", "power",
+        "home", "apps", "actions", "plugins", "style", "setup", "software", "health", "learn",
+        "power",
     ];
     assert_eq!(rail(&[], &[])?, all);
     assert_eq!(
         rail(&[], &["actions", "home", "power"])?,
         [
-            "home", "apps", "style", "setup", "software", "health", "learn"
+            "home", "apps", "plugins", "style", "setup", "software", "health", "learn"
         ]
     );
     assert_eq!(
         rail(&["power", "style"], &[])?,
         [
-            "home", "power", "style", "apps", "actions", "setup", "software", "health", "learn"
+            "home", "power", "style", "apps", "actions", "plugins", "setup", "software", "health",
+            "learn"
         ]
     );
     assert_eq!(
         rail(&["apps", "style"], &["actions"])?,
         [
-            "home", "apps", "style", "setup", "software", "health", "learn", "power"
+            "home", "apps", "style", "plugins", "setup", "software", "health", "learn", "power"
         ]
     );
     // Without `menu.groups` (older daemon) the rail keeps the groups every engine has.
@@ -428,7 +430,7 @@ fn launcher_rail_follows_layout_order_and_hidden_ids() -> Result<()> {
             })
             .collect::<Vec<_>>()
     };
-    assert_eq!(bare, ["home", "apps", "actions"]);
+    assert_eq!(bare, ["home", "apps", "actions", "plugins"]);
     Ok(())
 }
 
@@ -459,5 +461,128 @@ fn pending_query_keeps_the_accepted_model_geometry_until_replacement() -> Result
         ("launcher.pending".into(), Value::Bool(false)),
     ]))?;
     assert!(!grid(&h), "accepted search results must use row geometry");
+    Ok(())
+}
+
+#[test]
+fn launcher_two_line_copy_is_inside_its_row_and_clip() -> Result<()> {
+    let mut h = harness("a", 0.)?;
+    for description in [
+        "First readable line\nSecond readable line".to_owned(),
+        "A long readable description with words and emoji 🌊 ".repeat(30),
+        "first\nsecond\nthird".to_owned(),
+    ] {
+        h.update(BTreeMap::from([
+            (
+                "launcher.apps".into(),
+                Value::list(vec![serde_json::json!({
+                    "id":"wrapped", "name":"Readable title", "description":description,
+                    "icon":"fixture", "selected":false, "favorite":false, "favoriteId":"wrapped"
+                })]),
+            ),
+            ("launcher.total_count".into(), Value::Number(1.)),
+            ("launcher.result_count".into(), Value::Number(1.)),
+        ]))?;
+        let nodes = h.session.view_nodes();
+        let row = nodes
+            .iter()
+            .find(|n| n.action.as_deref() == Some("select_app"))
+            .unwrap();
+        let row_rect = bead::ui::rect(&row.draw);
+        let lines = nodes
+            .iter()
+            .filter(|n| n.id.contains("description.line-"))
+            .collect::<Vec<_>>();
+        assert_eq!(lines.len(), 2);
+        for line in &lines {
+            let rect = bead::ui::rect(&line.draw);
+            assert!(rect.y >= row_rect.y && rect.y + rect.h <= row_rect.y + row_rect.h);
+            assert!(
+                line.clip
+                    .is_none_or(|c| rect.y >= c.y && rect.y + rect.h <= c.y + c.h)
+            );
+            if let bead::render::Primitive::Text {
+                text,
+                family,
+                size,
+                color,
+                ..
+            } = &line.draw
+            {
+                assert!(bead::render::text_width(h.scene(), text, family, *size)? <= rect.w);
+                assert!(rect.h >= size * 1.4);
+                assert_eq!(color[3], 255, "no dark text mask");
+            } else {
+                panic!("description must be text");
+            }
+        }
+        if description.contains("third") || description.len() > 100 {
+            assert!(
+                matches!(&lines[1].draw, bead::render::Primitive::Text { text, .. } if text.ends_with('…'))
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn plugins_are_discoverable_and_navigate_to_the_existing_prefix() -> Result<()> {
+    let mut h = harness("", 0.)?;
+    assert!(
+        h.session
+            .view_nodes()
+            .iter()
+            .any(|n| n.action.as_deref() == Some("navigate")
+                && n.action_arg == Some(Value::Text("plugins".into())))
+    );
+    assert!(
+        h.session
+            .view_nodes()
+            .iter()
+            .any(|n| n.action.as_deref() == Some("launcher.app")
+                && n.action_arg == Some(Value::Text("widgets".into())))
+    );
+    assert!(crate::app::APPS.contains(&"widgets"));
+    let changes = h
+        .session
+        .action_values("navigate", Value::Text("plugins".into()))?;
+    h.update(changes)?;
+    assert_eq!(
+        h.session.stores.get("launcher.search.text"),
+        Some(&Value::Text(">plugin ".into()))
+    );
+    assert_eq!(
+        h.session.stores.get("launcher.engine_route"),
+        Some(&Value::Text(String::new()))
+    );
+    Ok(())
+}
+
+#[test]
+fn launcher_entry_table_icons_resolve_to_real_symbols() -> Result<()> {
+    let table: serde_json::Value =
+        serde_json::from_str(include_str!("../tests/launcher-actions.json"))?;
+    // This is the shell's actual rendering table: values are codepoints from the pinned
+    // upstream Symbols font, rather than desktop-theme lookups or placeholder images.
+    let registry = include_str!("../../../shell/ui/components/glyphs.luau");
+    let glyphs = registry
+        .lines()
+        .filter_map(|line| {
+            let (name, point) = line.trim().strip_prefix("[\"")?.split_once("\"]=0x")?;
+            let codepoint = u32::from_str_radix(point.trim_end_matches(','), 16).ok()?;
+            Some((name, codepoint))
+        })
+        .collect::<BTreeMap<_, _>>();
+    for row in ["catalogue", "providers", "navigation", "blocked"]
+        .iter()
+        .flat_map(|key| table[*key].as_array().unwrap())
+    {
+        let icon = row["icon"].as_str().expect("every audited row has an icon");
+        let codepoint = *glyphs
+            .get(icon)
+            .unwrap_or_else(|| panic!("{}: missing {icon}", row["id"]));
+        assert!(char::from_u32(codepoint).is_some() && (0xe000..=0xf8ff).contains(&codepoint));
+    }
+    assert!(glyphs.contains_key("extension") && glyphs.contains_key("widgets"));
     Ok(())
 }

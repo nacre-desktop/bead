@@ -2,6 +2,8 @@
 local ui = require("bead.ui")
 local kit = require("bead.kit")
 local M = require("./metrics")
+local Icon=require("./item-icon")
+local Lines = require("./text-lines")
 local Tile = ui.component("AppTile", {item={id="string",name="string",icon="string",selected="boolean",favorite="boolean",favoriteId="string"}}, function(p)
     return ui.Box{id="tile-wrap",width="fill",height="fill",
         ui.Button {id="tile",height="fill",width="fill",radius=11,padding=0,
@@ -10,8 +12,8 @@ local Tile = ui.component("AppTile", {item={id="string",name="string",icon="stri
             on_activate=ui.action("select_app",p.item.id),aria_label=p.item.name,
             ui.Box{position="absolute",left=0,top=10,width=3,height="70%",radius=1.5,fill="primary",visible=p.item.selected},
             ui.Column{align="center",gap=4,padding_top=7,padding_left=7,padding_right=7,
-                ui.Image{icon=p.item.icon,width=M.grid_icon,height=M.grid_icon,aria_label=p.item.name},
-                ui.Text{text=p.item.name,font_size=13.333,height=28,text_align="center"},
+                Icon(p.item,M.grid_icon),
+                Lines{id="name",text=p.item.name,width=M.grid_cell_width-14,font_size=M.grid_label_font,line_height=M.grid_label_height,max_lines=1,text_align="center"},
             },
         },
         ui.Button{id="favorite",position="absolute",right=1,top=3,width=23,height=23,radius=7,padding=0,

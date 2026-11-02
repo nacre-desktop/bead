@@ -133,8 +133,9 @@ return function(name)
 end
 "#;
 /// Host callbacks that read the current build (stores, measurements, fragments).
-const BRIDGED: [&str; 7] = [
+const BRIDGED: [&str; 8] = [
     "text_width",
+    "text_line_height",
     "preview_value",
     "resolve_for_check",
     "memo",
@@ -893,6 +894,17 @@ impl FrontEnd for LuauFrontEnd {
                         }
                     }
                     Ok(width)
+                })?,
+            )?;
+            host.set(
+                "text_line_height",
+                scope.create_function(|_, (family, size): (String, f32)| {
+                    vm.bump();
+                    if family.len() > 128 || !(1. ..=256.).contains(&size) {
+                        return Err(mlua::Error::runtime("invalid text measurement"));
+                    }
+                    let family = crate::text_style::family(&family);
+                    Ok(crate::text_style::size(size, &family) * 1.4)
                 })?,
             )?;
             host.set(

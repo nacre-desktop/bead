@@ -3196,6 +3196,7 @@ impl Runtime {
             }
             Ok(changes)
         }));
+        self.actions.register("launcher.app", "launcher")?;
         self.actions.register("launcher.quick", "launcher")?;
         self.actions.register("plugins.do", "launcher")?;
         self.launcher_quick = Some(quick);
@@ -6230,6 +6231,8 @@ impl SceneSource for Runtime {
                     || name == "status.pill.open"
                     || name == "launcher.open"
                     || name == "launcher.quick"
+                    || name == "launcher.app"
+                    || name == "plugins.do"
                     || name == "select_app"
                     || name == "toggle_favorite"
                     || name == "launcher.form"
@@ -7758,6 +7761,36 @@ impl SceneSource for Runtime {
                 .ok_or("launcher event channel unavailable")?(
                 UiEvent::CompanionVisibility(true)
             );
+            return self.finish_scene(None);
+        }
+        if let Some((_, name, bead::core::Value::Text(app))) = &host_action
+            && self.launcher_quick.is_some()
+            && name == "launcher.app"
+            && crate::app::APPS.contains(&app.as_str())
+            && (matches!(&event, UiEvent::Click { .. } | UiEvent::Release)
+                || matches!(&event, UiEvent::Command { command, .. } if command == "enter"))
+        {
+            self.actions.authorize(name)?;
+            let wake = self
+                .wakeup
+                .clone()
+                .ok_or("app completion event channel unavailable")?;
+            let app = app.clone();
+            std::thread::Builder::new()
+                .name("launcher-app".into())
+                .spawn(move || {
+                    let reply = crate::app::route(0, &app, "open", &[]);
+                    let changes = match reply.error {
+                        Some(error) => BTreeMap::from([(
+                            "launcher.error".into(),
+                            bead::core::Value::Text(error.message),
+                        )]),
+                        None => {
+                            BTreeMap::from([("panel.open".into(), bead::core::Value::Bool(false))])
+                        }
+                    };
+                    wake(UiEvent::Model(changes));
+                })?;
             return self.finish_scene(None);
         }
         if let (Some(quick), Some((_, name, bead::core::Value::Text(id)))) =
