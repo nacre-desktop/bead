@@ -45,7 +45,7 @@ pub struct Window {
     pub fullscreen: Option<bool>,
     pub urgent: bool,
 }
-/// Names match Nacre's public compositor capability vocabulary.
+/// Capability names shared by compositor backend implementations.
 pub const CAPABILITIES: &[&str] = &[
     "stableWorkspaceIndices",
     "globalWorkspaces",

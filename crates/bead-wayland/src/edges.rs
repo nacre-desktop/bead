@@ -118,7 +118,7 @@ const SIDES: [Edge; 4] = [Edge::Top, Edge::Right, Edge::Bottom, Edge::Left];
 /// Pointer leave to panel close for a hover-opened panel (QML's 130-140 ms exit timers).
 const EXIT_MS: u64 = 130;
 const FRAME: Duration = Duration::from_millis(16);
-/// The cue box fades in and out linearly over this long (QML `NacreHoverCue`).
+/// The cue box fades in and out linearly over this long.
 const CUE_FADE_S: f32 = 0.12;
 
 fn strip_geometry(edge: Edge, extent: u32) -> Geometry {
@@ -787,7 +787,7 @@ impl App {
         self.settle_edge_exit();
     }
     /// A panel opened or closed: lips redraw their active state; a panel dismissed under a
-    /// resting pointer must not reopen until the pointer leaves (`NacreHoverIntent.dismiss`).
+    /// resting pointer must not reopen until the pointer leaves.
     pub(super) fn edges_panel_changed(&mut self, closed: bool) {
         if self.options.control.is_none() {
             return;

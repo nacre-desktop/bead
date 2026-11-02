@@ -21,8 +21,7 @@ pub struct Lip {
     pub opens: String,
 }
 impl Lip {
-    /// The lip's rectangle in output logical coordinates (`NacreFrameLips`: the top lip is
-    /// `(w - 208) / 2, 0, 208, header`; the side lips `0 | w - frame, (h - 144) / 2, frame, 144`).
+    /// The lip's rectangle in output logical coordinates, centred along its edge.
     pub fn rect(&self, (w, h): (f32, f32)) -> Rect {
         let (length, thickness) = (self.length.max(0.), self.thickness.max(0.));
         match self.edge {
@@ -38,7 +37,7 @@ impl Lip {
     }
 }
 
-/// Port of `NacreHoverDwell`. With motion the fill advances per frame (a stalled frame
+/// With motion the fill advances per frame (a stalled frame
 /// never consumes the remaining fill) and, once full, holds two more frames before it
 /// fires, so the finished trace is seen. Without motion a plain timer fires after the
 /// full delay. A zero delay fires at once.
@@ -135,7 +134,7 @@ impl Dwell {
     }
 }
 
-/// `NacreHoverIntent.blocked/rearm` for lips: after a panel is dismissed while the pointer
+/// After a panel is dismissed while the pointer
 /// is still on a lip, that lip cannot open again until the pointer leaves it.
 #[derive(Clone, Debug, Default)]
 pub struct Gate {
@@ -156,8 +155,7 @@ impl Gate {
     }
 }
 
-/// Whether a hover may start a dwell now (`NacreHoverIntent.canOpen` plus the
-/// `clickEdgeMenus` switch): no button held, hover opening enabled and not blocked.
+/// Whether a hover may start a dwell: no button held, hover opening enabled and not blocked.
 pub fn may_dwell(buttons_held: bool, click_to_open: bool, allowed: bool, gate_open: bool) -> bool {
     !buttons_held && !click_to_open && allowed && gate_open
 }

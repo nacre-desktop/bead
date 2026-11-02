@@ -59,8 +59,7 @@ pub struct Monitor {
     pub rect: Rect,
     pub frame: Insets,
 }
-/// Distances and hysteresis. The defaults are the values the Nacre desktop was
-/// designed around; an application may override any of them.
+/// Distances and hysteresis. An application may override any default.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Tuning {
     /// A panel farther than this from its edge shows no guide at all.
@@ -396,8 +395,8 @@ impl Drag {
     }
 }
 
-/// The persisted pearls: the same shape the Nacre desktop keeps, with `kind` naming
-/// the view. Unknown top-level fields survive a load and save.
+/// The persisted pearls, with `kind` naming the view.
+/// Unknown top-level fields survive a load and save.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Layout {
     pub version: u32,

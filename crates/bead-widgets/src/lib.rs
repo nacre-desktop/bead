@@ -44,6 +44,6 @@ mod tests {
         ] {
             assert!(source(name).is_some(), "missing embedded module {name}");
         }
-        assert!(source("nacre").is_none());
+        assert!(source("unknown-app-module").is_none());
     }
 }
