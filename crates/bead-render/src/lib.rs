@@ -1228,10 +1228,11 @@ fn center_symbol_crop(pix: &Pixmap, target_w: u32, target_h: u32) -> Result<Pixm
     let Some((left, top, right, bottom)) = bounds else {
         return Ok(Pixmap::new(target_w, target_h).ok_or("symbol crop allocation")?);
     };
-    // Pixel indices denote pixel centres at n + .5. Rounding the displacement
-    // to a physical pixel keeps the ink within 1/2 physical pixel of centre.
-    let dx = (((width - 1) as f32 - (left + right) as f32) / 2.).round() as isize;
-    let dy = (((height - 1) as f32 - (top + bottom) as f32) / 2.).round() as isize;
+    // Pixel indices denote pixel centres at n + .5. Choose the nearest physical
+    // pixel, resolving exact half-pixel ties toward the lower coordinate. This
+    // cancels the layout engine's upward rounding of centred odd/even boxes.
+    let dx = ((((width - 1) as f32 - (left + right) as f32) / 2.) - 0.5).ceil() as isize;
+    let dy = ((((height - 1) as f32 - (top + bottom) as f32) / 2.) - 0.5).ceil() as isize;
     let mut cropped = Pixmap::new(target_w, target_h).ok_or("symbol crop allocation")?;
     let crop_x = (width - target_w as usize) / 2;
     let crop_y = (height - target_h as usize) / 2;
