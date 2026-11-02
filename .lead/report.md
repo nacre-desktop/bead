@@ -1,17 +1,17 @@
-Status: step 1c complete, pushed for lead review; CI passed and remote cleanup verified.
-Branch: task/codex-b0214c-boundaries-20261102; code commit 77ccb7b7, with a final documentation/report commit at HEAD.
-Host-injected tokens/fonts and extracted bead-kit/bead-widgets retain app-supplied IPC, catalogue, content, routes and storage paths.
-Product change: +227/-984 lines; five active files moved, obsolete scale-sync tool and replaced implementations removed.
-CI: complete .github/workflows/ci.yml replication on exact 77ccb7b7, dev-1 Ubuntu 24.04, 8 CPUs/16 GiB: PASS, including all 13 cargo-deny graphs.
-Checks include fmt, warnings-denied Clippy, workspace/trace tests, feature builds, Luau 0.742 (188 modules), minimal hosts, Python/packaging/video/private buses.
-Pixels: all 604 tracked goldens unchanged; zero-tolerance control reproduced five existing mismatches, with byte-identical base/candidate PNGs; other strict states passed.
-Limits: all-state recording extension did not reach tests after Docker stalled/provisioning exited 137. No physical/live parity claim.
-Two timing-sensitive tests failed transiently, then passed unchanged in focused reruns and final full CI; no assertions or goldens relaxed.
-Evidence: .lead/tmp/ci-b0214c/evidence/ (final-ci77.log/exit, strict logs/images/byte verification, cleanup log).
-Step 3: exact export selections and Nacre build/CI edits are in docs/specs/0214-framework-split.md, “Step 3 readiness”.
-Destinations: crates/nacre-shell/ + shell/ at Nacre top level; selected packaging/scripts/spikes/tools/examples/docs/notices under bead-shell/.
-Collision check: current Nacre origin/main 9c96a20ced21be08cdb4dfd40015f1db078334ef has none of those three destination prefixes.
-Nacre changes: explicit edition 2024/Rust 1.99, exact Bead rev pins/vendor alignment, reconciled features/profiles, extended workflow/check.py/Arch recipes and native dependencies.
-Keep the three-executable + shell/ artifact and transactional ui-shell API; preserve the existing QML wrapper and adjust preview manifests through the lead.
-Cleanup: all four B0214c container names, task image/tmux and remote task directory verified absent; target cache and local source/archive scratch removed. Review evidence retained.
-No other containers, live installation/configs, preview tooling or Nacre checkout touched. STOPPED before step 3; lead review required.
+Done — B0216 pushed to `task/codex-b0216-icon-centre-20261102`; ready for lead integration.
+
+- Code commits: `8fdb1f0c`, `ed42d9a6`, `8a6142ab`, `b5aeec25`, `58eee189`, `7b35831e`; all `[no-publish]`, correct author/committer.
+- Shared fix: centre Material Symbols ink, zero-pad/centre IconButton, use IconButton for icon-only pills; labeled layouts retained.
+- Inventory: `docs/specs/0216-icon-centring.md` covers all requested surfaces plus the service tray.
+- Product fixes: bar glyph wrapper, media seek, launcher favorite images, tray back/close; no per-glyph call-site offsets.
+- Ink tests: six renderer glyphs, seven kit variants, real control-centre/bar/media/tray buttons; both axes <=0.5 logical px at scales 1 and 1.5 — PASS.
+- `cargo fmt --all --check` — PASS.
+- `cargo clippy --workspace --all-targets --locked -j2 -- -D warnings` — PASS.
+- `cargo test --workspace --locked -j2` plus trace memory-policy tests — PASS.
+- Renderer no-default/all-feature checks, facade examples, headless shell and Luau schema — PASS.
+- Python proofs, packaging, video smoke, private service/SNI/clock lifecycle checks — PASS.
+- `cargo deny check` plus all-feature checks for ten framework manifests — PASS.
+- Full `.github/workflows/ci.yml` replicated in Ubuntu 24.04 — PASS.
+- All 229 changed/new goldens personally reviewed in 21 before/after sheets; original bar geometry assertions retained.
+- Product size: +90/-11 lines; removed 0 files; no new dependencies.
+- Open issue: paired QML/Bead nested captures skipped after test-host SSH timeout. No live desktop/config/install changes or main push.
