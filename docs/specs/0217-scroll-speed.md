@@ -3,7 +3,7 @@
 Bead retains one shared 100 logical px wheel notch across launcher, Widgets, Settings, chat and notifications.
 Touchpad finger events remain immediate and pixel-for-pixel, including the first event.
 The per-SceneSource wheel override and product-store multiplier are removed; surfaces cannot tune wheel speed independently.
-Nacre's separate 0.75 setting applies only to touchpads; mouse speed remains at its existing 1.0 default.
+Nacre's separate 0.75 setting applies only to touchpads; the mouse scroll factor remains at niri's 1.0 default.
 
 | Gesture | Before | After |
 | --- | ---: | ---: |
