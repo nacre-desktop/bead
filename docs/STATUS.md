@@ -1,3 +1,12 @@
+## 2026-11-02 — B0214 phase 1: independent MIT framework
+
+[B0214](specs/0214-framework-split.md) records the complete grouped ownership
+inventory, framework coupling audit, and staged history/import/install plan.
+Bead's first-party framework code is MIT only, copyright siverteh; the co-located
+Nacre product remains GPL pending migration. No runtime behavior or repository
+location changes in this phase. Lead review and B0212/B0213 landing precede the
+move; full remote checks remain subject to host availability in the handoff.
+
 ## 2026-10-27 — B0161 widget reference replacement (review fixes and captures complete; acceptance gates open)
 
 Rendered all six owner-approved HTML boards at their authored CSS sizes with the
