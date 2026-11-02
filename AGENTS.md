@@ -13,6 +13,9 @@ Bead is an independent MIT-licensed framework for building Wayland shells. Nacre
 
 ## Development
 
+- For multi-step project work, act as lead using the lead-workflow skill and built-in subagents; workers use isolated worktrees.
+- Commit author and committer: siverteh <92440237+Siverteh@users.noreply.github.com>. Include `[no-publish]` in every commit message. Never kill processes you did not start.
+
 - Keep framework checks independent of any application checkout. The minimal host in `examples/minimal-shell` must remain usable with Bead alone.
 - Run formatting, warnings-denied Clippy, tests, feature checks, dependency/license checks, and minimal-shell proofs for implementation changes. CI is authoritative; see `docs/development/ci.md`.
 - Specs document framework contracts and decisions. Keep them focused and remove product-specific history from this repository.
