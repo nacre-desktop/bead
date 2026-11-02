@@ -173,7 +173,7 @@ Recording already routes Record area/screen through the sound-choice form to `re
 | software.themes.create · Create a theme | nacre settings colors (registry alias) | `palette` | supported; theme lookup → supported; Symbols |
 | software.extensions.import · Add an extension | launcher form software-extension-import → helper (B0199) | `add` | supported; theme lookup → supported; Symbols |
 | software.packages.review-policy · AUR package review policy | nacre settings system (registry alias) | `policy` | supported; theme lookup → supported; Symbols |
-| actions.bring-visitors · Bring visitors here | native compositor backend bring-visitors | `workspaces` | supported; theme lookup → supported; Symbols |
+| actions.bring-visitors · Bring visitors here | helper monitor-workspaces bring | `workspaces` | supported; theme lookup → supported; Symbols |
 | calculation · calculation | wl-copy text | `content_copy` | supported; theme lookup → supported; Symbols |
 | actions.emoji.x · actions.emoji.x | wl-copy text | `content_copy` | supported; theme lookup → supported; Symbols |
 | actions.clipboard.1 · actions.clipboard.1 | clipboard.copy | `content_paste` | supported; theme lookup → supported; Symbols |
