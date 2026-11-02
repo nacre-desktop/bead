@@ -786,9 +786,9 @@ fn transcript_scroll_preserves_touchpad_pixels_and_shared_wheel_distance() {
             .iter()
             .find(|node| node.scroll_store.as_deref() == Some("chat.scroll"))
             .and_then(|node| node.scroll_limit)
-            .is_some_and(|limit| limit > 100.)
+            .is_some_and(|limit| limit > 130.)
     );
-    for (delta, expected) in [(23.5, 23.5), (54., 77.5)] {
+    for (delta, expected) in [(23.5, 23.5), (100., 123.5)] {
         h.script([bead_test::Input::Scroll {
             x: region.x + region.w / 2.,
             y: region.y + region.h / 2.,

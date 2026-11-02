@@ -93,13 +93,12 @@ ceiling. Full Bead CI passes. See [B0157](specs/0157-picker-errors.md).
 
 ## 2026-11-02 — B0217 shared Bead scroll speed
 
-Wheel conversion is now one framework policy: 54 logical px per notch (three nominal 18 px lines at scale 1),
-with high-resolution wheel fractions preserved. Touchpad axis pixels remain 1:1 and immediate. Removed the
-per-source wheel override so windows, overlays, panels and primary surfaces share the same conversion.
-Before/after gesture distances and the conversion tests are recorded in
-[B0217](specs/0217-scroll-speed.md). Every CI step passed in the required Ubuntu 24.04 container,
-including the real-view scroll tests, proofs and independent license graphs. No local builds/tests ran;
-the desktop test host was unreachable, so nested and physical validation remain unverified.
+Bead retains its shared 100 px wheel notch across views; touchpad finger pixels remain 1:1 and immediate.
+Nacre's separate 0.75 default accelerates touchpad input only; mouse speed stays at 1.0. The per-source
+wheel override is removed, and Bead's bundled Settings registry matches Nacre's touchpad-only metadata.
+Real-view tests cover launcher, Widgets, Settings, chat and notification history stores at 23.5 px and 100 px.
+The full Bead CI rerun is pending this correction. No local build/test or live run was made; the desktop
+test host timed out. See [B0217](specs/0217-scroll-speed.md).
 
 ## 2026-10-28 — B0173 wallpaper picker cold open (implementation and parity complete; acceptance gates open)
 

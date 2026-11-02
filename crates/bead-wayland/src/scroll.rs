@@ -28,8 +28,8 @@ const FLING_DECELERATION: f64 = 96. * 2.7559e-5 * 1_000_000.;
 const FLING_DURATION_DECELERATION: f64 = 2300.;
 const FLING_MIN_VELOCITY: f64 = 100.;
 const WHEEL_DURATION: f64 = 0.125;
-/// Chosen shared wheel token: three nominal 18 px lines at scale 1 = 54 logical px.
-const WHEEL_STEP: f64 = 54.;
+/// Shared launcher and Widgets wheel token, retained at 100 logical pixels per notch.
+const WHEEL_STEP: f64 = 100.;
 const LEGACY_WHEEL_NOTCH: f64 = 15.;
 
 pub(super) fn distance(axis: AxisScroll) -> f64 {
@@ -81,7 +81,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(movement(axis, false, None), (15., false));
-        assert_eq!(movement(axis, true, None), (54., true));
+        assert_eq!(movement(axis, true, None), (100., true));
         assert_eq!(
             movement(
                 AxisScroll {
@@ -104,7 +104,7 @@ mod tests {
             movement(axis, true, Some(AxisSource::Finger)),
             (-15., false)
         );
-        assert_eq!(movement(axis, true, Some(AxisSource::Wheel)), (-54., true));
+        assert_eq!(movement(axis, true, Some(AxisSource::Wheel)), (-100., true));
         assert_eq!(
             movement(
                 AxisScroll {
@@ -114,7 +114,7 @@ mod tests {
                 true,
                 Some(AxisSource::Wheel)
             ),
-            (54., true)
+            (100., true)
         );
         assert_eq!(
             movement(axis, true, Some(AxisSource::Continuous)),
@@ -180,35 +180,35 @@ mod tests {
                 value120: 120,
                 ..Default::default()
             }),
-            54.
+            100.
         );
         assert_eq!(
             distance(AxisScroll {
                 value120: 30,
                 ..Default::default()
             }),
-            13.5
+            25.
         );
         assert_eq!(
             distance(AxisScroll {
                 value120: -30,
                 ..Default::default()
             }),
-            -13.5
+            -25.
         );
         assert_eq!(
             distance(AxisScroll {
                 discrete: 1,
                 ..Default::default()
             }),
-            54.
+            100.
         );
         assert_eq!(
             distance(AxisScroll {
                 discrete: -1,
                 ..Default::default()
             }),
-            -54.
+            -100.
         );
         assert_eq!(
             distance(AxisScroll {
