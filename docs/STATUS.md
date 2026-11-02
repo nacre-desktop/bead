@@ -13,7 +13,10 @@ QML/live parity and memory evidence remain pending. No live run or deployment oc
 The accepted phase-2 code and B0212/B0213 form the base. Existing kit and widget
 algorithms now live in MIT bead-kit/bead-widgets; Nacre supplies its exact theme,
 catalogue, actions and paths. Replaced active copies and the scale-sync tool are
-removed. Goldens remain unchanged; remote validation is in progress. The
+removed. Complete Bead CI passed on `77ccb7b7`, including all 13 dependency/
+license checks. All 604 goldens are unchanged. Zero-tolerance control reproduced
+five existing golden mismatches with pixel-identical base/candidate renders;
+other strict comparisons passed. No live or physical parity claim is made. The
 [B0214 readiness note](specs/0214-framework-split.md) lists the exact step-3
 export selections, target collisions and Nacre build/CI changes. No import or
 live operation is performed in this unit.

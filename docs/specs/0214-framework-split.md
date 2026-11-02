@@ -15,8 +15,31 @@ choices, catalogue, host geometry, bindings/actions, animation settings and
 storage locations. Its storage adapter preserves diagnostics and revision/CAS
 behavior. Existing IPC remains app-supplied. The new built-in widget modules
 retain the existing restriction on plugin imports; they add no capabilities.
-All existing golden bytes must remain unchanged. Remote validation is recorded
-in the final handoff; no live or physical-presentation claim is made.
+Complete `.github/workflows/ci.yml` replication passed on source `77ccb7b7`
+in the task's Ubuntu 24.04 container (8 CPUs / 16 GiB): fmt, warnings-denied
+Clippy, workspace/trace tests, renderer features, minimal hosts, Luau 0.742
+(188 modules), Python/packaging/video/private-bus proofs and all 13 dependency/
+license graphs. Nacre's workspace suite passed 838 tests (4 ignored). All 604
+tracked golden files remain byte-identical to `d21f8065`.
+
+Additional pixel control: temporarily set the default self-golden tolerance to
+zero in each disposable checkout, leaving explicit QML tolerances unchanged.
+The candidate passed 830 tests; the base passed 833 (persistence tests moved
+into bead-widgets). Both had the same five strict golden mismatches and four
+ignored tests; three timing-only tests were filtered. Decoded RGBA comparisons
+of every failed actual image were pixel-identical between candidate and base.
+All passing strict states match their unchanged goldens. The five saved PNG
+pairs also have identical SHA-256 hashes. These failing tests stop at their
+first strict mismatch, so this is not an all-states zero-tolerance proof. A
+follow-up all-state recording attempt did not reach tests after the shared
+build host's Docker daemon stalled and its provisioning container exited 137. The test-helper change was restored;
+no product code, thresholds or golden files were changed.
+Logs and images are retained in `.lead/tmp/ci-b0214c/evidence/` for review.
+
+Two timing-sensitive tests failed transiently in earlier runs (120 Hz workspace
+frame count; provider acknowledgement ordering); both passed unchanged in
+focused reruns and the final complete workflow. No timing assertions or goldens
+were relaxed. No live or physical-presentation claim is made.
 
 ### Step 3 readiness (read-only; no import performed)
 
@@ -61,7 +84,10 @@ until a separately reviewed schema bump.
 Extend Nacre `.github/workflows/check.yml`, `tools/check.py`,
 `packaging/arch/{build.py,recipe.py,stage.py,check.py,test-installed.py}` and
 `packaging/packages.json` for the shell binaries, native dependencies, Luau/
-goldens/private-bus/product proof suites and pinned Bead source. Adapt relocated
+goldens/private-bus/product proof suites and pinned Bead source. Reconcile the
+current shell runtime dependencies (`glibc`, `gcc-libs`, `glib2`, `fontconfig`,
+`libxkbcommon`, `gdk-pixbuf2`, `libpipewire`, `mpv`) and build dependencies
+(`rust`, `cargo`, `clang`, `pkgconf`) with Nacre's existing package. Adapt relocated
 scripts' product-root paths and the analyzer's explicit framework-root input.
 Move product checks out of Bead CI only after Nacre's replacements pass.
 Nacre already installs `/usr/bin/nacre-shell` as its QML control wrapper: keep
