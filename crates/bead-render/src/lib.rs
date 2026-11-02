@@ -1204,6 +1204,70 @@ fn blur_text_shadow(pix: &mut Pixmap, shadow: TextShadow, scale: f32) {
         }
     }
 }
+
+/// Move a single symbol glyph's raster ink to the centre of its own text box.
+/// Material Symbols advances are not their ink bounds, so centring the advance
+/// in cosmic-text leaves many icons visibly off-centre inside button shapes.
+fn center_symbol_crop(pix: &Pixmap, target_w: u32, target_h: u32) -> Result<Pixmap> {
+    let width = pix.width() as usize;
+    let height = pix.height() as usize;
+    let mut bounds = None::<(usize, usize, usize, usize)>;
+    for (index, pixel) in pix.data().as_chunks::<4>().0.iter().enumerate() {
+        if pixel[3] == 0 {
+            continue;
+        }
+        let x = index % width;
+        let y = index / width;
+        bounds = Some(match bounds {
+            Some((left, top, right, bottom)) => {
+                (left.min(x), top.min(y), right.max(x), bottom.max(y))
+            }
+            None => (x, y, x, y),
+        });
+    }
+    let Some((left, top, right, bottom)) = bounds else {
+        return Ok(Pixmap::new(target_w, target_h).ok_or("symbol crop allocation")?);
+    };
+    // Pixel indices denote pixel centres at n + .5. Rounding the displacement
+    // to a physical pixel keeps the ink within 1/2 physical pixel of centre.
+    let dx = (((width - 1) as f32 - (left + right) as f32) / 2.).round() as isize;
+    let dy = (((height - 1) as f32 - (top + bottom) as f32) / 2.).round() as isize;
+    let mut cropped = Pixmap::new(target_w, target_h).ok_or("symbol crop allocation")?;
+    let crop_x = (width - target_w as usize) / 2;
+    let crop_y = (height - target_h as usize) / 2;
+    let source_width = pix.width() as usize;
+    for y in 0..cropped.height() as usize {
+        for x in 0..cropped.width() as usize {
+            let sx = x as isize + crop_x as isize - dx;
+            let sy = y as isize + crop_y as isize - dy;
+            if sx >= 0 && sy >= 0 && sx < width as isize && sy < height as isize {
+                let from = (sy as usize * source_width + sx as usize) * 4;
+                let to = (y * cropped.width() as usize + x) * 4;
+                cropped.data_mut()[to..to + 4].copy_from_slice(&pix.data()[from..from + 4]);
+            }
+        }
+    }
+    Ok(cropped)
+}
+
+fn symbol_raster_extent(target: u32, font_size: f32, scale: f32) -> u32 {
+    let minimum = (font_size * scale * 1.5).ceil().max(target as f32) as u32;
+    let minimum = minimum.max(1);
+    if (minimum - target) % 2 == 0 {
+        minimum
+    } else {
+        minimum + 1
+    }
+}
+
+fn is_single_symbol(family: &str, text: &str) -> bool {
+    (family == "Material Symbols Rounded"
+        || family == "Material Symbols Outlined"
+        || family == "Material Symbols Sharp"
+        || family == "Bead Test Symbols")
+        && !text.is_empty()
+        && !text.chars().any(char::is_whitespace)
+}
 fn apply_polygon_clip(pix: &mut Pixmap, points: &[[f32; 2]]) -> Result<()> {
     let mut path = tiny_skia::PathBuilder::new();
     for (index, [x, y]) in points.iter().enumerate() {
@@ -1290,7 +1354,16 @@ impl Renderer for CpuRenderer {
                     align,
                     shadow,
                 } => {
-                    let (w, h) = dimensions(*rect, scale);
+                    let (target_w, target_h) = dimensions(*rect, scale);
+                    let symbol = is_single_symbol(family, text);
+                    let (w, h) = if symbol {
+                        (
+                            symbol_raster_extent(target_w, *size, scale),
+                            symbol_raster_extent(target_h, *size, scale),
+                        )
+                    } else {
+                        (target_w, target_h)
+                    };
                     let mut pix = Pixmap::new(w, h).ok_or("text allocation")?;
                     let shared = self.fonts.as_ref().ok_or("font system unavailable")?;
                     let mut guard = shared.lock().map_err(|_| "font system poisoned")?;
@@ -1365,6 +1438,9 @@ impl Renderer for CpuRenderer {
                             }
                         },
                     );
+                    if symbol {
+                        pix = center_symbol_crop(&pix, target_w, target_h)?;
+                    }
                     if let Some(shadow) = shadow {
                         blur_text_shadow(&mut pix, *shadow, scale);
                     }
@@ -3702,5 +3778,120 @@ mod weight_tests {
         );
         assert!(after_ms < 16.7, "warmed OSD shadow took {after_ms:.3} ms");
         assert_eq!(brightness.width(), volume.width());
+    }
+}
+
+#[cfg(test)]
+mod symbol_ink_tests {
+    use super::*;
+
+    #[test]
+    fn material_symbol_ink_centres_in_its_box_at_fractional_scales() {
+        let font = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../bead-test/fonts/FixtureSymbols.ttf");
+        for scale in [1., 1.5] {
+            for (text, font_size, box_width, box_height) in [
+                ("check", 24., 40., 40.),
+                ("wifi", 24., 40., 40.),
+                ("play_arrow", 24., 40., 40.),
+                ("bluetooth", 24., 40., 40.),
+                ("volume_up", 24., 40., 40.),
+                // The status glyph box must contain the font ink at20px.
+                ("battery_full", 20., 24., 28.),
+            ] {
+                let scene = Scene {
+                    opacity: 1.,
+                    motion: None,
+                    resource_revision: 1,
+                    asset_data: Default::default(),
+                    clips: Default::default(),
+                    layers: vec![],
+                    prepared: Default::default(),
+                    font_files: vec![font.clone()],
+                    width: 80.,
+                    slide: None,
+                    primitives: vec![Primitive::Text {
+                        rect: Rect::new(20., 20., box_width, box_height),
+                        text: text.into(),
+                        family: "Bead Test Symbols".into(),
+                        size: font_size,
+                        color: [255, 255, 255, 255],
+                        weight: 400,
+                        align: Some(TextAlign::Center),
+                        shadow: None,
+                    }],
+                    offset: (0., 0.),
+                    bounds: Rect::new(0., 0., 80., 80.),
+                };
+                let width = (80. * scale) as u32;
+                let mut pixels = vec![0; width as usize * width as usize * 4];
+                let mut renderer = CpuRenderer::default();
+                renderer.prepare(&scene, scale).unwrap();
+                renderer
+                    .render(
+                        &scene,
+                        ShmTarget {
+                            bytes: &mut pixels,
+                            width,
+                            height: width,
+                            scale,
+                            format: PixelFormat::Rgba,
+                        },
+                        Damage::full(width, width),
+                    )
+                    .unwrap();
+                if text == "battery_full" {
+                    let mut wide = scene.clone();
+                    let Primitive::Text { rect, .. } = &mut wide.primitives[0] else {
+                        unreachable!()
+                    };
+                    rect.x = 12.;
+                    rect.w = 40.;
+                    let mut wide_pixels = vec![0; width as usize * width as usize * 4];
+                    let mut wide_renderer = CpuRenderer::default();
+                    wide_renderer.prepare(&wide, scale).unwrap();
+                    wide_renderer
+                        .render(
+                            &wide,
+                            ShmTarget {
+                                bytes: &mut wide_pixels,
+                                width,
+                                height: width,
+                                scale,
+                                format: PixelFormat::Rgba,
+                            },
+                            Damage::full(width, width),
+                        )
+                        .unwrap();
+                    let ink_pixels = pixels.chunks_exact(4).filter(|p| p[3] > 0).count();
+                    let wide_ink_pixels = wide_pixels.chunks_exact(4).filter(|p| p[3] > 0).count();
+                    assert_eq!(
+                        ink_pixels, wide_ink_pixels,
+                        "battery_full narrow box clipped ink at scale {scale}"
+                    );
+                }
+                let (mut left, mut top) = (width, width);
+                let (mut right, mut bottom) = (0, 0);
+                for y in 0..width {
+                    for x in 0..width {
+                        if pixels[(y as usize * width as usize + x as usize) * 4 + 3] > 0 {
+                            left = left.min(x);
+                            top = top.min(y);
+                            right = right.max(x);
+                            bottom = bottom.max(y);
+                        }
+                    }
+                }
+                assert!(right >= left && bottom >= top, "{text} rendered no ink");
+                let ink_x = (left + right + 1) as f32 / 2. / scale;
+                let ink_y = (top + bottom + 1) as f32 / 2. / scale;
+                let center_x = 20. + box_width / 2.;
+                let center_y = 20. + box_height / 2.;
+                assert!(
+                    (ink_x - center_x).abs() <= 0.5 && (ink_y - center_y).abs() <= 0.5,
+                    "{text} ink centre ({ink_x:.3}, {ink_y:.3}) is not within 0.5 logical px of button centre ({center_x:.3}, {center_y:.3}) at scale {scale}"
+                );
+            }
+        }
     }
 }
