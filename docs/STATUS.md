@@ -8,6 +8,16 @@ The authorized CI continuation refreshed and individually reviewed eight launche
 the wrapped-row render test covers scales 1 and 1.5. The full-CI result is in the unit report;
 QML/live parity and memory evidence remain pending. No live run or deployment occurred.
 [Audit and validation handoff](specs/0213-launcher.md).
+## 2026-11-02 — B0214 phase 2: framework independence
+
+The lead approved the split plan. Identity hooks preserve Nacre behavior through
+app-supplied labels/IDs and its private notification-policy adapter. Framework
+tests no longer require product assets, and an independent minimal-shell host
+owns its Luau, palette, tokens, app ID and hello plugin. Validation is in progress
+on the authorized CI host; desktop nested execution remains conditional on
+reachability. Frontend/schema generalization (1c) and the repository move remain
+deferred. See [B0214](specs/0214-framework-split.md).
+
 ## 2026-11-02 — B0214 phase 1: independent MIT framework
 
 [B0214](specs/0214-framework-split.md) records the complete grouped ownership

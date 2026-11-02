@@ -1,0 +1,12 @@
+id = "hello"
+name = "Hello example"
+version = "0.1.0"
+author = "siverteh"
+description = "An independent bundled widget."
+license = "MIT"
+api = 1
+capabilities = []
+
+[[widget]]
+id = "hello"
+entry = "widget.luau"
