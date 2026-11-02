@@ -545,6 +545,56 @@ fn texts(harness: &Harness) -> Vec<(String, bead::render::Rect)> {
 }
 
 #[test]
+fn the_gallery_workspaces_preview_has_horizontal_samples_and_one_active_workspace() {
+    let harness = app_harness(BTreeMap::from([
+        ("bead.workspaces".into(), Value::list(Vec::new())),
+        ("widgets.category".into(), Value::Text("bar".into())),
+    ]));
+    let scene = harness.scene();
+    let frame = scene
+        .layers
+        .iter()
+        .find(|layer| {
+            layer.id.contains("widget-card-workspaces") && layer.id.ends_with("bar-preview-frame")
+        })
+        .expect("workspaces card preview")
+        .bounds;
+    let shown: BTreeMap<_, _> = texts(&harness)
+        .into_iter()
+        .filter(|(_, rect)| {
+            let (x, y) = (rect.x + rect.w / 2., rect.y + rect.h / 2.);
+            x >= frame.x && x <= frame.x + frame.w && y >= frame.y && y <= frame.y + frame.h
+        })
+        .collect();
+    assert!(
+        shown.contains_key("terminal"),
+        "sample window icon: {shown:?}"
+    );
+    let cells: Vec<_> = ["1", "2", "3"]
+        .iter()
+        .map(|label| *shown.get(*label).expect("sample workspace label"))
+        .collect();
+    for pair in cells.windows(2) {
+        assert!(pair[0].x + pair[0].w <= pair[1].x, "horizontal: {cells:?}");
+        assert!(
+            ((pair[0].y + pair[0].h / 2.) - (pair[1].y + pair[1].h / 2.)).abs() <= 0.5,
+            "aligned: {cells:?}"
+        );
+    }
+    assert_eq!(
+        scene
+            .layers
+            .iter()
+            .filter(|layer| {
+                layer.id.contains("widget-card-workspaces") && layer.id.ends_with("active-capsule")
+            })
+            .count(),
+        1,
+        "exactly one highlighted sample workspace"
+    );
+}
+
+#[test]
 fn the_gallery_pill_is_an_empty_container_and_there_is_no_advanced_section() {
     let harness = app_harness(BTreeMap::new());
     let scene = harness.scene();

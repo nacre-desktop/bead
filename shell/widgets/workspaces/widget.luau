@@ -86,7 +86,7 @@ return {id="workspaces",title="Workspaces",icon="view_carousel",category="bar",d
                         end
                     end
                     if more~="" then
-                        apps[#apps+1]=ui.Text{id="more",text=more,width=17,height=28,shrink=0,font_size=12,color="onSurface"}
+                        apps[#apps+1]=centered_text{id="more",text=more,width=17,shrink=0,font_size=12,color="onSurface"}
                     end
                     width=32+shown*18+(more~="" and 20 or 0)+(hinted and 4 or 0)
                     animated_width=ui.animate("workspace.cell.width:"..props.instance.iid..":"..item.id,width,.16,"out-cubic")

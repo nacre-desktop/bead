@@ -870,6 +870,52 @@ fn workspace_switch_ticks_every_refresh_at_120_hz_in_both_directions() -> Result
 }
 
 #[test]
+fn workspace_overflow_and_app_icons_share_a_vertical_centre_at_both_scales() -> Result<()> {
+    for scale in [1., 1.5] {
+        let mut values = super::initial_models()?;
+        values.insert(
+            "bead.workspaces".into(),
+            Value::list(vec![serde_json::json!({"id":"one","index":1,"label":"1",
+                "active":true,"hinted":true,"shown":3,"overflow":"+2",
+                "app1":"terminal","app2":"language","app3":"folder"})]),
+        );
+        let mut h = Harness::load(
+            &root(),
+            Path::new("bar/main.luau"),
+            &root().join("palette.json"),
+            values,
+            Config {
+                width: 1920,
+                height: 50,
+                scale,
+            },
+        )?;
+        settle_harness_animations(&mut h)?;
+        let centre = |text: &str| {
+            h.scene()
+                .primitives
+                .iter()
+                .find_map(|primitive| match primitive {
+                    bead::render::Primitive::Text {
+                        text: value, rect, ..
+                    } if value == text => Some(rect.y + rect.h / 2.),
+                    _ => None,
+                })
+                .expect("workspace hint text")
+        };
+        for icon in ["terminal", "language", "folder"] {
+            assert!(
+                (centre("+2") - centre(icon)).abs() <= 0.5,
+                "scale {scale}: badge centre {} differs from {icon} centre {}",
+                centre("+2"),
+                centre(icon)
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn workspace_icon_cells_share_one_bar_pill_at_both_scales() -> Result<()> {
     for scale in [1., 1.5] {
         let mut values = super::initial_models()?;

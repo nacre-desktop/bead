@@ -947,7 +947,14 @@ return {
         ["widgets.preview"]={{["bead.desktop.audio"]="volume_up",["bead.desktop.audio.label"]="42%",
             ["bead.desktop.network"]="wifi",["bead.desktop.bluetooth"]="bluetooth",
             ["bead.desktop.battery"]="battery_full",["bead.desktop.battery.value"]="83%",["bar.title"]="Notes",["bar.clock.text"]="12:34",
-            ["bead.desktop.clock.date"]="2026-10-25",["bead.desktop.clock.seconds"]={fallback="12:34:56"}}},
+            ["bead.desktop.clock.date"]="2026-10-25",["bead.desktop.clock.seconds"]={fallback="12:34:56"},
+            ["bead.workspaces"]={__bind="widgets.preview.workspaces"}}},
+        -- A binding alias keeps Repeat and the form's width calculation on the same sample
+        -- model, independent of the editor host's empty/live output model.
+        ["widgets.preview.workspaces"]={
+            {id="sample-1",index=1,label="1",active=true,occupied=true,hinted=true,shown=1,app1="terminal"},
+            {id="sample-2",index=2,label="2",occupied=true},
+            {id="sample-3",index=3,label="3"}},
         ["settings.page"]="wallpaper",["settings.search"]="",["settings.nav"]={},["settings.items"]={},
         ["settings.title"]="",["settings.description"]="",["settings.message"]="",["settings.notice"]="",
         ["settings.noticed"]=false,["settings.writable"]=false,["settings.readonly"]=true,
