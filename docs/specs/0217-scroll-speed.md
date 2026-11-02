@@ -23,3 +23,6 @@ The test suite covers 1:1 finger input, full and fractional `value120`, stale wh
 discrete notches and legacy wheel input. Product scene tests exercise exact 23.5 px and 54 px deltas in
 launcher, Widgets, Settings, chat and notification history view stores.
 Live desktop comparison remains unavailable; the desktop test host timed out.
+
+The bundled Settings registry includes N0105 `scrollSpeed` (0.25–2.0, default 0.75),
+so the same control is available in both frontends. Niri applies it to touchpad and mouse.

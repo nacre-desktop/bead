@@ -199,6 +199,8 @@
  "settings.registry.keyboard-mouse.shake-planned": "Pointer enlargement needs a supported compositor backend.",
  "settings.registry.keyboard-mouse.shortcuts.label": "Keyboard shortcuts",
  "settings.registry.keyboard-mouse.touchpad.label": "Touchpad",
+ "settings.registry.keyboard-mouse.touchpad.scrollSpeed.description": "Set one scrolling speed for the touchpad and mouse wheel.",
+ "settings.registry.keyboard-mouse.touchpad.scrollSpeed.label": "Scroll speed",
  "settings.registry.keyboard-mouse.touchpad.touchpadEnabled.description": "Pointer and gestures from the built-in touchpad.",
  "settings.registry.keyboard-mouse.touchpad.touchpadEnabled.label": "Touchpad",
  "settings.registry.keyboard-mouse.touchpad.touchpadSpeed.description": "Adjust how far the pointer moves with your finger.",

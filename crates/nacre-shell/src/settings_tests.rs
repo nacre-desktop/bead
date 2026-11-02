@@ -112,6 +112,18 @@ fn appearance_rows_follow_the_registry_types_and_the_store_with_nacre_defaults()
 }
 
 #[test]
+fn shared_scroll_setting_defaults_and_preserves_a_saved_value() {
+    for (data, expected) in [(json!({}), 0.75), (json!({"scrollSpeed": 1.25}), 1.25)] {
+        let (settings, _) = fixture(data);
+        let rows = items(&settings.project(&stores("keyboard-mouse", "")));
+        let speed = row(&rows, "keyboard-mouse.touchpad.scrollSpeed");
+        assert_eq!(speed["kind"], "number");
+        assert_eq!(speed["number"], expected);
+        assert_eq!(speed["label"], "Scroll speed");
+    }
+}
+
+#[test]
 fn notifications_page_and_search_use_the_same_registry_data() {
     let (settings, _) = fixture(json!({"dnd": true}));
     let rows = items(&settings.project(&stores("notifications", "")));

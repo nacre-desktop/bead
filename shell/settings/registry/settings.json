@@ -2585,6 +2585,43 @@
       "dependsOn": "keyboard-mouse.touchpad.touchpadEnabled"
     },
     {
+      "id": "keyboard-mouse.touchpad.scrollSpeed",
+      "page": "keyboard-mouse",
+      "section": "keyboard-mouse.touchpad",
+      "key": "scrollSpeed",
+      "type": "number",
+      "default": 0.75,
+      "store": {
+        "id": "desktop",
+        "key": [
+          "scrollSpeed"
+        ]
+      },
+      "labelId": "settings.registry.keyboard-mouse.touchpad.scrollSpeed.label",
+      "descriptionId": "settings.registry.keyboard-mouse.touchpad.scrollSpeed.description",
+      "apply": "instant",
+      "advanced": false,
+      "synonyms": [
+        "scroll speed",
+        "scrollspeed"
+      ],
+      "visibleWhen": {
+        "all": [
+          {
+            "capability": "input.controls"
+          },
+          {
+            "capability": "input.touchpadSpeed"
+          }
+        ]
+      },
+      "range": {
+        "min": 0.25,
+        "max": 2.0,
+        "step": 0.05
+      }
+    },
+    {
       "id": "lock-login.widgets.lockMedia",
       "page": "lock-login",
       "section": "lock-login.widgets",
