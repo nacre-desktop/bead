@@ -346,6 +346,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bead-minimal-shell"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bead",
+]
+
+[[package]]
 name = "bead-render"
 version = "0.1.0"
 dependencies = [

@@ -1,5 +1,38 @@
 # B0214 — Independent MIT Bead framework
 
+## Phase 2 — approved continuation, 2026-11-02
+
+The lead approved the migration plan as written. This continuation implements
+only 1a (identities), 1b (test independence) and 2 (minimal-shell). Step 1c waits
+for B0213's frontend/schema changes; product history extraction waits for
+B0212 and B0213 to land. No repository move or live change is authorized here.
+
+Framework identity hooks are `Session::set_accessibility_label`, notification
+`Options::information` and optional `PolicyExtension`, and the two pearl app-ID
+fields in `PearlOptions`. Nacre supplies its exact existing labels/IDs and owns
+the old notification policy D-Bus adapter. The generic host exports
+`org.bead.Notifications`; both interfaces call the same policy operations. A
+successfully registered app extension is removed during stop or later startup
+failure; a failed registration must unwind its own partial work.
+
+Framework tests use authored neutral palette/image/kit fixtures. The specific
+Outfit thin-digit regression lives in Nacre's font-source tests and exercises
+the public CPU renderer with the product font selector. Product code/assets are
+not copied into MIT test data.
+
+`examples/minimal-shell` is an unpublished MIT workspace member with its own
+Luau views/behavior/tokens, palette, window identity and bundled hello plugin.
+It uses no daemon or user plugin/config/state directory. The CPU `--check`
+exercises rendering, action, input and reload; CI runs it and checks its
+independent dependency graph. Own Luau tokens avoid the deferred kit token API.
+`--root` supports a copied binary with an explicit standalone UI bundle.
+
+Remote validation results are recorded in the handoff after the full CI runs.
+The desktop TEST host timed out, so nested niri remains unverified unless a
+later connection succeeds. No performance or physical presentation claim.
+
+## Phase 1 record
+
 2026-11-02, phase 1: audit, migration plan, and relicense. Base:
 `2d97b3da935e216b1c3971a86912083da72f9ffc`. No repository move or runtime
 generalization is performed in this phase. The lead reviews this plan before

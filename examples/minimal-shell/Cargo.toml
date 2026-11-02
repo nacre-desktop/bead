@@ -1,0 +1,11 @@
+[package]
+name = "bead-minimal-shell"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT"
+publish = false
+
+[dependencies]
+accesskit = "=0.25.1"
+bead = { path = "../../crates/bead", default-features = false }

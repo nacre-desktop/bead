@@ -66,6 +66,7 @@ jobs:
       - name: Facade, headless UI and Luau schema
         run: |
           cargo run -p bead --example minimal --locked -j2 -- --check
+          cargo run -p bead-minimal-shell --locked -j2 -- --check
           cargo build -p nacre-shell --no-default-features --locked -j2
           target/debug/nacre-shell --check shell/ui/main.luau
           mkdir -p "$RUNNER_TEMP/luau"
@@ -117,6 +118,6 @@ jobs:
       - name: Dependency and license checks
         run: |
           cargo deny check
-          for manifest in crates/bead-*/Cargo.toml crates/bead/Cargo.toml; do
+          for manifest in crates/bead-*/Cargo.toml crates/bead/Cargo.toml examples/minimal-shell/Cargo.toml; do
             cargo deny --manifest-path "$manifest" --all-features --config deny-framework.toml check
           done

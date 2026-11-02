@@ -66,6 +66,10 @@ permissive and compositor-neutral by design.
 
 ## Future milestone: Bead for others
 
+- B0214: application accessibility label, notification server identity/policy
+  extension, and pending/visible pearl app IDs are host inputs; Nacre keeps its
+  compatibility interface in the product. Minimal-shell proves independent hosting.
+
 After Bead's core switch on Nacre, plan support for:
 
 - Services without Nacre: a standalone daemon enabled by the MIT protocol, or
