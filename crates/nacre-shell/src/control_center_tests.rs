@@ -1256,6 +1256,10 @@ fn control_center_pages_match_goldens() -> bead_test::Result<()> {
                 "catalog" => assert!(ids.iter().any(|i| i.contains("add-notifications"))),
                 _ => assert!(ids.iter().any(|i| i.contains("notices-dnd"))),
             }
+            let icons = crate::icon_centre_tests::assert_buttons(&h, scale, false)?;
+            if page == "home" {
+                assert!(icons >= 2, "missing control-centre icon samples");
+            }
             golden(name, &mut h, scale)?;
         }
     }

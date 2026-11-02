@@ -25,7 +25,7 @@ local function render(props,settings,_data)
             if app.favorite==true and #favorites<5 then
                 local over=string.find(hovered,"favorite-"..tostring(app.id),1,true)~=nil
                 local icon_size=over and 64 or size
-                favorites[#favorites+1]=kit.Button{id="favorite-"..app.id,width=icon_size,height=icon_size,padding=0,
+                favorites[#favorites+1]=kit.Button{id="favorite-"..app.id,width=icon_size,height=icon_size,padding=0,align="center",justify="center",
                     fill=ui.alpha("onSurface",.08),hover_fill=ui.alpha("onSurface",.12),radius=over and 18 or 15,
                     aria_label=app.name,on_activate=ui.action("menu.activate",app.id),
                     ui.Image{id="icon",icon=app.icon,width=icon_size*.68,height=icon_size*.68,aria_label=app.name}}

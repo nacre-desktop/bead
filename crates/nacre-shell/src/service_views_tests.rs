@@ -603,6 +603,7 @@ fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
             h.session.preview_deadline().is_none(),
             "bar geometry must be at its authored animation endpoint before golden capture"
         );
+        assert!(crate::icon_centre_tests::assert_buttons(&h, scale, false)? >= 2);
         // The pill's buttons tile its full width, while their glyphs retain the old inset.
         let mut targets: Vec<_> = h
             .session
@@ -666,9 +667,8 @@ fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
                 "space outside the pill is inert"
             );
         }
-        // Old glyph x = old target x + 3 px padding + optical-centering offset.
-        // New hit targets start 6 px earlier, with 9 px padding, so this is the
-        // same position while the hit rect grows over the old gap/end inset.
+        // Optical widths still define spacing; a centred row places the full glyph
+        // box without a manually calculated per-icon position.
         let optical_width = |text: &str| match text {
             "package_2" | "volume_up" | "volume_mute" | "volume_off" | "calendar_month" => {
                 Some(44. / 3.)
@@ -697,13 +697,14 @@ fn bar_counts_share_icon_hit_areas_and_centered_line_boxes() -> Result<()> {
         status_glyphs.sort_by(|a, b| a.1.x.total_cmp(&b.1.x));
         assert_eq!(status_glyphs.len(), 8, "every status glyph is present");
         for ((text, glyph), (_, target)) in status_glyphs.iter().zip(&targets) {
-            let ink = optical_width(text).expect("recognized status glyph");
+            assert!((glyph.w - 24.).abs() < 0.01);
             let hit_inset = 9.;
-            let expected = target.x + hit_inset + (ink - 24.) / 2.;
+            let expected =
+                target.x + hit_inset + optical_width(text).expect("recognized status glyph") / 2.;
             assert!(
-                (glyph.x - expected).abs() < 1.,
-                "status glyph {text} moved from its pre-648f0dd6 x position: expected {expected}, got {}",
-                glyph.x,
+                (glyph.x + glyph.w / 2. - expected).abs() < 1.,
+                "status glyph {text} box is not centred in its optical cell: expected {expected}, got {}",
+                glyph.x + glyph.w / 2.,
             );
         }
         for (suffix, action) in [

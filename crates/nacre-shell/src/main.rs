@@ -21,6 +21,8 @@ mod frame_cost_bench;
 mod headless;
 mod i18n;
 mod i18n_source;
+#[cfg(test)]
+mod icon_centre_tests;
 mod icon_warm;
 mod key_routes;
 mod launcher;

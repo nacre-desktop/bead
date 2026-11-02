@@ -985,6 +985,9 @@ fn dashboard_pages_have_deterministic_pixels_and_only_navigation_actions() -> Re
                 "selected-page modules and image snapshots remain lazy: {}",
                 h.session.resource_counts()
             );
+            if page == Page::Media {
+                assert!(crate::icon_centre_tests::assert_buttons(&h, scale, true)? >= 3);
+            }
             let frame = h.render()?;
             if page == Page::Today {
                 assert!(

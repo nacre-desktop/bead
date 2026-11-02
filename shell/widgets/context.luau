@@ -52,10 +52,9 @@ local function glyph(id,text,color)
 end
 local function status_glyph(id,text,kind,color)
     local width=t.status_symbol_ink[ui.resolve_for_check(text)] or t.status_ink[kind]
-    return ui.Box{id=id,width=width,height=t.icon_font*t.line_height,shrink=0,
-        ui.Text{id="ink",position="absolute",left=(width-t.icon_width)/2,top=0,width=t.icon_width,height=t.icon_font*t.line_height,
-            text=text,family="Material Symbols Rounded",font_size=t.icon_font,color=color or "secondary",text_align="center"},
-    }
+    return ui.Row{id=id,width=width,height=t.icon_font*t.line_height,shrink=0,align="center",justify="center",
+        ui.Text{id="ink",width=t.icon_width,height=t.icon_font*t.line_height,shrink=0,
+            text=text,family="Material Symbols Rounded",font_size=t.icon_font,color=color or "secondary",text_align="center"}}
 end
 local function status_text(p)
     -- Text paints from the top of its line box; centering a shorter box lowers
