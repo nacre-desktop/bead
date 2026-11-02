@@ -228,7 +228,10 @@ mod tests {
             discrete: 1,
             ..Default::default()
         };
-        assert_eq!(movement(axis, true, Some(AxisSource::Finger)), (-23.5, false));
+        assert_eq!(
+            movement(axis, true, Some(AxisSource::Finger)),
+            (-23.5, false)
+        );
     }
 }
 
