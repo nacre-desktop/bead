@@ -13,10 +13,13 @@ QML/live parity and memory evidence remain pending. No live run or deployment oc
 The lead approved the split plan. Identity hooks preserve Nacre behavior through
 app-supplied labels/IDs and its private notification-policy adapter. Framework
 tests no longer require product assets, and an independent minimal-shell host
-owns its Luau, palette, tokens, app ID and hello plugin. Validation is in progress
-on the authorized CI host; desktop nested execution remains conditional on
-reachability. Frontend/schema generalization (1c) and the repository move remain
-deferred. See [B0214](specs/0214-framework-split.md).
+owns its Luau, palette, tokens, app ID and hello plugin. Complete phase-1 and
+phase-2 CI passed, including every independent license graph. Framework tests
+pass without product assets, and all framework crates plus the example build
+in a fresh framework-only workspace with no Nacre dependencies. Desktop nested
+execution remains unverified (connection timed out). Frontend/schema
+generalization (1c) and the repository move remain deferred. See
+[B0214](specs/0214-framework-split.md).
 
 ## 2026-11-02 — B0214 phase 1: independent MIT framework
 

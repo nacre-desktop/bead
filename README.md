@@ -37,6 +37,17 @@ active shell. See the [packaging and rollback spec](docs/specs/0029-packaging-co
 
 ## Build and run
 
+For an independent framework host, start with
+[`examples/minimal-shell`](examples/minimal-shell/README.md). It owns its Luau,
+palette, tokens, app ID and hello plugin, and needs no Nacre checkout or daemon:
+
+```sh
+nice -n 10 cargo run -p bead-minimal-shell --locked -j2 -- --check
+```
+
+Omit `--check` to open its Wayland window. The lower-level `bead --example minimal`
+remains a renderer/facade smoke example.
+
 Build the shell from this checkout with the pinned workspace dependencies:
 
 ```sh
