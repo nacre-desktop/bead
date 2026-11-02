@@ -236,17 +236,16 @@ impl Dispatch<BeadLayerMotionV1, Arc<DispatchData>> for App {
                 LayerMotionEvent::Cancelled { serial }
             }
         };
-        let terminal_serial = match &converted {
-            LayerMotionEvent::Done { serial } | LayerMotionEvent::Cancelled { serial } => {
-                Some(*serial)
-            }
+        let terminal = match &converted {
+            LayerMotionEvent::Done { serial } => Some((*serial, true)),
+            LayerMotionEvent::Cancelled { serial } => Some((*serial, false)),
             LayerMotionEvent::PlaneState { .. } => None,
         };
         data.events
             .lock()
             .expect("motion event lock poisoned")
             .push(converted);
-        let Some(serial) = terminal_serial else {
+        let Some((serial, completed)) = terminal else {
             return;
         };
         let Some(index) = state.surfaces.iter().position(|surface| {
@@ -262,6 +261,10 @@ impl Dispatch<BeadLayerMotionV1, Arc<DispatchData>> for App {
             .as_ref()
             .is_some_and(|motion| motion.active_serial == Some(serial));
         if current {
+            let settled_open = completed
+                && state.surfaces[index].layer_motion_open == Some(true)
+                && state.surfaces[index].layer_motion_ui_serial == state.surfaces[index].ui_serial
+                && (!state.surfaces[index].companion || state.panel_target);
             state.surfaces[index].layer_motion_active = false;
             let surface = state.surfaces[index].layer.wl_surface().clone();
             if let Some(motion) = state.surfaces[index].layer_motion.as_mut() {
@@ -269,6 +272,7 @@ impl Dispatch<BeadLayerMotionV1, Arc<DispatchData>> for App {
             }
             drop(state.surfaces[index].layer_motion.take());
             state.surfaces[index].layer_motion_plan = None;
+            state.surfaces[index].layer_motion_resting_offset = None;
             state.panel_frame_until = None;
             if state.surfaces[index].companion && !state.panel_target {
                 state.surfaces[index].layer.unmap();
@@ -279,7 +283,14 @@ impl Dispatch<BeadLayerMotionV1, Arc<DispatchData>> for App {
                     .layer_motion_manager
                     .as_ref()
                     .map(|manager| manager.create(&surface, qh));
-                state.draw(index, qh);
+                if settled_open {
+                    // The submitted atlas already is the exact open scene. Removing
+                    // the identity presentation controller settles it without a
+                    // redundant full CPU paint.
+                    state.surfaces[index].redraw = false;
+                } else {
+                    state.draw(index, qh);
+                }
             }
         }
     }

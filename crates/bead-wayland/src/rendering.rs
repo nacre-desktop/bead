@@ -2,6 +2,14 @@
 //! Per-surface rendering, GPU staging and idle release.
 use super::*;
 
+fn copy_layer_motion_pixels(target: &mut [u8], pixels: &[u8]) -> bool {
+    let Some(target) = target.get_mut(..pixels.len()) else {
+        return false;
+    };
+    target.copy_from_slice(pixels);
+    true
+}
+
 #[cfg(feature = "native-gl")]
 fn is_cache_pressure(error: &str) -> bool {
     let error = error.to_ascii_lowercase();
@@ -79,6 +87,23 @@ mod keyboard_policy_tests {
         assert!(is_cache_pressure("retained cache byte budget exceeded"));
         assert!(is_cache_pressure("CPU snapshot admission failed"));
         assert!(!is_cache_pressure("invalid wallpaper image header"));
+    }
+}
+
+#[cfg(test)]
+mod layer_motion_buffer_tests {
+    use super::copy_layer_motion_pixels;
+
+    #[test]
+    fn atlas_upload_accepts_slot_pool_alignment_padding_only_after_valid_pixels() {
+        let pixels = (0..127).map(|value| value as u8).collect::<Vec<_>>();
+        let mut padded = vec![0xEE; pixels.len() + 16];
+        assert!(copy_layer_motion_pixels(&mut padded, &pixels));
+        assert_eq!(&padded[..pixels.len()], pixels);
+        assert!(padded[pixels.len()..].iter().all(|byte| *byte == 0xEE));
+
+        let mut short = vec![0; pixels.len() - 1];
+        assert!(!copy_layer_motion_pixels(&mut short, &pixels));
     }
 }
 
@@ -1318,7 +1343,19 @@ impl App {
         {
             return;
         }
-        if self.surfaces[index].layer_motion_active {
+        if self.surfaces[index].native.is_some() && self.surfaces[index].layer_motion_active {
+            let layer_surface = self.surfaces[index].layer.wl_surface().clone();
+            drop(self.surfaces[index].layer_motion.take());
+            self.surfaces[index].layer_motion_plan = None;
+            self.surfaces[index].layer_motion_active = false;
+            self.surfaces[index].layer_motion_open = None;
+            self.surfaces[index].layer_motion_resting_offset = None;
+            self.surfaces[index].layer_motion = self
+                .layer_motion_manager
+                .as_ref()
+                .map(|manager| manager.create(&layer_surface, qh));
+        }
+        if self.surfaces[index].layer_motion_active && self.surfaces[index].native.is_none() {
             let wanted_open = if self.surfaces[index].companion {
                 self.panel_target
             } else {
@@ -1387,6 +1424,7 @@ impl App {
             let compositor_motion_candidate = s.companion
                 && s.layer_motion.is_some()
                 && !bead_core::animation::reduced_motion()
+                && !self.options.background_blur
                 && self.companion.as_ref().is_some_and(|(scene, _, kind)| {
                     *kind == RendererKind::Cpu
                         && scene.slide.is_none()
@@ -1540,7 +1578,6 @@ impl App {
                 let (progress, active) = self.animations.value(&motion.id, now).unwrap();
                 layer_motion_opening = Some(open);
                 layer_motion_active = active;
-                layer_motion_source_scene = Some(scene.clone());
                 motion_clock = Some((
                     motion.id.clone(),
                     now,
@@ -1625,6 +1662,38 @@ impl App {
                 let phase = self.started.elapsed().as_secs_f32() % 2.;
                 rect.w = 1. + 299. * if phase < 1. { phase } else { 2. - phase };
             }
+            let layer_motion_target_changed = s.layer_motion_active
+                && layer_motion_opening.is_some_and(|opening| s.layer_motion_open != Some(opening));
+            let layer_motion_candidate = _kind == RendererKind::Cpu
+                && s.native.is_none()
+                && s.layer_motion.is_some()
+                && layer_motion_active
+                && !bead_core::animation::reduced_motion()
+                && !self.options.background_blur
+                && scene.slide.is_none()
+                && scene.motion.as_ref().is_some_and(|motion| {
+                    layer_motion_opening.is_some_and(|opening| {
+                        !opening
+                            || !motion.reveal
+                            || layer_motion_target_changed && s.layer_motion_plan.is_some()
+                    })
+                });
+            let layer_motion_needs_atlas = !s.layer_motion_active
+                || layer_motion_target_changed
+                || s.layer_motion_ui_serial != s.ui_serial;
+            if layer_motion_candidate
+                && layer_motion_needs_atlas
+                && let Some(opening) = layer_motion_opening
+            {
+                let mut source_scene = scene.clone();
+                source_scene.offset = (
+                    scene.offset.0 - layer_motion_pose.0,
+                    scene.offset.1 - layer_motion_pose.1,
+                );
+                source_scene.opacity = 1.;
+                source_scene.panel_offset(1., opening);
+                layer_motion_source_scene = Some(source_scene);
+            }
             if panel
                 && self.options.interactive
                 && (!s.companion || self.options.panel_spec.is_some())
@@ -1639,15 +1708,25 @@ impl App {
                 let keyboard_focus = text_focus
                     || !s.companion
                     || spec.is_some_and(|spec| spec.keyboard_focus && !spec.text_focus_only);
-                let visible = scene.opacity > 0.001
-                    && if s.companion && self.options.panel_spec.is_some() {
-                        self.panel_target
-                    } else {
-                        scene.motion.as_ref().is_none_or(|m| m.open)
-                    };
+                let visible = if layer_motion_candidate {
+                    layer_motion_opening.unwrap_or(false)
+                        && if s.companion && self.options.panel_spec.is_some() {
+                            self.panel_target
+                        } else {
+                            true
+                        }
+                } else {
+                    scene.opacity > 0.001
+                        && if s.companion && self.options.panel_spec.is_some() {
+                            self.panel_target
+                        } else {
+                            scene.motion.as_ref().is_none_or(|m| m.open)
+                        }
+                };
+                let input_scene = layer_motion_source_scene.as_ref().unwrap_or(scene);
                 let input_rect = if visible && s.companion && !passive && !self.options.test_passive
                 {
-                    content_input_rect(scene)
+                    content_input_rect(input_scene)
                 } else {
                     None
                 };
@@ -1726,11 +1805,30 @@ impl App {
                 if s.layer_motion.as_mut().unwrap().queue(plan).is_none() {
                     return Ok(());
                 }
+                let content_changed = s.layer_motion_ui_serial != s.ui_serial;
+                if content_changed && let Some(epoch) = s.callbacks.request_if_idle() {
+                    wl_surface.frame(
+                        qh,
+                        FrameData {
+                            surface: wl_surface.clone(),
+                            epoch,
+                            generation: scene.resource_revision,
+                            source_epoch: if s.companion { self.panel_epoch } else { 0 },
+                        },
+                    );
+                }
                 // The attached atlas remains valid, including for a reverse into
                 // a rounded reveal route. The server samples the current group.
                 wl_surface.commit();
                 s.layer_motion_open = Some(opening);
-                s.layer_motion_ui_serial = s.ui_serial;
+                if let Some(offset) = s.layer_motion_resting_offset {
+                    s.offset = offset;
+                }
+                s.input_content_offset = (0., 0.);
+                if !content_changed {
+                    s.layer_motion_ui_serial = s.ui_serial;
+                    s.last_submitted_ui_serial = s.ui_serial;
+                }
                 s.redraw = false;
                 s.frames += 1;
                 return Ok(());
@@ -1739,6 +1837,7 @@ impl App {
                 && layer_motion_active
                 && let Some(opening) = layer_motion_opening
                 && let Some(mut source_scene) = layer_motion_source_scene
+                && s.native.is_none()
                 && s.layer_motion.is_some()
                 && (!s.layer_motion_active
                     || s.layer_motion_open != Some(opening)
@@ -1780,6 +1879,9 @@ impl App {
                     if submit_animation && s.layer_motion.as_mut().unwrap().queue(&plan).is_none() {
                         return Ok(());
                     }
+                    s.layer_motion_resting_offset = Some(source_scene.offset);
+                    s.offset = source_scene.offset;
+                    s.input_content_offset = (0., 0.);
                     let pixels = plan.atlas.take_pixels();
                     let buffer_format = if plan.atlas.format == PixelFormat::Rgba {
                         wl_shm::Format::Abgr8888
@@ -1806,7 +1908,11 @@ impl App {
                             .buffer
                             .canvas(&mut s.pool)
                             .ok_or("layer motion buffer is still compositor-owned")?;
-                        target.copy_from_slice(&pixels);
+                        if !copy_layer_motion_pixels(target, &pixels) {
+                            return Err(
+                                "reusable layer motion slot is smaller than its atlas".into()
+                            );
+                        }
                         s.buffers[slot].pending.clear();
                         s.buffers[slot].painted = true;
                         slot
@@ -1817,7 +1923,9 @@ impl App {
                             plan.atlas.stride as i32,
                             buffer_format,
                         )?;
-                        bytes.copy_from_slice(&pixels);
+                        if !copy_layer_motion_pixels(bytes, &pixels) {
+                            return Err("new layer motion slot is smaller than its atlas".into());
+                        }
                         s.buffers.push(Reusable {
                             buffer,
                             pending: Vec::new(),
@@ -1838,11 +1946,46 @@ impl App {
                         plan.atlas.width as i32,
                         plan.atlas.height as i32,
                     );
+                    if let Some(epoch) = s.callbacks.request_if_idle() {
+                        wl_surface.frame(
+                            qh,
+                            FrameData {
+                                surface: wl_surface.clone(),
+                                epoch,
+                                generation: source_scene.resource_revision,
+                                source_epoch: if s.companion { self.panel_epoch } else { 0 },
+                            },
+                        );
+                    }
+                    if let Some(visual) = &mut s.pointer_visual {
+                        visual.stage_commit()?;
+                    }
+                    if let Some(presentation) = &self.presentation {
+                        if let Some(visual) = &s.pointer_visual {
+                            visual.feedback(presentation, &wl_surface, qh);
+                        }
+                        presentation.feedback(
+                            &wl_surface,
+                            qh,
+                            PresentationData {
+                                source_epoch: if s.companion { self.panel_epoch } else { 0 },
+                                visibility: if s.companion {
+                                    self.panel_close_epoch
+                                } else {
+                                    0
+                                },
+                                update: s.ui_serial,
+                                surface: wl_surface.clone(),
+                                generation: source_scene.resource_revision,
+                            },
+                        );
+                    }
                     wl_surface.commit();
                     s.layer_motion_active = true;
                     s.layer_motion_open = Some(opening);
                     s.layer_motion_ui_serial = s.ui_serial;
                     s.layer_motion_plan = Some(plan);
+                    s.last_submitted_ui_serial = s.ui_serial;
                     s.panel_unmapped = false;
                     s.redraw = false;
                     s.frames += 1;

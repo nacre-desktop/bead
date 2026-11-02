@@ -899,6 +899,7 @@ struct Surface {
     layer_motion_open: Option<bool>,
     layer_motion_plan: Option<bead_render::layer_motion::LayerMotionPlan>,
     layer_motion_ui_serial: u64,
+    layer_motion_resting_offset: Option<(f32, f32)>,
     /// The companion layer has no attached buffer after its close animation completes.
     panel_unmapped: bool,
     /// Fresh xdg role used while detached. The layer role remains available for

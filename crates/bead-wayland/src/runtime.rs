@@ -2416,6 +2416,7 @@ impl App {
                 layer_motion_open: None,
                 layer_motion_plan: None,
                 layer_motion_ui_serial: 0,
+                layer_motion_resting_offset: None,
                 panel_unmapped: false,
                 native: None,
                 prepared_native: None,
