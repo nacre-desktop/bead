@@ -2535,6 +2535,7 @@
       "descriptionId": "settings.registry.keyboard-mouse.touchpad.touchpadEnabled.description",
       "apply": "instant",
       "advanced": false,
+      "dependsOn": "keyboard-mouse.touchpad.touchpadEnabled",
       "synonyms": [
         "touchpad",
         "trackpad",
@@ -2581,8 +2582,7 @@
             "capability": "touchpad"
           }
         ]
-      },
-      "dependsOn": "keyboard-mouse.touchpad.touchpadEnabled"
+      }
     },
     {
       "id": "keyboard-mouse.touchpad.scrollSpeed",
@@ -2601,6 +2601,7 @@
       "descriptionId": "settings.registry.keyboard-mouse.touchpad.scrollSpeed.description",
       "apply": "instant",
       "advanced": false,
+      "dependsOn": "keyboard-mouse.touchpad.touchpadEnabled",
       "synonyms": [
         "scroll speed",
         "scrollspeed"
@@ -2612,6 +2613,9 @@
           },
           {
             "capability": "input.touchpadSpeed"
+          },
+          {
+            "capability": "touchpad"
           }
         ]
       },

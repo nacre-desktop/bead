@@ -698,7 +698,7 @@ fn widgets_app_scroll_preserves_the_shared_pixel_distance() {
             .map(|node| bead::ui::rect(&node.draw))
             .unwrap_or_else(|| panic!("{store} scroll region"));
         let started = std::time::Instant::now();
-        for delta in [23.5, 54.] {
+        for delta in [23.5, 100.] {
             harness
                 .script([bead_test::Input::Scroll {
                     x: region.x + region.w / 2.,
@@ -706,7 +706,7 @@ fn widgets_app_scroll_preserves_the_shared_pixel_distance() {
                     delta,
                 }])
                 .unwrap();
-            let expected = if delta == 23.5 { 23.5 } else { 77.5 };
+            let expected = if delta == 23.5 { 23.5 } else { 123.5 };
             assert_eq!(
                 harness.session.stores.get(store),
                 Some(&Value::Number(expected)),
