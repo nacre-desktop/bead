@@ -12,7 +12,9 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-FORBIDDEN = re.compile(r"nacre", re.IGNORECASE)
+FORBIDDEN = re.compile(
+    r"nacre|bead-shell[/\\]|(?:\.\.[/\\])+shell[/\\]", re.IGNORECASE
+)
 
 
 def run(*args: str) -> str:

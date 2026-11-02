@@ -2,9 +2,8 @@
 # SPDX-License-Identifier: MIT
 """Negative controls for the framework/product boundary guard."""
 
-import pathlib
 import importlib.util
-import sys
+import pathlib
 import tempfile
 import unittest
 
@@ -61,6 +60,15 @@ class FrameworkBoundaryTests(unittest.TestCase):
         errors = boundary.dependency_violations(metadata)
         self.assertTrue(any("nacre-protocol" in error for error in errors), errors)
         self.assertTrue(any("dependency source" in error for error in errors), errors)
+
+    def test_catches_exported_shell_paths_without_product_name(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            source = root / "lib.rs"
+            source.write_text('include_str!("../../shell/palette.json");\n')
+            (root / "assets").symlink_to("../../bead-shell/shell")
+            errors = boundary.source_violations((root,), root)
+        self.assertEqual(len(errors), 2, errors)
 
     def test_catches_product_path_and_nacrectl_literals(self):
         with tempfile.TemporaryDirectory() as temporary:
