@@ -91,6 +91,14 @@ ceiling. Full Bead CI passes. See [B0157](specs/0157-picker-errors.md).
 
 # Status
 
+## 2026-11-02 — B0217 shared Bead scroll speed
+
+Wheel conversion is now one framework policy: 54 logical px per notch (three nominal 18 px lines at scale 1),
+with high-resolution wheel fractions preserved. Touchpad axis pixels remain 1:1 and immediate. Removed the
+per-source wheel override so windows, overlays, panels and primary surfaces share the same conversion.
+Before/after gesture distances and the conversion tests are recorded in
+[B0217](specs/0217-scroll-speed.md). Remote CI is pending; no local build/test or nested desktop run was done.
+
 ## 2026-10-28 — B0173 wallpaper picker cold open (implementation and parity complete; acceptance gates open)
 
 The Bead catalogue snapshot, progressive visible-thumbnail hydration, lazy

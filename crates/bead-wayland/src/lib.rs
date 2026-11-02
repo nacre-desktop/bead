@@ -603,10 +603,6 @@ pub trait SceneSource {
     fn scroll_regions(&self) -> Vec<Rect> {
         Vec::new()
     }
-    /// Logical content distance for one wheel notch; pixel-axis input stays precise.
-    fn wheel_step(&self) -> f64 {
-        600.
-    }
     /// Whether outside pointer presses may dismiss this surface.
     fn outside_dismiss(&self) -> bool {
         true

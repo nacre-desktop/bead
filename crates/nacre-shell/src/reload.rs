@@ -9502,12 +9502,6 @@ impl SceneSource for Runtime {
         }
         self.session.scroll_regions()
     }
-    fn wheel_step(&self) -> f64 {
-        match self.session.stores.get("bead.scroll.wheel_step") {
-            Some(bead::core::Value::Number(step)) if step.is_finite() && *step > 0. => *step,
-            _ => 100.,
-        }
-    }
     fn outside_dismiss(&self) -> bool {
         self.session.stores.get("chat.pinned") != Some(&bead::core::Value::Bool(true))
     }
@@ -10186,8 +10180,6 @@ mod output_runtime_tests;
 mod pairing_runtime_tests;
 #[cfg(test)]
 mod prompt_runtime_tests;
-#[cfg(test)]
-mod scroll_runtime_tests;
 #[cfg(test)]
 mod session_menu_runtime_tests;
 #[cfg(test)]
