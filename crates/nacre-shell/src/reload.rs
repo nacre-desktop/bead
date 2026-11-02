@@ -2553,6 +2553,7 @@ impl Runtime {
     }
     pub fn for_output(mut session: bead::ui::Session, output: Option<String>) -> Self {
         crate::i18n::init();
+        session.set_accessibility_label("Nacre Shell");
         session.set_font_picker_if_missing(std::sync::Arc::new(|scene| {
             crate::font_sources::select(scene).unwrap_or_default()
         }));

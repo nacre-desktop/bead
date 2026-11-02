@@ -20,15 +20,27 @@ pub struct Notifications {
 }
 impl Notifications {
     pub fn private(socket: PathBuf, history: PathBuf) -> Result<Self> {
+        Self::private_with_options(
+            socket,
+            history,
+            bead_services::notification_bus::Options::default(),
+        )
+    }
+    pub fn private_with_options(
+        socket: PathBuf,
+        history: PathBuf,
+        options: bead_services::notification_bus::Options,
+    ) -> Result<Self> {
         let publisher = Publisher::new(
             format!("notifications-{}", EPOCH.fetch_add(1, Ordering::Relaxed)),
             json!({}),
         )?;
         let changed = publisher.clone();
         let stopped = publisher.clone();
-        let server = Server::start_with_lifecycle(
+        let server = Server::start_with_options(
             socket,
             history,
+            options,
             move |value| {
                 if changed.publish(value).is_err() {
                     let _ = changed.disconnect();

@@ -73,7 +73,7 @@ pub async fn parity(address: &str) -> Result<(), Box<dyn std::error::Error>> {
         &connection,
         "org.freedesktop.Notifications",
         "/org/freedesktop/Notifications",
-        "org.nacre.Bead.Notifications",
+        "org.bead.Notifications",
     )
     .await?;
     let mut closed = proxy.receive_signal("NotificationClosed").await?;
@@ -130,7 +130,7 @@ pub async fn parity(address: &str) -> Result<(), Box<dyn std::error::Error>> {
         &other,
         "org.freedesktop.Notifications",
         "/org/freedesktop/Notifications",
-        "org.nacre.Bead.Notifications",
+        "org.bead.Notifications",
     )
     .await?;
     assert!(

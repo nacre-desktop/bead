@@ -12,6 +12,104 @@ use std::{
     sync::{Arc, Mutex},
 };
 type ControlFn = Arc<dyn Fn(Control) -> Result<(), String> + Send + Sync>;
+const POLICY_PATH: &str = "/org/freedesktop/Notifications";
+const NACRE_POLICY_INTERFACE: &str = "org.nacre.Bead.Notifications";
+
+struct NacreNotificationPolicy(bead::services::notification_bus::Policy);
+#[zbus::interface(name = "org.nacre.Bead.Notifications")]
+impl NacreNotificationPolicy {
+    fn set_do_not_disturb(&self, value: bool) -> zbus::fdo::Result<()> {
+        self.0.set_do_not_disturb(value)
+    }
+    fn inhibit(
+        &self,
+        reason: String,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+    ) -> zbus::fdo::Result<u32> {
+        let owner = header
+            .sender()
+            .ok_or_else(|| zbus::fdo::Error::Failed("missing owner".into()))?
+            .to_string();
+        self.0.inhibit(owner, reason)
+    }
+    fn uninhibit(
+        &self,
+        cookie: u32,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+    ) -> zbus::fdo::Result<()> {
+        let owner = header
+            .sender()
+            .ok_or_else(|| zbus::fdo::Error::Failed("missing owner".into()))?
+            .to_string();
+        self.0.uninhibit(&owner, cookie)
+    }
+    fn get_history(&self) -> zbus::fdo::Result<String> {
+        self.0.history()
+    }
+    fn invoke_action(&self, id: u32, key: String) -> zbus::fdo::Result<()> {
+        self.0.invoke_action(id, key)
+    }
+    fn dismiss(&self, id: u32) -> zbus::fdo::Result<()> {
+        self.0.dismiss(id)
+    }
+    fn clear_history(&self) -> zbus::fdo::Result<()> {
+        self.0.clear_history()
+    }
+    fn show_osd(&self, channel: String, value: f64, muted: bool) -> zbus::fdo::Result<()> {
+        self.0.show_osd(channel, value, muted)
+    }
+    #[zbus(property)]
+    fn inhibited(&self) -> zbus::fdo::Result<bool> {
+        self.0.inhibited()
+    }
+}
+struct NacreNotificationPolicyExtension;
+impl bead::services::notification_bus::PolicyExtension for NacreNotificationPolicyExtension {
+    fn register(
+        &self,
+        connection: zbus::Connection,
+        policy: bead::services::notification_bus::Policy,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send>> {
+        Box::pin(async move {
+            let installed = connection
+                .object_server()
+                .at(POLICY_PATH, NacreNotificationPolicy(policy))
+                .await
+                .map_err(|error| error.to_string())?;
+            if !installed {
+                return Err("Nacre notification compatibility interface already installed".into());
+            }
+            Ok(())
+        })
+    }
+    fn unregister(
+        &self,
+        connection: zbus::Connection,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send>> {
+        Box::pin(async move {
+            connection
+                .object_server()
+                .remove::<NacreNotificationPolicy, _>(POLICY_PATH)
+                .await
+                .map_err(|error| error.to_string())?;
+            Ok(())
+        })
+    }
+    fn interface_name(&self) -> &'static str {
+        NACRE_POLICY_INTERFACE
+    }
+}
+fn nacre_notification_options() -> bead::services::notification_bus::Options {
+    bead::services::notification_bus::Options {
+        information: bead::services::notification_bus::ServerInformation {
+            name: "Bead".into(),
+            vendor: "Nacre".into(),
+            version: "0.1.0".into(),
+            spec_version: "1.2".into(),
+        },
+        policy_extension: Some(Arc::new(NacreNotificationPolicyExtension)),
+    }
+}
 pub type Wakeup = Arc<dyn Fn(UiEvent) + Send + Sync>;
 /// Keeps a view subscription alive; dropping it unsubscribes.
 pub type Handle = Box<dyn std::any::Any + Send>;
@@ -91,8 +189,12 @@ impl Owner {
                 )
             } else {
                 let server = Arc::new(
-                    bead::source::Notifications::private(socket, history)
-                        .map_err(|e| e.to_string())?,
+                    bead::source::Notifications::private_with_options(
+                        socket,
+                        history,
+                        nacre_notification_options(),
+                    )
+                    .map_err(|e| e.to_string())?,
                 );
                 let address = server.address().map_err(|e| e.to_string())?;
                 let controller = server.clone();
@@ -342,6 +444,146 @@ mod source_tests {
             values(&left.snapshot().ok_or("local")?.data),
             values(&right.snapshot().ok_or("fake")?.data)
         );
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod compatibility_tests {
+    use super::*;
+    use std::{os::unix::fs::PermissionsExt, time::Duration};
+
+    #[test]
+    fn nacre_policy_legacy_wire_api_delegates_to_neutral_policy()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let root = std::env::temp_dir().join(format!("nacre-policy-wire-{}", std::process::id()));
+        std::fs::create_dir(&root)?;
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))?;
+        struct Cleanup(std::path::PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _cleanup = Cleanup(root.clone());
+        let bus = bead::services::notification_bus::PrivateBus::start(root.join("bus"))?;
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        runtime.block_on(async {
+            let service_connection = bus.connect().await?;
+            let service = bead::services::notification_bus::start_with_options(
+                bead::services::notification_bus::Config {
+                    connection: service_connection.clone(),
+                    history: root.join("history.json"),
+                },
+                nacre_notification_options(),
+            )
+            .await?;
+            let client = bus.connect().await?;
+            let legacy = zbus::Proxy::new(
+                &client,
+                "org.freedesktop.Notifications",
+                POLICY_PATH,
+                NACRE_POLICY_INTERFACE,
+            )
+            .await?;
+            let neutral = zbus::Proxy::new(
+                &client,
+                "org.freedesktop.Notifications",
+                POLICY_PATH,
+                "org.bead.Notifications",
+            )
+            .await?;
+            let standard = zbus::Proxy::new(
+                &client,
+                "org.freedesktop.Notifications",
+                POLICY_PATH,
+                "org.freedesktop.Notifications",
+            )
+            .await?;
+            let info: (String, String, String, String) =
+                standard.call("GetServerInformation", &()).await?;
+            assert_eq!(
+                info,
+                ("Bead".into(), "Nacre".into(), "0.1.0".into(), "1.2".into())
+            );
+            let introspect = zbus::Proxy::new(
+                &client,
+                "org.freedesktop.Notifications",
+                POLICY_PATH,
+                "org.freedesktop.DBus.Introspectable",
+            )
+            .await?;
+            let xml: String = introspect.call("Introspect", &()).await?;
+            for member in [
+                "SetDoNotDisturb",
+                "Inhibit",
+                "Uninhibit",
+                "GetHistory",
+                "InvokeAction",
+                "Dismiss",
+                "ClearHistory",
+                "ShowOsd",
+                "Inhibited",
+            ] {
+                assert!(xml.contains(member), "legacy member missing: {member}");
+            }
+            legacy.call::<_, _, ()>("SetDoNotDisturb", &(true,)).await?;
+            tokio::time::timeout(Duration::from_secs(1), async {
+                while !neutral.get_property::<bool>("Inhibited").await? {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+                Ok::<(), zbus::Error>(())
+            })
+            .await??;
+            let cookie: u32 = legacy.call("Inhibit", &("compatibility test",)).await?;
+            let foreign_connection = bus.connect().await?;
+            let foreign = zbus::Proxy::new(
+                &foreign_connection,
+                "org.freedesktop.Notifications",
+                POLICY_PATH,
+                "org.bead.Notifications",
+            )
+            .await?;
+            assert!(
+                foreign
+                    .call::<_, _, ()>("Uninhibit", &(cookie,))
+                    .await
+                    .is_err()
+            );
+            neutral.call::<_, _, ()>("Uninhibit", &(cookie,)).await?;
+            legacy
+                .call::<_, _, ()>("SetDoNotDisturb", &(false,))
+                .await?;
+            tokio::time::timeout(Duration::from_secs(1), async {
+                while neutral.get_property::<bool>("Inhibited").await? {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+                Ok::<(), zbus::Error>(())
+            })
+            .await??;
+            service.stop().await?;
+            assert!(
+                service_connection
+                    .object_server()
+                    .interface::<_, NacreNotificationPolicy>(POLICY_PATH)
+                    .await
+                    .is_err()
+            );
+            tokio::time::timeout(Duration::from_secs(1), async {
+                while zbus::fdo::DBusProxy::new(&client)
+                    .await?
+                    .name_has_owner("org.freedesktop.Notifications".try_into()?)
+                    .await?
+                {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+                Ok::<(), zbus::Error>(())
+            })
+            .await??;
+            Ok::<(), Box<dyn std::error::Error>>(())
+        })?;
         Ok(())
     }
 }
