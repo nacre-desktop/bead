@@ -14,11 +14,12 @@ Per-SceneSource wheel overrides were removed so windows, overlays and panels can
 `value120` keeps fractional notches; legacy wheel axes still normalize their 15-unit notch to 54 px.
 Wheel glide remains over 125 ms. Finger input remains immediate; only release inertia follows it.
 The B0208 100 px value was introduced to match Chrome's desktop wheel distance, then supplied through a
-shared Bead store. B0217 replaces that policy with the owner's faster, uniform 54 px token.
+shared Bead store. B0217 replaces that policy with the owner's uniform 54 px token.
 The separate `extras.next` / `extras.prev` selection actions and their row-pitch scrolling are keyboard actions,
 not pointer scroll views, and retain their one-row behavior.
 
 Validation is pending the coordinator's remote full CI. No local builds, tests or nested sessions were run.
-The test suite covers 1:1 finger input, full and fractional `value120`, discrete notches, legacy wheel input,
-and the shared conversion used by launcher, Widgets, Settings, chat and notifications.
+The test suite covers 1:1 finger input, full and fractional `value120`, stale wheel-unit precedence,
+discrete notches and legacy wheel input. Product scene tests exercise exact 23.5 px and 54 px deltas in
+launcher, Widgets, Settings, chat and notification history view stores.
 Live desktop comparison remains unavailable; the desktop test host timed out.

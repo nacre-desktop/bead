@@ -466,6 +466,53 @@ pub(crate) fn harness(
     )
     .unwrap()
 }
+
+#[test]
+fn settings_items_scroll_preserves_touchpad_pixels_and_shared_wheel_distance() {
+    let items = (0..40)
+        .map(|index| {
+            json!({
+                "id": format!("fixture-{index}"),
+                "kind": "link",
+                "label": format!("Fixture setting {index}"),
+                "description": "A tall fixture row for scroll distance checks",
+                "page": "appearance",
+            })
+        })
+        .collect();
+    let mut h = harness(
+        BTreeMap::from([
+            ("settings.items".into(), Value::list(items)),
+            ("settings.title".into(), Value::Text("Fixture settings".into())),
+            ("settings.description".into(), Value::Text("".into())),
+            ("settings.searching".into(), Value::Bool(false)),
+        ]),
+        960,
+        640,
+        1.,
+    );
+    let region = h
+        .session
+        .view_nodes()
+        .into_iter()
+        .find(|node| node.scroll_store.as_deref() == Some("settings.scroll"))
+        .expect("settings item viewport")
+        .draw;
+    let region = bead::ui::rect(&region);
+    for (delta, expected) in [(23.5, 23.5), (54., 77.5)] {
+        h.script([bead_test::Input::Scroll {
+            x: region.x + region.w / 2.,
+            y: region.y + region.h / 2.,
+            delta,
+        }])
+        .unwrap();
+        assert_eq!(
+            h.session.stores.get("settings.scroll"),
+            Some(&Value::Number(expected))
+        );
+    }
+}
+
 pub(crate) fn golden(name: &str, h: &mut Harness) {
     // The window fills its surface: no panel shadow inset.
     let frame = h.pose((0., 0.), 1.).unwrap();

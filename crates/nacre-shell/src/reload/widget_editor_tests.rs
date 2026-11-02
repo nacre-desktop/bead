@@ -684,7 +684,7 @@ fn the_clock_page_shows_the_clock_in_its_previews_and_edits_one_copy() {
 }
 
 #[test]
-fn widgets_app_scroll_moves_at_the_shared_wheel_distance() {
+fn widgets_app_scroll_preserves_the_shared_pixel_distance() {
     for (selected, store) in [("", "widgets.scroll"), ("clock", "widgets.detail.scroll")] {
         let mut harness = app_harness(BTreeMap::from([(
             "widgets.selected".into(),
@@ -698,21 +698,24 @@ fn widgets_app_scroll_moves_at_the_shared_wheel_distance() {
             .map(|node| bead::ui::rect(&node.draw))
             .unwrap_or_else(|| panic!("{store} scroll region"));
         let started = std::time::Instant::now();
-        harness
-            .script([bead_test::Input::Scroll {
-                x: region.x + region.w / 2.,
-                y: region.y + region.h / 2.,
-                delta: 100.,
-            }])
-            .unwrap();
+        for delta in [23.5, 54.] {
+            harness
+                .script([bead_test::Input::Scroll {
+                    x: region.x + region.w / 2.,
+                    y: region.y + region.h / 2.,
+                    delta,
+                }])
+                .unwrap();
+            let expected = if delta == 23.5 { 23.5 } else { 77.5 };
+            assert_eq!(
+                harness.session.stores.get(store),
+                Some(&Value::Number(expected)),
+                "{store} preserves the exact logical pixel distance"
+            );
+        }
         let cost = started.elapsed();
-        assert_eq!(
-            harness.session.stores.get(store),
-            Some(&Value::Number(100.)),
-            "one wheel notch moves {store} by the framework's 100 px step"
-        );
         eprintln!(
-            "B0208_SCROLL page={selected:?} cost_ms={:.2}",
+            "B0217_SCROLL page={selected:?} cost_ms={:.2}",
             cost.as_secs_f64() * 1e3
         );
     }

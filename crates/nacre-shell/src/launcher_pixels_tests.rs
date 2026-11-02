@@ -333,7 +333,7 @@ fn launcher_grid_and_results_scroll_from_their_actual_hit_regions() -> Result<()
             viewport.scroll_limit
         );
         assert!(viewport.scroll_limit.is_some_and(|limit| limit > 400.));
-        for (delta, expected) in [(7., 7.), (-7., 0.)] {
+        for (delta, expected) in [(23.5, 23.5), (54., 77.5), (-77.5, 0.)] {
             h.script([bead_test::Input::Scroll {
                 x: rect.x + rect.w / 2.,
                 y: rect.y + rect.h / 2.,

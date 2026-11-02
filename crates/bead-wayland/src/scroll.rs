@@ -221,33 +221,15 @@ mod tests {
     }
 
     #[test]
-    fn every_scroll_target_uses_the_same_axis_conversion() {
-        // App::axis_scroll routes each concrete target through this one conversion function.
-        let targets = [
-            Target::Window(1),
-            Target::Overlay(2),
-            Target::Panel(3),
-            Target::Primary(None),
-            Target::Primary(Some((4, "output-1".into()))),
-        ];
-        let notch = AxisScroll {
+    #[test]
+    fn finger_pixels_take_precedence_over_stale_wheel_units() {
+        let axis = AxisScroll {
+            absolute: -23.5,
             value120: 120,
+            discrete: 1,
             ..Default::default()
         };
-        let finger = AxisScroll {
-            absolute: -23.,
-            ..Default::default()
-        };
-        for _target in targets {
-            assert_eq!(
-                movement(notch, true, Some(AxisSource::Wheel)),
-                (WHEEL_STEP, true)
-            );
-            assert_eq!(
-                movement(finger, true, Some(AxisSource::Finger)),
-                (-23., false)
-            );
-        }
+        assert_eq!(movement(axis, true, Some(AxisSource::Finger)), (-23.5, false));
     }
 }
 
