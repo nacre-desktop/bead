@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Palette-templated SVG images (B0056). A file named `*.themed.svg` carries `@role@` tokens (a palette
 //! role) or `@role+@` (the role lifted to readable contrast on the surface); the live palette fills them
 //! when a scene is materialized, so an icon follows the wallpaper palette like any palette fill.

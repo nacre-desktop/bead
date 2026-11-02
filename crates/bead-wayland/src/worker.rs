@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Script/CPU preparation actor; validated candidates cross the draw thread by value.
 use crate::{InputRegion, PanelAnchor, SceneSource, UiEvent};
 use bead_render::{Rect, Scene};

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Background work that must not compete with the UI thread for CPU or power.
 /// Spawn `work` on a named thread at a lower scheduling priority (nice +10 on Linux), for
 /// work done ahead of when it is needed; callers poll `is_finished` and never wait on it.

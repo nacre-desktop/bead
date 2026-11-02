@@ -7,7 +7,7 @@
   Breaking changes require the owner. Otherwise Nacre and Orient are read-only.
 - Do not duplicate Orient or port
   Python helpers. Use the existing palette JSON and helper JSON-lines protocol.
-- Framework crates: MIT OR Apache-2.0, permissive dependencies only. Never copy
+- Framework crates: MIT, permissive dependencies only. Never copy
   GPL/LGPL code into framework crates. Shell code/assets retain GPL-3.0 terms.
 - Also permitted: CC0-1.0, 0BSD, Unlicense and MIT-0. Use cargo-deny in CI, including
   independent bead-* graphs. GPL dependencies belong only in GPL nacre-shell:

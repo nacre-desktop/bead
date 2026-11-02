@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Semantic surface damage plus independent repair history for reusable SHM buffers.
 use super::{Buffer, SlotPool};
 use bead_render::{Damage, damage::FrameDamage, tree::Frame};

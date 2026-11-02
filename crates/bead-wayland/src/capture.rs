@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! B0090: leased, rate-limited toplevel capture (ext-image-copy-capture-v1 with
 //! ext-foreign-toplevel-image-capture-source-v1). A product holds a [`CaptureHub`], leases
 //! windows on it while a view is open, and reads small PNG thumbnails back; the protocol

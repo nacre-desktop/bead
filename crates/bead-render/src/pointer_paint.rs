@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Small borrowed-target paint helpers for compositor-positioned slider visuals.
 
 use super::{PixelFormat, Rect, ShmTarget};

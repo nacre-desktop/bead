@@ -1,10 +1,16 @@
-# Bead and Nacre Shell
+# Bead
 
-Bead is a Rust framework for building Wayland shells. It combines retained
+Bead is an independent, MIT-only Rust framework for building Wayland shells.
+Nacre depends on Bead; Bead never depends on Nacre. It combines retained
 rendering and layout with Luau views, stable-ID state, reusable UI components,
 and atomic hot reload. The framework crates provide general Wayland, rendering,
-input, service, and UI primitives; they do not contain Nacre-specific view
-layout or policy.
+input, service, and UI primitives. The remaining product identity and test-fixture
+coupling is audited in [B0214](docs/specs/0214-framework-split.md).
+
+This checkout temporarily also contains the GPL Nacre Shell product. B0214
+plans its move into Nacre with history; no files have moved yet. Generic kit,
+widgets, services, test support, and plugin loading belong to Bead; Nacre's
+views, tokens, content, assets, and install policy belong to Nacre.
 
 Nacre Shell is Nacre's desktop shell built on Bead. It includes the bar,
 launcher, dashboard, control panel, notifications, OSD, wallpaper picker,
@@ -99,7 +105,8 @@ evidence; the live desktop is not a test environment. See [the roadmap](docs/ROA
 
 ## License and distribution
 
-- `crates/bead-*`: MIT OR Apache-2.0, with permissive dependencies only.
+- `crates/bead-*` and the `crates/bead` facade: MIT only, copyright siverteh,
+  with permissive dependencies only; third-party notices remain in force.
 - `crates/nacre-shell` and `shell/`: GPL-3.0, retaining Nacre's terms and notices.
 - Every crate sets `publish = false`. Do not publish crates, packages, or releases.
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Keeps a wallpaper renderer process alive without ever depending on it. The renderer is
 //! spawned on the first source and kept warm when cleared, restarted with backoff after
 //! a crash while a source is wanted (desired source/state replay), and abandoned after too

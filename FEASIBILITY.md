@@ -1873,7 +1873,7 @@ Static Luau checking is not in mlua; strict Rust property/binding validation rem
 | --- | ---: | ---: | --- | --- |
 | Luau | 31 | 44 | actual compiler pass | MIT |
 | KDL + Luau | 27 | 40 | kdl6.7.1 parse pass | Apache-2.0 + MIT |
-| QML-like | 34 | 47 | proposal only, not parsed | own MIT/Apache |
+| QML-like | 34 | 47 | proposal only, not parsed | own MIT |
 
 No rendered runtime: memory(PSS+DRM)/CPU/pacing N/A. Syntax spike only, no production
 UI code changed; nice10/Cargo-j2 used. No system installs. ADR0002 contains the

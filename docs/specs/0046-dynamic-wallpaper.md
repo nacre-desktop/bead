@@ -11,7 +11,7 @@ plus the power rules below. It is built from three general pieces and one Nacre 
 
 | Piece | Where | Licence | Knows Nacre? |
 | --- | --- | --- | --- |
-| Protocol (`Source` kinds, `Command`, `Event`), pause/release **policy** state machine, crash-tolerant **supervisor** | `crates/bead-wallpaper` | MIT OR Apache-2.0 | no |
+| Protocol (`Source` kinds, `Command`, `Event`), pause/release **policy** state machine, crash-tolerant **supervisor** | `crates/bead-wallpaper` | MIT | no |
 | **Renderer** `bead-wallpaper-video`: one libmpv decoder, one bottom-layer surface per output | `crates/nacre-shell/src/bin/bead-wallpaper-video/` | GPL-3.0-only (libmpv) | no |
 | Nacre edge: reads the `wallpaper.active` motion member and the `wallpaper-picker` settings, turns compositor/battery/session state into policy inputs | `crates/nacre-shell/src/wallpaper_motion.rs`, `wallpaper.rs` | GPL-3.0-only | yes, only here |
 

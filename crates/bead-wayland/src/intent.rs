@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Hover intent for edge-anchored chrome: a dwell timer (a pointer must rest on a lip
 //! before its panel opens), a gate that keeps a just-closed lip from reopening under the
 //! pointer, and the lip geometry. Pure state machines: no Wayland objects and no clock;

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Bounded notification state. Transport and views share IDs, never view pointers.
 use serde::{Deserialize, Serialize};
 use std::{

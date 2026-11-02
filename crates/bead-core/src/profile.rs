@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Opt-in numeric timing; never records text, keys or user content.
 use std::sync::OnceLock;
 /// Per-frame/per-commit diagnostics (`PROFILE`, `UI_COMMIT`, `BUFFER`, ...) are

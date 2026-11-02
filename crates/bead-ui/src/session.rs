@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Durable stores, editor/focus state and validate-then-commit reload transactions.
 use super::*;
 #[cfg(test)]

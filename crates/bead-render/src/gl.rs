@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Shared native EGL context, retained subtree rasters and direct vector primitives.
 use crate::{Damage, RenderTarget, Renderer, Result, Scene, ShmTarget};
 use glutin::{

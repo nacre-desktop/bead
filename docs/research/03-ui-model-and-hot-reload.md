@@ -30,7 +30,7 @@ framework work. Do not claim that choosing Luau supplies those facilities.
 | Xilem/Masonry 0.4.0 | Rust state separate from view descriptions, reconciliation available; not an interpreted file system | Type-safe Rust views; less markup ambiguity, but normal edits compile | Reuses Vello/Parley/AccessKit, valuable controls and lifecycle patterns; custom layer-shell runtime integration remains | Apache-2.0. Eligible, but renderer cost and compile/edit loop remain concerns |
 | Dioxus 0.7.10 + Blitz DOM 0.2.4 | RSX/assets hot reload supports many structural edits; Rust Subsecond is experimental and does not automatically migrate changed data layouts | Familiar HTML/CSS/RSX aids agents; browser/CSS behavior exceeds our needed language surface | Native Blitz avoids a webview, but DOM/CSS/runtime are extra machinery and layer-shell needs adaptation | Dioxus/Subsecond/Blitz MIT OR Apache-2.0. Eligible alternative if custom language fails; not proven state-atomic shell reload |
 
-Slint license distinction matters: our authored files can remain MIT/Apache while
+Slint license distinction matters: our authored files are MIT while
 linking a GPL toolkit in a GPL application, but that is not the same as Bead using
 only permissively licensed dependencies. The royalty-free license is not MIT or
 Apache and has attribution/platform restrictions. This disqualifies the proposed

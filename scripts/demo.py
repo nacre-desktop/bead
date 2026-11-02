@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Edit only a temporary UI copy inside the existing nested preview.
 
-SPDX-License-Identifier: MIT OR Apache-2.0
+SPDX-License-Identifier: MIT
 """
 import os
 os.environ.setdefault('BEAD_VERBOSE_LOG', '1')

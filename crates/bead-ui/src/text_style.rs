@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Host-supplied text presentation: family aliases and a size offset, applied while
 //! views are laid out. Markup keeps naming its families literally; a host that lets
 //! the owner pick fonts maps those names to the chosen ones and every later layout

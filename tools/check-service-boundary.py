@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: MIT OR Apache-2.0
+# SPDX-License-Identifier: MIT
 """Fail if a headless host gains a UI, store, renderer or compositor dependency."""
 import subprocess
 

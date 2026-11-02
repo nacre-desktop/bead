@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Message lookup for shells: `tr(id, args)` over an injected catalog.
 //!
 //! The host supplies two things and nothing here knows where they come from:

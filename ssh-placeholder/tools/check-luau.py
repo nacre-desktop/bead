@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: MIT OR Apache-2.0
+# SPDX-License-Identifier: MIT
 """Analyze actual views against Rust-generated SDK declarations in a private mirror."""
 import argparse,json,os,pathlib,re,shutil,signal,subprocess,sys,tempfile
 ROOT=pathlib.Path(__file__).resolve().parent.parent

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Basic Unicode editing. Cursor/selection offsets are UTF-8 boundaries.
 use unicode_segmentation::UnicodeSegmentation;
 #[derive(Clone, Copy, Debug)]

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Hostable notification service. The host injects its connection and history path.
 //! `Server` is the compatibility wrapper that creates a private bus and runtime.
 use crate::notifications::{Center, Notice};

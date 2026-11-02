@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Actor state, worker transactions and per-surface drawing lifecycle.
 use super::*;
 const MAX_WALLPAPER_RGBA_BYTES: usize = 64 * 1024 * 1024;

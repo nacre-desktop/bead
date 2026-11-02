@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Event-driven desktop services, independent of views and compositor transports.
 use serde::{Deserialize, Serialize};
 

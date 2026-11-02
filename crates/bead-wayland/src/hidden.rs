@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Shell-wide hide: destroy every bar and panel layer surface, keep all view state,
 //! and recreate them on show. Destroying drops the exclusive zone, input region and
 //! keyboard focus together, so windows regain the space. Layer-shell resets a merely

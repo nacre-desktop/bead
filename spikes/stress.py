@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Matched Feature 2 clients; raw evidence stays ignored, no generated ledger.
 
-SPDX-License-Identifier: MIT OR Apache-2.0
+SPDX-License-Identifier: MIT
 Default preview is scripts/dev.sh. This measurement needs --live because nested
 refresh does not establish real-monitor performance. Stops only its own clients.
 """

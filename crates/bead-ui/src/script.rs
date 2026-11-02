@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 use crate::Diagnostic;
 use bead_core::{Stores, Value};
 use mlua::{Function, Lua, LuaSerdeExt, Table, VmState};

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: MIT OR Apache-2.0
+# SPDX-License-Identifier: MIT
 """Real private tray/PipeWire proof callback for the existing measure.py harness."""
 import json
 import os

@@ -10,11 +10,11 @@ Follows [B0035](0035-settings-stores.md). Nacre reference: `origin/main` at `bc0
 
 Generic mechanisms, no Nacre key:
 
-- `bead_ui::text_style` (MIT/Apache): a family alias table plus a size offset, consulted once
+- `bead_ui::text_style` (MIT): a family alias table plus a size offset, consulted once
   per text view while the layout is built. Icon families (`Material Symbols*`) keep their size.
   `set()` reloads every view through the listeners the i18n catalog already uses (the same
   `UiEvent::Reload` path as a language switch), only when the style really changed.
-- `bead_wayland::ShellControl` (MIT/Apache): `bar_enabled`, `panel_allowed(view)`,
+- `bead_wayland::ShellControl` (MIT): `bar_enabled`, `panel_allowed(view)`,
   `decoration_variant`, plus `watch(callback)`. The loop re-evaluates on `ControlChanged`:
   bar surfaces are destroyed or recreated (panel surfaces are kept; a bar-off state is separate
   from the Super+Z hide), an open panel that became disallowed is closed, a changed decoration

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Immutable cached content, independent of animated position and opacity.
 use crate::{CpuRenderer, Damage, PixelFormat, Renderer, Result, Scene, ShmTarget};
 use std::{

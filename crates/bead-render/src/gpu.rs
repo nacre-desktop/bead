@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! GPU composition of the identical raster layer used by the CPU fallback.
 //! Content is baked once; animation changes only image position and opacity.
 use crate::{

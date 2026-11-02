@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Static view configuration; only the selected factory creates a worker.
 use crate::PanelSpec;
 use smithay_client_toolkit::shell::wlr_layer::Anchor;

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Convert Wayland axis units into logical content distances for every surface.
 use smithay_client_toolkit::seat::pointer::AxisScroll;
 use std::sync::atomic::{AtomicU64, Ordering};

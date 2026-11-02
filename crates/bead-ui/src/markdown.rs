@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! The Markdown subset of a chat transcript. Block structure is kept
 //! (paragraphs, headings, lists, quotes, rules, fenced code); inline marks are
 //! flattened to plain text because a text box has one style. Assistant text only;

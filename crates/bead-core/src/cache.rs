@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Process-wide admission for retained cache bytes, independent of any renderer.
 //! Charges follow shared resources, so evicting a lookup does not hide live frames.
 use serde::Serialize;

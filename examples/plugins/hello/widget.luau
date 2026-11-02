@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: MIT OR Apache-2.0
+-- SPDX-License-Identifier: MIT
 -- Plugin API 1: the entry returns a factory. `api.ui`/`api.kit` are the Bead UI and kit,
 -- `api.plugin` holds the plugin id and its settings. Sizes and colours come from kit tokens.
 return function(api)

@@ -8,7 +8,7 @@ Reference: QML `LeftDrawer.qml`, `ChatPane.qml`, `NacreChatSession.qml`; contrac
 
 | Layer | Piece | Notes |
 | --- | --- | --- |
-| Framework (MIT/Apache) | `bead_ui::transcript` | Messages -> absolutely positioned cells (fill/text/button), Markdown blocks, 1500 B text groups, per-message layout cache, window of visible cells. Sizes/spacing/radii from `size-scale.json`. Knows nothing of any assistant. |
+| Framework (MIT) | `bead_ui::transcript` | Messages -> absolutely positioned cells (fill/text/button), Markdown blocks, 1500 B text groups, per-message layout cache, window of visible cells. Sizes/spacing/radii from `size-scale.json`. Knows nothing of any assistant. |
 | Framework | `bead_ui::markdown` | Paragraph, heading, ordered/bullet list, quote, rule, fenced code; inline marks flattened (a text box has one style). |
 | Framework | `bead_render::{text_lines,text_caret,text_vertical,text_selection}` | Same shaper as painting, for sizing and multi-line carets. |
 | Framework | `TextInput multiline`, `kit.Transcript`, `kit.Composer` | Shift+Enter newline, Enter activates, Up/Down by drawn line, wrapped caret and per-line selection. |

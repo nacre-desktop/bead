@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! One notification thread per identical bundle/palette, with scoped subscribers.
 use notify::Watcher;
 use std::{

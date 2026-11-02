@@ -88,7 +88,7 @@ avoid empty architectural crates before they provide a useful tested boundary.
 Feature 1 should introduce only the minimum useful framework surface crate and
 shell executable. Phase 0's Cargo member is a throwaway measurement spike, not
 these production modules. Every crate sets publish=false. Framework crates are
-MIT OR Apache-2.0; shell and Nacre-derived UI/assets retain GPL-3.0 terms.
+MIT; shell and Nacre-derived UI/assets retain GPL-3.0 terms.
 
 ```mermaid
 flowchart TD

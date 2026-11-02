@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Analyzer module generated directly from the Rust constructors/property schema.
 pub fn luau() -> String {
     let mut out = String::from(

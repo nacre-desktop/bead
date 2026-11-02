@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Protocol-neutral external data, bounded publication and transactional store projection.
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;

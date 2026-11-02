@@ -2,6 +2,10 @@
 
 Date: 2026-10-21. Status: **Accepted by owner**.
 
+2026-11-02 amendment: [B0214](../specs/0214-framework-split.md) supersedes the
+framework license with MIT only and authorizes framework generalization and the
+planned repository split. The separate nacre-protocol license is unchanged.
+
 ## Context
 
 Bead is the general Rust framework intended as a future alternative to
@@ -11,7 +15,7 @@ on Nacre's GPL-3.0 implementation.
 
 ## Decision
 
-1. Bead remains MIT OR Apache-2.0, with permissive-only dependencies. It is the
+1. Bead is MIT only, with permissive-only dependencies. It is the
    general framework. Nacre remains GPL-3.0 and is the flagship desktop built on
    Bead. GPL-only integrations (including niri-ipc, Hyprland bindings,
    mpv/GStreamer, and the daemon) stay on Nacre's side behind neutral adapters.
@@ -40,8 +44,9 @@ on Nacre's GPL-3.0 implementation.
    ```
    It returned no co-author trailers. Stop and list any non-owner identity or
    co-author found by this check.
-   Afterwards, Bead's `deny-framework.toml` may allow `bead-*` crates to depend
-   on `nacre-protocol` under MIT OR Apache-2.0.
+   This protocol relicense remains in force. The 2026-11-02 framework split
+   supersedes the earlier permission for `bead-*` to depend on it: only Nacre's
+   app adapter may depend on `nacre-protocol`; Bead never depends on Nacre.
 3. Do not split the daemon into another repository now. Revisit only if it
    becomes a general services daemon with outside users. Work Nacre-first:
    prioritize daemon and F4 quality on the owner's machines, then move Bead
@@ -241,7 +246,7 @@ After Bead's core switch on Nacre, plan support for:
 - Before publishing, choose a distinctive main crate name: `bead` and
   `bead-core` are taken by an abandoned 2021 container runtime; `bead-ui`,
   `bead-render`, `bead-wayland`, `bead-services`, `bead-test`, and
-  `bead-backends` are available. Present the project as “Bead, the Nacre shell
+  `bead-backends` are available. Present the project as “Bead, a Wayland shell
   framework” to distinguish it from “Beads,” an AI issue tracker. Publishing
   remains an owner decision.
 

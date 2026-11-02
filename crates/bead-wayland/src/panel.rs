@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Dynamic view ownership: only small durable state survives a closed/idle view.
 use super::*;
 /// A closed panel stays built for this long, so reopening it shows prepared content on its first frame.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Lazy output canvases. Each mapped surface is only the visible content bounds.
 use super::*;
 

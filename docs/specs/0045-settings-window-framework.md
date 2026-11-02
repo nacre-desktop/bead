@@ -9,7 +9,7 @@ Nacre reference: `origin/main` at `4d816ca2` (registry `nacre/shell/modules/sett
 
 Bead is a general framework. Nothing here hard-codes the owner's setup:
 
-- **Engine**: `bead-wayland::window` (generic xdg toplevel, MIT/Apache) and the form kit in `bead-ui/assets/kit.luau`
+- **Engine**: `bead-wayland::window` (generic xdg toplevel, MIT) and the form kit in `bead-ui/assets/kit.luau`
   (`SectionHeader`, `HelpText`, `FormRow`, `ToggleRow`, `ChoiceRow`, `NumberRow`, `TextRow`, `ListEditor`, `Swatch`, `ApplyBar`).
   They take labels, values and ready-made actions; sizes, radii and colours are theme tokens/palette roles. No setting id.
 - **Adapter** (`nacre-shell/src/settings.rs`, GPL): the only code that knows Nacre's registry shape and the `settings.store.<id>`

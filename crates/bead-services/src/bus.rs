@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 use crate::{
     Action, Battery, Bluetooth, MenuEntry, Network, Session, TrayItem,
     runtime::{Command, Shared},

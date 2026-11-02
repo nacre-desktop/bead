@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Deterministic routing for an icon group, hover previews and a shared panel.
 //! Appearance, view names and timing policy are supplied by the shell.
 use std::time::{Duration, Instant};

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! The same wire parity fixture runs with no UI/compositor against the host API.
 #[allow(dead_code)]
 #[path = "../examples/notification-client.rs"]

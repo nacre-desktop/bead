@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Location-indexed lexical QML audit, not a semantic QML parser.
 
-SPDX-License-Identifier: MIT OR Apache-2.0
+SPDX-License-Identifier: MIT
 """
 import argparse
 import ast

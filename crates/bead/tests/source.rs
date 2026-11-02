@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 #[allow(dead_code)]
 #[path = "../../bead-services/examples/notification-client.rs"]
 mod fixture;

@@ -8,7 +8,7 @@ crates stay Nacre-agnostic, the Nacre provider lives in GPL `nacre-shell`.
 
 ## Design
 
-- **bead-ui `i18n` (MIT/Apache, generic).** `tr(id, args)`, `tr_n(id, count, args)`
+- **bead-ui `i18n` (MIT, generic).** `tr(id, args)`, `tr_n(id, count, args)`
   (`{one, other}` plurals, `{count}` filled in), `{name}` placeholders. A process-wide
   catalog with three inputs the host injects: `set_builtin(json)` (English table),
   `install(revision, entries)` (replaces the whole fetched catalog; old revision is

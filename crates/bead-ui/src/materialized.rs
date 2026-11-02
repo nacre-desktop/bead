@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Fixed-box text candidate patching. Any structural binding, focus, hover, viewport
 //! or markup change falls back to validated full layout. Text has no intrinsic
 //! Taffy measure in this frontend; its fixed box never depends on the string.

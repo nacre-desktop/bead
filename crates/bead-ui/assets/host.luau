@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: MIT OR Apache-2.0
+-- SPDX-License-Identifier: MIT
 -- A host owns placement, never package data sources or shell routes.
 return function(ui)
     local function integer(n, lo, hi, label)

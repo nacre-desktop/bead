@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: MIT OR Apache-2.0
+# SPDX-License-Identifier: MIT
 """Restart only the private compositor, keeping an IPC subscriber alive.
 
 The private stable alias models socket replacement at the configured endpoint.
