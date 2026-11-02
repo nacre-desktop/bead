@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Native selection transports; payloads never pass through an external command.
 use super::*;
 use std::{

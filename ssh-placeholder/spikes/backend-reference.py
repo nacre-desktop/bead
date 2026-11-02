@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: MIT OR Apache-2.0
+# SPDX-License-Identifier: MIT
 """Load only Nacre's actual QML compositor backend in a disposable proof shell.
 
 NACRE_REFERENCE selects a read-only checkout. Paths/i18n are small lab shims;

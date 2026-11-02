@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Exact compact storage for large rasters with large uniform areas.
 use std::{
     collections::{HashMap, hash_map::Entry},

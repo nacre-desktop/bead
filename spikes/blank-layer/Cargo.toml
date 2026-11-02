@@ -2,7 +2,7 @@
 name = "bead-spike-blank-layer"
 version = "0.0.0"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 publish = false
 
 [dependencies]

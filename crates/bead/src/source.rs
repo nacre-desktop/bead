@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! In-process implementations of the same Source interface used by remote views.
 use bead_core::source::{
     Callback, Error, Publisher, Reply, Result, Snapshot, Source, Subscription,

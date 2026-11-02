@@ -100,7 +100,7 @@ route switch, appending plugin widget ids to the sidebar list, and three stores
 (`plugins.source`, `plugins.message`, `plugins.scroll`) in `behavior.luau`.
 
 ## Code
-- Framework (MIT/Apache, `bead-ui`): `plugins.rs` (manifest, discovery, state, mount, faults,
+- Framework (MIT, `bead-ui`): `plugins.rs` (manifest, discovery, state, mount, faults,
   install/update), frontend gates (`require`, `resolve_for_check`, `ui.plugin_gate`,
   `ui.plugin_fault`), `bundle.json` `plugins` flag, watcher extra paths, `Session::root`.
   New dependency: `toml` (MIT/Apache, already in the lock graph).

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Reusable shell facade. No application identity, palette engine or GPL adapters.
 pub use bead_backends as backends;
 pub use bead_core as core;

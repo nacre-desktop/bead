@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Measure task-owned clients in nested niri and stop every process on exit.
 
-SPDX-License-Identifier: MIT OR Apache-2.0
+SPDX-License-Identifier: MIT
 """
 import argparse
 import importlib.util

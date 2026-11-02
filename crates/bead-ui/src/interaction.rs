@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Hit testing, focus, range controls, Unicode editing and accessibility actions.
 use super::*;
 pub(super) fn deferred_matches(nodes: &[Node], pending: &super::session::DeferredAction) -> bool {

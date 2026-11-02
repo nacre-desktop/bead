@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Semantic surface damage, independent of back-buffer repaint history.
 use crate::{
     Damage, Rect,

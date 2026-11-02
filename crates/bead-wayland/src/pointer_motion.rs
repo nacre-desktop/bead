@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Pointer poses: one small synchronized child, isolated from panel rendering.
 use super::*;
 

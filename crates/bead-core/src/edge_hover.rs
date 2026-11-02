@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Shared lip/body/focus exit grace, independent of surface or view ownership.
 use std::time::{Duration, Instant};
 

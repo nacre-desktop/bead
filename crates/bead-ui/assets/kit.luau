@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: MIT OR Apache-2.0
+-- SPDX-License-Identifier: MIT
 -- Framework components. Palette roles are supplied by the existing Orient palette.
 return function(ui, tokens)
     local kit = {tokens=tokens, motion={color=.200, state=.120, text=.400}}

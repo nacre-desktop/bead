@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Bounded UI recovery data. Reports contain fixed codes, never source/user text.
 use serde::{Deserialize, Serialize};
 use std::{

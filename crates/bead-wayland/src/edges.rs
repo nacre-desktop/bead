@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Edge-anchored chrome (B0047): reserved screen edges and hover/click lips.
 //!
 //! The product describes both through [`ShellControl::edge_chrome`]; this module owns the

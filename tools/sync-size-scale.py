@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: MIT OR Apache-2.0
+# SPDX-License-Identifier: MIT
 """Synchronize factual scale data from the owner's selected Nacre revision."""
 import argparse,json,pathlib,sys
 p=argparse.ArgumentParser();p.add_argument('source',type=pathlib.Path);p.add_argument('--check',action='store_true');a=p.parse_args()

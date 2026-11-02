@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Local continuous range feedback that avoids re-running view materialization.
 
 use super::*;

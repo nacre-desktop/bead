@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Private-bus protocol fixture. No discovery or desktop/session connection.
 use futures_util::StreamExt;
 use std::{collections::HashMap, time::Duration};

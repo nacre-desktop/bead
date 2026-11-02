@@ -14,7 +14,7 @@ The daemon publishes every Settings store as `settings.store.<id>` (payload `Set
 
 ## Design (ADR 0004: Nacre keys only in `nacre-shell`)
 
-- `bead-core::animation::set_reduced_motion(bool)` (generic, MIT/Apache): every later
+- `bead-core::animation::set_reduced_motion(bool)` (generic, MIT): every later
   `Animations::target` reaches its target at once, so no curve runs and nothing keeps
   redrawing. Both call sites (panel open/close, bar peek) go through it.
 - `nacre-shell/src/prefs.rs` (GPL): follows `settings.store.desktop` and

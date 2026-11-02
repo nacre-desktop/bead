@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! B0053: the overlay slot, a second view slot beside the one resident panel.
 //!
 //! An overlay view is a content-sized layer surface on one output that coexists with

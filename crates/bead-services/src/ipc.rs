@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Versioned, owner-only, bounded Unix command transport. No display discovery.
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Compositor-neutral snapshots/actions. Native transports remain in GPL adapters.
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fmt, sync::Arc};

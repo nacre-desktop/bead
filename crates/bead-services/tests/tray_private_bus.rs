@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! SNI/DBusMenu integration proof. Run under dbus-run-session with the same
 //! private address supplied as DBUS_SYSTEM_BUS_ADDRESS.
 #[allow(dead_code)]

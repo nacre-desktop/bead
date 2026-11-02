@@ -1,4 +1,5 @@
 # Check bead-* roots independently: GPL may never leak into their dependencies.
+# Bead code is MIT only; this allow-list covers third-party dependency licenses.
 [licenses]
 allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "Zlib", "ISC", "Unicode-3.0", "Unicode-DFS-2016", "CC0-1.0", "0BSD", "Unlicense", "MIT-0"]
 # Native PipeWire build helper; LLVM exception grants additional Apache permissions.
@@ -8,7 +9,7 @@ multiple-versions = "warn"
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
-allow-git = ["https://github.com/nacre-desktop/nacre"] # Permits nacre-protocol after its MIT OR Apache-2.0 relicense; no dependency is added here.
+allow-git = [] # Bead never depends on Nacre, including its permissive protocol.
 
 [advisories]
 # These three informational unmaintained notices concern standalone crates merged into zbus 6; the advisories report no vulnerability. Current AccessKit, AT-SPI and tray support still requires zbus 5. Upstream: https://github.com/z-galaxy/zbus/issues/2043. Revisit when AccessKit/AT-SPI/tray support zbus 6 or by 2027-01-31. This exception is limited to the three IDs below.

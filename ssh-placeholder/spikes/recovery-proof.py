@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: MIT OR Apache-2.0
+# SPDX-License-Identifier: MIT
 """Private nested proof: first-frame bundle, startup fallback, watchdog, safe mode."""
 import importlib.util,json,os,pathlib,re,shutil,signal,subprocess,tempfile,time
 ROOT=pathlib.Path(__file__).resolve().parent.parent

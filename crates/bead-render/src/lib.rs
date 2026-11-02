@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Backend-neutral drawing commands and a CPU renderer over borrowed SHM memory.
 use cosmic_text::{
     Attrs, Buffer, Color as TextColor, Family, FontSystem, Metrics, Shaping, SwashCache,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: MIT OR Apache-2.0
+# SPDX-License-Identifier: MIT
 """Capability/lifetime proof reusing the actual nested bar+sound-panel workload."""
 import collections,importlib.util,json,os,pathlib,re
 ROOT=pathlib.Path(__file__).resolve().parent.parent

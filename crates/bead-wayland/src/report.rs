@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Numeric-only diagnostics: no titles, output names, argv or environment.
 use super::*;
 pub(super) fn save(app: &App, path: &std::path::Path) -> Result<(), Box<dyn Error>> {

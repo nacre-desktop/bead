@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Replaceable typed views and bounded Luau behavior over durable Rust state.
 pub mod accessibility;
 pub mod frontend;

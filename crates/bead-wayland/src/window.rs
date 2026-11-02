@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! B0045: one on-demand xdg toplevel window hosting a product `SceneSource`.
 //!
 //! The framework knows nothing about the window's content: the product supplies a

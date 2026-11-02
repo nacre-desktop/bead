@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Stable-ID animation state lives outside views. Rendering consumes only the pose.
 use std::{
     collections::BTreeMap,

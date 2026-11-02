@@ -5,7 +5,7 @@ name = "Hello"
 version = "0.1.0"
 author = "Example author"
 description = "A small bar widget that greets you."
-license = "MIT OR Apache-2.0"
+license = "MIT"
 api = 1
 # Only framework interaction state is readable without a topic: capability; this widget
 # needs no other access.

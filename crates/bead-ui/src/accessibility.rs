@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 use crate::{Node, rect};
 use accesskit::{Action, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use bead_core::{Stores, Value};

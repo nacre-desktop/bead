@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Plugins v1 (spec 0203): a directory with `plugin.toml` plus Luau files.
 //!
 //! Discover → validate → enable/disable (persisted) → mount the enabled plugins'

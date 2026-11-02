@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Private proof driver; not a public shell command protocol.
 use bead_services::{Action, Desktop};
 use std::io::BufRead;

@@ -19,8 +19,8 @@ it, keep the old image visible on load failure, and crossfade successful
 switches in the same short interval as Nacre when motion is enabled. Refresh
 palette/theme only through a published protocol route, paired with activation
 of the displayed image. Persistence belongs to the daemon/config; Bead adds no
-config writer. Read-only Bead dependency on the MIT OR Apache-2.0
-`nacre-protocol` crate is permitted.
+config writer. Nacre's application adapter may depend on the MIT OR Apache-2.0
+`nacre-protocol` crate. Under B0214, framework crates never depend on Nacre.
 
 ## Contract gate
 

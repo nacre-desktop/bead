@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! B0048: detach any panel session into a floating surface (a pearl) and dock it back.
 //!
 //! The resident panel is one group of state (worker, scene, renderer, surfaces).

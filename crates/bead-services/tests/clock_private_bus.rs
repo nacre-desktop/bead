@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Run on a private bus, never the host system bus. A slow logind read crosses
 //! the minute boundary without suspend or any change to the host clock.
 use bead_services::{Config, Desktop};

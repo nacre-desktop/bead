@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Per-surface CPU-first / warm GPU / idle CPU lifecycle.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

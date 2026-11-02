@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Pause/release policy for a motion wallpaper, one machine per output. Pure and
 //! clock-injected: the caller supplies inputs and a monotonic millisecond clock.
 //!

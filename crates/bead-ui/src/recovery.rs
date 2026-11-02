@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Trusted minimal scene; no script, service, input or application state dependency.
 use bead_render::{Palette, Primitive, Rect, Scene};
 pub fn safe_bar(palette: &Palette) -> Scene {

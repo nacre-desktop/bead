@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! B0048: pearls, panels detached from their edge into free-floating surfaces.
 //!
 //! Pure geometry, the drag state machine and the layout store. Nothing here knows a

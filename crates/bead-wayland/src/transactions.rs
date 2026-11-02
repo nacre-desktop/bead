@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Validated worker candidates and IME synchronization.
 use super::*;
 fn panel_event_belongs_to_host(event: &UiEvent) -> bool {

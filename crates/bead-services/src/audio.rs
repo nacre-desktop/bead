@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 use crate::{Audio, runtime::Shared};
 use pipewire as pw;
 use pw::{

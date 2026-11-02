@@ -5,6 +5,7 @@ members = ["crates/bead-test", "crates/bead", "crates/bead-services", "crates/be
 default-members = ["crates/bead", "crates/bead-services", "crates/nacre-shell"]
 
 [workspace.package]
+license = "MIT"
 edition = "2024"
 rust-version = "1.99"
 publish = false

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: MIT OR Apache-2.0
+# SPDX-License-Identifier: MIT
 """Opt-in native service-owner proof on private buses and an absent private PW socket."""
 import os
 import pathlib

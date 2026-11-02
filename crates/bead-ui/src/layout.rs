@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Typed views and Taffy layout are independent of authoring syntax.
 use crate::{Diagnostic, Node, frontend::Resolve};
 use bead_core::Value;

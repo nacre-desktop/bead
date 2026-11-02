@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Bounded argv execution. Only the process group created here is terminated.
 use std::{
     io::{Read, Write},

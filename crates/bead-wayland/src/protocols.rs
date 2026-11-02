@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Compositor, presentation, seat, keyboard and IME protocol dispatch.
 // Handlers hand events for a detached pearl's surfaces to the same handler with that
 // pearl swapped in, so some parameters are used only by that recursive call.

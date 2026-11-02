@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Explicit action-to-capability policy; theme prompts are a later frontend concern.
 use std::collections::{BTreeMap, BTreeSet};
 #[derive(Default)]

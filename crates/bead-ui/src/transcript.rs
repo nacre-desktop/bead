@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 //! Reusable scrolling transcript: messages with a label, plain or Markdown text, code
 //! blocks and copy actions, laid out as absolutely positioned cells and windowed to
 //! what is visible. It knows nothing about any assistant or service: callers map their
