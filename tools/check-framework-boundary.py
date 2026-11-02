@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -60,7 +61,13 @@ def source_violations(bases: tuple[pathlib.Path, ...], root: pathlib.Path) -> li
     for base in bases:
         paths = (base,) if base.is_file() else tuple(sorted(base.rglob("*")))
         for path in paths:
-            if not path.is_file() or path.is_symlink():
+            if path.is_symlink():
+                target = os.readlink(path)
+                if FORBIDDEN.search(target):
+                    rel = path.relative_to(root)
+                    errors.append(f"{rel}: symlink product path: {target}")
+                continue
+            if not path.is_file():
                 continue
             try:
                 content = path.read_text(encoding="utf-8")

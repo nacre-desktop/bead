@@ -3,12 +3,15 @@
 """Negative controls for the framework/product boundary guard."""
 
 import pathlib
+import importlib.util
 import sys
 import tempfile
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
-import check_framework_boundary as boundary
+GUARD_PATH = pathlib.Path(__file__).resolve().parents[1] / "check-framework-boundary.py"
+SPEC = importlib.util.spec_from_file_location("check_framework_boundary", GUARD_PATH)
+boundary = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(boundary)
 
 
 class FrameworkBoundaryTests(unittest.TestCase):
