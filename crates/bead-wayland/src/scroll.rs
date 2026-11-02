@@ -221,7 +221,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn finger_pixels_take_precedence_over_stale_wheel_units() {
         let axis = AxisScroll {
             absolute: -23.5,
