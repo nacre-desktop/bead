@@ -496,20 +496,32 @@ fn launcher_two_line_copy_is_inside_its_row_and_clip() -> Result<()> {
                 })
                 .unwrap();
             let row_rect = bead::ui::rect(&row.draw);
-            let lines = nodes
+            // Passive text is in scene primitives, not the interactive hit-node list.
+            let scene = h.scene();
+            let lines = scene
+                .layers
                 .iter()
-                .filter(|n| n.id.contains("description.line-"))
-                .filter(|n| {
-                    let rect = bead::ui::rect(&n.draw);
+                .filter(|layer| layer.id.contains("description.line-"))
+                .flat_map(|layer| layer.own.clone())
+                .filter(|&index| {
+                    let rect = bead::ui::rect(&scene.primitives[index]);
                     rect.y >= row_rect.y && rect.y < row_rect.y + row_rect.h
                 })
                 .collect::<Vec<_>>();
-            assert_eq!(lines.len(), 2, "scale {scale}, row {index}");
-            for line in &lines {
-                let rect = bead::ui::rect(&line.draw);
+            assert_eq!(
+                lines.len(),
+                2,
+                "scale {scale}, row {index}; layers: {:?}",
+                scene.layers.iter().map(|l| &l.id).collect::<Vec<_>>()
+            );
+            for &index in &lines {
+                let primitive = &scene.primitives[index];
+                let rect = bead::ui::rect(primitive);
                 assert!(rect.y >= row_rect.y && rect.y + rect.h <= row_rect.y + row_rect.h);
                 assert!(
-                    line.clip
+                    scene
+                        .clips
+                        .get(&index)
                         .is_none_or(|c| rect.y >= c.y && rect.y + rect.h <= c.y + c.h)
                 );
                 if let bead::render::Primitive::Text {
@@ -518,9 +530,9 @@ fn launcher_two_line_copy_is_inside_its_row_and_clip() -> Result<()> {
                     size,
                     color,
                     ..
-                } = &line.draw
+                } = primitive
                 {
-                    assert!(bead::render::text_width(h.scene(), text, family, *size)? <= rect.w);
+                    assert!(bead::render::text_width(scene, text, family, *size)? <= rect.w);
                     assert!(rect.h >= size * 1.4);
                     assert_eq!(color[3], 255, "no dark text mask");
                 } else {
@@ -529,7 +541,7 @@ fn launcher_two_line_copy_is_inside_its_row_and_clip() -> Result<()> {
             }
             if description.contains("third") || description.len() > 100 {
                 assert!(
-                    matches!(&lines[1].draw, bead::render::Primitive::Text { text, .. } if text.ends_with('…'))
+                    matches!(&scene.primitives[lines[1]], bead::render::Primitive::Text { text, .. } if text.ends_with('…'))
                 );
             }
         }
