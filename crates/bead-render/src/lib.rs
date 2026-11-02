@@ -3864,8 +3864,8 @@ mod symbol_ink_tests {
                             Damage::full(width, width),
                         )
                         .unwrap();
-                    let ink_pixels = pixels.chunks_exact(4).filter(|p| p[3] > 0).count();
-                    let wide_ink_pixels = wide_pixels.chunks_exact(4).filter(|p| p[3] > 0).count();
+                    let ink_pixels = pixels.as_chunks::<4>().0.iter().filter(|p| p[3] > 0).count();
+                    let wide_ink_pixels = wide_pixels.as_chunks::<4>().0.iter().filter(|p| p[3] > 0).count();
                     assert_eq!(
                         ink_pixels, wide_ink_pixels,
                         "battery_full narrow box clipped ink at scale {scale}"
