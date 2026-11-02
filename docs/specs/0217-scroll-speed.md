@@ -18,5 +18,6 @@ The Bead Settings registry mirrors Nacre's scroll-speed row metadata and describ
 
 Product scene tests send 23.5 px then 100 px and verify 123.5 px in launcher, Widgets, Settings, chat and notification history.
 Wayland conversion tests cover finger precedence, discrete notches, full and fractional `value120`, and legacy wheel input.
-The required full Bead CI is being rerun after this correction; no local builds or tests are allowed.
+Full Bead CI passed with exit 0 in the capped Ubuntu 24.04 container on implementation commit `45b547f`;
+the following documentation-only clarification is `66e82f0`. No local builds or tests were run.
 Live/nested comparison remains unavailable because the desktop test host timed out.
