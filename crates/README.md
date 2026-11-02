@@ -1,5 +1,5 @@
-# Crates
+# Framework crates
 
-`bead-wayland`: MIT surface lifecycle; `nacre-shell`: GPL-3.0-only
-application. All crates set publish=false. Add further framework components only
-when their feature requires them; cargo-deny enforces the dependency boundaries.
+The workspace contains reusable framework crates. The `bead` facade presents the common host API; focused crates provide core state and view contracts, rendering, UI, Wayland integration, backend adapters, services, wallpaper process support, widgets, and test utilities.
+
+All crates are unpublished. Each crate owns its dependency declarations and retains third-party notices for vendored code, fonts, and fixtures. Applications consume selected crates from a pinned Bead revision and provide their own identity, assets, content, configuration, and service integration.

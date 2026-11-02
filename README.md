@@ -1,130 +1,33 @@
 # Bead
 
-Bead is an independent, MIT-only Rust framework for building Wayland shells.
-Nacre depends on Bead; Bead never depends on Nacre. It combines retained
-rendering and layout with Luau views, stable-ID state, reusable UI components,
-and atomic hot reload. The framework crates provide general Wayland, rendering,
-input, service, and UI primitives. The remaining product identity and test-fixture
-coupling is audited in [B0214](docs/specs/0214-framework-split.md).
+Bead is a general MIT-licensed Rust framework for building Wayland shells. It provides retained rendering and layout, Luau views, stable-ID state, reusable UI components, atomic hot reload, Wayland integration, and optional service adapters.
 
-This checkout temporarily also contains the GPL Nacre Shell product. B0214
-plans its move into Nacre with history; no files have moved yet. Generic kit,
-widgets, services, test support, and plugin loading belong to Bead; Nacre's
-views, tokens, content, assets, and install policy belong to Nacre.
+[Nacre](https://github.com/nacre-desktop/nacre) is one application built on Bead. The framework has no dependency on Nacre; application identity, content, assets, service routes, and installation policy belong to each host.
 
-Nacre Shell is Nacre's desktop shell built on Bead. It includes the bar,
-launcher, dashboard, control panel, notifications, OSD, wallpaper picker,
-standalone Widgets app (dragged between the bar and desktop), AI panel, and the
-Settings, Colors, and Welcome apps. Bead is now the daily Nacre shell and is at
-parity with the QML shell for the migrated desktop workflow. Some migration
-work remains in progress; the current gaps and their evidence are tracked in
-the [core-switch review](docs/research/core-switch-gap-20261022.md) and
-[project status](docs/STATUS.md).
+## Start here
 
-The wallpaper picker commits its loading or cached state immediately, reuses its
-current-boot catalogue across reopens, and hydrates visible thumbnail misses in
-the background. It does not restart the full catalogue scan on a cached reopen.
-See [B0173](docs/specs/0173-picker-cold-open.md) for the route timing and
-measured acceptance status.
-
-## How it fits Nacre
-
-The shell uses Nacre's daemon contracts for shared state and actions. Nacre
-owns shell selection and lifecycle: `nacre ui-shell bead` selects Bead, and
-`nacre ui-shell qml` returns to the QML/Quickshell fallback. The shells install
-side by side; installing the separate `bead-shell` package does not switch the
-active shell. See the [packaging and rollback spec](docs/specs/0029-packaging-coexistence-rollback.md).
-
-## Build and run
-
-For an independent framework host, start with
-[`examples/minimal-shell`](examples/minimal-shell/README.md). It owns its Luau,
-palette, tokens, app ID and hello plugin, and needs no Nacre checkout or daemon:
+[`examples/minimal-shell`](examples/minimal-shell/README.md) is a standalone host using only Bead. Its headless check is:
 
 ```sh
-nice -n 10 cargo run -p bead-minimal-shell --locked -j2 -- --check
+cargo run -p bead-minimal-shell --locked -- --check
 ```
 
-Omit `--check` to open its Wayland window. The lower-level `bead --example minimal`
-remains a renderer/facade smoke example.
+Omit `--check` to open the Wayland window. The lower-level `bead --example minimal` is a renderer/facade smoke example.
 
-Build the shell from this checkout with the pinned workspace dependencies:
+## Framework map
 
-```sh
-cargo build --release --locked -j2 -p nacre-shell
-```
+- [`crates/`](crates/README.md) — framework crate guide.
+- [`examples/`](examples/README.md) — minimal host and plugin example.
+- [`docs/COMPONENTS.md`](docs/COMPONENTS.md) — UI components and host-provided theme inputs.
+- [`docs/specs/`](docs/specs/README.md) — retained framework contracts and split decision.
+- [`docs/development/ci.md`](docs/development/ci.md) — CI checks and local equivalents.
 
-For a release-optimized binary with symbols and frame pointers for live `perf` call stacks:
+Views describe presentation and behavior in Luau. Rust owns reusable platform, rendering, input, and service primitives. Reload validates a complete new view generation before swapping it atomically; invalid changes leave the last working UI active and report a source location and error.
 
-```sh
-RUSTFLAGS="-C force-frame-pointers=yes" cargo build -p nacre-shell --profile profiling --locked -j2
-```
+## CI and contributions
 
-For an isolated interactive preview from a Wayland session, use the nested
-preview script. It starts a private compositor, daemon, bus, runtime directory,
-and HOME; it does not install or switch the running Nacre shell:
+CI checks formatting, warnings-denied Clippy, tests, renderer features, framework dependency policy, and the minimal-shell example. See the [CI guide](docs/development/ci.md) and [repository rules](AGENTS.md) before contributing.
 
-```sh
-python3 scripts/try-bead.py --daemon /path/to/nacre-helper --bead target/release/nacre-shell
-```
+## License
 
-For the smaller framework development preview, `scripts/dev.sh` builds the
-shell and starts a nested niri session by default; choose Hyprland explicitly
-with `./scripts/dev.sh hyprland`. These previews require their compositor and
-Wayland tools to be installed.
-
-Nacre's Arch package recipe is in [`packaging/arch/PKGBUILD`](packaging/arch/PKGBUILD).
-It builds `nacre-shell` and stages the executable and Luau shell bundle beside
-the QML shell. [`packaging/stage.sh`](packaging/stage.sh) also supports staging
-under a chosen prefix and `DESTDIR`; package selection remains the job of
-`nacre ui-shell`.
-
-## Architecture
-
-- [`crates/`](crates/README.md) — Rust framework crates (`bead-wayland`,
-  `bead-render`, `bead-ui`, `bead-core`, `bead-services`, and related tools).
-- [`crates/nacre-shell/`](crates/nacre-shell/) — Nacre-specific adapters and
-  shell runtime, kept under the GPL boundary.
-- `shell/` — Luau views, reusable components, themes, and assets used by
-  Nacre Shell.
-- [`docs/specs/`](docs/specs/README.md) — numbered design and implementation
-  specifications; start with the [spec index](docs/specs/README.md).
-- [`spikes/`](spikes/) — research and measurement tools, fixtures, and proofs.
-- [`docs/STATUS.md`](docs/STATUS.md) — current milestone status and open gates.
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — architecture direction and feature gates.
-
-Views describe presentation and behavior in Luau. Rust owns reusable platform
-and framework services. Nacre-specific daemon routes are adapted at the shell
-edge. Reload validates a complete new view generation before atomically
-switching it in; invalid changes leave the last working UI active and report a
-source location and error.
-
-## CI
-
-The [CI workflow](.github/workflows/ci.yml) checks formatting, warnings-denied
-Clippy, service boundaries, workspace tests, renderer configurations, Luau
-schemas, packaging and service lifecycle proofs, and dependency/license policy.
-
-## Contributing
-
-Changes follow the spec-driven workflow: agree the scope and acceptance gates,
-implement the smallest complete unit, record evidence and remaining gaps in its
-spec and `docs/STATUS.md`, then run the relevant checks and full CI. User-visible
-shell changes require matched QML/Bead review and appropriate nested-session
-evidence; the live desktop is not a test environment. See [the roadmap](docs/ROADMAP.md),
-[spec index](docs/specs/README.md), and repository [standing rules](AGENTS.md).
-
-## License and distribution
-
-- `crates/bead-*` and the `crates/bead` facade: MIT only, copyright siverteh,
-  with permissive dependencies only; third-party notices remain in force.
-- `crates/nacre-shell` and `shell/`: GPL-3.0, retaining Nacre's terms and notices.
-- Every crate sets `publish = false`. Do not publish crates, packages, or releases.
-
-See [LICENSE.md](LICENSE.md) for asset and research-material boundaries and the
-full license texts. Contributions must preserve these boundaries; GPL/LGPL
-implementation code does not belong in framework crates.
-
-For the detailed research and preview commands retained from the experiment
-README, see [docs/PREVIEW.md](docs/PREVIEW.md).
-# Live perf profiling build: `RUSTFLAGS="-C force-frame-pointers=yes" cargo build -p nacre-shell --profile profiling --locked -j2`; this keeps release optimization and debuginfo for `perf report`.
+Bead is distributed under MIT terms. Third-party components retain their own notices and licenses. See [LICENSE.md](LICENSE.md) and the adjacent notices under `vendor/` and `crates/bead-test/fonts/`.
