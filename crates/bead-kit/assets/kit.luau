@@ -378,7 +378,7 @@ return function(ui, tokens)
             fill=ui.alpha(base,alpha),hover_fill=p.on_activate and ui.tint(base,"onSurface",pressed and .12 or .08) or ui.alpha(base,alpha),aria_label=p.label},
             {label=true,label_width=true,glyph=true,compact=true,selected=true})
         if has_icon and label=="" then
-            return kit.IconButton(props(out,{text=p.glyph,family="Material Symbols Rounded",font_size=icon,color=ink,text_align="center"}))
+            return kit.IconButton(props(out,{text=p.glyph,family=tokens.fonts.icon,font_size=icon,color=ink,text_align="center"}))
         end
         local gap=label~="" and has_icon and (compact and tokens.spacing.xs or tokens.spacing.sm) or 0
         local inset=math.max(0,(out.width-text_width-(has_icon and icon or 0)-gap)/2)
