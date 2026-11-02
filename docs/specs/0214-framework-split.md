@@ -27,9 +27,27 @@ exercises rendering, action, input and reload; CI runs it and checks its
 independent dependency graph. Own Luau tokens avoid the deferred kit token API.
 `--root` supports a copied binary with an explicit standalone UI bundle.
 
-Remote validation results are recorded in the handoff after the full CI runs.
-The desktop TEST host timed out, so nested niri remains unverified unless a
-later connection succeeds. No performance or physical presentation claim.
+Validation on the authorized remote Ubuntu 24.04 CI host:
+
+| Source / proof | Result |
+| --- | --- |
+| Phase 1 `099e1c34`, complete workflow | PASS, including all ten workspace/independent dependency and license checks. |
+| Phase 2 `5e6511eb`, complete workflow | PASS: fmt, warnings-denied Clippy, workspace/trace tests, renderer features, Luau 0.742 (181 modules), all Python proofs, packaging/video, private buses and all eleven dependency/license checks including minimal-shell. |
+| Framework tests without product assets | PASS after hiding `shell/` and `crates/nacre-shell/assets` and cleaning bead-ui/render/test outputs to force recompilation. Minimal-shell's headless check also passes. |
+| Independent framework-only workspace | PASS: copy only Bead crates, vendors and example; omit product workspace member and lockfile; resolve offline. With original crates/product/examples/vendor trees hidden, all ten local packages recompile from the copy, the dependency tree contains no Nacre, and the default example `--check` passes. |
+| Nacre compatibility | PASS: real private-bus calls, exact existing server information, legacy methods/property, shared neutral policy state, owner-scoped inhibition and teardown; moved Outfit regression passes in workspace tests. |
+| Nested niri | NOT RUN: desktop TEST host timed out; no capture armed, no performance or physical presentation claim. |
+
+The clean final workflow passed after a reused temporary Luau extraction
+directory prompted on the first attempt. The final run used a fresh temporary
+directory. The independent copy proof deliberately forces recompilation so a
+cached executable cannot retain its original compile-time asset root. Its
+unused fontconfig-patch/profile-entry warnings are informational: those packages
+belong to the transitional product graph, which the copy omits.
+
+Step 1c is still blocked on B0213 landing; step 3 still waits for B0212/B0213
+and the remaining generalization. Frontend/schema and every `shell/` file are
+unchanged by phase 2. No live installation, preview refresh or repository move.
 
 ## Phase 1 record
 
