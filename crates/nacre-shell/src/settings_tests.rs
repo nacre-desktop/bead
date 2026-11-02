@@ -495,7 +495,10 @@ fn settings_items_scroll_preserves_touchpad_pixels_and_shared_wheel_distance() {
     let mut h = harness(
         BTreeMap::from([
             ("settings.items".into(), Value::list(items)),
-            ("settings.title".into(), Value::Text("Fixture settings".into())),
+            (
+                "settings.title".into(),
+                Value::Text("Fixture settings".into()),
+            ),
             ("settings.description".into(), Value::Text("".into())),
             ("settings.searching".into(), Value::Bool(false)),
         ]),

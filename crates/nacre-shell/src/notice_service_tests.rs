@@ -36,7 +36,10 @@ fn notification_history_scroll_preserves_touchpad_pixels_and_shared_wheel_distan
         BTreeMap::from([
             ("notifications.open".into(), bead::core::Value::Bool(true)),
             ("panel.open".into(), bead::core::Value::Bool(true)),
-            ("notifications.scroll.y".into(), bead::core::Value::Number(0.)),
+            (
+                "notifications.scroll.y".into(),
+                bead::core::Value::Number(0.),
+            ),
             ("notifications.rows".into(), bead::core::Value::list(rows)),
         ]),
         Config {
