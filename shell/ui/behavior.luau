@@ -76,7 +76,9 @@ return {
       if #groups==0 then
         groups={{id="home",name=tr("bead.launcher.favorites"),icon="home"},{id="apps",name=tr("bead.launcher.apps"),icon="apps"},{id="actions",name=tr("bead.launcher.actions"),icon="bolt"}}
       end
-      groups=table.clone(groups)
+      local copy={}
+      for _,entry in ipairs(groups) do table.insert(copy,entry) end
+      groups=copy
       local present={}
       for _,entry in ipairs(groups) do present[entry.id]=true end
       if not present.widgets then table.insert(groups,{id="widgets",name=tr("bead.launcher.widgets"),icon="widgets"}) end
