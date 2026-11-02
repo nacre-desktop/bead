@@ -18,42 +18,48 @@ def run(*args: str) -> str:
     return subprocess.check_output(args, cwd=ROOT, text=True, stderr=subprocess.STDOUT)
 
 
-def main() -> int:
-    errors: list[str] = []
-
-    # Cargo's resolved all-feature graph catches renamed direct dependencies and
-    # transitive product crates, including aliases that do not spell "nacre".
-    metadata = json.loads(run("cargo", "metadata", "--locked", "--all-features", "--format-version", "1"))
+def dependency_violations(metadata: dict) -> list[str]:
     workspace_ids = set(metadata["workspace_members"])
     packages = {package["id"]: package for package in metadata["packages"]}
+    errors: list[str] = []
     for package_id in sorted(workspace_ids):
         package = packages[package_id]
         for dependency in package["dependencies"]:
-            if dependency["name"].lower().startswith("nacre"):
-                errors.append(f"{package['name']}: dependency {dependency['name']}")
+            package_name = dependency.get("package", dependency["name"])
+            if package_name.lower().startswith("nacre"):
+                errors.append(f"{package['name']}: dependency {package_name}")
 
-    # cargo metadata --no-deps is intentionally not used here: inspect resolved
-    # nodes so aliases and transitive crates are covered too.
     resolve = metadata.get("resolve") or {}
-    for node in resolve.get("nodes", []):
-        if node["id"] not in workspace_ids:
-            continue
-        package = packages[node["id"]]
-        for dep in node["deps"]:
-            target = packages[dep["pkg"]]
-            if target["name"].lower().startswith("nacre"):
-                errors.append(f"{package['name']}: resolved dependency {target['name']}")
+    nodes = {node["id"]: node for node in resolve.get("nodes", [])}
+    for workspace_id in sorted(workspace_ids):
+        root_package = packages[workspace_id]
+        pending = [workspace_id]
+        visited: set[str] = set()
+        while pending:
+            package_id = pending.pop()
+            if package_id in visited:
+                continue
+            visited.add(package_id)
+            package = packages[package_id]
+            source = package.get("source") or ""
+            if "github.com/nacre-desktop/nacre" in source.lower():
+                errors.append(f"{root_package['name']}: dependency source {source}")
+            node = nodes.get(package_id)
+            if node is None:
+                continue
+            for dep in node["deps"]:
+                target = packages[dep["pkg"]]
+                pending.append(dep["pkg"])
+                if target["name"].lower().startswith("nacre"):
+                    errors.append(f"{root_package['name']}: resolved dependency {target['name']}")
+    return errors
 
-    tree = run("cargo", "tree", "--workspace", "--all-features", "--locked", "--prefix", "none")
-    for line in tree.splitlines():
-        name = line.split()[0] if line.split() else ""
-        if name.lower().startswith("nacre"):
-            errors.append(f"resolved workspace graph contains {name}")
 
-    # The framework must not contain product crates, product path literals, or
-    # product tool references. Historical evidence belongs with the product.
-    for base in (ROOT / "crates", ROOT / "examples" / "minimal-shell"):
-        for path in sorted(base.rglob("*")):
+def source_violations(bases: tuple[pathlib.Path, ...], root: pathlib.Path) -> list[str]:
+    errors: list[str] = []
+    for base in bases:
+        paths = (base,) if base.is_file() else tuple(sorted(base.rglob("*")))
+        for path in paths:
             if not path.is_file() or path.is_symlink():
                 continue
             try:
@@ -62,8 +68,33 @@ def main() -> int:
                 continue
             for line_number, line in enumerate(content.splitlines(), 1):
                 if FORBIDDEN.search(line):
-                    rel = path.relative_to(ROOT)
+                    rel = path.relative_to(root)
                     errors.append(f"{rel}:{line_number}: product reference: {line.strip()[:120]}")
+    return errors
+
+
+def main() -> int:
+    errors = []
+
+    # Cargo's resolved all-feature graph catches renamed direct dependencies and
+    # transitive product crates, including aliases that do not spell "nacre".
+    metadata = json.loads(run("cargo", "metadata", "--locked", "--all-features", "--format-version", "1"))
+    errors.extend(dependency_violations(metadata))
+
+    tree = run("cargo", "tree", "--workspace", "--all-features", "--locked", "--prefix", "none")
+    for line in tree.splitlines():
+        name = line.split()[0] if line.split() else ""
+        if name.lower().startswith("nacre"):
+            errors.append(f"resolved workspace graph contains {name}")
+
+    # Product path/tool literals in framework source and examples also fail;
+    # historical evidence belongs with the product.
+    errors.extend(
+        source_violations(
+            (ROOT / "Cargo.toml", ROOT / "crates", ROOT / "examples" / "minimal-shell"),
+            ROOT,
+        )
+    )
 
     if errors:
         print("FRAMEWORK_BOUNDARY_FAILED", file=sys.stderr)

@@ -2,7 +2,7 @@
 
 An MIT example host with its own window identity, Luau views, palette, tokens,
 input state and bundled hello plugin. It needs Bead and system Wayland/fonts;
-it does not load Nacre, a helper/daemon, product fonts, or user configuration.
+it does not load a product runtime, helper/daemon, product fonts, or user configuration.
 Theme tokens here are ordinary app Luau; framework kit token injection is a
 separate follow-up.
 

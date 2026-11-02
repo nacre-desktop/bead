@@ -35,6 +35,8 @@ jobs:
         run: cargo fmt --all --check
       - name: Framework dependency direction
         run: python3 tools/check-framework-boundary.py
+      - name: Framework boundary negative controls
+        run: python3 -m unittest discover -s tools/tests -p 'test_framework_boundary.py'
       - name: Headless services dependency boundary
         run: python3 tools/check-service-boundary.py
       - name: Clippy
