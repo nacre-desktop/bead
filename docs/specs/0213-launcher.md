@@ -1,6 +1,6 @@
 # B0213 — Launcher readability, plugins and action audit
 
-Status: candidate; remote CI, refreshed goldens and paired visual review pending. One Nacre engine gap is an N-unit proposal below. No live session was used.
+Status: candidate; headless goldens refreshed and reviewed at scales 1 and 1.5; full-CI result is in the unit report. Paired QML/live review remains pending. One Nacre engine gap is an N-unit proposal below. No live session was used.
 
 ## Changes and root cause
 
@@ -232,8 +232,10 @@ The Widgets/Plugins rail entries are intentionally Bead-owned because the shared
 
 ## Validation handoff
 
-Both authorized remote-host probes failed (unreachable/timed out), so no build, test, nested capture or CI ran on the laptop. Single-file Rust formatting/checks use edition 2024, the repository edition; the suggested edition 2021 cannot parse its existing let chains. Luau analyzer was not on PATH.
+The initial offline pass had only formatting/JSON checks. The authorized CI continuation uses the requested Ubuntu 24.04 container and exact workflow command steps, with Cargo -j2. CI exposed and fixed the protected-store-array clone, the oversized result-grid spacer, and an omitted existing helper target in the static route proof. Results now reuse the shared bounded-spacer list; its optional fixed-pitch total preserves prefix pagination. The launcher bundle declares that shared module.
 
-Added tests cover explicit-newline/wrapped two-line descriptions, row/clip bounds, text width/line pitch/opacity and ellipsis; Plugins rail → prefix and Widgets target; all audited built-in icon names resolving through the actual codepoint table; every supported action's dispatch plan; extension state/command routing and the explicit software-open proposal. Existing B0208 tests cover install/access and plugin host operations.
+The wrapped-entry test renders actual text primitives at scales 1 and 1.5, checks both description lines against their row and renderer clip rectangles, verifies width, line pitch and full text opacity, and compares exact images. It covers explicit newlines, long wrapping/ellipsis and a third-line overflow. Passive text is checked in the scene, not the interactive hit-node list. Existing route, plugin, form and pagination tests also pass in the focused run.
 
-Lead must run the complete `.github/workflows/ci.yml` job in its prescribed Ubuntu 24.04 CI container, including fmt, warnings-denied clippy, workspace/trace tests, renderer feature checks, generated Luau schema/analyzer, all Python/proof/packaging/service/video tests and all cargo-deny graphs. Focus first on `cargo test -p nacre-shell --locked -j2 launcher_pixels_tests::`, `launcher_actions_tests::`, `plugins_tests::`, and existing app/command-route tests. The launcher row/grid goldens and any launcher full-scene goldens affected by the new rail must be regenerated and visually reviewed remotely (`BEAD_UPDATE_GOLDENS=1`), then rerun with updates off; existing exact comparisons were not weakened. Matched private QML/Bead open/hover/pressed/modes captures and the lead's live acceptance remain pending; known intended differences are the readable larger result rows and the two new rail entries. No screenshots are claimed.
+Eight images were regenerated in that same container and individually inspected: `launcher-rows-{grid,results,scrolled}.png`, `launcher-{conversion,conversion-error,guidance}.png`, and the new `launcher-two-line-{1,1.5}.png`. Both second lines are fully readable and have consistent ink, with no dark cut-off. Scroll-edge clipping remains limited to naturally partial rows at the viewport boundary. No comparison tolerance was changed. The new rail, one-line grid ellipsis and taller results explain the intended differences.
+
+The final full `.github/workflows/ci.yml` run uses golden updates **off**; its result and tested commit are recorded in the unit report. Matched private QML/Bead captures, performance/memory evidence and the lead's live acceptance remain outside this headless continuation. No live session was used, and no installed files or SPDX header lines were changed.
