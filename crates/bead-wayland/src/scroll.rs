@@ -28,7 +28,8 @@ const FLING_DECELERATION: f64 = 96. * 2.7559e-5 * 1_000_000.;
 const FLING_DURATION_DECELERATION: f64 = 2300.;
 const FLING_MIN_VELOCITY: f64 = 100.;
 const WHEEL_DURATION: f64 = 0.125;
-const WHEEL_STEP: f64 = 100.;
+/// Chosen shared wheel token: three nominal 18 px lines at scale 1 = 54 logical px.
+const WHEEL_STEP: f64 = 54.;
 const LEGACY_WHEEL_NOTCH: f64 = 15.;
 
 pub(super) fn distance(axis: AxisScroll) -> f64 {
@@ -80,7 +81,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(movement(axis, false, None), (15., false));
-        assert_eq!(movement(axis, true, None), (100., true));
+        assert_eq!(movement(axis, true, None), (54., true));
         assert_eq!(
             movement(
                 AxisScroll {
@@ -103,7 +104,7 @@ mod tests {
             movement(axis, true, Some(AxisSource::Finger)),
             (-15., false)
         );
-        assert_eq!(movement(axis, true, Some(AxisSource::Wheel)), (-100., true));
+        assert_eq!(movement(axis, true, Some(AxisSource::Wheel)), (-54., true));
         assert_eq!(
             movement(
                 AxisScroll {
@@ -113,7 +114,7 @@ mod tests {
                 true,
                 Some(AxisSource::Wheel)
             ),
-            (100., true)
+            (54., true)
         );
         assert_eq!(
             movement(axis, true, Some(AxisSource::Continuous)),
@@ -179,35 +180,35 @@ mod tests {
                 value120: 120,
                 ..Default::default()
             }),
-            100.
+            54.
         );
         assert_eq!(
             distance(AxisScroll {
                 value120: 30,
                 ..Default::default()
             }),
-            25.
+            13.5
         );
         assert_eq!(
             distance(AxisScroll {
                 value120: -30,
                 ..Default::default()
             }),
-            -25.
+            -13.5
         );
         assert_eq!(
             distance(AxisScroll {
                 discrete: 1,
                 ..Default::default()
             }),
-            100.
+            54.
         );
         assert_eq!(
             distance(AxisScroll {
                 discrete: -1,
                 ..Default::default()
             }),
-            -100.
+            -54.
         );
         assert_eq!(
             distance(AxisScroll {
@@ -217,6 +218,36 @@ mod tests {
             -2.5
         );
         assert_eq!(distance(AxisScroll::default()), 0.);
+    }
+
+    #[test]
+    fn every_scroll_target_uses_the_same_axis_conversion() {
+        // App::axis_scroll routes each concrete target through this one conversion function.
+        let targets = [
+            Target::Window(1),
+            Target::Overlay(2),
+            Target::Panel(3),
+            Target::Primary(None),
+            Target::Primary(Some((4, "output-1".into()))),
+        ];
+        let notch = AxisScroll {
+            value120: 120,
+            ..Default::default()
+        };
+        let finger = AxisScroll {
+            absolute: -23.,
+            ..Default::default()
+        };
+        for _target in targets {
+            assert_eq!(
+                movement(notch, true, Some(AxisSource::Wheel)),
+                (WHEEL_STEP, true)
+            );
+            assert_eq!(
+                movement(finger, true, Some(AxisSource::Finger)),
+                (-23., false)
+            );
+        }
     }
 }
 
@@ -351,40 +382,23 @@ impl App {
         axis: AxisScroll,
         source: Option<AxisSource>,
     ) {
-        let settings = match &target {
-            Target::Window(_) => self
-                .window
-                .as_ref()
-                .map(|w| (w.wheel_step(), w.scroll_regions())),
-            Target::Overlay(_) => self
-                .overlay
-                .as_ref()
-                .map(|o| (o.wheel_step(), o.scroll_regions())),
-            Target::Panel(_) => self
-                .panel_runtime
-                .as_ref()
-                .map(|s| (s.wheel_step(), s.scroll_regions())),
+        let regions = match &target {
+            Target::Window(_) => self.window.as_ref().map(|w| w.scroll_regions()),
+            Target::Overlay(_) => self.overlay.as_ref().map(|o| o.scroll_regions()),
+            Target::Panel(_) => self.panel_runtime.as_ref().map(|s| s.scroll_regions()),
             Target::Primary(Some((_, id))) => self
                 .output_sessions
                 .get(id)
                 .and_then(|s| s.source.as_ref())
-                .map(|s| (s.wheel_step(), s.scroll_regions())),
-            Target::Primary(None) => self
-                .runtime
-                .as_ref()
-                .map(|s| (s.wheel_step(), s.scroll_regions())),
+                .map(|s| s.scroll_regions()),
+            Target::Primary(None) => self.runtime.as_ref().map(|s| s.scroll_regions()),
         };
-        let content = settings.as_ref().is_some_and(|(_, regions)| {
+        let content = regions.as_ref().is_some_and(|regions| {
             regions.iter().any(|r| {
                 point.0 >= r.x && point.1 >= r.y && point.0 < r.x + r.w && point.1 < r.y + r.h
             })
         });
-        let step = settings
-            .map(|(step, _)| step)
-            .filter(|step| step.is_finite() && *step > 0.)
-            .unwrap_or(WHEEL_STEP);
         let (delta, wheel) = movement(axis, content, source);
-        let delta = delta * if wheel { step / WHEEL_STEP } else { 1. };
         let key = (target.clone(), horizontal);
         if delta == 0. {
             if axis.stop {

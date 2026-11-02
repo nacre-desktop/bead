@@ -15,7 +15,6 @@ struct Mirror {
     focused_dismiss: bool,
     tracks_origin: bool,
     outside_dismiss: bool,
-    wheel_step: f64,
     scroll_regions: Vec<Rect>,
     regions: Vec<InputRegion>,
     surrounding: Option<(String, i32, i32)>,
@@ -37,7 +36,6 @@ impl Mirror {
             focused_dismiss: source.focused_dismiss(),
             tracks_origin: source.tracks_origin(),
             outside_dismiss: source.outside_dismiss(),
-            wheel_step: source.wheel_step(),
             scroll_regions: source.scroll_regions(),
             regions: source.input_regions(),
             surrounding: source.surrounding_text(),
@@ -852,9 +850,6 @@ impl SceneSource for Source {
     }
     fn scroll_regions(&self) -> Vec<Rect> {
         self.mirror.scroll_regions.clone()
-    }
-    fn wheel_step(&self) -> f64 {
-        self.mirror.wheel_step
     }
     fn outside_dismiss(&self) -> bool {
         self.mirror.outside_dismiss
