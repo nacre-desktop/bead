@@ -453,9 +453,9 @@ return function(ui, tokens)
         if p.editing and p.editing.value then
             rows[#rows+1]=kit.TextInput{id="group-name",text=ui.bind(p.editing.value),placeholder=p.editing.label,
                 aria_label=p.editing.label,on_activate=ui.action(p.on_commit)}
-            rows[#rows+1]=ui.Row{gap=tokens.spacing.xs,
-                kit.Button{id="save-name",text=p.save_label or "Save",on_activate=ui.action(p.on_commit)},
-                kit.Button{id="cancel-name",text=p.cancel_label or "Cancel",on_activate=ui.action(p.on_cancel)}}
+            rows[#rows+1]=ui.Row{id="editor-actions",width="fill",height=40,shrink=0,gap=tokens.spacing.xs,align="center",justify="end",
+                kit.Button{id="save-name",width=88,height=36,shrink=0,text=p.save_label or "Save",on_activate=ui.action(p.on_commit)},
+                kit.Button{id="cancel-name",width=88,height=36,shrink=0,text=p.cancel_label or "Cancel",on_activate=ui.action(p.on_cancel)}}
         elseif p.on_create then rows[#rows+1]=kit.Button{id="create",height=36,text=p.create_label or "Create",
             on_activate=ui.action(p.on_create)} end
         for _,action in ipairs(p.actions or {}) do

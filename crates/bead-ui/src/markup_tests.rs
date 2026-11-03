@@ -578,6 +578,28 @@ return ui.Column{id="root",width=600,height=800,gap=8,
     assert!(texts.contains(&"Cancel"));
     assert!(texts.contains(&"Desk name"));
     assert!(texts.contains(&"Set current wallpaper"));
+    for (id, label) in [("save-name", "Save"), ("cancel-name", "Cancel")] {
+        let node = s
+            .current_nodes
+            .iter()
+            .find(|node| node.id.ends_with(id))
+            .unwrap_or_else(|| panic!("missing {id} editor action"));
+        let bounds = rect(&node.draw);
+        assert!(
+            bounds.w >= 88. && bounds.h >= 36.,
+            "{id} target is too small: {bounds:?}"
+        );
+        assert!(
+            s.current.primitives.iter().any(|primitive| matches!(
+                primitive,
+                Primitive::Text { text, rect, .. }
+                    if *text == label
+                        && rect.x >= bounds.x
+                        && rect.x + rect.w <= bounds.x + bounds.w
+            )),
+            "{label} label must fit inside its button target: {bounds:?}"
+        );
+    }
 
     let (x, y) = collection_node_center(&s, "desks");
     let scene = s.click(x, y).unwrap().unwrap();
