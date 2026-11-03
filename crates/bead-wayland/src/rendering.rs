@@ -1696,11 +1696,16 @@ impl App {
                     );
                     bead_render::layer_motion::scene_ink_bounds(scene, scale, resting_offset)
                         .is_some_and(|ink_bounds| {
-                            bead_render::layer_motion::translation_preserves_clip(
-                                ink_bounds,
-                                bead_render::Rect::new(0., 0., s.width as f32, s.height as f32),
-                                closed_offset,
+                            bead_render::layer_motion::motion_atlas_viewport(
+                                s.width, s.height, scale,
                             )
+                            .is_some_and(|viewport| {
+                                bead_render::layer_motion::translation_preserves_clip(
+                                    ink_bounds,
+                                    viewport,
+                                    closed_offset,
+                                )
+                            })
                         })
                 });
             let layer_motion_candidate = layer_motion_transport_eligible

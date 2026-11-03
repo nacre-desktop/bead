@@ -32,15 +32,51 @@ fn extend_bounds(bounds: &mut Option<Rect>, next: Rect) -> Option<()> {
     Some(())
 }
 
-fn bitmap_ink_bounds(rect: Rect, scale: f32) -> Rect {
-    let (width, height) = crate::dimensions(rect, scale);
-    let pad = 1. / scale;
-    Rect::new(
-        rect.x - pad,
-        rect.y - pad,
-        width as f32 / scale + 2. * pad,
-        height as f32 / scale + 2. * pad,
-    )
+fn bitmap_ink_bounds(
+    rect: Rect,
+    scale: f32,
+    offset: (f32, f32),
+    origin: (u32, u32),
+    size: (u32, u32),
+) -> Option<Rect> {
+    // Match TreeCpuRenderer's bitmap placement exactly: round the combined
+    // logical position after multiplying in f32, then add any raster origin.
+    let x = ((rect.x + offset.0) * scale).round();
+    let y = ((rect.y + offset.1) * scale).round();
+    if !x.is_finite()
+        || !y.is_finite()
+        || x < i32::MIN as f32
+        || x > i32::MAX as f32
+        || y < i32::MIN as f32
+        || y > i32::MAX as f32
+    {
+        return None;
+    }
+    let left = f64::from(x) + f64::from(origin.0);
+    let top = f64::from(y) + f64::from(origin.1);
+    let right = left + f64::from(size.0);
+    let bottom = top + f64::from(size.1);
+    let scale = f64::from(scale);
+    let bounds = Rect::new(
+        (left / scale) as f32,
+        (top / scale) as f32,
+        ((right - left) / scale) as f32,
+        ((bottom - top) / scale) as f32,
+    );
+    finite_rect(bounds).then_some(bounds)
+}
+
+/// Logical viewport covered by the physical atlas after pixel rounding.
+/// This may extend past the nominal logical size at fractional scales.
+pub fn motion_atlas_viewport(width: u32, height: u32, scale: f32) -> Option<Rect> {
+    if width == 0 || height == 0 || !scale.is_finite() || scale <= 0. {
+        return None;
+    }
+    let width = (f64::from(width) * f64::from(scale)).ceil();
+    let height = (f64::from(height) * f64::from(scale)).ceil();
+    let scale = f64::from(scale);
+    let viewport = Rect::new(0., 0., (width / scale) as f32, (height / scale) as f32);
+    finite_rect(viewport).then_some(viewport)
 }
 
 /// Conservative surface-local paint bounds for a scene at `scale` and `offset`.
@@ -54,8 +90,7 @@ pub fn scene_ink_bounds(scene: &Scene, scale: f32, offset: (f32, f32)) -> Option
     for (index, primitive) in scene.primitives.iter().enumerate() {
         let primitive_offset = scene.content_offset(index);
         let translated_offset = (offset.0 + primitive_offset.0, offset.1 + primitive_offset.1);
-        let ink = primitive_ink_bounds(primitive, scale)?
-            .translated(translated_offset.0, translated_offset.1);
+        let ink = primitive_ink_bounds(primitive, scale, translated_offset)?;
         extend_bounds(&mut bounds, ink)?;
     }
 
@@ -64,35 +99,25 @@ pub fn scene_ink_bounds(scene: &Scene, scale: f32, offset: (f32, f32)) -> Option
             return None;
         }
         for item in &frame.items {
-            let primitive =
-                primitive_ink_bounds(&item.primitive, scale)?.translated(offset.0, offset.1);
+            let primitive = if let Some(raster) = &item.raster {
+                bitmap_ink_bounds(
+                    crate::tree::rect(&item.primitive),
+                    scale,
+                    offset,
+                    raster.origin,
+                    (raster.pixels.width(), raster.pixels.height()),
+                )?
+            } else {
+                primitive_ink_bounds(&item.primitive, scale, offset)?
+            };
             extend_bounds(&mut bounds, primitive)?;
-
-            if let Some(raster) = &item.raster {
-                let rect = crate::tree::rect(&item.primitive);
-                let scale64 = f64::from(scale);
-                let pad = 1. / scale64;
-                let left =
-                    (f64::from(rect.x + offset.0) * scale64).round() + f64::from(raster.origin.0);
-                let top =
-                    (f64::from(rect.y + offset.1) * scale64).round() + f64::from(raster.origin.1);
-                let right = left + f64::from(raster.pixels.width());
-                let bottom = top + f64::from(raster.pixels.height());
-                let raster_bounds = Rect::new(
-                    (left / scale64 - pad) as f32,
-                    (top / scale64 - pad) as f32,
-                    ((right - left) / scale64 + 2. * pad) as f32,
-                    ((bottom - top) / scale64 + 2. * pad) as f32,
-                );
-                extend_bounds(&mut bounds, raster_bounds)?;
-            }
         }
     }
 
     bounds.or_else(|| Some(Rect::new(offset.0, offset.1, 0., 0.)))
 }
 
-fn primitive_ink_bounds(primitive: &Primitive, scale: f32) -> Option<Rect> {
+fn primitive_ink_bounds(primitive: &Primitive, scale: f32, offset: (f32, f32)) -> Option<Rect> {
     let rect = crate::tree::rect(primitive);
     if !finite_rect(rect) {
         return None;
@@ -121,6 +146,7 @@ fn primitive_ink_bounds(primitive: &Primitive, scale: f32) -> Option<Rect> {
                 rect.w + 2. * pad,
                 rect.h + 2. * pad,
             )
+            .translated(offset.0, offset.1)
         }
         Primitive::Polyline {
             points,
@@ -145,6 +171,7 @@ fn primitive_ink_bounds(primitive: &Primitive, scale: f32) -> Option<Rect> {
                 rect.w + 2. * pad,
                 rect.h + 2. * pad,
             )
+            .translated(offset.0, offset.1)
         }
         Primitive::Rounded { radius, border, .. } => {
             if !radius.is_finite() {
@@ -161,6 +188,7 @@ fn primitive_ink_bounds(primitive: &Primitive, scale: f32) -> Option<Rect> {
                 rect.w + 2. * pad,
                 rect.h + 2. * pad,
             )
+            .translated(offset.0, offset.1)
         }
         Primitive::Text { size, shadow, .. } => {
             if !size.is_finite()
@@ -171,19 +199,19 @@ fn primitive_ink_bounds(primitive: &Primitive, scale: f32) -> Option<Rect> {
             {
                 return None;
             }
-            bitmap_ink_bounds(rect, scale)
+            bitmap_ink_bounds(rect, scale, offset, (0, 0), crate::dimensions(rect, scale))?
         }
         Primitive::Image { blur, .. } => {
             if !blur.is_finite() || *blur < 0. {
                 return None;
             }
-            bitmap_ink_bounds(rect, scale)
+            bitmap_ink_bounds(rect, scale, offset, (0, 0), crate::dimensions(rect, scale))?
         }
         Primitive::Shadow { radius, blur, .. } => {
             if !radius.is_finite() || !blur.is_finite() || *radius < 0. || *blur < 0. {
                 return None;
             }
-            bitmap_ink_bounds(rect, scale)
+            bitmap_ink_bounds(rect, scale, offset, (0, 0), crate::dimensions(rect, scale))?
         }
     };
     finite_rect(bounds).then_some(bounds)
@@ -345,14 +373,13 @@ impl LayerMotionPlan {
         let Some(ink_bounds) = scene_ink_bounds(scene, scale, scene.offset) else {
             return Ok(None);
         };
+        let Some(atlas_viewport) = motion_atlas_viewport(width, height, scale) else {
+            return Ok(None);
+        };
         // The atlas contains only pixels inside this viewport. If the closed
         // pose moves hidden content into view, the compositor cannot recover
         // those pixels from the already-cropped source; keep the CPU path.
-        if !translation_preserves_clip(
-            ink_bounds,
-            Rect::new(0., 0., width as f32, height as f32),
-            closed_offset,
-        ) {
+        if !translation_preserves_clip(ink_bounds, atlas_viewport, closed_offset) {
             return Ok(None);
         }
         let pixel_width = (width as f64 * scale as f64).ceil();
@@ -639,6 +666,119 @@ mod tests {
         assert_eq!(plan.atlas.stride, 584);
         assert_eq!(plan.planes[0].source, Rect::new(0., 0., 97., 73.));
         assert_eq!(plan.planes[0].to.destination, plan.planes[0].source);
+        Ok(())
+    }
+
+    #[test]
+    fn bitmap_extent_uses_exact_shadow_pixels_at_aligned_fractional_scale() -> Result<()> {
+        struct CountPaint {
+            renderer: TreeCpuRenderer,
+            paints: usize,
+        }
+        impl Renderer for CountPaint {
+            fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
+                self.renderer.prepare(scene, scale)
+            }
+            fn render(
+                &mut self,
+                scene: &Scene,
+                target: ShmTarget<'_>,
+                damage: Damage,
+            ) -> Result<()> {
+                self.paints += 1;
+                self.renderer.render(scene, target, damage)
+            }
+        }
+
+        let mut scene = scene(false, false);
+        scene.width = 446.;
+        scene.bounds = Rect::new(-32., -32., 446., 360.);
+        scene.offset = (32., 32.);
+        scene.motion.as_mut().unwrap().edge = bead_core::Edge::Top;
+        scene.motion.as_mut().unwrap().slide_distance = Some(32.);
+        scene.primitives = vec![Primitive::Shadow {
+            rect: Rect::new(-32., -2., 446., 330.),
+            radius: 16.,
+            blur: 12.,
+        }];
+
+        let ink = scene_ink_bounds(&scene, 1.5, scene.offset).unwrap();
+        assert_eq!(ink, Rect::new(0., 30., 446., 330.));
+        assert!(translation_preserves_clip(
+            ink,
+            motion_atlas_viewport(446, 360, 1.5).unwrap(),
+            (0., -32.),
+        ));
+
+        let mut renderer = CountPaint {
+            renderer: TreeCpuRenderer::default(),
+            paints: 0,
+        };
+        let plan = LayerMotionPlan::for_slide(
+            &scene,
+            false,
+            446,
+            360,
+            1.5,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )?;
+        assert!(plan.is_some());
+        assert_eq!(renderer.paints, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn bitmap_extent_fits_odd_fractional_atlas_without_changing_logical_plane() -> Result<()> {
+        struct CountPaint {
+            renderer: TreeCpuRenderer,
+            paints: usize,
+        }
+        impl Renderer for CountPaint {
+            fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
+                self.renderer.prepare(scene, scale)
+            }
+            fn render(
+                &mut self,
+                scene: &Scene,
+                target: ShmTarget<'_>,
+                damage: Damage,
+            ) -> Result<()> {
+                self.paints += 1;
+                self.renderer.render(scene, target, damage)
+            }
+        }
+
+        let mut scene = scene(false, false);
+        scene.width = 97.;
+        scene.bounds = Rect::new(0., 0., 97., 73.);
+        scene.motion.as_mut().unwrap().slide_distance = Some(32.);
+        scene.primitives = vec![Primitive::Shadow {
+            rect: Rect::new(0., 0., 97., 73.),
+            radius: 8.,
+            blur: 4.,
+        }];
+        let ink = scene_ink_bounds(&scene, 1.5, scene.offset).unwrap();
+        assert_eq!(ink.w, 146. / 1.5);
+        assert_eq!(ink.h, 110. / 1.5);
+
+        let mut renderer = CountPaint {
+            renderer: TreeCpuRenderer::default(),
+            paints: 0,
+        };
+        let plan = LayerMotionPlan::for_slide(
+            &scene,
+            false,
+            97,
+            73,
+            1.5,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )?
+        .unwrap();
+        assert_eq!((plan.atlas.width, plan.atlas.height), (146, 110));
+        assert_eq!(plan.planes[0].source, Rect::new(0., 0., 97., 73.));
+        assert_eq!(renderer.paints, 1);
         Ok(())
     }
 
@@ -960,7 +1100,7 @@ mod tests {
             .insert(1_f32.to_bits(), std::sync::Arc::new(frame));
 
         let ink = scene_ink_bounds(&scene, 1., scene.offset).unwrap();
-        assert!(ink.x + ink.w > 40.);
+        assert_eq!(ink.x + ink.w, 40.);
         assert!(LayerMotionPlan::for_slide(
             &scene,
             false,
