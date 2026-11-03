@@ -1101,7 +1101,7 @@ mod tests {
         };
         assert_eq!(
             chrome
-                .lip_at(Edge::Left, (1000, 800), (4., 350.))
+                .lip_at(Edge::Left, (1000, 800), (4., 320.))
                 .map(|lip| lip.id.as_str()),
             Some("status")
         );
