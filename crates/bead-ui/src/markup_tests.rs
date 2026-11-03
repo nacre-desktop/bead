@@ -579,34 +579,34 @@ return ui.Column{id="root",width=600,height=800,gap=8,
     assert!(texts.contains(&"Desk name"));
     assert!(texts.contains(&"Set current wallpaper"));
 
-    let (x, y) = node_center(&s, "desks");
+    let (x, y) = collection_node_center(&s, "desks");
     let scene = s.click(x, y).unwrap().unwrap();
     s.commit(scene);
     assert_eq!(s.stores.get("opened"), Some(&Value::Bool(true)));
-    let (x, y) = node_center(&s, "rename-two");
+    let (x, y) = collection_node_center(&s, "rename-two");
     let scene = s.click(x, y).unwrap().unwrap();
     s.commit(scene);
     assert_eq!(s.stores.get("last"), Some(&Value::Text("two".into())));
-    let (x, y) = node_center(&s, "group-name");
+    let (x, y) = collection_node_center(&s, "group-name");
     let scene = s.click(x, y).unwrap().unwrap();
     s.commit(scene);
     let scene = s.key("Focus", false).unwrap().unwrap();
     s.commit(scene);
     assert_eq!(s.stores.get("name"), Some(&Value::Text("Focus".into())));
-    let (x, y) = node_center(&s, "save-name");
+    let (x, y) = collection_node_center(&s, "save-name");
     let scene = s.click(x, y).unwrap().unwrap();
     s.commit(scene);
     assert_eq!(
         s.stores.get("last"),
         Some(&Value::Text("commit:Focus".into()))
     );
-    let (x, y) = node_center(&s, "group-one");
+    let (x, y) = collection_node_center(&s, "group-one");
     let scene = s.click(x, y).unwrap().unwrap();
     s.commit(scene);
     assert_eq!(s.stores.get("current"), Some(&Value::Text("one".into())));
 }
 
-fn node_center(session: &Session, suffix: &str) -> (f32, f32) {
+fn collection_node_center(session: &Session, suffix: &str) -> (f32, f32) {
     let node = session
         .current_nodes
         .iter()
@@ -640,7 +640,7 @@ return ui.Box{id="root",width=400,height=300,
             .iter()
             .any(|p| matches!(p, Primitive::Text{text,..} if text=="Create desk"))
     );
-    let (x, y) = node_center(&s, "create");
+    let (x, y) = collection_node_center(&s, "create");
     let scene = s.click(x, y).unwrap().unwrap();
     s.commit(scene);
     assert_eq!(s.stores.get("created"), Some(&Value::Bool(true)));
