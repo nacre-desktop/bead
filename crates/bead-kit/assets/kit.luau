@@ -437,6 +437,7 @@ return function(ui, tokens)
     end
     -- Generic menu body intended for the host's popout surface. Hosts own any app-specific
     -- state and can show an editor by setting `editing={value=<store key>,label=<text>}`.
+    -- Supply a bounded `height` and bound `scroll` value to keep long group lists usable.
     function kit.CollectionSwitcherMenu(p)
         local groups=value(p.groups,{})
         local current_id=value(p.current,nil)
@@ -461,7 +462,10 @@ return function(ui, tokens)
             rows[#rows+1]=kit.Button{id="host-"..tostring(action.id),height=36,text=action.label,
                 aria_label=action.label,on_activate=ui.action(action.action,action.arg)}
         end
-        return kit.Popover(props(rows,{id=p.id,width=p.width or 240,gap=tokens.spacing.xs},nil))
+        local menu={id=p.id,width=p.width or 240,height=p.height,gap=tokens.spacing.xs,scroll=p.scroll}
+        for _,row in ipairs(rows) do table.insert(menu,row) end
+        if p.height then return ui.Scroll(menu) end
+        return ui.Column(menu)
     end
     kit.Peek=kit.Popover
     function kit.Tooltip(p) return kit.Popover(props(p,{width=180,padding=tokens.spacing.sm})) end
