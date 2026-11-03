@@ -1457,7 +1457,6 @@ impl App {
             self.surfaces[index].layer_motion_plan = None;
             self.surfaces[index].layer_motion_active = false;
             self.surfaces[index].layer_motion_open = None;
-            self.surfaces[index].layer_motion_animation_id = None;
             self.surfaces[index].layer_motion_resting_offset = None;
             self.surfaces[index].layer_motion = self
                 .layer_motion_manager
@@ -1970,12 +1969,11 @@ impl App {
                 && !layer_motion_cpu_replacement
                 && let Some(plan) = s.layer_motion_plan.as_mut()
             {
-                let motion = scene
+                let (duration, curve) = scene
                     .motion
                     .as_ref()
-                    .expect("active layer motion has a scene motion");
-                let animation_id = motion.id.clone();
-                let (duration, curve) = motion.transition(opening);
+                    .expect("active layer motion has a scene motion")
+                    .transition(opening);
                 for plane in &mut plan.planes {
                     std::mem::swap(&mut plane.from, &mut plane.to);
                 }
@@ -1985,7 +1983,6 @@ impl App {
                 if s.layer_motion.as_mut().unwrap().queue(plan).is_none() {
                     return Ok(());
                 }
-                s.layer_motion_animation_id = Some(animation_id);
                 let content_changed = s.layer_motion_ui_serial != s.ui_serial;
                 if content_changed && let Some(epoch) = s.callbacks.request_if_idle() {
                     wl_surface.frame(
@@ -2062,17 +2059,8 @@ impl App {
                             .map(|manager| manager.create(&wl_surface, qh));
                     }
                     let submit_animation = !s.layer_motion_active || changed_target;
-                    let animation_id = source_scene
-                        .motion
-                        .as_ref()
-                        .expect("active layer motion has a source motion")
-                        .id
-                        .clone();
                     if submit_animation && s.layer_motion.as_mut().unwrap().queue(&plan).is_none() {
                         return Ok(());
-                    }
-                    if submit_animation {
-                        s.layer_motion_animation_id = Some(animation_id);
                     }
                     s.layer_motion_resting_offset = Some(source_scene.offset);
                     s.offset = source_scene.offset;
@@ -2891,7 +2879,6 @@ impl App {
                 s.input_content_offset = input_content_offset;
                 s.layer_motion_active = false;
                 s.layer_motion_open = None;
-                s.layer_motion_animation_id = None;
                 s.layer_motion_plan = None;
                 s.layer_motion_resting_offset = None;
                 s.layer_motion_ui_serial = 0;
@@ -2986,7 +2973,11 @@ impl App {
             let committed_at = self.started.elapsed().as_secs_f64();
             let slide = self.animations.committed(&id, drawn, committed_at);
             super::overlay::log_slide(&id, slide);
-            if self.surfaces[index].companion && self.panel_frame_until.is_none() {
+            let motion_active = self
+                .animations
+                .value(&id, committed_at)
+                .is_some_and(|(_, active)| active);
+            if self.surfaces[index].companion && self.panel_frame_until.is_none() && motion_active {
                 self.panel_frame_until = Some(committed_at + duration);
             }
         }

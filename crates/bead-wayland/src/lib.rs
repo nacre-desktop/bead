@@ -897,7 +897,6 @@ struct Surface {
     layer_motion: Option<LayerMotionController>,
     layer_motion_active: bool,
     layer_motion_open: Option<bool>,
-    layer_motion_animation_id: Option<String>,
     layer_motion_plan: Option<bead_render::layer_motion::LayerMotionPlan>,
     layer_motion_ui_serial: u64,
     layer_motion_resting_offset: Option<(f32, f32)>,

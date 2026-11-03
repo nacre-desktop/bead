@@ -126,26 +126,6 @@ impl Animations {
         motion.frames = u32::MAX;
         Some(slide)
     }
-    /// Settle an animation at an expected endpoint after an external presenter
-    /// has completed the same timeline. A mismatched target is left untouched
-    /// so a newer reversal keeps its sampled CPU clock.
-    pub fn settle(&mut self, id: &str, expected: f32, now: f64) -> bool {
-        let Some(motion) = self.states.get_mut(id) else {
-            return false;
-        };
-        if motion.to != expected {
-            return false;
-        }
-        motion.from = expected;
-        motion.to = expected;
-        motion.started = now - motion.duration;
-        motion.held = false;
-        motion.requested = now;
-        motion.frames = u32::MAX;
-        motion.last_frame = now;
-        motion.max_gap = 0.;
-        true
-    }
     #[allow(clippy::too_many_arguments)]
     fn target_as(
         &mut self,
@@ -252,29 +232,6 @@ mod tests {
         assert!((slide.duration_ms - 400.).abs() < 10.);
         assert!((slide.max_gap_ms - 25.).abs() < 1e-6);
         assert_eq!(a.committed("panel", 2., 2.), None);
-    }
-
-    #[test]
-    fn external_completion_settles_matching_held_motion_without_replay() {
-        let mut animations = Animations::default();
-        animations.open_to("panel", true, 1., 0.4, Curve::EaseOut);
-        assert_eq!(animations.value("panel", 3.), Some((0., true)));
-
-        assert!(animations.settle("panel", 1., 3.));
-        animations.open_to("panel", true, 3.1, 0.4, Curve::EaseOut);
-        assert_eq!(animations.value("panel", 3.1), Some((1., false)));
-        assert!(!animations.active(3.1));
-        assert_eq!(animations.committed("panel", 3.1, 3.1), None);
-
-        animations.open_to("replacement", true, 3.2, 0.4, Curve::EaseOut);
-        assert_eq!(animations.value("replacement", 3.2), Some((0., true)));
-        assert!(animations.settle("panel", 1., 3.2));
-        assert_eq!(animations.value("replacement", 3.2), Some((0., true)));
-
-        animations.open_to("panel", false, 4., 0.4, Curve::EaseOut);
-        assert_eq!(animations.value("panel", 4.), Some((1., true)));
-        assert!(!animations.settle("panel", 1., 4.1));
-        assert_eq!(animations.value("panel", 4.1), Some((1., true)));
     }
     #[test]
     fn a_reversal_holds_its_current_pose_until_shown_and_plain_targets_never_hold() {

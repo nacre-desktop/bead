@@ -288,72 +288,45 @@ impl Dispatch<BeadLayerMotionV1, Arc<DispatchData>> for App {
         if current {
             let surface_companion = state.surfaces[index].companion;
             let surface_output = state.surfaces[index].output_name.clone();
-            let inactive_output = !surface_companion
-                && state.options.primary_factory.is_some()
-                && state.active_output.as_deref() != Some(surface_output.as_str());
-            let target_motion = if surface_companion {
-                state
-                    .companion
-                    .as_ref()
-                    .and_then(|(scene, _, _)| scene.motion.as_ref())
-                    .map(|motion| (motion.open, motion.reveal))
-            } else if inactive_output {
+            let target_scene = if surface_companion {
+                state.companion.as_ref().map(|(scene, _, _)| scene)
+            } else if state.options.primary_factory.is_some()
+                && state.active_output.as_deref() != Some(surface_output.as_str())
+            {
                 state
                     .output_sessions
                     .get(&surface_output)
-                    .and_then(|session| session.scene.motion.as_ref())
-                    .map(|motion| (motion.open, motion.reveal))
+                    .map(|session| &session.scene)
             } else {
-                state
-                    .scene
-                    .motion
-                    .as_ref()
-                    .map(|motion| (motion.open, motion.reveal))
+                Some(&state.scene)
             };
+            let target_motion = target_scene.and_then(|scene| scene.motion.as_ref());
             let target_open = if surface_companion && state.options.panel_spec.is_some() {
                 state.panel_target
             } else {
-                target_motion.as_ref().is_some_and(|(open, _)| *open)
+                target_motion.is_some_and(|motion| motion.open)
             };
             let cpu_reveal_handoff = layer_motion_completion_uses_cpu_reveal(
                 completed,
                 state.surfaces[index].layer_motion_open,
                 target_open,
-                target_motion.as_ref().is_some_and(|(_, reveal)| *reveal),
+                target_motion.is_some_and(|motion| motion.reveal),
             );
             if cpu_reveal_handoff {
                 if let Some(motion) = state.surfaces[index].layer_motion.as_mut() {
                     motion.take_events();
                     motion.retire_completed(serial);
                 }
-                state.surfaces[index].layer_motion_animation_id = None;
                 state.panel_frame_until = None;
                 state.surfaces[index].redraw = true;
                 state.draw(index, qh);
                 return;
-            }
-            if completed
-                && state.surfaces[index].layer_motion_open == Some(target_open)
-                && let Some(motion_id) = state.surfaces[index].layer_motion_animation_id.as_ref()
-            {
-                let expected = if target_open { 1. } else { 0. };
-                let now = state.started.elapsed().as_secs_f64();
-                if surface_companion {
-                    state.panel_animations.settle(motion_id, expected, now);
-                } else if inactive_output {
-                    if let Some(session) = state.output_sessions.get_mut(&surface_output) {
-                        session.animations.settle(motion_id, expected, now);
-                    }
-                } else {
-                    state.animations.settle(motion_id, expected, now);
-                }
             }
             let settled_open = completed
                 && state.surfaces[index].layer_motion_open == Some(true)
                 && state.surfaces[index].layer_motion_ui_serial == state.surfaces[index].ui_serial
                 && (!state.surfaces[index].companion || state.panel_target);
             state.surfaces[index].layer_motion_active = false;
-            state.surfaces[index].layer_motion_animation_id = None;
             let surface = state.surfaces[index].layer.wl_surface().clone();
             if let Some(motion) = state.surfaces[index].layer_motion.as_mut() {
                 motion.take_events();
