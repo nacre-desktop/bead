@@ -7,7 +7,187 @@
 
 use std::time::Duration;
 
-use crate::{Damage, PixelFormat, Rect, Renderer, Result, Scene, ShmTarget};
+use crate::{Damage, PixelFormat, Primitive, Rect, Renderer, Result, Scene, ShmTarget};
+
+fn finite_rect(rect: Rect) -> bool {
+    rect.x.is_finite()
+        && rect.y.is_finite()
+        && rect.w.is_finite()
+        && rect.h.is_finite()
+        && (rect.x + rect.w).is_finite()
+        && (rect.y + rect.h).is_finite()
+        && rect.w >= 0.
+        && rect.h >= 0.
+}
+
+fn extend_bounds(bounds: &mut Option<Rect>, next: Rect) -> Option<()> {
+    if !finite_rect(next) {
+        return None;
+    }
+    let merged = (*bounds).map_or(next, |current| current.union(next));
+    if !finite_rect(merged) {
+        return None;
+    }
+    *bounds = Some(merged);
+    Some(())
+}
+
+fn bitmap_ink_bounds(rect: Rect, scale: f32) -> Rect {
+    let (width, height) = crate::dimensions(rect, scale);
+    let pad = 1. / scale;
+    Rect::new(
+        rect.x - pad,
+        rect.y - pad,
+        width as f32 / scale + 2. * pad,
+        height as f32 / scale + 2. * pad,
+    )
+}
+
+/// Conservative surface-local paint bounds for a scene at `scale` and `offset`.
+/// Clips are deliberately ignored. A missing or malformed extent is unsafe for
+/// a viewport-cropped atlas and must retain the frame-driven path.
+pub fn scene_ink_bounds(scene: &Scene, scale: f32, offset: (f32, f32)) -> Option<Rect> {
+    if !scale.is_finite() || scale <= 0. || !offset.0.is_finite() || !offset.1.is_finite() {
+        return None;
+    }
+    let mut bounds = None;
+    for (index, primitive) in scene.primitives.iter().enumerate() {
+        let primitive_offset = scene.content_offset(index);
+        let translated_offset = (offset.0 + primitive_offset.0, offset.1 + primitive_offset.1);
+        let ink = primitive_ink_bounds(primitive, scale)?
+            .translated(translated_offset.0, translated_offset.1);
+        extend_bounds(&mut bounds, ink)?;
+    }
+
+    if let Some(frame) = scene.prepared.get(&scale.to_bits()) {
+        if frame.scale.to_bits() != scale.to_bits() {
+            return None;
+        }
+        for item in &frame.items {
+            let primitive =
+                primitive_ink_bounds(&item.primitive, scale)?.translated(offset.0, offset.1);
+            extend_bounds(&mut bounds, primitive)?;
+
+            if let Some(raster) = &item.raster {
+                let rect = crate::tree::rect(&item.primitive);
+                let scale64 = f64::from(scale);
+                let pad = 1. / scale64;
+                let left =
+                    (f64::from(rect.x + offset.0) * scale64).round() + f64::from(raster.origin.0);
+                let top =
+                    (f64::from(rect.y + offset.1) * scale64).round() + f64::from(raster.origin.1);
+                let right = left + f64::from(raster.pixels.width());
+                let bottom = top + f64::from(raster.pixels.height());
+                let raster_bounds = Rect::new(
+                    (left / scale64 - pad) as f32,
+                    (top / scale64 - pad) as f32,
+                    ((right - left) / scale64 + 2. * pad) as f32,
+                    ((bottom - top) / scale64 + 2. * pad) as f32,
+                );
+                extend_bounds(&mut bounds, raster_bounds)?;
+            }
+        }
+    }
+
+    bounds.or_else(|| Some(Rect::new(offset.0, offset.1, 0., 0.)))
+}
+
+fn primitive_ink_bounds(primitive: &Primitive, scale: f32) -> Option<Rect> {
+    let rect = crate::tree::rect(primitive);
+    if !finite_rect(rect) {
+        return None;
+    }
+    let antialias = 2. / scale;
+    let bounds = match primitive {
+        Primitive::Arc {
+            start_angle,
+            sweep_angle,
+            stroke_width,
+            ..
+        } => {
+            if !start_angle.is_finite()
+                || !sweep_angle.is_finite()
+                || !(-360. ..=360.).contains(start_angle)
+                || !(-360. ..=360.).contains(sweep_angle)
+                || !stroke_width.is_finite()
+                || *stroke_width < 0.
+            {
+                return None;
+            }
+            let pad = *stroke_width * 0.5 + antialias;
+            Rect::new(
+                rect.x - pad,
+                rect.y - pad,
+                rect.w + 2. * pad,
+                rect.h + 2. * pad,
+            )
+        }
+        Primitive::Polyline {
+            points,
+            stroke_width,
+            ..
+        } => {
+            if points.len() < 2
+                || points.len() > 256
+                || points
+                    .iter()
+                    .flatten()
+                    .any(|value| !value.is_finite() || !(0. ..=1.).contains(value))
+                || !stroke_width.is_finite()
+                || *stroke_width < 0.
+            {
+                return None;
+            }
+            let pad = *stroke_width * 0.5 + antialias;
+            Rect::new(
+                rect.x - pad,
+                rect.y - pad,
+                rect.w + 2. * pad,
+                rect.h + 2. * pad,
+            )
+        }
+        Primitive::Rounded { radius, border, .. } => {
+            if !radius.is_finite() {
+                return None;
+            }
+            let pad = match border {
+                Some((_, width)) if width.is_finite() && *width >= 0. => width * 0.5 + antialias,
+                Some(_) => return None,
+                None => antialias,
+            };
+            Rect::new(
+                rect.x - pad,
+                rect.y - pad,
+                rect.w + 2. * pad,
+                rect.h + 2. * pad,
+            )
+        }
+        Primitive::Text { size, shadow, .. } => {
+            if !size.is_finite()
+                || *size < 0.
+                || shadow.is_some_and(|shadow| {
+                    !shadow.blur.is_finite() || shadow.blur < 0. || !shadow.offset_y.is_finite()
+                })
+            {
+                return None;
+            }
+            bitmap_ink_bounds(rect, scale)
+        }
+        Primitive::Image { blur, .. } => {
+            if !blur.is_finite() || *blur < 0. {
+                return None;
+            }
+            bitmap_ink_bounds(rect, scale)
+        }
+        Primitive::Shadow { radius, blur, .. } => {
+            if !radius.is_finite() || !blur.is_finite() || *radius < 0. || *blur < 0. {
+                return None;
+            }
+            bitmap_ink_bounds(rect, scale)
+        }
+    };
+    finite_rect(bounds).then_some(bounds)
+}
 
 /// Whether a translated, viewport-cropped source can present every pixel that
 /// enters the viewport in the target pose.
@@ -162,12 +342,14 @@ impl LayerMotionPlan {
             motion.slide_distance.unwrap_or(scene.bounds.h),
             0.,
         );
-        let resting_bounds = scene.bounds.translated(scene.offset.0, scene.offset.1);
+        let Some(ink_bounds) = scene_ink_bounds(scene, scale, scene.offset) else {
+            return Ok(None);
+        };
         // The atlas contains only pixels inside this viewport. If the closed
         // pose moves hidden content into view, the compositor cannot recover
         // those pixels from the already-cropped source; keep the CPU path.
         if !translation_preserves_clip(
-            resting_bounds,
+            ink_bounds,
             Rect::new(0., 0., width as f32, height as f32),
             closed_offset,
         ) {
@@ -256,6 +438,37 @@ mod tests {
     use super::*;
     use crate::{Motion, Primitive, tree::TreeCpuRenderer};
 
+    struct NoPaint;
+    impl Renderer for NoPaint {
+        fn prepare(&mut self, _: &Scene, _: f32) -> Result<()> {
+            panic!("unsupported animation must not prepare")
+        }
+        fn render(&mut self, _: &Scene, _: ShmTarget<'_>, _: Damage) -> Result<()> {
+            panic!("unsupported animation must not paint")
+        }
+    }
+
+    fn paint_scene(scene: &Scene, offset: (f32, f32), width: u32, height: u32) -> Result<Vec<u8>> {
+        let mut scene = scene.clone();
+        scene.motion = None;
+        scene.offset = offset;
+        let mut pixels = vec![0; width as usize * height as usize * 4];
+        let mut renderer = TreeCpuRenderer::default();
+        renderer.prepare(&scene, 1.)?;
+        renderer.render(
+            &scene,
+            ShmTarget {
+                bytes: &mut pixels,
+                width,
+                height,
+                scale: 1.,
+                format: PixelFormat::Rgba,
+            },
+            Damage::full(width, height),
+        )?;
+        Ok(pixels)
+    }
+
     fn scene(reveal: bool, fade: bool) -> Scene {
         Scene {
             opacity: 1.,
@@ -296,15 +509,6 @@ mod tests {
 
     #[test]
     fn a_growing_body_is_rejected_before_any_prepare_or_paint() -> Result<()> {
-        struct NoPaint;
-        impl Renderer for NoPaint {
-            fn prepare(&mut self, _: &Scene, _: f32) -> Result<()> {
-                panic!("unsupported animation must not prepare")
-            }
-            fn render(&mut self, _: &Scene, _: ShmTarget<'_>, _: Damage) -> Result<()> {
-                panic!("unsupported animation must not paint")
-            }
-        }
         assert!(
             LayerMotionPlan::for_slide(
                 &scene(true, false),
@@ -562,6 +766,262 @@ mod tests {
             &mut renderer,
         )?;
         assert!(plan.is_some());
+        assert_eq!(renderer.paints, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn underreported_scene_bounds_do_not_drop_ink_that_cpu_motion_reveals() -> Result<()> {
+        let mut scene = scene(false, false);
+        scene.width = 32.;
+        scene.bounds = Rect::new(0., 0., 32., 32.);
+        scene.motion.as_mut().unwrap().edge = bead_core::Edge::Left;
+        scene.motion.as_mut().unwrap().slide_distance = Some(32.);
+        scene.primitives = vec![Primitive::Rounded {
+            rect: Rect::new(40., 4., 12., 12.),
+            radius: 1.,
+            fill: [220, 70, 30, 255],
+            border: None,
+        }];
+
+        // A 32x32 open-pose atlas clips this item completely, while the CPU
+        // close pose translates it to x=24..36 and paints its x=24..32 portion.
+        let open_pixels = paint_scene(&scene, (0., 0.), 32, 32)?;
+        let closed_pixels = paint_scene(&scene, (-16., 0.), 32, 32)?;
+        let visible = ((8 * 32 + 28) * 4) as usize;
+        assert_eq!(&open_pixels[visible..visible + 4], &[0; 4]);
+        assert!(
+            closed_pixels[visible..visible + 4]
+                .iter()
+                .any(|channel| *channel != 0)
+        );
+
+        assert!(LayerMotionPlan::for_slide(
+            &scene,
+            false,
+            32,
+            32,
+            1.,
+            PixelFormat::Rgba,
+            &mut NoPaint,
+        )?
+        .is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn border_paint_outset_is_included_in_source_ink_bounds() -> Result<()> {
+        let mut scene = scene(false, false);
+        scene.width = 32.;
+        scene.bounds = Rect::new(0., 0., 32., 32.);
+        scene.motion.as_mut().unwrap().edge = bead_core::Edge::Left;
+        scene.motion.as_mut().unwrap().slide_distance = Some(32.);
+        scene.primitives = vec![Primitive::Rounded {
+            rect: Rect::new(28., 4., 4., 12.),
+            radius: 1.,
+            fill: [220, 70, 30, 255],
+            border: Some(([255, 255, 255, 255], 4.)),
+        }];
+
+        let ink = scene_ink_bounds(&scene, 1., scene.offset).unwrap();
+        assert!(ink.x + ink.w > 32.);
+        assert!(LayerMotionPlan::for_slide(
+            &scene,
+            false,
+            32,
+            32,
+            1.,
+            PixelFormat::Rgba,
+            &mut NoPaint,
+        )?
+        .is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn fractional_bitmap_rounding_cannot_hide_entering_image_or_shadow_pixels() -> Result<()> {
+        for scale in [1., 1.5] {
+            for primitive in [
+                Primitive::Image {
+                    blur: 0.,
+                    fit: crate::ImageFit::Fill,
+                    clip_polygon: None,
+                    rect: Rect::new(24.6, 4., 7.4, 12.),
+                    path: "unused.png".into(),
+                },
+                Primitive::Shadow {
+                    rect: Rect::new(24.6, 4., 7.4, 12.),
+                    radius: 2.,
+                    blur: 1.,
+                },
+            ] {
+                let mut scene = scene(false, false);
+                scene.width = 32.;
+                scene.bounds = Rect::new(0., 0., 32., 32.);
+                scene.motion.as_mut().unwrap().edge = bead_core::Edge::Left;
+                scene.motion.as_mut().unwrap().slide_distance = Some(32.);
+                scene.primitives = vec![primitive];
+
+                let ink = scene_ink_bounds(&scene, scale, scene.offset).unwrap();
+                assert!(ink.x + ink.w > 32., "scale={scale} ink={ink:?}");
+                assert!(
+                    LayerMotionPlan::for_slide(
+                        &scene,
+                        false,
+                        32,
+                        32,
+                        scale,
+                        PixelFormat::Rgba,
+                        &mut NoPaint,
+                    )?
+                    .is_none()
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn nonfinite_item_and_union_extents_fall_back() {
+        let mut scene = scene(false, false);
+        scene.primitives = vec![Primitive::Rounded {
+            rect: Rect::new(f32::MAX, 0., f32::MAX, 8.),
+            radius: 1.,
+            fill: [255; 4],
+            border: None,
+        }];
+        assert!(scene_ink_bounds(&scene, 1., scene.offset).is_none());
+
+        scene.primitives = vec![
+            Primitive::Rounded {
+                rect: Rect::new(-f32::MAX * 0.75, 0., 0., 8.),
+                radius: 1.,
+                fill: [255; 4],
+                border: None,
+            },
+            Primitive::Rounded {
+                rect: Rect::new(f32::MAX * 0.75, 0., 0., 8.),
+                radius: 1.,
+                fill: [255; 4],
+                border: None,
+            },
+        ];
+        assert!(scene_ink_bounds(&scene, 1., scene.offset).is_none());
+    }
+
+    #[test]
+    fn prepared_raster_origin_and_pixels_are_checked_outside_primitive_bounds() -> Result<()> {
+        let mut scene = scene(false, false);
+        scene.width = 32.;
+        scene.bounds = Rect::new(0., 0., 32., 32.);
+        scene.motion.as_mut().unwrap().edge = bead_core::Edge::Left;
+        scene.motion.as_mut().unwrap().slide_distance = Some(32.);
+        scene.primitives = vec![Primitive::Text {
+            rect: Rect::new(20., 4., 8., 12.),
+            text: "raster-backed".into(),
+            family: "Noto Sans".into(),
+            size: 12.,
+            color: [255, 255, 255, 255],
+            weight: 400,
+            align: None,
+            shadow: None,
+        }];
+
+        let mut pixels = tiny_skia::Pixmap::new(12, 12).unwrap();
+        pixels.fill(tiny_skia::Color::from_rgba8(240, 80, 40, 255));
+        let charge = bead_core::cache::Budget::new("layer-motion-test", 4096)
+            .reserve(pixels.data().len() + 64)?;
+        let raster = std::sync::Arc::new(crate::tree::Raster {
+            pixels: std::sync::Arc::new(pixels),
+            origin: (8, 0),
+            key: 1,
+            base_key: None,
+            changed: Damage::full(12, 12),
+            _charge: charge,
+        });
+        let frame = crate::tree::Frame {
+            items: vec![crate::tree::Item {
+                id: "prepared/text/0".into(),
+                primitive: scene.primitives[0].clone(),
+                clip: None,
+                raster: Some(raster),
+                image: None,
+            }],
+            scale: 1.,
+            key: 1,
+            native_resource_budget: None,
+            _assets: Vec::new(),
+            layer_count: 1,
+            layers: Vec::new(),
+            _accounting: None,
+        };
+        scene
+            .prepared
+            .insert(1_f32.to_bits(), std::sync::Arc::new(frame));
+
+        let ink = scene_ink_bounds(&scene, 1., scene.offset).unwrap();
+        assert!(ink.x + ink.w > 40.);
+        assert!(LayerMotionPlan::for_slide(
+            &scene,
+            false,
+            32,
+            32,
+            1.,
+            PixelFormat::Rgba,
+            &mut NoPaint,
+        )?
+        .is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn overflow_moving_further_offscreen_remains_supported() -> Result<()> {
+        struct CountPaint {
+            renderer: TreeCpuRenderer,
+            paints: usize,
+        }
+        impl Renderer for CountPaint {
+            fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
+                self.renderer.prepare(scene, scale)
+            }
+            fn render(
+                &mut self,
+                scene: &Scene,
+                target: ShmTarget<'_>,
+                damage: Damage,
+            ) -> Result<()> {
+                self.paints += 1;
+                self.renderer.render(scene, target, damage)
+            }
+        }
+
+        let mut scene = scene(false, false);
+        scene.width = 32.;
+        scene.bounds = Rect::new(0., 0., 32., 32.);
+        scene.motion.as_mut().unwrap().edge = bead_core::Edge::Left;
+        scene.motion.as_mut().unwrap().slide_distance = Some(32.);
+        scene.primitives = vec![Primitive::Rounded {
+            rect: Rect::new(-8., 4., 16., 12.),
+            radius: 1.,
+            fill: [220, 70, 30, 255],
+            border: None,
+        }];
+        let mut renderer = CountPaint {
+            renderer: TreeCpuRenderer::default(),
+            paints: 0,
+        };
+        assert!(
+            LayerMotionPlan::for_slide(
+                &scene,
+                false,
+                32,
+                32,
+                1.,
+                PixelFormat::Rgba,
+                &mut renderer,
+            )?
+            .is_some()
+        );
         assert_eq!(renderer.paints, 1);
         Ok(())
     }

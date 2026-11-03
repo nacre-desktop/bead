@@ -1669,34 +1669,43 @@ impl App {
                 scene.offset.0 - layer_motion_pose.0,
                 scene.offset.1 - layer_motion_pose.1,
             );
-            let translation_preserves_clip = scene.motion.as_ref().is_some_and(|motion| {
-                let closed_offset = motion.edge.closed_offset(
-                    motion.slide_distance.unwrap_or(scene.bounds.w),
-                    motion.slide_distance.unwrap_or(scene.bounds.h),
-                    0.,
-                );
-                bead_render::layer_motion::translation_preserves_clip(
-                    scene.bounds.translated(resting_offset.0, resting_offset.1),
-                    bead_render::Rect::new(0., 0., s.width as f32, s.height as f32),
-                    closed_offset,
-                )
-            });
-            let layer_motion_candidate = _kind == RendererKind::Cpu
+            let layer_motion_transport_eligible = _kind == RendererKind::Cpu
                 && s.native.is_none()
                 && s.layer_motion.is_some()
                 && layer_motion_active
                 && !bead_core::animation::reduced_motion()
                 && !self.options.background_blur
-                && scene.slide.is_none()
-                && (translation_preserves_clip
-                    || layer_motion_target_changed && s.layer_motion_plan.is_some())
+                && scene.slide.is_none();
+            let layer_motion_pose_eligible = scene.motion.as_ref().is_some_and(|motion| {
+                layer_motion_opening.is_some_and(|opening| {
+                    !opening
+                        || !motion.reveal
+                        || layer_motion_target_changed && s.layer_motion_plan.is_some()
+                })
+            });
+            let layer_motion_reuses_atlas =
+                layer_motion_target_changed && s.layer_motion_plan.is_some();
+            let layer_motion_ink_safe = layer_motion_transport_eligible
+                && layer_motion_pose_eligible
+                && !layer_motion_reuses_atlas
                 && scene.motion.as_ref().is_some_and(|motion| {
-                    layer_motion_opening.is_some_and(|opening| {
-                        !opening
-                            || !motion.reveal
-                            || layer_motion_target_changed && s.layer_motion_plan.is_some()
-                    })
+                    let closed_offset = motion.edge.closed_offset(
+                        motion.slide_distance.unwrap_or(scene.bounds.w),
+                        motion.slide_distance.unwrap_or(scene.bounds.h),
+                        0.,
+                    );
+                    bead_render::layer_motion::scene_ink_bounds(scene, scale, resting_offset)
+                        .is_some_and(|ink_bounds| {
+                            bead_render::layer_motion::translation_preserves_clip(
+                                ink_bounds,
+                                bead_render::Rect::new(0., 0., s.width as f32, s.height as f32),
+                                closed_offset,
+                            )
+                        })
                 });
+            let layer_motion_candidate = layer_motion_transport_eligible
+                && layer_motion_pose_eligible
+                && (layer_motion_reuses_atlas || layer_motion_ink_safe);
             let layer_motion_needs_atlas = !s.layer_motion_active
                 || layer_motion_target_changed
                 || s.layer_motion_ui_serial != s.ui_serial;
