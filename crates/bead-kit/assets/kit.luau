@@ -430,7 +430,7 @@ return function(ui, tokens)
         local current,index
         for i,group in ipairs(groups) do if group.id==current_id then current,index=group,i;break end end
         current,index=current or groups[1],index or 1
-        return kit.Button{id=p.id,height=p.height or 32,padding_left=tokens.spacing.sm,padding_right=tokens.spacing.sm,
+        return kit.Button{id=p.id,height=p.height or 32,padding=0,padding_left=tokens.spacing.sm,padding_right=tokens.spacing.sm,
             width=p.width or 112,text=current.label or tostring(index),selected=true,
             aria_label=p.switcher_label or current.label or tostring(index),
             on_activate=p.on_toggle and ui.action(p.on_toggle) or nil}

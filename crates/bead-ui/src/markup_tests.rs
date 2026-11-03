@@ -542,7 +542,8 @@ fn collection_switcher_is_absent_for_single_group_and_lists_host_actions() {
         r#"local ui=require("bead.ui") local kit=require("bead.kit")
 return ui.Column{id="root",width=600,height=800,gap=8,
  kit.CollectionSwitcher{id="plain",groups={{id="one",label="One"}},current="one"},
- kit.CollectionSwitcher{id="desks",groups={{id="one",label="One"},{id="two"}},current=ui.bind("current"),on_toggle="toggle"},
+ kit.CollectionSwitcher{id="desks",groups={{id="one",label="One"},{id="two"}},current=ui.bind("current"),
+  height=28,on_toggle="toggle"},
  kit.CollectionSwitcherMenu{id="menu",groups={{id="one",label="One"},{id="two"}},current=ui.bind("current"),height=320,scroll=ui.bind("scroll"),
   on_switch="switch",on_create="create",on_rename="rename",create_label="Create desk",
   editing={value="name",label="Desk name"},on_commit="commit",on_cancel="cancel",
@@ -573,6 +574,25 @@ return ui.Column{id="root",width=600,height=800,gap=8,
         bounds.w == 0. || bounds.h == 0.
     }));
     assert!(texts.contains(&"2"));
+    let badge = s
+        .current_nodes
+        .iter()
+        .find(|node| node.id.ends_with("desks"))
+        .expect("collection badge node");
+    let badge_bounds = rect(&badge.draw);
+    assert_eq!(badge_bounds.h, 28.);
+    assert!(
+        s.current.primitives.iter().any(|primitive| matches!(
+            primitive,
+            Primitive::Text { text, rect, .. }
+                if *text == "2"
+                    && rect.x >= badge_bounds.x
+                    && rect.y >= badge_bounds.y
+                    && rect.x + rect.w <= badge_bounds.x + badge_bounds.w
+                    && rect.y + rect.h <= badge_bounds.y + badge_bounds.h
+        )),
+        "the badge label must fit vertically inside its 28px target: {badge_bounds:?}"
+    );
     assert!(texts.contains(&"Rename"));
     assert!(texts.contains(&"Save"));
     assert!(texts.contains(&"Cancel"));
