@@ -962,18 +962,12 @@ impl LayerShellHandler for App {
 
             if self.surfaces[i].companion && self.panel_runtime.is_some() {
                 let surface = &self.surfaces[i];
-                let viewport = surface
-                    .layer_promoted
-                    .then_some(surface.promoted_size)
-                    .flatten()
-                    .or_else(|| {
-                        self.output
-                            .info(&surface.output)
-                            .and_then(|i| i.logical_size)
-                            .filter(|(w, h)| *w > 0 && *h > 0)
-                            .map(|(w, h)| (w as u32, h as u32))
-                    })
-                    .unwrap_or((surface.width, surface.height));
+                let viewport = policy::panel_viewport_from_output(
+                    self.output
+                        .info(&surface.output)
+                        .and_then(|info| info.logical_size),
+                    (surface.width, surface.height),
+                );
                 let viewport_changed = self
                     .panel_runtime
                     .as_mut()

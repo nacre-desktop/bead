@@ -2331,7 +2331,12 @@ impl App {
                 .surfaces
                 .iter()
                 .find(|surface| surface.companion)
-                .map(|surface| (surface.width, surface.height))
+                .map(|surface| {
+                    policy::panel_viewport_from_output(
+                        self.output.info(&surface.output).and_then(|info| info.logical_size),
+                        (surface.width, surface.height),
+                    )
+                })
             && self
                 .panel_runtime
                 .as_mut()

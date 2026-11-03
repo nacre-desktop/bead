@@ -3910,6 +3910,7 @@ mod input_tests {
         let docked_physical = buffer_dimensions(configured.0, configured.1, 180).unwrap();
         assert_eq!((physical.0, physical.1), (1746, 981));
         assert_eq!((docked_physical.0, docked_physical.1), (1746, 948));
+        assert_eq!(policy::panel_viewport_from_output(Some((720, 900)), configured), (720, 900));
         assert_eq!(
             clip_body_rect_to_surface([32, 32, 200, 600], promoted_extent),
             Some([32, 32, 200, 600]),

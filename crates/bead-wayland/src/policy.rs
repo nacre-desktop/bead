@@ -69,6 +69,16 @@ pub(crate) fn native_detach_path(global_available: bool, source_ready: bool) -> 
         (false, _) => NativeDetachPath::LegacyXdg,
     }
 }
+
+pub(crate) fn panel_viewport_from_output(
+    output_logical_size: Option<(i32, i32)>,
+    configured_surface: (u32, u32),
+) -> (u32, u32) {
+    output_logical_size
+        .filter(|(width, height)| *width > 0 && *height > 0)
+        .map(|(width, height)| (width as u32, height as u32))
+        .unwrap_or(configured_surface)
+}
 /// An initial native frame is hidden until the latest complete geometry was
 /// placed. Replies for superseded rectangles cannot uncover an older pose.
 #[derive(Default)]
@@ -170,6 +180,14 @@ mod handoff_tests {
         );
         assert_eq!(command_promotion(true, true), CommandPromotion::Immediate);
         assert_eq!(command_promotion(false, false), CommandPromotion::LegacyXdg);
+    }
+
+    #[test]
+    fn panel_layout_viewport_uses_output_dimensions_independent_of_root_extents() {
+        use super::panel_viewport_from_output;
+        let configured = (1164, 632);
+        assert_eq!(panel_viewport_from_output(Some((720, 900)), configured), (720, 900));
+        assert_eq!(panel_viewport_from_output(None, configured), configured);
     }
 
     #[test]
