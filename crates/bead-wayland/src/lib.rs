@@ -14,6 +14,8 @@ mod decorations;
 mod edges;
 mod hidden;
 pub mod intent;
+mod layer_motion;
+mod layer_motion_protocol;
 mod layer_role;
 mod panel;
 mod panels;
@@ -32,6 +34,7 @@ mod protocols;
 mod rendering;
 mod report;
 mod runtime;
+use layer_motion::LayerMotionController;
 mod scroll;
 mod transactions;
 mod window;
@@ -891,6 +894,12 @@ struct Surface {
     output: wl_output::WlOutput,
     output_name: String,
     layer: layer_role::LayerRole,
+    layer_motion: Option<LayerMotionController>,
+    layer_motion_active: bool,
+    layer_motion_open: Option<bool>,
+    layer_motion_plan: Option<bead_render::layer_motion::LayerMotionPlan>,
+    layer_motion_ui_serial: u64,
+    layer_motion_resting_offset: Option<(f32, f32)>,
     /// The companion layer has no attached buffer after its close animation completes.
     panel_unmapped: bool,
     /// Fresh xdg role used while detached. The layer role remains available for

@@ -2,6 +2,57 @@
 //! Per-surface rendering, GPU staging and idle release.
 use super::*;
 
+fn layer_motion_handoff_eligible(
+    opening: bool,
+    sampled_progress: Option<f32>,
+    compositor_owns_timeline: bool,
+) -> bool {
+    compositor_owns_timeline
+        || sampled_progress.is_some_and(|progress| {
+            if opening {
+                progress == 0.
+            } else {
+                progress == 1.
+            }
+        })
+}
+
+fn layer_motion_reveal_reversal_uses_cpu(
+    opening: bool,
+    reveal: bool,
+    target_changed: bool,
+    compositor_owns_timeline: bool,
+) -> bool {
+    opening && reveal && target_changed && compositor_owns_timeline
+}
+
+fn layer_motion_cpu_replacement_pending(
+    surface_still_owns_atlas: bool,
+    controller_has_active_serial: bool,
+) -> bool {
+    surface_still_owns_atlas && !controller_has_active_serial
+}
+
+pub(super) fn layer_motion_completion_uses_cpu_reveal(
+    completed: bool,
+    completed_target_open: Option<bool>,
+    current_target_open: bool,
+    current_target_reveals: bool,
+) -> bool {
+    completed
+        && completed_target_open == Some(false)
+        && current_target_open
+        && current_target_reveals
+}
+
+fn copy_layer_motion_pixels(target: &mut [u8], pixels: &[u8]) -> bool {
+    let Some(target) = target.get_mut(..pixels.len()) else {
+        return false;
+    };
+    target.copy_from_slice(pixels);
+    true
+}
+
 #[cfg(feature = "native-gl")]
 fn is_cache_pressure(error: &str) -> bool {
     let error = error.to_ascii_lowercase();
@@ -79,6 +130,88 @@ mod keyboard_policy_tests {
         assert!(is_cache_pressure("retained cache byte budget exceeded"));
         assert!(is_cache_pressure("CPU snapshot admission failed"));
         assert!(!is_cache_pressure("invalid wallpaper image header"));
+    }
+}
+
+#[cfg(test)]
+mod layer_motion_buffer_tests {
+    use super::copy_layer_motion_pixels;
+
+    #[test]
+    fn atlas_upload_accepts_slot_pool_alignment_padding_only_after_valid_pixels() {
+        let pixels = (0..127).map(|value| value as u8).collect::<Vec<_>>();
+        let mut padded = vec![0xEE; pixels.len() + 16];
+        assert!(copy_layer_motion_pixels(&mut padded, &pixels));
+        assert_eq!(&padded[..pixels.len()], pixels);
+        assert!(padded[pixels.len()..].iter().all(|byte| *byte == 0xEE));
+
+        let mut short = vec![0; pixels.len() - 1];
+        assert!(!copy_layer_motion_pixels(&mut short, &pixels));
+    }
+}
+
+#[cfg(test)]
+mod layer_motion_handoff_tests {
+    use super::layer_motion_handoff_eligible;
+    use bead_core::animation::{Animations, Curve};
+
+    #[test]
+    fn cpu_motion_handoff_requires_the_matching_sampled_endpoint() {
+        let mut animations = Animations::default();
+        animations.open_to("panel", true, 0., 1., Curve::EaseOut);
+        assert!(layer_motion_handoff_eligible(
+            true,
+            animations.value("panel", 0.).map(|(progress, _)| progress),
+            false,
+        ));
+        animations.committed("panel", 0., 0.);
+
+        let open_time = 1. - 0.6_f64.cbrt();
+        let (opening_progress, active) = animations.value("panel", open_time).unwrap();
+        assert!(active && (opening_progress - 0.4).abs() < 1e-6);
+        assert!(!layer_motion_handoff_eligible(
+            false,
+            Some(opening_progress),
+            false,
+        ));
+        animations.open_to("panel", false, open_time, 1., Curve::EaseOut);
+        animations.committed("panel", open_time, open_time);
+        let (closing_progress, active) = animations.value("panel", open_time).unwrap();
+        assert!(active && (closing_progress - opening_progress).abs() < f32::EPSILON);
+        assert!(!layer_motion_handoff_eligible(
+            false,
+            Some(closing_progress),
+            false,
+        ));
+
+        let close_reverse_time = open_time + 0.1;
+        let (closing_midflight, active) = animations.value("panel", close_reverse_time).unwrap();
+        assert!(active && closing_midflight > 0. && closing_midflight < 1.);
+        animations.open_to("panel", true, close_reverse_time, 1., Curve::EaseOut);
+        animations.committed("panel", close_reverse_time, close_reverse_time);
+        let (opening_after_close, active) = animations.value("panel", close_reverse_time).unwrap();
+        assert!(active && (opening_after_close - closing_midflight).abs() < f32::EPSILON);
+        assert!(!layer_motion_handoff_eligible(
+            true,
+            Some(opening_after_close),
+            false,
+        ));
+
+        let settled_time = close_reverse_time + 2.;
+        let (settled_open, active) = animations.value("panel", settled_time).unwrap();
+        assert!(!active && settled_open == 1.);
+        animations.open_to("panel", false, settled_time, 1., Curve::EaseOut);
+        let (closing_endpoint, active) = animations.value("panel", settled_time).unwrap();
+        assert!(active && closing_endpoint == 1.);
+        assert!(layer_motion_handoff_eligible(
+            false,
+            Some(closing_endpoint),
+            false
+        ));
+
+        // Once the server owns presentation, CPU clock progress is irrelevant:
+        // the compositor retarget path samples its current pose.
+        assert!(layer_motion_handoff_eligible(false, Some(0.4), true));
     }
 }
 
@@ -1318,6 +1451,31 @@ impl App {
         {
             return;
         }
+        if self.surfaces[index].native.is_some() && self.surfaces[index].layer_motion_active {
+            let layer_surface = self.surfaces[index].layer.wl_surface().clone();
+            drop(self.surfaces[index].layer_motion.take());
+            self.surfaces[index].layer_motion_plan = None;
+            self.surfaces[index].layer_motion_active = false;
+            self.surfaces[index].layer_motion_open = None;
+            self.surfaces[index].layer_motion_resting_offset = None;
+            self.surfaces[index].layer_motion = self
+                .layer_motion_manager
+                .as_ref()
+                .map(|manager| manager.create(&layer_surface, qh));
+        }
+        if self.surfaces[index].layer_motion_active && self.surfaces[index].native.is_none() {
+            let wanted_open = if self.surfaces[index].companion {
+                self.panel_target
+            } else {
+                self.scene.motion.as_ref().is_some_and(|motion| motion.open)
+            };
+            if self.surfaces[index].layer_motion_open == Some(wanted_open)
+                && self.surfaces[index].layer_motion_ui_serial == self.surfaces[index].ui_serial
+            {
+                // No frame callbacks or source work while the compositor owns the timeline.
+                return;
+            }
+        }
         if self.surfaces[index]
             .handoff
             .as_ref()
@@ -1358,6 +1516,12 @@ impl App {
         let mut busy = false;
         // The motion this frame shows and the clock of its pose; a committed frame starts a held clock.
         let mut motion_clock: Option<(String, f64, f64)> = None;
+        let mut layer_motion_opening = None;
+        let mut layer_motion_active = false;
+        let mut layer_motion_source_scene = None;
+        let mut layer_motion_pose = (0., 0.);
+        let mut layer_motion_sampled_progress = None;
+        let mut layer_motion_pending_input = None;
         let result = (|| -> Result<(), Box<dyn Error>> {
             #[cfg(feature = "native-gl")]
             if self.surfaces[index].companion
@@ -1367,13 +1531,25 @@ impl App {
             }
             let s = &mut self.surfaces[index];
             let wl_surface = s.wl_surface().clone();
+            let compositor_motion_candidate = s.companion
+                && s.native.is_none()
+                && s.layer_motion.is_some()
+                && !bead_core::animation::reduced_motion()
+                && !self.options.background_blur
+                && self.companion.as_ref().is_some_and(|(scene, _, kind)| {
+                    *kind == RendererKind::Cpu
+                        && scene.slide.is_none()
+                        && scene
+                            .motion
+                            .as_ref()
+                            .is_some_and(|motion| !self.panel_target || !motion.reveal)
+                });
             if s.configured
                 && !s.callbacks.pending
                 && !s.scale_relayout_pending
-                && let Some(handoff) = s
-                    .handoff
-                    .as_ref()
-                    .filter(|handoff| handoff.has_prepared_frame())
+                && let Some(handoff) = s.handoff.as_ref().filter(|handoff| {
+                    !(s.companion && compositor_motion_candidate) && handoff.has_prepared_frame()
+                })
             {
                 let generation = self
                     .companion
@@ -1511,6 +1687,9 @@ impl App {
                     curve,
                 );
                 let (progress, active) = self.animations.value(&motion.id, now).unwrap();
+                layer_motion_opening = Some(open);
+                layer_motion_active = active;
+                layer_motion_sampled_progress = Some(progress);
                 motion_clock = Some((
                     motion.id.clone(),
                     now,
@@ -1526,6 +1705,7 @@ impl App {
                 s.redraw |= active;
                 scene.opacity = motion.opacity(progress);
                 let (dx, dy) = scene.panel_offset(progress, open);
+                layer_motion_pose = (dx, dy);
                 opaque_motion = active && (dx != 0. || dy != 0. || (motion.reveal && open));
                 // A vertical exit retains the open x origin instead of
                 // re-centering from the live surface width every frame.
@@ -1594,9 +1774,97 @@ impl App {
                 let phase = self.started.elapsed().as_secs_f32() % 2.;
                 rect.w = 1. + 299. * if phase < 1. { phase } else { 2. - phase };
             }
+            let layer_motion_target_changed = s.layer_motion_active
+                && layer_motion_opening.is_some_and(|opening| s.layer_motion_open != Some(opening));
+            let layer_motion_cpu_reset_pending = layer_motion_cpu_replacement_pending(
+                s.layer_motion_active,
+                s.layer_motion
+                    .as_ref()
+                    .is_some_and(|motion| motion.has_active_serial()),
+            );
+            let layer_motion_cpu_replacement = layer_motion_cpu_reset_pending
+                || scene.motion.as_ref().is_some_and(|motion| {
+                    layer_motion_opening.is_some_and(|opening| {
+                        layer_motion_reveal_reversal_uses_cpu(
+                            opening,
+                            motion.reveal,
+                            layer_motion_target_changed,
+                            s.layer_motion_active,
+                        )
+                    })
+                });
+            let resting_offset = (
+                scene.offset.0 - layer_motion_pose.0,
+                scene.offset.1 - layer_motion_pose.1,
+            );
+            let layer_motion_transport_eligible = _kind == RendererKind::Cpu
+                && s.native.is_none()
+                && s.layer_motion.is_some()
+                && layer_motion_active
+                && !bead_core::animation::reduced_motion()
+                && !self.options.background_blur
+                && scene.slide.is_none();
+            let layer_motion_handoff_ok = !layer_motion_cpu_replacement
+                && layer_motion_opening.is_some_and(|opening| {
+                    layer_motion_handoff_eligible(
+                        opening,
+                        layer_motion_sampled_progress,
+                        s.layer_motion_active,
+                    )
+                });
+            let layer_motion_pose_eligible = layer_motion_handoff_ok
+                && scene.motion.as_ref().is_some_and(|motion| {
+                    layer_motion_opening.is_some_and(|opening| {
+                        !opening
+                            || !motion.reveal
+                            || layer_motion_target_changed && s.layer_motion_plan.is_some()
+                    })
+                });
+            let layer_motion_reuses_atlas =
+                layer_motion_target_changed && s.layer_motion_plan.is_some();
+            let layer_motion_ink_safe = layer_motion_transport_eligible
+                && layer_motion_pose_eligible
+                && !layer_motion_reuses_atlas
+                && scene.motion.as_ref().is_some_and(|motion| {
+                    let closed_offset = motion.edge.closed_offset(
+                        motion.slide_distance.unwrap_or(scene.bounds.w),
+                        motion.slide_distance.unwrap_or(scene.bounds.h),
+                        0.,
+                    );
+                    bead_render::layer_motion::scene_ink_bounds(scene, scale, resting_offset)
+                        .is_some_and(|ink_bounds| {
+                            bead_render::layer_motion::motion_atlas_viewport(
+                                s.width, s.height, scale,
+                            )
+                            .is_some_and(|viewport| {
+                                bead_render::layer_motion::translation_preserves_clip(
+                                    ink_bounds,
+                                    viewport,
+                                    closed_offset,
+                                )
+                            })
+                        })
+                });
+            let layer_motion_candidate = layer_motion_transport_eligible
+                && layer_motion_pose_eligible
+                && (layer_motion_reuses_atlas || layer_motion_ink_safe);
+            let layer_motion_needs_atlas = !s.layer_motion_active
+                || layer_motion_target_changed
+                || s.layer_motion_ui_serial != s.ui_serial;
+            if layer_motion_candidate
+                && layer_motion_needs_atlas
+                && let Some(opening) = layer_motion_opening
+            {
+                let mut source_scene = scene.clone();
+                source_scene.offset = resting_offset;
+                source_scene.opacity = 1.;
+                source_scene.panel_offset(1., opening);
+                layer_motion_source_scene = Some(source_scene);
+            }
             if panel
                 && self.options.interactive
                 && (!s.companion || self.options.panel_spec.is_some())
+                && !(s.layer_motion_active && !layer_motion_target_changed)
             {
                 let spec = self.options.panel_spec.as_ref();
                 let passive = s.companion && spec.is_some_and(|spec| spec.passive);
@@ -1608,19 +1876,32 @@ impl App {
                 let keyboard_focus = text_focus
                     || !s.companion
                     || spec.is_some_and(|spec| spec.keyboard_focus && !spec.text_focus_only);
-                let visible = scene.opacity > 0.001
-                    && if s.companion && self.options.panel_spec.is_some() {
-                        self.panel_target
-                    } else {
-                        scene.motion.as_ref().is_none_or(|m| m.open)
-                    };
+                let visible = if layer_motion_candidate {
+                    layer_motion_opening.unwrap_or(false)
+                        && if s.companion && self.options.panel_spec.is_some() {
+                            self.panel_target
+                        } else {
+                            true
+                        }
+                } else {
+                    scene.opacity > 0.001
+                        && if s.companion && self.options.panel_spec.is_some() {
+                            self.panel_target
+                        } else {
+                            scene.motion.as_ref().is_none_or(|m| m.open)
+                        }
+                };
+                let input_scene = layer_motion_source_scene.as_ref().unwrap_or(scene);
                 let input_rect = if visible && s.companion && !passive && !self.options.test_passive
                 {
-                    content_input_rect(scene)
+                    content_input_rect(input_scene)
                 } else {
                     None
                 };
-                if s.input_visible != Some(visible) || s.input_rect != input_rect {
+                let input_enabled = visible && !self.options.test_passive && !passive;
+                if !layer_motion_cpu_replacement
+                    && (s.input_visible != Some(visible) || s.input_rect != input_rect)
+                {
                     if visible && !self.options.test_passive && !passive {
                         if let Some([x, y, w, h]) = input_rect {
                             let region = Region::new(&self.compositor)?;
@@ -1657,13 +1938,15 @@ impl App {
                                 .is_some_and(|source| !source.outside_dismiss())),
                     self.options.test_keyboard || s.companion,
                 );
-                if s.keyboard_visible != Some(interactivity) {
+                if layer_motion_cpu_replacement {
+                    layer_motion_pending_input =
+                        Some((visible, input_rect, interactivity, input_enabled));
+                } else if s.keyboard_visible != Some(interactivity) {
                     s.layer.set_keyboard_interactivity(interactivity);
                     s.keyboard_visible = Some(interactivity);
                 }
             }
-            s.offset = scene.offset;
-            s.input_content_offset = scene
+            let input_content_offset = scene
                 .motion
                 .as_ref()
                 .filter(|motion| motion.reveal)
@@ -1675,6 +1958,234 @@ impl App {
                     })
                 })
                 .unwrap_or((0., 0.));
+            if !layer_motion_cpu_replacement {
+                s.offset = scene.offset;
+                s.input_content_offset = input_content_offset;
+            }
+            if layer_motion_active
+                && let Some(opening) = layer_motion_opening
+                && s.layer_motion_active
+                && s.layer_motion_open != Some(opening)
+                && !layer_motion_cpu_replacement
+                && let Some(plan) = s.layer_motion_plan.as_mut()
+            {
+                let (duration, curve) = scene
+                    .motion
+                    .as_ref()
+                    .expect("active layer motion has a scene motion")
+                    .transition(opening);
+                for plane in &mut plan.planes {
+                    std::mem::swap(&mut plane.from, &mut plane.to);
+                }
+                plan.duration = Duration::from_secs_f64(duration);
+                plan.curve = curve;
+                plan.retarget = true;
+                if s.layer_motion.as_mut().unwrap().queue(plan).is_none() {
+                    return Ok(());
+                }
+                let content_changed = s.layer_motion_ui_serial != s.ui_serial;
+                if content_changed && let Some(epoch) = s.callbacks.request_if_idle() {
+                    wl_surface.frame(
+                        qh,
+                        FrameData {
+                            surface: wl_surface.clone(),
+                            epoch,
+                            generation: scene.resource_revision,
+                            source_epoch: if s.companion { self.panel_epoch } else { 0 },
+                        },
+                    );
+                }
+                // The attached atlas remains valid, including for a reverse into
+                // a rounded reveal route. The server samples the current group.
+                wl_surface.commit();
+                s.layer_motion_open = Some(opening);
+                if let Some(offset) = s.layer_motion_resting_offset {
+                    s.offset = offset;
+                }
+                s.input_content_offset = (0., 0.);
+                if !content_changed {
+                    s.layer_motion_ui_serial = s.ui_serial;
+                    s.last_submitted_ui_serial = s.ui_serial;
+                }
+                s.redraw = false;
+                s.frames += 1;
+                return Ok(());
+            }
+            if _kind == RendererKind::Cpu
+                && layer_motion_active
+                && let Some(opening) = layer_motion_opening
+                && let Some(mut source_scene) = layer_motion_source_scene
+                && s.native.is_none()
+                && s.layer_motion.is_some()
+                && (!s.layer_motion_active
+                    || s.layer_motion_open != Some(opening)
+                    || s.layer_motion_ui_serial != s.ui_serial)
+            {
+                source_scene.offset = (
+                    scene.offset.0 - layer_motion_pose.0,
+                    scene.offset.1 - layer_motion_pose.1,
+                );
+                // Panel presentation opacity starts from its complete resting
+                // pose; the compositor applies the configured opacity mode.
+                source_scene.opacity = 1.;
+                if let Some(mut plan) = bead_render::layer_motion::LayerMotionPlan::for_slide(
+                    &source_scene,
+                    opening,
+                    s.width,
+                    s.height,
+                    scale,
+                    format,
+                    renderer.as_mut(),
+                )? {
+                    let changed_target =
+                        s.layer_motion_active && s.layer_motion_open != Some(opening);
+                    plan.retarget = changed_target;
+                    let motion = s.layer_motion.as_mut().unwrap();
+                    if motion.needs_recreation(&plan) {
+                        if s.layer_motion_active {
+                            // A source layout cannot change under an active animation.
+                            // Let its current target finish, then recreate on the next draw.
+                            if let Some(offset) = s.layer_motion_resting_offset {
+                                s.offset = offset;
+                            }
+                            s.input_content_offset = (0., 0.);
+                            s.redraw = false;
+                            return Ok(());
+                        }
+                        drop(s.layer_motion.take());
+                        s.layer_motion = self
+                            .layer_motion_manager
+                            .as_ref()
+                            .map(|manager| manager.create(&wl_surface, qh));
+                    }
+                    let submit_animation = !s.layer_motion_active || changed_target;
+                    if submit_animation && s.layer_motion.as_mut().unwrap().queue(&plan).is_none() {
+                        return Ok(());
+                    }
+                    s.layer_motion_resting_offset = Some(source_scene.offset);
+                    s.offset = source_scene.offset;
+                    s.input_content_offset = (0., 0.);
+                    let pixels = plan.atlas.take_pixels();
+                    let buffer_format = if plan.atlas.format == PixelFormat::Rgba {
+                        wl_shm::Format::Abgr8888
+                    } else {
+                        wl_shm::Format::Argb8888
+                    };
+                    let atlas_geometry = (plan.atlas.width as i32, plan.atlas.height as i32);
+                    if s.geometry != atlas_geometry || s.format != plan.atlas.format {
+                        s.buffers.clear();
+                        let pool_bytes = (plan.atlas.stride as usize)
+                            .checked_mul(plan.atlas.height as usize)
+                            .ok_or("layer motion buffer size overflow")?;
+                        s.pool = SlotPool::new(pool_bytes.next_multiple_of(64) * 3, &self.shm)?;
+                        s.geometry = atlas_geometry;
+                        s.format = plan.atlas.format;
+                    }
+                    let reusable = s.buffers.iter().position(|buffer| {
+                        !buffer.buffer.slot().has_active_buffers()
+                            && buffer.buffer.height() == plan.atlas.height as i32
+                            && buffer.buffer.stride() == plan.atlas.stride as i32
+                    });
+                    let slot = if let Some(slot) = reusable {
+                        let target = s.buffers[slot]
+                            .buffer
+                            .canvas(&mut s.pool)
+                            .ok_or("layer motion buffer is still compositor-owned")?;
+                        if !copy_layer_motion_pixels(target, &pixels) {
+                            return Err(
+                                "reusable layer motion slot is smaller than its atlas".into()
+                            );
+                        }
+                        s.buffers[slot].pending.clear();
+                        s.buffers[slot].painted = true;
+                        slot
+                    } else {
+                        let (buffer, bytes) = s.pool.create_buffer(
+                            plan.atlas.width as i32,
+                            plan.atlas.height as i32,
+                            plan.atlas.stride as i32,
+                            buffer_format,
+                        )?;
+                        if !copy_layer_motion_pixels(bytes, &pixels) {
+                            return Err("new layer motion slot is smaller than its atlas".into());
+                        }
+                        s.buffers.push(Reusable {
+                            buffer,
+                            pending: Vec::new(),
+                            painted: true,
+                        });
+                        s.buffers.len() - 1
+                    };
+                    if let Some(viewport) = &s.viewport {
+                        wl_surface.set_buffer_scale(1);
+                        viewport.set_destination(s.width as i32, s.height as i32);
+                    } else {
+                        wl_surface.set_buffer_scale((s.scale120 / 120) as i32);
+                    }
+                    s.buffers[slot].buffer.attach_to(&wl_surface)?;
+                    wl_surface.damage_buffer(
+                        0,
+                        0,
+                        plan.atlas.width as i32,
+                        plan.atlas.height as i32,
+                    );
+                    if let Some(epoch) = s.callbacks.request_if_idle() {
+                        wl_surface.frame(
+                            qh,
+                            FrameData {
+                                surface: wl_surface.clone(),
+                                epoch,
+                                generation: source_scene.resource_revision,
+                                source_epoch: if s.companion { self.panel_epoch } else { 0 },
+                            },
+                        );
+                    }
+                    if let Some(visual) = &mut s.pointer_visual {
+                        visual.stage_commit()?;
+                    }
+                    if let Some(presentation) = &self.presentation {
+                        if let Some(visual) = &s.pointer_visual {
+                            visual.feedback(presentation, &wl_surface, qh);
+                        }
+                        presentation.feedback(
+                            &wl_surface,
+                            qh,
+                            PresentationData {
+                                source_epoch: if s.companion { self.panel_epoch } else { 0 },
+                                visibility: if s.companion {
+                                    self.panel_close_epoch
+                                } else {
+                                    0
+                                },
+                                update: s.ui_serial,
+                                surface: wl_surface.clone(),
+                                generation: source_scene.resource_revision,
+                            },
+                        );
+                    }
+                    wl_surface.commit();
+                    s.layer_motion_active = true;
+                    s.layer_motion_open = Some(opening);
+                    s.layer_motion_ui_serial = s.ui_serial;
+                    s.layer_motion_plan = Some(plan);
+                    s.last_submitted_ui_serial = s.ui_serial;
+                    s.panel_unmapped = false;
+                    s.redraw = false;
+                    s.frames += 1;
+                    return Ok(());
+                }
+            }
+            if s.layer_motion_active && s.native.is_none() && !layer_motion_cpu_replacement {
+                // The attached atlas remains the visible content until the
+                // compositor retires its animation, including while a changed
+                // or unsupported scene waits for the completion handoff.
+                if let Some(offset) = s.layer_motion_resting_offset {
+                    s.offset = offset;
+                }
+                s.input_content_offset = (0., 0.);
+                s.redraw = false;
+                return Ok(());
+            }
             renderer.presentation_motion(opaque_motion);
             bead_core::profile::split("pose");
             {
@@ -2323,11 +2834,56 @@ impl App {
                 );
             }
             b.buffer.attach_to(&wl_surface)?;
+            if layer_motion_cpu_replacement {
+                if let Some((visible, input_rect, interactivity, input_enabled)) =
+                    layer_motion_pending_input
+                {
+                    if s.input_visible != Some(visible) || s.input_rect != input_rect {
+                        if input_enabled {
+                            if let Some([x, y, w, h]) = input_rect {
+                                let region = Region::new(&self.compositor)?;
+                                if w > 0 && h > 0 {
+                                    region.add(x, y, w, h);
+                                }
+                                wl_surface.set_input_region(Some(region.wl_region()));
+                            } else {
+                                wl_surface.set_input_region(None);
+                            }
+                        } else {
+                            let empty = Region::new(&self.compositor)?;
+                            wl_surface.set_input_region(Some(empty.wl_region()));
+                        }
+                        s.input_visible = Some(visible);
+                        s.input_rect = input_rect;
+                    }
+                    if s.keyboard_visible != Some(interactivity) {
+                        s.layer.set_keyboard_interactivity(interactivity);
+                        s.keyboard_visible = Some(interactivity);
+                    }
+                }
+                // Reset takes effect with this replacement buffer commit. If
+                // painting or buffer acquisition failed earlier, the old atlas
+                // and its sampled presentation remain untouched for retry.
+                s.layer_motion
+                    .as_mut()
+                    .ok_or("active compositor presentation has no controller")?
+                    .reset_presentation();
+            }
             if s.companion {
                 bead_core::profile::mark("panel_commit");
                 s.panel_unmapped = false;
             }
             wl_surface.commit();
+            if layer_motion_cpu_replacement {
+                s.offset = scene.offset;
+                s.input_content_offset = input_content_offset;
+                s.layer_motion_active = false;
+                s.layer_motion_open = None;
+                s.layer_motion_plan = None;
+                s.layer_motion_resting_offset = None;
+                s.layer_motion_ui_serial = 0;
+                self.panel_frame_until = None;
+            }
             if replace_pending_ui {
                 let marked = s.callbacks.mark_replacement_used();
                 debug_assert!(marked, "pending callback changed during synchronous draw");
@@ -2417,7 +2973,11 @@ impl App {
             let committed_at = self.started.elapsed().as_secs_f64();
             let slide = self.animations.committed(&id, drawn, committed_at);
             super::overlay::log_slide(&id, slide);
-            if self.surfaces[index].companion && self.panel_frame_until.is_none() {
+            let motion_active = self
+                .animations
+                .value(&id, committed_at)
+                .is_some_and(|(_, active)| active);
+            if self.surfaces[index].companion && self.panel_frame_until.is_none() && motion_active {
                 self.panel_frame_until = Some(committed_at + duration);
             }
         }

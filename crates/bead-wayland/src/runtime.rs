@@ -92,6 +92,7 @@ pub(super) struct App {
     pub(super) output: OutputState,
     pub(super) compositor: CompositorState,
     pub(super) layers: LayerShell,
+    pub(super) layer_motion_manager: Option<crate::layer_motion::LayerMotionManager>,
     pub(super) xdg: Option<smithay_client_toolkit::shell::xdg::XdgShell>,
     pub(super) window: Option<window::Win>,
     pub(super) window_epoch: u64,
@@ -422,6 +423,7 @@ pub fn run_runtime(
         output: OutputState::new(&globals, &qh),
         compositor: CompositorState::bind(&globals, &qh)?,
         layers: LayerShell::bind(&globals, &qh)?,
+        layer_motion_manager: crate::layer_motion::LayerMotionManager::bind(&globals, &qh),
         xdg: App::bind_xdg(&globals, &qh),
         window: None,
         window_epoch: 0,
@@ -2386,6 +2388,10 @@ impl App {
                     keyboard,
                 },
             );
+            let layer_motion = self
+                .layer_motion_manager
+                .as_ref()
+                .map(|manager| manager.create(layer.wl_surface(), qh));
             if companion {
                 self.position_panel_surface(&layer, &output, scene);
             }
@@ -2405,6 +2411,12 @@ impl App {
                 output: output.clone(),
                 output_name: output_id.clone(),
                 layer,
+                layer_motion,
+                layer_motion_active: false,
+                layer_motion_open: None,
+                layer_motion_plan: None,
+                layer_motion_ui_serial: 0,
+                layer_motion_resting_offset: None,
                 panel_unmapped: false,
                 native: None,
                 prepared_native: None,

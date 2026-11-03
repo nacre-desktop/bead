@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="bead_layer_motion_v1">
+  <copyright>
+    SPDX-License-Identifier: MIT
+    Copyright © 2026 Bead contributors
+  </copyright>
+  <description summary="Compositor-driven layer surface presentation">
+    Defines a set of rectangular presentation planes sampling one layer surface
+    buffer. A compositor animates the planes at output presentation rate without
+    requiring client commits for each animation frame.
+  </description>
+
+  <interface name="bead_layer_motion_manager_v1" version="1">
+    <description summary="Create presentation controllers for layer surfaces"/>
+    <enum name="error">
+      <entry name="invalid_surface" value="0" summary="Surface has no layer-shell role"/>
+      <entry name="duplicate_controller" value="1" summary="Surface already has a motion controller"/>
+    </enum>
+    <request name="destroy" type="destructor"/>
+    <request name="get_motion">
+      <description summary="Create a controller for a layer surface">
+        The surface must already have a layer-shell role. The client should
+        create the controller and its planes in the same commit that attaches
+        the first complete buffer.
+      </description>
+      <arg name="id" type="new_id" interface="bead_layer_motion_v1"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+  </interface>
+
+  <interface name="bead_layer_motion_v1" version="1">
+    <description summary="Group animation of atlas presentation planes">
+      Plane requests are double-buffered with the associated wl_surface state.
+      The animate request starts one shared timeline for all configured planes
+      on the next predicted presentation following the commit. Source rectangles
+      use the logical surface texture after buffer transform and viewport
+      mapping. Destination rectangles and clips use logical surface-local units.
+      Clips are fixed in the unanimated surface frame and applied after the
+      destination rectangle is placed. Planes are composited in creation order:
+      the first plane is backmost and each later plane appears above earlier ones.
+    </description>
+    <enum name="curve">
+      <description summary="Normalized easing function applied to all planes"/>
+      <entry name="linear" value="0"/>
+      <entry name="ease_out_cubic" value="1"/>
+      <entry name="ease_in_out_cubic" value="2"/>
+      <entry name="emphasized_accelerate" value="3"/>
+      <entry name="spring" value="4"/>
+    </enum>
+    <enum name="opacity_mode">
+      <description summary="Opacity interpolation function"/>
+      <entry name="linear" value="0" summary="Use interpolated opacity"/>
+      <entry name="opaque_above" value="1" summary="Use full opacity above the configured threshold"/>
+    </enum>
+    <enum name="error">
+      <entry name="duplicate_plane" value="0" summary="Plane identifier already exists"/>
+      <entry name="unknown_plane" value="1" summary="Plane identifier does not exist"/>
+      <entry name="invalid_geometry" value="2" summary="Plane geometry is invalid"/>
+      <entry name="invalid_duration" value="3" summary="Animation duration is invalid"/>
+      <entry name="too_many_planes" value="4" summary="Controller plane limit exceeded"/>
+    </enum>
+    <request name="destroy" type="destructor">
+      <description summary="Destroy controller and cancel any active animation"/>
+    </request>
+    <request name="add_plane">
+      <description summary="Add a source rectangle and initial presentation state">
+        The source is immutable for the plane lifetime. All coordinates and
+        extents are logical fixed-point values. Extents must be non-negative.
+      </description>
+      <arg name="plane" type="uint"/>
+      <arg name="source_x" type="fixed"/>
+      <arg name="source_y" type="fixed"/>
+      <arg name="source_width" type="fixed"/>
+      <arg name="source_height" type="fixed"/>
+      <arg name="from_x" type="fixed"/>
+      <arg name="from_y" type="fixed"/>
+      <arg name="from_width" type="fixed"/>
+      <arg name="from_height" type="fixed"/>
+      <arg name="clip_x" type="fixed"/>
+      <arg name="clip_y" type="fixed"/>
+      <arg name="clip_width" type="fixed"/>
+      <arg name="clip_height" type="fixed"/>
+      <arg name="from_opacity" type="fixed"/>
+    </request>
+    <request name="set_plane_to">
+      <description summary="Set the target presentation state of one plane"/>
+      <arg name="plane" type="uint"/>
+      <arg name="x" type="fixed"/>
+      <arg name="y" type="fixed"/>
+      <arg name="width" type="fixed"/>
+      <arg name="height" type="fixed"/>
+      <arg name="clip_x" type="fixed"/>
+      <arg name="clip_y" type="fixed"/>
+      <arg name="clip_width" type="fixed"/>
+      <arg name="clip_height" type="fixed"/>
+      <arg name="opacity" type="fixed"/>
+    </request>
+    <request name="set_plane_from">
+      <description summary="Set the starting state used by the next animation"/>
+      <arg name="plane" type="uint"/>
+      <arg name="x" type="fixed"/>
+      <arg name="y" type="fixed"/>
+      <arg name="width" type="fixed"/>
+      <arg name="height" type="fixed"/>
+      <arg name="clip_x" type="fixed"/>
+      <arg name="clip_y" type="fixed"/>
+      <arg name="clip_width" type="fixed"/>
+      <arg name="clip_height" type="fixed"/>
+      <arg name="opacity" type="fixed"/>
+    </request>
+    <request name="set_curve">
+      <arg name="curve" type="uint" enum="curve"/>
+    </request>
+    <request name="set_plane_opacity_mode">
+      <arg name="plane" type="uint"/>
+      <arg name="mode" type="uint" enum="opacity_mode"/>
+      <arg name="threshold_millionths" type="uint"/>
+    </request>
+    <request name="animate">
+      <description summary="Start one synchronized animation for all planes">
+        Requests take effect atomically on the next wl_surface.commit. A
+        nonzero retarget samples every plane's current presentation and ignores
+        the from states supplied with add_plane. A zero retarget uses those
+        from states. Replacing an active animation cancels its serial first.
+      </description>
+      <arg name="serial" type="uint"/>
+      <arg name="duration_ms" type="uint"/>
+      <arg name="retarget" type="uint"/>
+    </request>
+    <request name="cancel">
+      <description summary="Freeze the active animation at its current state"/>
+      <arg name="serial" type="uint"/>
+    </request>
+    <request name="reset">
+      <description summary="Clear compositor presentation state at the next surface commit">
+        The compositor samples and cancels any active animation, then removes all
+        configured planes and presentation transforms for the associated surface.
+        Pending plane, animation, or cancel requests queued before reset are
+        discarded. The reset becomes visible atomically with the next
+        wl_surface.commit, which may attach ordinary replacement content.
+        Cancellation events for the active serial are sent after that commit.
+        The staged curve returns to linear; requests queued after reset may
+        define a new plane set for the same commit. The controller remains
+        usable, and serial monotonicity is preserved.
+      </description>
+    </request>
+    <event name="plane_state">
+      <description summary="Final committed state of one plane">
+        Sent once for every plane before done or cancelled.
+      </description>
+      <arg name="plane" type="uint"/>
+      <arg name="x" type="fixed"/>
+      <arg name="y" type="fixed"/>
+      <arg name="width" type="fixed"/>
+      <arg name="height" type="fixed"/>
+      <arg name="clip_x" type="fixed"/>
+      <arg name="clip_y" type="fixed"/>
+      <arg name="clip_width" type="fixed"/>
+      <arg name="clip_height" type="fixed"/>
+      <arg name="opacity" type="fixed"/>
+    </event>
+    <event name="done">
+      <arg name="serial" type="uint"/>
+    </event>
+    <event name="cancelled">
+      <arg name="serial" type="uint"/>
+    </event>
+  </interface>
+</protocol>
