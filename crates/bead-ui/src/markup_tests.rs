@@ -529,6 +529,87 @@ return ui.Column{id="root",width=200,height=100,
     });
 }
 
+#[test]
+fn collection_switcher_is_absent_for_single_group_and_lists_host_actions() {
+    let f = fixture();
+    write_palette(&f);
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        r#"return {stores={name="",current="two",last="",opened=false},actions={toggle=function(s) s.opened=not s.opened end,switch=function(s,id) s.current=id end,create=function(s) s.last="create" end,rename=function(s,id) s.last=id end,commit=function(s) s.last="commit:"..s.name end,cancel=function(s) s.last="cancel" end,host=function(s) s.last="wallpaper" end},computed={}}"#,
+    ).unwrap();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui") local kit=require("bead.kit")
+return ui.Column{id="root",width=600,height=800,gap=8,
+ kit.CollectionSwitcher{id="plain",groups={{id="one",label="One"}},current="one"},
+ kit.CollectionSwitcher{id="desks",groups={{id="one",label="One"},{id="two"}},current=ui.bind("current"),on_toggle="toggle"},
+ kit.CollectionSwitcherMenu{id="menu",groups={{id="one",label="One"},{id="two"}},current=ui.bind("current"),
+  on_switch="switch",on_create="create",on_rename="rename",create_label="Create desk",
+  editing={value="name",label="Desk name"},on_commit="commit",on_cancel="cancel",
+  actions={{id="wallpaper",label="Set current wallpaper",action="host"}}}}
+}"#,
+    ).unwrap();
+    let mut s = f.session();
+    s.entry = "ui/main.luau".into();
+    let scene = s.reload().unwrap();
+    s.commit(scene);
+    let texts: Vec<_> = s.current.primitives.iter().filter_map(|p| match p {
+        Primitive::Text { text, .. } => Some(text.as_str()),
+        _ => None,
+    }).collect();
+    assert_eq!(s.paint_bounds("plain").unwrap().w, 0.);
+    assert!(texts.contains(&"2"));
+    assert!(texts.contains(&"Rename"));
+    assert!(texts.contains(&"Save"));
+    assert!(texts.contains(&"Cancel"));
+    assert!(texts.contains(&"Desk name"));
+    assert!(texts.contains(&"Set current wallpaper"));
+
+    let badge = s.paint_bounds("desks").unwrap();
+    let scene = s.click(badge.x + badge.w / 2., badge.y + badge.h / 2.).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("opened"), Some(&Value::Bool(true)));
+    let rename = s.paint_bounds("rename-two").unwrap();
+    let scene = s.click(rename.x + rename.w / 2., rename.y + rename.h / 2.).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("last"), Some(&Value::Text("two".into())));
+    let input = s.paint_bounds("group-name").unwrap();
+    let scene = s.click(input.x + input.w / 2., input.y + input.h / 2.).unwrap().unwrap();
+    s.commit(scene);
+    let scene = s.key("Focus", false).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("name"), Some(&Value::Text("Focus".into())));
+    let save = s.paint_bounds("save-name").unwrap();
+    let scene = s.click(save.x + save.w / 2., save.y + save.h / 2.).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("last"), Some(&Value::Text("commit:Focus".into())));
+    let group = s.paint_bounds("group-one").unwrap();
+    let scene = s.click(group.x + group.w / 2., group.y + group.h / 2.).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("current"), Some(&Value::Text("one".into())));
+}
+
+#[test]
+fn collection_switcher_menu_exposes_host_create_action() {
+    let f = fixture();
+    write_palette(&f);
+    fs::write(f.0.join("ui/behavior.luau"),
+        r#"return {stores={created=false},actions={create=function(s) s.created=true end},computed={}}"#).unwrap();
+    fs::write(f.0.join("ui/main.luau"), r#"local ui=require("bead.ui") local kit=require("bead.kit")
+return ui.Box{id="root",width=400,height=300,
+ kit.CollectionSwitcherMenu{id="menu",groups={},on_create="create",create_label="Create desk"}}
+}"#).unwrap();
+    let mut s=f.session();
+    s.entry="ui/main.luau".into();
+    let scene=s.reload().unwrap();
+    s.commit(scene);
+    assert!(s.current.primitives.iter().any(|p| matches!(p, Primitive::Text{text,..} if text=="Create desk")));
+    let create=s.paint_bounds("create").unwrap();
+    let scene=s.click(create.x+create.w/2.,create.y+create.h/2.).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("created"),Some(&Value::Bool(true)));
+}
+
 fn nested_scroll_session(inner_content: &str) -> (Fixture, Session) {
     let f = fixture();
     fs::write(

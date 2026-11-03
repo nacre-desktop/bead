@@ -420,6 +420,49 @@ return function(ui, tokens)
         elseif e=="left" then out.left=distance else out.right=distance end
         return ui.Column(out)
     end
+    -- Compact host supplied group badge for a bar. Its menu is a separate surface because
+    -- bar slots may clip children; render CollectionSwitcherMenu in the host's popout.
+    -- `groups` is an ordered array of `{id,label}`. Buttons use normal keyboard activation.
+    function kit.CollectionSwitcher(p)
+        local groups=value(p.groups,{})
+        if #groups<=1 then return ui.Box{id=p.id,width=0,height=0} end
+        local current_id=value(p.current,nil)
+        local current,index
+        for i,group in ipairs(groups) do if group.id==current_id then current,index=group,i;break end end
+        current,index=current or groups[1],index or 1
+        return kit.Button{id=p.id,height=p.height or 32,padding_left=tokens.spacing.sm,padding_right=tokens.spacing.sm,
+            width=p.width or 112,text=current.label or tostring(index),selected=true,
+            aria_label=p.switcher_label or current.label or tostring(index),
+            on_activate=p.on_toggle and ui.action(p.on_toggle) or nil}
+    end
+    -- Generic menu body intended for the host's popout surface. Hosts own any app-specific
+    -- state and can show an editor by setting `editing={value=<store key>,label=<text>}`.
+    function kit.CollectionSwitcherMenu(p)
+        local groups=value(p.groups,{})
+        local current_id=value(p.current,nil)
+        local rows={}
+        for i,group in ipairs(groups) do
+            local label=group.label or tostring(i)
+            rows[#rows+1]=kit.ListRow{id="group-"..tostring(group.id),text=label,selected=group.id==current_id,
+                aria_label=label,on_activate=p.on_switch and ui.action(p.on_switch,group.id) or nil}
+            if p.on_rename then rows[#rows+1]=kit.Button{id="rename-"..tostring(group.id),height=32,
+                text=p.rename_label or "Rename",aria_label=(p.rename_label or "Rename").." "..label,
+                on_activate=ui.action(p.on_rename,group.id)} end
+        end
+        if p.editing and p.editing.value then
+            rows[#rows+1]=kit.TextInput{id="group-name",text=ui.bind(p.editing.value),placeholder=p.editing.label,
+                aria_label=p.editing.label,on_activate=ui.action(p.on_commit)}
+            rows[#rows+1]=ui.Row{gap=tokens.spacing.xs,
+                kit.Button{id="save-name",text=p.save_label or "Save",on_activate=ui.action(p.on_commit)},
+                kit.Button{id="cancel-name",text=p.cancel_label or "Cancel",on_activate=ui.action(p.on_cancel)}}
+        elseif p.on_create then rows[#rows+1]=kit.Button{id="create",height=36,text=p.create_label or "Create",
+            on_activate=ui.action(p.on_create)} end
+        for _,action in ipairs(p.actions or {}) do
+            rows[#rows+1]=kit.Button{id="host-"..tostring(action.id),height=36,text=action.label,
+                aria_label=action.label,on_activate=ui.action(action.action,action.arg)}
+        end
+        return kit.Popover(props(rows,{id=p.id,width=p.width or 240,gap=tokens.spacing.xs},nil))
+    end
     kit.Peek=kit.Popover
     function kit.Tooltip(p) return kit.Popover(props(p,{width=180,padding=tokens.spacing.sm})) end
     function kit.LevelMeter(p)
