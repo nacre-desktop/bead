@@ -186,7 +186,10 @@ mod handoff_tests {
     fn panel_layout_viewport_uses_output_dimensions_independent_of_root_extents() {
         use super::panel_viewport_from_output;
         let configured = (1164, 632);
-        assert_eq!(panel_viewport_from_output(Some((720, 900)), configured), (720, 900));
+        assert_eq!(
+            panel_viewport_from_output(Some((720, 900)), configured),
+            (720, 900)
+        );
         assert_eq!(panel_viewport_from_output(None, configured), configured);
     }
 
