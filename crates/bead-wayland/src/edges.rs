@@ -121,6 +121,14 @@ pub(super) struct EdgeState {
     cue_fade: f32,
     cue_epoch: u64,
 }
+fn cancel_for_external_source(edge: &mut EdgeState) -> Option<String> {
+    edge.dwelling = None;
+    edge.dwell.cancel();
+    edge.dwell_epoch = edge.dwell_epoch.wrapping_add(1);
+    edge.cue_epoch = edge.cue_epoch.wrapping_add(1);
+    edge.cue_fade = 0.;
+    edge.hovered.take()
+}
 fn key(output: &str, lip: &str) -> String {
     format!("{output}/{lip}")
 }
@@ -196,7 +204,19 @@ impl App {
         let Some(control) = self.options.control.clone() else {
             return;
         };
-        self.edge.chrome = control.edge_chrome();
+        let chrome = control.edge_chrome();
+        let external_takeover = !self.edge.chrome.external_source && chrome.external_source;
+        self.edge.chrome = chrome;
+        if external_takeover {
+            let hovered = cancel_for_external_source(&mut self.edge);
+            self.edge.hover_opened = None;
+            self.edge.exit = Default::default();
+            self.edge.exit_epoch = self.edge.exit_epoch.wrapping_add(1);
+            if let Some(key) = hovered {
+                self.publish_cue_values(&key);
+                self.redraw_lip(&key);
+            }
+        }
         if self.hidden {
             self.edge_surfaces.clear();
             return;
@@ -577,7 +597,8 @@ impl App {
         let Some(lip) = self.lip_named(&id) else {
             return;
         };
-        if !still
+        if !self.edge.chrome.maps_lip_surfaces()
+            || !still
             || self.edge.chrome.click_to_open
             || !self.lip_allowed(&lip)
             || !self.edge.gate.can_open(&k)
@@ -1016,5 +1037,27 @@ mod tests {
         };
         assert!(internal.maps_lip_surfaces());
         assert_eq!(internal.input_regions((1920, 1200)).len(), 1);
+    }
+
+    #[test]
+    fn external_source_takeover_cancels_pending_hover_and_cue_state() {
+        let mut edge = EdgeState::default();
+        edge.hovered = Some("DP-1/assistant".into());
+        edge.dwelling = edge.hovered.clone();
+        edge.dwell.start(350, false);
+        edge.dwell_epoch = 7;
+        edge.cue_epoch = 9;
+        edge.cue_fade = 0.8;
+
+        assert_eq!(
+            cancel_for_external_source(&mut edge).as_deref(),
+            Some("DP-1/assistant")
+        );
+        assert!(!edge.dwell.waiting());
+        assert_eq!(edge.dwelling, None);
+        assert_eq!(edge.hovered, None);
+        assert_eq!(edge.dwell_epoch, 8);
+        assert_eq!(edge.cue_epoch, 10);
+        assert_eq!(edge.cue_fade, 0.);
     }
 }
