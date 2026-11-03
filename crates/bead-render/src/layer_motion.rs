@@ -9,6 +9,32 @@ use std::time::Duration;
 
 use crate::{Damage, PixelFormat, Rect, Renderer, Result, Scene, ShmTarget};
 
+/// Whether a translated, viewport-cropped source can present every pixel that
+/// enters the viewport in the target pose.
+pub fn translation_preserves_clip(
+    source_bounds: Rect,
+    viewport: Rect,
+    closed_offset: (f32, f32),
+) -> bool {
+    if !source_bounds.x.is_finite()
+        || !source_bounds.y.is_finite()
+        || !source_bounds.w.is_finite()
+        || !source_bounds.h.is_finite()
+        || !viewport.x.is_finite()
+        || !viewport.y.is_finite()
+        || !viewport.w.is_finite()
+        || !viewport.h.is_finite()
+        || !closed_offset.0.is_finite()
+        || !closed_offset.1.is_finite()
+    {
+        return false;
+    }
+    !((closed_offset.0 < 0. && source_bounds.x + source_bounds.w > viewport.x + viewport.w)
+        || (closed_offset.0 > 0. && source_bounds.x < viewport.x)
+        || (closed_offset.1 < 0. && source_bounds.y + source_bounds.h > viewport.y + viewport.h)
+        || (closed_offset.1 > 0. && source_bounds.y < viewport.y))
+}
+
 /// One bounded, premultiplied pixel buffer, in the renderer's target format.
 pub struct PixelBuffer {
     pub width: u32,
@@ -131,6 +157,22 @@ impl LayerMotionPlan {
         if !duration.is_finite() || !(0.001..=10.).contains(&duration) {
             return Ok(None);
         }
+        let closed_offset = motion.edge.closed_offset(
+            motion.slide_distance.unwrap_or(scene.bounds.w),
+            motion.slide_distance.unwrap_or(scene.bounds.h),
+            0.,
+        );
+        let resting_bounds = scene.bounds.translated(scene.offset.0, scene.offset.1);
+        // The atlas contains only pixels inside this viewport. If the closed
+        // pose moves hidden content into view, the compositor cannot recover
+        // those pixels from the already-cropped source; keep the CPU path.
+        if !translation_preserves_clip(
+            resting_bounds,
+            Rect::new(0., 0., width as f32, height as f32),
+            closed_offset,
+        ) {
+            return Ok(None);
+        }
         let pixel_width = (width as f64 * scale as f64).ceil();
         let pixel_height = (height as f64 * scale as f64).ceil();
         if pixel_width > u32::MAX as f64 || pixel_height > u32::MAX as f64 {
@@ -171,11 +213,6 @@ impl LayerMotionPlan {
         )?;
 
         let source = Rect::new(0., 0., width as f32, height as f32);
-        let closed_offset = motion.edge.closed_offset(
-            motion.slide_distance.unwrap_or(scene.bounds.w),
-            motion.slide_distance.unwrap_or(scene.bounds.h),
-            0.,
-        );
         let resting = PlaneState {
             destination: source,
             clip: source,
@@ -398,6 +435,134 @@ mod tests {
         assert_eq!(plan.atlas.stride, 584);
         assert_eq!(plan.planes[0].source, Rect::new(0., 0., 97., 73.));
         assert_eq!(plan.planes[0].to.destination, plan.planes[0].source);
+        Ok(())
+    }
+
+    #[test]
+    fn clipped_source_pixels_that_enter_from_closed_edge_fall_back_before_paint() -> Result<()> {
+        struct NoPaint;
+        impl Renderer for NoPaint {
+            fn prepare(&mut self, _: &Scene, _: f32) -> Result<()> {
+                panic!("unsafe clipped motion must not prepare")
+            }
+            fn render(&mut self, _: &Scene, _: ShmTarget<'_>, _: Damage) -> Result<()> {
+                panic!("unsafe clipped motion must not paint")
+            }
+        }
+
+        let mut clipped = scene(false, false);
+        clipped.motion.as_mut().unwrap().edge = bead_core::Edge::Top;
+        clipped.offset = (0., 0.);
+        assert!(
+            LayerMotionPlan::for_slide(
+                &clipped,
+                false,
+                96,
+                40,
+                1.,
+                PixelFormat::Rgba,
+                &mut NoPaint,
+            )?
+            .is_none()
+        );
+
+        // The CPU path paints the full scene at the sampled offset before the
+        // output clip, so pixels from y=40..72 can enter the visible viewport.
+        let mut legacy = clipped.clone();
+        legacy.offset = (0., -16.);
+        legacy.motion = None;
+        let mut pixels = vec![0; 96 * 40 * 4];
+        let mut renderer = TreeCpuRenderer::default();
+        renderer.prepare(&legacy, 1.)?;
+        renderer.render(
+            &legacy,
+            ShmTarget {
+                bytes: &mut pixels,
+                width: 96,
+                height: 40,
+                scale: 1.,
+                format: PixelFormat::Rgba,
+            },
+            Damage::full(96, 40),
+        )?;
+        let visible_body_pixel = ((35 * 96 + 48) * 4) as usize;
+        assert!(
+            pixels[visible_body_pixel..visible_body_pixel + 4]
+                .iter()
+                .any(|channel| *channel != 0)
+        );
+
+        let mut cropped_source = clipped.clone();
+        cropped_source.motion = None;
+        let mut cropped_pixels = vec![0; 96 * 40 * 4];
+        let mut crop_renderer = TreeCpuRenderer::default();
+        crop_renderer.prepare(&cropped_source, 1.)?;
+        crop_renderer.render(
+            &cropped_source,
+            ShmTarget {
+                bytes: &mut cropped_pixels,
+                width: 96,
+                height: 40,
+                scale: 1.,
+                format: PixelFormat::Rgba,
+            },
+            Damage::full(96, 40),
+        )?;
+        let cropped_image = tiny_skia::PixmapRef::from_bytes(&cropped_pixels, 96, 40).unwrap();
+        let mut translated_crop = tiny_skia::Pixmap::new(96, 40).unwrap();
+        translated_crop.draw_pixmap(
+            0,
+            -16,
+            cropped_image,
+            &tiny_skia::PixmapPaint::default(),
+            tiny_skia::Transform::identity(),
+            None,
+        );
+        assert_eq!(
+            &translated_crop.data()[visible_body_pixel..visible_body_pixel + 4],
+            &[0; 4]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn clipped_source_that_moves_further_off_bottom_edge_remains_supported() -> Result<()> {
+        struct CountPaint {
+            renderer: TreeCpuRenderer,
+            paints: usize,
+        }
+        impl Renderer for CountPaint {
+            fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
+                self.renderer.prepare(scene, scale)
+            }
+            fn render(
+                &mut self,
+                scene: &Scene,
+                target: ShmTarget<'_>,
+                damage: Damage,
+            ) -> Result<()> {
+                self.paints += 1;
+                self.renderer.render(scene, target, damage)
+            }
+        }
+
+        let mut clipped = scene(false, false);
+        clipped.motion.as_mut().unwrap().edge = bead_core::Edge::Bottom;
+        let mut renderer = CountPaint {
+            renderer: TreeCpuRenderer::default(),
+            paints: 0,
+        };
+        let plan = LayerMotionPlan::for_slide(
+            &clipped,
+            false,
+            96,
+            40,
+            1.,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )?;
+        assert!(plan.is_some());
+        assert_eq!(renderer.paints, 1);
         Ok(())
     }
 }

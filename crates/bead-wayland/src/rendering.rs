@@ -1422,6 +1422,7 @@ impl App {
             let s = &mut self.surfaces[index];
             let wl_surface = s.wl_surface().clone();
             let compositor_motion_candidate = s.companion
+                && s.native.is_none()
                 && s.layer_motion.is_some()
                 && !bead_core::animation::reduced_motion()
                 && !self.options.background_blur
@@ -1664,6 +1665,22 @@ impl App {
             }
             let layer_motion_target_changed = s.layer_motion_active
                 && layer_motion_opening.is_some_and(|opening| s.layer_motion_open != Some(opening));
+            let resting_offset = (
+                scene.offset.0 - layer_motion_pose.0,
+                scene.offset.1 - layer_motion_pose.1,
+            );
+            let translation_preserves_clip = scene.motion.as_ref().is_some_and(|motion| {
+                let closed_offset = motion.edge.closed_offset(
+                    motion.slide_distance.unwrap_or(scene.bounds.w),
+                    motion.slide_distance.unwrap_or(scene.bounds.h),
+                    0.,
+                );
+                bead_render::layer_motion::translation_preserves_clip(
+                    scene.bounds.translated(resting_offset.0, resting_offset.1),
+                    bead_render::Rect::new(0., 0., s.width as f32, s.height as f32),
+                    closed_offset,
+                )
+            });
             let layer_motion_candidate = _kind == RendererKind::Cpu
                 && s.native.is_none()
                 && s.layer_motion.is_some()
@@ -1671,6 +1688,8 @@ impl App {
                 && !bead_core::animation::reduced_motion()
                 && !self.options.background_blur
                 && scene.slide.is_none()
+                && (translation_preserves_clip
+                    || layer_motion_target_changed && s.layer_motion_plan.is_some())
                 && scene.motion.as_ref().is_some_and(|motion| {
                     layer_motion_opening.is_some_and(|opening| {
                         !opening
@@ -1686,10 +1705,7 @@ impl App {
                 && let Some(opening) = layer_motion_opening
             {
                 let mut source_scene = scene.clone();
-                source_scene.offset = (
-                    scene.offset.0 - layer_motion_pose.0,
-                    scene.offset.1 - layer_motion_pose.1,
-                );
+                source_scene.offset = resting_offset;
                 source_scene.opacity = 1.;
                 source_scene.panel_offset(1., opening);
                 layer_motion_source_scene = Some(source_scene);
@@ -1697,6 +1713,7 @@ impl App {
             if panel
                 && self.options.interactive
                 && (!s.companion || self.options.panel_spec.is_some())
+                && !(s.layer_motion_active && !layer_motion_target_changed)
             {
                 let spec = self.options.panel_spec.as_ref();
                 let passive = s.companion && spec.is_some_and(|spec| spec.passive);
@@ -1867,6 +1884,11 @@ impl App {
                         if s.layer_motion_active {
                             // A source layout cannot change under an active animation.
                             // Let its current target finish, then recreate on the next draw.
+                            if let Some(offset) = s.layer_motion_resting_offset {
+                                s.offset = offset;
+                            }
+                            s.input_content_offset = (0., 0.);
+                            s.redraw = false;
                             return Ok(());
                         }
                         drop(s.layer_motion.take());
@@ -1990,12 +2012,18 @@ impl App {
                     s.redraw = false;
                     s.frames += 1;
                     return Ok(());
-                } else if s.layer_motion_active {
-                    // Do not apply a second set of CPU transforms over a surface
-                    // the compositor still owns. The completion event wakes the
-                    // settled CPU path.
-                    return Ok(());
                 }
+            }
+            if s.layer_motion_active && s.native.is_none() {
+                // The attached atlas remains the visible content until the
+                // compositor retires its animation, including while a changed
+                // or unsupported scene waits for the completion handoff.
+                if let Some(offset) = s.layer_motion_resting_offset {
+                    s.offset = offset;
+                }
+                s.input_content_offset = (0., 0.);
+                s.redraw = false;
+                return Ok(());
             }
             renderer.presentation_motion(opaque_motion);
             bead_core::profile::split("pose");
