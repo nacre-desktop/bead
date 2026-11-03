@@ -21,10 +21,20 @@ pub struct EdgeChrome {
     pub hover_delay_ms: u32,
     /// Open on click only (`clickEdgeMenus`).
     pub click_to_open: bool,
+    /// The host receives edge triggers from another source and routes them itself. When
+    /// enabled, Bead keeps reserved geometry but does not create interactive lip strips.
+    pub external_source: bool,
 }
 impl EdgeChrome {
+    fn maps_lip_surfaces(&self) -> bool {
+        !self.external_source || self.click_to_open
+    }
+
     /// Output-space regions that backdrops must leave available for the lips.
     pub fn input_regions(&self, output: (i32, i32)) -> Vec<Rect> {
+        if !self.maps_lip_surfaces() {
+            return Vec::new();
+        }
         self.lips
             .iter()
             .map(|lip| {
@@ -42,6 +52,15 @@ impl EdgeChrome {
                 Rect::new(x as f32, y as f32, g.size.0 as f32, g.size.1 as f32)
             })
             .collect()
+    }
+
+    /// Find the configured lip under an output-local pointer position. Hosts using an
+    /// external edge event stream use this to route an event to the matching lip.
+    pub fn lip_at(&self, edge: Edge, output: (i32, i32), position: (f32, f32)) -> Option<&Lip> {
+        self.lips.iter().find(|lip| {
+            lip.edge == edge
+                && lip.contains((output.0 as f32, output.1 as f32), position.0, position.1)
+        })
     }
 }
 /// The artwork inputs for one lip.
@@ -110,6 +129,19 @@ pub(super) struct EdgeState {
     /// The bar-hosted dwell cue's opacity (0..1) and its fade timer.
     cue_fade: f32,
     cue_epoch: u64,
+}
+fn cancel_for_external_source(edge: &mut EdgeState) -> Option<String> {
+    edge.dwelling = None;
+    edge.dwell.cancel();
+    edge.dwell_epoch = edge.dwell_epoch.wrapping_add(1);
+    edge.cue_epoch = edge.cue_epoch.wrapping_add(1);
+    edge.cue_fade = 0.;
+    edge.hovered.take()
+}
+fn release_external_hover(control: &dyn ShellControl, previous: Option<(String, Lip)>) {
+    if let Some((output, lip)) = previous {
+        control.external_panel_hover(&lip.opens, &output, false);
+    }
 }
 fn key(output: &str, lip: &str) -> String {
     format!("{output}/{lip}")
@@ -186,7 +218,24 @@ impl App {
         let Some(control) = self.options.control.clone() else {
             return;
         };
-        self.edge.chrome = control.edge_chrome();
+        let chrome = control.edge_chrome();
+        let external_takeover = !self.edge.chrome.external_source && chrome.external_source;
+        let previous_hover = self.edge.hovered.as_deref().and_then(|key| {
+            let (output, id) = key.split_once('/')?;
+            self.lip_named(id).map(|lip| (output.to_owned(), lip))
+        });
+        self.edge.chrome = chrome;
+        if external_takeover {
+            let hovered = cancel_for_external_source(&mut self.edge);
+            self.edge.hover_opened = None;
+            self.edge.exit = Default::default();
+            self.edge.exit_epoch = self.edge.exit_epoch.wrapping_add(1);
+            release_external_hover(control.as_ref(), previous_hover);
+            if let Some(key) = hovered {
+                self.publish_cue_values(&key);
+                self.redraw_lip(&key);
+            }
+        }
         if self.hidden {
             self.edge_surfaces.clear();
             return;
@@ -213,7 +262,11 @@ impl App {
                     ));
                 }
             }
-            for lip in chrome.lips.iter().filter(|l| !self.bar_hosts(l)) {
+            for lip in chrome
+                .lips
+                .iter()
+                .filter(|l| chrome.maps_lip_surfaces() && !self.bar_hosts(l))
+            {
                 wanted.push((
                     output.clone(),
                     name.clone(),
@@ -563,7 +616,8 @@ impl App {
         let Some(lip) = self.lip_named(&id) else {
             return;
         };
-        if !still
+        if !self.edge.chrome.maps_lip_surfaces()
+            || !still
             || self.edge.chrome.click_to_open
             || !self.lip_allowed(&lip)
             || !self.edge.gate.can_open(&k)
@@ -847,6 +901,11 @@ impl App {
         if self.edge.chrome.lips.is_empty() || self.options.control.is_none() {
             return;
         }
+        if !self.edge.chrome.maps_lip_surfaces()
+            && !matches!(event.kind, PointerEventKind::Press { button: 0x110, .. })
+        {
+            return;
+        }
         let s = &self.surfaces[bar];
         let (output, wl_output) = (s.output_name.clone(), s.output.clone());
         let Some((w, h)) = self
@@ -918,6 +977,18 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[derive(Default)]
+    struct HoverSpy(std::sync::Mutex<Vec<(String, String, bool)>>);
+    impl ShellControl for HoverSpy {
+        fn watch(&self, _: Box<dyn Fn() + Send + Sync>) {}
+        fn external_panel_hover(&self, view: &str, output: &str, inside: bool) {
+            self.0
+                .lock()
+                .unwrap()
+                .push((view.into(), output.into(), inside));
+        }
+    }
+
     #[test]
     fn reserved_strips_reserve_their_side_only() {
         let left = strip_geometry(Edge::Left, 10);
@@ -973,5 +1044,108 @@ mod tests {
                 Rect::new(0., 528., 11., 144.)
             ]
         );
+    }
+
+    #[test]
+    fn external_edge_source_leaves_lip_hit_testing_to_the_host() {
+        let chrome = EdgeChrome {
+            lips: vec![Lip {
+                id: "assistant".into(),
+                edge: Edge::Left,
+                length: 144.,
+                thickness: 10.,
+                opens: "assistant".into(),
+            }],
+            external_source: true,
+            ..Default::default()
+        };
+        assert!(!chrome.maps_lip_surfaces());
+        assert!(chrome.input_regions((1920, 1200)).is_empty());
+
+        let internal = EdgeChrome {
+            external_source: false,
+            ..chrome.clone()
+        };
+        assert!(internal.maps_lip_surfaces());
+        assert_eq!(internal.input_regions((1920, 1200)).len(), 1);
+
+        let click_only = EdgeChrome {
+            click_to_open: true,
+            ..chrome
+        };
+        assert!(click_only.maps_lip_surfaces());
+        assert_eq!(click_only.input_regions((1920, 1200)).len(), 1);
+    }
+
+    #[test]
+    fn external_source_takeover_cancels_pending_hover_and_cue_state() {
+        let mut edge = EdgeState::default();
+        edge.hovered = Some("DP-1/assistant".into());
+        edge.dwelling = edge.hovered.clone();
+        edge.dwell.start(350, false);
+        edge.dwell_epoch = 7;
+        edge.cue_epoch = 9;
+        edge.cue_fade = 0.8;
+
+        assert_eq!(
+            cancel_for_external_source(&mut edge).as_deref(),
+            Some("DP-1/assistant")
+        );
+        assert!(!edge.dwell.waiting());
+        assert_eq!(edge.dwelling, None);
+        assert_eq!(edge.hovered, None);
+        assert_eq!(edge.dwell_epoch, 8);
+        assert_eq!(edge.cue_epoch, 10);
+        assert_eq!(edge.cue_fade, 0.);
+        let control = HoverSpy::default();
+        release_external_hover(
+            &control,
+            Some((
+                "DP-1".into(),
+                Lip {
+                    id: "assistant".into(),
+                    edge: Edge::Left,
+                    length: 144.,
+                    thickness: 10.,
+                    opens: "assistant".into(),
+                },
+            )),
+        );
+        assert_eq!(
+            *control.0.lock().unwrap(),
+            [("assistant".into(), "DP-1".into(), false)]
+        );
+    }
+
+    #[test]
+    fn external_edge_positions_select_the_matching_lip() {
+        let chrome = EdgeChrome {
+            external_source: true,
+            lips: vec![
+                Lip {
+                    id: "assistant".into(),
+                    edge: Edge::Left,
+                    length: 100.,
+                    thickness: 10.,
+                    opens: "assistant".into(),
+                },
+                Lip {
+                    id: "status".into(),
+                    edge: Edge::Left,
+                    length: 200.,
+                    thickness: 10.,
+                    opens: "status".into(),
+                },
+            ],
+            ..Default::default()
+        };
+        assert_eq!(
+            chrome
+                .lip_at(Edge::Left, (1000, 800), (4., 320.))
+                .map(|lip| lip.id.as_str()),
+            Some("status")
+        );
+        assert_eq!(chrome.lip_at(Edge::Left, (1000, 800), (4., 100.)), None);
+        assert_eq!(chrome.lip_at(Edge::Right, (1000, 800), (4., 350.)), None);
     }
 }
