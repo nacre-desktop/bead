@@ -21,10 +21,20 @@ pub struct EdgeChrome {
     pub hover_delay_ms: u32,
     /// Open on click only (`clickEdgeMenus`).
     pub click_to_open: bool,
+    /// The host receives edge triggers from another source and routes them itself. When
+    /// enabled, Bead keeps reserved geometry but does not create interactive lip strips.
+    pub external_source: bool,
 }
 impl EdgeChrome {
+    fn maps_lip_surfaces(&self) -> bool {
+        !self.external_source
+    }
+
     /// Output-space regions that backdrops must leave available for the lips.
     pub fn input_regions(&self, output: (i32, i32)) -> Vec<Rect> {
+        if !self.maps_lip_surfaces() {
+            return Vec::new();
+        }
         self.lips
             .iter()
             .map(|lip| {
@@ -213,7 +223,11 @@ impl App {
                     ));
                 }
             }
-            for lip in chrome.lips.iter().filter(|l| !self.bar_hosts(l)) {
+            for lip in chrome
+                .lips
+                .iter()
+                .filter(|l| chrome.maps_lip_surfaces() && !self.bar_hosts(l))
+            {
                 wanted.push((
                     output.clone(),
                     name.clone(),
@@ -973,5 +987,29 @@ mod tests {
                 Rect::new(0., 528., 11., 144.)
             ]
         );
+    }
+
+    #[test]
+    fn external_edge_source_leaves_lip_hit_testing_to_the_host() {
+        let chrome = EdgeChrome {
+            lips: vec![Lip {
+                id: "assistant".into(),
+                edge: Edge::Left,
+                length: 144.,
+                thickness: 10.,
+                opens: "assistant".into(),
+            }],
+            external_source: true,
+            ..Default::default()
+        };
+        assert!(!chrome.maps_lip_surfaces());
+        assert!(chrome.input_regions((1920, 1200)).is_empty());
+
+        let internal = EdgeChrome {
+            external_source: false,
+            ..chrome
+        };
+        assert!(internal.maps_lip_surfaces());
+        assert_eq!(internal.input_regions((1920, 1200)).len(), 1);
     }
 }
