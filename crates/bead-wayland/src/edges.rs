@@ -27,7 +27,7 @@ pub struct EdgeChrome {
 }
 impl EdgeChrome {
     fn maps_lip_surfaces(&self) -> bool {
-        !self.external_source
+        !self.external_source || self.click_to_open
     }
 
     /// Output-space regions that backdrops must leave available for the lips.
@@ -52,6 +52,19 @@ impl EdgeChrome {
                 Rect::new(x as f32, y as f32, g.size.0 as f32, g.size.1 as f32)
             })
             .collect()
+    }
+
+    /// Find the configured lip under an output-local pointer position. Hosts using an
+    /// external edge event stream use this to route an event to the matching lip.
+    pub fn lip_at(
+        &self,
+        edge: Edge,
+        output: (i32, i32),
+        position: (f32, f32),
+    ) -> Option<&Lip> {
+        self.lips.iter().find(|lip| {
+            lip.edge == edge && lip.contains((output.0 as f32, output.1 as f32), position.0, position.1)
+        })
     }
 }
 /// The artwork inputs for one lip.
@@ -1037,6 +1050,13 @@ mod tests {
         };
         assert!(internal.maps_lip_surfaces());
         assert_eq!(internal.input_regions((1920, 1200)).len(), 1);
+
+        let click_only = EdgeChrome {
+            click_to_open: true,
+            ..chrome
+        };
+        assert!(click_only.maps_lip_surfaces());
+        assert_eq!(click_only.input_regions((1920, 1200)).len(), 1);
     }
 
     #[test]
@@ -1059,5 +1079,35 @@ mod tests {
         assert_eq!(edge.dwell_epoch, 8);
         assert_eq!(edge.cue_epoch, 10);
         assert_eq!(edge.cue_fade, 0.);
+    }
+
+    #[test]
+    fn external_edge_positions_select_the_matching_lip() {
+        let chrome = EdgeChrome {
+            external_source: true,
+            lips: vec![
+                Lip {
+                    id: "assistant".into(),
+                    edge: Edge::Left,
+                    length: 100.,
+                    thickness: 10.,
+                    opens: "assistant".into(),
+                },
+                Lip {
+                    id: "status".into(),
+                    edge: Edge::Left,
+                    length: 200.,
+                    thickness: 10.,
+                    opens: "status".into(),
+                },
+            ],
+            ..Default::default()
+        };
+        assert_eq!(
+            chrome.lip_at(Edge::Left, (1000, 800), (4., 350.)).map(|lip| lip.id.as_str()),
+            Some("status")
+        );
+        assert_eq!(chrome.lip_at(Edge::Left, (1000, 800), (4., 100.)), None);
+        assert_eq!(chrome.lip_at(Edge::Right, (1000, 800), (4., 350.)), None);
     }
 }
