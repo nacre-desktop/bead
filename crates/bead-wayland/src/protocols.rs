@@ -893,10 +893,19 @@ impl LayerShellHandler for App {
                     .filter(|(w, h)| *w > 0 && *h > 0)
                     .map(|(w, h)| (w as u32, h as u32))
                     .unwrap_or((surface.width, surface.height));
-                if let Some(source) = &mut self.panel_runtime {
-                    source.viewport(viewport.0, viewport.1);
+                let viewport_changed = self
+                    .panel_runtime
+                    .as_mut()
+                    .is_some_and(|source| source.viewport(viewport.0, viewport.1));
+                if viewport_changed {
+                    self.panel_ui(UiEvent::Relayout);
+                } else {
+                    // Configure can still change the layer allocation while the
+                    // layout viewport stays fixed. Redraw the current scene, but
+                    // don't enqueue a duplicate worker transaction for no layout
+                    // change.
+                    self.draw(i, qh);
                 }
-                self.panel_ui(UiEvent::Relayout);
                 return;
             }
             if self.options.primary_factory.is_some() && !self.surfaces[i].companion {
