@@ -13,6 +13,7 @@ use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop, globals::
 use crate::{
     layer_motion_protocol::bead_layer_motion_manager_v1::BeadLayerMotionManagerV1,
     layer_motion_protocol::bead_layer_motion_v1::{self, BeadLayerMotionV1},
+    rendering::layer_motion_completion_uses_cpu_reveal,
     runtime::App,
 };
 
@@ -168,6 +169,26 @@ impl LayerMotionController {
         Some(serial)
     }
 
+    /// Reset plane presentation atomically with the next wl_surface commit.
+    /// The caller must first attach ordinary replacement content; keep this
+    /// controller alive so later animations continue its serial sequence.
+    pub(crate) fn reset_presentation(&mut self) {
+        drop(self.take_events());
+        self.proxy.reset();
+        self.planes.clear();
+        self.active_serial = None;
+    }
+
+    pub(crate) fn retire_completed(&mut self, serial: u32) {
+        if self.active_serial == Some(serial) {
+            self.active_serial = None;
+        }
+    }
+
+    pub(crate) fn has_active_serial(&self) -> bool {
+        self.active_serial.is_some()
+    }
+
     fn matches(&self, data: &Arc<DispatchData>) -> bool {
         Arc::ptr_eq(&self.events, data)
     }
@@ -254,6 +275,10 @@ impl Dispatch<BeadLayerMotionV1, Arc<DispatchData>> for App {
                 .as_ref()
                 .is_some_and(|motion| motion.matches(data))
         }) else {
+            data.events
+                .lock()
+                .expect("motion event lock poisoned")
+                .clear();
             return;
         };
         let current = state.surfaces[index]
@@ -261,6 +286,34 @@ impl Dispatch<BeadLayerMotionV1, Arc<DispatchData>> for App {
             .as_ref()
             .is_some_and(|motion| motion.active_serial == Some(serial));
         if current {
+            let surface_companion = state.surfaces[index].companion;
+            let target_scene = if surface_companion {
+                state.companion.as_ref().map(|(scene, _, _)| scene)
+            } else {
+                Some(&state.scene)
+            };
+            let target_motion = target_scene.and_then(|scene| scene.motion.as_ref());
+            let target_open = if surface_companion && state.options.panel_spec.is_some() {
+                state.panel_target
+            } else {
+                target_motion.is_some_and(|motion| motion.open)
+            };
+            let cpu_reveal_handoff = layer_motion_completion_uses_cpu_reveal(
+                completed,
+                state.surfaces[index].layer_motion_open,
+                target_open,
+                target_motion.is_some_and(|motion| motion.reveal),
+            );
+            if cpu_reveal_handoff {
+                if let Some(motion) = state.surfaces[index].layer_motion.as_mut() {
+                    motion.take_events();
+                    motion.retire_completed(serial);
+                }
+                state.panel_frame_until = None;
+                state.surfaces[index].redraw = true;
+                state.draw(index, qh);
+                return;
+            }
             let settled_open = completed
                 && state.surfaces[index].layer_motion_open == Some(true)
                 && state.surfaces[index].layer_motion_ui_serial == state.surfaces[index].ui_serial
@@ -292,6 +345,13 @@ impl Dispatch<BeadLayerMotionV1, Arc<DispatchData>> for App {
                     state.draw(index, qh);
                 }
             }
+        } else {
+            // A reset or a replaced serial makes its terminal event stale. Drop
+            // its queued plane states too, rather than retaining them forever.
+            data.events
+                .lock()
+                .expect("motion event lock poisoned")
+                .clear();
         }
     }
 }
@@ -323,6 +383,8 @@ mod tests {
         commits: AtomicUsize,
         plane_adds: AtomicUsize,
         animates: AtomicUsize,
+        resets: AtomicUsize,
+        request_order: Mutex<Vec<&'static str>>,
     }
 
     #[derive(Clone)]
@@ -401,8 +463,15 @@ mod tests {
             _: &DisplayHandle,
             _: &mut DataInit<'_, Self>,
         ) {
-            if matches!(request, wl_surface::Request::Commit) {
-                state.0.commits.fetch_add(1, Ordering::Relaxed);
+            match request {
+                wl_surface::Request::Attach { .. } => {
+                    state.0.request_order.lock().unwrap().push("attach")
+                }
+                wl_surface::Request::Commit => {
+                    state.0.request_order.lock().unwrap().push("commit");
+                    state.0.commits.fetch_add(1, Ordering::Release);
+                }
+                _ => {}
             }
         }
     }
@@ -423,6 +492,10 @@ mod tests {
                 }
                 ServerMotionRequest::Animate { .. } => {
                     state.0.animates.fetch_add(1, Ordering::Relaxed);
+                }
+                ServerMotionRequest::Reset => {
+                    state.0.resets.fetch_add(1, Ordering::Relaxed);
+                    state.0.request_order.lock().unwrap().push("reset");
                 }
                 _ => {}
             }
@@ -565,6 +638,85 @@ mod tests {
         assert_eq!(counts.plane_adds.load(Ordering::Relaxed), 1);
         assert_eq!(counts.animates.load(Ordering::Relaxed), 2);
         assert_eq!(counts.commits.load(Ordering::Relaxed), 2);
+        drop(controller);
+        drop(surface);
+        stop.store(true, Ordering::Relaxed);
+        server_thread.join().unwrap();
+    }
+
+    #[test]
+    fn reset_is_staged_after_replacement_attach_and_reuses_serial_sequence() {
+        let counts = Arc::new(Counts::default());
+        let (client_stream, server_stream) = UnixStream::pair().unwrap();
+        let (server_thread, stop) = server(server_stream, counts.clone(), true);
+        let connection = wayland_client::Connection::from_socket(client_stream).unwrap();
+        let (globals, queue) = wayland_client::globals::registry_queue_init::<App>(&connection)
+            .expect("registry roundtrip");
+        let qh = queue.handle();
+        let manager = LayerMotionManager::bind(&globals, &qh).expect("advertised manager");
+        let compositor = smithay_client_toolkit::compositor::CompositorState::bind(&globals, &qh)
+            .expect("advertised compositor");
+        let surface = compositor.create_surface(&qh);
+        let mut renderer = CountPaint {
+            inner: TreeCpuRenderer::default(),
+            paints: 0,
+        };
+        let mut plan = LayerMotionPlan::for_slide(
+            &sample_scene(),
+            false,
+            32,
+            32,
+            1.,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )
+        .expect("prepare slide plan")
+        .expect("supported slide");
+        plan.atlas.take_pixels();
+        let mut controller = manager.create(&surface, &qh);
+        assert_eq!(controller.queue(&plan), Some(1));
+        surface.commit();
+        connection.flush().expect("flush initial request");
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while counts.commits.load(Ordering::Acquire) < 1 && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(counts.commits.load(Ordering::Acquire), 1);
+        assert_eq!(counts.animates.load(Ordering::Relaxed), 1);
+        assert!(controller.has_active_serial());
+        controller.retire_completed(1);
+        assert!(!controller.has_active_serial());
+        counts.request_order.lock().unwrap().clear();
+
+        // No replacement slot is needed in this wire-level test; a null attach
+        // stands in for the already-acquired replacement buffer. Production
+        // queues reset only after a real buffer attach succeeds.
+        surface.attach(None, 0, 0);
+        controller
+            .events
+            .events
+            .lock()
+            .unwrap()
+            .push(LayerMotionEvent::Done { serial: 1 });
+        controller.reset_presentation();
+        assert!(controller.planes.is_empty());
+        assert_eq!(controller.active_serial, None);
+        assert_eq!(controller.next_serial, 2);
+        assert!(controller.take_events().is_empty());
+        surface.commit();
+        connection.flush().expect("flush reset commit");
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while counts.commits.load(Ordering::Acquire) < 2 && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(counts.commits.load(Ordering::Acquire), 2);
+        assert_eq!(counts.resets.load(Ordering::Relaxed), 1);
+        assert_eq!(
+            *counts.request_order.lock().unwrap(),
+            ["attach", "reset", "commit"]
+        );
+        assert_eq!(controller.queue(&plan), Some(2));
         drop(controller);
         drop(surface);
         stop.store(true, Ordering::Relaxed);

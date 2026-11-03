@@ -2,6 +2,49 @@
 //! Per-surface rendering, GPU staging and idle release.
 use super::*;
 
+fn layer_motion_handoff_eligible(
+    opening: bool,
+    sampled_progress: Option<f32>,
+    compositor_owns_timeline: bool,
+) -> bool {
+    compositor_owns_timeline
+        || sampled_progress.is_some_and(|progress| {
+            if opening {
+                progress == 0.
+            } else {
+                progress == 1.
+            }
+        })
+}
+
+fn layer_motion_reveal_reversal_uses_cpu(
+    opening: bool,
+    reveal: bool,
+    target_changed: bool,
+    compositor_owns_timeline: bool,
+) -> bool {
+    opening && reveal && target_changed && compositor_owns_timeline
+}
+
+fn layer_motion_cpu_replacement_pending(
+    surface_still_owns_atlas: bool,
+    controller_has_active_serial: bool,
+) -> bool {
+    surface_still_owns_atlas && !controller_has_active_serial
+}
+
+pub(super) fn layer_motion_completion_uses_cpu_reveal(
+    completed: bool,
+    completed_target_open: Option<bool>,
+    current_target_open: bool,
+    current_target_reveals: bool,
+) -> bool {
+    completed
+        && completed_target_open == Some(false)
+        && current_target_open
+        && current_target_reveals
+}
+
 fn copy_layer_motion_pixels(target: &mut [u8], pixels: &[u8]) -> bool {
     let Some(target) = target.get_mut(..pixels.len()) else {
         return false;
@@ -104,6 +147,71 @@ mod layer_motion_buffer_tests {
 
         let mut short = vec![0; pixels.len() - 1];
         assert!(!copy_layer_motion_pixels(&mut short, &pixels));
+    }
+}
+
+#[cfg(test)]
+mod layer_motion_handoff_tests {
+    use super::layer_motion_handoff_eligible;
+    use bead_core::animation::{Animations, Curve};
+
+    #[test]
+    fn cpu_motion_handoff_requires_the_matching_sampled_endpoint() {
+        let mut animations = Animations::default();
+        animations.open_to("panel", true, 0., 1., Curve::EaseOut);
+        assert!(layer_motion_handoff_eligible(
+            true,
+            animations.value("panel", 0.).map(|(progress, _)| progress),
+            false,
+        ));
+        animations.committed("panel", 0., 0.);
+
+        let open_time = 1. - 0.6_f64.cbrt();
+        let (opening_progress, active) = animations.value("panel", open_time).unwrap();
+        assert!(active && (opening_progress - 0.4).abs() < 1e-6);
+        assert!(!layer_motion_handoff_eligible(
+            false,
+            Some(opening_progress),
+            false,
+        ));
+        animations.open_to("panel", false, open_time, 1., Curve::EaseOut);
+        animations.committed("panel", open_time, open_time);
+        let (closing_progress, active) = animations.value("panel", open_time).unwrap();
+        assert!(active && (closing_progress - opening_progress).abs() < f32::EPSILON);
+        assert!(!layer_motion_handoff_eligible(
+            false,
+            Some(closing_progress),
+            false,
+        ));
+
+        let close_reverse_time = open_time + 0.1;
+        let (closing_midflight, active) = animations.value("panel", close_reverse_time).unwrap();
+        assert!(active && closing_midflight > 0. && closing_midflight < 1.);
+        animations.open_to("panel", true, close_reverse_time, 1., Curve::EaseOut);
+        animations.committed("panel", close_reverse_time, close_reverse_time);
+        let (opening_after_close, active) = animations.value("panel", close_reverse_time).unwrap();
+        assert!(active && (opening_after_close - closing_midflight).abs() < f32::EPSILON);
+        assert!(!layer_motion_handoff_eligible(
+            true,
+            Some(opening_after_close),
+            false,
+        ));
+
+        let settled_time = close_reverse_time + 2.;
+        let (settled_open, active) = animations.value("panel", settled_time).unwrap();
+        assert!(!active && settled_open == 1.);
+        animations.open_to("panel", false, settled_time, 1., Curve::EaseOut);
+        let (closing_endpoint, active) = animations.value("panel", settled_time).unwrap();
+        assert!(active && closing_endpoint == 1.);
+        assert!(layer_motion_handoff_eligible(
+            false,
+            Some(closing_endpoint),
+            false
+        ));
+
+        // Once the server owns presentation, CPU clock progress is irrelevant:
+        // the compositor retarget path samples its current pose.
+        assert!(layer_motion_handoff_eligible(false, Some(0.4), true));
     }
 }
 
@@ -1412,6 +1520,8 @@ impl App {
         let mut layer_motion_active = false;
         let mut layer_motion_source_scene = None;
         let mut layer_motion_pose = (0., 0.);
+        let mut layer_motion_sampled_progress = None;
+        let mut layer_motion_pending_input = None;
         let result = (|| -> Result<(), Box<dyn Error>> {
             #[cfg(feature = "native-gl")]
             if self.surfaces[index].companion
@@ -1579,6 +1689,7 @@ impl App {
                 let (progress, active) = self.animations.value(&motion.id, now).unwrap();
                 layer_motion_opening = Some(open);
                 layer_motion_active = active;
+                layer_motion_sampled_progress = Some(progress);
                 motion_clock = Some((
                     motion.id.clone(),
                     now,
@@ -1665,6 +1776,23 @@ impl App {
             }
             let layer_motion_target_changed = s.layer_motion_active
                 && layer_motion_opening.is_some_and(|opening| s.layer_motion_open != Some(opening));
+            let layer_motion_cpu_reset_pending = layer_motion_cpu_replacement_pending(
+                s.layer_motion_active,
+                s.layer_motion
+                    .as_ref()
+                    .is_some_and(|motion| motion.has_active_serial()),
+            );
+            let layer_motion_cpu_replacement = layer_motion_cpu_reset_pending
+                || scene.motion.as_ref().is_some_and(|motion| {
+                    layer_motion_opening.is_some_and(|opening| {
+                        layer_motion_reveal_reversal_uses_cpu(
+                            opening,
+                            motion.reveal,
+                            layer_motion_target_changed,
+                            s.layer_motion_active,
+                        )
+                    })
+                });
             let resting_offset = (
                 scene.offset.0 - layer_motion_pose.0,
                 scene.offset.1 - layer_motion_pose.1,
@@ -1676,13 +1804,22 @@ impl App {
                 && !bead_core::animation::reduced_motion()
                 && !self.options.background_blur
                 && scene.slide.is_none();
-            let layer_motion_pose_eligible = scene.motion.as_ref().is_some_and(|motion| {
-                layer_motion_opening.is_some_and(|opening| {
-                    !opening
-                        || !motion.reveal
-                        || layer_motion_target_changed && s.layer_motion_plan.is_some()
-                })
-            });
+            let layer_motion_handoff_ok = !layer_motion_cpu_replacement
+                && layer_motion_opening.is_some_and(|opening| {
+                    layer_motion_handoff_eligible(
+                        opening,
+                        layer_motion_sampled_progress,
+                        s.layer_motion_active,
+                    )
+                });
+            let layer_motion_pose_eligible = layer_motion_handoff_ok
+                && scene.motion.as_ref().is_some_and(|motion| {
+                    layer_motion_opening.is_some_and(|opening| {
+                        !opening
+                            || !motion.reveal
+                            || layer_motion_target_changed && s.layer_motion_plan.is_some()
+                    })
+                });
             let layer_motion_reuses_atlas =
                 layer_motion_target_changed && s.layer_motion_plan.is_some();
             let layer_motion_ink_safe = layer_motion_transport_eligible
@@ -1761,7 +1898,10 @@ impl App {
                 } else {
                     None
                 };
-                if s.input_visible != Some(visible) || s.input_rect != input_rect {
+                let input_enabled = visible && !self.options.test_passive && !passive;
+                if !layer_motion_cpu_replacement
+                    && (s.input_visible != Some(visible) || s.input_rect != input_rect)
+                {
                     if visible && !self.options.test_passive && !passive {
                         if let Some([x, y, w, h]) = input_rect {
                             let region = Region::new(&self.compositor)?;
@@ -1798,13 +1938,15 @@ impl App {
                                 .is_some_and(|source| !source.outside_dismiss())),
                     self.options.test_keyboard || s.companion,
                 );
-                if s.keyboard_visible != Some(interactivity) {
+                if layer_motion_cpu_replacement {
+                    layer_motion_pending_input =
+                        Some((visible, input_rect, interactivity, input_enabled));
+                } else if s.keyboard_visible != Some(interactivity) {
                     s.layer.set_keyboard_interactivity(interactivity);
                     s.keyboard_visible = Some(interactivity);
                 }
             }
-            s.offset = scene.offset;
-            s.input_content_offset = scene
+            let input_content_offset = scene
                 .motion
                 .as_ref()
                 .filter(|motion| motion.reveal)
@@ -1816,10 +1958,15 @@ impl App {
                     })
                 })
                 .unwrap_or((0., 0.));
+            if !layer_motion_cpu_replacement {
+                s.offset = scene.offset;
+                s.input_content_offset = input_content_offset;
+            }
             if layer_motion_active
                 && let Some(opening) = layer_motion_opening
                 && s.layer_motion_active
                 && s.layer_motion_open != Some(opening)
+                && !layer_motion_cpu_replacement
                 && let Some(plan) = s.layer_motion_plan.as_mut()
             {
                 let (duration, curve) = scene
@@ -2028,7 +2175,7 @@ impl App {
                     return Ok(());
                 }
             }
-            if s.layer_motion_active && s.native.is_none() {
+            if s.layer_motion_active && s.native.is_none() && !layer_motion_cpu_replacement {
                 // The attached atlas remains the visible content until the
                 // compositor retires its animation, including while a changed
                 // or unsupported scene waits for the completion handoff.
@@ -2687,11 +2834,56 @@ impl App {
                 );
             }
             b.buffer.attach_to(&wl_surface)?;
+            if layer_motion_cpu_replacement {
+                if let Some((visible, input_rect, interactivity, input_enabled)) =
+                    layer_motion_pending_input
+                {
+                    if s.input_visible != Some(visible) || s.input_rect != input_rect {
+                        if input_enabled {
+                            if let Some([x, y, w, h]) = input_rect {
+                                let region = Region::new(&self.compositor)?;
+                                if w > 0 && h > 0 {
+                                    region.add(x, y, w, h);
+                                }
+                                wl_surface.set_input_region(Some(region.wl_region()));
+                            } else {
+                                wl_surface.set_input_region(None);
+                            }
+                        } else {
+                            let empty = Region::new(&self.compositor)?;
+                            wl_surface.set_input_region(Some(empty.wl_region()));
+                        }
+                        s.input_visible = Some(visible);
+                        s.input_rect = input_rect;
+                    }
+                    if s.keyboard_visible != Some(interactivity) {
+                        s.layer.set_keyboard_interactivity(interactivity);
+                        s.keyboard_visible = Some(interactivity);
+                    }
+                }
+                // Reset takes effect with this replacement buffer commit. If
+                // painting or buffer acquisition failed earlier, the old atlas
+                // and its sampled presentation remain untouched for retry.
+                s.layer_motion
+                    .as_mut()
+                    .ok_or("active compositor presentation has no controller")?
+                    .reset_presentation();
+            }
             if s.companion {
                 bead_core::profile::mark("panel_commit");
                 s.panel_unmapped = false;
             }
             wl_surface.commit();
+            if layer_motion_cpu_replacement {
+                s.offset = scene.offset;
+                s.input_content_offset = input_content_offset;
+                s.layer_motion_active = false;
+                s.layer_motion_open = None;
+                s.layer_motion_plan = None;
+                s.layer_motion_resting_offset = None;
+                s.layer_motion_ui_serial = 0;
+                self.panel_frame_until = None;
+            }
             if replace_pending_ui {
                 let marked = s.callbacks.mark_replacement_used();
                 debug_assert!(marked, "pending callback changed during synchronous draw");

@@ -131,6 +131,19 @@
       <description summary="Freeze the active animation at its current state"/>
       <arg name="serial" type="uint"/>
     </request>
+    <request name="reset">
+      <description summary="Clear compositor presentation state at the next surface commit">
+        The compositor samples and cancels any active animation, then removes all
+        configured planes and presentation transforms for the associated surface.
+        Pending plane, animation, or cancel requests queued before reset are
+        discarded. The reset becomes visible atomically with the next
+        wl_surface.commit, which may attach ordinary replacement content.
+        Cancellation events for the active serial are sent after that commit.
+        The staged curve returns to linear; requests queued after reset may
+        define a new plane set for the same commit. The controller remains
+        usable, and serial monotonicity is preserved.
+      </description>
+    </request>
     <event name="plane_state">
       <description summary="Final committed state of one plane">
         Sent once for every plane before done or cancelled.
