@@ -861,6 +861,11 @@ impl App {
         if self.edge.chrome.lips.is_empty() || self.options.control.is_none() {
             return;
         }
+        if !self.edge.chrome.maps_lip_surfaces()
+            && !matches!(event.kind, PointerEventKind::Press { button: 0x110, .. })
+        {
+            return;
+        }
         let s = &self.surfaces[bar];
         let (output, wl_output) = (s.output_name.clone(), s.output.clone());
         let Some((w, h)) = self
