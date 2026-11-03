@@ -527,6 +527,11 @@ impl App {
         output: &wl_output::WlOutput,
         scene: &Scene,
     ) -> bool {
+        if self.surfaces.iter().any(|surface| {
+            surface.layer.wl_surface() == layer.wl_surface() && surface.layer_promoted
+        }) {
+            return false;
+        }
         let source = if self.processing_panel {
             self.runtime.as_ref()
         } else {
@@ -1210,6 +1215,7 @@ impl App {
         }
     }
     fn release_panel_body(&mut self, check_app_lifetime: bool) {
+        self.clear_promotion_pending();
         self.panel_cover = None;
         self.panel_dock_transition = None;
         self.cancel_prepared_native();

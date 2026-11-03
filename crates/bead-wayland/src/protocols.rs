@@ -25,6 +25,32 @@ fn companion_frame_active(animation_active: bool, frame_until: Option<f64>, now:
     animation_active || frame_until.is_some_and(|until| now <= until)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LayerCloseAction {
+    IgnoreDormantXdg,
+    ClosePromotedPearl,
+    KeepLayerSession,
+}
+
+fn layer_close_action(dormant_xdg: bool, promoted_pearl: bool) -> LayerCloseAction {
+    if dormant_xdg {
+        LayerCloseAction::IgnoreDormantXdg
+    } else if promoted_pearl {
+        LayerCloseAction::ClosePromotedPearl
+    } else {
+        LayerCloseAction::KeepLayerSession
+    }
+}
+
+fn native_promotion_pearl_close(
+    pearl_slot: bool,
+    manager: bool,
+    controller: bool,
+    pending: bool,
+) -> bool {
+    pearl_slot && manager && (controller || pending)
+}
+
 #[cfg(test)]
 mod closed_panel_unmap_tests {
     use super::{closed_panel_ready_to_unmap, companion_frame_active};
@@ -106,6 +132,33 @@ mod closed_panel_unmap_tests {
         assert_eq!(marker.frames as usize, committed.len());
         let marker = format!("PANEL_SLIDE name=dashboard {marker}");
         assert!(marker.contains("frames=37"), "{marker}");
+    }
+}
+
+#[cfg(test)]
+mod promoted_layer_close_tests {
+    use super::{LayerCloseAction, layer_close_action, native_promotion_pearl_close};
+
+    #[test]
+    fn native_promotion_close_releases_only_the_pearl_slot() {
+        assert_eq!(
+            layer_close_action(false, native_promotion_pearl_close(true, true, true, false)),
+            LayerCloseAction::ClosePromotedPearl
+        );
+        assert_eq!(
+            layer_close_action(false, native_promotion_pearl_close(true, true, false, true)),
+            LayerCloseAction::ClosePromotedPearl,
+            "pending restore intent owns the pearl close"
+        );
+        assert!(!native_promotion_pearl_close(false, true, true, true));
+        assert_eq!(
+            layer_close_action(true, false),
+            LayerCloseAction::IgnoreDormantXdg
+        );
+        assert_eq!(
+            layer_close_action(false, false),
+            LayerCloseAction::KeepLayerSession
+        );
     }
 }
 delegate_noop!(App: ignore ZwpRelativePointerManagerV1);
@@ -733,15 +786,38 @@ impl ShmHandler for App {
 impl LayerShellHandler for App {
     fn closed(&mut self, conn: &Connection, qh: &QueueHandle<Self>, layer: &LayerSurface) {
         // The dormant layer role is retained while the visible xdg pearl is open.
-        if self
+        let dormant_xdg = self
             .surfaces
             .iter()
-            .any(|s| s.layer == *layer && s.native.is_some())
-        {
+            .any(|s| s.layer == *layer && s.native.is_some());
+        if let Some(id) = self.slot_of_layer(layer) {
+            let promoted_pearl = self
+                .in_slot(id, |app| {
+                    native_promotion_pearl_close(
+                        app.pearl
+                            .is_some_and(|info| info.kind == pearls::Kind::Pearl),
+                        app.compositor_promotion_enabled(),
+                        app.surfaces.iter().any(|surface| {
+                            surface.layer == *layer && surface.layer_promotion.is_some()
+                        }),
+                        app.promotion_pending,
+                    )
+                })
+                .unwrap_or(false);
+            match layer_close_action(dormant_xdg, promoted_pearl) {
+                LayerCloseAction::IgnoreDormantXdg => return,
+                LayerCloseAction::ClosePromotedPearl => {
+                    if let Err(error) = self.close_pearl(id) {
+                        eprintln!("PEARL_CLOSE_ERROR {error}");
+                    }
+                    return;
+                }
+                LayerCloseAction::KeepLayerSession => {}
+            }
+            self.in_slot(id, |app| app.closed(conn, qh, layer));
             return;
         }
-        if let Some(id) = self.slot_of_layer(layer) {
-            self.in_slot(id, |app| app.closed(conn, qh, layer));
+        if dormant_xdg {
             return;
         }
         if self.edge_closed(layer) {
@@ -886,12 +962,17 @@ impl LayerShellHandler for App {
 
             if self.surfaces[i].companion && self.panel_runtime.is_some() {
                 let surface = &self.surfaces[i];
-                let viewport = self
-                    .output
-                    .info(&surface.output)
-                    .and_then(|i| i.logical_size)
-                    .filter(|(w, h)| *w > 0 && *h > 0)
-                    .map(|(w, h)| (w as u32, h as u32))
+                let viewport = surface
+                    .layer_promoted
+                    .then_some(surface.promoted_size)
+                    .flatten()
+                    .or_else(|| {
+                        self.output
+                            .info(&surface.output)
+                            .and_then(|i| i.logical_size)
+                            .filter(|(w, h)| *w > 0 && *h > 0)
+                            .map(|(w, h)| (w as u32, h as u32))
+                    })
                     .unwrap_or((surface.width, surface.height));
                 let viewport_changed = self
                     .panel_runtime
@@ -1233,8 +1314,12 @@ impl PointerHandler for App {
                 }
                 continue;
             }
+            let button_serial = match &event.kind {
+                PointerEventKind::Press { serial, .. } => *serial,
+                _ => 0,
+            };
             if matches!(event.kind, PointerEventKind::Press { button: 0x110, .. })
-                && self.gesture_press(&event.surface, event.position)
+                && self.gesture_press(&event.surface, event.position, button_serial)
             {
                 self.pointer_pressed = false;
                 continue;

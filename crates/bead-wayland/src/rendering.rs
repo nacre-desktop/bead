@@ -251,12 +251,36 @@ fn motion_scene_offset(
 
 /// The docked layer may be clipped to the output while its detached window
 /// must retain the complete panel content extent.
+pub(super) fn natural_surface_size(scene: &Scene) -> Option<(u32, u32)> {
+    let width = scene.bounds.w.ceil();
+    let height = (scene.bounds.y + scene.bounds.h + scene.offset.1).ceil();
+    if !width.is_finite()
+        || !height.is_finite()
+        || width <= 0.
+        || height <= 0.
+        || width > 32768.
+        || height > 32768.
+    {
+        return None;
+    }
+    Some((width as u32, height as u32))
+}
+
+fn effective_render_size(
+    configured: (u32, u32),
+    promoted: bool,
+    natural: Option<(u32, u32)>,
+) -> (u32, u32) {
+    if promoted {
+        natural.unwrap_or(configured)
+    } else {
+        configured
+    }
+}
+
 #[cfg(any(feature = "native-gl", test))]
 fn native_gl_dimensions(scene: &Scene, scale120: u32) -> Result<(u32, u32), Box<dyn Error>> {
-    let width = scene.bounds.w.ceil().max(1.) as u32;
-    let height = (scene.bounds.y + scene.bounds.h + scene.offset.1)
-        .ceil()
-        .max(1.) as u32;
+    let (width, height) = natural_surface_size(scene).ok_or("invalid natural scene extent")?;
     let (width, height, _, _) = buffer_dimensions(width, height, scale120)?;
     Ok((width as u32, height as u32))
 }
@@ -300,6 +324,84 @@ pub(super) fn content_input_rect(scene: &Scene) -> Option<[i32; 4]> {
         (right - x).max(0.) as i32,
         (bottom - y).max(0.) as i32,
     ])
+}
+
+/// Limit compositor body geometry to the root's currently committed logical
+/// extent. Promotion preserves the existing buffer and cannot enlarge it.
+pub(super) fn clip_body_rect_to_surface(body: [i32; 4], size: (u32, u32)) -> Option<[i32; 4]> {
+    if body[2] <= 0 || body[3] <= 0 {
+        return None;
+    }
+    let width = i64::from(size.0.min(i32::MAX as u32));
+    let height = i64::from(size.1.min(i32::MAX as u32));
+    let left = i64::from(body[0]).clamp(0, width);
+    let top = i64::from(body[1]).clamp(0, height);
+    let right = (i64::from(body[0]) + i64::from(body[2])).clamp(left, width);
+    let bottom = (i64::from(body[1]) + i64::from(body[3])).clamp(top, height);
+    (right > left && bottom > top).then_some([
+        left as i32,
+        top as i32,
+        (right - left) as i32,
+        (bottom - top) as i32,
+    ])
+}
+
+fn visible_promoted_body_size(scene: &Scene, root_size: (u32, u32)) -> Option<(u32, u32)> {
+    content_input_rect(scene)
+        .and_then(|body| clip_body_rect_to_surface(body, root_size))
+        .map(|body| (body[2] as u32, body[3] as u32))
+}
+
+/// Keep the existing visible body at its original root-local origin after
+/// detached UI updates change scene padding or position.
+fn stabilize_body_origin(scene: &mut Scene, origin: (i32, i32)) {
+    if let Some(current) = content_input_rect(scene)
+        && current[2] > 0
+        && current[3] > 0
+    {
+        scene.offset.0 += (origin.0 - current[0]) as f32;
+        scene.offset.1 += (origin.1 - current[1]) as f32;
+    }
+}
+
+fn stage_command_promotion(surface: &mut Surface, body: [i32; 4]) -> bool {
+    if surface.layer_promoted {
+        return true;
+    }
+    let Some(controller) = surface.layer_promotion.as_ref() else {
+        return false;
+    };
+    if surface.layer_promoted {
+        return false;
+    }
+    surface.promotion_serial = surface.promotion_serial.wrapping_add(1).max(1);
+    surface
+        .promotion_state
+        .stage_promote(surface.promotion_serial);
+    surface.layer_promoted = true;
+    surface.promoted_body_origin = Some((body[0], body[1]));
+    surface.promoted_body_size = Some((body[2] as u32, body[3] as u32));
+    controller.promote(
+        surface.promotion_serial,
+        None,
+        0,
+        [
+            body[0] as f64,
+            body[1] as f64,
+            body[2] as f64,
+            body[3] as f64,
+        ],
+    );
+    true
+}
+
+fn should_stage_command_promotion(
+    pending: bool,
+    companion: bool,
+    configured: bool,
+    controller: bool,
+) -> bool {
+    pending && companion && configured && controller
 }
 
 /// Adopt only pixels the following complete repairs will leave untouched.
@@ -1522,6 +1624,7 @@ impl App {
         let mut layer_motion_pose = (0., 0.);
         let mut layer_motion_sampled_progress = None;
         let mut layer_motion_pending_input = None;
+        let mut pending_promotion_staged = false;
         let result = (|| -> Result<(), Box<dyn Error>> {
             #[cfg(feature = "native-gl")]
             if self.surfaces[index].companion
@@ -1530,8 +1633,15 @@ impl App {
                 return Err(Box::new(GpuUnavailable(error)));
             }
             let s = &mut self.surfaces[index];
+            let command_promotion_pending = should_stage_command_promotion(
+                self.promotion_pending,
+                s.companion,
+                s.configured,
+                s.layer_promotion.is_some(),
+            );
             let wl_surface = s.wl_surface().clone();
             let compositor_motion_candidate = s.companion
+                && !command_promotion_pending
                 && s.native.is_none()
                 && s.layer_motion.is_some()
                 && !bead_core::animation::reduced_motion()
@@ -1623,6 +1733,16 @@ impl App {
             if !s.configured {
                 return Ok(());
             }
+            let configured_size = (s.width, s.height);
+            let mut render_size = effective_render_size(
+                configured_size,
+                s.promotion_state.renders_natural_extent(),
+                natural_surface_size(scene),
+            );
+            let promotion_reset_active = s.layer_motion.is_some()
+                && ((s.promotion_reset_motion
+                    && (s.layer_motion_active || s.layer_motion_plan.is_some()))
+                    || (command_promotion_pending && s.layer_motion_active));
             if s.scale_relayout_pending {
                 let deferred = if s.companion {
                     self.panel_runtime.as_ref()
@@ -1640,28 +1760,6 @@ impl App {
                 s.scale_relayout_pending = false;
             }
             let scale = s.scale120 as f32 / 120.;
-            let (w, h, stride, size) = buffer_dimensions(s.width, s.height, s.scale120)?;
-            let format = if cfg!(target_endian = "little")
-                && !self.options.force_argb
-                && self.shm.formats().contains(&wl_shm::Format::Abgr8888)
-            {
-                PixelFormat::Rgba
-            } else {
-                PixelFormat::Bgra
-            };
-            let replace_pending_ui = _kind == RendererKind::Cpu
-                && s.callbacks
-                    .can_replace_pending_ui(s.ui_serial != s.last_submitted_ui_serial)
-                && s.geometry == (w, h)
-                && s.format == format
-                && s.buffers
-                    .iter()
-                    .any(|b| !b.buffer.slot().has_active_buffers());
-            if s.callbacks.pending && _kind != RendererKind::Cpu {
-                s.redraw = true;
-                return Ok(());
-            }
-            s.redraw = false;
             let mut opaque_motion = self.options.animate;
             if let Some(motion) = scene.motion.clone() {
                 let prior_x = scene.offset.0;
@@ -1712,21 +1810,10 @@ impl App {
                 scene.offset = motion_scene_offset(prior_x, motion.edge, open, dx, dy);
             }
 
-            s.background_visible = scene.opacity > 0.001;
-            let background_requested = self.options.background_blur && s.background_visible;
-            let logical_size = (s.width, s.height);
-            background::update(
-                &self.background,
-                &self.compositor,
-                s,
-                qh,
-                background_requested,
-                logical_size,
-            );
             if !panel {
-                scene.bounds.w = s.width as f32;
-                scene.bounds.h = s.height as f32;
-                scene.width = s.width as f32;
+                scene.bounds.w = render_size.0 as f32;
+                scene.bounds.h = render_size.1 as f32;
+                scene.width = render_size.0 as f32;
             }
             if panel {
                 if self
@@ -1740,7 +1827,7 @@ impl App {
                 {
                     // Custom positioners already align the body through the padded
                     // surface origin, even when the compositor clips that surface.
-                    scene.offset.0 = ((s.width as f32 - scene.width) / 2.).max(0.);
+                    scene.offset.0 = ((render_size.0 as f32 - scene.width) / 2.).max(0.);
                 }
                 if let Some(slide) = scene.slide {
                     let progress = if self.options.animate {
@@ -1767,6 +1854,78 @@ impl App {
                     scene.offset.1 = (y * scale).round() / scale;
                 }
             }
+            if let Some(origin) = s.promoted_body_origin {
+                stabilize_body_origin(scene, origin);
+            }
+            let promotion_active = s.promotion_state.renders_natural_extent();
+            render_size = effective_render_size(
+                configured_size,
+                promotion_active,
+                natural_surface_size(scene),
+            );
+            let resize_promoted_root =
+                promotion_active && s.promoted_size.unwrap_or(configured_size) != render_size;
+            let promoted_body_size = promotion_active
+                .then(|| visible_promoted_body_size(scene, render_size))
+                .flatten();
+            let promoted_body_resize =
+                promoted_body_size.is_some_and(|size| s.promoted_body_size != Some(size));
+            let pending_promotion_body = if command_promotion_pending {
+                content_input_rect(scene)
+                    .and_then(|body| clip_body_rect_to_surface(body, render_size))
+            } else {
+                None
+            };
+            if command_promotion_pending && pending_promotion_body.is_none() {
+                s.redraw = true;
+                if !s.callbacks.pending {
+                    let epoch = s.callbacks.request();
+                    wl_surface.frame(
+                        qh,
+                        FrameData {
+                            surface: wl_surface.clone(),
+                            epoch,
+                            generation: scene.resource_revision,
+                            source_epoch: self.panel_epoch,
+                        },
+                    );
+                    s.callbacks.pending = true;
+                    wl_surface.commit();
+                }
+                return Ok(());
+            }
+            s.background_visible = scene.opacity > 0.001;
+            let background_requested = self.options.background_blur && s.background_visible;
+            background::update(
+                &self.background,
+                &self.compositor,
+                s,
+                qh,
+                background_requested,
+                render_size,
+            );
+            let (w, h, stride, size) = buffer_dimensions(render_size.0, render_size.1, s.scale120)?;
+            let format = if cfg!(target_endian = "little")
+                && !self.options.force_argb
+                && self.shm.formats().contains(&wl_shm::Format::Abgr8888)
+            {
+                PixelFormat::Rgba
+            } else {
+                PixelFormat::Bgra
+            };
+            let replace_pending_ui = _kind == RendererKind::Cpu
+                && s.callbacks
+                    .can_replace_pending_ui(s.ui_serial != s.last_submitted_ui_serial)
+                && s.geometry == (w, h)
+                && s.format == format
+                && s.buffers
+                    .iter()
+                    .any(|b| !b.buffer.slot().has_active_buffers());
+            if s.callbacks.pending && _kind != RendererKind::Cpu {
+                s.redraw = true;
+                return Ok(());
+            }
+            s.redraw = false;
             if self.options.debug_progress
                 && let Some(bead_render::Primitive::Rounded { rect, .. }) =
                     scene.primitives.last_mut()
@@ -1783,6 +1942,7 @@ impl App {
                     .is_some_and(|motion| motion.has_active_serial()),
             );
             let layer_motion_cpu_replacement = layer_motion_cpu_reset_pending
+                || promotion_reset_active
                 || scene.motion.as_ref().is_some_and(|motion| {
                     layer_motion_opening.is_some_and(|opening| {
                         layer_motion_reveal_reversal_uses_cpu(
@@ -1799,6 +1959,8 @@ impl App {
             );
             let layer_motion_transport_eligible = _kind == RendererKind::Cpu
                 && s.native.is_none()
+                && !s.layer_promoted
+                && !command_promotion_pending
                 && s.layer_motion.is_some()
                 && layer_motion_active
                 && !bead_core::animation::reduced_motion()
@@ -1834,7 +1996,9 @@ impl App {
                     bead_render::layer_motion::scene_ink_bounds(scene, scale, resting_offset)
                         .is_some_and(|ink_bounds| {
                             bead_render::layer_motion::motion_atlas_viewport(
-                                s.width, s.height, scale,
+                                render_size.0,
+                                render_size.1,
+                                scale,
                             )
                             .is_some_and(|viewport| {
                                 bead_render::layer_motion::translation_preserves_clip(
@@ -2031,8 +2195,8 @@ impl App {
                 if let Some(mut plan) = bead_render::layer_motion::LayerMotionPlan::for_slide(
                     &source_scene,
                     opening,
-                    s.width,
-                    s.height,
+                    render_size.0,
+                    render_size.1,
                     scale,
                     format,
                     renderer.as_mut(),
@@ -2118,7 +2282,7 @@ impl App {
                     };
                     if let Some(viewport) = &s.viewport {
                         wl_surface.set_buffer_scale(1);
-                        viewport.set_destination(s.width as i32, s.height as i32);
+                        viewport.set_destination(render_size.0 as i32, render_size.1 as i32);
                     } else {
                         wl_surface.set_buffer_scale((s.scale120 / 120) as i32);
                     }
@@ -2211,6 +2375,9 @@ impl App {
                     vec![Damage::full(w as u32, h as u32)]
                 }
             };
+            if resize_promoted_root || command_promotion_pending {
+                regions = vec![Damage::full(w as u32, h as u32)];
+            }
             bead_core::profile::split("damage");
             damage_px = regions
                 .iter()
@@ -2248,7 +2415,7 @@ impl App {
             }
             if let Some(viewport) = &s.viewport {
                 wl_surface.set_buffer_scale(1);
-                viewport.set_destination(s.width as i32, s.height as i32);
+                viewport.set_destination(render_size.0 as i32, render_size.1 as i32);
             } else {
                 wl_surface.set_buffer_scale((s.scale120 / 120) as i32);
             }
@@ -2283,13 +2450,12 @@ impl App {
                     bead_core::vprintln!(
                         "BUFFER output={} logical={}x{} physical={}x{} scale={scale} transport=GL",
                         s.output.id().protocol_id(),
-                        s.width,
-                        s.height,
+                        render_size.0,
+                        render_size.1,
                         w,
                         h
                     );
                 }
-                let surface = s.gl.as_ref().unwrap();
                 // Paint the target backbuffer without swapping it. It shares
                 // the existing context, renderer and raster cache; only release
                 // presents this frame together with its final surface offset.
@@ -2358,7 +2524,7 @@ impl App {
                         .as_ref()
                         .is_some_and(|spec| spec.retain_when_closed);
                 let activate_started = Instant::now();
-                transport.activate(surface, w as u32, h as u32)?;
+                transport.activate(s.gl.as_ref().unwrap(), w as u32, h as u32)?;
                 if self.started.elapsed().as_secs_f64() > 2. {
                     s.activate_ms
                         .push(activate_started.elapsed().as_secs_f64() * 1000.);
@@ -2422,6 +2588,19 @@ impl App {
                     }
                     return Ok(());
                 }
+                if command_promotion_pending {
+                    let body = pending_promotion_body.ok_or("missing restored pearl body")?;
+                    pending_promotion_staged = stage_command_promotion(s, body);
+                    if !pending_promotion_staged {
+                        return Err("could not stage restored pearl promotion".into());
+                    }
+                }
+                if promoted_body_resize
+                    && let Some(promotion) = &s.layer_promotion
+                    && let Some((body_width, body_height)) = promoted_body_size
+                {
+                    promotion.set_body_size(body_width, body_height);
+                }
                 renderer.draw(
                     scene,
                     RenderTarget::Gl(bead_render::gl::GlTarget {
@@ -2480,7 +2659,15 @@ impl App {
                 if s.companion {
                     bead_core::profile::mark("panel_commit");
                 }
-                transport.present(surface, &regions)?;
+                transport.present(s.gl.as_ref().unwrap(), &regions)?;
+                if pending_promotion_staged {
+                    self.promotion_pending = false;
+                }
+                if s.promotion_state.renders_natural_extent() {
+                    s.promoted_size = Some(render_size);
+                    s.promoted_body_size = promoted_body_size;
+                }
+                s.promotion_reset_motion = false;
                 s.last_submitted_ui_serial = s.ui_serial;
                 if self.started.elapsed().as_secs_f64() > 2. {
                     s.swap_ms.push(swap_started.elapsed().as_secs_f64() * 1000.);
@@ -2490,6 +2677,19 @@ impl App {
             }
             #[cfg(feature = "wgpu")]
             if renderer.wants_gpu() {
+                if command_promotion_pending {
+                    let body = pending_promotion_body.ok_or("missing restored pearl body")?;
+                    pending_promotion_staged = stage_command_promotion(s, body);
+                    if !pending_promotion_staged {
+                        return Err("could not stage restored pearl promotion".into());
+                    }
+                }
+                if promoted_body_resize
+                    && let Some(promotion) = &s.layer_promotion
+                    && let Some((body_width, body_height)) = promoted_body_size
+                {
+                    promotion.set_body_size(body_width, body_height);
+                }
                 if self.gpu.is_none() {
                     self.gpu = Some(bead_render::gpu::Transport::new(self.options.memory_usage));
                 }
@@ -2532,8 +2732,8 @@ impl App {
                         bead_core::vprintln!(
                             "BUFFER output={} logical={}x{} physical={}x{} scale={scale} transport=GPU",
                             s.output.id().protocol_id(),
-                            s.width,
-                            s.height,
+                            render_size.0,
+                            render_size.1,
                             w,
                             h
                         );
@@ -2615,6 +2815,14 @@ impl App {
                         );
                     }
                     dev.queue.present(frame);
+                    if pending_promotion_staged {
+                        self.promotion_pending = false;
+                    }
+                    if s.promotion_state.renders_natural_extent() {
+                        s.promoted_size = Some(render_size);
+                        s.promoted_body_size = promoted_body_size;
+                    }
+                    s.promotion_reset_motion = false;
                     s.last_submitted_ui_serial = s.ui_serial;
                     let _ = dev.device.poll(wgpu::PollType::Poll);
                     s.frames += 1;
@@ -2664,8 +2872,8 @@ impl App {
                 bead_core::vprintln!(
                     "BUFFER output={} logical={}x{} physical={}x{} scale={scale} format={format:?} allocation_count={} pool_bytes={} buffer_bytes={size}",
                     s.output.id().protocol_id(),
-                    s.width,
-                    s.height,
+                    render_size.0,
+                    render_size.1,
                     w,
                     h,
                     s.allocations,
@@ -2740,6 +2948,19 @@ impl App {
                     );
                     s.buffers[slot].pending = pending;
                 }
+            }
+            if command_promotion_pending {
+                let body = pending_promotion_body.ok_or("missing restored pearl body")?;
+                pending_promotion_staged = stage_command_promotion(s, body);
+                if !pending_promotion_staged {
+                    return Err("could not stage restored pearl promotion".into());
+                }
+            }
+            if promoted_body_resize
+                && let Some(promotion) = &s.layer_promotion
+                && let Some((body_width, body_height)) = promoted_body_size
+            {
+                promotion.set_body_size(body_width, body_height);
             }
             let b = &mut s.buffers[slot];
             b.painted = true;
@@ -2874,6 +3095,14 @@ impl App {
                 s.panel_unmapped = false;
             }
             wl_surface.commit();
+            if pending_promotion_staged {
+                self.promotion_pending = false;
+            }
+            if s.promotion_state.renders_natural_extent() {
+                s.promoted_size = Some(render_size);
+                s.promoted_body_size = promoted_body_size;
+            }
+            s.promotion_reset_motion = false;
             if layer_motion_cpu_replacement {
                 s.offset = scene.offset;
                 s.input_content_offset = input_content_offset;
@@ -3648,5 +3877,76 @@ mod input_tests {
         assert_eq!(content_window_rect(&scene), Some([32, 32, 200, 100]));
         scene.offset = (32., 32.);
         assert_eq!(content_input_rect(&scene), Some([32, 32, 200, 100]));
+    }
+
+    #[test]
+    fn promotion_body_is_clipped_to_the_committed_root_extent() {
+        assert_eq!(
+            clip_body_rect_to_surface([32, 32, 200, 1200], (1164, 632)),
+            Some([32, 32, 200, 600]),
+            "a tall body is promoted only through pixels already in the layer root"
+        );
+        assert_eq!(
+            clip_body_rect_to_surface([-20, -10, 200, 100], (500, 300)),
+            Some([0, 0, 180, 90])
+        );
+        assert_eq!(
+            clip_body_rect_to_surface([600, 0, 100, 100], (500, 300)),
+            None
+        );
+    }
+
+    #[test]
+    fn promotion_geometry_stays_logical_at_fractional_scale_1_5() {
+        let configured = (1164, 632);
+        let natural = (1164, 654);
+        let promoted_extent = effective_render_size(configured, true, Some(natural));
+        assert_eq!(promoted_extent, natural);
+        assert_eq!(
+            effective_render_size(configured, false, Some(natural)),
+            configured
+        );
+        let physical = buffer_dimensions(promoted_extent.0, promoted_extent.1, 180).unwrap();
+        let docked_physical = buffer_dimensions(configured.0, configured.1, 180).unwrap();
+        assert_eq!((physical.0, physical.1), (1746, 981));
+        assert_eq!((docked_physical.0, docked_physical.1), (1746, 948));
+        assert_eq!(
+            clip_body_rect_to_surface([32, 32, 200, 600], promoted_extent),
+            Some([32, 32, 200, 600]),
+            "body geometry stays in logical units at scale 1.5"
+        );
+    }
+
+    #[test]
+    fn promoted_body_size_uses_frozen_origin_not_root_height() {
+        let mut scene = scene();
+        scene.layers[0].bounds = Rect::new(0., 0., 200., 700.);
+        scene.bounds = Rect::new(-32., -32., 1164., 654.);
+        scene.offset = (32., 32.);
+        stabilize_body_origin(&mut scene, (32, 32));
+        let root_size = natural_surface_size(&scene).unwrap();
+        assert_eq!(root_size, (1164, 654));
+        let body = visible_promoted_body_size(&scene, root_size).unwrap();
+        assert_eq!(body, (200, 622));
+        assert!(body.1 + 32 <= root_size.1);
+        assert_ne!(
+            body.1, root_size.1,
+            "protocol size is the body, not the root extent"
+        );
+    }
+
+    #[test]
+    fn promoted_scene_updates_keep_the_body_at_its_original_surface_origin() {
+        let mut scene = scene();
+        scene.offset = (57., 81.);
+        stabilize_body_origin(&mut scene, (32, 32));
+        assert_eq!(content_input_rect(&scene), Some([32, 32, 200, 100]));
+    }
+
+    #[test]
+    fn restored_promotion_waits_for_a_configured_companion_and_cleared_intent_stays_cleared() {
+        assert!(!should_stage_command_promotion(true, true, false, true));
+        assert!(should_stage_command_promotion(true, true, true, true));
+        assert!(!should_stage_command_promotion(false, true, true, true));
     }
 }

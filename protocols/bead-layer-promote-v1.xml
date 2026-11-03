@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="bead_layer_promote_v1">
+  <copyright>
+    SPDX-License-Identifier: MIT
+    Copyright © 2026 Bead contributors
+  </copyright>
+  <description summary="Compositor-owned floating presentation of a layer surface">
+    This optional protocol retains an existing wl_surface, its buffer tree and
+    its immutable layer-shell role. The compositor switches its presentation
+    between a docked layer and an undecorated floating surface. Exactly one
+    presentation owns the surface in any frame, including screen capture.
+    Coordinates are logical, after buffer transform and viewport mapping.
+  </description>
+  <interface name="bead_layer_promote_manager_v1" version="1">
+    <enum name="error">
+      <entry name="invalid_surface" value="0" summary="Surface has no live layer-shell role"/>
+      <entry name="duplicate_controller" value="1" summary="Surface already has a controller"/>
+    </enum>
+    <request name="destroy" type="destructor">
+      <description summary="Destroy the manager without affecting existing controllers"/>
+    </request>
+    <request name="get_promotion">
+      <description summary="Control the presentation of an existing layer root">
+        The root must have a live layer-shell role. A controller may be obtained
+        before the root has its first buffer, including while an output is
+        being removed. A closing layer's normal close event still applies;
+        creating a controller does not make an unavailable output usable.
+        Destroying the layer role invalidates its controller. The client must
+        destroy that controller before obtaining another for a new role.
+      </description>
+      <arg name="id" type="new_id" interface="bead_layer_promote_v1"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+  </interface>
+  <interface name="bead_layer_promote_v1" version="1">
+    <description summary="Atomic layer-to-floating ownership and interactive movement">
+      Promote, dock and cancel are double-buffered with the root wl_surface
+      commit; the last staged request wins. Request serials are client-owned
+      monotonic uints compared with signed wraparound differences. Stale or
+      duplicate serials are ignored. Move is immediate. Configure and rejected
+      acknowledge requests; there is no configure acknowledgement request.
+      Null-buffer commits cancel staged requests and end floating presentation.
+      The controller remains reusable on remap. Controller destruction restores
+      docked ownership. A client must not attach an xdg role or create a second
+      content surface for this handoff. The compositor supplies placement,
+      pointer movement, focus, output migration and transition animation.
+    </description>
+    <enum name="error">
+      <entry name="invalid_geometry" value="0" summary="Invalid body rectangle or command grab arguments"/>
+    </enum>
+    <enum name="state">
+      <entry name="docked" value="0"/>
+      <entry name="promoted" value="1"/>
+      <entry name="moving" value="2"/>
+    </enum>
+    <request name="destroy" type="destructor"/>
+    <request name="promote">
+      <description summary="Float the current layer content at its current position">
+        The body rectangle is surface-local and identifies the visible window
+        geometry within the existing surface. It does not resize the buffer.
+        Width and height must be positive and no greater than 32768 logical
+        units; the body must fit the mapped surface at commit. Geometry that
+        does not fit the current buffer is rejected without changing ownership.
+        The compositor derives global placement from its current layer position.
+        A mapped root keeps its previous compositor pose even if pending layer
+        geometry changes accompany this commit. A root's first content commit
+        instead uses its newly committed layer placement, allowing restoration
+        of saved positions without creating a second content surface.
+        A non-null seat requires a current pointer button grab on this surface
+        and its button press serial. At commit the compositor preserves the grab
+        point and includes movement since that press, then moves the content
+        immediately as the pointer moves. Motion, relative motion and the final
+        button release remain delivered to the client. An expired or unrelated
+        grab is rejected. For command-driven promotion, seat must be null and
+        button_serial must be zero. Promotion of an already promoted surface
+        is rejected. Clients keep their root buffer coordinates stable while
+        promoted; compositor geometry events report global placement.
+      </description>
+      <arg name="serial" type="uint"/>
+      <arg name="seat" type="object" interface="wl_seat" allow-null="true"/>
+      <arg name="button_serial" type="uint"/>
+      <arg name="x" type="fixed"/><arg name="y" type="fixed"/>
+      <arg name="width" type="fixed"/><arg name="height" type="fixed"/>
+    </request>
+    <request name="move">
+      <description summary="Start another move of promoted content">
+        The same seat, surface and current button serial validation as promote
+        applies. No root commit is required. Invalid moves emit rejected using
+        the last accepted request serial and leave presentation unchanged.
+      </description>
+      <arg name="seat" type="object" interface="wl_seat"/>
+      <arg name="button_serial" type="uint"/>
+    </request>
+    <request name="dock">
+      <description summary="Restore layer ownership on the current promoted output">
+        The compositor animates the retained content to its layer-shell anchor
+        on the current output using its layer motion presentation sampler.
+        The client may stage its docked scene with the same root commit. There
+        is no buffer unmap/remap or second content surface in the handoff.
+      </description>
+      <arg name="serial" type="uint"/>
+    </request>
+    <request name="cancel">
+      <description summary="Return to the original docked output and anchor">
+        Behaves as dock but uses the original output if it still exists.
+        If it was removed, the current surviving output is used. Docking or
+        cancelling an already docked surface is rejected without side effects.
+      </description>
+      <arg name="serial" type="uint"/>
+    </request>
+    <request name="set_body_size">
+      <description summary="Update promoted content extent with a new root buffer">
+        Double-buffered with the root commit. Width and height must be positive,
+        at most 32768 logical units, and fit the newly committed root texture at
+        the original body origin. The body origin and pointer hotspot remain
+        unchanged. The compositor reports the new extent using the active
+        promotion serial. This request has no effect while docked or unmapped.
+        It lets a client render its natural extent on the retained root after
+        promotion, including content previously clipped by layer arrangement.
+        No layer role recreation, resize handshake or second content surface
+        is required. Clients retain their configured layer extent for docking.
+      </description>
+      <arg name="width" type="fixed"/>
+      <arg name="height" type="fixed"/>
+    </request>
+    <event name="configure">
+      <description summary="Committed state or compositor movement notification">
+        Rectangle coordinates describe the global visible body. Output is the
+        compositor's output name. Moving notifications reuse the promotion
+        serial and do not require client buffer commits. Docked reports the
+        terminal anchor even while the compositor animates the return.
+      </description>
+      <arg name="serial" type="uint"/><arg name="state" type="uint" enum="state"/>
+      <arg name="x" type="fixed"/><arg name="y" type="fixed"/><arg name="width" type="fixed"/>
+      <arg name="height" type="fixed"/><arg name="output" type="string"/>
+    </event>
+    <event name="rejected">
+      <description summary="Request did not change presentation">
+        Reasons are human-readable diagnostics, not stable machine tokens.
+      </description>
+      <arg name="serial" type="uint"/><arg name="reason" type="string"/>
+    </event>
+  </interface>
+</protocol>

@@ -26,6 +26,49 @@ pub(crate) fn prepare_native_for_drag_press<T>(
 ) -> Option<T> {
     (accepted_press && docked_source).then(prepare)
 }
+
+/// Keep hidden xdg preparation exclusively for compositors without the native
+/// layer-promotion extension.
+pub(crate) fn prepare_legacy_native_for_drag_press<T>(
+    promotion_available: bool,
+    accepted_press: bool,
+    docked_source: bool,
+    prepare: impl FnOnce() -> T,
+) -> Option<T> {
+    (!promotion_available)
+        .then(|| prepare_native_for_drag_press(accepted_press, docked_source, prepare))
+        .flatten()
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum NativeDetachPath {
+    Compositor,
+    LegacyXdg,
+    NotReady,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CommandPromotion {
+    Immediate,
+    FirstConfiguredBuffer,
+    LegacyXdg,
+}
+
+pub(crate) fn command_promotion(global_available: bool, source_ready: bool) -> CommandPromotion {
+    match (global_available, source_ready) {
+        (true, true) => CommandPromotion::Immediate,
+        (true, false) => CommandPromotion::FirstConfiguredBuffer,
+        (false, _) => CommandPromotion::LegacyXdg,
+    }
+}
+
+pub(crate) fn native_detach_path(global_available: bool, source_ready: bool) -> NativeDetachPath {
+    match (global_available, source_ready) {
+        (true, true) => NativeDetachPath::Compositor,
+        (true, false) => NativeDetachPath::NotReady,
+        (false, _) => NativeDetachPath::LegacyXdg,
+    }
+}
 /// An initial native frame is hidden until the latest complete geometry was
 /// placed. Replies for superseded rectangles cannot uncover an older pose.
 #[derive(Default)]
@@ -68,14 +111,17 @@ mod handoff_tests {
 
     #[test]
     fn panel_open_close_without_drag_creates_zero_toplevels() {
-        use super::prepare_native_for_drag_press;
+        use super::prepare_legacy_native_for_drag_press;
         use std::cell::Cell;
 
         let creations = Cell::new(0);
         let prepare = || creations.set(creations.get() + 1);
 
         for _ in 0..20 {
-            assert_eq!(prepare_native_for_drag_press(false, true, prepare), None);
+            assert_eq!(
+                prepare_legacy_native_for_drag_press(false, false, true, prepare),
+                None
+            );
         }
         assert_eq!(
             creations.get(),
@@ -83,13 +129,47 @@ mod handoff_tests {
             "opening and closing without dragging cannot create a toplevel"
         );
         assert_eq!(
-            prepare_native_for_drag_press(true, false, prepare),
+            prepare_legacy_native_for_drag_press(false, true, false, prepare),
             None,
             "a pearl press cannot reserve a second native target"
         );
         assert_eq!(creations.get(), 0);
-        assert_eq!(prepare_native_for_drag_press(true, true, prepare), Some(()));
+        assert_eq!(
+            prepare_legacy_native_for_drag_press(false, true, true, prepare),
+            Some(())
+        );
         assert_eq!(creations.get(), 1, "a valid docked drag may prewarm once");
+        assert_eq!(
+            prepare_legacy_native_for_drag_press(true, true, true, prepare),
+            None
+        );
+        assert_eq!(
+            creations.get(),
+            1,
+            "native promotion never allocates a hidden target"
+        );
+    }
+
+    #[test]
+    fn native_detach_uses_global_and_rejects_unready_compositor_source() {
+        use super::{NativeDetachPath, native_detach_path};
+        assert_eq!(native_detach_path(true, true), NativeDetachPath::Compositor);
+        assert_eq!(native_detach_path(true, false), NativeDetachPath::NotReady);
+        assert_eq!(
+            native_detach_path(false, false),
+            NativeDetachPath::LegacyXdg
+        );
+    }
+
+    #[test]
+    fn command_pearl_defers_on_compositor_and_uses_legacy_only_without_global() {
+        use super::{CommandPromotion, command_promotion};
+        assert_eq!(
+            command_promotion(true, false),
+            CommandPromotion::FirstConfiguredBuffer
+        );
+        assert_eq!(command_promotion(true, true), CommandPromotion::Immediate);
+        assert_eq!(command_promotion(false, false), CommandPromotion::LegacyXdg);
     }
 
     #[test]
