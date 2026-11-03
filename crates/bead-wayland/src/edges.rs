@@ -138,6 +138,11 @@ fn cancel_for_external_source(edge: &mut EdgeState) -> Option<String> {
     edge.cue_fade = 0.;
     edge.hovered.take()
 }
+fn release_external_hover(control: &dyn ShellControl, previous: Option<(String, Lip)>) {
+    if let Some((output, lip)) = previous {
+        control.external_panel_hover(&lip.opens, &output, false);
+    }
+}
 fn key(output: &str, lip: &str) -> String {
     format!("{output}/{lip}")
 }
@@ -215,12 +220,17 @@ impl App {
         };
         let chrome = control.edge_chrome();
         let external_takeover = !self.edge.chrome.external_source && chrome.external_source;
+        let previous_hover = self.edge.hovered.as_deref().and_then(|key| {
+            let (output, id) = key.split_once('/')?;
+            self.lip_named(id).map(|lip| (output.to_owned(), lip))
+        });
         self.edge.chrome = chrome;
         if external_takeover {
             let hovered = cancel_for_external_source(&mut self.edge);
             self.edge.hover_opened = None;
             self.edge.exit = Default::default();
             self.edge.exit_epoch = self.edge.exit_epoch.wrapping_add(1);
+            release_external_hover(control.as_ref(), previous_hover);
             if let Some(key) = hovered {
                 self.publish_cue_values(&key);
                 self.redraw_lip(&key);
@@ -967,6 +977,18 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[derive(Default)]
+    struct HoverSpy(std::sync::Mutex<Vec<(String, String, bool)>>);
+    impl ShellControl for HoverSpy {
+        fn watch(&self, _: Box<dyn Fn() + Send + Sync>) {}
+        fn external_panel_hover(&self, view: &str, output: &str, inside: bool) {
+            self.0
+                .lock()
+                .unwrap()
+                .push((view.into(), output.into(), inside));
+        }
+    }
+
     #[test]
     fn reserved_strips_reserve_their_side_only() {
         let left = strip_geometry(Edge::Left, 10);
@@ -1075,6 +1097,24 @@ mod tests {
         assert_eq!(edge.dwell_epoch, 8);
         assert_eq!(edge.cue_epoch, 10);
         assert_eq!(edge.cue_fade, 0.);
+        let control = HoverSpy::default();
+        release_external_hover(
+            &control,
+            Some((
+                "DP-1".into(),
+                Lip {
+                    id: "assistant".into(),
+                    edge: Edge::Left,
+                    length: 144.,
+                    thickness: 10.,
+                    opens: "assistant".into(),
+                },
+            )),
+        );
+        assert_eq!(
+            *control.0.lock().unwrap(),
+            [("assistant".into(), "DP-1".into(), false)]
+        );
     }
 
     #[test]
