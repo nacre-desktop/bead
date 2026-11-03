@@ -56,14 +56,10 @@ impl EdgeChrome {
 
     /// Find the configured lip under an output-local pointer position. Hosts using an
     /// external edge event stream use this to route an event to the matching lip.
-    pub fn lip_at(
-        &self,
-        edge: Edge,
-        output: (i32, i32),
-        position: (f32, f32),
-    ) -> Option<&Lip> {
+    pub fn lip_at(&self, edge: Edge, output: (i32, i32), position: (f32, f32)) -> Option<&Lip> {
         self.lips.iter().find(|lip| {
-            lip.edge == edge && lip.contains((output.0 as f32, output.1 as f32), position.0, position.1)
+            lip.edge == edge
+                && lip.contains((output.0 as f32, output.1 as f32), position.0, position.1)
         })
     }
 }
@@ -1046,7 +1042,7 @@ mod tests {
 
         let internal = EdgeChrome {
             external_source: false,
-            ..chrome
+            ..chrome.clone()
         };
         assert!(internal.maps_lip_surfaces());
         assert_eq!(internal.input_regions((1920, 1200)).len(), 1);
@@ -1104,7 +1100,9 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            chrome.lip_at(Edge::Left, (1000, 800), (4., 350.)).map(|lip| lip.id.as_str()),
+            chrome
+                .lip_at(Edge::Left, (1000, 800), (4., 350.))
+                .map(|lip| lip.id.as_str()),
             Some("status")
         );
         assert_eq!(chrome.lip_at(Edge::Left, (1000, 800), (4., 100.)), None);
