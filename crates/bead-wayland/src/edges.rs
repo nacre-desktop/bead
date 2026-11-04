@@ -264,6 +264,14 @@ fn external_cue_lip(chrome: &EdgeChrome, cue: &ExternalEdgeCue, output: (i32, i3
 fn external_cue_fires(phase: ExternalEdgePhase, entered: bool, latched: bool) -> bool {
     phase == ExternalEdgePhase::Triggered || (entered && latched)
 }
+fn request_external_panel(control: &dyn ShellControl, lip: &Lip, output: &str) -> bool {
+    if control.external_panel_open(&lip.opens, output).is_some() {
+        control.external_panel_request(&lip.opens, output, false);
+        true
+    } else {
+        false
+    }
+}
 
 #[derive(Default)]
 struct ExternalCueTracker {
@@ -728,14 +736,17 @@ impl App {
     }
 
     fn open_lip(&mut self, output: &str, lip: &Lip) {
+        if self
+            .options
+            .control
+            .as_deref()
+            .is_some_and(|control| request_external_panel(control, lip, output))
+        {
+            return;
+        }
         self.edge.exit = Default::default();
         self.edge.hover_opened = Some(key(output, &lip.id));
-        if let Some(control) = &self.options.control
-            && control.external_panel_open(&lip.opens, output).is_some()
-        {
-            control.external_panel_request(&lip.opens, output, false);
-        } else if let Err(error) = self.request_panel_at(Some(&lip.opens), Some(output), true, None)
-        {
+        if let Err(error) = self.request_panel_at(Some(&lip.opens), Some(output), true, None) {
             eprintln!("EDGE_OPEN_ERROR {error}");
             self.edge.hover_opened = None;
         }
@@ -1288,6 +1299,21 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct ExternalPanelSpy(std::sync::Mutex<Vec<(String, String, bool)>>);
+    impl ShellControl for ExternalPanelSpy {
+        fn watch(&self, _: Box<dyn Fn() + Send + Sync>) {}
+        fn external_panel_open(&self, _: &str, _: &str) -> Option<bool> {
+            Some(false)
+        }
+        fn external_panel_request(&self, view: &str, output: &str, toggle: bool) {
+            self.0
+                .lock()
+                .unwrap()
+                .push((view.into(), output.into(), toggle));
+        }
+    }
+
     #[test]
     fn reserved_strips_reserve_their_side_only() {
         let left = strip_geometry(Edge::Left, 10);
@@ -1495,6 +1521,23 @@ mod tests {
             "EOF already released the active hover"
         );
         assert!(tracker.latched.is_none());
+    }
+
+    #[test]
+    fn externally_owned_panel_request_does_not_claim_local_hover_close_ownership() {
+        let control = ExternalPanelSpy::default();
+        let lip = Lip {
+            id: "assistant".into(),
+            edge: Edge::Left,
+            length: 144.,
+            thickness: 10.,
+            opens: "assistant".into(),
+        };
+        assert!(request_external_panel(&control, &lip, "DP-1"));
+        assert_eq!(
+            *control.0.lock().unwrap(),
+            [("assistant".into(), "DP-1".into(), false)]
+        );
     }
 
     #[test]
