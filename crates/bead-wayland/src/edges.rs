@@ -47,7 +47,7 @@ pub struct ExternalEdgeCueChannel(Arc<Mutex<Option<calloop::channel::Channel<Ext
 pub struct ExternalEdgeCueSender(calloop::channel::Sender<ExternalEdgeCue>);
 impl ExternalEdgeCueChannel {
     /// Create the retained sender and the channel to pass into [`Options`].
-    pub fn new() -> (ExternalEdgeCueSender, Self) {
+    pub fn channel() -> (ExternalEdgeCueSender, Self) {
         let (sender, receiver) = calloop::channel::channel();
         (
             ExternalEdgeCueSender(sender),
@@ -1542,7 +1542,7 @@ mod tests {
 
     #[test]
     fn external_cue_channel_delivers_messages_and_reports_sender_eof() {
-        let (sender, channel) = ExternalEdgeCueChannel::new();
+        let (sender, channel) = ExternalEdgeCueChannel::channel();
         let receiver = channel.take_receiver().expect("single channel receiver");
         let cue = ExternalEdgeCue {
             output: "DP-1".into(),
