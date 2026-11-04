@@ -40,9 +40,7 @@ pub enum ExternalEdgePhase {
 
 /// Cloneable bridge between a host edge adapter and Bead's Wayland event loop.
 #[derive(Clone)]
-pub struct ExternalEdgeCueChannel(
-    Arc<Mutex<Option<calloop::channel::Receiver<ExternalEdgeCue>>>>,
-);
+pub struct ExternalEdgeCueChannel(Arc<Mutex<Option<calloop::channel::Receiver<ExternalEdgeCue>>>>);
 
 /// Cloneable handle that sends cues into the channel passed in [`Options`].
 #[derive(Clone)]
@@ -51,9 +49,14 @@ impl ExternalEdgeCueChannel {
     /// Create the retained sender and the channel to pass into [`Options`].
     pub fn new() -> (ExternalEdgeCueSender, Self) {
         let (sender, receiver) = calloop::channel::channel();
-        (ExternalEdgeCueSender(sender), Self(Arc::new(Mutex::new(Some(receiver)))))
+        (
+            ExternalEdgeCueSender(sender),
+            Self(Arc::new(Mutex::new(Some(receiver)))),
+        )
     }
-    pub(super) fn take_receiver(&self) -> Option<calloop::channel::Receiver<ExternalEdgeCue>> {
+    /// Take the one receiver owned by this channel. This supports alternate event loops and
+    /// integration tests; production runtime calls it once when it starts.
+    pub fn take_receiver(&self) -> Option<calloop::channel::Receiver<ExternalEdgeCue>> {
         self.0.lock().ok()?.take()
     }
 }
@@ -276,9 +279,16 @@ struct ExternalCueTransition {
 }
 impl ExternalCueTracker {
     fn update(&mut self, cue: &ExternalEdgeCue, target: Option<String>) -> ExternalCueTransition {
-        let target = (cue.phase != ExternalEdgePhase::Left).then_some(target).flatten();
-        let left = self.hovered.clone().filter(|old| target.as_ref() != Some(old));
-        let entered = target.clone().filter(|new| self.hovered.as_ref() != Some(new));
+        let target = (cue.phase != ExternalEdgePhase::Left)
+            .then_some(target)
+            .flatten();
+        let left = self
+            .hovered
+            .clone()
+            .filter(|old| target.as_ref() != Some(old));
+        let entered = target
+            .clone()
+            .filter(|new| self.hovered.as_ref() != Some(new));
         if cue.phase == ExternalEdgePhase::Triggered {
             self.latched = Some((cue.output.clone(), cue.edge));
             self.fired = true;
@@ -286,14 +296,36 @@ impl ExternalCueTracker {
             self.latched = None;
             self.fired = false;
         }
-        let latched = self.latched.as_ref().is_some_and(|(output, edge)| output == &cue.output && *edge == cue.edge);
+        let latched = self
+            .latched
+            .as_ref()
+            .is_some_and(|(output, edge)| output == &cue.output && *edge == cue.edge);
         let fires = target.is_some() && external_cue_fires(cue.phase, entered.is_some(), latched);
         if cue.phase == ExternalEdgePhase::Left
-            && self.latched.as_ref().is_some_and(|(output, edge)| output == &cue.output && *edge == cue.edge)
-        { self.latched = None; self.fired = false; }
+            && self
+                .latched
+                .as_ref()
+                .is_some_and(|(output, edge)| output == &cue.output && *edge == cue.edge)
+        {
+            self.latched = None;
+            self.fired = false;
+        }
         self.hovered = target.clone();
-        self.progress = target.as_ref().map(|key| (key.clone(), if self.fired { 0. } else { cue.progress.clamp(0., 1.) }));
-        ExternalCueTransition { left, entered, fires }
+        self.progress = target.as_ref().map(|key| {
+            (
+                key.clone(),
+                if self.fired {
+                    0.
+                } else {
+                    cue.progress.clamp(0., 1.)
+                },
+            )
+        });
+        ExternalCueTransition {
+            left,
+            entered,
+            fires,
+        }
     }
     fn close(&mut self) -> Option<String> {
         self.latched = None;
@@ -416,7 +448,10 @@ impl App {
                             s.layer.wl_surface().set_input_region(None);
                         } else {
                             match Region::new(&self.compositor) {
-                                Ok(empty) => s.layer.wl_surface().set_input_region(Some(empty.wl_region())),
+                                Ok(empty) => s
+                                    .layer
+                                    .wl_surface()
+                                    .set_input_region(Some(empty.wl_region())),
                                 Err(error) => {
                                     eprintln!("EDGE_INPUT_REGION_ERROR {error}");
                                     continue;
@@ -576,20 +611,44 @@ impl App {
         }
         if cue.phase != ExternalEdgePhase::Left
             && (!self.edge.chrome.external_source || self.edge.chrome.click_to_open)
-        { return; }
+        {
+            return;
+        }
         let belongs = |key: &str| {
-            let Some((output, id)) = key.split_once('/') else { return false; };
-            output == cue.output && self.edge.chrome.lips.iter().any(|lip| lip.id == id && lip.edge == cue.edge)
+            let Some((output, id)) = key.split_once('/') else {
+                return false;
+            };
+            output == cue.output
+                && self
+                    .edge
+                    .chrome
+                    .lips
+                    .iter()
+                    .any(|lip| lip.id == id && lip.edge == cue.edge)
         };
         if cue.phase == ExternalEdgePhase::Left
             && !self.edge.external.hovered.as_deref().is_some_and(belongs)
-            && !self.edge.external.latched.as_ref().is_some_and(|(output, edge)| output == &cue.output && *edge == cue.edge)
-        { return; }
-        let output_size = self.output.outputs().into_iter().find_map(|output| {
-            self.output.info(&output).and_then(|info| {
-                (info.name.as_deref() == Some(cue.output.as_str())).then_some(info.logical_size).flatten()
+            && !self
+                .edge
+                .external
+                .latched
+                .as_ref()
+                .is_some_and(|(output, edge)| output == &cue.output && *edge == cue.edge)
+        {
+            return;
+        }
+        let output_size = self
+            .output
+            .outputs()
+            .into_iter()
+            .find_map(|output| {
+                self.output.info(&output).and_then(|info| {
+                    (info.name.as_deref() == Some(cue.output.as_str()))
+                        .then_some(info.logical_size)
+                        .flatten()
+                })
             })
-        }).unwrap_or((0, 0));
+            .unwrap_or((0, 0));
         let found = external_cue_lip(&self.edge.chrome, &cue, output_size);
         let target = found.as_ref().map(|lip| key(&cue.output, &lip.id));
         let transition = self.edge.external.update(&cue, target);
@@ -597,7 +656,9 @@ impl App {
             if let Some((output, id)) = old.split_once('/')
                 && let Some(lip) = self.lip_named(id)
                 && let Some(control) = &self.options.control
-            { control.external_panel_hover(&lip.opens, output, false); }
+            {
+                control.external_panel_hover(&lip.opens, output, false);
+            }
             self.edge.hovered = None;
             self.edge.gate.rearm(&old);
             self.redraw_lip(&old);
@@ -606,11 +667,15 @@ impl App {
         if cue.phase == ExternalEdgePhase::Left {
             return;
         }
-        let Some(lip) = found else { return; };
+        let Some(lip) = found else {
+            return;
+        };
         let k = key(&cue.output, &lip.id);
         self.edge.hovered = Some(k.clone());
         self.edge.exit_epoch = self.edge.exit_epoch.wrapping_add(1);
-        if transition.entered.is_some() && let Some(control) = &self.options.control {
+        if transition.entered.is_some()
+            && let Some(control) = &self.options.control
+        {
             control.external_panel_hover(&lip.opens, &cue.output, true);
         }
         if transition.fires {
@@ -624,13 +689,17 @@ impl App {
             || self.edge.external.latched.is_some()
             || self.edge.external.hovered.is_some()
             || (self.edge.chrome.external_source && self.edge.hovered.is_some());
-        if !had_external_state { return; }
+        if !had_external_state {
+            return;
+        }
         let k = self.edge.external.close();
         if let Some(k) = &k
             && let Some((output, id)) = k.split_once('/')
             && let Some(lip) = self.lip_named(id)
             && let Some(control) = &self.options.control
-        { control.external_panel_hover(&lip.opens, output, false); }
+        {
+            control.external_panel_hover(&lip.opens, output, false);
+        }
         self.edge.hovered = None;
         self.edge.external = ExternalCueTracker::default();
         if let Some(k) = k {
@@ -642,12 +711,19 @@ impl App {
 
     fn external_lip_fire(&mut self, output: &str, lip: &Lip) {
         let k = key(output, &lip.id);
-        let active = self.output.outputs().into_iter().find_map(|wl_output| {
-            self.output.info(&wl_output).and_then(|info| {
-                (info.name.as_deref() == Some(output)).then(|| self.lip_active(&wl_output, lip))
+        let active = self
+            .output
+            .outputs()
+            .into_iter()
+            .find_map(|wl_output| {
+                self.output.info(&wl_output).and_then(|info| {
+                    (info.name.as_deref() == Some(output)).then(|| self.lip_active(&wl_output, lip))
+                })
             })
-        }).unwrap_or(false);
-        if active || !self.lip_allowed(lip) || !self.edge.gate.can_open(&k) { return; }
+            .unwrap_or(false);
+        if active || !self.lip_allowed(lip) || !self.edge.gate.can_open(&k) {
+            return;
+        }
         self.open_lip(output, lip);
     }
 
@@ -656,8 +732,10 @@ impl App {
         self.edge.hover_opened = Some(key(output, &lip.id));
         if let Some(control) = &self.options.control
             && control.external_panel_open(&lip.opens, output).is_some()
-        { control.external_panel_request(&lip.opens, output, false); }
-        else if let Err(error) = self.request_panel_at(Some(&lip.opens), Some(output), true, None) {
+        {
+            control.external_panel_request(&lip.opens, output, false);
+        } else if let Err(error) = self.request_panel_at(Some(&lip.opens), Some(output), true, None)
+        {
             eprintln!("EDGE_OPEN_ERROR {error}");
             self.edge.hover_opened = None;
         }
@@ -755,7 +833,9 @@ impl App {
     }
     /// The pointer is on a lip (enter or motion).
     fn lip_approach(&mut self, output: &str, lip: &Lip, wl_output: Option<&wl_output::WlOutput>) {
-        if self.edge.chrome.external_source && !self.edge.chrome.click_to_open { return; }
+        if self.edge.chrome.external_source && !self.edge.chrome.click_to_open {
+            return;
+        }
         let k = key(output, &lip.id);
         self.edge.exit_epoch = self.edge.exit_epoch.wrapping_add(1);
         let entered = self.edge.hovered.as_deref() != Some(k.as_str());
@@ -958,7 +1038,9 @@ impl App {
         self.settle_edge_exit();
     }
     fn lip_click(&mut self, output: &str, lip: &Lip, wl_output: &wl_output::WlOutput) {
-        if self.edge.chrome.external_source && !self.edge.chrome.click_to_open { return; }
+        if self.edge.chrome.external_source && !self.edge.chrome.click_to_open {
+            return;
+        }
         let k = key(output, &lip.id);
         if self.options.trace_state {
             println!(
@@ -1296,32 +1378,68 @@ mod tests {
 
     #[test]
     fn native_hover_keeps_visual_lips_but_removes_every_input_region() {
-        let lip = Lip { id: "left".into(), edge: Edge::Left, length: 144., thickness: 10., opens: "panel".into() };
-        let chrome = EdgeChrome { lips: vec![lip.clone()], external_source: true, ..Default::default() };
+        let lip = Lip {
+            id: "left".into(),
+            edge: Edge::Left,
+            length: 144.,
+            thickness: 10.,
+            opens: "panel".into(),
+        };
+        let chrome = EdgeChrome {
+            lips: vec![lip.clone()],
+            external_source: true,
+            ..Default::default()
+        };
         let geometry = chrome.lip_surface_geometry(&lip, (1920, 1200));
         assert!(!geometry.input);
         assert_eq!(geometry.size, (10, 144));
         assert!(chrome.input_regions((1920, 1200)).is_empty());
-        let click = EdgeChrome { click_to_open: true, ..chrome };
+        let click = EdgeChrome {
+            click_to_open: true,
+            ..chrome
+        };
         assert!(click.lip_surface_geometry(&lip, (1920, 1200)).input);
         assert_eq!(click.input_regions((1920, 1200)).len(), 1);
     }
 
     #[test]
     fn native_cues_map_enter_motion_trigger_and_leave_without_local_dwell() {
-        let chrome = EdgeChrome { external_source: true, lips: vec![Lip {
-            id: "left".into(), edge: Edge::Left, length: 144., thickness: 10., opens: "panel".into(),
-        }], ..Default::default() };
+        let chrome = EdgeChrome {
+            external_source: true,
+            lips: vec![Lip {
+                id: "left".into(),
+                edge: Edge::Left,
+                length: 144.,
+                thickness: 10.,
+                opens: "panel".into(),
+            }],
+            ..Default::default()
+        };
         let cue = |phase, y, progress| ExternalEdgeCue {
-            output: "DP-1".into(), edge: Edge::Left, position: (4., y), progress, phase,
+            output: "DP-1".into(),
+            edge: Edge::Left,
+            position: (4., y),
+            progress,
+            phase,
         };
         let approach = cue(ExternalEdgePhase::Approach, 600., 0.);
         let hover = cue(ExternalEdgePhase::Hover, 600., 0.5);
         let trigger = cue(ExternalEdgePhase::Triggered, 600., 1.);
-        assert_eq!(external_cue_lip(&chrome, &approach, (1920, 1200)).unwrap().id, "left");
-        assert_eq!(external_cue_lip(&chrome, &hover, (1920, 1200)).unwrap().id, "left");
+        assert_eq!(
+            external_cue_lip(&chrome, &approach, (1920, 1200))
+                .unwrap()
+                .id,
+            "left"
+        );
+        assert_eq!(
+            external_cue_lip(&chrome, &hover, (1920, 1200)).unwrap().id,
+            "left"
+        );
         assert!(!external_cue_fires(approach.phase, true, false));
-        assert!(!external_cue_fires(hover.phase, false, false), "progress alone cannot open");
+        assert!(
+            !external_cue_fires(hover.phase, false, false),
+            "progress alone cannot open"
+        );
         assert!(external_cue_fires(trigger.phase, false, false));
         let outside = cue(ExternalEdgePhase::Hover, 100., 0.7);
         assert!(external_cue_lip(&chrome, &outside, (1920, 1200)).is_none());
@@ -1333,26 +1451,49 @@ mod tests {
         let first = tracker.update(&approach, Some("DP-1/left".into()));
         assert_eq!(first.entered.as_deref(), Some("DP-1/left"));
         assert!(!first.fires);
-        assert_eq!(tracker.progress.as_ref().map(|(_, progress)| *progress), Some(0.));
+        assert_eq!(
+            tracker.progress.as_ref().map(|(_, progress)| *progress),
+            Some(0.)
+        );
         let moving = tracker.update(&hover, Some("DP-1/left".into()));
         assert!(moving.entered.is_none() && !moving.fires);
-        assert_eq!(tracker.progress.as_ref().map(|(_, progress)| *progress), Some(0.5));
+        assert_eq!(
+            tracker.progress.as_ref().map(|(_, progress)| *progress),
+            Some(0.5)
+        );
         let fired = tracker.update(&trigger, Some("DP-1/left".into()));
         assert!(fired.fires);
         assert_eq!(tracker.latched, Some(("DP-1".into(), Edge::Left)));
         let full = cue(ExternalEdgePhase::Hover, 600., 1.);
         assert!(!tracker.update(&full, Some("DP-1/left".into())).fires);
-        assert_eq!(tracker.progress.as_ref().map(|(_, progress)| *progress), Some(0.));
+        assert_eq!(
+            tracker.progress.as_ref().map(|(_, progress)| *progress),
+            Some(0.)
+        );
         let out = cue(ExternalEdgePhase::Hover, 100., 1.);
-        assert_eq!(tracker.update(&out, None).left.as_deref(), Some("DP-1/left"));
+        assert_eq!(
+            tracker.update(&out, None).left.as_deref(),
+            Some("DP-1/left")
+        );
         let reentered = tracker.update(&full, Some("DP-1/other".into()));
         assert_eq!(reentered.entered.as_deref(), Some("DP-1/other"));
-        assert!(reentered.fires, "latched dwell applies to a lip reached later on the cue band");
-        assert!(!tracker.update(&full, Some("DP-1/other".into())).fires, "one trigger per lip entry");
+        assert!(
+            reentered.fires,
+            "latched dwell applies to a lip reached later on the cue band"
+        );
+        assert!(
+            !tracker.update(&full, Some("DP-1/other".into())).fires,
+            "one trigger per lip entry"
+        );
         assert_eq!(tracker.close().as_deref(), Some("DP-1/other"));
-        assert!(tracker.hovered.is_none() && tracker.progress.is_none() && tracker.latched.is_none());
+        assert!(
+            tracker.hovered.is_none() && tracker.progress.is_none() && tracker.latched.is_none()
+        );
         let left = cue(ExternalEdgePhase::Left, 100., 0.);
-        assert!(tracker.update(&left, None).left.is_none(), "EOF already released the active hover");
+        assert!(
+            tracker.update(&left, None).left.is_none(),
+            "EOF already released the active hover"
+        );
         assert!(tracker.latched.is_none());
     }
 
