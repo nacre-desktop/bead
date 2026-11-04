@@ -981,7 +981,7 @@ mod tests {
         assert!(opening_retarget_sample.h < contour.animated_from.h);
         let center = ((36 * plan.atlas.width + 48) * 4) as usize;
         assert_eq!(plan.atlas.pixels[center..center + 4], [35, 80, 120, 255]);
-        assert!(plan.atlas.take_pixels().len() > 0);
+        assert!(!plan.atlas.take_pixels().is_empty());
         Ok(())
     }
 
