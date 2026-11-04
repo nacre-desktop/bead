@@ -125,14 +125,15 @@ impl RevealContour {
                     .copied()
                     .all(fixed_valid)
         };
-        let contour_bounds_valid = |rect: Rect| {
-            rect_valid(rect) && ((rect.w == 0. && rect.h == 0.) || (rect.w > 0. && rect.h > 0.))
-        };
         let compound_rect_valid = |rect: Rect| rect_valid(rect) && rect.w > 0. && rect.h > 0.;
         self.static_rects.len() <= 16
             && self.holes.len() <= 16
-            && contour_bounds_valid(self.output_bounds)
-            && contour_bounds_valid(self.crop)
+            && rect_valid(self.output_bounds)
+            && self.output_bounds.w > 0.
+            && self.output_bounds.h > 0.
+            && rect_valid(self.crop)
+            && self.crop.w > 0.
+            && self.crop.h > 0.
             && rect_valid(self.animated_from)
             && rect_valid(self.animated_to)
             && rect_valid(self.content_clip_from)
@@ -1094,12 +1095,12 @@ mod tests {
         contour.holes.push(Rect::new(0., 0., 1., 0.));
         assert!(!contour.valid());
         contour.holes.clear();
-        contour.output_bounds.w = 0.;
+        contour.output_bounds = Rect::new(0., 0., 0., 0.);
         assert!(!contour.valid());
-        contour.output_bounds.w = 96.;
-        contour.crop.h = 0.;
+        contour.output_bounds = Rect::new(0., 0., 96., 72.);
+        contour.crop = Rect::new(0., 0., 0., 0.);
         assert!(!contour.valid());
-        contour.crop.h = 72.;
+        contour.crop = Rect::new(0., 0., 96., 72.);
 
         contour.rim = Some(RevealRim {
             colors: [[255; 4]; 3],
@@ -1122,6 +1123,8 @@ mod tests {
             unreachable!();
         };
         *rect = Rect::new(8., -8., 80., 56.);
+        let changed_body = overflow.primitives[0].clone();
+        overflow.motion.as_mut().unwrap().parts = vec![(0, changed_body)];
         overflow.motion.as_mut().unwrap().slide_distance = None;
         assert!(motion_atlas_ink_is_safe(
             &overflow,
@@ -1142,6 +1145,10 @@ mod tests {
             &mut renderer,
         )?
         .expect("stationary reveal does not translate clipped contour ink");
+        assert_eq!(
+            plan.reveal.as_ref().unwrap().animated_to,
+            Rect::new(8., -8., 80., 56.)
+        );
         assert_eq!(plan.planes[0].from.destination.y, 0.);
 
         overflow.motion.as_mut().unwrap().slide_distance = Some(32.);
