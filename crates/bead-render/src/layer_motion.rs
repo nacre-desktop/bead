@@ -16,6 +16,13 @@ pub enum RevealCornerMode {
     QuadraticCut,
 }
 
+/// Whether the compositor draws/masks with a contour or tracks it invisibly.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RevealMode {
+    Visible,
+    TrackingOnly,
+}
+
 /// Three-stop color gradient used by a compositor-owned contour rim.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RevealRim {
@@ -31,6 +38,7 @@ pub struct RevealRim {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RevealShadow {
     pub color: [u8; 4],
+    pub radius: f32,
     pub blur: f32,
     pub spread: f32,
     pub offset: (f32, f32),
@@ -56,6 +64,7 @@ pub struct RevealContour {
     pub radii_from: [f32; 4],
     pub radii_to: [f32; 4],
     pub corner_mode: RevealCornerMode,
+    pub mode: RevealMode,
     /// Plane whose opacity controls contour fill, rim, and shadow alpha.
     pub opacity_plane: u32,
     /// Perimeter edges whose corners are square: left=1, top=2, right=4, bottom=8.
@@ -66,6 +75,27 @@ pub struct RevealContour {
 }
 
 impl RevealContour {
+    /// Keep the contour at its complete opening pose during whole-scene exits.
+    /// Retargeting still samples the previously presented geometry.
+    pub fn resting_pose(&self) -> Self {
+        let mut contour = self.clone();
+        contour.animated_from = contour.animated_to;
+        contour.radii_from = contour.radii_to;
+        contour.content_clip_from = contour.content_clip_to;
+        contour
+    }
+
+    /// Retain this contour's geometry for later retargeting while leaving the
+    /// full-scene close atlas visually unchanged.
+    pub fn tracking_only(&self) -> Self {
+        let mut contour = self.resting_pose();
+        contour.mode = RevealMode::TrackingOnly;
+        contour.crop = contour.output_bounds;
+        contour.content_clip_from = contour.output_bounds;
+        contour.content_clip_to = contour.output_bounds;
+        contour
+    }
+
     /// Translate scene-local shape data into its root surface-local frame.
     pub fn translated(&self, dx: f32, dy: f32) -> Self {
         let mut contour = self.clone();
@@ -95,7 +125,16 @@ impl RevealContour {
     }
 
     pub fn valid(&self) -> bool {
-        let rect_valid = |rect: Rect| finite_rect(rect);
+        let fixed_valid = |value: f32| {
+            value.is_finite() && (-8_388_608. ..=8_388_607.996).contains(&value)
+        };
+        let rect_valid = |rect: Rect| {
+            finite_rect(rect)
+                && [rect.x, rect.y, rect.w, rect.h]
+                    .iter()
+                    .copied()
+                    .all(fixed_valid)
+        };
         self.static_rects.len() <= 16
             && self.holes.len() <= 16
             && rect_valid(self.output_bounds)
@@ -106,7 +145,11 @@ impl RevealContour {
             && rect_valid(self.content_clip_to)
             && self.static_rects.iter().copied().all(rect_valid)
             && self.holes.iter().copied().all(rect_valid)
-            && self.radii_from.iter().chain(&self.radii_to).all(|r| r.is_finite() && *r >= 0.)
+            && self
+                .radii_from
+                .iter()
+                .chain(&self.radii_to)
+                .all(|r| *r >= 0. && fixed_valid(*r))
             && self.square_edges & !0xf == 0
             && self.rim.is_none_or(|rim| {
                 rim.stops.iter().all(|v| v.is_finite() && (0. ..=1.).contains(v))
@@ -114,55 +157,78 @@ impl RevealContour {
                     && rim.stops[1] <= rim.stops[2]
                     && [rim.start.0, rim.start.1, rim.end.0, rim.end.1]
                         .iter()
-                        .all(|v| v.is_finite())
-                    && rim.width.is_finite()
+                        .all(|v| fixed_valid(*v))
+                    && fixed_valid(rim.width)
                     && rim.width >= 0.
                     && rim.opacity.is_finite()
                     && (0. ..=1.).contains(&rim.opacity)
             })
             && self.shadow.is_none_or(|shadow| {
-                shadow.blur.is_finite()
+                shadow.radius.is_finite()
+                    && shadow.radius >= 0.
+                    && fixed_valid(shadow.blur)
                     && shadow.blur >= 0.
-                    && shadow.spread.is_finite()
+                    && fixed_valid(shadow.spread)
                     && [shadow.offset.0, shadow.offset.1]
                         .iter()
-                        .all(|v| v.is_finite())
+                        .all(|v| fixed_valid(*v))
             })
     }
 }
 
-fn inferred_reveal_contour(scene: &Scene, width: u32, height: u32) -> Option<RevealContour> {
+fn inferred_reveal_contour(
+    scene: &Scene,
+    width: u32,
+    height: u32,
+) -> Option<(RevealContour, Vec<usize>)> {
     let motion = scene.motion.as_ref().filter(|motion| motion.reveal)?;
-    let (body, radius, fill, border) = motion
+    let body_part = motion
         .parts
         .iter()
-        .find_map(|(_, primitive)| match primitive {
+        .find_map(|(index, primitive)| match primitive {
             Primitive::Rounded {
                 rect,
                 radius,
                 fill,
                 border,
-            } => Some((*rect, *radius, *fill, *border)),
+            } => Some((*index, *rect, *radius, *fill, *border)),
             _ => None,
-        })
-        .or_else(|| {
-            scene
-                .primitives
-                .iter()
-                .filter_map(|primitive| match primitive {
-                    Primitive::Rounded {
-                        rect,
-                        radius,
-                        fill,
-                        border,
-                    } if rect.w > 0. && rect.h > 0. => {
-                        Some((*rect, *radius, *fill, *border))
-                    }
-                    _ => None,
-                })
-                .max_by(|a, b| (a.0.w * a.0.h).total_cmp(&(b.0.w * b.0.h)))
-        })?;
+        });
+    let (body_index, body, radius, fill, border) = if let Some(body) = body_part {
+        body
+    } else {
+        let mut rounded = scene
+            .primitives
+            .iter()
+            .enumerate()
+            .filter_map(|(index, primitive)| match primitive {
+                Primitive::Rounded {
+                    rect,
+                    radius,
+                    fill,
+                    border,
+                } if rect.w > 0. && rect.h > 0. => {
+                    Some((index, *rect, *radius, *fill, *border))
+                }
+                _ => None,
+            });
+        let body = rounded.next()?;
+        if rounded.next().is_some() {
+            return None;
+        }
+        body
+    };
     if !radius.is_finite() || radius < 0. {
+        return None;
+    }
+    let rounded_parts = motion
+        .parts
+        .iter()
+        .filter(|(_, primitive)| {
+            matches!(primitive, Primitive::Rounded { rect, .. } if *rect == body)
+        })
+        .count();
+    if !motion.parts.is_empty() && rounded_parts != 1 {
         return None;
     }
     let from = Scene::revealed(body, motion.edge, 0.);
@@ -175,15 +241,47 @@ fn inferred_reveal_contour(scene: &Scene, width: u32, height: u32) -> Option<Rev
         width,
         opacity: 1.,
     });
-    let shadow = motion.parts.iter().find_map(|(_, primitive)| match primitive {
-        Primitive::Shadow { blur, .. } if blur.is_finite() && *blur >= 0. => Some(RevealShadow {
-            color: [0, 0, 0, 82],
-            blur: *blur,
-            spread: 0.,
-            offset: (0., 0.),
-        }),
+    let has_shadow = motion
+        .parts
+        .iter()
+        .any(|(_, primitive)| matches!(primitive, Primitive::Shadow { .. }));
+    let shadow_part = motion.parts.iter().find_map(|(index, primitive)| match primitive {
+        Primitive::Shadow {
+            rect,
+            radius: shadow_radius,
+            blur,
+        } if blur.is_finite()
+            && *blur >= 0.
+            && shadow_radius.is_finite()
+            && (*shadow_radius - radius).abs() < 0.01 =>
+        {
+            let inset = blur * 3.;
+            let left = rect.x + inset - body.x;
+            let right = rect.x + rect.w - inset - (body.x + body.w);
+            let top = rect.y + inset - body.y;
+            let bottom = rect.y + rect.h - inset - (body.y + body.h);
+            let spread_x = (right - left) * 0.5;
+            let spread_y = (bottom - top) * 0.5;
+            if (spread_x - spread_y).abs() >= 0.01 {
+                return None;
+            }
+            Some((
+                *index,
+                RevealShadow {
+                    color: [0, 0, 0, 82],
+                    radius: *shadow_radius,
+                    blur: *blur,
+                    spread: spread_x,
+                    offset: ((left + right) * 0.5, (top + bottom) * 0.5),
+                },
+            ))
+        }
         _ => None,
     });
+    if has_shadow && shadow_part.is_none() {
+        return None;
+    }
+    let shadow = shadow_part.map(|(_, shadow)| shadow);
     let clip = |p| {
         scene
             .reveal_window_at(p)
@@ -198,14 +296,22 @@ fn inferred_reveal_contour(scene: &Scene, width: u32, height: u32) -> Option<Rev
         animated_to: body,
         content_clip_from: clip(0.),
         content_clip_to: clip(1.),
-        radii_from: [0.; 4],
+        radii_from: [radius; 4],
         radii_to: [radius; 4],
         corner_mode: RevealCornerMode::Circular,
+        mode: RevealMode::Visible,
         opacity_plane: 0,
         square_edges: 0,
         fill,
         rim,
         shadow,
+    })
+    .map(|contour| {
+        let mut indices = vec![body_index];
+        if let Some((shadow_index, _)) = shadow_part {
+            indices.push(shadow_index);
+        }
+        (contour, indices)
     })
 }
 
@@ -578,35 +684,53 @@ impl LayerMotionPlan {
             motion.slide_distance.unwrap_or(scene.bounds.h),
             0.,
         );
-        let reveal = if opening && motion.reveal {
-            motion
-                .art
-                .as_ref()
-                .and_then(|art| art.contour.as_ref())
-                .cloned()
-                .or_else(|| inferred_reveal_contour(scene, width, height))
-                .map(|contour| contour.translated(scene.offset.0, scene.offset.1))
+        let (reveal, reveal_owned_indices) = if motion.reveal {
+            if let Some(art) = motion.art.as_ref() {
+                if let Some(contour) = art.contour.as_ref() {
+                    let (contour, indices) = if opening {
+                        (
+                            contour.clone(),
+                            motion
+                                .parts
+                                .iter()
+                                .map(|(index, _)| *index)
+                                .chain(std::iter::once(art.index))
+                                .collect::<std::collections::BTreeSet<_>>(),
+                        )
+                    } else {
+                        (contour.tracking_only(), Default::default())
+                    };
+                    (
+                        Some(contour.translated(scene.offset.0, scene.offset.1)),
+                        indices,
+                    )
+                } else {
+                    (None, Default::default())
+                }
+            } else if let Some((contour, indices)) = inferred_reveal_contour(scene, width, height) {
+                let (contour, indices) = if opening {
+                    (contour, indices.into_iter().collect())
+                } else {
+                    (contour.tracking_only(), Default::default())
+                };
+                (
+                    Some(contour.translated(scene.offset.0, scene.offset.1)),
+                    indices,
+                )
+            } else {
+                return Ok(None);
+            }
         } else {
-            None
+            (None, Default::default())
         };
         if reveal.as_ref().is_some_and(|contour| !contour.valid()) {
             return Ok(None);
         }
         let mut ink_scene = scene.clone();
-        let reveal_indices = if reveal.is_some() {
-            motion
-                .parts
-                .iter()
-                .map(|(index, _)| *index)
-                .chain(motion.art.as_ref().map(|art| art.index))
-                .collect::<std::collections::BTreeSet<_>>()
-        } else {
-            Default::default()
-        };
-        if !reveal_indices.is_empty() {
+        if !reveal_owned_indices.is_empty() {
             let mut index = 0;
             ink_scene.retain_primitives(|_| {
-                let keep = !reveal_indices.contains(&index);
+                let keep = !reveal_owned_indices.contains(&index);
                 index += 1;
                 keep
             });
@@ -646,10 +770,36 @@ impl LayerMotionPlan {
         let mut pixels = vec![0; bytes];
         let mut final_scene = scene.clone();
         final_scene.panel_offset(1., opening);
-        if !reveal_indices.is_empty() {
+        if !opening
+            && let Some(art) = final_scene
+                .motion
+                .as_ref()
+                .and_then(|motion| motion.art.clone())
+                .filter(|art| art.contour.is_some())
+        {
+            let (rect, bytes) = (art.draw)(art.body, None);
+            use std::hash::{Hash, Hasher};
+            let mut hash = std::collections::hash_map::DefaultHasher::new();
+            bytes.hash(&mut hash);
+            let path = std::path::PathBuf::from(format!("@reveal-art-{:x}.svg", hash.finish()));
+            final_scene
+                .asset_data
+                .retain(|path, _| !path.to_string_lossy().starts_with("@reveal-art-"));
+            final_scene.asset_data.insert(path.clone(), bytes);
+            if let Some(Primitive::Image {
+                path: target,
+                rect: target_rect,
+                ..
+            }) = final_scene.primitives.get_mut(art.index)
+            {
+                *target_rect = rect;
+                *target = path;
+            }
+        }
+        if !reveal_owned_indices.is_empty() {
             let mut index = 0;
             final_scene.retain_primitives(|_| {
-                let keep = !reveal_indices.contains(&index);
+                let keep = !reveal_owned_indices.contains(&index);
                 index += 1;
                 keep
             });
@@ -785,19 +935,48 @@ mod tests {
     }
 
     #[test]
-    fn a_growing_body_is_rejected_before_any_prepare_or_paint() -> Result<()> {
-        assert!(
-            LayerMotionPlan::for_slide(
-                &scene(true, false),
-                true,
-                96,
-                72,
-                1.5,
-                PixelFormat::Rgba,
-                &mut NoPaint,
-            )?
-            .is_none()
-        );
+    fn a_single_generic_rounded_body_gets_compositor_geometry() -> Result<()> {
+        let mut renderer = TreeCpuRenderer::default();
+        let plan = LayerMotionPlan::for_slide(
+            &scene(true, false),
+            true,
+            96,
+            72,
+            1.5,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )?
+        .expect("representable generic rounded body");
+        let contour = plan.reveal.expect("compositor contour");
+        assert_eq!(contour.animated_from, Rect::new(8., 64., 80., 0.));
+        assert_eq!(contour.animated_to, Rect::new(8., 8., 80., 56.));
+        assert_eq!(contour.radii_from, [6.; 4]);
+        assert_eq!(contour.radii_to, [6.; 4]);
+        assert_eq!(contour.mode, RevealMode::Visible);
+        Ok(())
+    }
+
+    #[test]
+    fn generic_close_keeps_the_full_scene_and_tracks_geometry_invisibly() -> Result<()> {
+        let mut renderer = TreeCpuRenderer::default();
+        let mut plan = LayerMotionPlan::for_slide(
+            &scene(true, false),
+            false,
+            96,
+            72,
+            1.,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )?
+        .expect("whole-scene close plan");
+        let contour = plan.reveal.as_ref().expect("latent contour state");
+        assert_eq!(contour.mode, RevealMode::TrackingOnly);
+        assert_eq!(contour.animated_from, contour.animated_to);
+        assert_eq!(contour.content_clip_from, contour.output_bounds);
+        assert_eq!(contour.content_clip_to, contour.output_bounds);
+        let center = ((36 * plan.atlas.width + 48) * 4) as usize;
+        assert_eq!(plan.atlas.pixels[center..center + 4], [35, 80, 120, 255]);
+        assert!(plan.atlas.take_pixels().len() > 0);
         Ok(())
     }
 

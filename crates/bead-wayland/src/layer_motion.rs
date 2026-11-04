@@ -206,6 +206,14 @@ impl LayerMotionController {
                 pack_rgba(contour.fill),
                 contour.opacity_plane,
             );
+            self.proxy.set_reveal_mode(match contour.mode {
+                bead_render::layer_motion::RevealMode::Visible => {
+                    bead_layer_motion_v1::RevealMode::Visible
+                }
+                bead_render::layer_motion::RevealMode::TrackingOnly => {
+                    bead_layer_motion_v1::RevealMode::TrackingOnly
+                }
+            });
             self.proxy.set_reveal_content_clip(
                 contour.content_clip_from.x as f64,
                 contour.content_clip_from.y as f64,
@@ -250,14 +258,15 @@ impl LayerMotionController {
                 }
                 if let Some(shadow) = contour.shadow {
                     self.proxy.set_reveal_shadow(
-                    pack_rgba(shadow.color),
-                    shadow.blur as f64,
+                        pack_rgba(shadow.color),
+                        shadow.radius as f64,
+                        shadow.blur as f64,
                     shadow.spread as f64,
                     shadow.offset.0 as f64,
                     shadow.offset.1 as f64,
                     );
                 } else {
-                    self.proxy.set_reveal_shadow(0, 0., 0., 0., 0.);
+                    self.proxy.set_reveal_shadow(0, 0., 0., 0., 0., 0.);
                 }
             } else {
                 self.proxy.set_reveal_bounds(0., 0., 0., 0., 0., 0., 0., 0.);
@@ -269,10 +278,12 @@ impl LayerMotionController {
                     0,
                     0,
                 );
+                self.proxy
+                    .set_reveal_mode(bead_layer_motion_v1::RevealMode::TrackingOnly);
                 self.proxy.set_reveal_content_clip(0., 0., 0., 0., 0., 0., 0., 0.);
                 self.proxy.set_reveal_rects(Vec::new(), Vec::new());
                 self.proxy.set_reveal_rim(0, 0, 0, 0., 1., 1., 0., 0., 0., 0., 0., 0.);
-                self.proxy.set_reveal_shadow(0, 0., 0., 0., 0.);
+                self.proxy.set_reveal_shadow(0, 0., 0., 0., 0., 0.);
             }
         }
         let curve = match plan.curve {
@@ -450,10 +461,12 @@ impl Dispatch<BeadLayerMotionV1, Arc<DispatchData>> for App {
                 state.surfaces[index].layer_motion_open,
                 target_open,
                 target_motion.is_some_and(|motion| motion.reveal),
-                state.surfaces[index]
-                    .layer_motion_plan
-                    .as_ref()
-                    .is_some_and(|plan| plan.reveal.is_some()),
+                target_scene.is_some_and(|scene| {
+                    crate::rendering::reveal_contour_capable(
+                        scene,
+                        state.layer_motion_manager.as_ref(),
+                    )
+                }),
             );
             if cpu_reveal_handoff {
                 if let Some(motion) = state.surfaces[index].layer_motion.as_mut() {
@@ -469,6 +482,31 @@ impl Dispatch<BeadLayerMotionV1, Arc<DispatchData>> for App {
                 && state.surfaces[index].layer_motion_open == Some(true)
                 && state.surfaces[index].layer_motion_ui_serial == state.surfaces[index].ui_serial
                 && (!state.surfaces[index].companion || state.panel_target);
+            let reveal_contour_available = target_scene.is_some_and(|scene| {
+                target_motion.is_some_and(|motion| motion.reveal)
+                    && crate::rendering::reveal_contour_capable(
+                        scene,
+                        state.layer_motion_manager.as_ref(),
+                    )
+            });
+            if completed && reveal_contour_available && target_open {
+                if let Some(motion) = state.surfaces[index].layer_motion.as_mut() {
+                    motion.take_events();
+                    motion.retire_completed(serial);
+                }
+                state.panel_frame_until = None;
+                state.surfaces[index].layer_motion_active = true;
+                if settled_open {
+                    // Keep the contour controller and atlas attached as static
+                    // compositor presentation. Later transitions can retarget it;
+                    // content replacement will reset atomically with fresh pixels.
+                    state.surfaces[index].redraw = false;
+                    return;
+                }
+                state.surfaces[index].redraw = true;
+                state.draw(index, qh);
+                return;
+            }
             state.surfaces[index].layer_motion_active = false;
             let surface = state.surfaces[index].layer.wl_surface().clone();
             if let Some(motion) = state.surfaces[index].layer_motion.as_mut() {
@@ -516,7 +554,11 @@ mod tests {
     };
     use bead_render::{
         Damage, Motion, PixelFormat, Primitive, Renderer, Result, Scene, ShmTarget,
-        layer_motion::LayerMotionPlan, tree::TreeCpuRenderer,
+        RevealArt,
+        layer_motion::{
+            LayerMotionPlan, RevealContour, RevealCornerMode, RevealRim, RevealShadow,
+        },
+        tree::TreeCpuRenderer,
     };
     use std::{
         os::unix::net::UnixStream,
@@ -535,6 +577,13 @@ mod tests {
         plane_adds: AtomicUsize,
         animates: AtomicUsize,
         resets: AtomicUsize,
+        reveal_bounds: AtomicUsize,
+        reveal_geometry: AtomicUsize,
+        reveal_clip: AtomicUsize,
+        reveal_rects: AtomicUsize,
+        reveal_rim: AtomicUsize,
+        reveal_shadow: AtomicUsize,
+        reveal_mode: AtomicUsize,
         request_order: Mutex<Vec<&'static str>>,
     }
 
@@ -648,6 +697,27 @@ mod tests {
                     state.0.resets.fetch_add(1, Ordering::Relaxed);
                     state.0.request_order.lock().unwrap().push("reset");
                 }
+                ServerMotionRequest::SetRevealBounds { .. } => {
+                    state.0.reveal_bounds.fetch_add(1, Ordering::Relaxed);
+                }
+                ServerMotionRequest::SetRevealGeometry { .. } => {
+                    state.0.reveal_geometry.fetch_add(1, Ordering::Relaxed);
+                }
+                ServerMotionRequest::SetRevealContentClip { .. } => {
+                    state.0.reveal_clip.fetch_add(1, Ordering::Relaxed);
+                }
+                ServerMotionRequest::SetRevealRects { .. } => {
+                    state.0.reveal_rects.fetch_add(1, Ordering::Relaxed);
+                }
+                ServerMotionRequest::SetRevealRim { .. } => {
+                    state.0.reveal_rim.fetch_add(1, Ordering::Relaxed);
+                }
+                ServerMotionRequest::SetRevealShadow { .. } => {
+                    state.0.reveal_shadow.fetch_add(1, Ordering::Relaxed);
+                }
+                ServerMotionRequest::SetRevealMode { .. } => {
+                    state.0.reveal_mode.fetch_add(1, Ordering::Relaxed);
+                }
                 _ => {}
             }
         }
@@ -656,14 +726,14 @@ mod tests {
     fn server(
         stream: UnixStream,
         counts: Arc<Counts>,
-        advertise_motion: bool,
+        motion_version: Option<u32>,
     ) -> (thread::JoinHandle<()>, Arc<AtomicBool>) {
         let mut display = Display::<FakeState>::new().unwrap();
         let mut handle = display.handle();
         let state = FakeState(counts);
         handle.create_global::<FakeState, wl_compositor::WlCompositor, _>(6, ());
-        if advertise_motion {
-            handle.create_global::<FakeState, ServerMotionManager, _>(1, ());
+        if let Some(version) = motion_version {
+            handle.create_global::<FakeState, ServerMotionManager, _>(version, ());
         }
         handle
             .insert_client(stream, Arc::new(FakeClient))
@@ -737,7 +807,7 @@ mod tests {
     fn one_paint_and_one_group_request_reach_the_wayland_dispatch_queue() {
         let counts = Arc::new(Counts::default());
         let (client_stream, server_stream) = UnixStream::pair().unwrap();
-        let (server_thread, stop) = server(server_stream, counts.clone(), true);
+        let (server_thread, stop) = server(server_stream, counts.clone(), Some(1));
         let connection = wayland_client::Connection::from_socket(client_stream).unwrap();
         let (globals, queue) = wayland_client::globals::registry_queue_init::<App>(&connection)
             .expect("registry roundtrip");
@@ -774,6 +844,8 @@ mod tests {
         assert_eq!(counts.plane_adds.load(Ordering::Relaxed), 1);
         assert_eq!(counts.animates.load(Ordering::Relaxed), 1);
         assert_eq!(counts.commits.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_bounds.load(Ordering::Relaxed), 0);
+        assert_eq!(counts.reveal_geometry.load(Ordering::Relaxed), 0);
         for plane in &mut plan.planes {
             std::mem::swap(&mut plane.from, &mut plane.to);
         }
@@ -796,10 +868,121 @@ mod tests {
     }
 
     #[test]
+    fn reveal_descriptor_is_submitted_once_and_style_edits_reuse_the_controller() {
+        let counts = Arc::new(Counts::default());
+        let (client_stream, server_stream) = UnixStream::pair().unwrap();
+        let (server_thread, stop) = server(server_stream, counts.clone(), Some(2));
+        let connection = wayland_client::Connection::from_socket(client_stream).unwrap();
+        let (globals, queue) = wayland_client::globals::registry_queue_init::<App>(&connection)
+            .expect("registry roundtrip");
+        let qh = queue.handle();
+        let manager = LayerMotionManager::bind(&globals, &qh).expect("advertised manager v2");
+        assert!(manager.supports_reveal());
+        let compositor = smithay_client_toolkit::compositor::CompositorState::bind(&globals, &qh)
+            .expect("advertised compositor");
+        let surface = compositor.create_surface(&qh);
+        let mut scene = sample_scene();
+        let body = Rect::new(4., 4., 24., 24.);
+        let primitive = scene.primitives[0].clone();
+        let motion = scene.motion.as_mut().unwrap();
+        motion.reveal = true;
+        motion.parts = vec![(0, primitive)];
+        motion.art = Some(RevealArt {
+            body,
+            index: 0,
+            contour: Some(RevealContour {
+                output_bounds: Rect::new(0., 0., 32., 32.),
+                crop: Rect::new(0., 0., 32., 32.),
+                static_rects: vec![Rect::new(0., 0., 32., 4.)],
+                holes: Vec::new(),
+                animated_from: Rect::new(4., 28., 24., 0.),
+                animated_to: body,
+                content_clip_from: Rect::new(-4096., -4096., 8224., 8224.),
+                content_clip_to: Rect::new(0., 0., 32., 32.),
+                radii_from: [0.; 4],
+                radii_to: [3.; 4],
+                corner_mode: RevealCornerMode::QuadraticCut,
+                mode: bead_render::layer_motion::RevealMode::Visible,
+                opacity_plane: 0,
+                square_edges: 2,
+                fill: [35, 80, 120, 255],
+                rim: Some(RevealRim {
+                    colors: [[100, 130, 180, 255]; 3],
+                    stops: [0., 0.38, 1.],
+                    start: (0., 0.),
+                    end: (0., 32.),
+                    width: 1.,
+                    opacity: 0.25,
+                }),
+                shadow: Some(RevealShadow {
+                    color: [0, 0, 0, 82],
+                    radius: 3.,
+                    blur: 8.,
+                    spread: 0.,
+                    offset: (0., 2.),
+                }),
+            }),
+            draw: Arc::new(|_, _| panic!("compositor contour skips per-frame art draw")),
+        });
+        let mut renderer = CountPaint {
+            inner: TreeCpuRenderer::default(),
+            paints: 0,
+        };
+        let mut plan = LayerMotionPlan::for_slide(
+            &scene,
+            true,
+            32,
+            32,
+            1.,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )
+        .expect("prepare reveal plan")
+        .expect("supported descriptor");
+        assert_eq!(renderer.paints, 1);
+        let mut controller = manager.create(&surface, &qh);
+        assert!(controller.queue(&plan).is_some());
+        surface.commit();
+        connection.flush().expect("flush reveal request");
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while counts.animates.load(Ordering::Relaxed) == 0 && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(counts.reveal_bounds.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_geometry.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_clip.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_rects.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_rim.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_shadow.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_mode.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.animates.load(Ordering::Relaxed), 1);
+
+        plan.reveal.as_mut().unwrap().rim.as_mut().unwrap().opacity = 0.16;
+        assert!(!controller.needs_recreation(&plan));
+        plan.retarget = true;
+        assert!(controller.queue(&plan).is_some());
+        surface.commit();
+        connection.flush().expect("flush style update");
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while counts.animates.load(Ordering::Relaxed) < 2 && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(renderer.paints, 1);
+        assert_eq!(counts.plane_adds.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_rim.load(Ordering::Relaxed), 2);
+        assert_eq!(counts.reveal_mode.load(Ordering::Relaxed), 2);
+        assert_eq!(counts.animates.load(Ordering::Relaxed), 2);
+        drop(controller);
+        drop(surface);
+        stop.store(true, Ordering::Relaxed);
+        server_thread.join().unwrap();
+    }
+
+    #[test]
     fn reset_is_staged_after_replacement_attach_and_reuses_serial_sequence() {
         let counts = Arc::new(Counts::default());
         let (client_stream, server_stream) = UnixStream::pair().unwrap();
-        let (server_thread, stop) = server(server_stream, counts.clone(), true);
+        let (server_thread, stop) = server(server_stream, counts.clone(), Some(1));
         let connection = wayland_client::Connection::from_socket(client_stream).unwrap();
         let (globals, queue) = wayland_client::globals::registry_queue_init::<App>(&connection)
             .expect("registry roundtrip");
@@ -878,7 +1061,7 @@ mod tests {
     fn absent_global_keeps_the_stock_compositor_path_available() {
         let counts = Arc::new(Counts::default());
         let (client_stream, server_stream) = UnixStream::pair().unwrap();
-        let (server_thread, stop) = server(server_stream, counts, false);
+        let (server_thread, stop) = server(server_stream, counts, None);
         let connection = wayland_client::Connection::from_socket(client_stream).unwrap();
         let (globals, _queue) = wayland_client::globals::registry_queue_init::<App>(&connection)
             .expect("registry roundtrip");

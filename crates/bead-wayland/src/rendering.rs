@@ -45,7 +45,7 @@ fn layer_motion_reveal_reversal_uses_cpu(
     opening && reveal && target_changed && compositor_owns_timeline && !compositor_has_contour
 }
 
-fn reveal_contour_capable(scene: &Scene, manager: Option<&crate::layer_motion::LayerMotionManager>) -> bool {
+pub(super) fn reveal_contour_capable(scene: &Scene, manager: Option<&crate::layer_motion::LayerMotionManager>) -> bool {
     let Some(motion) = scene.motion.as_ref().filter(|motion| motion.reveal) else {
         return true;
     };
@@ -56,8 +56,12 @@ fn reveal_contour_capable(scene: &Scene, manager: Option<&crate::layer_motion::L
 fn layer_motion_cpu_replacement_pending(
     surface_still_owns_atlas: bool,
     controller_has_active_serial: bool,
+    target_changed: bool,
+    plan_can_retarget: bool,
 ) -> bool {
-    surface_still_owns_atlas && !controller_has_active_serial
+    surface_still_owns_atlas
+        && !controller_has_active_serial
+        && (!target_changed || !plan_can_retarget)
 }
 
 pub(super) fn layer_motion_completion_uses_cpu_reveal(
@@ -1976,6 +1980,8 @@ impl App {
                 s.layer_motion
                     .as_ref()
                     .is_some_and(|motion| motion.has_active_serial()),
+                layer_motion_target_changed,
+                s.layer_motion_plan.is_some(),
             );
             let layer_motion_cpu_replacement = layer_motion_cpu_reset_pending
                 || promotion_reset_active
@@ -1986,9 +1992,7 @@ impl App {
                             motion.reveal,
                             layer_motion_target_changed,
                             s.layer_motion_active,
-                            s.layer_motion_plan
-                                .as_ref()
-                                .is_some_and(|plan| plan.reveal.is_some()),
+                            reveal_contour_capable(scene, self.layer_motion_manager.as_ref()),
                         )
                     })
                 });
@@ -2014,12 +2018,10 @@ impl App {
                     )
                 });
             let layer_motion_pose_eligible = layer_motion_handoff_ok
+                && layer_motion_opening.is_some()
                 && scene.motion.as_ref().is_some_and(|motion| {
-                    layer_motion_opening.is_some_and(|opening| {
-                        !opening
-                            || !motion.reveal
-                            || reveal_contour_capable(scene, self.layer_motion_manager.as_ref())
-                    })
+                    !motion.reveal
+                        || reveal_contour_capable(scene, self.layer_motion_manager.as_ref())
                 });
             let layer_motion_reuses_atlas =
                 layer_motion_target_changed && s.layer_motion_plan.is_some();
@@ -2169,6 +2171,7 @@ impl App {
                 && let Some(opening) = layer_motion_opening
                 && s.layer_motion_active
                 && s.layer_motion_open != Some(opening)
+                && !scene.motion.as_ref().is_some_and(|motion| motion.reveal)
                 && !layer_motion_cpu_replacement
                 && let Some(plan) = s.layer_motion_plan.as_mut()
             {
