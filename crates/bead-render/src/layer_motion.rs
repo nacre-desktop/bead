@@ -125,16 +125,20 @@ impl RevealContour {
                     .copied()
                     .all(fixed_valid)
         };
+        let contour_bounds_valid = |rect: Rect| {
+            rect_valid(rect) && ((rect.w == 0. && rect.h == 0.) || (rect.w > 0. && rect.h > 0.))
+        };
+        let compound_rect_valid = |rect: Rect| rect_valid(rect) && rect.w > 0. && rect.h > 0.;
         self.static_rects.len() <= 16
             && self.holes.len() <= 16
-            && rect_valid(self.output_bounds)
-            && rect_valid(self.crop)
+            && contour_bounds_valid(self.output_bounds)
+            && contour_bounds_valid(self.crop)
             && rect_valid(self.animated_from)
             && rect_valid(self.animated_to)
             && rect_valid(self.content_clip_from)
             && rect_valid(self.content_clip_to)
-            && self.static_rects.iter().copied().all(rect_valid)
-            && self.holes.iter().copied().all(rect_valid)
+            && self.static_rects.iter().copied().all(compound_rect_valid)
+            && self.holes.iter().copied().all(compound_rect_valid)
             && self
                 .radii_from
                 .iter()
@@ -154,9 +158,13 @@ impl RevealContour {
                     && rim.width >= 0.
                     && rim.opacity.is_finite()
                     && (0. ..=1.).contains(&rim.opacity)
+                    && (rim.width == 0. || rim.opacity == 0. || rim.start != rim.end)
             })
             && self.shadow.is_none_or(|shadow| {
-                fixed_valid(shadow.blur)
+                (self.static_rects.is_empty()
+                    && self.holes.is_empty()
+                    && self.corner_mode == RevealCornerMode::Circular)
+                    && fixed_valid(shadow.blur)
                     && shadow.blur >= 0.
                     && fixed_valid(shadow.spread)
                     && [shadow.offset.0, shadow.offset.1]
@@ -407,6 +415,49 @@ pub fn scene_ink_bounds(scene: &Scene, scale: f32, offset: (f32, f32)) -> Option
     }
 
     bounds.or_else(|| Some(Rect::new(offset.0, offset.1, 0., 0.)))
+}
+
+/// The atlas plane's closed endpoint, shared by planning and renderer eligibility.
+pub fn closed_plane_offset(scene: &Scene, opening: bool) -> Option<(f32, f32)> {
+    let motion = scene.motion.as_ref()?;
+    Some(if opening && motion.reveal {
+        motion.slide_distance.map_or((0., 0.), |distance| {
+            motion.edge.closed_offset(distance, distance, 0.)
+        })
+    } else {
+        motion.edge.closed_offset(
+            motion.slide_distance.unwrap_or(scene.bounds.w),
+            motion.slide_distance.unwrap_or(scene.bounds.h),
+            0.,
+        )
+    })
+}
+
+/// Conservative renderer-side preflight, matching the planner's translation rule.
+pub fn motion_atlas_ink_is_safe(
+    scene: &Scene,
+    opening: bool,
+    width: u32,
+    height: u32,
+    scale: f32,
+    offset: (f32, f32),
+) -> bool {
+    if opening
+        && scene
+            .motion
+            .as_ref()
+            .is_some_and(|motion| motion.reveal && motion.slide_distance.is_none())
+    {
+        return true;
+    }
+    let Some(closed_offset) = closed_plane_offset(scene, opening) else {
+        return false;
+    };
+    scene_ink_bounds(scene, scale, offset)
+        .zip(motion_atlas_viewport(width, height, scale))
+        .is_some_and(|(ink_bounds, viewport)| {
+            translation_preserves_clip(ink_bounds, viewport, closed_offset)
+        })
 }
 
 fn primitive_ink_bounds(primitive: &Primitive, scale: f32, offset: (f32, f32)) -> Option<Rect> {
@@ -665,11 +716,9 @@ impl LayerMotionPlan {
         if !duration.is_finite() || !(0.001..=10.).contains(&duration) {
             return Ok(None);
         }
-        let closed_offset = motion.edge.closed_offset(
-            motion.slide_distance.unwrap_or(scene.bounds.w),
-            motion.slide_distance.unwrap_or(scene.bounds.h),
-            0.,
-        );
+        let Some(closed_offset) = closed_plane_offset(scene, opening) else {
+            return Ok(None);
+        };
         let (reveal, reveal_owned_indices) = if motion.reveal {
             if let Some(art) = motion.art.as_ref() {
                 if let Some(contour) = art.contour.as_ref() {
@@ -939,6 +988,180 @@ mod tests {
         assert_eq!(contour.radii_from, [6.; 4]);
         assert_eq!(contour.radii_to, [6.; 4]);
         assert_eq!(contour.mode, RevealMode::Visible);
+        Ok(())
+    }
+
+    #[test]
+    fn reveal_content_stays_put_without_a_slide_distance_at_sampled_scales() -> Result<()> {
+        for scale in [1., 1.5] {
+            let mut stationary = scene(true, false);
+            stationary.motion.as_mut().unwrap().slide_distance = None;
+            let mut renderer = TreeCpuRenderer::default();
+            let plan = LayerMotionPlan::for_slide(
+                &stationary,
+                true,
+                96,
+                72,
+                scale,
+                PixelFormat::Rgba,
+                &mut renderer,
+            )?
+            .expect("representable stationary reveal");
+            let plane = &plan.planes[0];
+            assert_eq!(plane.from.destination, Rect::new(0., 0., 96., 72.));
+            assert_eq!(plane.to.destination, Rect::new(0., 0., 96., 72.));
+            for t in [0., 0.25, 0.5, 0.75, 1.] {
+                let y = plane.from.destination.y
+                    + (plane.to.destination.y - plane.from.destination.y) * t;
+                assert_eq!(y, 0., "reveal content moved at t={t} scale={scale}");
+            }
+
+            let mut translated = scene(true, false);
+            translated.motion.as_mut().unwrap().slide_distance = Some(32.);
+            let mut renderer = TreeCpuRenderer::default();
+            let plan = LayerMotionPlan::for_slide(
+                &translated,
+                true,
+                96,
+                72,
+                scale,
+                PixelFormat::Rgba,
+                &mut renderer,
+            )?
+            .expect("representable explicitly translated reveal");
+            let plane = &plan.planes[0];
+            assert_eq!(plane.from.destination, Rect::new(0., 32., 96., 72.));
+            assert_eq!(plane.to.destination, Rect::new(0., 0., 96., 72.));
+            assert_eq!(
+                plane.from.destination.y * 0.5 + plane.to.destination.y * 0.5,
+                16.
+            );
+
+            let mut whole_scene_close = stationary.clone();
+            whole_scene_close.motion.as_mut().unwrap().open = false;
+            let mut renderer = TreeCpuRenderer::default();
+            let plan = LayerMotionPlan::for_slide(
+                &whole_scene_close,
+                false,
+                96,
+                72,
+                scale,
+                PixelFormat::Rgba,
+                &mut renderer,
+            )?
+            .expect("whole-scene close retains its default extent");
+            assert_eq!(plan.planes[0].from.destination, Rect::new(0., 0., 96., 72.));
+            assert_eq!(plan.planes[0].to.destination, Rect::new(0., 72., 96., 72.));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn reveal_validation_rejects_unsupported_shadow_and_degenerate_visible_rim() -> Result<()> {
+        let mut renderer = TreeCpuRenderer::default();
+        let plan = LayerMotionPlan::for_slide(
+            &scene(true, false),
+            true,
+            96,
+            72,
+            1.,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )?
+        .expect("representable reveal");
+        let mut contour = plan.reveal.expect("contour");
+        contour.shadow = Some(RevealShadow {
+            color: [0, 0, 0, 82],
+            blur: 8.,
+            spread: 0.,
+            offset: (0., 2.),
+        });
+        assert!(contour.valid());
+
+        contour.static_rects.push(Rect::new(0., 0., 1., 1.));
+        assert!(!contour.valid());
+        contour.static_rects.clear();
+        contour.holes.push(Rect::new(0., 0., 1., 1.));
+        assert!(!contour.valid());
+        contour.holes.clear();
+        contour.corner_mode = RevealCornerMode::QuadraticCut;
+        assert!(!contour.valid());
+        contour.corner_mode = RevealCornerMode::Circular;
+        contour.shadow = None;
+        contour.static_rects.push(Rect::new(0., 0., 0., 1.));
+        assert!(!contour.valid());
+        contour.static_rects.clear();
+        contour.holes.push(Rect::new(0., 0., 1., 0.));
+        assert!(!contour.valid());
+        contour.holes.clear();
+        contour.output_bounds.w = 0.;
+        assert!(!contour.valid());
+        contour.output_bounds.w = 96.;
+        contour.crop.h = 0.;
+        assert!(!contour.valid());
+        contour.crop.h = 72.;
+
+        contour.rim = Some(RevealRim {
+            colors: [[255; 4]; 3],
+            stops: [0., 0.5, 1.],
+            start: (1., 1.),
+            end: (1., 1.),
+            width: 1.,
+            opacity: 0.5,
+        });
+        assert!(!contour.valid());
+        contour.rim.as_mut().unwrap().opacity = 0.;
+        assert!(contour.valid());
+        Ok(())
+    }
+
+    #[test]
+    fn stationary_reveal_ignores_overflow_owned_by_its_contour() -> Result<()> {
+        let mut overflow = scene(true, false);
+        let Primitive::Rounded { rect, .. } = &mut overflow.primitives[0] else {
+            unreachable!();
+        };
+        *rect = Rect::new(8., -8., 80., 56.);
+        overflow.motion.as_mut().unwrap().slide_distance = None;
+        assert!(motion_atlas_ink_is_safe(
+            &overflow,
+            true,
+            96,
+            72,
+            1.,
+            (0., 0.)
+        ));
+        let mut renderer = TreeCpuRenderer::default();
+        let plan = LayerMotionPlan::for_slide(
+            &overflow,
+            true,
+            96,
+            72,
+            1.,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )?
+        .expect("stationary reveal does not translate clipped contour ink");
+        assert_eq!(plan.planes[0].from.destination.y, 0.);
+
+        overflow.motion.as_mut().unwrap().slide_distance = Some(32.);
+        assert!(!motion_atlas_ink_is_safe(
+            &overflow,
+            true,
+            96,
+            72,
+            1.,
+            (0., 0.)
+        ));
+        overflow.motion.as_mut().unwrap().slide_distance = None;
+        assert!(!motion_atlas_ink_is_safe(
+            &overflow,
+            false,
+            96,
+            72,
+            1.,
+            (0., 0.)
+        ));
         Ok(())
     }
 

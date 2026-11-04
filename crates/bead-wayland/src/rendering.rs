@@ -2042,27 +2042,15 @@ impl App {
             let layer_motion_ink_safe = layer_motion_transport_eligible
                 && layer_motion_pose_eligible
                 && !layer_motion_reuses_atlas
-                && scene.motion.as_ref().is_some_and(|motion| {
-                    let closed_offset = motion.edge.closed_offset(
-                        motion.slide_distance.unwrap_or(scene.bounds.w),
-                        motion.slide_distance.unwrap_or(scene.bounds.h),
-                        0.,
-                    );
-                    bead_render::layer_motion::scene_ink_bounds(scene, scale, resting_offset)
-                        .is_some_and(|ink_bounds| {
-                            bead_render::layer_motion::motion_atlas_viewport(
-                                render_size.0,
-                                render_size.1,
-                                scale,
-                            )
-                            .is_some_and(|viewport| {
-                                bead_render::layer_motion::translation_preserves_clip(
-                                    ink_bounds,
-                                    viewport,
-                                    closed_offset,
-                                )
-                            })
-                        })
+                && layer_motion_opening.is_some_and(|opening| {
+                    bead_render::layer_motion::motion_atlas_ink_is_safe(
+                        scene,
+                        opening,
+                        render_size.0,
+                        render_size.1,
+                        scale,
+                        resting_offset,
+                    )
                 });
             let layer_motion_candidate = layer_motion_transport_eligible
                 && layer_motion_pose_eligible

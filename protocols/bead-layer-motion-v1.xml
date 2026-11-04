@@ -163,6 +163,8 @@
       <description summary="Set root-local output and crop bounds for reveal rendering">
         Coordinates and extents outside the inclusive logical range -32768 to
         32768 are invalid and must be rejected by the client before sending.
+        Output and crop bounds may be disabled with both extents zero; otherwise
+        both width and height must be positive.
       </description>
       <arg name="output_x" type="fixed"/><arg name="output_y" type="fixed"/>
       <arg name="output_width" type="fixed"/><arg name="output_height" type="fixed"/>
@@ -176,6 +178,8 @@
         shared curve. square_edges bits are left=1, top=2, right=4, bottom=8.
         RGBA is unpremultiplied sRGB packed as 0xRRGGBBAA. Fill, rim, and
         shadow alpha follow the sampled opacity of opacity_plane.
+        Clients must not pair a shadow with static rectangles, holes, or the
+        quadratic-cut corner mode; that combination is unsupported.
       </description>
       <arg name="from_x" type="fixed"/><arg name="from_y" type="fixed"/>
       <arg name="from_width" type="fixed"/><arg name="from_height" type="fixed"/>
@@ -204,14 +208,17 @@
       <description summary="Set fixed contour rectangles and even-odd holes">
         Each array contains at most 16 x/y/width/height tuples, each encoded
         as four native-endian signed 24.8 wl_fixed integers (16 bytes). Length
-        must be a multiple of 16 before any element is decoded.
+        must be a multiple of 16 before any element is decoded. Every rectangle
+        and hole must have positive width and height; zero-area entries are invalid.
       </description>
       <arg name="static_rects" type="array"/><arg name="holes" type="array"/>
     </request>
     <request name="set_reveal_rim" since="2">
       <description summary="Set a constant three-stop compositor-rendered rim gradient">
         Colors are unpremultiplied sRGB packed 0xRRGGBBAA. Stops are normalized
-        gradient positions. Geometry is in root-local logical units.
+        gradient positions. Geometry is in root-local logical units. A visible
+        rim with nonzero width and opacity requires distinct start and end
+        points; zero-width or zero-opacity rims may use a degenerate vector.
       </description>
       <arg name="color_0" type="uint"/><arg name="color_1" type="uint"/>
       <arg name="color_2" type="uint"/><arg name="stop_0" type="fixed"/>
@@ -224,7 +231,9 @@
       <description summary="Set optional compositor-rendered reveal shadow">
         RGBA is unpremultiplied sRGB packed as 0xRRGGBBAA. Blur, spread and
         offsets use root-local logical surface units. The shadow follows the
-        contour's sampled per-corner radii throughout the timeline.
+        contour's sampled per-corner radii throughout the timeline. Clients
+        may send it only for a circular animated rounded rectangle with no
+        static rectangles or holes.
       </description>
       <arg name="rgba" type="uint"/><arg name="blur" type="fixed"/>
       <arg name="spread" type="fixed"/><arg name="offset_x" type="fixed"/>
