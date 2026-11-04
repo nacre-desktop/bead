@@ -40,7 +40,7 @@ pub enum ExternalEdgePhase {
 
 /// Cloneable bridge between a host edge adapter and Bead's Wayland event loop.
 #[derive(Clone)]
-pub struct ExternalEdgeCueChannel(Arc<Mutex<Option<calloop::channel::Receiver<ExternalEdgeCue>>>>);
+pub struct ExternalEdgeCueChannel(Arc<Mutex<Option<calloop::channel::Channel<ExternalEdgeCue>>>>);
 
 /// Cloneable handle that sends cues into the channel passed in [`Options`].
 #[derive(Clone)]
@@ -56,14 +56,14 @@ impl ExternalEdgeCueChannel {
     }
     /// Take the one receiver owned by this channel. This supports alternate event loops and
     /// integration tests; production runtime calls it once when it starts.
-    pub fn take_receiver(&self) -> Option<calloop::channel::Receiver<ExternalEdgeCue>> {
+    pub fn take_receiver(&self) -> Option<calloop::channel::Channel<ExternalEdgeCue>> {
         self.0.lock().ok()?.take()
     }
 }
 impl ExternalEdgeCueSender {
     /// Send one pre-dwell or terminal edge cue into Bead's event loop.
     pub fn send(&self, cue: ExternalEdgeCue) -> Result<(), ExternalEdgeCue> {
-        self.0.send(cue).map_err(|error| error.into_inner())
+        self.0.send(cue).map_err(|error| error.0)
     }
 }
 
@@ -1495,6 +1495,26 @@ mod tests {
             "EOF already released the active hover"
         );
         assert!(tracker.latched.is_none());
+    }
+
+    #[test]
+    fn external_cue_channel_delivers_messages_and_reports_sender_eof() {
+        let (sender, channel) = ExternalEdgeCueChannel::new();
+        let receiver = channel.take_receiver().expect("single channel receiver");
+        let cue = ExternalEdgeCue {
+            output: "DP-1".into(),
+            edge: Edge::Top,
+            position: (120., 4.),
+            progress: 0.25,
+            phase: ExternalEdgePhase::Hover,
+        };
+        sender.send(cue.clone()).unwrap();
+        assert_eq!(receiver.try_recv().unwrap(), cue);
+        drop(sender);
+        assert!(
+            receiver.try_recv().is_err(),
+            "sender drop closes the cue stream"
+        );
     }
 
     #[test]
