@@ -8,7 +8,7 @@ use bead_render::{
     layer_motion::{LayerMotionPlan, PlaneState},
 };
 use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop, globals::GlobalList};
+use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, delegate_noop, globals::GlobalList};
 
 use crate::{
     layer_motion_protocol::bead_layer_motion_manager_v1::BeadLayerMotionManagerV1,
@@ -37,7 +37,11 @@ struct DispatchData {
 impl LayerMotionManager {
     /// Bind the protocol when the compositor advertises it.
     pub(crate) fn bind(globals: &GlobalList, qh: &QueueHandle<App>) -> Option<Self> {
-        globals.bind(qh, 1..=1, ()).ok().map(Self)
+        globals.bind(qh, 1..=2, ()).ok().map(Self)
+    }
+
+    pub(crate) fn supports_reveal(&self) -> bool {
+        self.0.version() >= 2
     }
 
     /// Create a controller associated with a layer-role surface.
@@ -86,6 +90,9 @@ impl LayerMotionController {
                     .is_some_and(|source| *source != plane.source)
             })
         {
+            return None;
+        }
+        if plan.reveal.is_some() && self.proxy.version() < 2 {
             return None;
         }
         for plane in &plan.planes {
@@ -146,6 +153,127 @@ impl LayerMotionController {
                 ),
             };
             self.proxy.set_plane_opacity_mode(plane.id, mode, threshold);
+        }
+        if self.proxy.version() >= 2 {
+            if let Some(contour) = &plan.reveal {
+            let mut static_rects = Vec::with_capacity(contour.static_rects.len() * 16);
+            for rect in &contour.static_rects {
+                encode_rect(&mut static_rects, *rect);
+            }
+            let mut holes = Vec::with_capacity(contour.holes.len() * 16);
+            for rect in &contour.holes {
+                encode_rect(&mut holes, *rect);
+            }
+            let [from_tl, from_tr, from_br, from_bl] = contour.radii_from;
+            let [to_tl, to_tr, to_br, to_bl] = contour.radii_to;
+            let corner_mode = match contour.corner_mode {
+                bead_render::layer_motion::RevealCornerMode::Circular => {
+                    bead_layer_motion_v1::CornerMode::Circular
+                }
+                bead_render::layer_motion::RevealCornerMode::QuadraticCut => {
+                    bead_layer_motion_v1::CornerMode::QuadraticCut
+                }
+            };
+            self.proxy.set_reveal_bounds(
+                contour.output_bounds.x as f64,
+                contour.output_bounds.y as f64,
+                contour.output_bounds.w as f64,
+                contour.output_bounds.h as f64,
+                contour.crop.x as f64,
+                contour.crop.y as f64,
+                contour.crop.w as f64,
+                contour.crop.h as f64,
+            );
+            self.proxy.set_reveal_geometry(
+                contour.animated_from.x as f64,
+                contour.animated_from.y as f64,
+                contour.animated_from.w as f64,
+                contour.animated_from.h as f64,
+                contour.animated_to.x as f64,
+                contour.animated_to.y as f64,
+                contour.animated_to.w as f64,
+                contour.animated_to.h as f64,
+                from_tl as f64,
+                from_tr as f64,
+                from_br as f64,
+                from_bl as f64,
+                to_tl as f64,
+                to_tr as f64,
+                to_br as f64,
+                to_bl as f64,
+                corner_mode,
+                contour.square_edges,
+                pack_rgba(contour.fill),
+                contour.opacity_plane,
+            );
+            self.proxy.set_reveal_content_clip(
+                contour.content_clip_from.x as f64,
+                contour.content_clip_from.y as f64,
+                contour.content_clip_from.w as f64,
+                contour.content_clip_from.h as f64,
+                contour.content_clip_to.x as f64,
+                contour.content_clip_to.y as f64,
+                contour.content_clip_to.w as f64,
+                contour.content_clip_to.h as f64,
+            );
+            self.proxy.set_reveal_rects(static_rects, holes);
+                if let Some(rim) = contour.rim {
+                    self.proxy.set_reveal_rim(
+                    pack_rgba(rim.colors[0]),
+                    pack_rgba(rim.colors[1]),
+                    pack_rgba(rim.colors[2]),
+                    rim.stops[0] as f64,
+                    rim.stops[1] as f64,
+                    rim.stops[2] as f64,
+                    rim.start.0 as f64,
+                    rim.start.1 as f64,
+                    rim.end.0 as f64,
+                    rim.end.1 as f64,
+                    rim.width as f64,
+                    rim.opacity as f64,
+                    );
+                } else {
+                    self.proxy.set_reveal_rim(
+                        0,
+                        0,
+                        0,
+                        0.,
+                        1.,
+                        1.,
+                        0.,
+                        0.,
+                        0.,
+                        0.,
+                        0.,
+                        0.,
+                    );
+                }
+                if let Some(shadow) = contour.shadow {
+                    self.proxy.set_reveal_shadow(
+                    pack_rgba(shadow.color),
+                    shadow.blur as f64,
+                    shadow.spread as f64,
+                    shadow.offset.0 as f64,
+                    shadow.offset.1 as f64,
+                    );
+                } else {
+                    self.proxy.set_reveal_shadow(0, 0., 0., 0., 0.);
+                }
+            } else {
+                self.proxy.set_reveal_bounds(0., 0., 0., 0., 0., 0., 0., 0.);
+                self.proxy.set_reveal_geometry(
+                    0., 0., 0., 0., 0., 0., 0., 0.,
+                    0., 0., 0., 0., 0., 0., 0., 0.,
+                    bead_layer_motion_v1::CornerMode::Circular,
+                    0,
+                    0,
+                    0,
+                );
+                self.proxy.set_reveal_content_clip(0., 0., 0., 0., 0., 0., 0., 0.);
+                self.proxy.set_reveal_rects(Vec::new(), Vec::new());
+                self.proxy.set_reveal_rim(0, 0, 0, 0., 1., 1., 0., 0., 0., 0., 0., 0.);
+                self.proxy.set_reveal_shadow(0, 0., 0., 0., 0.);
+            }
         }
         let curve = match plan.curve {
             bead_core::animation::Curve::EaseOut => bead_layer_motion_v1::Curve::EaseOutCubic,
@@ -211,6 +339,17 @@ impl LayerMotionController {
                 .expect("motion event lock poisoned"),
         )
     }
+}
+
+fn encode_rect(bytes: &mut Vec<u8>, rect: Rect) {
+    for value in [rect.x, rect.y, rect.w, rect.h] {
+        let fixed = (f64::from(value) * 256.).round() as i32;
+        bytes.extend_from_slice(&fixed.to_ne_bytes());
+    }
+}
+
+fn pack_rgba(color: [u8; 4]) -> u32 {
+    u32::from_be_bytes(color)
 }
 
 impl Drop for LayerMotionController {
@@ -311,6 +450,10 @@ impl Dispatch<BeadLayerMotionV1, Arc<DispatchData>> for App {
                 state.surfaces[index].layer_motion_open,
                 target_open,
                 target_motion.is_some_and(|motion| motion.reveal),
+                state.surfaces[index]
+                    .layer_motion_plan
+                    .as_ref()
+                    .is_some_and(|plan| plan.reveal.is_some()),
             );
             if cpu_reveal_handoff {
                 if let Some(motion) = state.surfaces[index].layer_motion.as_mut() {

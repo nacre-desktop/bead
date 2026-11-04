@@ -2,6 +2,24 @@
 //! Per-surface rendering, GPU staging and idle release.
 use super::*;
 
+fn layer_motion_renderer_supported(kind: RendererKind) -> bool {
+    matches!(kind, RendererKind::Cpu | RendererKind::FemtovgGl)
+}
+
+#[cfg(test)]
+mod layer_motion_renderer_tests {
+    use super::layer_motion_renderer_supported;
+    use bead_render::RendererKind;
+
+    #[test]
+    fn cpu_and_native_gl_can_submit_compositor_motion_atlases() {
+        assert!(layer_motion_renderer_supported(RendererKind::Cpu));
+        assert!(layer_motion_renderer_supported(RendererKind::FemtovgGl));
+        assert!(!layer_motion_renderer_supported(RendererKind::Femtovg));
+        assert!(!layer_motion_renderer_supported(RendererKind::Vello));
+    }
+}
+
 fn layer_motion_handoff_eligible(
     opening: bool,
     sampled_progress: Option<f32>,
@@ -22,8 +40,17 @@ fn layer_motion_reveal_reversal_uses_cpu(
     reveal: bool,
     target_changed: bool,
     compositor_owns_timeline: bool,
+    compositor_has_contour: bool,
 ) -> bool {
-    opening && reveal && target_changed && compositor_owns_timeline
+    opening && reveal && target_changed && compositor_owns_timeline && !compositor_has_contour
+}
+
+fn reveal_contour_capable(scene: &Scene, manager: Option<&crate::layer_motion::LayerMotionManager>) -> bool {
+    let Some(motion) = scene.motion.as_ref().filter(|motion| motion.reveal) else {
+        return true;
+    };
+    manager.is_some_and(crate::layer_motion::LayerMotionManager::supports_reveal)
+        && (motion.art.as_ref().is_none_or(|art| art.contour.is_some()))
 }
 
 fn layer_motion_cpu_replacement_pending(
@@ -38,11 +65,13 @@ pub(super) fn layer_motion_completion_uses_cpu_reveal(
     completed_target_open: Option<bool>,
     current_target_open: bool,
     current_target_reveals: bool,
+    compositor_has_contour: bool,
 ) -> bool {
     completed
         && completed_target_open == Some(false)
         && current_target_open
         && current_target_reveals
+        && !compositor_has_contour
 }
 
 fn copy_layer_motion_pixels(target: &mut [u8], pixels: &[u8]) -> bool {
@@ -1647,12 +1676,19 @@ impl App {
                 && !bead_core::animation::reduced_motion()
                 && !self.options.background_blur
                 && self.companion.as_ref().is_some_and(|(scene, _, kind)| {
-                    *kind == RendererKind::Cpu
+                    layer_motion_renderer_supported(*kind)
                         && scene.slide.is_none()
                         && scene
                             .motion
                             .as_ref()
-                            .is_some_and(|motion| !self.panel_target || !motion.reveal)
+                            .is_some_and(|motion| {
+                                !self.panel_target
+                                    || !motion.reveal
+                                    || reveal_contour_capable(
+                                        scene,
+                                        self.layer_motion_manager.as_ref(),
+                                    )
+                            })
                 });
             if s.configured
                 && !s.callbacks.pending
@@ -1950,6 +1986,9 @@ impl App {
                             motion.reveal,
                             layer_motion_target_changed,
                             s.layer_motion_active,
+                            s.layer_motion_plan
+                                .as_ref()
+                                .is_some_and(|plan| plan.reveal.is_some()),
                         )
                     })
                 });
@@ -1957,7 +1996,7 @@ impl App {
                 scene.offset.0 - layer_motion_pose.0,
                 scene.offset.1 - layer_motion_pose.1,
             );
-            let layer_motion_transport_eligible = _kind == RendererKind::Cpu
+            let layer_motion_transport_eligible = layer_motion_renderer_supported(_kind)
                 && s.native.is_none()
                 && !s.layer_promoted
                 && !command_promotion_pending
@@ -1979,7 +2018,7 @@ impl App {
                     layer_motion_opening.is_some_and(|opening| {
                         !opening
                             || !motion.reveal
-                            || layer_motion_target_changed && s.layer_motion_plan.is_some()
+                            || reveal_contour_capable(scene, self.layer_motion_manager.as_ref())
                     })
                 });
             let layer_motion_reuses_atlas =
@@ -2175,8 +2214,7 @@ impl App {
                 s.frames += 1;
                 return Ok(());
             }
-            if _kind == RendererKind::Cpu
-                && layer_motion_active
+            if layer_motion_active
                 && let Some(opening) = layer_motion_opening
                 && let Some(mut source_scene) = layer_motion_source_scene
                 && s.native.is_none()
@@ -2192,6 +2230,16 @@ impl App {
                 // Panel presentation opacity starts from its complete resting
                 // pose; the compositor applies the configured opacity mode.
                 source_scene.opacity = 1.;
+                // Protocol atlases are SHM buffers even when the steady-state
+                // renderer draws directly into an EGL surface. Use Bead's
+                // deterministic CPU tree renderer for this one-time snapshot;
+                // the active timeline itself remains compositor-driven.
+                let mut atlas_renderer = bead_render::tree::TreeCpuRenderer::default();
+                let atlas_renderer: &mut dyn bead_render::Renderer = if _kind == RendererKind::Cpu {
+                    renderer.as_mut()
+                } else {
+                    &mut atlas_renderer
+                };
                 if let Some(mut plan) = bead_render::layer_motion::LayerMotionPlan::for_slide(
                     &source_scene,
                     opening,
@@ -2199,7 +2247,7 @@ impl App {
                     render_size.1,
                     scale,
                     format,
-                    renderer.as_mut(),
+                    atlas_renderer,
                 )? {
                     let changed_target =
                         s.layer_motion_active && s.layer_motion_open != Some(opening);

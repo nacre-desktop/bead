@@ -365,6 +365,9 @@ pub type RevealFrame = (Rect, std::sync::Arc<[u8]>);
 pub struct RevealArt {
     pub body: Rect,
     pub index: usize,
+    /// Optional exact compositor contour description. When absent, the frame
+    /// renderer continues to call `draw` for each animated reveal pose.
+    pub contour: Option<layer_motion::RevealContour>,
     /// `draw(revealed, crop)`: artwork for the revealed body; with `crop` (scene coordinates) exactly that
     /// rectangle is drawn (the pre-rasterised edge template), else the closure picks a trimmed crop.
     pub draw: std::sync::Arc<dyn Fn(Rect, Option<Rect>) -> RevealFrame + Send + Sync>,
@@ -765,8 +768,13 @@ impl Scene {
             .motion
             .as_ref()
             .filter(|m| m.reveal && m.open && m.progress < 1.)?;
+        self.reveal_window_at(m.progress)
+    }
+    /// Reveal clip for an explicit eased progress, including closed/open endpoints.
+    pub fn reveal_window_at(&self, progress: f32) -> Option<Rect> {
+        let m = self.motion.as_ref().filter(|m| m.reveal)?;
         let body = self.reveal_body()?;
-        let p = m.progress.clamp(0., 1.);
+        let p = progress.clamp(0., 1.);
         const M: f32 = 4096.;
         let (ix, iy) = m.edge.inward();
         Some(if iy > 0. {
