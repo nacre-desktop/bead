@@ -117,9 +117,7 @@ impl RevealContour {
     }
 
     pub fn valid(&self) -> bool {
-        let fixed_valid = |value: f32| {
-            value.is_finite() && (-32_768. ..=32_768.).contains(&value)
-        };
+        let fixed_valid = |value: f32| value.is_finite() && (-32_768. ..=32_768.).contains(&value);
         let rect_valid = |rect: Rect| {
             finite_rect(rect)
                 && [rect.x, rect.y, rect.w, rect.h]
@@ -144,7 +142,9 @@ impl RevealContour {
                 .all(|r| *r >= 0. && fixed_valid(*r))
             && self.square_edges & !0xf == 0
             && self.rim.is_none_or(|rim| {
-                rim.stops.iter().all(|v| v.is_finite() && (0. ..=1.).contains(v))
+                rim.stops
+                    .iter()
+                    .all(|v| v.is_finite() && (0. ..=1.).contains(v))
                     && rim.stops[0] <= rim.stops[1]
                     && rim.stops[1] <= rim.stops[2]
                     && [rim.start.0, rim.start.1, rim.end.0, rim.end.1]
@@ -197,9 +197,7 @@ fn inferred_reveal_contour(
                     radius,
                     fill,
                     border,
-                } if rect.w > 0. && rect.h > 0. => {
-                    Some((index, *rect, *radius, *fill, *border))
-                }
+                } if rect.w > 0. && rect.h > 0. => Some((index, *rect, *radius, *fill, *border)),
                 _ => None,
             });
         let body = rounded.next()?;
@@ -214,9 +212,9 @@ fn inferred_reveal_contour(
     let rounded_parts = motion
         .parts
         .iter()
-        .filter(|(_, primitive)| {
-            matches!(primitive, Primitive::Rounded { rect, .. } if *rect == body)
-        })
+        .filter(
+            |(_, primitive)| matches!(primitive, Primitive::Rounded { rect, .. } if *rect == body),
+        )
         .count();
     if !motion.parts.is_empty() && rounded_parts != 1 {
         return None;
@@ -235,47 +233,46 @@ fn inferred_reveal_contour(
         .parts
         .iter()
         .any(|(_, primitive)| matches!(primitive, Primitive::Shadow { .. }));
-    let shadow_part = motion.parts.iter().find_map(|(index, primitive)| match primitive {
-        Primitive::Shadow {
-            rect,
-            radius: shadow_radius,
-            blur,
-        } if blur.is_finite()
-            && *blur >= 0.
-            && shadow_radius.is_finite()
-            && (*shadow_radius - radius).abs() < 0.01 =>
-        {
-            let inset = blur * 3.;
-            let left = rect.x + inset - body.x;
-            let right = rect.x + rect.w - inset - (body.x + body.w);
-            let top = rect.y + inset - body.y;
-            let bottom = rect.y + rect.h - inset - (body.y + body.h);
-            let spread_x = (right - left) * 0.5;
-            let spread_y = (bottom - top) * 0.5;
-            if (spread_x - spread_y).abs() >= 0.01 {
-                return None;
+    let shadow_part = motion
+        .parts
+        .iter()
+        .find_map(|(index, primitive)| match primitive {
+            Primitive::Shadow {
+                rect,
+                radius: shadow_radius,
+                blur,
+            } if blur.is_finite()
+                && *blur >= 0.
+                && shadow_radius.is_finite()
+                && (*shadow_radius - radius).abs() < 0.01 =>
+            {
+                let inset = blur * 3.;
+                let left = rect.x + inset - body.x;
+                let right = rect.x + rect.w - inset - (body.x + body.w);
+                let top = rect.y + inset - body.y;
+                let bottom = rect.y + rect.h - inset - (body.y + body.h);
+                let spread_x = (right - left) * 0.5;
+                let spread_y = (bottom - top) * 0.5;
+                if (spread_x - spread_y).abs() >= 0.01 {
+                    return None;
+                }
+                Some((
+                    *index,
+                    RevealShadow {
+                        color: [0, 0, 0, 82],
+                        blur: *blur,
+                        spread: spread_x,
+                        offset: ((left + right) * 0.5, (top + bottom) * 0.5),
+                    },
+                ))
             }
-            Some((
-                *index,
-                RevealShadow {
-                    color: [0, 0, 0, 82],
-                    blur: *blur,
-                    spread: spread_x,
-                    offset: ((left + right) * 0.5, (top + bottom) * 0.5),
-                },
-            ))
-        }
-        _ => None,
-    });
+            _ => None,
+        });
     if has_shadow && shadow_part.is_none() {
         return None;
     }
     let shadow = shadow_part.map(|(_, shadow)| shadow);
-    let clip = |p| {
-        scene
-            .reveal_window_at(p)
-            .unwrap_or(output)
-    };
+    let clip = |p| scene.reveal_window_at(p).unwrap_or(output);
     Some(RevealContour {
         output_bounds: output,
         crop: output,
@@ -968,14 +965,10 @@ mod tests {
         assert_eq!(contour.content_clip_from, opening_clip_to);
         assert_eq!(contour.content_clip_to, opening_clip_from);
         let opening_retarget_sample = Rect::new(
-            contour.animated_from.x
-                + (contour.animated_to.x - contour.animated_from.x) * 0.5,
-            contour.animated_from.y
-                + (contour.animated_to.y - contour.animated_from.y) * 0.5,
-            contour.animated_from.w
-                + (contour.animated_to.w - contour.animated_from.w) * 0.5,
-            contour.animated_from.h
-                + (contour.animated_to.h - contour.animated_from.h) * 0.5,
+            contour.animated_from.x + (contour.animated_to.x - contour.animated_from.x) * 0.5,
+            contour.animated_from.y + (contour.animated_to.y - contour.animated_from.y) * 0.5,
+            contour.animated_from.w + (contour.animated_to.w - contour.animated_from.w) * 0.5,
+            contour.animated_from.h + (contour.animated_to.h - contour.animated_from.h) * 0.5,
         );
         assert_eq!(opening_retarget_sample, Rect::new(8., 36., 80., 28.));
         assert!(opening_retarget_sample.h < contour.animated_from.h);

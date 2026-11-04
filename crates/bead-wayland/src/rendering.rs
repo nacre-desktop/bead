@@ -62,7 +62,10 @@ fn layer_motion_reveal_reversal_uses_cpu(
     opening && reveal && target_changed && compositor_owns_timeline && !compositor_has_contour
 }
 
-pub(super) fn reveal_contour_capable(scene: &Scene, manager: Option<&crate::layer_motion::LayerMotionManager>) -> bool {
+pub(super) fn reveal_contour_capable(
+    scene: &Scene,
+    manager: Option<&crate::layer_motion::LayerMotionManager>,
+) -> bool {
     let Some(motion) = scene.motion.as_ref().filter(|motion| motion.reveal) else {
         return true;
     };
@@ -1699,17 +1702,11 @@ impl App {
                 && self.companion.as_ref().is_some_and(|(scene, _, kind)| {
                     layer_motion_renderer_supported(*kind)
                         && scene.slide.is_none()
-                        && scene
-                            .motion
-                            .as_ref()
-                            .is_some_and(|motion| {
-                                !self.panel_target
-                                    || !motion.reveal
-                                    || reveal_contour_capable(
-                                        scene,
-                                        self.layer_motion_manager.as_ref(),
-                                    )
-                            })
+                        && scene.motion.as_ref().is_some_and(|motion| {
+                            !self.panel_target
+                                || !motion.reveal
+                                || reveal_contour_capable(scene, self.layer_motion_manager.as_ref())
+                        })
                 });
             if s.configured
                 && !s.callbacks.pending
