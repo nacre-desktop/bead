@@ -271,6 +271,7 @@ pub(crate) struct Group {
     pub(crate) info: Option<Info>,
     reserved_pearl_id: Option<u32>,
     prewarm_attempted: bool,
+    promotion_pending: bool,
     surfaces: Vec<Surface>,
 }
 impl Group {
@@ -300,6 +301,7 @@ impl Group {
             info: None,
             reserved_pearl_id: None,
             prewarm_attempted: false,
+            promotion_pending: false,
             surfaces: Vec::new(),
         }
     }
@@ -343,6 +345,8 @@ pub(crate) struct Gesture {
     drag: Drag,
     /// The pearl the docked panel turned into, once it left the threshold.
     lifted: Option<u32>,
+    button_serial: u32,
+    native_move_started: bool,
 }
 
 impl App {
@@ -417,6 +421,7 @@ impl App {
         swap(&mut self.pearl, &mut g.info);
         swap(&mut self.reserved_pearl_id, &mut g.reserved_pearl_id);
         swap(&mut self.prewarm_attempted, &mut g.prewarm_attempted);
+        swap(&mut self.promotion_pending, &mut g.promotion_pending);
         let mine: Vec<Surface> = {
             let mut kept = Vec::new();
             let mut out = Vec::new();
@@ -684,11 +689,21 @@ impl App {
         if !self.pearls_on() {
             return Err("pearls are disabled".into());
         }
+        if policy::native_detach_path(
+            self.layer_promotion_manager.is_some(),
+            self.promotion_body_rect().is_some(),
+        ) == policy::NativeDetachPath::NotReady
+        {
+            return Err(
+                "compositor promotion requires a configured, rendered layer surface".into(),
+            );
+        }
         if self
             .options
             .pearls
             .as_ref()
             .is_some_and(|p| p.native.is_some())
+            && !self.compositor_promotion_enabled()
             && self.xdg.is_none()
         {
             return Err("native pearls require xdg-shell".into());
@@ -738,24 +753,43 @@ impl App {
         // full-output layer rather than leaving it mapped. Docking recreates it.
         drop(self.dismiss.take());
         self.panel_ui(UiEvent::PanelDetached(true));
-        if self.native_pearls_enabled() {
-            if native {
-                // Direct/API detaches do not share the gesture-lift timing window.
-                self.cancel_prepared_native();
-                if let Err(error) = self.promote_native_pearl() {
-                    eprintln!("PEARL_NATIVE_ERROR {error}");
+        if native {
+            match policy::command_promotion(
+                self.compositor_promotion_enabled(),
+                !self.promotion_pending && self.promotion_body_rect().is_some(),
+            ) {
+                policy::CommandPromotion::Immediate => {
+                    self.promote_layer_pearl(0, None);
                 }
-            } else if !self
+                policy::CommandPromotion::FirstConfiguredBuffer => {
+                    // Restored pearls have no mapped/ready source yet. Place
+                    // the existing layer role without a buffer and promote it
+                    // with its first content commit; never create an xdg target.
+                    self.promotion_pending = true;
+                    self.reposition_companions(true);
+                }
+                policy::CommandPromotion::LegacyXdg if self.native_pearls_enabled() => {
+                    self.cancel_prepared_native();
+                    if let Err(error) = self.promote_native_pearl() {
+                        eprintln!("PEARL_NATIVE_ERROR {error}");
+                    }
+                }
+                policy::CommandPromotion::LegacyXdg => {}
+            }
+        } else if self.native_pearls_enabled()
+            && !self.compositor_promotion_enabled()
+            && !self
                 .surfaces
                 .iter()
                 .any(|surface| surface.prepared_native.is_some())
-                && !self.prewarm_attempted
-                && let Err(error) = self.prepare_native_pearl()
-            {
-                eprintln!("PEARL_NATIVE_ERROR {error}");
-            }
+            && !self.prewarm_attempted
+            && let Err(error) = self.prepare_native_pearl()
+        {
+            eprintln!("PEARL_NATIVE_ERROR {error}");
         }
-        self.place_pearl_surfaces();
+        if !self.compositor_promotion_enabled() {
+            self.place_pearl_surfaces();
+        }
     }
     fn native_pearls_enabled(&self) -> bool {
         self.pearl.is_some_and(|info| info.kind == Kind::Pearl)
@@ -764,6 +798,66 @@ impl App {
                 .pearls
                 .as_ref()
                 .is_some_and(|options| options.native.is_some())
+    }
+    pub(super) fn compositor_promotion_enabled(&self) -> bool {
+        self.layer_promotion_manager.is_some()
+    }
+    fn promotion_body_rect(&self) -> Option<[i32; 4]> {
+        let surface = self
+            .surfaces
+            .iter()
+            .find(|surface| surface.companion && surface.layer_promotion.is_some())?;
+        if !surface.configured || !surface.ready || surface.frames == 0 {
+            return None;
+        }
+        self.companion
+            .as_ref()
+            .and_then(|(scene, _, _)| rendering::content_input_rect(scene))
+            .and_then(|body| {
+                rendering::clip_body_rect_to_surface(body, (surface.width, surface.height))
+            })
+    }
+    pub(super) fn clear_promotion_pending(&mut self) {
+        self.promotion_pending = false;
+    }
+    fn promote_layer_pearl(&mut self, button_serial: u32, seat: Option<&wl_seat::WlSeat>) {
+        let Some(index) = self
+            .surfaces
+            .iter()
+            .position(|surface| surface.companion && surface.layer_promotion.is_some())
+        else {
+            return;
+        };
+        let size = (self.surfaces[index].width, self.surfaces[index].height);
+        let Some(body) = self
+            .companion
+            .as_ref()
+            .and_then(|(scene, _, _)| rendering::content_input_rect(scene))
+            .and_then(|body| rendering::clip_body_rect_to_surface(body, size))
+        else {
+            return;
+        };
+        let surface = &mut self.surfaces[index];
+        surface.promotion_serial = surface.promotion_serial.wrapping_add(1).max(1);
+        let serial = surface.promotion_serial;
+        surface.promotion_state.stage_promote(serial);
+        surface.layer_promoted = true;
+        surface.promoted_body_origin = Some((body[0], body[1]));
+        surface.promoted_body_size = Some((body[2] as u32, body[3] as u32));
+        surface.layer_promotion.as_ref().unwrap().promote(
+            serial,
+            seat,
+            button_serial,
+            [
+                body[0] as f64,
+                body[1] as f64,
+                body[2] as f64,
+                body[3] as f64,
+            ],
+        );
+        // The request and current content share this root commit, making the
+        // compositor's role transition an atomic handoff of the existing buffer.
+        surface.commit();
     }
 
     /// Prepare a hidden native target after a valid drag press on this docked
@@ -1342,6 +1436,9 @@ impl App {
         self.in_slot(id, |app| {
             if let Some(info) = &mut app.pearl {
                 info.rect = rect;
+            }
+            if app.compositor_promotion_enabled() {
+                return;
             }
             app.reposition_companions(false);
             if !app
@@ -2099,6 +2196,50 @@ impl App {
     }
     /// Dock a pearl to the edge of `output` (its own when none).
     pub(super) fn dock_pearl(&mut self, id: u32, output: Option<&str>) -> Result<(), String> {
+        if self.pending_promotion_dock.is_some() {
+            return Err("a compositor dock request is already pending".into());
+        }
+        let stage = self
+            .in_slot(id, |app| {
+                let Some(surface) = app.surfaces.iter_mut().find(|surface| {
+                    surface.companion && surface.layer_promoted && surface.layer_promotion.is_some()
+                }) else {
+                    return layer_promote::DockStage::Rejected;
+                };
+                surface.promotion_serial = surface.promotion_serial.wrapping_add(1).max(1);
+                let stage = surface.promotion_state.stage_dock(surface.promotion_serial);
+                if stage == layer_promote::DockStage::SendNow {
+                    surface
+                        .layer_promotion
+                        .as_ref()
+                        .unwrap()
+                        .dock(surface.promotion_serial);
+                    surface.commit();
+                }
+                stage
+            })
+            .unwrap_or(layer_promote::DockStage::Rejected);
+        if stage != layer_promote::DockStage::Rejected {
+            self.pending_promotion_dock = Some((id, output.map(str::to_owned)));
+            return Ok(());
+        }
+        self.dock_pearl_local(id, output, false)
+    }
+
+    pub(super) fn dock_pearl_local(
+        &mut self,
+        id: u32,
+        output: Option<&str>,
+        preserve_surface: bool,
+    ) -> Result<(), String> {
+        self.in_slot(id, |app| app.clear_promotion_pending());
+        if self
+            .pending_promotion_dock
+            .as_ref()
+            .is_some_and(|(pending, _)| *pending == id)
+        {
+            self.pending_promotion_dock = None;
+        }
         let at = self
             .slots
             .iter()
@@ -2108,8 +2249,18 @@ impl App {
             .info
             .filter(|info| info.kind == Kind::Pearl)
             .map(|info| info.rect);
+        let promoted_output = self.slots[at]
+            .surfaces
+            .iter()
+            .find(|surface| surface.companion && surface.layer_promoted)
+            .map(|surface| surface.output_name.clone());
         let target = output
             .and_then(|n| self.output_named(n))
+            .or_else(|| {
+                promoted_output
+                    .as_deref()
+                    .and_then(|name| self.output_named(name))
+            })
             .or_else(|| self.slots[at].surfaces.first().map(|s| s.output.clone()))
             .ok_or("no output to dock to")?;
         let mut g = self.slots.remove(at);
@@ -2130,11 +2281,14 @@ impl App {
             .ok_or("pearl lost its view")?;
         self.panel_target = true;
         self.panel_center = None;
-        self.panel_dock_transition = dropped.map(|from| DockTransition {
-            from,
-            animation_id: format!("bead.pearl.dock.{id}"),
-            started: false,
-        });
+        self.panel_dock_transition = (!preserve_surface)
+            .then_some(dropped)
+            .flatten()
+            .map(|from| DockTransition {
+                from,
+                animation_id: format!("bead.pearl.dock.{id}"),
+                started: false,
+            });
         let moved = self.panel_output.as_ref() != Some(&target);
         // Native EGL/wgpu resources must retire before their xdg role. A fresh
         // layer surface also receives fresh idle timers and fractional state.
@@ -2142,7 +2296,8 @@ impl App {
             .surfaces
             .iter()
             .any(|s| s.companion && s.native.is_some());
-        if moved || native || (spec.keyboard_focus && self.dismiss.is_none()) {
+        if (moved || native || (spec.keyboard_focus && self.dismiss.is_none())) && !preserve_surface
+        {
             drop(self.dismiss.take());
             let (cover, primary) = self.surfaces.drain(..).partition(|s| s.companion);
             self.surfaces = primary;
@@ -2154,8 +2309,43 @@ impl App {
             let qh = self.qh.clone();
             self.add_output(&qh, target.clone());
         }
+        if preserve_surface && spec.keyboard_focus && self.dismiss.is_none() {
+            self.create_dismiss(&target)?;
+        }
+        if preserve_surface {
+            self.panel_output = Some(target.clone());
+            let output_name = self
+                .output
+                .info(&target)
+                .and_then(|info| info.name)
+                .unwrap_or_default();
+            for surface in self.surfaces.iter_mut().filter(|surface| surface.companion) {
+                surface.output = target.clone();
+                surface.output_name = output_name.clone();
+            }
+        }
         self.panel_ui(UiEvent::PanelDetached(false));
         self.panel_ui(UiEvent::PanelVisibility(true));
+        if preserve_surface
+            && let Some((width, height)) = self
+                .surfaces
+                .iter()
+                .find(|surface| surface.companion)
+                .map(|surface| {
+                    policy::panel_viewport_from_output(
+                        self.output
+                            .info(&surface.output)
+                            .and_then(|info| info.logical_size),
+                        (surface.width, surface.height),
+                    )
+                })
+            && self
+                .panel_runtime
+                .as_mut()
+                .is_some_and(|source| source.viewport(width, height))
+        {
+            self.panel_ui(UiEvent::Relayout);
+        }
         self.set_dismiss_enabled(
             self.panel_ready
                 && self
@@ -2172,6 +2362,14 @@ impl App {
         Ok(())
     }
     pub(super) fn close_pearl(&mut self, id: u32) -> Result<(), String> {
+        self.in_slot(id, |app| app.clear_promotion_pending());
+        if self
+            .pending_promotion_dock
+            .as_ref()
+            .is_some_and(|(pending, _)| *pending == id)
+        {
+            self.pending_promotion_dock = None;
+        }
         if self.gesture.as_ref().is_some_and(|g| g.lifted == Some(id)) {
             self.gesture = None;
             self.end_guides();
@@ -2346,6 +2544,7 @@ impl App {
             .pearls
             .as_ref()
             .is_some_and(|p| p.native.is_some())
+            && !self.compositor_promotion_enabled()
             && self.xdg.is_none()
         {
             return Err("native pearls require xdg-shell".into());
@@ -2396,6 +2595,9 @@ impl App {
         self.swap_group(&mut g);
         let started = self.start_panel(Some(&monitor.name), true);
         if started.is_ok() {
+            if self.compositor_promotion_enabled() {
+                self.promotion_pending = true;
+            }
             self.become_pearl(true);
         }
         self.swap_group(&mut g);
@@ -2482,6 +2684,7 @@ impl App {
         &mut self,
         surface: &wl_surface::WlSurface,
         local: (f64, f64),
+        button_serial: u32,
     ) -> bool {
         if !self.pearls_on()
             || self.gesture.is_some()
@@ -2504,9 +2707,12 @@ impl App {
             self.on_surface(surface, |app| {
                 let subject = app.gesture_subject(surface, local)?;
                 let docked_source = subject.1 == Source::Docked;
-                let _ = policy::prepare_native_for_drag_press(true, docked_source, || {
-                    app.prewarm_drag_target();
-                });
+                let _ = policy::prepare_legacy_native_for_drag_press(
+                    app.compositor_promotion_enabled(),
+                    true,
+                    docked_source,
+                    || app.prewarm_drag_target(),
+                );
                 Some(subject)
             })
         else {
@@ -2526,6 +2732,8 @@ impl App {
             surface: surface.clone(),
             drag,
             lifted,
+            button_serial,
+            native_move_started: false,
         });
         true
     }
@@ -2552,14 +2760,51 @@ impl App {
         if gesture.drag.ready && gesture.lifted.is_none() && gesture.drag.source == Source::Docked {
             // Pulled past the threshold: the panel itself comes along as a pearl.
             let body = gesture.drag.body;
+            let promoted = self.compositor_promotion_enabled();
             match self.detach_resident_with_role(body, false) {
-                Ok(id) => gesture.lifted = Some(id),
+                Ok(id) => {
+                    gesture.lifted = Some(id);
+                    if promoted {
+                        let seat = self.seat.seats().next();
+                        self.in_slot(id, |app| {
+                            app.promote_layer_pearl(gesture.button_serial, seat.as_ref())
+                        });
+                        gesture.native_move_started = true;
+                    }
+                }
                 Err(error) => {
                     eprintln!("PEARL_LIFT_ERROR {error}");
                     self.end_guides();
                     return;
                 }
             }
+        }
+        if gesture.drag.ready
+            && let Some(id) = gesture.lifted
+            && !gesture.native_move_started
+        {
+            let button_serial = gesture.button_serial;
+            let seat = self.seat.seats().next();
+            let moved = self
+                .in_slot(id, |app| {
+                    let Some(surface) = app
+                        .surfaces
+                        .iter_mut()
+                        .find(|surface| surface.companion && surface.layer_promoted)
+                    else {
+                        return false;
+                    };
+                    if let Some(seat) = seat.as_ref() {
+                        surface
+                            .layer_promotion
+                            .as_ref()
+                            .unwrap()
+                            .move_with_grab(seat, button_serial);
+                    }
+                    true
+                })
+                .unwrap_or(false);
+            gesture.native_move_started = moved;
         }
         if let Some(id) = gesture.lifted
             && gesture.drag.ready
@@ -2606,10 +2851,14 @@ impl App {
                 }
             }
             (Outcome::Detach { rect, .. } | Outcome::Moved { rect }, Some(id)) => {
-                let activated = self
-                    .in_slot(id, |app| app.activate_prepared_native(rect))
+                let compositor_promoted = self
+                    .in_slot(id, |app| app.compositor_promotion_enabled())
                     .unwrap_or(false);
-                if !activated {
+                let activated = !compositor_promoted
+                    && self
+                        .in_slot(id, |app| app.activate_prepared_native(rect))
+                        .unwrap_or(false);
+                if !activated && !compositor_promoted {
                     self.in_slot(id, |app| app.cancel_prepared_native());
                     self.move_pearl(id, rect);
                     self.in_slot(id, |app| {

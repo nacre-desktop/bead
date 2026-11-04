@@ -16,6 +16,8 @@ mod hidden;
 pub mod intent;
 mod layer_motion;
 mod layer_motion_protocol;
+mod layer_promote;
+mod layer_promote_protocol;
 mod layer_role;
 mod panel;
 mod panels;
@@ -35,6 +37,7 @@ mod rendering;
 mod report;
 mod runtime;
 use layer_motion::LayerMotionController;
+use layer_promote::LayerPromotionController;
 mod scroll;
 mod transactions;
 mod window;
@@ -895,6 +898,14 @@ struct Surface {
     output_name: String,
     layer: layer_role::LayerRole,
     layer_motion: Option<LayerMotionController>,
+    layer_promotion: Option<LayerPromotionController>,
+    layer_promoted: bool,
+    promotion_serial: u32,
+    promotion_state: layer_promote::PromotionState,
+    promoted_body_origin: Option<(i32, i32)>,
+    promoted_size: Option<(u32, u32)>,
+    promoted_body_size: Option<(u32, u32)>,
+    promotion_reset_motion: bool,
     layer_motion_active: bool,
     layer_motion_open: Option<bool>,
     layer_motion_plan: Option<bead_render::layer_motion::LayerMotionPlan>,
@@ -972,6 +983,20 @@ impl Surface {
     }
     /// Unmaps the layer role; it accepts buffers again only after a fresh configure.
     fn unmap_layer(&mut self) {
+        if self.layer_promoted {
+            if let Some(promotion) = &self.layer_promotion {
+                self.promotion_serial = self.promotion_serial.wrapping_add(1).max(1);
+                self.promotion_state.stage_cancel(self.promotion_serial);
+                promotion.cancel(self.promotion_serial);
+                self.layer.wl_surface().commit();
+            }
+            self.layer_promoted = false;
+            self.promoted_body_origin = None;
+            self.promoted_size = None;
+            self.promoted_body_size = None;
+            self.promotion_reset_motion = true;
+            self.promotion_state.invalidate();
+        }
         self.layer.unmap();
         if self.native.is_none() {
             self.configured = false;

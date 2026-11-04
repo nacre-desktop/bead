@@ -93,6 +93,7 @@ pub(super) struct App {
     pub(super) compositor: CompositorState,
     pub(super) layers: LayerShell,
     pub(super) layer_motion_manager: Option<crate::layer_motion::LayerMotionManager>,
+    pub(super) layer_promotion_manager: Option<crate::layer_promote::LayerPromotionManager>,
     pub(super) xdg: Option<smithay_client_toolkit::shell::xdg::XdgShell>,
     pub(super) window: Option<window::Win>,
     pub(super) window_epoch: u64,
@@ -133,6 +134,7 @@ pub(super) struct App {
     pub(super) pearl: Option<pearls::Info>,
     pub(super) reserved_pearl_id: Option<u32>,
     pub(super) prewarm_attempted: bool,
+    pub(super) promotion_pending: bool,
     pub(super) slots: Vec<pearls::Group>,
     pub(super) pearl_seq: u32,
     pub(super) epoch_seq: u64,
@@ -142,6 +144,7 @@ pub(super) struct App {
     pub(super) pending_pearls: Vec<bead_core::pearl::Entry>,
     pub(super) pearl_watch: Option<Box<dyn Send>>,
     pub(super) pearl_save_pending: bool,
+    pub(super) pending_promotion_dock: Option<(u32, Option<String>)>,
     pub(super) pearl_saved: Option<bead_core::pearl::Layout>,
 }
 
@@ -424,6 +427,7 @@ pub fn run_runtime(
         compositor: CompositorState::bind(&globals, &qh)?,
         layers: LayerShell::bind(&globals, &qh)?,
         layer_motion_manager: crate::layer_motion::LayerMotionManager::bind(&globals, &qh),
+        layer_promotion_manager: crate::layer_promote::LayerPromotionManager::bind(&globals, &qh),
         xdg: App::bind_xdg(&globals, &qh),
         window: None,
         window_epoch: 0,
@@ -460,6 +464,7 @@ pub fn run_runtime(
         pearl: None,
         reserved_pearl_id: None,
         prewarm_attempted: false,
+        promotion_pending: false,
         slots: Vec::new(),
         pearl_seq: 0,
         epoch_seq: 0,
@@ -469,6 +474,7 @@ pub fn run_runtime(
         pending_pearls: Vec::new(),
         pearl_watch: None,
         pearl_save_pending: false,
+        pending_promotion_dock: None,
         pearl_saved: None,
     };
     app.load_pearls();
@@ -2392,6 +2398,10 @@ impl App {
                 .layer_motion_manager
                 .as_ref()
                 .map(|manager| manager.create(layer.wl_surface(), qh));
+            let layer_promotion = self
+                .layer_promotion_manager
+                .as_ref()
+                .map(|manager| manager.create(layer.wl_surface(), qh));
             if companion {
                 self.position_panel_surface(&layer, &output, scene);
             }
@@ -2412,6 +2422,14 @@ impl App {
                 output_name: output_id.clone(),
                 layer,
                 layer_motion,
+                layer_promotion,
+                layer_promoted: false,
+                promotion_serial: 0,
+                promotion_state: Default::default(),
+                promoted_body_origin: None,
+                promoted_size: None,
+                promoted_body_size: None,
+                promotion_reset_motion: false,
                 layer_motion_active: false,
                 layer_motion_open: None,
                 layer_motion_plan: None,
