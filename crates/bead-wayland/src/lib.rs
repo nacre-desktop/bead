@@ -22,7 +22,10 @@ mod layer_role;
 mod panel;
 mod panels;
 mod pointer_motion;
-pub use edges::{EdgeArt, EdgeChrome, LipState};
+pub use edges::{
+    EdgeArt, EdgeChrome, ExternalEdgeCue, ExternalEdgeCueChannel, ExternalEdgeCueSender,
+    ExternalEdgePhase, LipState,
+};
 mod pearls;
 pub use panels::Panels;
 pub use pearls::{
@@ -789,6 +792,8 @@ pub struct Options {
     /// Optional product-owned wallpaper consumer; the framework owns passive surfaces.
     pub wallpaper: Option<std::sync::Arc<dyn WallpaperProvider>>,
     pub control: Option<std::sync::Arc<dyn ShellControl>>,
+    /// Optional pre-dwell cue stream from a host-owned edge trigger source.
+    pub external_edge_cues: Option<ExternalEdgeCueChannel>,
     /// B0090: leased per-window capture; the hub reports `supported()` once the compositor's
     /// image-copy-capture and foreign-toplevel globals are bound.
     pub capture: Option<std::sync::Arc<CaptureHub>>,
@@ -856,6 +861,7 @@ impl Default for Options {
             trace_state: false,
             wallpaper: None,
             control: None,
+            external_edge_cues: None,
             capture: None,
             palette_feed: None,
             window: None,

@@ -486,6 +486,14 @@ pub fn run_runtime(
             app.clipboard.seat(&seat, &qh);
         }
     }
+    if let Some(channel) = app.options.external_edge_cues.clone()
+        && let Some(receiver) = channel.take_receiver()
+    {
+        loop_.handle().insert_source(receiver, |event, _, app| match event {
+            calloop::channel::Event::Msg(cue) => app.external_edge_cue(cue),
+            calloop::channel::Event::Closed => app.external_edge_cues_closed(),
+        })?;
+    }
     println!(
         "START pid={} namespace={} damage={} direct_shm=true buffers_max=3",
         std::process::id(),
