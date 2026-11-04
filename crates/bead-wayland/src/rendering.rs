@@ -2340,6 +2340,56 @@ impl App {
                         wl_surface.set_buffer_scale((s.scale120 / 120) as i32);
                     }
                     s.buffers[slot].buffer.attach_to(&wl_surface)?;
+                    let terminal_buffer = if let Some(terminal) = plan.terminal.as_mut() {
+                        let pixels = terminal.take_pixels();
+                        let reusable = s.buffers.iter().enumerate().find_map(|(index, buffer)| {
+                            (index != slot
+                                && !buffer.buffer.slot().has_active_buffers()
+                                && buffer.buffer.height() == terminal.height as i32
+                                && buffer.buffer.stride() == terminal.stride as i32)
+                                .then_some(index)
+                        });
+                        let terminal_slot = if let Some(terminal_slot) = reusable {
+                            let target = s.buffers[terminal_slot]
+                                .buffer
+                                .canvas(&mut s.pool)
+                                .ok_or("terminal layer motion buffer is still compositor-owned")?;
+                            if !copy_layer_motion_pixels(target, &pixels) {
+                                return Err("reusable terminal layer motion slot is too small".into());
+                            }
+                            s.buffers[terminal_slot].buffer.activate()?;
+                            terminal_slot
+                        } else {
+                            let buffer_format = if terminal.format == PixelFormat::Rgba {
+                                wl_shm::Format::Abgr8888
+                            } else {
+                                wl_shm::Format::Argb8888
+                            };
+                            let (buffer, bytes) = s.pool.create_buffer(
+                                terminal.width as i32,
+                                terminal.height as i32,
+                                terminal.stride as i32,
+                                buffer_format,
+                            )?;
+                            if !copy_layer_motion_pixels(bytes, &pixels) {
+                                return Err("new terminal layer motion slot is too small".into());
+                            }
+                            buffer.activate()?;
+                            s.buffers.push(Reusable {
+                                buffer,
+                                pending: Vec::new(),
+                                painted: true,
+                            });
+                            s.buffers.len() - 1
+                        };
+                        Some(s.buffers[terminal_slot].buffer.wl_buffer().clone())
+                    } else {
+                        None
+                    };
+                    s.layer_motion.as_mut().unwrap().queue_terminal_buffer(
+                        terminal_buffer.as_ref(),
+                        render_size,
+                    );
                     wl_surface.damage_buffer(
                         0,
                         0,

@@ -669,12 +669,15 @@ pub struct LayerMotionPlan {
     pub curve: bead_core::animation::Curve,
     pub retarget: bool,
     pub atlas: PixelBuffer,
+    /// Immutable full-open pixels used at the completed visible-reveal endpoint.
+    pub terminal: Option<PixelBuffer>,
     pub planes: Vec<LayerMotionPlane>,
     pub reveal: Option<RevealContour>,
 }
 
 impl LayerMotionPlan {
-    /// Paint the complete open scene once for a whole-scene translation/fade.
+    /// Paint the compositor atlas and, for visible reveal openings, its full-open
+    /// terminal snapshot for a whole-scene translation/fade.
     /// `scene.offset` must be the resting open placement in this surface.
     /// `width` and `height` are the logical viewport destination; atlas dimensions
     /// are rounded up to physical pixels without changing that destination.
@@ -795,14 +798,27 @@ impl LayerMotionPlan {
         let Some(bytes) = (stride as usize).checked_mul(pixel_height as usize) else {
             return Ok(None);
         };
-        // One slide buffer, charged for its entire lifetime. Match the CPU
-        // composite size ceiling; this buffer is additional transient storage.
+        // Bound the combined slide and optional terminal buffers before either
+        // renderer paint starts. The terminal snapshot is only needed for a
+        // visible reveal opening.
         const LIMIT: usize = 64 * bead_core::cache::MIB;
-        if bytes > LIMIT {
+        let terminal_bytes = if opening
+            && reveal
+                .as_ref()
+                .is_some_and(|reveal| reveal.mode == RevealMode::Visible)
+        {
+            bytes
+        } else {
+            0
+        };
+        let combined_bytes = bytes
+            .checked_add(terminal_bytes)
+            .ok_or("layer motion buffer size overflow")?;
+        if combined_bytes > LIMIT {
             return Ok(None);
         }
         let budget = bead_core::cache::Budget::new("layer-motion-pixels", LIMIT);
-        let charge = budget.reserve(bytes)?;
+        let charge = budget.reserve(combined_bytes)?;
         let mut pixels = vec![0; bytes];
         let mut final_scene = scene.clone();
         final_scene.panel_offset(1., opening);
@@ -856,6 +872,38 @@ impl LayerMotionPlan {
             Damage::full(pixel_width, pixel_height),
         )?;
 
+        let terminal = if terminal_bytes > 0 {
+            let mut terminal_scene = scene.clone();
+            terminal_scene.panel_offset(1., true);
+            terminal_scene.prepared.clear();
+            terminal_scene.opacity = 1.;
+            terminal_scene.motion = None;
+            let mut terminal_pixels = vec![0; bytes];
+            renderer.prepare_on_ui(&terminal_scene, scale)?;
+            renderer.render(
+                &terminal_scene,
+                ShmTarget {
+                    bytes: &mut terminal_pixels,
+                    width: pixel_width,
+                    height: pixel_height,
+                    scale,
+                    format,
+                },
+                Damage::full(pixel_width, pixel_height),
+            )?;
+            Some(PixelBuffer {
+                width: pixel_width,
+                height: pixel_height,
+                stride,
+                scale,
+                format,
+                pixels: terminal_pixels,
+                _charge: charge.clone(),
+            })
+        } else {
+            None
+        };
+
         let source = Rect::new(0., 0., width as f32, height as f32);
         let resting = PlaneState {
             destination: source,
@@ -880,6 +928,7 @@ impl LayerMotionPlan {
                 pixels,
                 _charge: charge,
             },
+            terminal,
             planes: vec![LayerMotionPlane {
                 id: 0,
                 source,
@@ -1205,6 +1254,46 @@ mod tests {
         let center = ((36 * plan.atlas.width + 48) * 4) as usize;
         assert_eq!(plan.atlas.pixels[center..center + 4], [35, 80, 120, 255]);
         assert!(!plan.atlas.take_pixels().is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn visible_reveal_captures_the_full_open_terminal_image() -> Result<()> {
+        let mut renderer = TreeCpuRenderer::default();
+        let mut source = scene(true, false);
+        let plan = LayerMotionPlan::for_slide(
+            &source,
+            true,
+            96,
+            72,
+            1.,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )?
+        .expect("visible reveal plan");
+        let terminal = plan.terminal.expect("full-open terminal image");
+        source.panel_offset(1., true);
+        source.opacity = 1.;
+        let expected = paint_scene(&source, (0., 0.), 96, 72)?;
+        assert_eq!(terminal.pixels, expected);
+        assert_eq!(plan.atlas.width, terminal.width);
+        assert_eq!(plan.atlas.height, terminal.height);
+        Ok(())
+    }
+
+    #[test]
+    fn combined_reveal_buffers_over_the_limit_fall_back_before_paint() -> Result<()> {
+        let mut renderer = NoPaint;
+        assert!(LayerMotionPlan::for_slide(
+            &scene(true, false),
+            true,
+            4_000,
+            3_000,
+            1.,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )?
+        .is_none());
         Ok(())
     }
 

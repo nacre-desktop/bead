@@ -313,6 +313,24 @@ impl LayerMotionController {
         Some(serial)
     }
 
+    /// Queue or clear the immutable terminal snapshot in the same commit as
+    /// the plan. The caller owns allocation and keeps the SHM buffer alive.
+    pub(crate) fn queue_terminal_buffer(
+        &mut self,
+        buffer: Option<&wayland_client::protocol::wl_buffer::WlBuffer>,
+        logical_size: (u32, u32),
+    ) {
+        if self.proxy.version() >= 2 {
+            let (width, height) = if buffer.is_some() {
+                (logical_size.0 as f64, logical_size.1 as f64)
+            } else {
+                (0., 0.)
+            };
+            self.proxy
+                .set_reveal_terminal_buffer(buffer, width, height);
+        }
+    }
+
     /// Reset plane presentation atomically with the next wl_surface commit.
     /// The caller must first attach ordinary replacement content; keep this
     /// controller alive so later animations continue its serial sequence.
@@ -622,6 +640,21 @@ mod tests {
             ["plane_state", "done", "cancelled"],
             "version 1 event opcodes must not move"
         );
+        assert_eq!(
+            requests.last().map(String::as_str),
+            Some("set_reveal_terminal_buffer"),
+            "terminal buffer request must be appended after existing requests"
+        );
+        let terminal = controller
+            .split("<request name=\"set_reveal_terminal_buffer\"")
+            .nth(1)
+            .unwrap()
+            .split("</request>")
+            .next()
+            .unwrap();
+        assert!(terminal.contains(
+            "name=\"buffer\" type=\"object\" interface=\"wl_buffer\" allow-null=\"true\""
+        ));
         for request in controller.split("<request ").skip(1) {
             let request = request.split("</request>").next().unwrap();
             assert!(
@@ -660,6 +693,7 @@ mod tests {
         reveal_rects: AtomicUsize,
         reveal_rim: AtomicUsize,
         reveal_shadow: AtomicUsize,
+        terminal_buffer: AtomicUsize,
         reveal_mode: AtomicUsize,
         tracking_mode: AtomicUsize,
         request_order: Mutex<Vec<&'static str>>,
@@ -804,6 +838,16 @@ mod tests {
                         state.0.tracking_mode.fetch_add(1, Ordering::Relaxed);
                     }
                 }
+                ServerMotionRequest::SetRevealTerminalBuffer {
+                    buffer,
+                    width,
+                    height,
+                } => {
+                    assert!(buffer.is_none());
+                    assert_eq!((width, height), (0., 0.));
+                    state.0.terminal_buffer.fetch_add(1, Ordering::Relaxed);
+                    state.0.request_order.lock().unwrap().push("terminal");
+                }
                 _ => {}
             }
         }
@@ -920,6 +964,7 @@ mod tests {
         plan.atlas.take_pixels();
         assert_eq!(renderer.paints, 1);
         let mut controller = manager.create(&surface, &qh);
+        controller.queue_terminal_buffer(None, (0, 0));
         controller.queue(&plan).expect("one valid plane");
         surface.commit();
         connection.flush().expect("flush requests");
@@ -932,10 +977,12 @@ mod tests {
         assert_eq!(counts.commits.load(Ordering::Relaxed), 1);
         assert_eq!(counts.reveal_bounds.load(Ordering::Relaxed), 0);
         assert_eq!(counts.reveal_geometry.load(Ordering::Relaxed), 0);
+        assert_eq!(counts.terminal_buffer.load(Ordering::Relaxed), 0);
         for plane in &mut plan.planes {
             std::mem::swap(&mut plane.from, &mut plane.to);
         }
         plan.retarget = true;
+        controller.queue_terminal_buffer(None, (0, 0));
         controller.queue(&plan).expect("retarget same atlas");
         surface.commit();
         connection.flush().expect("flush retarget");
@@ -947,6 +994,7 @@ mod tests {
         assert_eq!(counts.plane_adds.load(Ordering::Relaxed), 1);
         assert_eq!(counts.animates.load(Ordering::Relaxed), 2);
         assert_eq!(counts.commits.load(Ordering::Relaxed), 2);
+        assert_eq!(counts.terminal_buffer.load(Ordering::Relaxed), 0);
         drop(controller);
         drop(surface);
         stop.store(true, Ordering::Relaxed);
@@ -1017,8 +1065,9 @@ mod tests {
             LayerMotionPlan::for_slide(&scene, true, 32, 32, 1., PixelFormat::Rgba, &mut renderer)
                 .expect("prepare reveal plan")
                 .expect("supported descriptor");
-        assert_eq!(renderer.paints, 1);
+        assert_eq!(renderer.paints, 2, "visible reveal captures atlas and endpoint");
         let mut controller = manager.create(&surface, &qh);
+        controller.queue_terminal_buffer(None, (0, 0));
         assert!(controller.queue(&plan).is_some());
         surface.commit();
         connection.flush().expect("flush reveal request");
@@ -1034,6 +1083,7 @@ mod tests {
         assert_eq!(counts.reveal_shadow.load(Ordering::Relaxed), 1);
         assert_eq!(counts.reveal_mode.load(Ordering::Relaxed), 1);
         assert_eq!(counts.tracking_mode.load(Ordering::Relaxed), 0);
+        assert_eq!(counts.terminal_buffer.load(Ordering::Relaxed), 1);
         assert_eq!(counts.animates.load(Ordering::Relaxed), 1);
 
         plan.reveal.as_mut().unwrap().rim.as_mut().unwrap().opacity = 0.16;
@@ -1046,11 +1096,12 @@ mod tests {
         while counts.animates.load(Ordering::Relaxed) < 2 && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(2));
         }
-        assert_eq!(renderer.paints, 1);
+        assert_eq!(renderer.paints, 2);
         assert_eq!(counts.plane_adds.load(Ordering::Relaxed), 1);
         assert_eq!(counts.reveal_rim.load(Ordering::Relaxed), 2);
         assert_eq!(counts.reveal_mode.load(Ordering::Relaxed), 2);
         assert_eq!(counts.animates.load(Ordering::Relaxed), 2);
+        assert_eq!(counts.terminal_buffer.load(Ordering::Relaxed), 1);
         assert_eq!(counts.tracking_mode.load(Ordering::Relaxed), 0);
         drop(controller);
         drop(surface);

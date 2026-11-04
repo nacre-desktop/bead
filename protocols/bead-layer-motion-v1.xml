@@ -248,6 +248,29 @@
       </description>
       <arg name="mode" type="uint" enum="reveal_mode"/>
     </request>
+    <request name="set_reveal_terminal_buffer" since="2">
+      <description summary="Set the immutable full-open snapshot for a visible reveal endpoint">
+        The buffer is copied from SHM ARGB8888 or ABGR8888 when the associated
+        wl_surface commit is applied. Pixels are premultiplied; physical width,
+        height and stride must be positive and copy bounds are checked. The
+        compositor sends wl_buffer.release after copying, and clients must not
+        mutate or reuse the buffer before release. Retained terminal data is
+        capped at 64 MiB combined with other retained motion pixels.
+
+        Width and height are positive logical surface dimensions within the
+        existing fixed-point limits. A null buffer clears the snapshot and
+        requires both dimensions to be zero. The request applies atomically
+        with the motion descriptor and atlas; stale serials do not install it.
+        The snapshot is used only when a visible reveal reaches eased progress
+        1, replacing the animated atlas and contour for that endpoint. Animated
+        frames continue using the atlas and contour. Reset, destruction, unmap,
+        tracking-only presentation, and non-reveal descriptors clear terminal
+        data; a new descriptor must replace or explicitly clear it.
+      </description>
+      <arg name="buffer" type="object" interface="wl_buffer" allow-null="true"/>
+      <arg name="width" type="fixed"/>
+      <arg name="height" type="fixed"/>
+    </request>
     <event name="plane_state">
       <description summary="Final committed state of one plane">
         Sent once for every plane before done or cancelled.
