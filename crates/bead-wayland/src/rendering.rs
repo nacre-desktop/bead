@@ -18,6 +18,23 @@ mod layer_motion_renderer_tests {
         assert!(!layer_motion_renderer_supported(RendererKind::Femtovg));
         assert!(!layer_motion_renderer_supported(RendererKind::Vello));
     }
+
+    #[test]
+    fn supported_reveal_reversals_keep_the_compositor_controller() {
+        assert!(!super::layer_motion_reveal_reversal_uses_cpu(
+            true, true, true, true, true
+        ));
+        assert!(super::layer_motion_reveal_reversal_uses_cpu(
+            true, true, true, true, false
+        ));
+        assert!(!super::layer_motion_completion_uses_cpu_reveal(
+            true,
+            Some(false),
+            true,
+            true,
+            true
+        ));
+    }
 }
 
 fn layer_motion_handoff_eligible(

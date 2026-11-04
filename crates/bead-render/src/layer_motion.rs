@@ -38,7 +38,6 @@ pub struct RevealRim {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RevealShadow {
     pub color: [u8; 4],
-    pub radius: f32,
     pub blur: f32,
     pub spread: f32,
     pub offset: (f32, f32),
@@ -75,24 +74,17 @@ pub struct RevealContour {
 }
 
 impl RevealContour {
-    /// Keep the contour at its complete opening pose during whole-scene exits.
-    /// Retargeting still samples the previously presented geometry.
-    pub fn resting_pose(&self) -> Self {
-        let mut contour = self.clone();
-        contour.animated_from = contour.animated_to;
-        contour.radii_from = contour.radii_to;
-        contour.content_clip_from = contour.content_clip_to;
-        contour
-    }
-
     /// Retain this contour's geometry for later retargeting while leaving the
     /// full-scene close atlas visually unchanged.
     pub fn tracking_only(&self) -> Self {
-        let mut contour = self.resting_pose();
+        let mut contour = self.clone();
+        contour.animated_from = self.animated_to;
+        contour.animated_to = self.animated_from;
+        contour.radii_from = self.radii_to;
+        contour.radii_to = self.radii_from;
+        contour.content_clip_from = self.content_clip_to;
+        contour.content_clip_to = self.content_clip_from;
         contour.mode = RevealMode::TrackingOnly;
-        contour.crop = contour.output_bounds;
-        contour.content_clip_from = contour.output_bounds;
-        contour.content_clip_to = contour.output_bounds;
         contour
     }
 
@@ -126,7 +118,7 @@ impl RevealContour {
 
     pub fn valid(&self) -> bool {
         let fixed_valid = |value: f32| {
-            value.is_finite() && (-8_388_608. ..=8_388_607.996).contains(&value)
+            value.is_finite() && (-32_768. ..=32_768.).contains(&value)
         };
         let rect_valid = |rect: Rect| {
             finite_rect(rect)
@@ -164,9 +156,7 @@ impl RevealContour {
                     && (0. ..=1.).contains(&rim.opacity)
             })
             && self.shadow.is_none_or(|shadow| {
-                shadow.radius.is_finite()
-                    && shadow.radius >= 0.
-                    && fixed_valid(shadow.blur)
+                fixed_valid(shadow.blur)
                     && shadow.blur >= 0.
                     && fixed_valid(shadow.spread)
                     && [shadow.offset.0, shadow.offset.1]
@@ -269,7 +259,6 @@ fn inferred_reveal_contour(
                 *index,
                 RevealShadow {
                     color: [0, 0, 0, 82],
-                    radius: *shadow_radius,
                     blur: *blur,
                     spread: spread_x,
                     offset: ((left + right) * 0.5, (top + bottom) * 0.5),
@@ -971,9 +960,25 @@ mod tests {
         .expect("whole-scene close plan");
         let contour = plan.reveal.as_ref().expect("latent contour state");
         assert_eq!(contour.mode, RevealMode::TrackingOnly);
-        assert_eq!(contour.animated_from, contour.animated_to);
-        assert_eq!(contour.content_clip_from, contour.output_bounds);
-        assert_eq!(contour.content_clip_to, contour.output_bounds);
+        assert_eq!(contour.animated_from, Rect::new(8., 8., 80., 56.));
+        assert_eq!(contour.animated_to, Rect::new(8., 64., 80., 0.));
+        let opening_scene = scene(true, false);
+        let opening_clip_from = opening_scene.reveal_window_at(0.).unwrap();
+        let opening_clip_to = opening_scene.reveal_window_at(1.).unwrap();
+        assert_eq!(contour.content_clip_from, opening_clip_to);
+        assert_eq!(contour.content_clip_to, opening_clip_from);
+        let opening_retarget_sample = Rect::new(
+            contour.animated_from.x
+                + (contour.animated_to.x - contour.animated_from.x) * 0.5,
+            contour.animated_from.y
+                + (contour.animated_to.y - contour.animated_from.y) * 0.5,
+            contour.animated_from.w
+                + (contour.animated_to.w - contour.animated_from.w) * 0.5,
+            contour.animated_from.h
+                + (contour.animated_to.h - contour.animated_from.h) * 0.5,
+        );
+        assert_eq!(opening_retarget_sample, Rect::new(8., 36., 80., 28.));
+        assert!(opening_retarget_sample.h < contour.animated_from.h);
         let center = ((36 * plan.atlas.width + 48) * 4) as usize;
         assert_eq!(plan.atlas.pixels[center..center + 4], [35, 80, 120, 255]);
         assert!(plan.atlas.take_pixels().len() > 0);

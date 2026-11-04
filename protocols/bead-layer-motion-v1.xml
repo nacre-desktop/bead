@@ -160,7 +160,10 @@
     </request>
     <!-- Version 2 requests stay after all version 1 requests to preserve opcodes. -->
     <request name="set_reveal_bounds" since="2">
-      <description summary="Set root-local output and crop bounds for reveal rendering"/>
+      <description summary="Set root-local output and crop bounds for reveal rendering">
+        Coordinates and extents outside the inclusive logical range -32768 to
+        32768 are invalid and must be rejected by the client before sending.
+      </description>
       <arg name="output_x" type="fixed"/><arg name="output_y" type="fixed"/>
       <arg name="output_width" type="fixed"/><arg name="output_height" type="fixed"/>
       <arg name="crop_x" type="fixed"/><arg name="crop_y" type="fixed"/>
@@ -220,18 +223,19 @@
     <request name="set_reveal_shadow" since="2">
       <description summary="Set optional compositor-rendered reveal shadow">
         RGBA is unpremultiplied sRGB packed as 0xRRGGBBAA. Blur, spread and
-        offsets use root-local logical surface units.
+        offsets use root-local logical surface units. The shadow follows the
+        contour's sampled per-corner radii throughout the timeline.
       </description>
-      <arg name="rgba" type="uint"/><arg name="radius" type="fixed"/>
-      <arg name="blur" type="fixed"/>
+      <arg name="rgba" type="uint"/><arg name="blur" type="fixed"/>
       <arg name="spread" type="fixed"/><arg name="offset_x" type="fixed"/>
       <arg name="offset_y" type="fixed"/>
     </request>
     <request name="set_reveal_mode" since="2">
       <description summary="Select visible contour rendering or invisible geometry tracking">
         Tracking-only mode preserves animated geometry and radii for retargeting,
-        but draws no contour, applies no contour mask, and imposes no hit-test
-        restriction. The independent content clip continues to apply.
+        and tracks content-clip endpoints, but draws no contour, applies no
+        contour mask or content clip, and imposes no hit-test restriction.
+        Whole-scene close atlases continue to use ordinary plane clipping.
       </description>
       <arg name="mode" type="uint" enum="reveal_mode"/>
     </request>

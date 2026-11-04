@@ -259,14 +259,13 @@ impl LayerMotionController {
                 if let Some(shadow) = contour.shadow {
                     self.proxy.set_reveal_shadow(
                         pack_rgba(shadow.color),
-                        shadow.radius as f64,
                         shadow.blur as f64,
                     shadow.spread as f64,
                     shadow.offset.0 as f64,
                     shadow.offset.1 as f64,
                     );
                 } else {
-                    self.proxy.set_reveal_shadow(0, 0., 0., 0., 0., 0.);
+                    self.proxy.set_reveal_shadow(0, 0., 0., 0., 0.);
                 }
             } else {
                 self.proxy.set_reveal_bounds(0., 0., 0., 0., 0., 0., 0., 0.);
@@ -283,7 +282,7 @@ impl LayerMotionController {
                 self.proxy.set_reveal_content_clip(0., 0., 0., 0., 0., 0., 0., 0.);
                 self.proxy.set_reveal_rects(Vec::new(), Vec::new());
                 self.proxy.set_reveal_rim(0, 0, 0, 0., 1., 1., 0., 0., 0., 0., 0., 0.);
-                self.proxy.set_reveal_shadow(0, 0., 0., 0., 0., 0.);
+                self.proxy.set_reveal_shadow(0, 0., 0., 0., 0.);
             }
         }
         let curve = match plan.curve {
@@ -584,6 +583,7 @@ mod tests {
         reveal_rim: AtomicUsize,
         reveal_shadow: AtomicUsize,
         reveal_mode: AtomicUsize,
+        tracking_mode: AtomicUsize,
         request_order: Mutex<Vec<&'static str>>,
     }
 
@@ -715,8 +715,16 @@ mod tests {
                 ServerMotionRequest::SetRevealShadow { .. } => {
                     state.0.reveal_shadow.fetch_add(1, Ordering::Relaxed);
                 }
-                ServerMotionRequest::SetRevealMode { .. } => {
+                ServerMotionRequest::SetRevealMode { mode } => {
                     state.0.reveal_mode.fetch_add(1, Ordering::Relaxed);
+                    if matches!(
+                        mode,
+                        wayland_server::WEnum::Value(
+                            crate::layer_motion_protocol::server::bead_layer_motion_v1::RevealMode::TrackingOnly
+                        )
+                    ) {
+                        state.0.tracking_mode.fetch_add(1, Ordering::Relaxed);
+                    }
                 }
                 _ => {}
             }
@@ -916,7 +924,6 @@ mod tests {
                 }),
                 shadow: Some(RevealShadow {
                     color: [0, 0, 0, 82],
-                    radius: 3.,
                     blur: 8.,
                     spread: 0.,
                     offset: (0., 2.),
@@ -955,6 +962,7 @@ mod tests {
         assert_eq!(counts.reveal_rim.load(Ordering::Relaxed), 1);
         assert_eq!(counts.reveal_shadow.load(Ordering::Relaxed), 1);
         assert_eq!(counts.reveal_mode.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.tracking_mode.load(Ordering::Relaxed), 0);
         assert_eq!(counts.animates.load(Ordering::Relaxed), 1);
 
         plan.reveal.as_mut().unwrap().rim.as_mut().unwrap().opacity = 0.16;
@@ -972,6 +980,53 @@ mod tests {
         assert_eq!(counts.reveal_rim.load(Ordering::Relaxed), 2);
         assert_eq!(counts.reveal_mode.load(Ordering::Relaxed), 2);
         assert_eq!(counts.animates.load(Ordering::Relaxed), 2);
+        assert_eq!(counts.tracking_mode.load(Ordering::Relaxed), 0);
+        drop(controller);
+        drop(surface);
+        stop.store(true, Ordering::Relaxed);
+        server_thread.join().unwrap();
+    }
+
+    #[test]
+    fn whole_scene_reveal_close_sends_tracking_only_contour_once() {
+        let counts = Arc::new(Counts::default());
+        let (client_stream, server_stream) = UnixStream::pair().unwrap();
+        let (server_thread, stop) = server(server_stream, counts.clone(), Some(2));
+        let connection = wayland_client::Connection::from_socket(client_stream).unwrap();
+        let (globals, queue) = wayland_client::globals::registry_queue_init::<App>(&connection)
+            .expect("registry roundtrip");
+        let qh = queue.handle();
+        let manager = LayerMotionManager::bind(&globals, &qh).expect("advertised manager v2");
+        let compositor = smithay_client_toolkit::compositor::CompositorState::bind(&globals, &qh)
+            .expect("advertised compositor");
+        let surface = compositor.create_surface(&qh);
+        let mut scene = sample_scene();
+        scene.motion.as_mut().unwrap().reveal = true;
+        let mut renderer = TreeCpuRenderer::default();
+        let plan = LayerMotionPlan::for_slide(
+            &scene,
+            false,
+            32,
+            32,
+            1.,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(plan.reveal.as_ref().unwrap().mode, bead_render::layer_motion::RevealMode::TrackingOnly);
+        let mut controller = manager.create(&surface, &qh);
+        assert!(controller.queue(&plan).is_some());
+        surface.commit();
+        connection.flush().expect("flush close tracker");
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while counts.animates.load(Ordering::Relaxed) == 0 && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(counts.tracking_mode.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_geometry.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_clip.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.animates.load(Ordering::Relaxed), 1);
         drop(controller);
         drop(surface);
         stop.store(true, Ordering::Relaxed);
