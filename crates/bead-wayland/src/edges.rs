@@ -207,6 +207,10 @@ fn cancel_for_external_source(edge: &mut EdgeState) -> Option<String> {
     edge.external = ExternalCueTracker::default();
     edge.hovered.take()
 }
+fn complete_edge_cue(edge: &mut EdgeState) {
+    edge.cue_fade = 0.;
+    edge.cue_epoch = edge.cue_epoch.wrapping_add(1);
+}
 fn release_external_hover(control: &dyn ShellControl, previous: Option<(String, Lip)>) {
     if let Some((output, lip)) = previous {
         control.external_panel_hover(&lip.opens, &output, false);
@@ -681,6 +685,7 @@ impl App {
         let k = key(&cue.output, &lip.id);
         self.edge.hovered = Some(k.clone());
         self.edge.exit_epoch = self.edge.exit_epoch.wrapping_add(1);
+        self.settle_edge_exit();
         if transition.entered.is_some()
             && let Some(control) = &self.options.control
         {
@@ -718,6 +723,7 @@ impl App {
     }
 
     fn external_lip_fire(&mut self, output: &str, lip: &Lip) {
+        complete_edge_cue(&mut self.edge);
         let k = key(output, &lip.id);
         let active = self
             .output
@@ -925,8 +931,7 @@ impl App {
         };
         self.edge.dwell.cancel();
         // The panel opens: the cue vanishes with it, as QML hides the cue while its dashboard is visible.
-        self.edge.cue_fade = 0.;
-        self.edge.cue_epoch = self.edge.cue_epoch.wrapping_add(1);
+        complete_edge_cue(&mut self.edge);
         let Some((output, id)) = k.split_once('/') else {
             return;
         };
@@ -1598,6 +1603,18 @@ mod tests {
             *control.0.lock().unwrap(),
             [("assistant".into(), "DP-1".into(), false)]
         );
+    }
+
+    #[test]
+    fn completed_hover_cue_hides_immediately_and_invalidates_its_fade_timer() {
+        let mut edge = EdgeState {
+            cue_fade: 0.75,
+            cue_epoch: 41,
+            ..Default::default()
+        };
+        complete_edge_cue(&mut edge);
+        assert_eq!(edge.cue_fade, 0.);
+        assert_eq!(edge.cue_epoch, 42);
     }
 
     #[test]
