@@ -570,6 +570,81 @@ mod tests {
         protocol::{wl_compositor, wl_surface},
     };
 
+    #[test]
+    fn reveal_v2_keeps_v1_wire_opcodes_and_wayland_argument_limits() {
+        let xml = include_str!("../../../protocols/bead-layer-motion-v1.xml");
+        let interface = |name: &str| {
+            xml.split(&format!("interface name=\"{name}\""))
+                .nth(1)
+                .expect("protocol interface")
+                .split("</interface>")
+                .next()
+                .expect("closed protocol interface")
+        };
+        let names = |interface: &str, element: &str| {
+            interface
+                .split(&format!("<{element} "))
+                .skip(1)
+                .map(|entry| {
+                    entry
+                        .split("name=\"")
+                        .nth(1)
+                        .and_then(|entry| entry.split('\"').next())
+                        .expect("protocol element name")
+                        .to_owned()
+                })
+                .collect::<Vec<_>>()
+        };
+        let manager = interface("bead_layer_motion_manager_v1");
+        assert_eq!(names(manager, "request"), ["destroy", "get_motion"]);
+        let controller = interface("bead_layer_motion_v1");
+        let requests = names(controller, "request");
+        assert_eq!(
+            &requests[..9],
+            [
+                "destroy",
+                "add_plane",
+                "set_plane_to",
+                "set_plane_from",
+                "set_curve",
+                "set_plane_opacity_mode",
+                "animate",
+                "cancel",
+                "reset",
+            ],
+            "version 1 request opcodes must not move"
+        );
+        assert_eq!(
+            names(controller, "event"),
+            ["plane_state", "done", "cancelled"],
+            "version 1 event opcodes must not move"
+        );
+        for request in controller.split("<request ").skip(1) {
+            let request = request.split("</request>").next().unwrap();
+            assert!(
+                request.matches("<arg ").count() <= 20,
+                "Wayland request argument limit exceeded: {}",
+                request.split("name=\"").nth(1).unwrap_or_default()
+            );
+        }
+        let geometry = controller
+            .split("<request name=\"set_reveal_geometry\"")
+            .nth(1)
+            .unwrap()
+            .split("</request>")
+            .next()
+            .unwrap();
+        assert_eq!(geometry.matches("<arg ").count(), 20);
+        let shadow = controller
+            .split("<request name=\"set_reveal_shadow\"")
+            .nth(1)
+            .unwrap()
+            .split("</request>")
+            .next()
+            .unwrap();
+        assert_eq!(shadow.matches("<arg ").count(), 5);
+    }
+
     #[derive(Default)]
     struct Counts {
         commits: AtomicUsize,
