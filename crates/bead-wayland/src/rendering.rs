@@ -2355,7 +2355,9 @@ impl App {
                                 .canvas(&mut s.pool)
                                 .ok_or("terminal layer motion buffer is still compositor-owned")?;
                             if !copy_layer_motion_pixels(target, &pixels) {
-                                return Err("reusable terminal layer motion slot is too small".into());
+                                return Err(
+                                    "reusable terminal layer motion slot is too small".into()
+                                );
                             }
                             s.buffers[terminal_slot].buffer.activate()?;
                             terminal_slot
@@ -2386,10 +2388,10 @@ impl App {
                     } else {
                         None
                     };
-                    s.layer_motion.as_mut().unwrap().queue_terminal_buffer(
-                        terminal_buffer.as_ref(),
-                        render_size,
-                    );
+                    s.layer_motion
+                        .as_mut()
+                        .unwrap()
+                        .queue_terminal_buffer(terminal_buffer.as_ref(), render_size);
                     wl_surface.damage_buffer(
                         0,
                         0,

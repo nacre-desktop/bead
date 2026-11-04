@@ -326,8 +326,7 @@ impl LayerMotionController {
             } else {
                 (0., 0.)
             };
-            self.proxy
-                .set_reveal_terminal_buffer(buffer, width, height);
+            self.proxy.set_reveal_terminal_buffer(buffer, width, height);
         }
     }
 
@@ -1065,7 +1064,10 @@ mod tests {
             LayerMotionPlan::for_slide(&scene, true, 32, 32, 1., PixelFormat::Rgba, &mut renderer)
                 .expect("prepare reveal plan")
                 .expect("supported descriptor");
-        assert_eq!(renderer.paints, 2, "visible reveal captures atlas and endpoint");
+        assert_eq!(
+            renderer.paints, 2,
+            "visible reveal captures atlas and endpoint"
+        );
         let mut controller = manager.create(&surface, &qh);
         controller.queue_terminal_buffer(None, (0, 0));
         assert!(controller.queue(&plan).is_some());

@@ -2,8 +2,8 @@
 //! Immutable pixels and presentation planes for optional compositor animation.
 //!
 //! A plan describes presentation, independent of a particular display protocol.
-//! Preparing it performs the slide's sole client paint. A presenter keeps those
-//! pixels attached until the compositor reports completion or cancellation.
+//! Preparing it performs its setup paints. A presenter keeps those pixels
+//! attached until the compositor reports completion or cancellation.
 
 use std::time::Duration;
 
@@ -1284,16 +1284,18 @@ mod tests {
     #[test]
     fn combined_reveal_buffers_over_the_limit_fall_back_before_paint() -> Result<()> {
         let mut renderer = NoPaint;
-        assert!(LayerMotionPlan::for_slide(
-            &scene(true, false),
-            true,
-            4_000,
-            3_000,
-            1.,
-            PixelFormat::Rgba,
-            &mut renderer,
-        )?
-        .is_none());
+        assert!(
+            LayerMotionPlan::for_slide(
+                &scene(true, false),
+                true,
+                4_000,
+                3_000,
+                1.,
+                PixelFormat::Rgba,
+                &mut renderer,
+            )?
+            .is_none()
+        );
         Ok(())
     }
 

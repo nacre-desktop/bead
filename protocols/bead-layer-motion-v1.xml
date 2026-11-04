@@ -254,8 +254,9 @@
         wl_surface commit is applied. Pixels are premultiplied; physical width,
         height and stride must be positive and copy bounds are checked. The
         compositor sends wl_buffer.release after copying, and clients must not
-        mutate or reuse the buffer before release. Retained terminal data is
-        capped at 64 MiB combined with other retained motion pixels.
+        mutate or reuse the buffer before release. Retained terminal snapshot
+        data is capped at 64 MiB per layer, including a previous snapshot
+        retained during replacement.
 
         Width and height are positive logical surface dimensions within the
         existing fixed-point limits. A null buffer clears the snapshot and
