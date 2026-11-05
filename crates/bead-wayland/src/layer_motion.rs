@@ -576,7 +576,7 @@ mod tests {
     };
     use bead_render::{
         Damage, Motion, PixelFormat, Primitive, Renderer, Result, RevealArt, Scene, ShmTarget,
-        layer_motion::{LayerMotionPlan, RevealContour, RevealCornerMode, RevealRim, RevealShadow},
+        layer_motion::{LayerMotionPlan, RevealContour, RevealCornerMode, RevealRim},
         tree::TreeCpuRenderer,
     };
     use std::{
