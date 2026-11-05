@@ -2,6 +2,41 @@
 //! Per-surface rendering, GPU staging and idle release.
 use super::*;
 
+fn layer_motion_renderer_supported(kind: RendererKind) -> bool {
+    matches!(kind, RendererKind::Cpu | RendererKind::FemtovgGl)
+}
+
+#[cfg(test)]
+mod layer_motion_renderer_tests {
+    use super::layer_motion_renderer_supported;
+    use bead_render::RendererKind;
+
+    #[test]
+    fn cpu_and_native_gl_can_submit_compositor_motion_atlases() {
+        assert!(layer_motion_renderer_supported(RendererKind::Cpu));
+        assert!(layer_motion_renderer_supported(RendererKind::FemtovgGl));
+        assert!(!layer_motion_renderer_supported(RendererKind::Femtovg));
+        assert!(!layer_motion_renderer_supported(RendererKind::Vello));
+    }
+
+    #[test]
+    fn supported_reveal_reversals_keep_the_compositor_controller() {
+        assert!(!super::layer_motion_reveal_reversal_uses_cpu(
+            true, true, true, true, true
+        ));
+        assert!(super::layer_motion_reveal_reversal_uses_cpu(
+            true, true, true, true, false
+        ));
+        assert!(!super::layer_motion_completion_uses_cpu_reveal(
+            true,
+            Some(false),
+            true,
+            true,
+            true
+        ));
+    }
+}
+
 fn layer_motion_handoff_eligible(
     opening: bool,
     sampled_progress: Option<f32>,
@@ -22,15 +57,31 @@ fn layer_motion_reveal_reversal_uses_cpu(
     reveal: bool,
     target_changed: bool,
     compositor_owns_timeline: bool,
+    compositor_has_contour: bool,
 ) -> bool {
-    opening && reveal && target_changed && compositor_owns_timeline
+    opening && reveal && target_changed && compositor_owns_timeline && !compositor_has_contour
+}
+
+pub(super) fn reveal_contour_capable(
+    scene: &Scene,
+    manager: Option<&crate::layer_motion::LayerMotionManager>,
+) -> bool {
+    let Some(motion) = scene.motion.as_ref().filter(|motion| motion.reveal) else {
+        return true;
+    };
+    manager.is_some_and(crate::layer_motion::LayerMotionManager::supports_reveal)
+        && (motion.art.as_ref().is_none_or(|art| art.contour.is_some()))
 }
 
 fn layer_motion_cpu_replacement_pending(
     surface_still_owns_atlas: bool,
     controller_has_active_serial: bool,
+    target_changed: bool,
+    plan_can_retarget: bool,
 ) -> bool {
-    surface_still_owns_atlas && !controller_has_active_serial
+    surface_still_owns_atlas
+        && !controller_has_active_serial
+        && (!target_changed || !plan_can_retarget)
 }
 
 pub(super) fn layer_motion_completion_uses_cpu_reveal(
@@ -38,11 +89,13 @@ pub(super) fn layer_motion_completion_uses_cpu_reveal(
     completed_target_open: Option<bool>,
     current_target_open: bool,
     current_target_reveals: bool,
+    compositor_has_contour: bool,
 ) -> bool {
     completed
         && completed_target_open == Some(false)
         && current_target_open
         && current_target_reveals
+        && !compositor_has_contour
 }
 
 fn copy_layer_motion_pixels(target: &mut [u8], pixels: &[u8]) -> bool {
@@ -1647,12 +1700,13 @@ impl App {
                 && !bead_core::animation::reduced_motion()
                 && !self.options.background_blur
                 && self.companion.as_ref().is_some_and(|(scene, _, kind)| {
-                    *kind == RendererKind::Cpu
+                    layer_motion_renderer_supported(*kind)
                         && scene.slide.is_none()
-                        && scene
-                            .motion
-                            .as_ref()
-                            .is_some_and(|motion| !self.panel_target || !motion.reveal)
+                        && scene.motion.as_ref().is_some_and(|motion| {
+                            !self.panel_target
+                                || !motion.reveal
+                                || reveal_contour_capable(scene, self.layer_motion_manager.as_ref())
+                        })
                 });
             if s.configured
                 && !s.callbacks.pending
@@ -1940,6 +1994,8 @@ impl App {
                 s.layer_motion
                     .as_ref()
                     .is_some_and(|motion| motion.has_active_serial()),
+                layer_motion_target_changed,
+                s.layer_motion_plan.is_some(),
             );
             let layer_motion_cpu_replacement = layer_motion_cpu_reset_pending
                 || promotion_reset_active
@@ -1950,6 +2006,7 @@ impl App {
                             motion.reveal,
                             layer_motion_target_changed,
                             s.layer_motion_active,
+                            reveal_contour_capable(scene, self.layer_motion_manager.as_ref()),
                         )
                     })
                 });
@@ -1957,7 +2014,7 @@ impl App {
                 scene.offset.0 - layer_motion_pose.0,
                 scene.offset.1 - layer_motion_pose.1,
             );
-            let layer_motion_transport_eligible = _kind == RendererKind::Cpu
+            let layer_motion_transport_eligible = layer_motion_renderer_supported(_kind)
                 && s.native.is_none()
                 && !s.layer_promoted
                 && !command_promotion_pending
@@ -1975,39 +2032,25 @@ impl App {
                     )
                 });
             let layer_motion_pose_eligible = layer_motion_handoff_ok
+                && layer_motion_opening.is_some()
                 && scene.motion.as_ref().is_some_and(|motion| {
-                    layer_motion_opening.is_some_and(|opening| {
-                        !opening
-                            || !motion.reveal
-                            || layer_motion_target_changed && s.layer_motion_plan.is_some()
-                    })
+                    !motion.reveal
+                        || reveal_contour_capable(scene, self.layer_motion_manager.as_ref())
                 });
             let layer_motion_reuses_atlas =
                 layer_motion_target_changed && s.layer_motion_plan.is_some();
             let layer_motion_ink_safe = layer_motion_transport_eligible
                 && layer_motion_pose_eligible
                 && !layer_motion_reuses_atlas
-                && scene.motion.as_ref().is_some_and(|motion| {
-                    let closed_offset = motion.edge.closed_offset(
-                        motion.slide_distance.unwrap_or(scene.bounds.w),
-                        motion.slide_distance.unwrap_or(scene.bounds.h),
-                        0.,
-                    );
-                    bead_render::layer_motion::scene_ink_bounds(scene, scale, resting_offset)
-                        .is_some_and(|ink_bounds| {
-                            bead_render::layer_motion::motion_atlas_viewport(
-                                render_size.0,
-                                render_size.1,
-                                scale,
-                            )
-                            .is_some_and(|viewport| {
-                                bead_render::layer_motion::translation_preserves_clip(
-                                    ink_bounds,
-                                    viewport,
-                                    closed_offset,
-                                )
-                            })
-                        })
+                && layer_motion_opening.is_some_and(|opening| {
+                    bead_render::layer_motion::motion_atlas_ink_is_safe(
+                        scene,
+                        opening,
+                        render_size.0,
+                        render_size.1,
+                        scale,
+                        resting_offset,
+                    )
                 });
             let layer_motion_candidate = layer_motion_transport_eligible
                 && layer_motion_pose_eligible
@@ -2130,6 +2173,7 @@ impl App {
                 && let Some(opening) = layer_motion_opening
                 && s.layer_motion_active
                 && s.layer_motion_open != Some(opening)
+                && !scene.motion.as_ref().is_some_and(|motion| motion.reveal)
                 && !layer_motion_cpu_replacement
                 && let Some(plan) = s.layer_motion_plan.as_mut()
             {
@@ -2175,8 +2219,7 @@ impl App {
                 s.frames += 1;
                 return Ok(());
             }
-            if _kind == RendererKind::Cpu
-                && layer_motion_active
+            if layer_motion_active
                 && let Some(opening) = layer_motion_opening
                 && let Some(mut source_scene) = layer_motion_source_scene
                 && s.native.is_none()
@@ -2192,6 +2235,16 @@ impl App {
                 // Panel presentation opacity starts from its complete resting
                 // pose; the compositor applies the configured opacity mode.
                 source_scene.opacity = 1.;
+                // Protocol atlases are SHM buffers even when the steady-state
+                // renderer draws directly into an EGL surface. Use Bead's
+                // deterministic CPU tree renderer for this one-time snapshot;
+                // the active timeline itself remains compositor-driven.
+                let mut atlas_renderer = bead_render::tree::TreeCpuRenderer::default();
+                let atlas_renderer: &mut dyn bead_render::Renderer = if _kind == RendererKind::Cpu {
+                    renderer.as_mut()
+                } else {
+                    &mut atlas_renderer
+                };
                 if let Some(mut plan) = bead_render::layer_motion::LayerMotionPlan::for_slide(
                     &source_scene,
                     opening,
@@ -2199,7 +2252,7 @@ impl App {
                     render_size.1,
                     scale,
                     format,
-                    renderer.as_mut(),
+                    atlas_renderer,
                 )? {
                     let changed_target =
                         s.layer_motion_active && s.layer_motion_open != Some(opening);
@@ -2287,6 +2340,58 @@ impl App {
                         wl_surface.set_buffer_scale((s.scale120 / 120) as i32);
                     }
                     s.buffers[slot].buffer.attach_to(&wl_surface)?;
+                    let terminal_buffer = if let Some(terminal) = plan.terminal.as_mut() {
+                        let pixels = terminal.take_pixels();
+                        let reusable = s.buffers.iter().enumerate().find_map(|(index, buffer)| {
+                            (index != slot
+                                && !buffer.buffer.slot().has_active_buffers()
+                                && buffer.buffer.height() == terminal.height as i32
+                                && buffer.buffer.stride() == terminal.stride as i32)
+                                .then_some(index)
+                        });
+                        let terminal_slot = if let Some(terminal_slot) = reusable {
+                            let target = s.buffers[terminal_slot]
+                                .buffer
+                                .canvas(&mut s.pool)
+                                .ok_or("terminal layer motion buffer is still compositor-owned")?;
+                            if !copy_layer_motion_pixels(target, &pixels) {
+                                return Err(
+                                    "reusable terminal layer motion slot is too small".into()
+                                );
+                            }
+                            s.buffers[terminal_slot].buffer.activate()?;
+                            terminal_slot
+                        } else {
+                            let buffer_format = if terminal.format == PixelFormat::Rgba {
+                                wl_shm::Format::Abgr8888
+                            } else {
+                                wl_shm::Format::Argb8888
+                            };
+                            let (buffer, bytes) = s.pool.create_buffer(
+                                terminal.width as i32,
+                                terminal.height as i32,
+                                terminal.stride as i32,
+                                buffer_format,
+                            )?;
+                            if !copy_layer_motion_pixels(bytes, &pixels) {
+                                return Err("new terminal layer motion slot is too small".into());
+                            }
+                            buffer.activate()?;
+                            s.buffers.push(Reusable {
+                                buffer,
+                                pending: Vec::new(),
+                                painted: true,
+                            });
+                            s.buffers.len() - 1
+                        };
+                        Some(s.buffers[terminal_slot].buffer.wl_buffer().clone())
+                    } else {
+                        None
+                    };
+                    s.layer_motion
+                        .as_mut()
+                        .unwrap()
+                        .queue_terminal_buffer(terminal_buffer.as_ref(), render_size);
                     wl_surface.damage_buffer(
                         0,
                         0,
