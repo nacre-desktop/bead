@@ -22,6 +22,23 @@ fn panel_event_belongs_to_host(event: &UiEvent) -> bool {
     )
 }
 
+#[cfg(feature = "native-gl")]
+fn layer_motion_gl_surface_can_be_deferred(
+    renderer: RendererKind,
+    reveal: bool,
+    has_slide: bool,
+    controller: bool,
+    contour: bool,
+    effects_blocked: bool,
+) -> bool {
+    renderer == RendererKind::FemtovgGl
+        && reveal
+        && !has_slide
+        && controller
+        && contour
+        && !effects_blocked
+}
+
 impl App {
     pub(super) fn ui(&mut self, event: UiEvent) {
         let _busy = bead_core::profile::Busy::named(|| {
@@ -867,9 +884,29 @@ impl App {
                     .map(|(i, _)| i)
                     .collect();
                 for i in indices {
+                    #[cfg(feature = "native-gl")]
+                    let defer_gpu_for_reveal = {
+                        let surface = &self.surfaces[i];
+                        layer_motion_gl_surface_can_be_deferred(
+                            self.options.renderer,
+                            scene.motion.as_ref().is_some_and(|motion| motion.reveal),
+                            scene.slide.is_some(),
+                            surface.layer_motion.is_some()
+                                && surface.native.is_none()
+                                && !surface.layer_promoted,
+                            super::rendering::reveal_contour_capable(
+                                scene,
+                                self.layer_motion_manager.as_ref(),
+                            ),
+                            self.options.background_blur || bead_core::animation::reduced_motion(),
+                        )
+                    };
+                    #[cfg(all(feature = "wgpu", not(feature = "native-gl")))]
+                    let defer_gpu_for_reveal = false;
                     #[cfg(any(feature = "native-gl", feature = "wgpu"))]
                     if !self.processing_panel
                         && self.renderer.wants_gpu()
+                        && !defer_gpu_for_reveal
                         && let Err(error) = self.ensure_gpu(i)
                     {
                         if !self.options.auto_fallback {
@@ -1240,5 +1277,58 @@ mod panel_event_routing_tests {
         assert!(!panel_event_belongs_to_host(&UiEvent::Model(
             BTreeMap::new()
         )));
+    }
+
+    #[test]
+    #[cfg(feature = "native-gl")]
+    fn gl_surface_setup_is_deferred_only_for_supported_reveal_handoffs() {
+        assert!(layer_motion_gl_surface_can_be_deferred(
+            RendererKind::FemtovgGl,
+            true,
+            false,
+            true,
+            true,
+            false,
+        ));
+        assert!(!layer_motion_gl_surface_can_be_deferred(
+            RendererKind::Cpu,
+            true,
+            false,
+            true,
+            true,
+            false,
+        ));
+        assert!(!layer_motion_gl_surface_can_be_deferred(
+            RendererKind::FemtovgGl,
+            true,
+            true,
+            true,
+            true,
+            false,
+        ));
+        assert!(!layer_motion_gl_surface_can_be_deferred(
+            RendererKind::FemtovgGl,
+            true,
+            false,
+            false,
+            true,
+            false,
+        ));
+        assert!(!layer_motion_gl_surface_can_be_deferred(
+            RendererKind::FemtovgGl,
+            true,
+            false,
+            true,
+            false,
+            false,
+        ));
+        assert!(!layer_motion_gl_surface_can_be_deferred(
+            RendererKind::FemtovgGl,
+            true,
+            false,
+            true,
+            true,
+            true,
+        ));
     }
 }

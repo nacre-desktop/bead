@@ -2,12 +2,313 @@
 //! Immutable pixels and presentation planes for optional compositor animation.
 //!
 //! A plan describes presentation, independent of a particular display protocol.
-//! Preparing it performs the slide's sole client paint. A presenter keeps those
-//! pixels attached until the compositor reports completion or cancellation.
+//! Preparing it performs its setup paints. A presenter keeps those pixels
+//! attached until the compositor reports completion or cancellation.
 
 use std::time::Duration;
 
 use crate::{Damage, PixelFormat, Primitive, Rect, Renderer, Result, Scene, ShmTarget};
+
+/// Corner interpretation for a compositor-owned reveal contour.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RevealCornerMode {
+    Circular,
+    QuadraticCut,
+}
+
+/// Whether the compositor draws/masks with a contour or tracks it invisibly.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RevealMode {
+    Visible,
+    TrackingOnly,
+}
+
+/// Three-stop color gradient used by a compositor-owned contour rim.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RevealRim {
+    pub colors: [[u8; 4]; 3],
+    pub stops: [f32; 3],
+    pub start: (f32, f32),
+    pub end: (f32, f32),
+    pub width: f32,
+    pub opacity: f32,
+}
+
+/// Optional compositor-owned shadow surrounding a reveal contour.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RevealShadow {
+    pub color: [u8; 4],
+    pub blur: f32,
+    pub spread: f32,
+    pub offset: (f32, f32),
+}
+
+/// Static compound contour plus a rounded rectangle animated by the shared
+/// layer-motion timeline. All geometry is root-surface-local logical units.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RevealContour {
+    /// Full logical output bounds for perimeter and gradient classification.
+    pub output_bounds: Rect,
+    /// Visible crop represented by this contour and its source atlas.
+    pub crop: Rect,
+    /// Fixed rectangles unioned with the animated rectangle (maximum 16).
+    pub static_rects: Vec<Rect>,
+    /// Even-odd cutouts removed from the compound contour (maximum 16).
+    pub holes: Vec<Rect>,
+    pub animated_from: Rect,
+    pub animated_to: Rect,
+    /// Content clip endpoints used alongside the contour body's visual mask.
+    pub content_clip_from: Rect,
+    pub content_clip_to: Rect,
+    pub radii_from: [f32; 4],
+    pub radii_to: [f32; 4],
+    pub corner_mode: RevealCornerMode,
+    pub mode: RevealMode,
+    /// Plane whose opacity controls contour fill, rim, and shadow alpha.
+    pub opacity_plane: u32,
+    /// Perimeter edges whose corners are square: left=1, top=2, right=4, bottom=8.
+    pub square_edges: u32,
+    pub fill: [u8; 4],
+    pub rim: Option<RevealRim>,
+    pub shadow: Option<RevealShadow>,
+}
+
+impl RevealContour {
+    /// Retain this contour's geometry for later retargeting while leaving the
+    /// full-scene close atlas visually unchanged.
+    pub fn tracking_only(&self) -> Self {
+        let mut contour = self.clone();
+        contour.animated_from = self.animated_to;
+        contour.animated_to = self.animated_from;
+        contour.radii_from = self.radii_to;
+        contour.radii_to = self.radii_from;
+        contour.content_clip_from = self.content_clip_to;
+        contour.content_clip_to = self.content_clip_from;
+        contour.mode = RevealMode::TrackingOnly;
+        contour
+    }
+
+    /// Translate scene-local shape data into its root surface-local frame.
+    pub fn translated(&self, dx: f32, dy: f32) -> Self {
+        let mut contour = self.clone();
+        contour.output_bounds = contour.output_bounds.translated(dx, dy);
+        contour.crop = contour.crop.translated(dx, dy);
+        contour.static_rects = contour
+            .static_rects
+            .iter()
+            .map(|rect| rect.translated(dx, dy))
+            .collect();
+        contour.holes = contour
+            .holes
+            .iter()
+            .map(|rect| rect.translated(dx, dy))
+            .collect();
+        contour.animated_from = contour.animated_from.translated(dx, dy);
+        contour.animated_to = contour.animated_to.translated(dx, dy);
+        contour.content_clip_from = contour.content_clip_from.translated(dx, dy);
+        contour.content_clip_to = contour.content_clip_to.translated(dx, dy);
+        if let Some(rim) = &mut contour.rim {
+            rim.start.0 += dx;
+            rim.start.1 += dy;
+            rim.end.0 += dx;
+            rim.end.1 += dy;
+        }
+        contour
+    }
+
+    pub fn valid(&self) -> bool {
+        let fixed_valid = |value: f32| value.is_finite() && (-32_768. ..=32_768.).contains(&value);
+        let rect_valid = |rect: Rect| {
+            finite_rect(rect)
+                && [rect.x, rect.y, rect.w, rect.h]
+                    .iter()
+                    .copied()
+                    .all(fixed_valid)
+        };
+        let compound_rect_valid = |rect: Rect| rect_valid(rect) && rect.w > 0. && rect.h > 0.;
+        self.static_rects.len() <= 16
+            && self.holes.len() <= 16
+            && rect_valid(self.output_bounds)
+            && self.output_bounds.w > 0.
+            && self.output_bounds.h > 0.
+            && rect_valid(self.crop)
+            && self.crop.w > 0.
+            && self.crop.h > 0.
+            && rect_valid(self.animated_from)
+            && rect_valid(self.animated_to)
+            && rect_valid(self.content_clip_from)
+            && rect_valid(self.content_clip_to)
+            && self.static_rects.iter().copied().all(compound_rect_valid)
+            && self.holes.iter().copied().all(compound_rect_valid)
+            && self
+                .radii_from
+                .iter()
+                .chain(&self.radii_to)
+                .all(|r| *r >= 0. && fixed_valid(*r))
+            && self.square_edges & !0xf == 0
+            && self.rim.is_none_or(|rim| {
+                rim.stops
+                    .iter()
+                    .all(|v| v.is_finite() && (0. ..=1.).contains(v))
+                    && rim.stops[0] <= rim.stops[1]
+                    && rim.stops[1] <= rim.stops[2]
+                    && [rim.start.0, rim.start.1, rim.end.0, rim.end.1]
+                        .iter()
+                        .all(|v| fixed_valid(*v))
+                    && fixed_valid(rim.width)
+                    && rim.width >= 0.
+                    && rim.opacity.is_finite()
+                    && (0. ..=1.).contains(&rim.opacity)
+                    && (rim.width == 0. || rim.opacity == 0. || rim.start != rim.end)
+            })
+            && self.shadow.is_none_or(|shadow| {
+                (self.static_rects.is_empty()
+                    && self.holes.is_empty()
+                    && self.corner_mode == RevealCornerMode::Circular)
+                    && fixed_valid(shadow.blur)
+                    && shadow.blur >= 0.
+                    && fixed_valid(shadow.spread)
+                    && [shadow.offset.0, shadow.offset.1]
+                        .iter()
+                        .all(|v| fixed_valid(*v))
+            })
+    }
+}
+
+fn inferred_reveal_contour(
+    scene: &Scene,
+    width: u32,
+    height: u32,
+) -> Option<(RevealContour, Vec<usize>)> {
+    let motion = scene.motion.as_ref().filter(|motion| motion.reveal)?;
+    let body_part = motion
+        .parts
+        .iter()
+        .find_map(|(index, primitive)| match primitive {
+            Primitive::Rounded {
+                rect,
+                radius,
+                fill,
+                border,
+            } => Some((*index, *rect, *radius, *fill, *border)),
+            _ => None,
+        });
+    let (body_index, body, radius, fill, border) = if let Some(body) = body_part {
+        body
+    } else {
+        let mut rounded = scene
+            .primitives
+            .iter()
+            .enumerate()
+            .filter_map(|(index, primitive)| match primitive {
+                Primitive::Rounded {
+                    rect,
+                    radius,
+                    fill,
+                    border,
+                } if rect.w > 0. && rect.h > 0. => Some((index, *rect, *radius, *fill, *border)),
+                _ => None,
+            });
+        let body = rounded.next()?;
+        if rounded.next().is_some() {
+            return None;
+        }
+        body
+    };
+    if !radius.is_finite() || radius < 0. {
+        return None;
+    }
+    let rounded_parts = motion
+        .parts
+        .iter()
+        .filter(
+            |(_, primitive)| matches!(primitive, Primitive::Rounded { rect, .. } if *rect == body),
+        )
+        .count();
+    if !motion.parts.is_empty() && rounded_parts != 1 {
+        return None;
+    }
+    let from = Scene::revealed(body, motion.edge, 0.);
+    let output = Rect::new(0., 0., width as f32, height as f32);
+    let rim = border.map(|(color, width)| RevealRim {
+        colors: [color; 3],
+        stops: [0., 0.5, 1.],
+        start: (body.x, body.y),
+        end: (body.x, body.y + body.h),
+        width,
+        opacity: 1.,
+    });
+    let has_shadow = motion
+        .parts
+        .iter()
+        .any(|(_, primitive)| matches!(primitive, Primitive::Shadow { .. }));
+    let shadow_part = motion
+        .parts
+        .iter()
+        .find_map(|(index, primitive)| match primitive {
+            Primitive::Shadow {
+                rect,
+                radius: shadow_radius,
+                blur,
+            } if blur.is_finite()
+                && *blur >= 0.
+                && shadow_radius.is_finite()
+                && (*shadow_radius - radius).abs() < 0.01 =>
+            {
+                let inset = blur * 3.;
+                let left = rect.x + inset - body.x;
+                let right = rect.x + rect.w - inset - (body.x + body.w);
+                let top = rect.y + inset - body.y;
+                let bottom = rect.y + rect.h - inset - (body.y + body.h);
+                let spread_x = (right - left) * 0.5;
+                let spread_y = (bottom - top) * 0.5;
+                if (spread_x - spread_y).abs() >= 0.01 {
+                    return None;
+                }
+                Some((
+                    *index,
+                    RevealShadow {
+                        color: [0, 0, 0, 82],
+                        blur: *blur,
+                        spread: spread_x,
+                        offset: ((left + right) * 0.5, (top + bottom) * 0.5),
+                    },
+                ))
+            }
+            _ => None,
+        });
+    if has_shadow && shadow_part.is_none() {
+        return None;
+    }
+    let shadow = shadow_part.map(|(_, shadow)| shadow);
+    let clip = |p| scene.reveal_window_at(p).unwrap_or(output);
+    Some(RevealContour {
+        output_bounds: output,
+        crop: output,
+        static_rects: Vec::new(),
+        holes: Vec::new(),
+        animated_from: from,
+        animated_to: body,
+        content_clip_from: clip(0.),
+        content_clip_to: clip(1.),
+        radii_from: [radius; 4],
+        radii_to: [radius; 4],
+        corner_mode: RevealCornerMode::Circular,
+        mode: RevealMode::Visible,
+        opacity_plane: 0,
+        square_edges: 0,
+        fill,
+        rim,
+        shadow,
+    })
+    .map(|contour| {
+        let mut indices = vec![body_index];
+        if let Some((shadow_index, _)) = shadow_part {
+            indices.push(shadow_index);
+        }
+        (contour, indices)
+    })
+}
 
 fn finite_rect(rect: Rect) -> bool {
     rect.x.is_finite()
@@ -115,6 +416,49 @@ pub fn scene_ink_bounds(scene: &Scene, scale: f32, offset: (f32, f32)) -> Option
     }
 
     bounds.or_else(|| Some(Rect::new(offset.0, offset.1, 0., 0.)))
+}
+
+/// The atlas plane's closed endpoint, shared by planning and renderer eligibility.
+pub fn closed_plane_offset(scene: &Scene, opening: bool) -> Option<(f32, f32)> {
+    let motion = scene.motion.as_ref()?;
+    Some(if opening && motion.reveal {
+        motion.slide_distance.map_or((0., 0.), |distance| {
+            motion.edge.closed_offset(distance, distance, 0.)
+        })
+    } else {
+        motion.edge.closed_offset(
+            motion.slide_distance.unwrap_or(scene.bounds.w),
+            motion.slide_distance.unwrap_or(scene.bounds.h),
+            0.,
+        )
+    })
+}
+
+/// Conservative renderer-side preflight, matching the planner's translation rule.
+pub fn motion_atlas_ink_is_safe(
+    scene: &Scene,
+    opening: bool,
+    width: u32,
+    height: u32,
+    scale: f32,
+    offset: (f32, f32),
+) -> bool {
+    if opening
+        && scene
+            .motion
+            .as_ref()
+            .is_some_and(|motion| motion.reveal && motion.slide_distance.is_none())
+    {
+        return true;
+    }
+    let Some(closed_offset) = closed_plane_offset(scene, opening) else {
+        return false;
+    };
+    scene_ink_bounds(scene, scale, offset)
+        .zip(motion_atlas_viewport(width, height, scale))
+        .is_some_and(|(ink_bounds, viewport)| {
+            translation_preserves_clip(ink_bounds, viewport, closed_offset)
+        })
 }
 
 fn primitive_ink_bounds(primitive: &Primitive, scale: f32, offset: (f32, f32)) -> Option<Rect> {
@@ -325,11 +669,15 @@ pub struct LayerMotionPlan {
     pub curve: bead_core::animation::Curve,
     pub retarget: bool,
     pub atlas: PixelBuffer,
+    /// Immutable full-open pixels used at the completed visible-reveal endpoint.
+    pub terminal: Option<PixelBuffer>,
     pub planes: Vec<LayerMotionPlane>,
+    pub reveal: Option<RevealContour>,
 }
 
 impl LayerMotionPlan {
-    /// Paint the complete open scene once for a whole-scene translation/fade.
+    /// Paint the compositor atlas and, for visible reveal openings, its full-open
+    /// terminal snapshot for a whole-scene translation/fade.
     /// `scene.offset` must be the resting open placement in this surface.
     /// `width` and `height` are the logical viewport destination; atlas dimensions
     /// are rounded up to physical pixels without changing that destination.
@@ -352,7 +700,14 @@ impl LayerMotionPlan {
             return Ok(None);
         };
         if bead_core::animation::reduced_motion()
-            || opening && motion.reveal
+            || opening
+                && motion.reveal
+                && motion
+                    .art
+                    .as_ref()
+                    .and_then(|art| art.contour.as_ref())
+                    .is_none()
+                && motion.art.is_some()
             || scene.slide.is_some()
             || width == 0
             || height == 0
@@ -365,12 +720,61 @@ impl LayerMotionPlan {
         if !duration.is_finite() || !(0.001..=10.).contains(&duration) {
             return Ok(None);
         }
-        let closed_offset = motion.edge.closed_offset(
-            motion.slide_distance.unwrap_or(scene.bounds.w),
-            motion.slide_distance.unwrap_or(scene.bounds.h),
-            0.,
-        );
-        let Some(ink_bounds) = scene_ink_bounds(scene, scale, scene.offset) else {
+        let Some(closed_offset) = closed_plane_offset(scene, opening) else {
+            return Ok(None);
+        };
+        let (reveal, reveal_owned_indices) = if motion.reveal {
+            if let Some(art) = motion.art.as_ref() {
+                if let Some(contour) = art.contour.as_ref() {
+                    let (contour, indices) = if opening {
+                        (
+                            contour.clone(),
+                            motion
+                                .parts
+                                .iter()
+                                .map(|(index, _)| *index)
+                                .chain(std::iter::once(art.index))
+                                .collect::<std::collections::BTreeSet<_>>(),
+                        )
+                    } else {
+                        (contour.tracking_only(), Default::default())
+                    };
+                    (
+                        Some(contour.translated(scene.offset.0, scene.offset.1)),
+                        indices,
+                    )
+                } else {
+                    (None, Default::default())
+                }
+            } else if let Some((contour, indices)) = inferred_reveal_contour(scene, width, height) {
+                let (contour, indices) = if opening {
+                    (contour, indices.into_iter().collect())
+                } else {
+                    (contour.tracking_only(), Default::default())
+                };
+                (
+                    Some(contour.translated(scene.offset.0, scene.offset.1)),
+                    indices,
+                )
+            } else {
+                return Ok(None);
+            }
+        } else {
+            (None, Default::default())
+        };
+        if reveal.as_ref().is_some_and(|contour| !contour.valid()) {
+            return Ok(None);
+        }
+        let mut ink_scene = scene.clone();
+        if !reveal_owned_indices.is_empty() {
+            let mut index = 0;
+            ink_scene.retain_primitives(|_| {
+                let keep = !reveal_owned_indices.contains(&index);
+                index += 1;
+                keep
+            });
+        }
+        let Some(ink_bounds) = scene_ink_bounds(&ink_scene, scale, scene.offset) else {
             return Ok(None);
         };
         let Some(atlas_viewport) = motion_atlas_viewport(width, height, scale) else {
@@ -394,17 +798,64 @@ impl LayerMotionPlan {
         let Some(bytes) = (stride as usize).checked_mul(pixel_height as usize) else {
             return Ok(None);
         };
-        // One slide buffer, charged for its entire lifetime. Match the CPU
-        // composite size ceiling; this buffer is additional transient storage.
+        // Bound the combined slide and optional terminal buffers before either
+        // renderer paint starts. The terminal snapshot is only needed for a
+        // visible reveal opening.
         const LIMIT: usize = 64 * bead_core::cache::MIB;
-        if bytes > LIMIT {
+        let terminal_bytes = if opening
+            && reveal
+                .as_ref()
+                .is_some_and(|reveal| reveal.mode == RevealMode::Visible)
+        {
+            bytes
+        } else {
+            0
+        };
+        let combined_bytes = bytes
+            .checked_add(terminal_bytes)
+            .ok_or("layer motion buffer size overflow")?;
+        if combined_bytes > LIMIT {
             return Ok(None);
         }
         let budget = bead_core::cache::Budget::new("layer-motion-pixels", LIMIT);
-        let charge = budget.reserve(bytes)?;
+        let charge = budget.reserve(combined_bytes)?;
         let mut pixels = vec![0; bytes];
         let mut final_scene = scene.clone();
         final_scene.panel_offset(1., opening);
+        if !opening
+            && let Some(art) = final_scene
+                .motion
+                .as_ref()
+                .and_then(|motion| motion.art.clone())
+                .filter(|art| art.contour.is_some())
+        {
+            let (rect, bytes) = (art.draw)(art.body, None);
+            use std::hash::{Hash, Hasher};
+            let mut hash = std::collections::hash_map::DefaultHasher::new();
+            bytes.hash(&mut hash);
+            let path = std::path::PathBuf::from(format!("@reveal-art-{:x}.svg", hash.finish()));
+            final_scene
+                .asset_data
+                .retain(|path, _| !path.to_string_lossy().starts_with("@reveal-art-"));
+            final_scene.asset_data.insert(path.clone(), bytes);
+            if let Some(Primitive::Image {
+                path: target,
+                rect: target_rect,
+                ..
+            }) = final_scene.primitives.get_mut(art.index)
+            {
+                *target_rect = rect;
+                *target = path;
+            }
+        }
+        if !reveal_owned_indices.is_empty() {
+            let mut index = 0;
+            final_scene.retain_primitives(|_| {
+                let keep = !reveal_owned_indices.contains(&index);
+                index += 1;
+                keep
+            });
+        }
         // Motion is now entirely presentation state. It must not trigger the
         // CPU slide caches or per-frame body processing while painting the atlas.
         final_scene.motion = None;
@@ -420,6 +871,38 @@ impl LayerMotionPlan {
             },
             Damage::full(pixel_width, pixel_height),
         )?;
+
+        let terminal = if terminal_bytes > 0 {
+            let mut terminal_scene = scene.clone();
+            terminal_scene.panel_offset(1., true);
+            terminal_scene.prepared.clear();
+            terminal_scene.opacity = 1.;
+            terminal_scene.motion = None;
+            let mut terminal_pixels = vec![0; bytes];
+            renderer.prepare_on_ui(&terminal_scene, scale)?;
+            renderer.render(
+                &terminal_scene,
+                ShmTarget {
+                    bytes: &mut terminal_pixels,
+                    width: pixel_width,
+                    height: pixel_height,
+                    scale,
+                    format,
+                },
+                Damage::full(pixel_width, pixel_height),
+            )?;
+            Some(PixelBuffer {
+                width: pixel_width,
+                height: pixel_height,
+                stride,
+                scale,
+                format,
+                pixels: terminal_pixels,
+                _charge: charge.clone(),
+            })
+        } else {
+            None
+        };
 
         let source = Rect::new(0., 0., width as f32, height as f32);
         let resting = PlaneState {
@@ -445,6 +928,7 @@ impl LayerMotionPlan {
                 pixels,
                 _charge: charge,
             },
+            terminal,
             planes: vec![LayerMotionPlane {
                 id: 0,
                 source,
@@ -456,6 +940,7 @@ impl LayerMotionPlan {
                     OpacityMode::OpaqueAbove(0.001)
                 },
             }],
+            reveal,
         }))
     }
 }
@@ -535,16 +1020,279 @@ mod tests {
     }
 
     #[test]
-    fn a_growing_body_is_rejected_before_any_prepare_or_paint() -> Result<()> {
+    fn a_single_generic_rounded_body_gets_compositor_geometry() -> Result<()> {
+        let mut renderer = TreeCpuRenderer::default();
+        let plan = LayerMotionPlan::for_slide(
+            &scene(true, false),
+            true,
+            96,
+            72,
+            1.5,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )?
+        .expect("representable generic rounded body");
+        let contour = plan.reveal.expect("compositor contour");
+        assert_eq!(contour.animated_from, Rect::new(8., 64., 80., 0.));
+        assert_eq!(contour.animated_to, Rect::new(8., 8., 80., 56.));
+        assert_eq!(contour.radii_from, [6.; 4]);
+        assert_eq!(contour.radii_to, [6.; 4]);
+        assert_eq!(contour.mode, RevealMode::Visible);
+        Ok(())
+    }
+
+    #[test]
+    fn reveal_content_stays_put_without_a_slide_distance_at_sampled_scales() -> Result<()> {
+        for scale in [1., 1.5] {
+            let mut stationary = scene(true, false);
+            stationary.motion.as_mut().unwrap().slide_distance = None;
+            let mut renderer = TreeCpuRenderer::default();
+            let plan = LayerMotionPlan::for_slide(
+                &stationary,
+                true,
+                96,
+                72,
+                scale,
+                PixelFormat::Rgba,
+                &mut renderer,
+            )?
+            .expect("representable stationary reveal");
+            let plane = &plan.planes[0];
+            assert_eq!(plane.from.destination, Rect::new(0., 0., 96., 72.));
+            assert_eq!(plane.to.destination, Rect::new(0., 0., 96., 72.));
+            for t in [0., 0.25, 0.5, 0.75, 1.] {
+                let y = plane.from.destination.y
+                    + (plane.to.destination.y - plane.from.destination.y) * t;
+                assert_eq!(y, 0., "reveal content moved at t={t} scale={scale}");
+            }
+
+            let mut translated = scene(true, false);
+            translated.motion.as_mut().unwrap().slide_distance = Some(32.);
+            let mut renderer = TreeCpuRenderer::default();
+            let plan = LayerMotionPlan::for_slide(
+                &translated,
+                true,
+                96,
+                72,
+                scale,
+                PixelFormat::Rgba,
+                &mut renderer,
+            )?
+            .expect("representable explicitly translated reveal");
+            let plane = &plan.planes[0];
+            assert_eq!(plane.from.destination, Rect::new(0., 32., 96., 72.));
+            assert_eq!(plane.to.destination, Rect::new(0., 0., 96., 72.));
+            assert_eq!(
+                plane.from.destination.y * 0.5 + plane.to.destination.y * 0.5,
+                16.
+            );
+
+            let mut whole_scene_close = stationary.clone();
+            whole_scene_close.motion.as_mut().unwrap().open = false;
+            let mut renderer = TreeCpuRenderer::default();
+            let plan = LayerMotionPlan::for_slide(
+                &whole_scene_close,
+                false,
+                96,
+                72,
+                scale,
+                PixelFormat::Rgba,
+                &mut renderer,
+            )?
+            .expect("whole-scene close retains its default extent");
+            assert_eq!(plan.planes[0].from.destination, Rect::new(0., 0., 96., 72.));
+            assert_eq!(plan.planes[0].to.destination, Rect::new(0., 72., 96., 72.));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn reveal_validation_rejects_unsupported_shadow_and_degenerate_visible_rim() -> Result<()> {
+        let mut renderer = TreeCpuRenderer::default();
+        let plan = LayerMotionPlan::for_slide(
+            &scene(true, false),
+            true,
+            96,
+            72,
+            1.,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )?
+        .expect("representable reveal");
+        let mut contour = plan.reveal.expect("contour");
+        contour.shadow = Some(RevealShadow {
+            color: [0, 0, 0, 82],
+            blur: 8.,
+            spread: 0.,
+            offset: (0., 2.),
+        });
+        assert!(contour.valid());
+
+        contour.static_rects.push(Rect::new(0., 0., 1., 1.));
+        assert!(!contour.valid());
+        contour.static_rects.clear();
+        contour.holes.push(Rect::new(0., 0., 1., 1.));
+        assert!(!contour.valid());
+        contour.holes.clear();
+        contour.corner_mode = RevealCornerMode::QuadraticCut;
+        assert!(!contour.valid());
+        contour.corner_mode = RevealCornerMode::Circular;
+        contour.shadow = None;
+        contour.static_rects.push(Rect::new(0., 0., 0., 1.));
+        assert!(!contour.valid());
+        contour.static_rects.clear();
+        contour.holes.push(Rect::new(0., 0., 1., 0.));
+        assert!(!contour.valid());
+        contour.holes.clear();
+        contour.output_bounds = Rect::new(0., 0., 0., 0.);
+        assert!(!contour.valid());
+        contour.output_bounds = Rect::new(0., 0., 96., 72.);
+        contour.crop = Rect::new(0., 0., 0., 0.);
+        assert!(!contour.valid());
+        contour.crop = Rect::new(0., 0., 96., 72.);
+
+        contour.rim = Some(RevealRim {
+            colors: [[255; 4]; 3],
+            stops: [0., 0.5, 1.],
+            start: (1., 1.),
+            end: (1., 1.),
+            width: 1.,
+            opacity: 0.5,
+        });
+        assert!(!contour.valid());
+        contour.rim.as_mut().unwrap().opacity = 0.;
+        assert!(contour.valid());
+        Ok(())
+    }
+
+    #[test]
+    fn stationary_reveal_ignores_overflow_owned_by_its_contour() -> Result<()> {
+        let mut overflow = scene(true, false);
+        let Primitive::Rounded { rect, .. } = &mut overflow.primitives[0] else {
+            unreachable!();
+        };
+        *rect = Rect::new(8., -8., 80., 56.);
+        let changed_body = overflow.primitives[0].clone();
+        overflow.motion.as_mut().unwrap().parts = vec![(0, changed_body)];
+        overflow.motion.as_mut().unwrap().slide_distance = None;
+        assert!(motion_atlas_ink_is_safe(
+            &overflow,
+            true,
+            96,
+            72,
+            1.,
+            (0., 0.)
+        ));
+        let mut renderer = TreeCpuRenderer::default();
+        let plan = LayerMotionPlan::for_slide(
+            &overflow,
+            true,
+            96,
+            72,
+            1.,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )?
+        .expect("stationary reveal does not translate clipped contour ink");
+        assert_eq!(
+            plan.reveal.as_ref().unwrap().animated_to,
+            Rect::new(8., -8., 80., 56.)
+        );
+        assert_eq!(plan.planes[0].from.destination.y, 0.);
+
+        overflow.motion.as_mut().unwrap().slide_distance = Some(32.);
+        assert!(!motion_atlas_ink_is_safe(
+            &overflow,
+            true,
+            96,
+            72,
+            1.,
+            (0., 0.)
+        ));
+        overflow.motion.as_mut().unwrap().slide_distance = None;
+        assert!(!motion_atlas_ink_is_safe(
+            &overflow,
+            false,
+            96,
+            72,
+            1.,
+            (0., 0.)
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn generic_close_keeps_the_full_scene_and_tracks_geometry_invisibly() -> Result<()> {
+        let mut renderer = TreeCpuRenderer::default();
+        let mut plan = LayerMotionPlan::for_slide(
+            &scene(true, false),
+            false,
+            96,
+            72,
+            1.,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )?
+        .expect("whole-scene close plan");
+        let contour = plan.reveal.as_ref().expect("latent contour state");
+        assert_eq!(contour.mode, RevealMode::TrackingOnly);
+        assert_eq!(contour.animated_from, Rect::new(8., 8., 80., 56.));
+        assert_eq!(contour.animated_to, Rect::new(8., 64., 80., 0.));
+        let opening_scene = scene(true, false);
+        let opening_clip_from = opening_scene.reveal_window_at(0.).unwrap();
+        let opening_clip_to = opening_scene.reveal_window_at(1.).unwrap();
+        assert_eq!(contour.content_clip_from, opening_clip_to);
+        assert_eq!(contour.content_clip_to, opening_clip_from);
+        let opening_retarget_sample = Rect::new(
+            contour.animated_from.x + (contour.animated_to.x - contour.animated_from.x) * 0.5,
+            contour.animated_from.y + (contour.animated_to.y - contour.animated_from.y) * 0.5,
+            contour.animated_from.w + (contour.animated_to.w - contour.animated_from.w) * 0.5,
+            contour.animated_from.h + (contour.animated_to.h - contour.animated_from.h) * 0.5,
+        );
+        assert_eq!(opening_retarget_sample, Rect::new(8., 36., 80., 28.));
+        assert!(opening_retarget_sample.h < contour.animated_from.h);
+        let center = ((36 * plan.atlas.width + 48) * 4) as usize;
+        assert_eq!(plan.atlas.pixels[center..center + 4], [35, 80, 120, 255]);
+        assert!(!plan.atlas.take_pixels().is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn visible_reveal_captures_the_full_open_terminal_image() -> Result<()> {
+        let mut renderer = TreeCpuRenderer::default();
+        let mut source = scene(true, false);
+        let plan = LayerMotionPlan::for_slide(
+            &source,
+            true,
+            96,
+            72,
+            1.,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )?
+        .expect("visible reveal plan");
+        let terminal = plan.terminal.expect("full-open terminal image");
+        source.panel_offset(1., true);
+        source.opacity = 1.;
+        let expected = paint_scene(&source, (0., 0.), 96, 72)?;
+        assert_eq!(terminal.pixels, expected);
+        assert_eq!(plan.atlas.width, terminal.width);
+        assert_eq!(plan.atlas.height, terminal.height);
+        Ok(())
+    }
+
+    #[test]
+    fn combined_reveal_buffers_over_the_limit_fall_back_before_paint() -> Result<()> {
+        let mut renderer = NoPaint;
         assert!(
             LayerMotionPlan::for_slide(
                 &scene(true, false),
                 true,
-                96,
-                72,
-                1.5,
+                4_000,
+                3_000,
+                1.,
                 PixelFormat::Rgba,
-                &mut NoPaint,
+                &mut renderer,
             )?
             .is_none()
         );

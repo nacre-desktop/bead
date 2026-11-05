@@ -10,7 +10,7 @@
     requiring client commits for each animation frame.
   </description>
 
-  <interface name="bead_layer_motion_manager_v1" version="1">
+  <interface name="bead_layer_motion_manager_v1" version="2">
     <description summary="Create presentation controllers for layer surfaces"/>
     <enum name="error">
       <entry name="invalid_surface" value="0" summary="Surface has no layer-shell role"/>
@@ -28,7 +28,7 @@
     </request>
   </interface>
 
-  <interface name="bead_layer_motion_v1" version="1">
+  <interface name="bead_layer_motion_v1" version="2">
     <description summary="Group animation of atlas presentation planes">
       Plane requests are double-buffered with the associated wl_surface state.
       The animate request starts one shared timeline for all configured planes
@@ -38,6 +38,12 @@
       Clips are fixed in the unanimated surface frame and applied after the
       destination rectangle is placed. Planes are composited in creation order:
       the first plane is backmost and each later plane appears above earlier ones.
+      Version 2 adds a compound reveal contour. Geometry and radii share the
+      plane animation timeline; contour rectangles are unioned, then holes are
+      removed with the even-odd rule. Rect arrays contain at most 16 entries,
+      each encoded as four signed 24.8 wl_fixed values (x, y, width, height) in
+      native connection byte order. Their byte lengths must be multiples of
+      16. All geometry and gradient coordinates are root-local logical units.
     </description>
     <enum name="curve">
       <description summary="Normalized easing function applied to all planes"/>
@@ -51,6 +57,14 @@
       <description summary="Opacity interpolation function"/>
       <entry name="linear" value="0" summary="Use interpolated opacity"/>
       <entry name="opaque_above" value="1" summary="Use full opacity above the configured threshold"/>
+    </enum>
+    <enum name="corner_mode">
+      <entry name="circular" value="0"/>
+      <entry name="quadratic_cut" value="1"/>
+    </enum>
+    <enum name="reveal_mode">
+      <entry name="visible" value="0" summary="Draw and apply the contour as a mask"/>
+      <entry name="tracking_only" value="1" summary="Track geometry without drawing or masking"/>
     </enum>
     <enum name="error">
       <entry name="duplicate_plane" value="0" summary="Plane identifier already exists"/>
@@ -143,6 +157,120 @@
         define a new plane set for the same commit. The controller remains
         usable, and serial monotonicity is preserved.
       </description>
+    </request>
+    <!-- Version 2 requests stay after all version 1 requests to preserve opcodes. -->
+    <request name="set_reveal_bounds" since="2">
+      <description summary="Set root-local output and crop bounds for reveal rendering">
+        Coordinates and extents outside the inclusive logical range -32768 to
+        32768 are invalid and must be rejected by the client before sending.
+        Output and crop bounds may be disabled with both extents zero; otherwise
+        both width and height must be positive.
+      </description>
+      <arg name="output_x" type="fixed"/><arg name="output_y" type="fixed"/>
+      <arg name="output_width" type="fixed"/><arg name="output_height" type="fixed"/>
+      <arg name="crop_x" type="fixed"/><arg name="crop_y" type="fixed"/>
+      <arg name="crop_width" type="fixed"/><arg name="crop_height" type="fixed"/>
+    </request>
+    <request name="set_reveal_geometry" since="2">
+      <description summary="Set compound animated reveal geometry">
+        Fixed rectangles and the animated rounded rectangle are unioned; holes
+        are removed with even-odd fill. Endpoints and radii interpolate on the
+        shared curve. square_edges bits are left=1, top=2, right=4, bottom=8.
+        RGBA is unpremultiplied sRGB packed as 0xRRGGBBAA. Fill, rim, and
+        shadow alpha follow the sampled opacity of opacity_plane.
+        Clients must not pair a shadow with static rectangles, holes, or the
+        quadratic-cut corner mode; that combination is unsupported.
+      </description>
+      <arg name="from_x" type="fixed"/><arg name="from_y" type="fixed"/>
+      <arg name="from_width" type="fixed"/><arg name="from_height" type="fixed"/>
+      <arg name="to_x" type="fixed"/><arg name="to_y" type="fixed"/>
+      <arg name="to_width" type="fixed"/><arg name="to_height" type="fixed"/>
+      <arg name="from_radius_top_left" type="fixed"/><arg name="from_radius_top_right" type="fixed"/>
+      <arg name="from_radius_bottom_right" type="fixed"/><arg name="from_radius_bottom_left" type="fixed"/>
+      <arg name="to_radius_top_left" type="fixed"/><arg name="to_radius_top_right" type="fixed"/>
+      <arg name="to_radius_bottom_right" type="fixed"/><arg name="to_radius_bottom_left" type="fixed"/>
+      <arg name="corner_mode" type="uint" enum="corner_mode"/>
+      <arg name="square_edges" type="uint"/><arg name="fill_rgba" type="uint"/>
+      <arg name="opacity_plane" type="uint"/>
+    </request>
+    <request name="set_reveal_content_clip" since="2">
+      <description summary="Set animated content clip endpoints">
+        This clip preserves layer-surface reveal-window semantics separately
+        from the rounded contour mask. Both rectangles interpolate on the
+        shared animation curve and are intersected with crop and surface bounds.
+      </description>
+      <arg name="from_x" type="fixed"/><arg name="from_y" type="fixed"/>
+      <arg name="from_width" type="fixed"/><arg name="from_height" type="fixed"/>
+      <arg name="to_x" type="fixed"/><arg name="to_y" type="fixed"/>
+      <arg name="to_width" type="fixed"/><arg name="to_height" type="fixed"/>
+    </request>
+    <request name="set_reveal_rects" since="2">
+      <description summary="Set fixed contour rectangles and even-odd holes">
+        Each array contains at most 16 x/y/width/height tuples, each encoded
+        as four native-endian signed 24.8 wl_fixed integers (16 bytes). Length
+        must be a multiple of 16 before any element is decoded. Every rectangle
+        and hole must have positive width and height; zero-area entries are invalid.
+      </description>
+      <arg name="static_rects" type="array"/><arg name="holes" type="array"/>
+    </request>
+    <request name="set_reveal_rim" since="2">
+      <description summary="Set a constant three-stop compositor-rendered rim gradient">
+        Colors are unpremultiplied sRGB packed 0xRRGGBBAA. Stops are normalized
+        gradient positions. Geometry is in root-local logical units. A visible
+        rim with nonzero width and opacity requires distinct start and end
+        points; zero-width or zero-opacity rims may use a degenerate vector.
+      </description>
+      <arg name="color_0" type="uint"/><arg name="color_1" type="uint"/>
+      <arg name="color_2" type="uint"/><arg name="stop_0" type="fixed"/>
+      <arg name="stop_1" type="fixed"/><arg name="stop_2" type="fixed"/>
+      <arg name="start_x" type="fixed"/><arg name="start_y" type="fixed"/>
+      <arg name="end_x" type="fixed"/><arg name="end_y" type="fixed"/>
+      <arg name="width" type="fixed"/><arg name="opacity" type="fixed"/>
+    </request>
+    <request name="set_reveal_shadow" since="2">
+      <description summary="Set optional compositor-rendered reveal shadow">
+        RGBA is unpremultiplied sRGB packed as 0xRRGGBBAA. Blur, spread and
+        offsets use root-local logical surface units. The shadow follows the
+        contour's sampled per-corner radii throughout the timeline. Clients
+        may send it only for a circular animated rounded rectangle with no
+        static rectangles or holes.
+      </description>
+      <arg name="rgba" type="uint"/><arg name="blur" type="fixed"/>
+      <arg name="spread" type="fixed"/><arg name="offset_x" type="fixed"/>
+      <arg name="offset_y" type="fixed"/>
+    </request>
+    <request name="set_reveal_mode" since="2">
+      <description summary="Select visible contour rendering or invisible geometry tracking">
+        Tracking-only mode preserves animated geometry and radii for retargeting,
+        and tracks content-clip endpoints, but draws no contour, applies no
+        contour mask or content clip, and imposes no hit-test restriction.
+        Whole-scene close atlases continue to use ordinary plane clipping.
+      </description>
+      <arg name="mode" type="uint" enum="reveal_mode"/>
+    </request>
+    <request name="set_reveal_terminal_buffer" since="2">
+      <description summary="Set the immutable full-open snapshot for a visible reveal endpoint">
+        The buffer is copied from SHM ARGB8888 or ABGR8888 when the associated
+        wl_surface commit is applied. Pixels are premultiplied; physical width,
+        height and stride must be positive and copy bounds are checked. The
+        compositor sends wl_buffer.release after copying, and clients must not
+        mutate or reuse the buffer before release. Retained terminal snapshot
+        data is capped at 64 MiB per layer, including a previous snapshot
+        retained during replacement.
+
+        Width and height are positive logical surface dimensions within the
+        existing fixed-point limits. A null buffer clears the snapshot and
+        requires both dimensions to be zero. The request applies atomically
+        with the motion descriptor and atlas; stale serials do not install it.
+        The snapshot is used only when a visible reveal reaches eased progress
+        1, replacing the animated atlas and contour for that endpoint. Animated
+        frames continue using the atlas and contour. Reset, destruction, unmap,
+        tracking-only presentation, and non-reveal descriptors clear terminal
+        data; a new descriptor must replace or explicitly clear it.
+      </description>
+      <arg name="buffer" type="object" interface="wl_buffer" allow-null="true"/>
+      <arg name="width" type="fixed"/>
+      <arg name="height" type="fixed"/>
     </request>
     <event name="plane_state">
       <description summary="Final committed state of one plane">

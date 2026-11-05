@@ -8,7 +8,9 @@ use bead_render::{
     layer_motion::{LayerMotionPlan, PlaneState},
 };
 use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop, globals::GlobalList};
+use wayland_client::{
+    Connection, Dispatch, Proxy, QueueHandle, delegate_noop, globals::GlobalList,
+};
 
 use crate::{
     layer_motion_protocol::bead_layer_motion_manager_v1::BeadLayerMotionManagerV1,
@@ -37,7 +39,11 @@ struct DispatchData {
 impl LayerMotionManager {
     /// Bind the protocol when the compositor advertises it.
     pub(crate) fn bind(globals: &GlobalList, qh: &QueueHandle<App>) -> Option<Self> {
-        globals.bind(qh, 1..=1, ()).ok().map(Self)
+        globals.bind(qh, 1..=2, ()).ok().map(Self)
+    }
+
+    pub(crate) fn supports_reveal(&self) -> bool {
+        self.0.version() >= 2
     }
 
     /// Create a controller associated with a layer-role surface.
@@ -86,6 +92,9 @@ impl LayerMotionController {
                     .is_some_and(|source| *source != plane.source)
             })
         {
+            return None;
+        }
+        if plan.reveal.is_some() && self.proxy.version() < 2 {
             return None;
         }
         for plane in &plan.planes {
@@ -147,6 +156,141 @@ impl LayerMotionController {
             };
             self.proxy.set_plane_opacity_mode(plane.id, mode, threshold);
         }
+        if self.proxy.version() >= 2 {
+            if let Some(contour) = &plan.reveal {
+                let mut static_rects = Vec::with_capacity(contour.static_rects.len() * 16);
+                for rect in &contour.static_rects {
+                    encode_rect(&mut static_rects, *rect);
+                }
+                let mut holes = Vec::with_capacity(contour.holes.len() * 16);
+                for rect in &contour.holes {
+                    encode_rect(&mut holes, *rect);
+                }
+                let [from_tl, from_tr, from_br, from_bl] = contour.radii_from;
+                let [to_tl, to_tr, to_br, to_bl] = contour.radii_to;
+                let corner_mode = match contour.corner_mode {
+                    bead_render::layer_motion::RevealCornerMode::Circular => {
+                        bead_layer_motion_v1::CornerMode::Circular
+                    }
+                    bead_render::layer_motion::RevealCornerMode::QuadraticCut => {
+                        bead_layer_motion_v1::CornerMode::QuadraticCut
+                    }
+                };
+                self.proxy.set_reveal_bounds(
+                    contour.output_bounds.x as f64,
+                    contour.output_bounds.y as f64,
+                    contour.output_bounds.w as f64,
+                    contour.output_bounds.h as f64,
+                    contour.crop.x as f64,
+                    contour.crop.y as f64,
+                    contour.crop.w as f64,
+                    contour.crop.h as f64,
+                );
+                self.proxy.set_reveal_geometry(
+                    contour.animated_from.x as f64,
+                    contour.animated_from.y as f64,
+                    contour.animated_from.w as f64,
+                    contour.animated_from.h as f64,
+                    contour.animated_to.x as f64,
+                    contour.animated_to.y as f64,
+                    contour.animated_to.w as f64,
+                    contour.animated_to.h as f64,
+                    from_tl as f64,
+                    from_tr as f64,
+                    from_br as f64,
+                    from_bl as f64,
+                    to_tl as f64,
+                    to_tr as f64,
+                    to_br as f64,
+                    to_bl as f64,
+                    corner_mode,
+                    contour.square_edges,
+                    pack_rgba(contour.fill),
+                    contour.opacity_plane,
+                );
+                self.proxy.set_reveal_mode(match contour.mode {
+                    bead_render::layer_motion::RevealMode::Visible => {
+                        bead_layer_motion_v1::RevealMode::Visible
+                    }
+                    bead_render::layer_motion::RevealMode::TrackingOnly => {
+                        bead_layer_motion_v1::RevealMode::TrackingOnly
+                    }
+                });
+                self.proxy.set_reveal_content_clip(
+                    contour.content_clip_from.x as f64,
+                    contour.content_clip_from.y as f64,
+                    contour.content_clip_from.w as f64,
+                    contour.content_clip_from.h as f64,
+                    contour.content_clip_to.x as f64,
+                    contour.content_clip_to.y as f64,
+                    contour.content_clip_to.w as f64,
+                    contour.content_clip_to.h as f64,
+                );
+                self.proxy.set_reveal_rects(static_rects, holes);
+                if let Some(rim) = contour.rim {
+                    self.proxy.set_reveal_rim(
+                        pack_rgba(rim.colors[0]),
+                        pack_rgba(rim.colors[1]),
+                        pack_rgba(rim.colors[2]),
+                        rim.stops[0] as f64,
+                        rim.stops[1] as f64,
+                        rim.stops[2] as f64,
+                        rim.start.0 as f64,
+                        rim.start.1 as f64,
+                        rim.end.0 as f64,
+                        rim.end.1 as f64,
+                        rim.width as f64,
+                        rim.opacity as f64,
+                    );
+                } else {
+                    self.proxy
+                        .set_reveal_rim(0, 0, 0, 0., 1., 1., 0., 0., 0., 0., 0., 0.);
+                }
+                if let Some(shadow) = contour.shadow {
+                    self.proxy.set_reveal_shadow(
+                        pack_rgba(shadow.color),
+                        shadow.blur as f64,
+                        shadow.spread as f64,
+                        shadow.offset.0 as f64,
+                        shadow.offset.1 as f64,
+                    );
+                } else {
+                    self.proxy.set_reveal_shadow(0, 0., 0., 0., 0.);
+                }
+            } else {
+                self.proxy.set_reveal_bounds(0., 0., 0., 0., 0., 0., 0., 0.);
+                self.proxy.set_reveal_geometry(
+                    0.,
+                    0.,
+                    0.,
+                    0.,
+                    0.,
+                    0.,
+                    0.,
+                    0.,
+                    0.,
+                    0.,
+                    0.,
+                    0.,
+                    0.,
+                    0.,
+                    0.,
+                    0.,
+                    bead_layer_motion_v1::CornerMode::Circular,
+                    0,
+                    0,
+                    0,
+                );
+                self.proxy
+                    .set_reveal_mode(bead_layer_motion_v1::RevealMode::TrackingOnly);
+                self.proxy
+                    .set_reveal_content_clip(0., 0., 0., 0., 0., 0., 0., 0.);
+                self.proxy.set_reveal_rects(Vec::new(), Vec::new());
+                self.proxy
+                    .set_reveal_rim(0, 0, 0, 0., 1., 1., 0., 0., 0., 0., 0., 0.);
+                self.proxy.set_reveal_shadow(0, 0., 0., 0., 0.);
+            }
+        }
         let curve = match plan.curve {
             bead_core::animation::Curve::EaseOut => bead_layer_motion_v1::Curve::EaseOutCubic,
             bead_core::animation::Curve::EaseInOut => bead_layer_motion_v1::Curve::EaseInOutCubic,
@@ -167,6 +311,23 @@ impl LayerMotionController {
         );
         self.active_serial = Some(serial);
         Some(serial)
+    }
+
+    /// Queue or clear the immutable terminal snapshot in the same commit as
+    /// the plan. The caller owns allocation and keeps the SHM buffer alive.
+    pub(crate) fn queue_terminal_buffer(
+        &mut self,
+        buffer: Option<&wayland_client::protocol::wl_buffer::WlBuffer>,
+        logical_size: (u32, u32),
+    ) {
+        if self.proxy.version() >= 2 {
+            let (width, height) = if buffer.is_some() {
+                (logical_size.0 as f64, logical_size.1 as f64)
+            } else {
+                (0., 0.)
+            };
+            self.proxy.set_reveal_terminal_buffer(buffer, width, height);
+        }
     }
 
     /// Reset plane presentation atomically with the next wl_surface commit.
@@ -211,6 +372,17 @@ impl LayerMotionController {
                 .expect("motion event lock poisoned"),
         )
     }
+}
+
+fn encode_rect(bytes: &mut Vec<u8>, rect: Rect) {
+    for value in [rect.x, rect.y, rect.w, rect.h] {
+        let fixed = (f64::from(value) * 256.).round() as i32;
+        bytes.extend_from_slice(&fixed.to_ne_bytes());
+    }
+}
+
+fn pack_rgba(color: [u8; 4]) -> u32 {
+    u32::from_be_bytes(color)
 }
 
 impl Drop for LayerMotionController {
@@ -311,6 +483,12 @@ impl Dispatch<BeadLayerMotionV1, Arc<DispatchData>> for App {
                 state.surfaces[index].layer_motion_open,
                 target_open,
                 target_motion.is_some_and(|motion| motion.reveal),
+                target_scene.is_some_and(|scene| {
+                    crate::rendering::reveal_contour_capable(
+                        scene,
+                        state.layer_motion_manager.as_ref(),
+                    )
+                }),
             );
             if cpu_reveal_handoff {
                 if let Some(motion) = state.surfaces[index].layer_motion.as_mut() {
@@ -326,6 +504,31 @@ impl Dispatch<BeadLayerMotionV1, Arc<DispatchData>> for App {
                 && state.surfaces[index].layer_motion_open == Some(true)
                 && state.surfaces[index].layer_motion_ui_serial == state.surfaces[index].ui_serial
                 && (!state.surfaces[index].companion || state.panel_target);
+            let reveal_contour_available = target_scene.is_some_and(|scene| {
+                target_motion.is_some_and(|motion| motion.reveal)
+                    && crate::rendering::reveal_contour_capable(
+                        scene,
+                        state.layer_motion_manager.as_ref(),
+                    )
+            });
+            if completed && reveal_contour_available && target_open {
+                if let Some(motion) = state.surfaces[index].layer_motion.as_mut() {
+                    motion.take_events();
+                    motion.retire_completed(serial);
+                }
+                state.panel_frame_until = None;
+                state.surfaces[index].layer_motion_active = true;
+                if settled_open {
+                    // Keep the contour controller and atlas attached as static
+                    // compositor presentation. Later transitions can retarget it;
+                    // content replacement will reset atomically with fresh pixels.
+                    state.surfaces[index].redraw = false;
+                    return;
+                }
+                state.surfaces[index].redraw = true;
+                state.draw(index, qh);
+                return;
+            }
             state.surfaces[index].layer_motion_active = false;
             let surface = state.surfaces[index].layer.wl_surface().clone();
             if let Some(motion) = state.surfaces[index].layer_motion.as_mut() {
@@ -372,8 +575,9 @@ mod tests {
         bead_layer_motion_v1::{BeadLayerMotionV1 as ServerMotion, Request as ServerMotionRequest},
     };
     use bead_render::{
-        Damage, Motion, PixelFormat, Primitive, Renderer, Result, Scene, ShmTarget,
-        layer_motion::LayerMotionPlan, tree::TreeCpuRenderer,
+        Damage, Motion, PixelFormat, Primitive, Renderer, Result, RevealArt, Scene, ShmTarget,
+        layer_motion::{LayerMotionPlan, RevealContour, RevealCornerMode, RevealRim, RevealShadow},
+        tree::TreeCpuRenderer,
     };
     use std::{
         os::unix::net::UnixStream,
@@ -386,12 +590,111 @@ mod tests {
         protocol::{wl_compositor, wl_surface},
     };
 
+    #[test]
+    fn reveal_v2_keeps_v1_wire_opcodes_and_wayland_argument_limits() {
+        let xml = include_str!("../../../protocols/bead-layer-motion-v1.xml");
+        let interface = |name: &str| {
+            xml.split(&format!("interface name=\"{name}\""))
+                .nth(1)
+                .expect("protocol interface")
+                .split("</interface>")
+                .next()
+                .expect("closed protocol interface")
+        };
+        let names = |interface: &str, element: &str| {
+            interface
+                .split(&format!("<{element} "))
+                .skip(1)
+                .map(|entry| {
+                    entry
+                        .split("name=\"")
+                        .nth(1)
+                        .and_then(|entry| entry.split('\"').next())
+                        .expect("protocol element name")
+                        .to_owned()
+                })
+                .collect::<Vec<_>>()
+        };
+        let manager = interface("bead_layer_motion_manager_v1");
+        assert_eq!(names(manager, "request"), ["destroy", "get_motion"]);
+        let controller = interface("bead_layer_motion_v1");
+        let requests = names(controller, "request");
+        assert_eq!(
+            &requests[..9],
+            [
+                "destroy",
+                "add_plane",
+                "set_plane_to",
+                "set_plane_from",
+                "set_curve",
+                "set_plane_opacity_mode",
+                "animate",
+                "cancel",
+                "reset",
+            ],
+            "version 1 request opcodes must not move"
+        );
+        assert_eq!(
+            names(controller, "event"),
+            ["plane_state", "done", "cancelled"],
+            "version 1 event opcodes must not move"
+        );
+        assert_eq!(
+            requests.last().map(String::as_str),
+            Some("set_reveal_terminal_buffer"),
+            "terminal buffer request must be appended after existing requests"
+        );
+        let terminal = controller
+            .split("<request name=\"set_reveal_terminal_buffer\"")
+            .nth(1)
+            .unwrap()
+            .split("</request>")
+            .next()
+            .unwrap();
+        assert!(terminal.contains(
+            "name=\"buffer\" type=\"object\" interface=\"wl_buffer\" allow-null=\"true\""
+        ));
+        for request in controller.split("<request ").skip(1) {
+            let request = request.split("</request>").next().unwrap();
+            assert!(
+                request.matches("<arg ").count() <= 20,
+                "Wayland request argument limit exceeded: {}",
+                request.split("name=\"").nth(1).unwrap_or_default()
+            );
+        }
+        let geometry = controller
+            .split("<request name=\"set_reveal_geometry\"")
+            .nth(1)
+            .unwrap()
+            .split("</request>")
+            .next()
+            .unwrap();
+        assert_eq!(geometry.matches("<arg ").count(), 20);
+        let shadow = controller
+            .split("<request name=\"set_reveal_shadow\"")
+            .nth(1)
+            .unwrap()
+            .split("</request>")
+            .next()
+            .unwrap();
+        assert_eq!(shadow.matches("<arg ").count(), 5);
+    }
+
     #[derive(Default)]
     struct Counts {
         commits: AtomicUsize,
         plane_adds: AtomicUsize,
         animates: AtomicUsize,
         resets: AtomicUsize,
+        reveal_bounds: AtomicUsize,
+        reveal_geometry: AtomicUsize,
+        reveal_clip: AtomicUsize,
+        reveal_rects: AtomicUsize,
+        reveal_rim: AtomicUsize,
+        reveal_shadow: AtomicUsize,
+        terminal_buffer: AtomicUsize,
+        reveal_mode: AtomicUsize,
+        tracking_mode: AtomicUsize,
         request_order: Mutex<Vec<&'static str>>,
     }
 
@@ -505,6 +808,45 @@ mod tests {
                     state.0.resets.fetch_add(1, Ordering::Relaxed);
                     state.0.request_order.lock().unwrap().push("reset");
                 }
+                ServerMotionRequest::SetRevealBounds { .. } => {
+                    state.0.reveal_bounds.fetch_add(1, Ordering::Relaxed);
+                }
+                ServerMotionRequest::SetRevealGeometry { .. } => {
+                    state.0.reveal_geometry.fetch_add(1, Ordering::Relaxed);
+                }
+                ServerMotionRequest::SetRevealContentClip { .. } => {
+                    state.0.reveal_clip.fetch_add(1, Ordering::Relaxed);
+                }
+                ServerMotionRequest::SetRevealRects { .. } => {
+                    state.0.reveal_rects.fetch_add(1, Ordering::Relaxed);
+                }
+                ServerMotionRequest::SetRevealRim { .. } => {
+                    state.0.reveal_rim.fetch_add(1, Ordering::Relaxed);
+                }
+                ServerMotionRequest::SetRevealShadow { .. } => {
+                    state.0.reveal_shadow.fetch_add(1, Ordering::Relaxed);
+                }
+                ServerMotionRequest::SetRevealMode { mode } => {
+                    state.0.reveal_mode.fetch_add(1, Ordering::Relaxed);
+                    if matches!(
+                        mode,
+                        wayland_server::WEnum::Value(
+                            crate::layer_motion_protocol::server::bead_layer_motion_v1::RevealMode::TrackingOnly
+                        )
+                    ) {
+                        state.0.tracking_mode.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+                ServerMotionRequest::SetRevealTerminalBuffer {
+                    buffer,
+                    width,
+                    height,
+                } => {
+                    assert!(buffer.is_none());
+                    assert_eq!((width, height), (0., 0.));
+                    state.0.terminal_buffer.fetch_add(1, Ordering::Relaxed);
+                    state.0.request_order.lock().unwrap().push("terminal");
+                }
                 _ => {}
             }
         }
@@ -513,14 +855,14 @@ mod tests {
     fn server(
         stream: UnixStream,
         counts: Arc<Counts>,
-        advertise_motion: bool,
+        motion_version: Option<u32>,
     ) -> (thread::JoinHandle<()>, Arc<AtomicBool>) {
         let mut display = Display::<FakeState>::new().unwrap();
         let mut handle = display.handle();
         let state = FakeState(counts);
         handle.create_global::<FakeState, wl_compositor::WlCompositor, _>(6, ());
-        if advertise_motion {
-            handle.create_global::<FakeState, ServerMotionManager, _>(1, ());
+        if let Some(version) = motion_version {
+            handle.create_global::<FakeState, ServerMotionManager, _>(version, ());
         }
         handle
             .insert_client(stream, Arc::new(FakeClient))
@@ -594,7 +936,7 @@ mod tests {
     fn one_paint_and_one_group_request_reach_the_wayland_dispatch_queue() {
         let counts = Arc::new(Counts::default());
         let (client_stream, server_stream) = UnixStream::pair().unwrap();
-        let (server_thread, stop) = server(server_stream, counts.clone(), true);
+        let (server_thread, stop) = server(server_stream, counts.clone(), Some(1));
         let connection = wayland_client::Connection::from_socket(client_stream).unwrap();
         let (globals, queue) = wayland_client::globals::registry_queue_init::<App>(&connection)
             .expect("registry roundtrip");
@@ -621,6 +963,7 @@ mod tests {
         plan.atlas.take_pixels();
         assert_eq!(renderer.paints, 1);
         let mut controller = manager.create(&surface, &qh);
+        controller.queue_terminal_buffer(None, (0, 0));
         controller.queue(&plan).expect("one valid plane");
         surface.commit();
         connection.flush().expect("flush requests");
@@ -631,10 +974,14 @@ mod tests {
         assert_eq!(counts.plane_adds.load(Ordering::Relaxed), 1);
         assert_eq!(counts.animates.load(Ordering::Relaxed), 1);
         assert_eq!(counts.commits.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_bounds.load(Ordering::Relaxed), 0);
+        assert_eq!(counts.reveal_geometry.load(Ordering::Relaxed), 0);
+        assert_eq!(counts.terminal_buffer.load(Ordering::Relaxed), 0);
         for plane in &mut plan.planes {
             std::mem::swap(&mut plane.from, &mut plane.to);
         }
         plan.retarget = true;
+        controller.queue_terminal_buffer(None, (0, 0));
         controller.queue(&plan).expect("retarget same atlas");
         surface.commit();
         connection.flush().expect("flush retarget");
@@ -646,6 +993,160 @@ mod tests {
         assert_eq!(counts.plane_adds.load(Ordering::Relaxed), 1);
         assert_eq!(counts.animates.load(Ordering::Relaxed), 2);
         assert_eq!(counts.commits.load(Ordering::Relaxed), 2);
+        assert_eq!(counts.terminal_buffer.load(Ordering::Relaxed), 0);
+        drop(controller);
+        drop(surface);
+        stop.store(true, Ordering::Relaxed);
+        server_thread.join().unwrap();
+    }
+
+    #[test]
+    fn reveal_descriptor_is_submitted_once_and_style_edits_reuse_the_controller() {
+        let counts = Arc::new(Counts::default());
+        let (client_stream, server_stream) = UnixStream::pair().unwrap();
+        let (server_thread, stop) = server(server_stream, counts.clone(), Some(2));
+        let connection = wayland_client::Connection::from_socket(client_stream).unwrap();
+        let (globals, queue) = wayland_client::globals::registry_queue_init::<App>(&connection)
+            .expect("registry roundtrip");
+        let qh = queue.handle();
+        let manager = LayerMotionManager::bind(&globals, &qh).expect("advertised manager v2");
+        assert!(manager.supports_reveal());
+        let compositor = smithay_client_toolkit::compositor::CompositorState::bind(&globals, &qh)
+            .expect("advertised compositor");
+        let surface = compositor.create_surface(&qh);
+        let mut scene = sample_scene();
+        let body = Rect::new(4., 4., 24., 24.);
+        let primitive = scene.primitives[0].clone();
+        let motion = scene.motion.as_mut().unwrap();
+        motion.reveal = true;
+        motion.parts = vec![(0, primitive)];
+        motion.art = Some(RevealArt {
+            body,
+            index: 0,
+            contour: Some(RevealContour {
+                output_bounds: Rect::new(0., 0., 32., 32.),
+                crop: Rect::new(0., 0., 32., 32.),
+                static_rects: vec![Rect::new(0., 0., 32., 4.)],
+                holes: Vec::new(),
+                animated_from: Rect::new(4., 28., 24., 0.),
+                animated_to: body,
+                content_clip_from: Rect::new(-4096., -4096., 8224., 8224.),
+                content_clip_to: Rect::new(0., 0., 32., 32.),
+                radii_from: [0.; 4],
+                radii_to: [3.; 4],
+                corner_mode: RevealCornerMode::QuadraticCut,
+                mode: bead_render::layer_motion::RevealMode::Visible,
+                opacity_plane: 0,
+                square_edges: 2,
+                fill: [35, 80, 120, 255],
+                rim: Some(RevealRim {
+                    colors: [[100, 130, 180, 255]; 3],
+                    stops: [0., 0.38, 1.],
+                    start: (0., 0.),
+                    end: (0., 32.),
+                    width: 1.,
+                    opacity: 0.25,
+                }),
+                shadow: Some(RevealShadow {
+                    color: [0, 0, 0, 82],
+                    blur: 8.,
+                    spread: 0.,
+                    offset: (0., 2.),
+                }),
+            }),
+            draw: Arc::new(|_, _| panic!("compositor contour skips per-frame art draw")),
+        });
+        let mut renderer = CountPaint {
+            inner: TreeCpuRenderer::default(),
+            paints: 0,
+        };
+        let mut plan =
+            LayerMotionPlan::for_slide(&scene, true, 32, 32, 1., PixelFormat::Rgba, &mut renderer)
+                .expect("prepare reveal plan")
+                .expect("supported descriptor");
+        assert_eq!(
+            renderer.paints, 2,
+            "visible reveal captures atlas and endpoint"
+        );
+        let mut controller = manager.create(&surface, &qh);
+        controller.queue_terminal_buffer(None, (0, 0));
+        assert!(controller.queue(&plan).is_some());
+        surface.commit();
+        connection.flush().expect("flush reveal request");
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while counts.animates.load(Ordering::Relaxed) == 0 && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(counts.reveal_bounds.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_geometry.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_clip.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_rects.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_rim.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_shadow.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_mode.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.tracking_mode.load(Ordering::Relaxed), 0);
+        assert_eq!(counts.terminal_buffer.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.animates.load(Ordering::Relaxed), 1);
+
+        plan.reveal.as_mut().unwrap().rim.as_mut().unwrap().opacity = 0.16;
+        assert!(!controller.needs_recreation(&plan));
+        plan.retarget = true;
+        assert!(controller.queue(&plan).is_some());
+        surface.commit();
+        connection.flush().expect("flush style update");
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while counts.animates.load(Ordering::Relaxed) < 2 && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(renderer.paints, 2);
+        assert_eq!(counts.plane_adds.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_rim.load(Ordering::Relaxed), 2);
+        assert_eq!(counts.reveal_mode.load(Ordering::Relaxed), 2);
+        assert_eq!(counts.animates.load(Ordering::Relaxed), 2);
+        assert_eq!(counts.terminal_buffer.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.tracking_mode.load(Ordering::Relaxed), 0);
+        drop(controller);
+        drop(surface);
+        stop.store(true, Ordering::Relaxed);
+        server_thread.join().unwrap();
+    }
+
+    #[test]
+    fn whole_scene_reveal_close_sends_tracking_only_contour_once() {
+        let counts = Arc::new(Counts::default());
+        let (client_stream, server_stream) = UnixStream::pair().unwrap();
+        let (server_thread, stop) = server(server_stream, counts.clone(), Some(2));
+        let connection = wayland_client::Connection::from_socket(client_stream).unwrap();
+        let (globals, queue) = wayland_client::globals::registry_queue_init::<App>(&connection)
+            .expect("registry roundtrip");
+        let qh = queue.handle();
+        let manager = LayerMotionManager::bind(&globals, &qh).expect("advertised manager v2");
+        let compositor = smithay_client_toolkit::compositor::CompositorState::bind(&globals, &qh)
+            .expect("advertised compositor");
+        let surface = compositor.create_surface(&qh);
+        let mut scene = sample_scene();
+        scene.motion.as_mut().unwrap().reveal = true;
+        let mut renderer = TreeCpuRenderer::default();
+        let plan =
+            LayerMotionPlan::for_slide(&scene, false, 32, 32, 1., PixelFormat::Rgba, &mut renderer)
+                .unwrap()
+                .unwrap();
+        assert_eq!(
+            plan.reveal.as_ref().unwrap().mode,
+            bead_render::layer_motion::RevealMode::TrackingOnly
+        );
+        let mut controller = manager.create(&surface, &qh);
+        assert!(controller.queue(&plan).is_some());
+        surface.commit();
+        connection.flush().expect("flush close tracker");
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while counts.animates.load(Ordering::Relaxed) == 0 && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(counts.tracking_mode.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_geometry.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.reveal_clip.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.animates.load(Ordering::Relaxed), 1);
         drop(controller);
         drop(surface);
         stop.store(true, Ordering::Relaxed);
@@ -656,7 +1157,7 @@ mod tests {
     fn reset_is_staged_after_replacement_attach_and_reuses_serial_sequence() {
         let counts = Arc::new(Counts::default());
         let (client_stream, server_stream) = UnixStream::pair().unwrap();
-        let (server_thread, stop) = server(server_stream, counts.clone(), true);
+        let (server_thread, stop) = server(server_stream, counts.clone(), Some(1));
         let connection = wayland_client::Connection::from_socket(client_stream).unwrap();
         let (globals, queue) = wayland_client::globals::registry_queue_init::<App>(&connection)
             .expect("registry roundtrip");
@@ -735,7 +1236,7 @@ mod tests {
     fn absent_global_keeps_the_stock_compositor_path_available() {
         let counts = Arc::new(Counts::default());
         let (client_stream, server_stream) = UnixStream::pair().unwrap();
-        let (server_thread, stop) = server(server_stream, counts, false);
+        let (server_thread, stop) = server(server_stream, counts, None);
         let connection = wayland_client::Connection::from_socket(client_stream).unwrap();
         let (globals, _queue) = wayland_client::globals::registry_queue_init::<App>(&connection)
             .expect("registry roundtrip");
