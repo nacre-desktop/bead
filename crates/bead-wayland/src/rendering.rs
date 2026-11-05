@@ -20,6 +20,14 @@ mod layer_motion_renderer_tests {
     }
 
     #[test]
+    fn gpu_reveal_requires_exact_opt_in_value() {
+        assert!(!super::layer_reveal_enabled(None));
+        assert!(!super::layer_reveal_enabled(Some("0")));
+        assert!(!super::layer_reveal_enabled(Some("true")));
+        assert!(super::layer_reveal_enabled(Some("1")));
+    }
+
+    #[test]
     fn supported_reveal_reversals_keep_the_compositor_controller() {
         assert!(!super::layer_motion_reveal_reversal_uses_cpu(
             true, true, true, true, true
@@ -69,8 +77,13 @@ pub(super) fn reveal_contour_capable(
     let Some(motion) = scene.motion.as_ref().filter(|motion| motion.reveal) else {
         return true;
     };
-    manager.is_some_and(crate::layer_motion::LayerMotionManager::supports_reveal)
+    layer_reveal_enabled(std::env::var("BEAD_LAYER_REVEAL").ok().as_deref())
+        && manager.is_some_and(crate::layer_motion::LayerMotionManager::supports_reveal)
         && (motion.art.as_ref().is_none_or(|art| art.contour.is_some()))
+}
+
+fn layer_reveal_enabled(value: Option<&str>) -> bool {
+    value == Some("1")
 }
 
 fn layer_motion_cpu_replacement_pending(
