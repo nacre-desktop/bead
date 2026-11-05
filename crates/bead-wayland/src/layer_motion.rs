@@ -1047,12 +1047,10 @@ mod tests {
                     width: 1.,
                     opacity: 0.25,
                 }),
-                shadow: Some(RevealShadow {
-                    color: [0, 0, 0, 82],
-                    blur: 8.,
-                    spread: 0.,
-                    offset: (0., 2.),
-                }),
+                // This compound shape has fixed rectangles and quadratic-cut
+                // corners; the protocol permits shadows only with a plain
+                // circular rounded contour.
+                shadow: None,
             }),
             draw: Arc::new(|_, _| panic!("compositor contour skips per-frame art draw")),
         });
