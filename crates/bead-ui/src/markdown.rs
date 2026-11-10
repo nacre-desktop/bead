@@ -2,7 +2,7 @@
 //! The Markdown subset of a chat transcript. Block structure is kept
 //! (paragraphs, headings, lists, quotes, rules, fenced code); inline marks are
 //! flattened to plain text because a text box has one style. Assistant text only;
-//! the user's own text stays plain, as in the QML.
+//! the user's own text stays plain.
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Block {
@@ -132,7 +132,7 @@ pub fn parse(text: &str) -> Vec<Block> {
     blocks
 }
 
-/// Contents of the closed fenced blocks, exactly what the QML "Copy code" buttons copy.
+/// Contents of the closed fenced blocks for a host's copy-code action.
 pub fn code_blocks(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut open: Option<Vec<&str>> = None;

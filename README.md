@@ -1,10 +1,14 @@
 # Bead
 
-Bead is a general MIT-licensed Rust framework for building Wayland shells. It provides retained rendering and layout, Luau views, stable-ID state, reusable UI components, atomic hot reload, Wayland integration, and optional service adapters.
+Bead is an actively developed, MIT-licensed Rust framework for building Wayland shells. It provides reusable rendering, input, Luau UI, widgets, host adapters, and optional desktop-service primitives. Bead is an independent framework; applications supply their own identity, shell content, assets, configuration, service routes, and installation policy.
 
-[Nacre](https://github.com/nacre-desktop/nacre) is one application built on Bead. The framework has no dependency on Nacre; application identity, content, assets, service routes, and installation policy belong to each host.
+**Status:** workspace crates are not published to crates.io. Applications should pin a reviewed Git revision; APIs may change between revisions.
 
-## Start here
+## What Bead provides
+
+Views describe presentation and behavior in Luau. Rust owns reusable platform, rendering, input, and service primitives. Reload validates a complete new view generation before swapping it atomically; invalid changes leave the last working UI active and report a source location and error.
+
+## Try the minimal shell
 
 [`examples/minimal-shell`](examples/minimal-shell/README.md) is a standalone host using only Bead. Its headless check is:
 
@@ -14,20 +18,34 @@ cargo run -p bead-minimal-shell --locked -- --check
 
 Omit `--check` to open the Wayland window. The lower-level `bead --example minimal` is a renderer/facade smoke example.
 
-## Framework map
+## Workspace layout
 
-- [`crates/`](crates/README.md) — framework crate guide.
-- [`examples/`](examples/README.md) — minimal host and plugin example.
-- [`docs/COMPONENTS.md`](docs/COMPONENTS.md) — UI components and host-provided theme inputs.
-- [`docs/specs/`](docs/specs/README.md) — retained framework contracts and split decision.
-- [`docs/development/ci.md`](docs/development/ci.md) — CI checks and local equivalents.
+- [`crates/`](crates/) — framework crates.
+- [`examples/`](examples/) — minimal host and plugin example.
+- [`docs/`](docs/) — framework contracts and development guides.
+- [`protocols/`](protocols/) — protocol definitions used by the workspace.
+- [`tools/`](tools/) — repository checks and test support.
 
-Views describe presentation and behavior in Luau. Rust owns reusable platform, rendering, input, and service primitives. Reload validates a complete new view generation before swapping it atomically; invalid changes leave the last working UI active and report a source location and error.
+## Crates
 
-## CI and contributions
+See the [crate guide](crates/README.md) for the workspace crate breakdown.
 
-CI checks formatting, warnings-denied Clippy, tests, renderer features, framework dependency policy, and the minimal-shell example. See the [CI guide](docs/development/ci.md) and [repository rules](AGENTS.md) before contributing.
+## Examples
 
-## License
+See the [examples guide](examples/README.md) for the minimal host and plugin example.
 
-Bead is distributed under MIT terms. Third-party components retain their own notices and licenses. See [LICENSE.md](LICENSE.md) and the adjacent notices under `vendor/` and `crates/bead-test/fonts/`.
+## Documentation
+
+- [Components](docs/COMPONENTS.md) — UI components and host-provided theme inputs.
+- [Status](docs/STATUS.md) and [roadmap](docs/ROADMAP.md).
+- [Architecture decisions](docs/decisions/0001-architecture.md) — records the framework's architectural choices.
+- [Framework specifications](docs/specs/README.md) — retained contracts and split decision.
+- [CI guide](docs/development/ci.md) — checks and local equivalents.
+
+## License and third-party notices
+
+Bead framework code and original documentation are licensed under the MIT License in [`LICENSE`](LICENSE). Third-party components retain their own notices and licenses; see the notices under `vendor/` and `crates/bead-test/fonts/`.
+
+## Contributing
+
+See the [CI guide](docs/development/ci.md) and [repository rules](AGENTS.md) before contributing.

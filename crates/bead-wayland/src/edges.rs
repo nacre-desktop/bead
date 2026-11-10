@@ -220,7 +220,7 @@ fn key(output: &str, lip: &str) -> String {
     format!("{output}/{lip}")
 }
 const SIDES: [Edge; 4] = [Edge::Top, Edge::Right, Edge::Bottom, Edge::Left];
-/// Pointer leave to panel close for a hover-opened panel (QML's 130-140 ms exit timers).
+/// Delay between pointer leave and closing a hover-opened panel.
 const EXIT_MS: u64 = 130;
 const FRAME: Duration = Duration::from_millis(16);
 /// The cue box fades in and out linearly over this long.
@@ -930,7 +930,7 @@ impl App {
             return;
         };
         self.edge.dwell.cancel();
-        // The panel opens: the cue vanishes with it, as QML hides the cue while its dashboard is visible.
+        // The cue closes with the panel so it does not remain visible over the opened surface.
         complete_edge_cue(&mut self.edge);
         let Some((output, id)) = k.split_once('/') else {
             return;

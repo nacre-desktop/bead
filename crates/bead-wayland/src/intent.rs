@@ -173,7 +173,7 @@ mod tests {
         }
     }
     #[test]
-    fn lip_rectangles_match_the_qml_formulas() {
+    fn lip_rectangles_are_centered_on_the_output_edge() {
         let out = (1920., 1200.);
         assert_eq!(
             lip(Edge::Top, 208., 50.).rect(out),

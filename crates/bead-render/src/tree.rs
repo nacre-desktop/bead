@@ -3113,8 +3113,8 @@ pub struct TreeCpuRenderer {
     close_timer: bool,
 }
 /// B0205: an opening ends on the worker-prepared frame at the slide's offset, painted directly
-/// over the whole surface (the window no longer clips any content), which cost a full repaint on
-/// the UI thread (~6 ms one dev-2 core, 40–60 ms live on battery). The same paint runs on one
+/// over the whole surface (the window no longer clips any content), which avoids doing a full
+/// repaint on the UI thread during the opening. The same paint runs on one
 /// low-priority thread while the opening slides; the settled frames copy their owed regions from
 /// it once it has finished (never waiting; otherwise they paint directly as before). The
 /// painter is identical and a repair region paints the same pixels as a full paint, so the copy

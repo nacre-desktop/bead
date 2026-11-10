@@ -15,4 +15,4 @@ This index contains current framework contracts and repository-boundary decision
 | [0218 — Compositor-driven layer motion](0218-layer-motion.md) | Optional grouped atlas-plane animation for layer surfaces |
 | [0219 — Native layer promotion](0219-native-layer-promotion.md) | Optional compositor-owned floating placement for the existing layer surface |
 
-Step 3 (history import into Nacre) and step 4 (product removal from Bead) are complete. The full framework CI workflow passed on `b18cec0ce64378a9db8218f227eeeb75b289fb13` without a Nacre checkout, including all 12 independent dependency/license roots and minimal-shell proofs. Step 5 closure checks remain with the lead. No product implementation plan is maintained here.
+This index covers Bead framework contracts. See [status](../STATUS.md) and the [framework split decision](0214-framework-split.md) for migration state; step 5 closure checks remain with the lead.

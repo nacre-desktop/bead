@@ -343,7 +343,9 @@ impl State {
         });
         // Older hosts persisted transient markup budget overruns as permanent
         // plugin faults. Treat those entries as recoverable on the next start.
-        state.faults.retain(|_, message| !transient_budget_error(message));
+        state
+            .faults
+            .retain(|_, message| !transient_budget_error(message));
         state
     }
     pub fn save(&self, path: &Path) -> Result<(), String> {

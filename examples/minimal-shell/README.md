@@ -21,3 +21,4 @@ For development, start it inside a private nested compositor, using a private
 HOME, XDG runtime directory and bus. `--seconds N` bounds the host's lifetime.
 Use `--root DIR` to supply the bundled `ui/` tree when copying the binary elsewhere.
 No installer, systemd unit or compositor config is installed by this example.
+Keep nested-session testing isolated from the user's live desktop and configuration.

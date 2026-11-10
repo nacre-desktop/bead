@@ -37,8 +37,8 @@ return function(ui, tokens)
         return kit.Button(out)
     end
     -- A rounded track, filled part, and handle, all inset 6 px.
-    -- A horizontal two-colour fill (QML `Gradient` blending the accent into `secondary`): a flat `from` bar with
-    -- round ends, and, while `tokens.gradients` is on (the `interfaceGradients` setting) and the bar is long
+    -- A horizontal two-colour fill blending `from` into `to`: a flat `from` bar with
+    -- round ends, and, while `tokens.gradients` is enabled and the bar is long
     -- enough, the interior blended in equal steps by laying `to` over it at rising alpha. Roles are palette
     -- names; `opacity` dims the whole fill. Off or short or dimmed, it is the flat `from` bar.
     function kit.Fill(p)
@@ -168,7 +168,7 @@ return function(ui, tokens)
             local label_size=tokens.text.caption*4/3
             local labels={ui.Text{id="label",text=p.label,width=text_w,height=18,font_size=label_size,font_weight=500,color=color}}
             if p.detail and p.detail~="" then
-                -- network and Bluetooth names may take a second line, as in QML; the height follows the estimated wrap
+                -- Network and Bluetooth names may take a second line; height follows the estimated wrap.
                 local lines=p.detail_lines and (#p.detail*small*.5>text_w and 2 or 1) or 1
                 labels[2]=ui.Text{id="detail",text=p.detail,width=text_w,height=lines*16,font_size=small,
                     color=armed and p.on and "onPrimaryContainer" or "onSurfaceVariant"}
@@ -243,7 +243,7 @@ return function(ui, tokens)
         local out,total={},0
         for i,row in ipairs(rows) do
             local spec=p.sizes[row.size]
-            -- a short last row shares the whole width (QML `Layout.fillWidth`)
+            -- A short last row shares the whole available width.
             local cell=(p.width-p.gap*(#row.items-1))/#row.items
             local kids={}
             for j,t in ipairs(row.items) do kids[j]=t.build(cell,spec.height) end
