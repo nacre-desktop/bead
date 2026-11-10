@@ -4,3 +4,4 @@ target/
 **/target/
 __pycache__/
 *.pyc
+.lead/
