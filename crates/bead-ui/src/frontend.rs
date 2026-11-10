@@ -700,8 +700,11 @@ impl Vm {
             sdk.set(
                 "plugin_fault",
                 lua.create_function(move |_, (id, message): (String, String)| {
-                    crate::plugins::fault(&root, &id, &message);
-                    Ok(())
+                    if crate::plugins::fault(&root, &id, &message) {
+                        Err(mlua::Error::runtime(message))
+                    } else {
+                        Ok(())
+                    }
                 })?,
             )?;
         }

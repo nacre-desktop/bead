@@ -266,6 +266,112 @@ fn a_broken_plugin_is_listed_with_its_error_and_others_still_load() {
 }
 
 #[test]
+fn a_persisted_budget_fault_is_recovered_but_real_faults_stay_disabled() {
+    let (temp, config) = fixture(HOST_VIEW);
+    plugin(
+        &config.system[0],
+        "recovered",
+        VALID,
+        "return function() end",
+    );
+    fs::create_dir_all(config.state.as_ref().unwrap().parent().unwrap()).unwrap();
+    fs::write(
+        config.state.as_ref().unwrap(),
+        r#"{"version":1,"faults":{"recovered":"runtime error: markup exceeded 50 ms limit","other":"render failed"}}"#,
+    )
+    .unwrap();
+
+    let recovered = State::load(config.state.as_deref());
+    assert!(!recovered.faults.contains_key("recovered"));
+    assert_eq!(
+        recovered.faults.get("other").map(String::as_str),
+        Some("render failed")
+    );
+    assert!(mount(&temp.0).grants.contains_key("recovered"));
+}
+
+#[test]
+fn a_transient_plugin_timeout_keeps_the_last_scene_and_retries_on_the_next_update() {
+    let (temp, config) = fixture(HOST_VIEW);
+    plugin(
+        &config.system[0],
+        "retry",
+        VALID,
+        "return function(api) return {render=function() return api.ui.Text{id='item',text='healthy',width=100,height=20} end} end",
+    );
+    fs::create_dir_all(temp.0.join("ui")).unwrap();
+    fs::write(
+        temp.0.join("ui/bundle.json"),
+        r#"{"plugins":true,"modules":[]}"#,
+    )
+    .unwrap();
+    fs::write(
+        temp.0.join("ui/behavior.luau"),
+        "return {stores={},actions={},computed={}}",
+    )
+    .unwrap();
+    let entry = temp.0.join("ui/main.luau");
+    let view = "local ui=require('bead.ui')\nlocal index=require('../plugins/index')\nlocal entry=index.plugins[1]\nlocal package=require('../'..entry.widgets[1].module)({ui=ui,plugin={id=entry.id,settings=entry.values}})\nlocal ok,node=pcall(package.render)\nif not ok then ui.plugin_fault(entry.id,tostring(node)); return ui.Text{id='failed',text='faulted',width=100,height=20} end\nreturn node";
+    fs::write(&entry, view).unwrap();
+    let fallback = bead_render::Scene {
+        opacity: 1.,
+        motion: None,
+        resource_revision: 0,
+        asset_data: Default::default(),
+        clips: Default::default(),
+        layers: Vec::new(),
+        prepared: Default::default(),
+        font_files: vec![],
+        width: 100.,
+        slide: None,
+        primitives: vec![],
+        offset: (0., 0.),
+        bounds: bead_render::Rect::new(0., 0., 100., 100.),
+    };
+    let mut session = crate::Session::new(
+        temp.0.clone(),
+        "ui/main.luau".into(),
+        temp.0.join("palette.json"),
+        bead_render::Palette::read(&temp.0.join("palette.json")).unwrap(),
+        fallback,
+    );
+    let scene = session.reload().unwrap();
+    session.commit(scene);
+
+    fs::write(
+        config.system[0].join("retry/widget.luau"),
+        "return function(api) return {render=function() while true do end end} end",
+    )
+    .unwrap();
+    fs::write(&entry, view).unwrap();
+    // Exercise the real Luau interrupt inside a plugin render. Its pcall
+    // reaches plugin_fault, which must rethrow the transient error to Session.
+    let error = match session.reload() {
+        Err(error) => error,
+        Ok(_) => panic!("transient plugin timeout unexpectedly replaced the scene"),
+    };
+    assert!(error.message.contains("exceeded 50 ms"), "{error}");
+    assert!(!config.state.as_ref().unwrap().exists());
+    assert!(mount(&temp.0).grants.contains_key("retry"));
+    assert!(session.current.primitives.iter().any(|primitive| matches!(
+        primitive,
+        bead_render::Primitive::Text { text, .. } if text == "healthy"
+    )));
+
+    fs::write(
+        config.system[0].join("retry/widget.luau"),
+        "return function(api) return {render=function() return api.ui.Text{id='item',text='healthy again',width=100,height=20} end} end",
+    )
+    .unwrap();
+    let scene = session.update(BTreeMap::new()).unwrap().unwrap();
+    session.commit(scene);
+    assert!(session.current.primitives.iter().any(|primitive| matches!(
+        primitive,
+        bead_render::Primitive::Text { text, .. } if text == "healthy again"
+    )));
+}
+
+#[test]
 fn local_install_copies_a_folder_disabled_and_refuses_duplicates() {
     let (temp, config) = fixture(HOST_VIEW);
     let source = temp.0.join("source");

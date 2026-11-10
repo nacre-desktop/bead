@@ -337,10 +337,14 @@ impl State {
         let Some(bytes) = path.and_then(|path| fs::read(path).ok()) else {
             return Self::default();
         };
-        serde_json::from_slice(&bytes).unwrap_or_else(|error| Self {
+        let mut state = serde_json::from_slice(&bytes).unwrap_or_else(|error| Self {
             notice: format!("plugin state unreadable, using defaults: {error}"),
             ..Self::default()
-        })
+        });
+        // Older hosts persisted transient markup budget overruns as permanent
+        // plugin faults. Treat those entries as recoverable on the next start.
+        state.faults.retain(|_, message| !transient_budget_error(message));
+        state
     }
     pub fn save(&self, path: &Path) -> Result<(), String> {
         let parent = path
@@ -631,16 +635,27 @@ pub fn owner(file: &str) -> Option<&str> {
     valid_id(id).then_some(id)
 }
 
-/// Record a load/render failure once: the plugin stays off until the user re-enables it.
+/// Plugins with permanent faults stay off until the user re-enables them.
 static FAULTED: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
-pub fn fault(root: &Path, id: &str, message: &str) {
+fn transient_budget_error(message: &str) -> bool {
+    message.contains("exceeded 50 ms")
+}
+/// Record a load/render failure once; return true when it is a transient budget overrun.
+pub fn fault(root: &Path, id: &str, message: &str) -> bool {
+    let transient = transient_budget_error(message);
     let message: String = message.chars().take(512).collect();
+    if transient {
+        // A previous host may have persisted this recoverable error. State::load
+        // drops it; avoid writing state on every over-budget build.
+        eprintln!("PLUGIN_ERROR id={id} {message}");
+        return true;
+    }
     if !FAULTED
         .lock()
         .unwrap_or_else(|p| p.into_inner())
         .insert(id.to_owned())
     {
-        return;
+        return false;
     }
     eprintln!("PLUGIN_ERROR id={id} {message}");
     let config = config(root);
@@ -649,6 +664,7 @@ pub fn fault(root: &Path, id: &str, message: &str) {
             state.faults.insert(id.to_owned(), message);
         });
     }
+    false
 }
 /// Enable or disable a plugin. Enabling clears a recorded fault.
 pub fn set_enabled(config: &Config, id: &str, enabled: bool) -> Result<(), String> {
