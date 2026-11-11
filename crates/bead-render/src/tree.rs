@@ -1814,6 +1814,14 @@ impl TreeCache {
                                             .cloned()
                                     }
                                 })
+                                .or_else(|| {
+                                    previous_frame_item
+                                        .as_ref()
+                                        .filter(|(previous_id, _)| previous_id == &id)
+                                        .and_then(|(_, raster)| raster.as_ref())
+                                        .filter(|raster| raster.key == key)
+                                        .cloned()
+                                })
                         })
                         .flatten();
                     let started = std::time::Instant::now();
@@ -3006,10 +3014,23 @@ impl CpuPreparation {
     pub fn mark_requested(&self) -> bool {
         !self.queued.swap(true, std::sync::atomic::Ordering::AcqRel)
     }
-    pub fn prepare(&self) -> std::result::Result<(), String> {
-        let result = TreeCpuRenderer::prepare_snapshot(&self.scene, self.scale)
+    pub fn prepare(&self) -> std::result::Result<Option<TreeCache>, String> {
+        let mut result = TreeCpuRenderer::prepare_snapshot(&self.scene, self.scale)
             .map_err(|error| error.to_string());
-        let status = result.as_ref().map(|_| ()).map_err(Clone::clone);
+        // Keep the worker's already baked pixels warm for later scene changes.
+        // The snapshot still owns its frame until the UI accepts it, including
+        // the direct-paint fallback when compact-cache admission is denied.
+        let cache = result
+            .as_mut()
+            .ok()
+            .filter(|prepared| prepared.release_cache)
+            .map(|prepared| {
+                let frame = prepared.renderer.cache.frame.clone();
+                let cache = std::mem::take(&mut prepared.renderer.cache);
+                prepared.renderer.cache.frame = frame;
+                cache
+            });
+        let status = result.as_ref().map(|_| cache).map_err(Clone::clone);
         *self.result.lock().map_err(|_| "CPU preparation poisoned")? = Some(result);
         status
     }
@@ -7753,6 +7774,57 @@ mod tests {
             first,
             "a reused image raster matches fresh rendering"
         );
+    }
+
+    #[test]
+    fn imported_prepared_frame_reuses_same_image_raster_and_rebuilds_changed_asset() {
+        let mut scene = scene();
+        let mut source = TreeCache::default();
+        source.prepare(&scene, 1.).unwrap();
+        let prepared = source.frame.as_ref().unwrap().clone();
+        let prepared_pixels = prepared.items[0].raster.as_ref().unwrap().pixels.clone();
+        scene.prepared.insert(1_f32.to_bits(), prepared.clone());
+
+        let mut resumed = TreeCache::default();
+        resumed.prepare(&scene, 1.).unwrap();
+        assert!(Arc::ptr_eq(resumed.frame.as_ref().unwrap(), &prepared));
+        scene.prepared.clear();
+
+        let builds = resumed.builds;
+        resumed.prepare(&scene, 1.).unwrap();
+        let reused_pixels = resumed.frame.as_ref().unwrap().items[0]
+            .raster
+            .as_ref()
+            .unwrap()
+            .pixels
+            .clone();
+        assert_eq!(
+            resumed.builds, builds,
+            "an unchanged imported raster is reused"
+        );
+        assert!(Arc::ptr_eq(&prepared_pixels, &reused_pixels));
+
+        let mut changed =
+            Pixmap::decode_png(&scene.asset_data[std::path::Path::new("proof.png")]).unwrap();
+        changed.pixels_mut()[0] =
+            tiny_skia::PremultipliedColorU8::from_rgba(200, 10, 20, 255).unwrap();
+        scene
+            .asset_data
+            .insert("proof.png".into(), Arc::from(changed.encode_png().unwrap()));
+        scene.resource_revision += 1;
+        resumed.prepare(&scene, 1.).unwrap();
+        let changed_pixels = resumed.frame.as_ref().unwrap().items[0]
+            .raster
+            .as_ref()
+            .unwrap()
+            .pixels
+            .clone();
+        assert_eq!(
+            resumed.builds,
+            builds + 1,
+            "changed pixels require a rebuild"
+        );
+        assert!(!Arc::ptr_eq(&prepared_pixels, &changed_pixels));
     }
 
     #[test]

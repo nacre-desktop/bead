@@ -315,8 +315,17 @@ fn prepare_resource_job(
             Ok(result)
         }
         Job::PrepareCpu(request) => {
-            *cache = bead_render::tree::TreeCache::default();
             let result = request.prepare();
+            let frame = cache.frame.take();
+            *cache = Default::default();
+            let result = result.map(|prepared| {
+                if let Some(mut prepared) = prepared {
+                    // ReleasePrepared names the source frame, which can still
+                    // be a native recipe while its CPU pixels are already warm.
+                    prepared.frame = frame;
+                    *cache = prepared;
+                }
+            });
             Ok(result)
         }
         job => Err(job),
@@ -1033,6 +1042,62 @@ mod tests {
         ));
         assert!(cache.frame.is_none());
         assert!(current.upgrade().is_none());
+    }
+
+    #[test]
+    fn cpu_preparation_keeps_dense_pixels_warm_and_source_release_identity() {
+        use bead_render::Renderer;
+        for changed_before_close in [false, true] {
+            let mut fixture = scene();
+            fixture.primitives[0] = bead_render::Primitive::Image {
+                rect: bead_render::Rect::new(0., 0., 16., 16.),
+                path: "proof.svg".into(),
+                blur: 0.,
+                fit: bead_render::ImageFit::Fill,
+                clip_polygon: None,
+            };
+            fixture.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));
+            let mut cache = bead_render::tree::TreeCache::default()
+                .with_image_policy(bead_render::tree::ImagePolicy::UploadOnly);
+            bake(&mut cache, &mut fixture, &[1.]).unwrap();
+            let source_frame = fixture.prepared[&1_f32.to_bits()].clone();
+            assert!(source_frame.items[0].image.is_some());
+            let mut renderer = bead_render::tree::TreeCpuRenderer::default();
+            let error = renderer.prepare_on_ui(&fixture, 1.).unwrap_err();
+            let request = error
+                .downcast_ref::<bead_render::tree::CpuResourcesPending>()
+                .unwrap()
+                .request
+                .clone();
+            assert!(matches!(
+                prepare_resource_job(Job::PrepareCpu(request), &mut cache),
+                Ok(Ok(()))
+            ));
+            assert!(Arc::ptr_eq(cache.frame.as_ref().unwrap(), &source_frame));
+            renderer.prepare_on_ui(&fixture, 1.).unwrap();
+            drop(renderer);
+            let builds = cache.builds;
+            assert!(builds > 0);
+            fixture.prepared.clear();
+            if changed_before_close {
+                fixture.resource_revision += 1;
+                cache.prepare(&fixture, 1.).unwrap();
+                assert_eq!(
+                    cache.builds, builds,
+                    "the first scene update reuses baked CPU pixels"
+                );
+                assert!(cache.frame.as_ref().unwrap().items[0].raster.is_some());
+                assert!(cache.frame.as_ref().unwrap().items[0].image.is_none());
+            }
+            let current = Arc::downgrade(cache.frame.as_ref().unwrap());
+            assert!(release_cached_prepared(&mut cache, &[current]));
+            assert!(cache.frame.is_none());
+            cache.prepare(&fixture, 1.).unwrap();
+            assert!(
+                cache.builds > builds,
+                "close releases the warm pixels even without an intervening scene update"
+            );
+        }
     }
 
     #[test]
