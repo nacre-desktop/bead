@@ -341,11 +341,10 @@ impl State {
             notice: format!("plugin state unreadable, using defaults: {error}"),
             ..Self::default()
         });
-        // Older hosts persisted transient markup budget overruns as permanent
-        // plugin faults. Treat those entries as recoverable on the next start.
+        // Legacy migration: older hosts persisted this timeout as text.
         state
             .faults
-            .retain(|_, message| !transient_budget_error(message));
+            .retain(|_, message| !message.contains("markup exceeded 50 ms limit"));
         state
     }
     pub fn save(&self, path: &Path) -> Result<(), String> {
@@ -639,8 +638,10 @@ pub fn owner(file: &str) -> Option<&str> {
 
 /// Plugins with permanent faults stay off until the user re-enables them.
 static FAULTED: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
-fn transient_budget_error(message: &str) -> bool {
-    message.contains("exceeded 50 ms")
+pub(crate) const MARKUP_BUDGET_ERROR_CODE: &str = "BEAD_MARKUP_BUDGET_EXCEEDED";
+
+pub(crate) fn transient_budget_error(message: &str) -> bool {
+    message.contains(MARKUP_BUDGET_ERROR_CODE)
 }
 /// Record a load/render failure once; return true when it is a transient budget overrun.
 pub fn fault(root: &Path, id: &str, message: &str) -> bool {

@@ -646,7 +646,10 @@ impl Vm {
             if ticks.get().is_multiple_of(64)
                 && bead_core::profile::thread_cpu_ns() > limit.get() + spent.get()
             {
-                Err(mlua::Error::runtime("markup exceeded 50 ms limit"))
+                Err(mlua::Error::runtime(format!(
+                    "{}: markup exceeded 50 ms limit",
+                    crate::plugins::MARKUP_BUDGET_ERROR_CODE
+                )))
             } else {
                 Ok(VmState::Continue)
             }

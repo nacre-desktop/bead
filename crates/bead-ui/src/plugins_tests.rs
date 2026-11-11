@@ -372,6 +372,15 @@ fn a_transient_plugin_timeout_keeps_the_last_scene_and_retries_on_the_next_updat
 }
 
 #[test]
+fn transient_budget_classification_uses_stable_error_code() {
+    assert!(super::transient_budget_error(&format!(
+        "{}: markup exceeded 73 ms limit",
+        super::MARKUP_BUDGET_ERROR_CODE
+    )));
+    assert!(!super::transient_budget_error("render failed"));
+}
+
+#[test]
 fn local_install_copies_a_folder_disabled_and_refuses_duplicates() {
     let (temp, config) = fixture(HOST_VIEW);
     let source = temp.0.join("source");
