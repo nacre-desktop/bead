@@ -583,6 +583,8 @@ pub trait SceneSource {
     ) -> Result<(), Box<dyn Error>> {
         Err("asynchronous CPU preparation is unavailable".into())
     }
+    /// Release source-owned prepared frames after a matching frozen snapshot is accepted.
+    fn release_prepared(&mut self, _scene: &Scene) {}
     fn resources_retired(&self) -> bool {
         false
     }

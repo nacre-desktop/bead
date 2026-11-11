@@ -978,7 +978,8 @@ impl TreeCache {
         self.nodes.retain(|_, (_, touched)| *touched == self.serial);
     }
     /// Retire all pixel-bearing owners after a frozen snapshot has been built.
-    fn release_pixel_storage(&mut self) {
+    /// Release frames and pixel-bearing cache entries while keeping budgets and image policy.
+    pub fn release_pixel_storage(&mut self) {
         self.frame = None;
         self.entries.clear();
         self.nodes.clear();
@@ -3850,6 +3851,43 @@ impl Renderer for TreeCpuRenderer {
             0,
         )
     }
+    fn resume_prepared(&mut self, scene: &Scene, scale: f32) -> Result<()> {
+        if self.snapshot_fingerprint.is_none()
+            || !scale.is_finite()
+            || scale <= 0.
+            || scene.opacity != 1.
+            || scene.slide.is_some()
+            || scene
+                .motion
+                .as_ref()
+                .is_none_or(|motion| !motion.open || motion.reveal)
+        {
+            return Ok(());
+        }
+        let Some(frame) = scene
+            .prepared
+            .get(&scale.to_bits())
+            .filter(|frame| frame.scale.to_bits() == scale.to_bits())
+            .filter(|frame| prepared_rasters_match_visibility(scene, frame))
+            .filter(|frame| frame.items.iter().all(|item| item.image.is_none()))
+        else {
+            return Ok(());
+        };
+        let mut resumed = Self::default();
+        resumed.cache.prepare(scene, scale)?;
+        if !resumed
+            .cache
+            .frame
+            .as_ref()
+            .is_some_and(|imported| Arc::ptr_eq(imported, frame))
+        {
+            return Ok(());
+        }
+        resumed.opacity_builds = self.opacity_builds;
+        resumed.direct_composites = self.direct_composites;
+        *self = resumed;
+        Ok(())
+    }
     fn reusable_scene(&self, scene: &Scene, scale: f32) -> Result<bool> {
         if let Some(fingerprint) = self.worker_fingerprint.as_ref() {
             return fingerprint.matches_content(scene, scale);
@@ -3888,17 +3926,19 @@ impl Renderer for TreeCpuRenderer {
             }
             return Ok(());
         }
-        let dense = scene.prepared.get(&scale.to_bits()).is_some_and(|frame| {
-            prepared_rasters_match_visibility(scene, frame)
-                && frame.items.iter().all(|item| item.image.is_none())
-        }) && !scene.motion.as_ref().is_some_and(|motion| {
-            motion.reveal
-                && motion.progress < 1.
-                && motion
-                    .parts
-                    .iter()
-                    .any(|(_, primitive)| matches!(primitive, Primitive::Image { .. }))
-        });
+        let dense = self.snapshot_fingerprint.is_none()
+            && scene.prepared.get(&scale.to_bits()).is_some_and(|frame| {
+                prepared_rasters_match_visibility(scene, frame)
+                    && frame.items.iter().all(|item| item.image.is_none())
+            })
+            && !scene.motion.as_ref().is_some_and(|motion| {
+                motion.reveal
+                    && motion.progress < 1.
+                    && motion
+                        .parts
+                        .iter()
+                        .any(|(_, primitive)| matches!(primitive, Primitive::Image { .. }))
+            });
         if dense {
             return self.prepare(scene, scale);
         }
@@ -3937,13 +3977,16 @@ impl Renderer for TreeCpuRenderer {
                 None => None,
             }
         };
-        if let Some(Ok(mut prepared)) = ready {
-            // Keep the prepared frame: reveals animate it instead of a frozen composite.
-            prepared.release_cache = false;
+        if let Some(Ok(prepared)) = ready {
             let mut renderer = prepared.accept()?;
-            renderer.snapshot_fingerprint = None;
-            renderer.worker_fingerprint = Some(SnapshotFingerprint::new(scene, scale)?);
+            if renderer.snapshot_fingerprint.is_none() {
+                // Reveal and denied-snapshot fallbacks retain the worker frame;
+                // reuse it rather than queueing a second preparation per draw.
+                renderer.worker_fingerprint = Some(SnapshotFingerprint::new(scene, scale)?);
+            }
             if let Some(motion) = scene.motion.as_ref().filter(|motion| motion.reveal) {
+                // Reveals animate the prepared frame instead of a frozen composite.
+                renderer.snapshot_fingerprint = None;
                 renderer.opaque_composition = if !motion.open || motion.progress < 1. {
                     OpaqueComposition::Direct
                 } else {
@@ -4102,10 +4145,9 @@ impl Renderer for TreeCpuRenderer {
 /// Store exact repeated pixels compactly, including transparent and dimmer borders.
 fn compress_rows(pixels: Pixmap) -> FlattenedPixels {
     let (width, height) = (pixels.width(), pixels.height());
-    // Compression is an optional CPU snapshot optimization. Keep its per-job
-    // scan bounded; large wallpaper and picker snapshots stay dense instead of
-    // monopolizing the resource worker while scanning millions of pixels.
-    const MAX_COMPRESSION_PIXELS: u64 = 4 * 1024 * 1024;
+    // Compression is an optional CPU snapshot optimization. A 4K-sized view
+    // fits the bound; larger surfaces stay dense to keep the worker scan bounded.
+    const MAX_COMPRESSION_PIXELS: u64 = 8 * 1024 * 1024;
     if u64::from(width) * u64::from(height) > MAX_COMPRESSION_PIXELS {
         return FlattenedPixels::Dense(pixels);
     }
@@ -4325,7 +4367,7 @@ mod tests {
         }
     }
     #[test]
-    fn cpu_snapshot_accept_falls_back_when_native_view_budget_is_full() {
+    fn cpu_snapshot_freezes_after_native_budget_is_released() {
         let scene = scene();
         let mut cache = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
         cache.prepare(&scene, 1.).unwrap();
@@ -4335,9 +4377,9 @@ mod tests {
             .insert(1_f32.to_bits(), cache.frame.as_ref().unwrap().clone());
 
         let prepared = TreeCpuRenderer::prepare_snapshot(&scene, 1.).unwrap();
-        let budget = prepared.native_budget.as_ref().unwrap();
+        let budget = prepared.native_budget.as_ref().unwrap().clone();
         let remaining = 40 * bead_core::cache::MIB - budget.used();
-        let _fill = budget.reserve(remaining).unwrap();
+        let gpu = budget.reserve(remaining).unwrap();
         let renderer = prepared
             .accept()
             .expect("optional flattened snapshot must fall back to CPU layers");
@@ -4345,6 +4387,53 @@ mod tests {
         assert!(renderer.group_charge.is_none());
         assert!(renderer.cache.frame.is_some());
         assert!(renderer.snapshot_fingerprint.is_none());
+        drop(gpu);
+        let after_release = TreeCpuRenderer::prepare_snapshot(&scene, 1.)
+            .unwrap()
+            .accept()
+            .unwrap();
+        assert!(after_release.flattened.is_some());
+        assert!(after_release.group_charge.is_some());
+        assert!(after_release.snapshot_fingerprint.is_some());
+    }
+
+    #[test]
+    fn ui_cpu_prepare_reuses_frame_after_snapshot_budget_fallback() {
+        let mut scene = scene();
+        let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+        worker.prepare(&scene, 1.).unwrap();
+        scene
+            .prepared
+            .insert(1_f32.to_bits(), worker.frame.as_ref().unwrap().clone());
+        let budget = scene
+            .prepared
+            .get(&1_f32.to_bits())
+            .unwrap()
+            .native_resource_budget
+            .as_ref()
+            .unwrap()
+            .clone();
+
+        let mut renderer = TreeCpuRenderer::default();
+        let pending = renderer.prepare_on_ui(&scene, 1.).unwrap_err();
+        let request = pending
+            .downcast_ref::<CpuResourcesPending>()
+            .unwrap()
+            .request
+            .clone();
+        assert!(request.mark_requested());
+        request.prepare().unwrap();
+
+        let remaining = 40 * bead_core::cache::MIB - budget.used();
+        let _fill = budget.reserve(remaining).unwrap();
+        renderer.prepare_on_ui(&scene, 1.).unwrap();
+        assert!(renderer.flattened.is_none());
+        assert!(renderer.cache.frame.is_some());
+        assert!(renderer.snapshot_fingerprint.is_none());
+        assert!(renderer.worker_fingerprint.is_some());
+
+        renderer.prepare_on_ui(&scene, 1.).unwrap();
+        assert_snapshot_pixels_match_reference(&mut renderer, &scene, 1.);
     }
 
     #[test]
@@ -5151,6 +5240,20 @@ mod tests {
             renderer.opacity_builds, builds,
             "warm exact fingerprint is reused"
         );
+        assert!(
+            renderer.cache.frame.is_none(),
+            "accepted snapshot releases source rasters"
+        );
+        assert!(
+            renderer.snapshot_fingerprint.is_some(),
+            "non-reveal content stays frozen"
+        );
+        assert!(renderer.worker_fingerprint.is_none());
+        for (opacity, offset) in [(1., (0., 0.)), (0.45, (1.25, -0.75))] {
+            scene.opacity = opacity;
+            scene.offset = offset;
+            assert_snapshot_pixels_match_reference(&mut renderer, &scene, 1.);
+        }
         scene.prepared.clear();
         let mut dense_worker = TreeCache::default();
         dense_worker.prepare(&scene, 1.).unwrap();
@@ -5160,9 +5263,40 @@ mod tests {
         renderer.prepare_on_ui(&scene, 1.).unwrap();
         assert!(
             renderer.cpu_preparation.is_none(),
-            "normal Dense import never queues another snapshot"
+            "matching frozen snapshot reuses its exact content"
         );
         let accepted = renderer.flattened.as_ref().unwrap().0;
+        let mut changed_scene = scene.clone();
+        changed_scene.resource_revision += 1;
+        let mut changed_source = Pixmap::new(8, 8).unwrap();
+        changed_source.fill(tiny_skia::Color::from_rgba8(90, 20, 40, 255));
+        changed_scene.asset_data.insert(
+            "proof.png".into(),
+            Arc::from(changed_source.encode_png().unwrap()),
+        );
+        let mut dense_worker = TreeCache::default();
+        dense_worker.prepare(&changed_scene, 1.).unwrap();
+        changed_scene.prepared.clear();
+        changed_scene
+            .prepared
+            .insert(1.0f32.to_bits(), dense_worker.frame.clone().unwrap());
+        let pending = renderer.prepare_on_ui(&changed_scene, 1.).unwrap_err();
+        let request = pending
+            .downcast_ref::<CpuResourcesPending>()
+            .unwrap()
+            .request
+            .clone();
+        assert_eq!(renderer.flattened.as_ref().unwrap().0, accepted);
+        assert!(renderer.snapshot_fingerprint.is_some());
+        assert!(request.mark_requested());
+        request.prepare().unwrap();
+        renderer.prepare_on_ui(&changed_scene, 1.).unwrap();
+        assert!(renderer.cache.frame.is_none());
+        assert!(renderer.snapshot_fingerprint.is_some());
+        assert_snapshot_pixels_match_reference(&mut renderer, &changed_scene, 1.);
+        let changed_accepted = renderer.flattened.as_ref().unwrap().0;
+
+        let mut scene = changed_scene;
         scene.prepared.clear();
         scene
             .asset_data
@@ -5177,9 +5311,99 @@ mod tests {
         assert!(renderer.prepare_on_ui(&scene, 1.).is_err());
         assert_eq!(
             renderer.flattened.as_ref().unwrap().0,
-            accepted,
+            changed_accepted,
             "failed worker replacement keeps accepted pixels"
         );
+    }
+
+    #[test]
+    fn stable_snapshot_resumes_only_a_matching_dense_prepared_frame() {
+        let mut scene = scene();
+        scene.motion = Some(crate::Motion {
+            id: "resume-test".into(),
+            open: true,
+            duration: 0.2,
+            return_duration: None,
+            return_curve: None,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            fade: false,
+            reveal: false,
+            progress: 1.,
+            parts: Vec::new(),
+            art: None,
+        });
+        let mut worker = TreeCache::default();
+        worker.prepare(&scene, 1.).unwrap();
+        let prepared = worker.frame.as_ref().unwrap().clone();
+        scene.prepared.insert(1_f32.to_bits(), prepared.clone());
+        let mut renderer = TreeCpuRenderer::snapshot(&scene, 1.).unwrap();
+        assert!(renderer.snapshot_fingerprint.is_some());
+        assert!(renderer.cache.frame.is_none());
+
+        let mut no_frame = scene.clone();
+        no_frame.resource_revision += 1;
+        no_frame.prepared.clear();
+        renderer.resume_prepared(&no_frame, 1.).unwrap();
+        renderer.resume_prepared(&scene, 1.5).unwrap();
+        let mut faded = scene.clone();
+        faded.opacity = 0.5;
+        renderer.resume_prepared(&faded, 1.).unwrap();
+        let mut closing = scene.clone();
+        closing.motion.as_mut().unwrap().open = false;
+        renderer.resume_prepared(&closing, 1.).unwrap();
+        assert!(renderer.snapshot_fingerprint.is_some());
+        assert!(renderer.flattened.is_some());
+        assert!(renderer.cache.frame.is_none());
+
+        let mut changed_scene = scene.clone();
+        changed_scene.resource_revision += 1;
+        let mut changed_source = Pixmap::new(8, 8).unwrap();
+        changed_source.fill(tiny_skia::Color::from_rgba8(90, 20, 40, 255));
+        changed_scene.asset_data.insert(
+            "proof.png".into(),
+            Arc::from(changed_source.encode_png().unwrap()),
+        );
+        changed_scene.prepared.clear();
+        let mut changed_worker = TreeCache::default();
+        changed_worker.prepare(&changed_scene, 1.).unwrap();
+        let changed_frame = changed_worker.frame.as_ref().unwrap().clone();
+        changed_scene
+            .prepared
+            .insert(1_f32.to_bits(), changed_frame.clone());
+        renderer.resume_prepared(&changed_scene, 1.).unwrap();
+        assert!(renderer.snapshot_fingerprint.is_none());
+        assert!(renderer.flattened.is_none());
+        assert!(Arc::ptr_eq(
+            renderer.cache.frame.as_ref().unwrap(),
+            &changed_frame
+        ));
+        assert_snapshot_pixels_match_reference(&mut renderer, &changed_scene, 1.);
+
+        let mut native_scene = scene.clone();
+        native_scene.prepared.clear();
+        let mut upload_worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+        upload_worker.prepare(&native_scene, 1.).unwrap();
+        assert!(
+            upload_worker
+                .frame
+                .as_ref()
+                .unwrap()
+                .items
+                .iter()
+                .any(|item| item.image.is_some())
+        );
+        native_scene.prepared.insert(
+            1_f32.to_bits(),
+            upload_worker.frame.as_ref().unwrap().clone(),
+        );
+        let mut frozen = TreeCpuRenderer::snapshot(&native_scene, 1.).unwrap();
+        frozen.resume_prepared(&native_scene, 1.).unwrap();
+        assert!(frozen.snapshot_fingerprint.is_some());
+        assert!(frozen.flattened.is_some());
+        assert!(frozen.cache.frame.is_none());
     }
 
     #[test]
@@ -7293,6 +7517,25 @@ mod tests {
         assert_eq!((pixels.width(), pixels.height()), (4320, 2700));
         assert!(pixels.data().len() <= 64 * bead_core::cache::MIB);
     }
+
+    #[test]
+    fn display_sized_snapshots_compress_with_a_bounded_scan() {
+        let mut repeated = Pixmap::new(2500, 2100).unwrap();
+        for pixel in repeated.data_mut().as_chunks_mut::<4>().0 {
+            pixel.copy_from_slice(&[20, 25, 35, 160]);
+        }
+        assert!(matches!(
+            compress_rows(repeated),
+            FlattenedPixels::Sparse(_)
+        ));
+
+        let above_limit = Pixmap::new(2900, 2900).unwrap();
+        assert!(matches!(
+            compress_rows(above_limit),
+            FlattenedPixels::Dense(_)
+        ));
+    }
+
     #[test]
     fn partial_repairs_match_full_pixels_with_opaque_background_corners_clip_and_alpha() {
         let mut scene = scene();

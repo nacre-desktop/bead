@@ -896,6 +896,10 @@ pub trait Renderer {
     fn prepare_on_ui(&mut self, scene: &Scene, scale: f32) -> Result<()> {
         self.prepare(scene, scale)
     }
+    /// Resume dense worker-prepared content from a frozen renderer at a host-confirmed resting pose.
+    fn resume_prepared(&mut self, _scene: &Scene, _scale: f32) -> Result<()> {
+        Ok(())
+    }
     fn reusable_scene(&self, _scene: &Scene, _scale: f32) -> Result<bool> {
         Ok(false)
     }

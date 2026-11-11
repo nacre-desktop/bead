@@ -977,6 +977,7 @@ impl App {
         Ok(())
     }
     pub(super) fn panel_ui(&mut self, event: UiEvent) {
+        let closing_event = matches!(&event, UiEvent::PanelVisibility(false));
         let _busy = bead_core::profile::Busy::named(|| {
             format!("panel_ui:{}", bead_core::profile::variant_name(&event)).into()
         });
@@ -1033,6 +1034,19 @@ impl App {
         }
         if !changed && !force_draw {
             return;
+        }
+        if changed
+            && !closing_event
+            && !self.panel_target
+            && self
+                .options
+                .panel_spec
+                .as_ref()
+                .is_some_and(|spec| spec.retain_when_closed)
+            && self.panel_snapshot_ready()
+            && let Err(error) = self.start_panel_snapshot()
+        {
+            self.fail(error);
         }
         if changed && self.sync_native_pearl_scene() {
             if self.surfaces.iter().any(|s| s.handoff.is_some()) {
@@ -1144,33 +1158,34 @@ impl App {
             .as_ref()
             .is_some_and(|spec| spec.retain_when_closed)
         {
-            #[cfg(feature = "native-gl")]
-            {
-                let epoch = self.panel_epoch;
-                if let Err(error) = self.loop_handle.insert_source(
-                    // Finish the retained-panel CPU snapshot before the two-second
-                    // post-close idle boundary; layer/view release keeps its own timer.
-                    Timer::from_duration(Duration::from_millis(1500)),
-                    move |_, _, app| {
-                        if !app.panel_target
-                            && app.panel_epoch == epoch
-                            && app.panel_close_epoch == token
-                        {
-                            bead_core::vprintln!(
-                                "PANEL_SNAPSHOT_TRIGGER monotonic_ns={} epoch={} close_epoch={}",
-                                monotonic_ns(),
-                                epoch,
-                                token
-                            );
-                            if let Err(error) = app.start_panel_snapshot() {
-                                app.fail(error);
-                            }
-                        }
-                        TimeoutAction::Drop
-                    },
-                ) {
-                    self.fail(error);
-                }
+            let epoch = self.panel_epoch;
+            if let Err(error) = self.loop_handle.insert_source(
+                // Finish the retained-panel CPU snapshot before the two-second
+                // post-close idle boundary; layer/view release keeps its own timer.
+                Timer::from_duration(Duration::from_millis(1500)),
+                move |_, _, app| {
+                    if app.panel_target
+                        || app.panel_epoch != epoch
+                        || app.panel_close_epoch != token
+                    {
+                        return TimeoutAction::Drop;
+                    }
+                    if !app.panel_snapshot_ready() {
+                        return TimeoutAction::ToDuration(Duration::from_millis(100));
+                    }
+                    bead_core::vprintln!(
+                        "PANEL_SNAPSHOT_TRIGGER monotonic_ns={} epoch={} close_epoch={}",
+                        monotonic_ns(),
+                        epoch,
+                        token
+                    );
+                    if let Err(error) = app.start_panel_snapshot() {
+                        app.fail(error);
+                    }
+                    TimeoutAction::Drop
+                },
+            ) {
+                self.fail(error);
             }
             return;
         }

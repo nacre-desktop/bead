@@ -5,7 +5,7 @@ use bead_render::{Rect, Scene};
 use std::{
     collections::VecDeque,
     error::Error,
-    sync::{Arc, mpsc},
+    sync::{Arc, Weak, mpsc},
     thread::JoinHandle,
 };
 pub type Factory = Box<dyn FnOnce() -> Result<Box<dyn SceneSource>, String> + Send>;
@@ -105,6 +105,7 @@ impl ResourceRetirement {
 enum Job {
     PrepareImages(Vec<Arc<bead_render::tree::ImagePayload>>),
     PrepareCpu(Arc<bead_render::tree::CpuPreparation>),
+    ReleasePrepared(Vec<Weak<bead_render::tree::Frame>>),
     PanelCenter(Option<f32>),
     InitialModel(std::collections::BTreeMap<String, bead_core::Value>),
     PanelAnchor(Option<PanelAnchor>),
@@ -321,6 +322,20 @@ fn prepare_resource_job(
         job => Err(job),
     }
 }
+fn release_cached_prepared(
+    cache: &mut bead_render::tree::TreeCache,
+    expected: &[Weak<bead_render::tree::Frame>],
+) -> bool {
+    let Some(frame) = cache.frame.as_ref() else {
+        return false;
+    };
+    let current = Arc::downgrade(frame);
+    if !expected.iter().any(|frame| frame.ptr_eq(&current)) {
+        return false;
+    }
+    cache.release_pixel_storage();
+    true
+}
 impl SceneSource for Source {
     fn resources_retired(&self) -> bool {
         self.retired.load(std::sync::atomic::Ordering::Acquire)
@@ -337,6 +352,29 @@ impl SceneSource for Source {
             self.send(Job::PrepareCpu(request))?;
         }
         Ok(())
+    }
+
+    fn release_prepared(&mut self, scene: &Scene) {
+        let matching = scene
+            .prepared
+            .iter()
+            .filter_map(|(scale, frame)| {
+                self.current
+                    .prepared
+                    .get(scale)
+                    .filter(|current| Arc::ptr_eq(current, frame))
+                    .map(|current| (*scale, Arc::downgrade(current)))
+            })
+            .collect::<Vec<_>>();
+        if matching.is_empty() {
+            return;
+        }
+        for (scale, _) in &matching {
+            self.current.prepared.remove(scale);
+        }
+        let _ = self.send(Job::ReleasePrepared(
+            matching.into_iter().map(|(_, frame)| frame).collect(),
+        ));
     }
 
     fn prepare_images(
@@ -467,6 +505,9 @@ impl SceneSource for Source {
                     match job {
                         Job::PrepareImages(_) | Job::PrepareCpu(_) => {
                             unreachable!("resource jobs handled above")
+                        }
+                        Job::ReleasePrepared(frames) => {
+                            release_cached_prepared(&mut cache, &frames);
                         }
                         Job::PanelCenter(center) => source.panel_center(center),
                         Job::InitialModel(values) => {
@@ -903,6 +944,107 @@ mod tests {
             bounds: bead_render::Rect::new(0., 0., 16., 16.),
         }
     }
+    fn prepared_frame(scene: &mut Scene) -> Arc<bead_render::tree::Frame> {
+        let mut cache = bead_render::tree::TreeCache::default();
+        cache.prepare(scene, 1.).unwrap();
+        cache.frame.take().unwrap()
+    }
+
+    #[test]
+    fn prepared_release_clears_only_matching_current_scene_and_uses_weak_job() {
+        let mut current = scene();
+        let current_frame = prepared_frame(&mut current);
+        let current_weak = Arc::downgrade(&current_frame);
+        current
+            .prepared
+            .insert(1_f32.to_bits(), current_frame.clone());
+        drop(current_frame);
+
+        let mut candidate = scene();
+        candidate.resource_revision = 1;
+        let candidate_frame = prepared_frame(&mut candidate);
+        let candidate_weak = Arc::downgrade(&candidate_frame);
+        candidate
+            .prepared
+            .insert(1_f32.to_bits(), candidate_frame.clone());
+        drop(candidate_frame);
+
+        let mut source = Source::new(Box::new(|| Err("unused".into())), current);
+        source.candidate = Some(candidate);
+        source.mirror = Arc::new(Mirror {
+            summary: "unchanged model".into(),
+            ..Default::default()
+        });
+        let (sender, receiver) = mpsc::channel();
+        source.sender = Some(sender);
+        let expected = source.current.clone();
+        source.release_prepared(&expected);
+        drop(expected);
+
+        assert!(source.current.prepared.is_empty());
+        assert_eq!(source.current.resource_revision, 0);
+        assert!(!source.accepted, "release never commits a candidate");
+        assert_eq!(source.state_summary(), "unchanged model");
+        assert!(
+            source
+                .candidate
+                .as_ref()
+                .unwrap()
+                .prepared
+                .contains_key(&1_f32.to_bits())
+        );
+        assert!(current_weak.upgrade().is_none());
+        assert!(candidate_weak.upgrade().is_some());
+        let Ok(Job::ReleasePrepared(frames)) = receiver.try_recv() else {
+            panic!("release must enqueue an actor barrier");
+        };
+        assert_eq!(frames.len(), 1);
+        assert!(frames[0].ptr_eq(&current_weak));
+    }
+
+    #[test]
+    fn stale_prepared_release_does_not_drop_a_newer_actor_frame() {
+        let old_scene = scene();
+        let mut cache = bead_render::tree::TreeCache::default();
+        cache.prepare(&old_scene, 1.).unwrap();
+        let old_frame = cache.frame.as_ref().unwrap().clone();
+        let old = Arc::downgrade(&old_frame);
+
+        let mut newer_scene = scene();
+        newer_scene.primitives[0] = bead_render::Primitive::Rounded {
+            rect: bead_render::Rect::new(0., 0., 16., 16.),
+            radius: 0.,
+            fill: [80, 30, 40, 255],
+            border: None,
+        };
+        cache.prepare(&newer_scene, 1.).unwrap();
+        let newer = cache.frame.as_ref().unwrap().clone();
+        assert!(!Arc::ptr_eq(cache.frame.as_ref().unwrap(), &old_frame));
+        drop(old_scene);
+        drop(old_frame);
+
+        assert!(!release_cached_prepared(&mut cache, &[old]));
+        assert!(Arc::ptr_eq(cache.frame.as_ref().unwrap(), &newer));
+        let current = Arc::downgrade(&newer);
+        drop(newer);
+        assert!(release_cached_prepared(
+            &mut cache,
+            std::slice::from_ref(&current)
+        ));
+        assert!(cache.frame.is_none());
+        assert!(current.upgrade().is_none());
+    }
+
+    #[test]
+    fn prepared_release_is_deferred_to_the_ordered_actor_loop() {
+        let mut cache = bead_render::tree::TreeCache::default();
+        let job = Job::ReleasePrepared(Vec::new());
+        assert!(matches!(
+            prepare_resource_job(job, &mut cache),
+            Err(Job::ReleasePrepared(_))
+        ));
+    }
+
     #[test]
     fn unchanged_frame_interval_sends_no_worker_job_and_queued_changes_coalesce() {
         let mut source = Source::new(Box::new(|| Err("unused".into())), scene());

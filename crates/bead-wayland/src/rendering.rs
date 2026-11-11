@@ -6,10 +6,23 @@ fn layer_motion_renderer_supported(kind: RendererKind) -> bool {
     matches!(kind, RendererKind::Cpu | RendererKind::FemtovgGl)
 }
 
+fn accepted_frozen_snapshot(
+    renderer: &dyn bead_render::Renderer,
+    scene: &bead_render::Scene,
+    scale: f32,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    if scene.motion.as_ref().is_some_and(|motion| motion.reveal)
+        || renderer.prepared_frame().is_some()
+    {
+        return Ok(false);
+    }
+    renderer.reusable_scene(scene, scale)
+}
+
 #[cfg(test)]
 mod layer_motion_renderer_tests {
-    use super::layer_motion_renderer_supported;
-    use bead_render::RendererKind;
+    use super::{accepted_frozen_snapshot, layer_motion_renderer_supported};
+    use bead_render::{Renderer, RendererKind};
 
     #[test]
     fn cpu_and_native_gl_can_submit_compositor_motion_atlases() {
@@ -42,6 +55,55 @@ mod layer_motion_renderer_tests {
             true,
             true
         ));
+    }
+
+    #[test]
+    fn prepared_release_requires_a_current_frozen_non_reveal_snapshot() {
+        let mut scene = bead_render::Scene {
+            opacity: 1.,
+            motion: None,
+            resource_revision: 1,
+            asset_data: Default::default(),
+            clips: Default::default(),
+            layers: vec![],
+            prepared: Default::default(),
+            font_files: vec![],
+            width: 16.,
+            slide: None,
+            primitives: vec![bead_render::Primitive::Rounded {
+                rect: bead_render::Rect::new(0., 0., 16., 16.),
+                radius: 0.,
+                fill: [20, 40, 80, 255],
+                border: None,
+            }],
+            offset: (0., 0.),
+            bounds: bead_render::Rect::new(0., 0., 16., 16.),
+        };
+        let frozen = bead_render::tree::TreeCpuRenderer::snapshot(&scene, 1.).unwrap();
+        assert!(accepted_frozen_snapshot(&frozen, &scene, 1.).unwrap());
+
+        let mut direct = bead_render::tree::TreeCpuRenderer::default();
+        direct.prepare(&scene, 1.).unwrap();
+        assert!(!accepted_frozen_snapshot(&direct, &scene, 1.).unwrap());
+
+        scene.motion = Some(bead_render::Motion {
+            id: "release-guard".into(),
+            open: false,
+            duration: 0.2,
+            return_duration: None,
+            return_curve: None,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Bottom,
+            slide_distance: None,
+            fade: false,
+            reveal: true,
+            progress: 0.,
+            parts: Vec::new(),
+            art: None,
+        });
+        let reveal = bead_render::tree::TreeCpuRenderer::snapshot(&scene, 1.).unwrap();
+        assert!(!accepted_frozen_snapshot(&reveal, &scene, 1.).unwrap());
     }
 }
 
@@ -119,13 +181,11 @@ fn copy_layer_motion_pixels(target: &mut [u8], pixels: &[u8]) -> bool {
     true
 }
 
-#[cfg(feature = "native-gl")]
 fn is_cache_pressure(error: &str) -> bool {
     let error = error.to_ascii_lowercase();
     error.contains("budget") || error.contains("admission") || error.contains("cache pressure")
 }
 
-#[cfg(feature = "native-gl")]
 fn report_cache_pressure(owner: &str, error: &str) {
     static LAST_REPORT: std::sync::OnceLock<std::sync::Mutex<Option<Instant>>> =
         std::sync::OnceLock::new();
@@ -645,15 +705,12 @@ impl Drop for GlPreparation {
         }
     }
 }
-#[cfg(feature = "native-gl")]
 struct PanelSnapshotWorker(Option<std::thread::JoinHandle<()>>);
-#[cfg(feature = "native-gl")]
 impl PanelSnapshotWorker {
     fn join(&mut self) -> Option<std::thread::Result<()>> {
         self.0.take().map(std::thread::JoinHandle::join)
     }
 }
-#[cfg(feature = "native-gl")]
 impl Drop for PanelSnapshotWorker {
     fn drop(&mut self) {
         if let Some(worker) = self.0.take() {
@@ -818,7 +875,6 @@ impl App {
         Ok(())
     }
     /// Cache a CPU first frame, then retire closed-panel GPU and SHM allocations.
-    #[cfg(feature = "native-gl")]
     pub(super) fn start_panel_snapshot(&mut self) -> Result<(), Box<dyn Error>> {
         if self.panel_snapshot_pending
             || self.panel_target
@@ -828,15 +884,20 @@ impl App {
                 .panel_spec
                 .as_ref()
                 .is_some_and(|spec| spec.retain_when_closed)
-            || self.options.companion.as_ref().map(|(_, kind)| *kind)
-                != Some(RendererKind::FemtovgGl)
         {
             return Ok(());
         }
-        let Some((scene, _, _)) = &self.companion else {
+        let Some((scene, renderer, kind)) = &self.companion else {
             return Ok(());
         };
-        let scene = scene.clone();
+        let cpu_renderer = *kind == RendererKind::Cpu;
+        let gl_renderer = *kind == RendererKind::FemtovgGl;
+        if !cpu_renderer && !gl_renderer {
+            return Ok(());
+        }
+        if !self.panel_snapshot_ready() {
+            return Ok(());
+        }
         let epoch = self.panel_epoch;
         let close_epoch = self.panel_close_epoch;
         let ui_serial = self.panel_ui_serial;
@@ -845,6 +906,16 @@ impl App {
             .iter()
             .find(|surface| surface.companion)
             .map_or(1., |surface| surface.scale120 as f32 / 120.);
+        if cpu_renderer && scene.motion.as_ref().is_some_and(|motion| motion.reveal) {
+            return Ok(());
+        }
+        if cpu_renderer && accepted_frozen_snapshot(renderer.as_ref(), scene, scale)? {
+            if !scene.prepared.is_empty() {
+                self.release_panel_prepared();
+            }
+            return Ok(());
+        }
+        let scene = scene.clone();
         let (sender, receiver) = std::sync::mpsc::channel();
         let snapshot_started_ns = monotonic_ns();
         bead_core::vprintln!(
@@ -892,6 +963,7 @@ impl App {
                         .find(|surface| surface.companion)
                         .map_or(1., |surface| surface.scale120 as f32 / 120.);
                     let current = !app.panel_target
+                        && app.panel_snapshot_ready()
                         && app.panel_runtime.is_some()
                         && app.panel_epoch == epoch
                         && app.panel_close_epoch == close_epoch
@@ -901,7 +973,17 @@ impl App {
                         match result.unwrap_or_else(|_| Err("snapshot worker disconnected".into()))
                         {
                             Ok(snapshot) => {
-                                if let Err(error) = app.suspend_panel_gpu(snapshot) {
+                                #[cfg(feature = "native-gl")]
+                                let accepted = if app.companion.as_ref().is_some_and(
+                                    |(_, _, kind)| *kind == RendererKind::FemtovgGl,
+                                ) {
+                                    app.suspend_panel_gpu(snapshot, scale)
+                                } else {
+                                    app.accept_panel_cpu_snapshot(snapshot, scale)
+                                };
+                                #[cfg(not(feature = "native-gl"))]
+                                let accepted = app.accept_panel_cpu_snapshot(snapshot, scale);
+                                if let Err(error) = accepted {
                                     let detail = error.to_string();
                                     if is_cache_pressure(&detail) {
                                         report_cache_pressure("retained-panel", &detail);
@@ -999,89 +1081,134 @@ impl App {
     pub(super) fn suspend_panel_gpu(
         &mut self,
         snapshot: bead_render::tree::PreparedCpuSnapshot,
+        scale: f32,
     ) -> Result<(), Box<dyn Error>> {
         let _span = bead_core::profile::Span::new("panel_gpu_retire");
-        #[cfg(feature = "native-gl")]
-        if self.options.companion.as_ref().map(|(_, kind)| *kind) == Some(RendererKind::FemtovgGl) {
-            self.release_companion_gpu_resources()?;
-            let snapshot = snapshot.accept()?;
-            if let Some((scene, renderer, kind)) = &mut self.companion {
-                *renderer = Box::new(snapshot);
-                *kind = RendererKind::Cpu;
-                self.panel_cpu_cached = true;
-                // The CPU renderer retains a flattened first-frame snapshot.
-                // Do not keep the accepted worker-prepared raster frame alive
-                // through the companion scene after the snapshot is adopted.
-                scene.prepared.clear();
-            }
-            for surface in self.surfaces.iter_mut().filter(|s| s.companion) {
-                let wl_surface = surface.wl_surface().clone();
-                drop(surface.gl.take());
-                surface.gl_prepared = false;
-                surface.gl_prepare_pending = false;
-                surface.callbacks.invalidate();
-                surface.visual_damage = Default::default();
-                surface.buffers.clear();
-                surface.pool = SlotPool::new(4096, &self.shm)?;
-                surface.previous = None;
-                surface.geometry = (0, 0);
-                if surface.panel_unmapped
-                    || (surface.native.is_none() && !surface.layer.can_attach())
-                {
-                    // No buffer is attached, so the compositor holds no GL BO.
-                    continue;
-                }
-                // Replace the mapped transparent GL buffer too: otherwise the
-                // compositor can retain its BO after our EGL display has been terminated.
-                let scale = surface.scale120 as f32 / 120.;
-                let (width, height) = if let Some(viewport) = &surface.viewport {
-                    wl_surface.set_buffer_scale(1);
-                    viewport
-                        .set_destination(surface.width.max(1) as i32, surface.height.max(1) as i32);
-                    (1, 1)
-                } else {
-                    (
-                        (surface.width as f32 * scale).ceil() as i32,
-                        (surface.height as f32 * scale).ceil() as i32,
-                    )
-                };
-                // A fresh memfd is zero-filled; do not fault transparent pages in.
-                let (buffer, _) = surface.pool.create_buffer(
-                    width,
-                    height,
-                    width * 4,
-                    wl_shm::Format::Argb8888,
-                )?;
-                buffer.attach_to(&wl_surface)?;
-                wl_surface.damage_buffer(0, 0, width, height);
-                wl_surface.commit();
-                surface.buffers.push(Reusable {
-                    buffer,
-                    pending: Vec::new(),
-                    painted: false,
-                });
-            }
-            if self.options.renderer == RendererKind::Cpu
-                && !self.has_gl_surfaces()
-                && let Some(transport) = self.gl.take()
-            {
-                // SAFETY: renderers and all EGL surfaces are gone; the CPU bar owns no EGL objects.
-                unsafe { transport.shutdown_exclusive() }?;
-            }
-            self.options.lazy_gl = true;
-            self.companion_policy = Default::default();
-            self.panel_gpu_suspended = true;
-            #[cfg(all(target_os = "linux", target_env = "gnu"))]
-            unsafe {
-                libc::malloc_trim(0);
-            }
-            println!(
-                "PANEL_GPU_SUSPENDED shared_context_retained={} monotonic_ns={}",
-                self.gl.is_some(),
-                monotonic_ns()
-            );
+        self.release_companion_gpu_resources()?;
+        let snapshot = snapshot.accept()?;
+        let frozen = if let Some((scene, _, _)) = self.companion.as_ref() {
+            accepted_frozen_snapshot(&snapshot, scene, scale)?
+        } else {
+            false
+        };
+        if let Some((_, renderer, kind)) = &mut self.companion {
+            *renderer = Box::new(snapshot);
+            *kind = RendererKind::Cpu;
+            self.panel_cpu_cached = true;
         }
+        if frozen {
+            self.release_panel_prepared();
+        } else if let Some((scene, _, _)) = &mut self.companion {
+            // Preserve the legacy reveal/direct fallback handoff. Those frames
+            // are not frozen snapshots and must not retire source ownership.
+            scene.prepared.clear();
+        }
+        for surface in self.surfaces.iter_mut().filter(|s| s.companion) {
+            let wl_surface = surface.wl_surface().clone();
+            drop(surface.gl.take());
+            surface.gl_prepared = false;
+            surface.gl_prepare_pending = false;
+            surface.callbacks.invalidate();
+            surface.visual_damage = Default::default();
+            surface.buffers.clear();
+            surface.pool = SlotPool::new(4096, &self.shm)?;
+            surface.previous = None;
+            surface.geometry = (0, 0);
+            if surface.panel_unmapped || (surface.native.is_none() && !surface.layer.can_attach()) {
+                // No buffer is attached, so the compositor holds no GL BO.
+                continue;
+            }
+            // Replace the mapped transparent GL buffer too: otherwise the
+            // compositor can retain its BO after our EGL display has been terminated.
+            let scale = surface.scale120 as f32 / 120.;
+            let (width, height) = if let Some(viewport) = &surface.viewport {
+                wl_surface.set_buffer_scale(1);
+                viewport.set_destination(surface.width.max(1) as i32, surface.height.max(1) as i32);
+                (1, 1)
+            } else {
+                (
+                    (surface.width as f32 * scale).ceil() as i32,
+                    (surface.height as f32 * scale).ceil() as i32,
+                )
+            };
+            // A fresh memfd is zero-filled; do not fault transparent pages in.
+            let (buffer, _) =
+                surface
+                    .pool
+                    .create_buffer(width, height, width * 4, wl_shm::Format::Argb8888)?;
+            buffer.attach_to(&wl_surface)?;
+            wl_surface.damage_buffer(0, 0, width, height);
+            wl_surface.commit();
+            surface.buffers.push(Reusable {
+                buffer,
+                pending: Vec::new(),
+                painted: false,
+            });
+        }
+        if self.options.renderer == RendererKind::Cpu
+            && !self.has_gl_surfaces()
+            && let Some(transport) = self.gl.take()
+        {
+            // SAFETY: renderers and all EGL surfaces are gone; the CPU bar owns no EGL objects.
+            unsafe { transport.shutdown_exclusive() }?;
+        }
+        self.options.lazy_gl = true;
+        self.companion_policy = Default::default();
+        self.panel_gpu_suspended = true;
+        #[cfg(all(target_os = "linux", target_env = "gnu"))]
+        unsafe {
+            libc::malloc_trim(0);
+        }
+        println!(
+            "PANEL_GPU_SUSPENDED shared_context_retained={} monotonic_ns={}",
+            self.gl.is_some(),
+            monotonic_ns()
+        );
         Ok(())
+    }
+
+    fn accept_panel_cpu_snapshot(
+        &mut self,
+        prepared: bead_render::tree::PreparedCpuSnapshot,
+        scale: f32,
+    ) -> Result<(), Box<dyn Error>> {
+        let snapshot = prepared.accept()?;
+        let frozen = if let Some((scene, _, kind)) = self.companion.as_ref() {
+            *kind == RendererKind::Cpu && accepted_frozen_snapshot(&snapshot, scene, scale)?
+        } else {
+            false
+        };
+        if !frozen {
+            return Ok(());
+        }
+        if let Some((_, renderer, _)) = &mut self.companion {
+            *renderer = Box::new(snapshot);
+        }
+        self.release_panel_prepared();
+        Ok(())
+    }
+
+    fn release_panel_prepared(&mut self) {
+        let Some((scene, _, _)) = self.companion.as_mut() else {
+            return;
+        };
+        if let Some(source) = self.panel_runtime.as_mut() {
+            source.release_prepared(scene);
+        }
+        scene.prepared.clear();
+    }
+
+    pub(super) fn panel_snapshot_ready(&self) -> bool {
+        !self.panel_target
+            && self.panel_dock_transition.is_none()
+            && !self
+                .panel_animations
+                .active(self.started.elapsed().as_secs_f64())
+            && self
+                .surfaces
+                .iter()
+                .filter(|surface| surface.companion)
+                .all(|surface| !surface.layer_motion_active)
     }
     fn trim_idle_shm(&mut self, index: usize) {
         let surface = &mut self.surfaces[index];
@@ -2467,6 +2594,19 @@ impl App {
                 s.input_content_offset = (0., 0.);
                 s.redraw = false;
                 return Ok(());
+            }
+            if layer_motion_opening == Some(true)
+                && !layer_motion_active
+                && layer_motion_sampled_progress == Some(1.)
+                && !s.layer_motion_active
+                && scene.opacity == 1.
+                && scene.slide.is_none()
+                && scene
+                    .motion
+                    .as_ref()
+                    .is_some_and(|motion| motion.open && !motion.reveal)
+            {
+                renderer.resume_prepared(scene, scale)?;
             }
             renderer.presentation_motion(opaque_motion);
             bead_core::profile::split("pose");

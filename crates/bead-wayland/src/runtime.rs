@@ -38,7 +38,6 @@ pub(super) struct App {
     pub(super) panel_gpu_suspended: bool,
     #[cfg(feature = "native-gl")]
     pub(super) panel_cpu_cached: bool,
-    #[cfg(feature = "native-gl")]
     pub(super) panel_snapshot_pending: bool,
     /// The shown view was offered by a service (see `UiEvent::CompanionOffer`).
     pub(super) panel_ambient: bool,
@@ -374,7 +373,6 @@ pub fn run_runtime(
         panel_gpu_suspended: false,
         #[cfg(feature = "native-gl")]
         panel_cpu_cached: false,
-        #[cfg(feature = "native-gl")]
         panel_snapshot_pending: false,
         panel_ambient: false,
         panel_hovered: None,
