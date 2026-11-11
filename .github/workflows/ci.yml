@@ -15,7 +15,6 @@ jobs:
       CARGO_TERM_COLOR: always
     container:
       image: ubuntu:24.04
-      options: --cpus=8 --memory=16g
     defaults:
       run:
         shell: nice -n 10 bash -e -o pipefail {0}
