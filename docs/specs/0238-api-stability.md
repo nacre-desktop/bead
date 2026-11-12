@@ -43,13 +43,13 @@ Counts below are source-declared public items (`pub` declarations in each crate'
 
 | Location / observed consumer | Hazard | Smallest fix before publication | Estimated churn |
 |---|---|---|---|
-| `crates/bead-services/src/runtime.rs:119` `Config` (3 public bools); Nacre has 5 `Config {}` literals | Adding a field breaks external literals | Add `#[non_exhaustive]`; retain `Default`; document `Config { …, ..Default::default() }` | About 5 Nacre callsites; small |
+| `crates/bead-services/src/runtime.rs:119` `Config` (3 public bools); Nacre has 5 `Config {}` literals | Adding a field breaks external literals | Add `#[non_exhaustive]`; retain `Default`; consumers write `let mut c = Config::default(); c.audio = true;` (non-exhaustive structs cannot be built with struct expressions outside the crate, even with `..Default::default()`) | About 5 Nacre callsites; small |
 | `crates/bead-services/src/lib.rs:102` service `Snapshot`; Nacre literal at `status_views_tests.rs:15` | New store fields break exhaustive literals | `#[non_exhaustive]` + `Default`; consumers construct defaults then mutate fields | One observed literal; small |
-| `crates/bead-wayland/src/lib.rs:745` `Options` (53 public fields; includes debug/test and product-shaped flags such as `app`/`app_as_pearl`); Nacre uses default update syntax | Every added field can break exhaustive literals; flags mix generic host options with app policy | Keep `Default`, add `#[non_exhaustive]`; later move app-launch policy to a narrow host API | Current Nacre churn is low (`..Default::default()`); broad external impact otherwise |
+| `crates/bead-wayland/src/lib.rs:745` `Options` (53 public fields; includes debug/test and product-shaped flags such as `app`/`app_as_pearl`); Nacre uses default update syntax | Every added field can break exhaustive literals; flags mix generic host options with app policy | Keep `Default`, add `#[non_exhaustive]`; later move app-launch policy to a narrow host API | Every consumer `Options { .., ..Default::default() }` literal must become `Default` + field assignment; moderate one-time churn, none afterwards |
 | `crates/bead-wayland/src/window.rs:29` `WindowSpec`; 4 Nacre constructors | Field growth breaks literals and bundles policy/callbacks | `#[non_exhaustive]` + constructor/builder with required identity/size/factory and defaults for optional policy | 4 constructors; moderate migration |
 | `crates/bead-render/src/lib.rs:445` `Scene`; Nacre has multiple direct literals including `colors_tests.rs:492` | Internal renderer cache/resource fields leak into externally constructed scene | Make implementation fields private and expose `Scene::new`/mutators; interim `Default` + `..Default::default()` only if all fields can safely default | Several Nacre literals; moderate; audit external users first |
 
-For `#[non_exhaustive]`, migrate known consumers in a preparatory revision before the first release. It prevents downstream exhaustive construction while preserving read access to public fields.
+For `#[non_exhaustive]`, migrate known consumers in a preparatory revision before the first release. It forbids downstream struct expressions entirely (functional update syntax included) while preserving read access and field assignment on a value obtained from `Default`/a constructor.
 
 ## 3. Versioning policy
 
