@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 use bead::{
-    host::{FolderView, empty_scene},
+    host::{FolderServicesRuntime, FolderView, empty_scene},
     wayland::{Options, PrimaryFactory, UiEvent, WindowSpec},
 };
 use serde::Deserialize;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     error::Error,
     path::{Path, PathBuf},
     sync::Arc,
@@ -199,18 +199,13 @@ impl App {
                 .collect(),
         }
     }
-    fn view(
-        &self,
-        size: (u32, u32),
-        services: bead::host::FolderServices,
-    ) -> Result<FolderView, Box<dyn Error>> {
-        FolderView::load_with_services(
+    fn view(&self, size: (u32, u32)) -> Result<FolderView, Box<dyn Error>> {
+        FolderView::load(
             self.root.clone(),
             self.manifest.view.clone(),
             self.manifest.palette.clone(),
             &self.manifest.title,
             size,
-            services,
         )
         .map_err(|e| {
             format!(
@@ -234,7 +229,7 @@ impl App {
     }
     fn check(&self) -> Result<(), Box<dyn Error>> {
         let size = self.surface_size();
-        let mut view = self.view(size, bead::host::FolderServices::default())?;
+        let mut view = self.view(size)?;
         view.check_render(UiEvent::Reload)
             .map_err(|e| format!("{}: {e}", self.manifest.view.display()))?;
         println!("OK {}", self.manifest.title);
@@ -242,7 +237,7 @@ impl App {
     }
     fn run(self, seconds: Option<f64>) -> Result<(), Box<dyn Error>> {
         let surface_size = self.surface_size();
-        let services = self.folder_services();
+        let runtime = FolderServicesRuntime::start(self.folder_services());
         let fallback = empty_scene(surface_size);
         let mut options = Options {
             namespace: self.manifest.id.clone(),
@@ -257,6 +252,7 @@ impl App {
             let view = self.manifest.view.clone();
             let palette = self.manifest.palette.clone();
             let size = (w.size[0], w.size[1]);
+            let runtime = runtime.clone();
             let min = w.min_size.map(|s| (s[0], s[1])).unwrap_or((320, 240));
             options.window = Some(WindowSpec {
                 app_id,
@@ -268,16 +264,21 @@ impl App {
                 on_resize: None,
                 fallback: fallback.clone(),
                 factory: Arc::new(move |_| {
-                    FolderView::load_with_services(
-                        root.clone(),
-                        view.clone(),
-                        palette.clone(),
-                        &title,
-                        size,
-                        services.clone(),
-                    )
-                    .map(|v| Box::new(v) as Box<dyn bead::wayland::SceneSource>)
-                    .map_err(|e| e.to_string())
+                    let loaded = if let Some(runtime) = &runtime {
+                        FolderView::load_with_runtime(
+                            root.clone(),
+                            view.clone(),
+                            palette.clone(),
+                            &title,
+                            size,
+                            runtime.clone(),
+                        )
+                    } else {
+                        FolderView::load(root.clone(), view.clone(), palette.clone(), &title, size)
+                    };
+                    loaded
+                        .map(|v| Box::new(v) as Box<dyn bead::wayland::SceneSource>)
+                        .map_err(|e| e.to_string())
                 }),
                 model: Arc::new(|_| Default::default()),
             });
@@ -290,18 +291,29 @@ impl App {
                 let view = self.manifest.view.clone();
                 let palette = self.manifest.palette.clone();
                 let title = self.manifest.title.clone();
-                let services = services.clone();
+                let runtime = runtime.clone();
                 move |_| {
-                    FolderView::load_with_services(
-                        root.clone(),
-                        view.clone(),
-                        palette.clone(),
-                        &title,
-                        surface_size,
-                        services.clone(),
-                    )
-                    .map(|v| Box::new(v) as Box<dyn bead::wayland::SceneSource>)
-                    .map_err(|e| e.to_string())
+                    let loaded = if let Some(runtime) = &runtime {
+                        FolderView::load_with_runtime(
+                            root.clone(),
+                            view.clone(),
+                            palette.clone(),
+                            &title,
+                            surface_size,
+                            runtime.clone(),
+                        )
+                    } else {
+                        FolderView::load(
+                            root.clone(),
+                            view.clone(),
+                            palette.clone(),
+                            &title,
+                            surface_size,
+                        )
+                    };
+                    loaded
+                        .map(|v| Box::new(v) as Box<dyn bead::wayland::SceneSource>)
+                        .map_err(|e| e.to_string())
                 }
             });
             options.primary_factory = Some(factory);
@@ -380,7 +392,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::{
+        collections::BTreeSet,
+        sync::atomic::{AtomicU64, Ordering},
+    };
     static SERIAL: AtomicU64 = AtomicU64::new(0);
     fn folder(body: &str) -> PathBuf {
         let p = std::env::temp_dir().join(format!(
@@ -484,6 +499,16 @@ mod tests {
         let marker =
             std::env::temp_dir().join(format!("bead-check-command-{}", std::process::id()));
         let _ = std::fs::remove_file(&marker);
+        std::fs::write(
+            p.join("view/main.luau"),
+            "local ui=require('bead.ui'); return ui.Text{text='check'}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            p.join("view/behavior.luau"),
+            "return {stores={},actions={},computed={}}\n",
+        )
+        .unwrap();
         App::load(&p).unwrap().check().unwrap();
         std::thread::sleep(std::time::Duration::from_millis(100));
         assert!(

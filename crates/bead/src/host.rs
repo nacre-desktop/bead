@@ -14,7 +14,10 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     error::Error,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Condvar, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
     time::Duration,
 };
 
@@ -34,7 +37,188 @@ struct CommandState {
     results: BTreeMap<String, (String, bool, String)>,
     active: BTreeSet<String>,
 }
-type ServiceWakeup = Arc<Mutex<Option<Box<dyn Fn(UiEvent) + Send + Sync>>>>;
+type ServiceWakeup = Arc<dyn Fn(UiEvent) + Send + Sync>;
+type WakeCallback = Arc<dyn Fn(UiEvent) + Send + Sync>;
+
+#[derive(Default)]
+struct RuntimeSignals {
+    callbacks: Mutex<BTreeMap<u64, WakeCallback>>,
+    next: AtomicU64,
+}
+impl RuntimeSignals {
+    fn register(&self, callback: WakeCallback) -> u64 {
+        let id = self.next.fetch_add(1, Ordering::Relaxed);
+        self.callbacks.lock().unwrap().insert(id, callback.clone());
+        callback(UiEvent::Model(BTreeMap::new()));
+        id
+    }
+    fn unregister(&self, id: u64) {
+        self.callbacks.lock().unwrap().remove(&id);
+    }
+    fn notify_one(&self, id: u64) {
+        let callback = self.callbacks.lock().unwrap().get(&id).cloned();
+        if let Some(callback) = callback {
+            callback(UiEvent::Model(BTreeMap::new()));
+        }
+    }
+    fn notify(&self) {
+        let callbacks = self
+            .callbacks
+            .lock()
+            .unwrap()
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        for callback in callbacks {
+            callback(UiEvent::Model(BTreeMap::new()));
+        }
+    }
+}
+
+/// Process-wide owner for the services shared by all views of a folder app.
+pub struct FolderServicesRuntime {
+    services: FolderServices,
+    desktop: Option<Arc<Desktop>>,
+    _subscription: Option<Subscription>,
+    _clock_lease: Option<ClockSecondsLease>,
+    commands: Arc<Mutex<CommandState>>,
+    signals: Arc<RuntimeSignals>,
+    stop: Arc<(Mutex<bool>, Condvar)>,
+    scheduler: Mutex<Option<std::thread::JoinHandle<()>>>,
+}
+impl FolderServicesRuntime {
+    /// Start one shared runtime, or return `None` when nothing was declared.
+    pub fn start(services: FolderServices) -> Option<Arc<Self>> {
+        if services.desktop.is_empty() && services.commands.is_empty() {
+            return None;
+        }
+        let desktop = if services.desktop.is_empty() {
+            None
+        } else {
+            Some(Desktop::start_config(DesktopConfig {
+                audio: services.desktop.contains("audio"),
+                bus: services.desktop.iter().any(|service| {
+                    matches!(
+                        service.as_str(),
+                        "battery" | "network" | "bluetooth" | "tray" | "session"
+                    )
+                }),
+            }))
+        };
+        let clock_lease = if services.desktop.contains("clock") {
+            desktop
+                .as_ref()
+                .map(|desktop| desktop.clock_seconds_lease())
+        } else {
+            None
+        };
+        let signals = Arc::new(RuntimeSignals::default());
+        let subscription = desktop.as_ref().map(|desktop| {
+            let signals = Arc::downgrade(&signals);
+            desktop.subscribe(move |_| {
+                if let Some(signals) = signals.upgrade() {
+                    signals.notify();
+                }
+            })
+        });
+        let commands = Arc::new(Mutex::new(CommandState::default()));
+        let wake: ServiceWakeup = {
+            let signals = signals.clone();
+            Arc::new(move |_| signals.notify())
+        };
+        let intervals = services
+            .commands
+            .iter()
+            .filter_map(|(name, spec)| spec.interval.map(|interval| (name.clone(), interval)))
+            .collect::<Vec<_>>();
+        for (name, spec) in &services.commands {
+            if spec.interval.is_some() {
+                launch_command(name, &services.commands, &commands, &wake);
+            }
+        }
+        let stop = Arc::new((Mutex::new(false), Condvar::new()));
+        let scheduler = if intervals.is_empty() {
+            None
+        } else {
+            let specs = services.commands.clone();
+            let commands = commands.clone();
+            let wake = wake.clone();
+            let stop_signal = stop.clone();
+            Some(std::thread::spawn(move || {
+                let mut next = intervals
+                    .into_iter()
+                    .map(|(name, interval)| (name, interval, std::time::Instant::now()))
+                    .collect::<Vec<_>>();
+                loop {
+                    let wait = next
+                        .iter()
+                        .map(|(_, interval, started)| interval.saturating_sub(started.elapsed()))
+                        .min()
+                        .unwrap_or(Duration::from_secs(60));
+                    let stopped = stop_signal.0.lock().unwrap();
+                    if *stopped {
+                        break;
+                    }
+                    let (stopped, _) = stop_signal.1.wait_timeout(stopped, wait).unwrap();
+                    if *stopped {
+                        break;
+                    }
+                    drop(stopped);
+                    for (name, interval, started) in &mut next {
+                        if started.elapsed() >= *interval {
+                            launch_command(name, &specs, &commands, &wake);
+                            *started = std::time::Instant::now();
+                        }
+                    }
+                }
+            }))
+        };
+        Some(Arc::new(Self {
+            services,
+            desktop,
+            _subscription: subscription,
+            _clock_lease: clock_lease,
+            commands,
+            signals,
+            stop,
+            scheduler: Mutex::new(scheduler),
+        }))
+    }
+
+    fn register(&self, callback: WakeCallback) -> u64 {
+        self.signals.register(callback)
+    }
+    fn unregister(&self, id: u64) {
+        self.signals.unregister(id);
+    }
+    fn notify_view(&self, id: u64) {
+        self.signals.notify_one(id);
+    }
+    fn run_command(&self, name: &str) {
+        if !self.services.commands.contains_key(name) {
+            eprintln!("unknown command '{name}'");
+            return;
+        }
+        let wake: ServiceWakeup = {
+            let signals = self.signals.clone();
+            Arc::new(move |_| signals.notify())
+        };
+        launch_command(name, &self.services.commands, &self.commands, &wake);
+    }
+    fn command_values(&self) -> BTreeMap<String, (String, bool, String)> {
+        self.commands.lock().unwrap().results.clone()
+    }
+}
+impl Drop for FolderServicesRuntime {
+    fn drop(&mut self) {
+        let (stopped, wake) = &*self.stop;
+        *stopped.lock().unwrap() = true;
+        wake.notify_all();
+        if let Some(thread) = self.scheduler.lock().unwrap().take() {
+            let _ = thread.join();
+        }
+    }
+}
 
 /// Project the raw desktop snapshot into stable, app-facing stores.
 pub fn desktop_values(snapshot: &Snapshot) -> BTreeMap<String, Value> {
@@ -123,7 +307,13 @@ fn declared_desktop_values(
         .into_iter()
         .filter(|(key, _)| {
             key.strip_prefix("desktop.")
-                .and_then(|rest| rest.split('.').next())
+                .map(|rest| {
+                    if rest == "date" {
+                        "clock"
+                    } else {
+                        rest.split('.').next().unwrap_or_default()
+                    }
+                })
                 .is_some_and(|service| declared.contains(service))
         })
         .collect()
@@ -221,11 +411,7 @@ fn launch_command(
             shared.active.remove(&name);
             shared.results.insert(name, (stdout, ok, error));
         }
-        if let Ok(slot) = wake.lock()
-            && let Some(cb) = slot.as_ref()
-        {
-            cb(UiEvent::Model(BTreeMap::new()));
-        }
+        wake(UiEvent::Model(BTreeMap::new()));
     });
 }
 fn execute_command(spec: &CommandSpec) -> (String, bool, String) {
@@ -236,7 +422,7 @@ fn execute_command(spec: &CommandSpec) -> (String, bool, String) {
         &[],
         bead_services::process::Limits {
             timeout: spec.timeout,
-            output: 8 * 1024 * 1024,
+            output: 64 * 1024,
             ..Default::default()
         },
     ) {
@@ -295,15 +481,12 @@ pub struct FolderView {
     pub session: Session,
     pending: Option<Scene>,
     size: (u32, u32),
-    services: FolderServices,
-    desktop: Option<Arc<Desktop>>,
-    _subscription: Option<Subscription>,
-    _clock_lease: Option<ClockSecondsLease>,
+    runtime: Option<Arc<FolderServicesRuntime>>,
+    registration: Option<u64>,
+    initialized: bool,
+    needs_external_refresh: bool,
     last_revision: Option<u64>,
     pointer: Option<(f32, f32)>,
-    commands: Arc<Mutex<CommandState>>,
-    services_wakeup: ServiceWakeup,
-    stopped: Arc<std::sync::atomic::AtomicBool>,
 }
 impl FolderView {
     pub fn load(
@@ -313,15 +496,25 @@ impl FolderView {
         title: &str,
         size: (u32, u32),
     ) -> Result<Self, Box<dyn Error>> {
-        Self::load_with_services(root, view, palette, title, size, FolderServices::default())
+        Self::load_inner(root, view, palette, title, size, None)
     }
-    pub fn load_with_services(
+    pub fn load_with_runtime(
         root: PathBuf,
         view: PathBuf,
         palette: PathBuf,
         title: &str,
         size: (u32, u32),
-        services: FolderServices,
+        runtime: Arc<FolderServicesRuntime>,
+    ) -> Result<Self, Box<dyn Error>> {
+        Self::load_inner(root, view, palette, title, size, Some(runtime))
+    }
+    fn load_inner(
+        root: PathBuf,
+        view: PathBuf,
+        palette: PathBuf,
+        title: &str,
+        size: (u32, u32),
+        runtime: Option<Arc<FolderServicesRuntime>>,
     ) -> Result<Self, Box<dyn Error>> {
         crate::ui::plugins::configure(
             &root,
@@ -341,109 +534,45 @@ impl FolderView {
         let mut session = Session::new(root, view, palette, colors, fallback);
         session.set_accessibility_label(title);
         session.set_viewport(size.0, size.1);
-        let desktop = if services.desktop.is_empty() {
-            None
-        } else {
-            Some(Desktop::start_config(DesktopConfig {
-                audio: services.desktop.contains("audio"),
-                bus: services.desktop.iter().any(|s| {
-                    matches!(
-                        s.as_str(),
-                        "battery" | "network" | "bluetooth" | "tray" | "session"
-                    )
-                }),
-            }))
-        };
-        let clock_lease = if services.desktop.contains("clock") {
-            desktop.as_ref().map(|d| d.clock_seconds_lease())
-        } else {
-            None
-        };
-        let services_wakeup: ServiceWakeup = Arc::new(Mutex::new(None));
-        let subscription = desktop.as_ref().map(|d| {
-            let signal = services_wakeup.clone();
-            d.subscribe(move |_| {
-                if let Ok(slot) = signal.lock()
-                    && let Some(wake) = slot.as_ref()
-                {
-                    wake(UiEvent::Model(BTreeMap::new()));
-                }
-            })
-        });
         Ok(Self {
             session,
             pending: None,
             size,
-            services,
-            desktop,
-            _subscription: subscription,
-            _clock_lease: clock_lease,
+            runtime,
+            registration: None,
+            initialized: false,
+            needs_external_refresh: false,
             last_revision: None,
             pointer: None,
-            commands: Arc::new(Mutex::new(CommandState::default())),
-            services_wakeup,
-            stopped: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         })
-        .map(|host| {
-            for (name, spec) in host.services.commands.clone() {
-                if spec.interval.is_some() {
-                    host.start_command(&name);
-                }
-                if let Some(interval) = spec.interval {
-                    let stopped = host.stopped.clone();
-                    let commands = host.commands.clone();
-                    let wake = host.services_wakeup.clone();
-                    let specs = host.services.commands.clone();
-                    std::thread::spawn(move || {
-                        while !stopped.load(std::sync::atomic::Ordering::Acquire) {
-                            std::thread::sleep(interval);
-                            if stopped.load(std::sync::atomic::Ordering::Acquire) {
-                                break;
-                            }
-                            launch_command(&name, &specs, &commands, &wake);
-                        }
-                    });
-                }
-            }
-            host
-        })
-    }
-    fn start_command(&self, name: &str) {
-        launch_command(
-            name,
-            &self.services.commands,
-            &self.commands,
-            &self.services_wakeup,
-        );
-    }
-    fn run_command(&self, name: &str) {
-        if !self.services.commands.contains_key(name) {
-            eprintln!("unknown command '{name}'");
-            return;
-        }
-        self.start_command(name);
     }
     fn apply_external(&mut self) -> Result<Option<Scene>, Box<dyn Error>> {
         let mut changes = BTreeMap::new();
-        if let Some(desktop) = &self.desktop {
-            let snapshot = desktop.snapshot();
-            if self
-                .last_revision
-                .is_none_or(|revision| snapshot.revision >= revision)
-                && self.last_revision != Some(snapshot.revision)
-            {
-                self.last_revision = Some(snapshot.revision);
-                changes.extend(declared_desktop_values(&snapshot, &self.services.desktop));
+        if let Some(runtime) = &self.runtime {
+            if let Some(desktop) = &runtime.desktop {
+                let snapshot = desktop.snapshot();
+                if self
+                    .last_revision
+                    .is_none_or(|revision| snapshot.revision >= revision)
+                {
+                    self.last_revision = Some(snapshot.revision);
+                    changes.extend(declared_desktop_values(
+                        &snapshot,
+                        &runtime.services.desktop,
+                    ));
+                }
             }
-        }
-        if let Ok(mut state) = self.commands.lock() {
-            for (name, (stdout, ok, error)) in std::mem::take(&mut state.results) {
+            for (name, (stdout, ok, error)) in runtime.command_values() {
                 changes.insert(format!("commands.{name}.stdout"), Value::Text(stdout));
                 changes.insert(format!("commands.{name}.ok"), Value::Bool(ok));
                 changes.insert(format!("commands.{name}.error"), Value::Text(error));
             }
         }
+        let count = changes.len();
         changes.retain(|key, _| self.session.has_store(key));
+        if !self.initialized && changes.len() != count {
+            self.needs_external_refresh = true;
+        }
         if changes.is_empty() {
             Ok(None)
         } else {
@@ -490,8 +619,11 @@ impl SceneSource for FolderView {
         self.session.watch(wakeup)
     }
     fn services(&mut self, wakeup: Box<dyn Fn(UiEvent) + Send + Sync>) {
-        if let Ok(mut slot) = self.services_wakeup.lock() {
-            *slot = Some(wakeup);
+        if let Some(runtime) = &self.runtime {
+            if let Some(id) = self.registration.take() {
+                runtime.unregister(id);
+            }
+            self.registration = Some(runtime.register(Arc::from(wakeup)));
         }
     }
     fn viewport(&mut self, w: u32, h: u32) -> bool {
@@ -537,9 +669,18 @@ impl SceneSource for FolderView {
                 _ => None,
             },
             UiEvent::Action { name, argument } => {
-                match route_folder_action(&name, &argument, &self.services.desktop, self.pointer) {
+                let empty = BTreeSet::new();
+                let declared = self
+                    .runtime
+                    .as_ref()
+                    .map_or(&empty, |runtime| &runtime.services.desktop);
+                match route_folder_action(&name, &argument, declared, self.pointer) {
                     Ok(Some(DesktopRequest::Action(action))) => {
-                        if let Some(desktop) = &self.desktop {
+                        if let Some(desktop) = self
+                            .runtime
+                            .as_ref()
+                            .and_then(|runtime| runtime.desktop.as_ref())
+                        {
                             if let Err(e) = desktop.action(action) {
                                 eprintln!("desktop action {name}: {e}");
                             }
@@ -549,7 +690,11 @@ impl SceneSource for FolderView {
                         None
                     }
                     Ok(Some(DesktopRequest::Command(command))) => {
-                        self.run_command(&command);
+                        if let Some(runtime) = &self.runtime {
+                            runtime.run_command(&command);
+                        } else {
+                            eprintln!("unknown command '{command}'");
+                        }
                         None
                     }
                     Err(e) => {
@@ -595,8 +740,16 @@ impl SceneSource for FolderView {
         Some(self.session.accessibility_tree())
     }
     fn commit(&mut self) -> bool {
-        if let Some(scene) = self.pending.take() {
-            self.session.commit(scene)
+        let Some(scene) = self.pending.take() else {
+            return true;
+        };
+        self.session.commit(scene);
+        self.initialized = true;
+        if self.needs_external_refresh {
+            self.needs_external_refresh = false;
+            if let (Some(runtime), Some(id)) = (&self.runtime, self.registration) {
+                runtime.notify_view(id);
+            }
         }
         true
     }
@@ -607,9 +760,20 @@ impl SceneSource for FolderView {
     }
 }
 
+impl Drop for FolderView {
+    fn drop(&mut self) {
+        if let (Some(runtime), Some(id)) = (&self.runtime, self.registration.take()) {
+            runtime.unregister(id);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
     #[test]
     fn folder_bar_removes_panel_margin_and_uses_surface_viewport() {
@@ -629,8 +793,8 @@ mod tests {
         for primitive in &raw.primitives {
             if let crate::render::Primitive::Text { rect, .. } = primitive {
                 assert!(
-                    rect.h > 36.,
-                    "old path lays out labels against the full output height"
+                    rect.y > 36.,
+                    "old path positions centered labels against the full output height"
                 );
             }
         }
@@ -675,39 +839,53 @@ mod tests {
         assert_eq!(empty["desktop.battery.percent"], Value::Number(-1.));
         assert_eq!(empty["desktop.audio.volume"], Value::Number(-1.));
         assert_eq!(empty["desktop.network.strength"], Value::Number(-1.));
-        let mut snapshot = Snapshot::default();
-        snapshot.clock = "12:34".into();
-        snapshot.clock_seconds = "12:34:56".into();
-        snapshot.date = Some(bead_services::LocalDate {
-            year: 2026,
-            month: 11,
-            day: 12,
-        });
-        snapshot.audio.connected = true;
-        snapshot.audio.volume = Some(0.42);
-        snapshot.audio.muted = Some(true);
-        snapshot.audio.default_sink = Some("Speakers".into());
-        snapshot.battery.available = true;
-        snapshot.battery.percentage = Some(83.);
-        snapshot.battery.charging = true;
-        snapshot.battery.on_battery = false;
-        snapshot.network.available = true;
-        snapshot.network.connected = true;
-        snapshot.network.wireless_enabled = true;
-        snapshot.network.name = "wifi".into();
-        snapshot.network.strength = Some(70);
-        snapshot.bluetooth.available = true;
-        snapshot.bluetooth.powered = true;
-        snapshot.bluetooth.connected_devices = vec!["Headphones".into()];
-        snapshot.tray.push(bead_services::TrayItem {
-            id: "item".into(),
-            title: "Tray".into(),
-            icon_name: "icon".into(),
-            attention: true,
-            has_menu: true,
+        let snapshot = Snapshot {
+            clock: "12:34".into(),
+            clock_seconds: "12:34:56".into(),
+            date: Some(bead_services::LocalDate {
+                year: 2026,
+                month: 11,
+                day: 12,
+            }),
+            audio: bead_services::Audio {
+                connected: true,
+                default_sink: Some("Speakers".into()),
+                volume: Some(0.42),
+                muted: Some(true),
+                ..Default::default()
+            },
+            battery: bead_services::Battery {
+                available: true,
+                percentage: Some(83.),
+                charging: true,
+                on_battery: false,
+            },
+            network: bead_services::Network {
+                available: true,
+                connected: true,
+                wireless_enabled: true,
+                name: "wifi".into(),
+                strength: Some(70),
+            },
+            bluetooth: bead_services::Bluetooth {
+                available: true,
+                powered: true,
+                connected_devices: vec!["Headphones".into()],
+            },
+            tray: vec![bead_services::TrayItem {
+                id: "item".into(),
+                title: "Tray".into(),
+                icon_name: "icon".into(),
+                attention: true,
+                has_menu: true,
+                ..Default::default()
+            }],
+            session: bead_services::Session {
+                locked: true,
+                ..Default::default()
+            },
             ..Default::default()
-        });
-        snapshot.session.locked = true;
+        };
         let values = desktop_values(&snapshot);
         assert_eq!(
             values["desktop.clock.seconds"],
@@ -813,6 +991,151 @@ mod tests {
         let (stdout, ok, _) = execute_command(&spec(&["python3", "-c", "print('x'*5000)"], 5));
         assert!(ok);
         assert_eq!(stdout.len(), 4096);
+        let (_, ok, error) = execute_command(&spec(&["python3", "-c", "print('x'*70000)"], 5));
+        assert!(!ok);
+        assert!(error.contains("output limit"));
+    }
+
+    #[test]
+    fn shared_runtime_delivers_one_command_result_to_two_views() {
+        use std::{os::unix::fs::PermissionsExt, sync::mpsc};
+
+        let id = format!(
+            "{}-{}",
+            std::process::id(),
+            TEMP_ID.fetch_add(1, Ordering::Relaxed)
+        );
+        let base = std::env::temp_dir().join(format!("bead-folder-runtime-{id}"));
+        std::fs::create_dir_all(&base).unwrap();
+        let marker = base.join("runs");
+        let go = base.join("go");
+        let script = base.join("command.sh");
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nwhile [ ! -e '{}' ]; do sleep 0.01; done\nprintf x >> '{}'\nprintf 'hi\\n'\n",
+                go.display(), marker.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let root = base.join("app");
+        std::fs::create_dir_all(root.join("view")).unwrap();
+        std::fs::write(
+            root.join("view/main.luau"),
+            "local ui=require('bead.ui'); return ui.Text{id='command',text=ui.bind('commands.kernel.stdout'),width=120,height=24}",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("view/behavior.luau"),
+            "return {stores={['commands.kernel.stdout']='',['commands.kernel.ok']=false,['commands.kernel.error']=''},actions={},computed={}}",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("view/bundle.json"),
+            r#"{"plugins":true,"modules":[]}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("palette.json"),
+            r#"{"formatVersion":1,"colours":{}}"#,
+        )
+        .unwrap();
+        let runtime = FolderServicesRuntime::start(FolderServices {
+            desktop: BTreeSet::from(["clock".into()]),
+            commands: BTreeMap::from([(
+                "kernel".into(),
+                CommandSpec {
+                    argv: vec![script.display().to_string()],
+                    interval: Some(Duration::from_secs(600)),
+                    timeout: Duration::from_secs(5),
+                },
+            )]),
+        })
+        .unwrap();
+        let mut first = FolderView::load_with_runtime(
+            root.clone(),
+            "view/main.luau".into(),
+            "palette.json".into(),
+            "Status one",
+            (1280, 42),
+            runtime.clone(),
+        )
+        .unwrap();
+        let mut second = FolderView::load_with_runtime(
+            root,
+            "view/main.luau".into(),
+            "palette.json".into(),
+            "Status two",
+            (1280, 42),
+            runtime.clone(),
+        )
+        .unwrap();
+        assert!(Arc::ptr_eq(
+            first.runtime.as_ref().unwrap(),
+            second.runtime.as_ref().unwrap()
+        ));
+        let (first_tx, first_rx) = mpsc::channel();
+        let (second_tx, second_rx) = mpsc::channel();
+        first.services(Box::new(move |event| {
+            let _ = first_tx.send(event);
+        }));
+        second.services(Box::new(move |event| {
+            let _ = second_tx.send(event);
+        }));
+        let _ = first_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        let _ = second_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        std::fs::write(&go, "go").unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        while runtime
+            .command_values()
+            .get("kernel")
+            .is_none_or(|result| result.0 != "hi")
+        {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "startup command did not finish"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let _ = first_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        let _ = second_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        let _ = first.check_render(UiEvent::Reload).unwrap();
+        let _ = second.check_render(UiEvent::Reload).unwrap();
+        let _ = first.check_render(UiEvent::Model(BTreeMap::new())).unwrap();
+        let _ = second
+            .check_render(UiEvent::Model(BTreeMap::new()))
+            .unwrap();
+        for view in [&first, &second] {
+            let stores: serde_json::Value =
+                serde_json::from_str(&view.session.state_summary()).unwrap();
+            assert_eq!(stores["commands.kernel.stdout"], "hi");
+            assert!(stores["commands.kernel.ok"].as_bool().unwrap());
+        }
+        assert_eq!(std::fs::read_to_string(&marker).unwrap().lines().count(), 1);
+        drop(first);
+        drop(second);
+        drop(runtime);
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn interval_scheduler_stops_promptly_when_runtime_drops() {
+        let runtime = FolderServicesRuntime::start(FolderServices {
+            commands: BTreeMap::from([(
+                "slow".into(),
+                CommandSpec {
+                    argv: vec!["true".into()],
+                    interval: Some(Duration::from_secs(600)),
+                    timeout: Duration::from_secs(5),
+                },
+            )]),
+            ..Default::default()
+        })
+        .unwrap();
+        let started = std::time::Instant::now();
+        drop(runtime);
+        assert!(started.elapsed() < Duration::from_millis(100));
     }
 
     #[test]
@@ -862,12 +1185,5 @@ mod tests {
             |p| matches!(p,crate::render::Primitive::Text{text,..} if text=="Button presses: 1")
         ));
         assert!(view.session.state_summary().contains("\"count\":1"));
-    }
-}
-
-impl Drop for FolderView {
-    fn drop(&mut self) {
-        self.stopped
-            .store(true, std::sync::atomic::Ordering::Release);
     }
 }
