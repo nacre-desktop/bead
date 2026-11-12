@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
-members = ["crates/bead-test", "crates/bead", "crates/bead-services", "crates/bead-backends", "crates/bead-core", "crates/bead-kit", "crates/bead-widgets", "crates/bead-ui", "crates/bead-wayland", "crates/bead-render", "crates/bead-wallpaper", "examples/minimal-shell"]
-default-members = ["crates/bead-test", "crates/bead", "crates/bead-services", "crates/bead-backends", "crates/bead-core", "crates/bead-kit", "crates/bead-widgets", "crates/bead-ui", "crates/bead-wayland", "crates/bead-render", "crates/bead-wallpaper", "examples/minimal-shell"]
+members = ["crates/bead-test", "crates/bead-cli", "crates/bead", "crates/bead-services", "crates/bead-backends", "crates/bead-core", "crates/bead-kit", "crates/bead-widgets", "crates/bead-ui", "crates/bead-wayland", "crates/bead-render", "crates/bead-wallpaper", "examples/minimal-shell"]
+default-members = ["crates/bead-test", "crates/bead-cli", "crates/bead", "crates/bead-services", "crates/bead-backends", "crates/bead-core", "crates/bead-kit", "crates/bead-widgets", "crates/bead-ui", "crates/bead-wayland", "crates/bead-render", "crates/bead-wallpaper", "examples/minimal-shell"]
 
 [workspace.package]
 license = "MIT"

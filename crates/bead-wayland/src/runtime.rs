@@ -2352,7 +2352,11 @@ impl App {
             let exclusive_zone = if self.options.test_passive {
                 -1
             } else if self.options.bar && !companion {
-                self.bar_thickness() as i32
+                if self.options.bar_exclusive {
+                    self.bar_thickness() as i32
+                } else {
+                    0
+                }
             } else if self.options.panel || companion {
                 -1
             } else {

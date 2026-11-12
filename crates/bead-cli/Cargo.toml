@@ -1,0 +1,16 @@
+[package]
+name = "bead-cli"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "bead"
+path = "src/main.rs"
+
+[dependencies]
+bead = { path = "../bead", default-features = false }
+serde = { version = "1", features = ["derive"] }
+toml = "1.1.8"

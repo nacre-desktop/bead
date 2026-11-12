@@ -1,0 +1,9 @@
+id = "org.bead.Example.HelloBar"
+title = "Hello bar"
+view = "view/main.luau"
+palette = "palette.json"
+
+[layer]
+edge = "top"
+size = 36
+exclusive = true

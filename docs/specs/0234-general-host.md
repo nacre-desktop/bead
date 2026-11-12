@@ -1,0 +1,7 @@
+# 0234 — General folder host, phase 1
+
+`bead run <folder> [--seconds N]` runs one manifest-defined xdg-toplevel window or primary edge bar; `bead check <folder>` loads, validates and CPU-renders one Luau generation without Wayland. Apps contain a required `bead.toml`, relative in-folder `view/` and palette files, a UI bundle, and optional plugins. The manifest requires identity/title and exactly one window or layer table, rejects unknown keys and paths outside the app folder. Both modes use `bead::host::FolderView`, which owns the shared `Session` event mapping and check renderer. Layer mode uses the existing primary/bar surface path; `Options.bar_size` and `bar_exclusive` expose general static thickness and reservation policy.
+
+Phase 1 provides only view-owned state/actions. It does not provide external services/data, integrations, multiple surfaces, install/package workflows, panels/pearls/overlays/canvases, or a docs site. B0235 owns services. No temporary duplicate implementation remains.
+
+Evidence: dev-1 focused checks passed. In nested headless Sway, the window mapped and the layer log reported `HelloBar`, top anchor `13`, size `0x36`, exclusive zone `36`, and workspace origin y=36. The window capture is visible; the bar capture is blank despite successful buffer presentation, so visible bar rendering remains an open issue. Captures and IPC logs stay in the task's untracked `.lead/evidence/`. QML parity is not applicable because these framework examples have no corresponding Nacre product surfaces.

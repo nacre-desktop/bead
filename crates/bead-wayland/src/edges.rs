@@ -359,11 +359,13 @@ impl App {
         self.options.bar && !self.bar_off && lip.edge == self.options.edge
     }
     pub(super) fn bar_thickness(&self) -> u32 {
-        self.options
-            .control
-            .as_ref()
-            .and_then(|c| c.bar_thickness())
-            .unwrap_or(50)
+        self.options.bar_size.unwrap_or_else(|| {
+            self.options
+                .control
+                .as_ref()
+                .and_then(|c| c.bar_thickness())
+                .unwrap_or(50)
+        })
     }
     /// The bar's layer size: zero spans the edge it is anchored along.
     pub(super) fn bar_size(&self) -> (u32, u32) {

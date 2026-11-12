@@ -771,6 +771,9 @@ pub struct Options {
     pub force_argb: bool,
     pub seconds: Option<f64>,
     pub bar: bool,
+    /// Optional static bar thickness and exclusive-zone policy for general hosts.
+    pub bar_size: Option<u32>,
+    pub bar_exclusive: bool,
     pub edge: bead_core::Edge,
     pub panel: bool,
     pub content_size: bool,
@@ -843,6 +846,8 @@ impl Default for Options {
             force_argb: false,
             seconds: None,
             bar: false,
+            bar_size: None,
+            bar_exclusive: true,
             edge: Default::default(),
             panel: false,
             content_size: false,

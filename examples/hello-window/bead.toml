@@ -1,0 +1,8 @@
+id = "org.bead.Example.HelloWindow"
+title = "Hello window"
+view = "view/main.luau"
+palette = "palette.json"
+
+[window]
+size = [440, 300]
+min_size = [320, 240]

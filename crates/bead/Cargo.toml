@@ -6,6 +6,7 @@ rust-version.workspace=true
 license="MIT"
 publish=false
 [dependencies]
+accesskit = "=0.25.1"
 tokio = { version = "1", features = ["rt", "time"] }
 serde_json = "1"
 bead-core={path="../bead-core"}

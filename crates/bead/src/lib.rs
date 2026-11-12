@@ -9,4 +9,5 @@ pub use bead_ui as ui;
 pub use bead_wayland as wayland;
 pub use bead_widgets as widgets;
 
+pub mod host;
 pub mod source;
