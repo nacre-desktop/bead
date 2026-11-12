@@ -18,6 +18,17 @@ cargo run -p bead-minimal-shell --locked -- --check
 
 Omit `--check` to open the Wayland window. The lower-level `bead --example minimal` is a renderer/facade smoke example.
 
+## Getting started
+
+Install or build the `bead` CLI, then check and run a folder app:
+
+```sh
+bead check examples/hello-bar
+bead run examples/hello-bar
+```
+
+Start with the [documentation index](docs/README.md) and [15-minute bar tutorial](docs/tutorial/bar.md).
+
 ## Workspace layout
 
 - [`crates/`](crates/) — framework crates.
@@ -36,11 +47,7 @@ See the [examples guide](examples/README.md) for the minimal host and plugin exa
 
 ## Documentation
 
-- [Components](docs/COMPONENTS.md) — UI components and host-provided theme inputs.
-- [Status](docs/STATUS.md) and [roadmap](docs/ROADMAP.md).
-- [Architecture decisions](docs/decisions/0001-architecture.md) — records the framework's architectural choices.
-- [Framework specifications](docs/specs/README.md) — retained contracts and split decision.
-- [CI guide](docs/development/ci.md) — checks and local equivalents.
+See the [documentation index](docs/README.md) for the tutorial, references, examples, architecture decisions, and specifications.
 
 ## License and third-party notices
 

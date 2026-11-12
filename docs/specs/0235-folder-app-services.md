@@ -6,8 +6,8 @@ Folder manifests may opt in to any subset of desktop snapshot services and decla
 
 The example `hello-status` demonstrates a layer surface, desktop values, and a local `uname -r` command. This unit also centres the existing hello-bar labels and adds a FolderView coordinate-frame input test. Clock seconds are leased whenever `clock` is declared.
 
-Out of scope: notification server and popups/multiple surfaces, files/watch stores, richer MPRIS/UPower data, per-output data, and Nacre integration (B0236+). No temporary duplicate implementation paths were introduced.
+Out of scope: notification server and popups/multiple surfaces, files/watch stores, richer MPRIS/UPower data, per-output data, and application integration. No temporary duplicate implementation paths were introduced.
 
-Visual parity gap: `hello-status` is a new framework example with no corresponding Nacre QML surface, so a paired QML comparison is not applicable.
+Visual parity is not applicable to `hello-status`: it is a framework example rather than a product surface.
 
 Evidence: dev-1 formatting, warnings-denied Clippy, focused crate tests, framework/service boundaries, all folder-app checks, the SDK minimal proof, and minimal-shell proof passed. The runtime screenshot was inspected: hello-bar labels sit around the 36-pixel bar's vertical midpoint; hello-status shows `20:07`, unavailable battery/audio states, and `Kernel 6.14.0-37-generic` in its 42-pixel layer. Command fan-out and prompt scheduler-stop tests pass; see `.lead/report.md` for exact output.

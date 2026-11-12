@@ -1,0 +1,9 @@
+id = "org.example.TutorialBar"
+title = "Tutorial bar"
+
+[layer]
+edge = "top"
+size = 36
+
+[services]
+desktop = ["clock", "battery", "audio"]
