@@ -40,6 +40,19 @@ struct CommandState {
 type ServiceWakeup = Arc<dyn Fn(UiEvent) + Send + Sync>;
 type WakeCallback = Arc<dyn Fn(UiEvent) + Send + Sync>;
 
+fn desktop_config(services: &BTreeSet<String>) -> DesktopConfig {
+    DesktopConfig {
+        audio: services.contains("audio"),
+        bus: services.iter().any(|service| {
+            matches!(
+                service.as_str(),
+                "battery" | "network" | "bluetooth" | "tray" | "session"
+            )
+        }),
+        tray_watcher: services.contains("tray"),
+    }
+}
+
 #[derive(Default)]
 struct RuntimeSignals {
     callbacks: Mutex<BTreeMap<u64, WakeCallback>>,
@@ -95,15 +108,7 @@ impl FolderServicesRuntime {
         let desktop = if services.desktop.is_empty() {
             None
         } else {
-            Some(Desktop::start_config(DesktopConfig {
-                audio: services.desktop.contains("audio"),
-                bus: services.desktop.iter().any(|service| {
-                    matches!(
-                        service.as_str(),
-                        "battery" | "network" | "bluetooth" | "tray" | "session"
-                    )
-                }),
-            }))
+            Some(Desktop::start_config(desktop_config(&services.desktop)))
         };
         let clock_lease = if services.desktop.contains("clock") {
             desktop
@@ -774,6 +779,11 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static TEMP_ID: AtomicU64 = AtomicU64::new(0);
+
+    #[test]
+    fn tray_service_enables_the_fallback_watcher() {
+        assert!(desktop_config(&BTreeSet::from(["tray".to_owned()])).tray_watcher);
+    }
 
     #[test]
     fn folder_bar_removes_panel_margin_and_uses_surface_viewport() {
