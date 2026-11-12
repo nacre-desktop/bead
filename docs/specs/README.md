@@ -4,8 +4,6 @@ This index contains current framework contracts and repository-boundary decision
 
 | Specification | Scope |
 |---|---|
-| [0234 — General folder host](0234-general-host.md) | Run and CPU-check Luau application folders with the `bead` CLI |
-| [0236 — Optional StatusNotifierWatcher](0236-tray-watcher.md) | Optional session-bus watcher ownership and registration lifecycle |
 | [0025 — Per-output UI sessions](0025-per-output-ui-sessions.md) | Host-owned output identity and independent UI sessions |
 | [0032 — Internationalization consumer](0032-i18n-consumer.md) | Application-provided translation catalogs |
 | [0035 — Settings stores](0035-settings-stores.md) | Stable-ID state and host-backed persistence |
@@ -19,10 +17,11 @@ This index contains current framework contracts and repository-boundary decision
 | [0232 — GraphCanvas feasibility](0232-graph-canvas.md) | Draft: renderer/layout measurements and general canvas architecture |
 | [0234 — General folder host](0234-general-host.md) | Run and CPU-check Luau application folders with the `bead` CLI |
 | [0235 — Folder app services](0235-folder-app-services.md) | Opt-in desktop snapshots, actions, and declared commands for folder apps |
+| [0236 — Optional StatusNotifierWatcher](0236-tray-watcher.md) | Optional session-bus watcher ownership and registration lifecycle |
 
 Planned:
 
-- B0236: first integrations slice (MPRIS).
+- B0239: MPRIS media service (next integrations slice).
 - B0237: tutorial, gallery, API notes, and in-repo docs site.
 - B0238: API stability and versioning plan.
 
