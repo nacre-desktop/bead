@@ -18,12 +18,12 @@ This index contains current framework contracts and repository-boundary decision
 | [0234 — General folder host](0234-general-host.md) | Run and CPU-check Luau application folders with the `bead` CLI |
 | [0235 — Folder app services](0235-folder-app-services.md) | Opt-in desktop snapshots, actions, and declared commands for folder apps |
 | [0236 — Optional StatusNotifierWatcher](0236-tray-watcher.md) | Optional session-bus watcher ownership and registration lifecycle |
+| [0238 — API stability and versioning](0238-api-stability.md) | Proposed stable surfaces, compatibility rules, hazards, and publishing readiness |
 
 Planned:
 
 - B0239: MPRIS media service (next integrations slice).
 - B0240: smooth scrolling and visible scroll bars in the kit.
 - B0241: host actions pass view validation without shims; a mute toggle.
-- B0238: API stability and versioning plan.
 
 This index covers Bead framework contracts. See the [documentation index](../README.md) for the current framework overview and the [framework ownership decision](0214-framework-split.md).
