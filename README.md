@@ -4,6 +4,8 @@ Bead is an actively developed, MIT-licensed Rust framework for building Wayland 
 
 **Status:** workspace crates are not published to crates.io. Applications should pin a reviewed Git revision; APIs may change between revisions.
 
+![Bead's minimal shell running in a private Wayland session.](docs/images/minimal-shell.png)
+
 ## What Bead provides
 
 Views describe presentation and behavior in Luau. Rust owns reusable platform, rendering, input, and service primitives. Reload validates a complete new view generation before swapping it atomically; invalid changes leave the last working UI active and report a source location and error.
