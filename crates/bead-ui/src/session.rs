@@ -43,6 +43,9 @@ impl Drop for PointerInput {
 }
 /// The state owner survives every view/script replacement.
 pub struct Session {
+    pub(super) scroll_feedback: crate::scroll_feedback::Feedback,
+    pub(super) scrollbar_config: crate::scrollbar::Config,
+    pub(super) keyboard_scroll: Option<crate::scroll_feedback::KeyboardMotion>,
     pub(super) accessibility_label: String,
     font_picker: Option<crate::transcript::Picker>,
     projector: Option<Projector>,
@@ -165,6 +168,9 @@ impl Session {
         fallback: Scene,
     ) -> Self {
         Self {
+            scroll_feedback: Default::default(),
+            scrollbar_config: crate::theme::scrollbar_config(),
+            keyboard_scroll: None,
             accessibility_label: "Bead".into(),
             font_picker: None,
             projector: None,
@@ -457,6 +463,15 @@ impl Session {
             (scene, nodes) = generation.materialize(&stores, &palette, self.viewport)?;
         }
 
+        self.scrollbar_config = crate::theme::scrollbar_config();
+        self.scroll_feedback.paint(
+            &mut scene,
+            &nodes,
+            &stores,
+            &palette,
+            &self.scrollbar_config,
+            (std::time::Instant::now(), self.frame_interval),
+        );
         bead_core::profile::mark("layout_ready");
         self.pending = Some(Pending {
             entry: self.entry.clone(),
@@ -586,6 +601,9 @@ impl Session {
         }
         scene
     }
+    pub(super) fn frame_due(&self, deadline: std::time::Instant, now: std::time::Instant) -> bool {
+        deadline.saturating_duration_since(now) <= self.frame_interval / 2
+    }
     /// Earliest transient-feedback or Luau animation frame deadline.
     pub fn preview_deadline(&self) -> Option<std::time::Instant> {
         let preview = (self.stores.get("bead.pressed") != Some(&Value::Bool(true)))
@@ -595,7 +613,15 @@ impl Session {
             .generation
             .as_ref()
             .and_then(Generation::animation_deadline);
-        [preview, animation].into_iter().flatten().min()
+        [
+            preview,
+            animation,
+            self.scroll_feedback.deadline,
+            self.keyboard_scroll.as_ref().map(|m| m.next),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
     /// Duration of the current panel pose transition, used by hosts to keep
     /// view-local scalar animation timers out of compositor-driven slide frames.
@@ -622,6 +648,13 @@ impl Session {
     /// Shared edge-panel hover controller. Authored `panel.close_on_leave` and
     /// `panel.leave_delay` select the policy; lip/body reentry or input focus holds it.
     pub fn pointer_region(&mut self, inside: bool) -> Result<Option<Scene>, Diagnostic> {
+        if !inside
+            && let Some((x, y)) = self.scroll_feedback.pointer.take()
+            && let Some((id, _)) = self.scrollbar_hit(x, y)
+        {
+            self.scroll_feedback
+                .leave(&id, std::time::Instant::now(), &self.scrollbar_config);
+        }
         self.pointer_inside = inside;
         self.pointer_seen = true;
         self.update(BTreeMap::new())
@@ -672,10 +705,24 @@ impl Session {
         base: u64,
         animation_checkpoint: Option<frontend::AnimationSnapshot>,
     ) -> Result<Option<Scene>, Diagnostic> {
+        let mut stores = stores;
+        let now = std::time::Instant::now();
+        if let Some(motion) = &mut self.keyboard_scroll {
+            let (value, done) = motion.value(now);
+            stores
+                .commit(BTreeMap::from([(
+                    motion.store.clone(),
+                    Value::Number(value),
+                )]))
+                .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
+            motion.next = now + self.frame_interval;
+            if done {
+                self.keyboard_scroll = None;
+            }
+        }
         let Some(generation) = &self.generation else {
             return Ok(None);
         };
-        let mut stores = stores;
         if self.pointer_input.get() && stores.get("bead.focus_visible").is_some() {
             stores
                 .commit(BTreeMap::from([(
@@ -745,12 +792,22 @@ impl Session {
         // external projector before deciding that its wakeup changed nothing.
         let animation_due = generation
             .animation_deadline()
-            .is_some_and(|deadline| std::time::Instant::now() >= deadline);
-        if stores.revision() == base && !animation_due {
+            .is_some_and(|deadline| self.frame_due(deadline, now));
+        // A callback can arrive just before the nominal deadline. Gating it a
+        // second time by a full period would skip alternate display frames.
+        let feedback_due = self.scroll_feedback.dirty
+            || self
+                .scroll_feedback
+                .deadline
+                .is_some_and(|deadline| self.frame_due(deadline, now));
+        if stores.revision() == base && !animation_due && !feedback_due {
             return Ok(None);
         }
-        let (mut scene, mut nodes) =
-            generation.materialize(&stores, &self.palette, self.viewport)?;
+        let (mut scene, mut nodes) = if stores.revision() == base && !animation_due {
+            (self.current.clone(), self.current_nodes.clone())
+        } else {
+            generation.materialize(&stores, &self.palette, self.viewport)?
+        };
         if self.coalesce_projection
             && let Some(projector) = &self.projector
         {
@@ -819,6 +876,24 @@ impl Session {
             }
         }
 
+        for node in self.current_nodes.iter().filter(|n| {
+            n.scrollable && n.scrollbar && n.scroll_limit.is_some_and(|limit| limit > 0.)
+        }) {
+            if let Some(store) = &node.scroll_store
+                && stores.get(store) != self.stores.get(store)
+            {
+                self.scroll_feedback
+                    .reveal(&node.id, now, &self.scrollbar_config);
+            }
+        }
+        self.scroll_feedback.paint(
+            &mut scene,
+            &nodes,
+            &stores,
+            &self.palette,
+            &self.scrollbar_config,
+            (std::time::Instant::now(), self.frame_interval),
+        );
         scene.font_files = self.current.font_files.clone();
         if self.error.is_some() && self.source_fault {
             let old = self.current.clone();
@@ -878,7 +953,7 @@ impl Session {
             && self.edge_hover.deadline().is_none()
             && self
                 .preview_deadline()
-                .is_none_or(|deadline| std::time::Instant::now() < deadline)
+                .is_none_or(|deadline| !self.frame_due(deadline, std::time::Instant::now()))
             && self.pending.is_none()
             && let Some(generation) = &self.generation
             && !generation.model_affects_view(changes.iter().filter_map(|(id, value)| {
@@ -934,6 +1009,14 @@ impl Session {
                 return Err(error);
             }
         };
+        self.scroll_feedback.paint(
+            &mut scene,
+            &nodes,
+            &self.stores,
+            &self.palette,
+            &self.scrollbar_config,
+            (std::time::Instant::now(), self.frame_interval),
+        );
         scene.font_files = self.current.font_files.clone();
         self.pending = Some(Pending {
             entry: self.entry.clone(),
@@ -970,6 +1053,14 @@ impl Session {
                 return Err(error);
             }
         };
+        self.scroll_feedback.paint(
+            &mut scene,
+            &nodes,
+            &self.stores,
+            &palette,
+            &self.scrollbar_config,
+            (std::time::Instant::now(), self.frame_interval),
+        );
         scene.font_files = self.current.font_files.clone();
         self.pending = Some(Pending {
             entry: self.entry.clone(),

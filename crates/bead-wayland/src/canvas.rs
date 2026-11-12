@@ -59,6 +59,19 @@ pub(super) struct Canvas {
     translate: Option<(f32, f32)>,
 }
 
+fn canvas_source_point(position: (f64, f64), bounds: Rect, offset: (f32, f32)) -> (f32, f32) {
+    (
+        position.0 as f32 + bounds.x - offset.0,
+        position.1 as f32 + bounds.y - offset.1,
+    )
+}
+
+impl Canvas {
+    pub(super) fn scroll_active(&self) -> bool {
+        self.lifecycle.open && self.configured && self.layer.is_some()
+    }
+}
+
 impl Drop for Canvas {
     fn drop(&mut self) {
         if let Some(scale) = self.fractional.take() {
@@ -529,6 +542,9 @@ impl App {
         }
     }
     fn canvas_hide(&mut self, key: &(String, String)) {
+        if let Some(epoch) = self.canvases.get(key).map(|c| c.epoch) {
+            self.cancel_scroll(&scroll::Target::Canvas(epoch));
+        }
         if let Some(canvas) = self.canvases.get_mut(key) {
             canvas.lifecycle.close();
             canvas.callbacks.invalidate();
@@ -588,6 +604,14 @@ impl App {
         }
     }
     pub(super) fn canvas_ui(&mut self, key: &(String, String), event: UiEvent) {
+        self.scrolls.ui_depth += 1;
+        self.process_canvas_ui(key, event);
+        self.scrolls.ui_depth -= 1;
+        if self.scrolls.ui_depth == 0 {
+            self.schedule_source_frames();
+        }
+    }
+    fn process_canvas_ui(&mut self, key: &(String, String), event: UiEvent) {
         if let UiEvent::ResourcesPrepared(result) = event {
             match result {
                 Ok(()) => {
@@ -694,6 +718,8 @@ impl App {
                     canvas.frame_pending = false;
                     canvas.dirty = false;
                     canvas.pressed = false;
+                    let epoch = canvas.epoch;
+                    self.cancel_scroll(&scroll::Target::Canvas(epoch));
                     return;
                 };
                 if hidden_prepare {
@@ -1171,6 +1197,7 @@ impl App {
             }
         }
         let _ = self.canvas_draw(&key);
+        self.schedule_source_frames();
     }
     pub(super) fn canvas_scale(&mut self, surface: &wl_surface::WlSurface, scale120: u32) {
         let Some(key) = self
@@ -1196,33 +1223,38 @@ impl App {
         }
         self.canvas_ui(&key, UiEvent::Relayout);
     }
-    pub(super) fn canvas_frame(&mut self, surface: &wl_surface::WlSurface, epoch: u64) {
+    pub(super) fn canvas_frame(
+        &mut self,
+        surface: &wl_surface::WlSurface,
+        epoch: u64,
+        source_epoch: u64,
+    ) {
         let Some(key) = self
             .canvases
             .iter()
             .find(|(_, canvas)| {
-                canvas
-                    .layer
-                    .as_ref()
-                    .is_some_and(|layer| layer.wl_surface() == surface)
+                canvas.epoch == source_epoch
+                    && canvas
+                        .layer
+                        .as_ref()
+                        .is_some_and(|layer| layer.wl_surface() == surface)
             })
             .map(|(key, _)| key.clone())
         else {
             return;
         };
-        let again = if let Some(canvas) = self.canvases.get_mut(&key) {
-            if canvas.callbacks.accept(epoch) {
-                canvas.frame_pending = false;
-                canvas.dirty
-            } else {
-                false
-            }
-        } else {
-            false
-        };
-        if again {
+        let canvas = self.canvases.get_mut(&key).unwrap();
+        if !canvas.callbacks.accept(epoch) {
+            return;
+        }
+        canvas.frame_pending = false;
+        let target = scroll::Target::Canvas(canvas.epoch);
+        self.scroll_frame(&target, Instant::now());
+        if self.canvases.get(&key).is_some_and(|c| c.dirty) {
             let _ = self.canvas_draw(&key);
         }
+        self.request_scroll_frame(&target);
+        self.schedule_source_frames();
     }
     pub(super) fn canvas_pointer(&mut self, event: &PointerEvent) {
         let Some(key) = self
@@ -1242,15 +1274,24 @@ impl App {
             return;
         };
         let bounds = canvas.bounds.unwrap_or(Rect::new(0., 0., 0., 0.));
-        let (x, y) = (
-            event.position.0 as f32 + bounds.x - canvas.source_offset.0,
-            event.position.1 as f32 + bounds.y - canvas.source_offset.1,
-        );
+        let (x, y) = canvas_source_point(event.position, bounds, canvas.source_offset);
         let inside = canvas
             .source
             .input_regions()
             .iter()
             .any(|region| region.contains(x, y));
+        if let PointerEventKind::Axis {
+            vertical,
+            horizontal,
+            source,
+            ..
+        } = event.kind
+        {
+            let target = scroll::Target::Canvas(canvas.epoch);
+            self.axis_scroll(target.clone(), false, (x, y), vertical, source);
+            self.axis_scroll(target, true, (x, y), horizontal, source);
+            return;
+        }
         let dispatched = match event.kind {
             PointerEventKind::Motion { .. } | PointerEventKind::Enter { .. } => {
                 Some(if canvas.pressed {
@@ -1290,6 +1331,9 @@ impl App {
             .find(|(_, canvas)| canvas.layer.as_ref() == Some(layer))
             .map(|(key, _)| key.clone())
         {
+            if let Some(epoch) = self.canvases.get(&key).map(|c| c.epoch) {
+                self.cancel_scroll(&scroll::Target::Canvas(epoch));
+            }
             if let Some(canvas) = self.canvases.get_mut(&key)
                 && canvas.retain_when_closed
                 && !canvas.lifecycle.open
@@ -1314,6 +1358,15 @@ impl App {
         }
     }
     pub(super) fn canvas_output_removed(&mut self, output: &wl_output::WlOutput) {
+        let epochs: Vec<_> = self
+            .canvases
+            .values()
+            .filter(|c| &c.output == output)
+            .map(|c| c.epoch)
+            .collect();
+        for epoch in epochs {
+            self.cancel_scroll(&scroll::Target::Canvas(epoch));
+        }
         self.canvases.retain(|_, canvas| &canvas.output != output);
     }
     pub(super) fn canvas_output_updated(&mut self, output: &wl_output::WlOutput) {
@@ -1353,6 +1406,7 @@ impl App {
             self.panel_canvas_owner = None;
         }
         if let Some(canvas) = self.canvases.remove(key) {
+            self.cancel_scroll(&scroll::Target::Canvas(canvas.epoch));
             // Source teardown joins the worker; return its freed scratch/arena pages
             // after the scene and renderer owners have also been dropped.
             drop(canvas);
@@ -1369,6 +1423,19 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scroll_pointer_uses_cropped_surface_coordinates_in_source_space() {
+        let bounds = Rect::new(120., 240., 300., 400.);
+        assert_eq!(
+            canvas_source_point((20.5, 30.25), bounds, (100., 200.)),
+            (40.5, 70.25)
+        );
+        let region = Rect::new(40., 70., 100., 200.);
+        let point = canvas_source_point((20.5, 30.25), bounds, (100., 200.));
+        assert!(point.0 >= region.x && point.0 < region.x + region.w);
+        assert!(point.1 >= region.y && point.1 < region.y + region.h);
+    }
 
     #[test]
     fn host_canvas_envelopes_are_routed_out_of_the_canvas_runtime() {

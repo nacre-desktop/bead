@@ -11,6 +11,7 @@ use std::{
 pub type Factory = Box<dyn FnOnce() -> Result<Box<dyn SceneSource>, String> + Send>;
 #[derive(Default)]
 struct Mirror {
+    wakeup_at: Option<std::time::Instant>,
     drag_visuals: Vec<crate::DragVisual>,
     focused_dismiss: bool,
     tracks_origin: bool,
@@ -32,6 +33,7 @@ impl Mirror {
     fn read(source: &dyn SceneSource) -> Self {
         let _profile = bead_core::profile::Span::new("mirror");
         Self {
+            wakeup_at: source.wakeup_at(),
             drag_visuals: source.drag_visuals(),
             focused_dismiss: source.focused_dismiss(),
             tracks_origin: source.tracks_origin(),
@@ -55,6 +57,7 @@ enum Phase {
     Failed,
 }
 pub struct Packet {
+    animation_frame: bool,
     phase: Phase,
     token: u64,
     scene: Option<Scene>,
@@ -191,6 +194,7 @@ pub struct Source {
     retired: Arc<std::sync::atomic::AtomicBool>,
     token: u64,
     accepted: bool,
+    frame_pending: bool,
     current: Scene,
     candidate: Option<Scene>,
     viewport: Option<(u32, u32)>,
@@ -209,6 +213,7 @@ impl Source {
             scales: vec![1.],
             token: 0,
             accepted: false,
+            frame_pending: false,
             current: fallback,
             candidate: None,
             viewport: None,
@@ -346,6 +351,13 @@ fn release_cached_prepared(
     true
 }
 impl SceneSource for Source {
+    fn wakeup_at(&self) -> Option<std::time::Instant> {
+        if self.frame_pending {
+            None
+        } else {
+            self.mirror.wakeup_at
+        }
+    }
     fn resources_retired(&self) -> bool {
         self.retired.load(std::sync::atomic::Ordering::Acquire)
     }
@@ -432,6 +444,7 @@ impl SceneSource for Source {
                     Ok(source) => source,
                     Err(error) => {
                         wakeup(UiEvent::Worker(Arc::new(Packet {
+                            animation_frame: false,
                             phase: Phase::Failed,
                             token: 0,
                             scene: None,
@@ -460,7 +473,6 @@ impl SceneSource for Source {
                 let mut token = 0;
                 let mut idle = false;
                 let mut needs_trim = false;
-                let mut active_scales = vec![1.];
                 let mut accepted_resource_revision = None;
                 'actor: loop {
                     for job in receiver.try_iter() {
@@ -471,37 +483,24 @@ impl SceneSource for Source {
                     }
                     let job = if let Some(job) = queue.pop_front() {
                         job
-                    } else {
-                        if let Some(deadline) = source.wakeup_at() {
-                            match receiver.recv_timeout(
-                                deadline.saturating_duration_since(std::time::Instant::now()),
-                            ) {
-                                Ok(job) => job,
-                                Err(mpsc::RecvTimeoutError::Timeout) => Job::Stage(
-                                    UiEvent::Model(Default::default()),
-                                    active_scales.clone(),
-                                ),
-                                Err(mpsc::RecvTimeoutError::Disconnected) => break,
-                            }
-                        } else if idle && needs_trim {
-                            match receiver.recv_timeout(std::time::Duration::from_millis(250)) {
-                                Ok(job) => job,
-                                Err(mpsc::RecvTimeoutError::Timeout) => {
-                                    cache.trim_idle();
-                                    #[cfg(all(target_os = "linux", target_env = "gnu"))]
-                                    unsafe {
-                                        libc::malloc_trim(0);
-                                    }
-                                    needs_trim = false;
-                                    continue;
+                    } else if idle && needs_trim {
+                        match receiver.recv_timeout(std::time::Duration::from_millis(250)) {
+                            Ok(job) => job,
+                            Err(mpsc::RecvTimeoutError::Timeout) => {
+                                cache.trim_idle();
+                                #[cfg(all(target_os = "linux", target_env = "gnu"))]
+                                unsafe {
+                                    libc::malloc_trim(0);
                                 }
-                                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                                needs_trim = false;
+                                continue;
                             }
-                        } else {
-                            match receiver.recv() {
-                                Ok(job) => job,
-                                Err(_) => break,
-                            }
+                            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                        }
+                    } else {
+                        match receiver.recv() {
+                            Ok(job) => job,
+                            Err(_) => break,
                         }
                     };
                     let job = match prepare_resource_job(job, &mut cache) {
@@ -552,7 +551,6 @@ impl SceneSource for Source {
                         Job::Ack(_, _) => {}
                         Job::Stage(event, scales) | Job::ContentScroll(event, scales) => {
                             source.scales(scales.clone());
-                            active_scales.clone_from(&scales);
                             match &event {
                                 UiEvent::Hover { x, y } => {
                                     bead_core::profile::position("worker_hover", *x, *y)
@@ -571,6 +569,8 @@ impl SceneSource for Source {
                                 UiEvent::Click { .. } => "worker_click",
                                 _ => "worker_input",
                             });
+                            let animation_frame =
+                                matches!(&event, UiEvent::Model(values) if values.is_empty());
                             let reload = matches!(event, UiEvent::Reload);
                             // Detaching or docking gives the panel another look: once it
                             // is accepted, the rasters only the old look used can go.
@@ -589,6 +589,7 @@ impl SceneSource for Source {
                                 Ok(Some(scene)) => (scene, None),
                                 Ok(None) => {
                                     wakeup(UiEvent::Worker(Arc::new(Packet {
+                                        animation_frame,
                                         phase: Phase::Settled,
                                         token,
                                         scene: None,
@@ -645,6 +646,7 @@ impl SceneSource for Source {
                             }
                             if let Err(error) = baked {
                                 wakeup(UiEvent::Worker(Arc::new(Packet {
+                                    animation_frame,
                                     phase: Phase::Failed,
                                     token,
                                     scene: None,
@@ -671,6 +673,7 @@ impl SceneSource for Source {
                                 cache.builds
                             );
                             wakeup(UiEvent::Worker(Arc::new(Packet {
+                                animation_frame,
                                 phase: Phase::Ready,
                                 token,
                                 scene: Some(scene.clone()),
@@ -715,6 +718,7 @@ impl SceneSource for Source {
                                                     }
                                                 }
                                                 wakeup(UiEvent::Worker(Arc::new(Packet {
+                                                    animation_frame,
                                                     phase: Phase::Accepted,
                                                     token,
                                                     scene: Some(scene),
@@ -730,6 +734,7 @@ impl SceneSource for Source {
                                                 let mut overlay = source.error_scene(error.clone());
                                                 if bake(&mut cache, &mut overlay, &scales).is_ok() {
                                                     wakeup(UiEvent::Worker(Arc::new(Packet {
+                                                        animation_frame,
                                                         phase: Phase::Accepted,
                                                         token,
                                                         scene: Some(overlay),
@@ -812,6 +817,14 @@ impl SceneSource for Source {
         }
         if let UiEvent::Worker(packet) = event {
             self.token = packet.token;
+            if packet.animation_frame
+                && matches!(
+                    packet.phase,
+                    Phase::Accepted | Phase::Settled | Phase::Failed
+                )
+            {
+                self.frame_pending = false;
+            }
             if let Some(mirror) = &packet.mirror {
                 self.mirror = mirror.clone();
             }
@@ -834,6 +847,14 @@ impl SceneSource for Source {
             }
             self.candidate = packet.scene.clone();
             return Ok(packet.scene.clone());
+        }
+        if matches!(&event, UiEvent::Model(values) if values.is_empty())
+            && self.mirror.wakeup_at.is_some()
+        {
+            if self.frame_pending {
+                return Ok(None);
+            }
+            self.frame_pending = true;
         }
         let content_scroll = match &event {
             UiEvent::Scroll { x, y, .. } | UiEvent::HorizontalScroll { x, y, .. } => self
@@ -1108,6 +1129,61 @@ mod tests {
             prepare_resource_job(job, &mut cache),
             Err(Job::ReleasePrepared(_))
         ));
+    }
+
+    #[test]
+    fn compositor_frame_coalesces_until_its_own_transaction_settles() {
+        let mut source = Source::new(Box::new(|| Err("unused".into())), scene());
+        let deadline = std::time::Instant::now();
+        source.mirror = Arc::new(Mirror {
+            wakeup_at: Some(deadline),
+            ..Default::default()
+        });
+        let (sender, receiver) = mpsc::channel();
+        source.sender = Some(sender);
+        assert_eq!(source.wakeup_at(), Some(deadline));
+        source.stage(UiEvent::Model(Default::default())).unwrap();
+        assert!(source.wakeup_at().is_none());
+        source.stage(UiEvent::Model(Default::default())).unwrap();
+        assert!(matches!(
+            receiver.try_recv(),
+            Ok(Job::Stage(UiEvent::Model(_), _))
+        ));
+        assert!(receiver.try_recv().is_err());
+        let packet = |animation_frame, phase, mirror| {
+            UiEvent::Worker(Arc::new(Packet {
+                animation_frame,
+                phase,
+                token: 1,
+                scene: None,
+                mirror,
+                error: None,
+                reload: false,
+                wallpaper_palette: None,
+            }))
+        };
+        source.stage(packet(false, Phase::Accepted, None)).unwrap();
+        assert!(
+            source.wakeup_at().is_none(),
+            "an earlier input cannot release frame credit"
+        );
+        source.stage(packet(true, Phase::Ready, None)).unwrap();
+        assert!(
+            source.wakeup_at().is_none(),
+            "GPU preparation is still in flight"
+        );
+        source
+            .stage(packet(
+                true,
+                Phase::Settled,
+                Some(Arc::new(Mirror::default())),
+            ))
+            .unwrap();
+        assert!(!source.frame_pending);
+        assert!(
+            source.wakeup_at().is_none(),
+            "settled idle view has no more callback work"
+        );
     }
 
     #[test]

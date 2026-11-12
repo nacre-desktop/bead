@@ -122,6 +122,7 @@ pub const PROPERTIES: &[&str] = &[
     "pointer_arg",
     "edge_hover",
     "scroll",
+    "scrollbar",
     "fill",
     "color",
     "border_color",
@@ -216,6 +217,7 @@ pub struct ViewSpec {
     /// TextInput value is drawn as bullets and kept out of accessibility, IME and copy.
     pub masked: bool,
     pub scroll: Option<String>,
+    pub scrollbar: bool,
     pub fill: Option<Json>,
     pub color: Option<Json>,
     pub border_color: Option<Json>,
@@ -829,6 +831,7 @@ impl ViewSpec {
                 multiline: boolean(p, "multiline", false, source)?,
                 masked: boolean(p, "masked", false, source)?,
                 scroll,
+                scrollbar: boolean(p, "scrollbar", true, source)?,
                 fill: p.get("fill").cloned(),
                 color: p.get("color").cloned(),
                 border_color: p.get("border_color").cloned(),
@@ -1350,6 +1353,8 @@ pub fn layout(
                 scroll: None,
                 action_arg: view.argument.clone(),
                 scroll_store: inherited_scroll.map(str::to_owned),
+                scrollable: view.scroll.is_some(),
+                scrollbar: view.scroll.is_some() && view.scrollbar,
                 scroll_limit,
                 focusable: view.action.is_some() || view.input.is_some(),
                 multiline: view.multiline && view.input.is_some(),
@@ -1425,4 +1430,34 @@ pub fn layout(
         &mut output,
     )?;
     Ok(output)
+}
+
+#[cfg(test)]
+mod scrollbar_property_tests {
+    use super::*;
+
+    #[test]
+    fn scroll_bar_opt_out_is_boolean_and_defaults_on() {
+        let source = Source {
+            file: "test.luau".into(),
+            line: 1,
+        };
+        let mut raw = RawNode {
+            kind: Widget::Scroll,
+            props: serde_json::from_value(serde_json::json!({
+                "id":"list", "scroll":{"__bind":"scroll"}
+            }))
+            .unwrap(),
+            children: vec![],
+            source: source.clone(),
+            scope: None,
+        };
+        let resolve = |_: &str| Ok(Value::Number(0.));
+        assert!(ViewSpec::from_raw(&raw, &resolve).unwrap().scrollbar);
+        raw.props.insert("scrollbar".into(), Json::Bool(false));
+        assert!(!ViewSpec::from_raw(&raw, &resolve).unwrap().scrollbar);
+        raw.props
+            .insert("scrollbar".into(), Json::String("no".into()));
+        assert!(ViewSpec::from_raw(&raw, &resolve).is_err());
+    }
 }

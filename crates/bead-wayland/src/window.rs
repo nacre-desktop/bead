@@ -65,12 +65,19 @@ pub(super) struct Win {
     cursor_serial: u32,
     last_draw: Option<Instant>,
     timer: bool,
+    pub(super) callbacks: policy::Callbacks,
     drawn: u64,
     first_frame_texts: Vec<String>,
     ui_serial: u64,
     presented_update: Option<u64>,
 }
 impl Win {
+    pub(super) fn wakeup_at(&self) -> Option<Instant> {
+        self.source.wakeup_at()
+    }
+    pub(super) fn scroll_surface(&self) -> &wl_surface::WlSurface {
+        self.window.wl_surface()
+    }
     pub(super) fn viewport_size(&self) -> (u32, u32) {
         self.size
     }
@@ -105,6 +112,8 @@ pub(super) fn key_command(keysym: Keysym, ctrl: bool) -> Option<&'static str> {
         Keysym::Right => "right",
         Keysym::Up => "up",
         Keysym::Down => "down",
+        Keysym::Page_Up | Keysym::KP_Page_Up => "page-up",
+        Keysym::Page_Down | Keysym::KP_Page_Down => "page-down",
         Keysym::Home => "home",
         Keysym::End => "end",
         Keysym::Delete => "delete",
@@ -433,6 +442,7 @@ impl App {
             cursor_serial: 0,
             last_draw: None,
             timer: false,
+            callbacks: Default::default(),
             drawn: 0,
             first_frame_texts: Vec::new(),
             ui_serial: 0,
@@ -514,9 +524,11 @@ impl App {
         }
     }
     pub(super) fn close_window(&mut self) {
-        if self.window.take().is_none() {
+        let Some(window) = self.window.take() else {
             return;
-        }
+        };
+        self.cancel_scroll(&scroll::Target::Window(window.epoch()));
+        drop(window);
         if self.options.app.is_some() {
             self.signal.stop();
         }
@@ -574,6 +586,9 @@ impl App {
     }
     /// Service wakeups and input for the window; the product source stages them.
     pub(super) fn window_ui(&mut self, event: UiEvent) {
+        self.source_transaction(event, Self::process_window_ui);
+    }
+    fn process_window_ui(&mut self, event: UiEvent) {
         if let UiEvent::ResourcesPrepared(result) = event {
             match result {
                 Ok(()) => self.window_draw(),
@@ -635,7 +650,9 @@ impl App {
         if !win.configured {
             return;
         }
-        if let Some(last) = win.last_draw {
+        if !self.scrolls.in_frame
+            && let Some(last) = win.last_draw
+        {
             let delay = super::scroll::tick().saturating_sub(last.elapsed());
             if !delay.is_zero() {
                 if !win.timer {
@@ -929,5 +946,18 @@ impl App {
         if let Some(ev) = ev {
             self.window_ui(ev);
         }
+    }
+}
+
+#[cfg(test)]
+mod key_command_tests {
+    use super::{Keysym, key_command};
+
+    #[test]
+    fn maps_page_keys_for_scroll_commands() {
+        assert_eq!(key_command(Keysym::Page_Up, false), Some("page-up"));
+        assert_eq!(key_command(Keysym::Page_Down, false), Some("page-down"));
+        assert_eq!(key_command(Keysym::KP_Page_Up, false), Some("page-up"));
+        assert_eq!(key_command(Keysym::KP_Page_Down, false), Some("page-down"));
     }
 }

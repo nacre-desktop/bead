@@ -29,6 +29,17 @@ pub fn tree_for_app(views: &[Node], stores: &Stores, app_label: &str) -> TreeUpd
             Role::ScrollView
         });
         node.set_label(view.label.clone());
+        if view.scrollable
+            && let (Some(store), Some(maximum)) = (&view.scroll_store, view.scroll_limit)
+        {
+            let position = match stores.get(store) {
+                Some(Value::Number(value)) => *value,
+                _ => 0.,
+            };
+            node.set_scroll_y(position.clamp(0., maximum));
+            node.set_scroll_y_min(0.);
+            node.set_scroll_y_max(maximum);
+        }
         let r = rect(&view.draw);
         node.set_bounds(accesskit::Rect {
             x0: f64::from(r.x + 32.),

@@ -125,7 +125,6 @@ mod tests {
     #[test]
     fn wheel_reversal_discards_pending_forward_travel() {
         let previous = Motion {
-            serial: 0,
             started: Instant::now(),
             distance: 1200.,
             delivered: 100.,
@@ -233,12 +232,200 @@ mod tests {
             (-23.5, false)
         );
     }
+
+    #[test]
+    fn compositor_callbacks_drive_wheel_at_sixty_and_one_twenty_hz() {
+        for (hz, expected) in [(60_u64, 8), (120, 15)] {
+            let start = Instant::now();
+            let target = Target::Window(7);
+            let mut state = State::default();
+            state.motions.insert(
+                (target.clone(), false),
+                Motion {
+                    started: start,
+                    distance: WHEEL_STEP,
+                    delivered: 0.,
+                    point: (4., 5.),
+                },
+            );
+            let mut frames = 0;
+            let mut travel = 0.;
+            while state.animating(&target) {
+                frames += 1;
+                let now = start + Duration::from_nanos((frames * 1_000_000_000_u64).div_ceil(hz));
+                let (delta, point) = state.step(&target, false, now).unwrap();
+                assert_eq!(point, (4., 5.));
+                assert!(delta > 0.);
+                travel += delta;
+            }
+            assert_eq!(frames, expected);
+            assert!((travel - WHEEL_STEP).abs() < 1e-9);
+            assert!(
+                state
+                    .step(&target, false, start + Duration::from_secs(1))
+                    .is_none()
+            );
+        }
+    }
+
+    #[test]
+    fn callback_motion_is_isolated_by_axis_and_surface_epoch() {
+        let start = Instant::now();
+        let old = Target::Panel(7);
+        let new = Target::Panel(8);
+        let mut state = State::default();
+        state.flings.insert(
+            (old.clone(), true),
+            Fling {
+                started: start,
+                velocity: 1500.,
+                viewport: 1080.,
+                delivered: 0.,
+                point: (3., 4.),
+            },
+        );
+        let now = start + Duration::from_millis(10);
+        assert!(state.step(&new, true, now).is_none());
+        assert!(state.step(&old, false, now).is_none());
+        let (first, _) = state.step(&old, true, now).unwrap();
+        assert!(first > 0.);
+        state
+            .step(&old, true, start + Duration::from_secs(3))
+            .unwrap();
+        assert!(!state.animating(&old));
+    }
+
+    #[test]
+    fn scroll_and_render_share_one_callback_credit_until_motion_finishes() {
+        let mut callbacks = policy::Callbacks::default();
+        let scroll_credit = callbacks.request_if_idle().unwrap();
+        assert!(callbacks.request_if_idle().is_none()); // rendering already has a wakeup
+        assert!(callbacks.accept(scroll_credit));
+        let render_credit = callbacks.request_if_idle().unwrap();
+        assert!(callbacks.request_if_idle().is_none()); // scroll reuses the rendered frame
+        callbacks.invalidate(); // surface retired or replaced
+        let reopened = callbacks.request_if_idle().unwrap();
+        assert!(!callbacks.accept(render_credit));
+        assert!(callbacks.pending);
+        assert!(callbacks.accept(reopened));
+        assert!(!callbacks.pending); // no request after the last motion frame
+    }
+
+    #[test]
+    fn canvas_motion_is_epoch_isolated_and_cancelled_on_retirement() {
+        let started = Instant::now();
+        let canvas = Target::Canvas(8);
+        let mut state = State::default();
+        state.motions.insert(
+            (canvas.clone(), false),
+            Motion {
+                started,
+                distance: 100.,
+                delivered: 0.,
+                point: (40.5, 70.25),
+            },
+        );
+        assert!(
+            state
+                .step(
+                    &Target::Canvas(9),
+                    false,
+                    started + Duration::from_millis(10)
+                )
+                .is_none()
+        );
+        let (_, point) = state
+            .step(&canvas, false, started + Duration::from_millis(10))
+            .unwrap();
+        assert_eq!(point, (40.5, 70.25));
+        state.interrupt(&canvas);
+        assert!(!state.animating(&canvas));
+        assert!(
+            state
+                .step(&canvas, false, started + Duration::from_secs(1))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn idle_deadline_waits_for_one_shot_wakeup_before_requesting_frames() {
+        let now = Instant::now();
+        let hide = now + Duration::from_secs(1);
+        let interval = Duration::from_millis(34);
+        assert!(!callback_due(hide, now, interval));
+        assert!(!callback_due(
+            hide,
+            now + Duration::from_millis(900),
+            interval
+        ));
+        assert!(callback_due(hide, hide, interval));
+        assert!(callback_due(
+            now + Duration::from_nanos(8_333_333),
+            now,
+            interval
+        ));
+        assert!(callback_due(
+            now + Duration::from_nanos(16_666_667),
+            now,
+            interval
+        ));
+    }
+
+    #[test]
+    fn slightly_early_callback_uses_this_refresh_instead_of_skipping_it() {
+        let start = Instant::now();
+        for hz in [60, 120] {
+            let interval = Duration::from_nanos(1_000_000_000 / hz);
+            let deadline = start + interval;
+            let callback = deadline - Duration::from_micros(100);
+            assert!(callback < deadline);
+            assert!(callback_due(deadline, callback, interval / 2));
+            assert!(!callback_due(
+                start + Duration::from_secs(1),
+                callback,
+                interval / 2
+            ));
+        }
+    }
+
+    #[test]
+    fn retarget_uses_callback_pose_and_preserves_total_wheel_travel() {
+        let start = Instant::now();
+        let target = Target::Overlay(2);
+        let mut state = State::default();
+        state.motions.insert(
+            (target.clone(), false),
+            Motion {
+                started: start,
+                distance: 100.,
+                delivered: 0.,
+                point: (1., 2.),
+            },
+        );
+        let now = start + Duration::from_millis(50);
+        let (first, _) = state.step(&target, false, now).unwrap();
+        assert!((first - 78.4).abs() < 1e-9);
+        let motion = state.motions.values_mut().next().unwrap();
+        let pending = remaining_distance(Some(motion), (1., 2.), 100.);
+        *motion = Motion {
+            started: now,
+            distance: pending + 100.,
+            delivered: 0.,
+            point: (1., 2.),
+        };
+        let (rest, _) = state
+            .step(&target, false, now + Duration::from_millis(125))
+            .unwrap();
+        assert!((first + rest - 200.).abs() < 1e-9);
+        assert!(!state.is_animating());
+    }
 }
 
 use super::*;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum Target {
+    Canvas(u64),
     Window(u64),
     Overlay(u64),
     Panel(u64),
@@ -246,18 +433,62 @@ pub(super) enum Target {
 }
 #[derive(Default)]
 pub(super) struct State {
-    serial: u64,
+    pub(super) in_frame: bool,
+    pub(super) ui_depth: u32,
+    wakeups: std::collections::BTreeMap<Target, (Instant, calloop::RegistrationToken)>,
     motions: std::collections::BTreeMap<(Target, bool), Motion>,
     pixels: std::collections::BTreeMap<(Target, bool), Pixels>,
     flings: std::collections::BTreeMap<(Target, bool), Fling>,
 }
 impl State {
+    pub(super) fn interrupt(&mut self, target: &Target) {
+        self.motions.retain(|(t, _), _| t != target);
+        self.flings.retain(|(t, _), _| t != target);
+        self.pixels.retain(|(t, _), _| t != target);
+    }
+    fn animating(&self, target: &Target) -> bool {
+        self.motions.keys().any(|(t, _)| t == target)
+            || self.flings.keys().any(|(t, _)| t == target)
+    }
+    /// Mutate existing entries in place; no timer registration or per-frame key clones.
+    fn step(
+        &mut self,
+        target: &Target,
+        horizontal: bool,
+        now: Instant,
+    ) -> Option<(f64, (f32, f32))> {
+        let mut result = None;
+        self.motions.retain(|(t, h), motion| {
+            if t != target || *h != horizontal {
+                return true;
+            }
+            let progress =
+                (now.duration_since(motion.started).as_secs_f64() / WHEEL_DURATION).min(1.);
+            let next = motion.distance * (1. - (1. - progress).powi(3));
+            result = Some((next - motion.delivered, motion.point));
+            motion.delivered = next;
+            progress < 1.
+        });
+        self.flings.retain(|(t, h), fling| {
+            if t != target || *h != horizontal {
+                return true;
+            }
+            let (next, done) = fling_position(
+                fling.velocity,
+                now.duration_since(fling.started).as_secs_f64(),
+                fling.viewport,
+            );
+            result = Some((next - fling.delivered, fling.point));
+            fling.delivered = next;
+            !done
+        });
+        result
+    }
     pub(super) fn is_animating(&self) -> bool {
         !self.motions.is_empty() || !self.flings.is_empty()
     }
 }
 struct Fling {
-    serial: u64,
     started: Instant,
     velocity: f64,
     viewport: f64,
@@ -272,7 +503,6 @@ struct Pixels {
     point: (f32, f32),
 }
 struct Motion {
-    serial: u64,
     started: Instant,
     distance: f64,
     delivered: f64,
@@ -284,9 +514,298 @@ fn remaining_distance(previous: Option<&Motion>, point: (f32, f32), delta: f64) 
         .filter(|p| p.point == point && p.distance.signum() == delta.signum())
         .map_or(0., |p| p.distance - p.delivered)
 }
+fn callback_due(deadline: Instant, now: Instant, interval: Duration) -> bool {
+    deadline.saturating_duration_since(now) <= interval
+}
 impl App {
+    pub(super) fn cancel_scroll(&mut self, target: &Target) {
+        if let Some((_, token)) = self.scrolls.wakeups.remove(target) {
+            self.loop_handle.remove(token);
+        }
+        self.scrolls.interrupt(target);
+    }
+    /// Resolve only live surface identities: closed/replaced slots never drive old motion.
+    pub(super) fn scroll_surface_target(&self, surface: &wl_surface::WlSurface) -> Option<Target> {
+        if let Some(window) = self
+            .window
+            .as_ref()
+            .filter(|w| w.scroll_surface() == surface)
+        {
+            return Some(Target::Window(window.epoch()));
+        }
+        if let Some(overlay) = self
+            .overlay
+            .as_ref()
+            .filter(|o| o.scroll_surface() == surface)
+        {
+            return Some(Target::Overlay(overlay.epoch()));
+        }
+        if let Some(canvas) = self.canvases.values().find(|c| {
+            c.scroll_active() && c.layer.as_ref().is_some_and(|l| l.wl_surface() == surface)
+        }) {
+            return Some(Target::Canvas(canvas.epoch));
+        }
+        let layer = self.surfaces.iter().find(|s| s.wl_surface() == surface)?;
+        Some(if layer.companion {
+            Target::Panel(self.panel_epoch)
+        } else if self.options.primary_factory.is_some() {
+            Target::Primary(
+                self.output_sessions
+                    .get(&layer.output_name)
+                    .map(|session| (session.epoch, layer.output_name.clone())),
+            )
+        } else {
+            Target::Primary(None)
+        })
+    }
+    /// Bootstrap from input, then share the rendering callback credit on every frame.
+    pub(super) fn request_scroll_frame(&mut self, target: &Target) {
+        if !self.scrolls.animating(target) {
+            return;
+        }
+        self.request_source_callback(target);
+    }
+    fn request_source_callback(&mut self, target: &Target) {
+        let generation = match target {
+            Target::Canvas(epoch) => self
+                .canvases
+                .values()
+                .find(|c| c.epoch == *epoch)
+                .map_or(0, |c| c.scene.resource_revision),
+            Target::Panel(_) => self
+                .companion
+                .as_ref()
+                .map_or(0, |(scene, _, _)| scene.resource_revision),
+            Target::Primary(Some((_, id))) => self
+                .output_sessions
+                .get(id)
+                .map_or(0, |s| s.scene.resource_revision),
+            _ => self.scene.resource_revision,
+        };
+        let request = match target {
+            Target::Canvas(epoch) => self
+                .canvases
+                .values_mut()
+                .find(|c| c.epoch == *epoch && c.scroll_active())
+                .and_then(|c| {
+                    let surface = c.layer.as_ref()?.wl_surface().clone();
+                    c.callbacks.request_if_idle().map(|credit| {
+                        c.frame_pending = true;
+                        (surface, credit, *epoch)
+                    })
+                }),
+            Target::Window(epoch) => self
+                .window
+                .as_mut()
+                .filter(|w| w.epoch() == *epoch)
+                .and_then(|w| {
+                    let surface = w.scroll_surface().clone();
+                    w.callbacks
+                        .request_if_idle()
+                        .map(|credit| (surface, credit, *epoch))
+                }),
+            Target::Overlay(epoch) => self
+                .overlay
+                .as_mut()
+                .filter(|o| o.epoch() == *epoch)
+                .and_then(|o| {
+                    let surface = o.scroll_surface().clone();
+                    o.callbacks
+                        .request_if_idle()
+                        .map(|credit| (surface, credit, *epoch))
+                }),
+            Target::Panel(epoch) => self
+                .surfaces
+                .iter_mut()
+                .find(|s| s.companion && *epoch == self.panel_epoch)
+                .and_then(|s| {
+                    s.callbacks
+                        .request_if_idle()
+                        .map(|credit| (s.wl_surface().clone(), credit, *epoch))
+                }),
+            Target::Primary(output) => {
+                let valid = output.as_ref().is_none_or(|(epoch, name)| {
+                    self.output_sessions
+                        .get(name)
+                        .is_some_and(|s| s.epoch == *epoch)
+                });
+                self.surfaces
+                    .iter_mut()
+                    .find(|s| {
+                        valid
+                            && !s.companion
+                            && output
+                                .as_ref()
+                                .is_none_or(|(_, name)| &s.output_name == name)
+                    })
+                    .and_then(|s| {
+                        s.callbacks
+                            .request_if_idle()
+                            .map(|credit| (s.wl_surface().clone(), credit, 0))
+                    })
+            }
+        };
+        if let Some((surface, epoch, source_epoch)) = request {
+            surface.frame(
+                &self.qh,
+                FrameData {
+                    surface: surface.clone(),
+                    epoch,
+                    generation,
+                    source_epoch,
+                },
+            );
+            surface.commit();
+        }
+    }
+    pub(super) fn scroll_frame(&mut self, target: &Target, now: Instant) {
+        self.scrolls.in_frame = true;
+        for horizontal in [false, true] {
+            if let Some((delta, point)) = self.scrolls.step(target, horizontal, now) {
+                self.deliver_scroll(target, horizontal, point, delta);
+            }
+        }
+        // Scrolling already advances view-local animation and decoration state.
+        // Only request a second source update if its deadline is still pending.
+        if self
+            .source_deadline(target)
+            .is_some_and(|deadline| callback_due(deadline, now, tick() / 2))
+        {
+            self.deliver_source_event(target, UiEvent::Model(Default::default()));
+        }
+        self.scrolls.in_frame = false;
+    }
+    fn source_deadline(&self, target: &Target) -> Option<Instant> {
+        match target {
+            Target::Canvas(epoch) => self
+                .canvases
+                .values()
+                .find(|c| c.epoch == *epoch && c.scroll_active())
+                .and_then(|c| c.source.wakeup_at()),
+            Target::Window(epoch) => self
+                .window
+                .as_ref()
+                .filter(|w| w.epoch() == *epoch)
+                .and_then(|w| w.wakeup_at()),
+            Target::Overlay(epoch) => self
+                .overlay
+                .as_ref()
+                .filter(|o| o.epoch() == *epoch)
+                .and_then(|o| o.wakeup_at()),
+            Target::Panel(epoch) if *epoch == self.panel_epoch => {
+                self.panel_runtime.as_ref().and_then(|s| s.wakeup_at())
+            }
+            Target::Primary(Some((epoch, id))) => self
+                .output_sessions
+                .get(id)
+                .filter(|s| s.epoch == *epoch)
+                .and_then(|s| s.source.as_ref())
+                .and_then(|s| s.wakeup_at()),
+            Target::Primary(None) => self.runtime.as_ref().and_then(|s| s.wakeup_at()),
+            _ => None,
+        }
+    }
+    /// Distant deadlines sleep once; animation deadlines consume compositor frame credit.
+    pub(super) fn schedule_source_frames(&mut self) {
+        if let Some(w) = &self.window {
+            self.schedule_source_frame(Target::Window(w.epoch()));
+        }
+        if let Some(o) = &self.overlay {
+            self.schedule_source_frame(Target::Overlay(o.epoch()));
+        }
+        for i in 0..self.canvases.len() {
+            if let Some(epoch) = self
+                .canvases
+                .values()
+                .nth(i)
+                .filter(|c| c.scroll_active())
+                .map(|c| c.epoch)
+            {
+                self.schedule_source_frame(Target::Canvas(epoch));
+            }
+        }
+        for i in 0..self.surfaces.len() {
+            let surface = self.surfaces[i].wl_surface().clone();
+            if let Some(target) = self.scroll_surface_target(&surface) {
+                self.schedule_source_frame(target);
+            }
+        }
+    }
+    fn schedule_source_frame(&mut self, target: Target) {
+        let deadline = self.source_deadline(&target);
+        if self
+            .scrolls
+            .wakeups
+            .get(&target)
+            .is_some_and(|(old, _)| deadline.is_some_and(|next| *old <= next))
+        {
+            return;
+        }
+        if let Some((_, token)) = self.scrolls.wakeups.remove(&target) {
+            self.loop_handle.remove(token);
+        }
+        let Some(deadline) = deadline else {
+            return;
+        };
+        let now = Instant::now();
+        // A near-term source deadline is animation work even before presentation
+        // feedback reveals its output's period (up to the supported ~30 Hz).
+        if callback_due(deadline, now, Duration::from_millis(34)) {
+            self.request_source_callback(&target);
+        } else {
+            let key = target.clone();
+            let mut expected = deadline;
+            let result = self.loop_handle.insert_source(
+                Timer::from_duration(deadline.duration_since(now)),
+                move |_, _, app| {
+                    if let Target::Panel(epoch) = &key {
+                        app.with_epoch(*epoch, |app| app.wake_scroll_source(&key, &mut expected))
+                            .unwrap_or(TimeoutAction::Drop)
+                    } else {
+                        app.wake_scroll_source(&key, &mut expected)
+                    }
+                },
+            );
+            match result {
+                Ok(token) => {
+                    self.scrolls.wakeups.insert(target, (deadline, token));
+                }
+                Err(error) => self.fail(error),
+            }
+        }
+    }
+    fn wake_scroll_source(&mut self, key: &Target, expected: &mut Instant) -> TimeoutAction {
+        if !self
+            .scrolls
+            .wakeups
+            .get(key)
+            .is_some_and(|(at, _)| *at == *expected)
+        {
+            return TimeoutAction::Drop;
+        }
+        if let Some(next) = self.source_deadline(key) {
+            let now = Instant::now();
+            if !callback_due(next, now, Duration::from_millis(34)) {
+                // Moving input postpones idle hiding. Reuse this timer
+                // instead of registering another source on every frame.
+                self.scrolls.wakeups.get_mut(key).unwrap().0 = next;
+                *expected = next;
+                return TimeoutAction::ToDuration(next.duration_since(now));
+            }
+            self.scrolls.wakeups.remove(key);
+            self.request_source_callback(key);
+        } else {
+            self.scrolls.wakeups.remove(key);
+        }
+        TimeoutAction::Drop
+    }
     fn fling_viewport(&self, target: &Target, horizontal: bool) -> f64 {
         let size = match target {
+            Target::Canvas(epoch) => self
+                .canvases
+                .values()
+                .find(|c| c.epoch == *epoch && c.scroll_active())
+                .map(|c| c.viewport_size),
             Target::Window(epoch) => self
                 .window
                 .as_ref()
@@ -321,10 +840,11 @@ impl App {
         if panel {
             Target::Panel(self.panel_epoch)
         } else {
-            let output = self
-                .active_input_output
-                .as_ref()
-                .and_then(|id| self.output_sessions.get(id).map(|s| (s.epoch, id.clone())));
+            let output = self.options.primary_factory.as_ref().and_then(|_| {
+                self.active_input_output
+                    .as_ref()
+                    .and_then(|id| self.output_sessions.get(id).map(|s| (s.epoch, id.clone())))
+            });
             Target::Primary(output)
         }
     }
@@ -348,7 +868,11 @@ impl App {
                 delta,
             }
         };
+        self.deliver_source_event(target, event);
+    }
+    fn deliver_source_event(&mut self, target: &Target, event: UiEvent) {
         match target {
+            Target::Canvas(epoch) => self.ui(UiEvent::Canvas(*epoch, Box::new(event))),
             Target::Window(epoch) => self.ui(UiEvent::Window(*epoch, Box::new(event))),
             Target::Overlay(epoch) => self.ui(UiEvent::Overlay(*epoch, Box::new(event))),
             Target::Panel(epoch) => self.ui(UiEvent::Panel(*epoch, Box::new(event))),
@@ -367,6 +891,11 @@ impl App {
         source: Option<AxisSource>,
     ) {
         let regions = match &target {
+            Target::Canvas(epoch) => self
+                .canvases
+                .values()
+                .find(|c| c.epoch == *epoch && c.scroll_active())
+                .map(|c| c.source.scroll_regions()),
             Target::Window(_) => self.window.as_ref().map(|w| w.scroll_regions()),
             Target::Overlay(_) => self.overlay.as_ref().map(|o| o.scroll_regions()),
             Target::Panel(_) => self.panel_runtime.as_ref().map(|s| s.scroll_regions()),
@@ -409,46 +938,16 @@ impl App {
         }
         self.scrolls.pixels.remove(&key);
         let remaining = remaining_distance(previous.as_ref(), point, delta);
-        self.scrolls.serial = self.scrolls.serial.wrapping_add(1);
-        let serial = self.scrolls.serial;
         self.scrolls.motions.insert(
-            key.clone(),
+            key,
             Motion {
-                serial,
                 started: Instant::now(),
                 distance: remaining + delta,
                 delivered: 0.,
                 point,
             },
         );
-        if let Err(error) =
-            self.loop_handle
-                .insert_source(Timer::from_duration(tick()), move |_, _, app| {
-                    let Some(motion) = app
-                        .scrolls
-                        .motions
-                        .get_mut(&key)
-                        .filter(|m| m.serial == serial)
-                    else {
-                        return TimeoutAction::Drop;
-                    };
-                    let progress =
-                        (motion.started.elapsed().as_secs_f64() / WHEEL_DURATION).min(1.);
-                    let next = motion.distance * (1. - (1. - progress).powi(3));
-                    let delta = next - motion.delivered;
-                    motion.delivered = next;
-                    let point = motion.point;
-                    app.deliver_scroll(&key.0, key.1, point, delta);
-                    if progress >= 1. {
-                        app.scrolls.motions.remove(&key);
-                        TimeoutAction::Drop
-                    } else {
-                        TimeoutAction::ToDuration(tick())
-                    }
-                })
-        {
-            self.fail(error);
-        }
+        self.request_scroll_frame(&target);
     }
     /// Estimate release speed only; finger positions are delivered without interpolation.
     fn track_pixels(&mut self, key: (Target, bool), point: (f32, f32), delta: f64) {
@@ -496,13 +995,10 @@ impl App {
         if !velocity.is_finite() || viewport <= 0. {
             return;
         }
-        self.scrolls.serial = self.scrolls.serial.wrapping_add(1);
-        let serial = self.scrolls.serial;
         let key = key.clone();
         self.scrolls.flings.insert(
             key.clone(),
             Fling {
-                serial,
                 started: Instant::now(),
                 velocity,
                 viewport,
@@ -510,36 +1006,7 @@ impl App {
                 point: pixels.point,
             },
         );
-        if let Err(error) =
-            self.loop_handle
-                .insert_source(Timer::from_duration(tick()), move |_, _, app| {
-                    let Some(fling) = app
-                        .scrolls
-                        .flings
-                        .get_mut(&key)
-                        .filter(|f| f.serial == serial)
-                    else {
-                        return TimeoutAction::Drop;
-                    };
-                    let (next, done) = fling_position(
-                        fling.velocity,
-                        fling.started.elapsed().as_secs_f64(),
-                        fling.viewport,
-                    );
-                    let delta = next - fling.delivered;
-                    fling.delivered = next;
-                    let point = fling.point;
-                    app.deliver_scroll(&key.0, key.1, point, delta);
-                    if done {
-                        app.scrolls.flings.remove(&key);
-                        TimeoutAction::Drop
-                    } else {
-                        TimeoutAction::ToDuration(tick())
-                    }
-                })
-        {
-            self.fail(error);
-        }
+        self.request_scroll_frame(&key.0);
     }
 }
 

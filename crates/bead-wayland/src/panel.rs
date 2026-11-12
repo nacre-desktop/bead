@@ -835,6 +835,7 @@ impl App {
                 m.transition(false).1,
             );
         }
+        self.cancel_scroll(&scroll::Target::Panel(self.panel_epoch));
         self.panel_epoch = self.next_epoch();
         let epoch = self.panel_epoch;
         self.panel_reload_pending = false;
@@ -1266,6 +1267,7 @@ impl App {
         self.panel_ambient = false;
         self.panel_center = None;
         self.panel_anchor = None;
+        self.cancel_scroll(&scroll::Target::Panel(self.panel_epoch));
         self.panel_epoch = self.next_epoch();
         drop(self.dismiss.take());
         drop(self.panel_runtime.take());

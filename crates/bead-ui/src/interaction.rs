@@ -92,9 +92,17 @@ impl Session {
     /// Pointer press: the hit control's action sees `bead.pressed` false (a new gesture);
     /// every drag step that follows sees it true until [`Session::release`].
     pub fn click(&mut self, x: f32, y: f32) -> Result<Option<Scene>, Diagnostic> {
+        if let Some(scene) = self.scrollbar_press(x, y)? {
+            return Ok(scene);
+        }
         self.click_at(x, y, true, true)
     }
     pub fn release(&mut self) -> Result<Option<Scene>, Diagnostic> {
+        if let Some((id, _)) = self.scroll_feedback.capture.take() {
+            self.scroll_feedback
+                .leave(&id, std::time::Instant::now(), &self.scrollbar_config);
+            return self.update(BTreeMap::new());
+        }
         let deferred = self.deferred_valid();
         self.range_grab = None;
         self.finish_transfer();
@@ -327,6 +335,7 @@ impl Session {
         regions
     }
     pub fn scroll(&mut self, x: f32, y: f32, delta: f64) -> Result<Option<Scene>, Diagnostic> {
+        self.keyboard_scroll = None;
         let Some(generation) = &self.generation else {
             return Ok(None);
         };
@@ -394,6 +403,9 @@ impl Session {
         self.stage_state(stores)
     }
     pub fn drag(&mut self, x: f32, y: f32) -> Result<Option<Scene>, Diagnostic> {
+        if let Some(scene) = self.scrollbar_drag(x, y)? {
+            return Ok(scene);
+        }
         let deferred_gesture = self.deferred_gesture;
         let canceled = self.track_deferred_pointer(x, y);
         if deferred_gesture {
@@ -466,6 +478,23 @@ impl Session {
         matches!(self.stores.get("bead.focused"),Some(Value::Text(id)) if self.current_nodes.iter().any(|n|n.drag && &n.id==id))
     }
     pub fn hover(&mut self, x: f32, y: f32) -> Result<Option<Scene>, Diagnostic> {
+        let prior = self
+            .scroll_feedback
+            .pointer
+            .and_then(|(x, y)| self.scrollbar_hit(x, y))
+            .map(|(id, _)| id);
+        self.scroll_feedback.pointer = Some((x, y));
+        let next = self.scrollbar_hit(x, y).map(|(id, _)| id);
+        if prior != next {
+            if let Some(id) = next.as_ref() {
+                self.scroll_feedback
+                    .reveal(id, std::time::Instant::now(), &self.scrollbar_config);
+            }
+            if let Some(id) = prior.as_ref().filter(|id| Some(*id) != next.as_ref()) {
+                self.scroll_feedback
+                    .leave(id, std::time::Instant::now(), &self.scrollbar_config);
+            }
+        }
         let canceled = self.track_deferred_pointer(x, y);
         if self.stores.get("bead.hovered").is_none() {
             return if canceled {
@@ -473,6 +502,8 @@ impl Session {
                     "bead.pressed".into(),
                     Value::Bool(false),
                 )]))
+            } else if self.scroll_feedback.dirty {
+                self.update(BTreeMap::new())
             } else {
                 Ok(None)
             };
@@ -486,6 +517,7 @@ impl Session {
             changes.insert("bead.pressed".into(), Value::Bool(false));
         }
         if !canceled
+            && !self.scroll_feedback.dirty
             && changes
                 .iter()
                 .all(|(id, value)| self.stores.get(id) == Some(value))
@@ -622,6 +654,9 @@ impl Session {
         self.update(changes)
     }
     pub fn action_at(&self, x: f32, y: f32) -> Option<(String, String, Value)> {
+        if self.scrollbar_hit(x, y).is_some() {
+            return None;
+        }
         let node = self.hit(x, y, false)?;
         Some((
             node.id.clone(),

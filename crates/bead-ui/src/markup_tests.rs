@@ -867,11 +867,11 @@ fn nested_scroll_offset_cache_matches_full_layout_and_preserves_viewport_clips()
 return ui.Panel{id="panel",width=240,height=200,
  ui.Box{id="outside-clip",position="absolute",left=5,top=5,width=40,height=32,clip_children=true,
   ui.Button{id="outside-overflow",position="absolute",left=0,top=0,width=70,height=60,text="Outside",on_activate=ui.action("select","outside")}},
- ui.Scroll{id="outer",width=220,height=80,scroll=ui.bind("scroll"),
+ ui.Scroll{id="outer",scrollbar=false,width=220,height=80,scroll=ui.bind("scroll"),
   ui.Box{id="outer-clip",width=220,height=280,shrink=0,clip_children=true,
    ui.Column{id="outer-content",gap=4,
    ui.Button{id="before",height=30,text="Before"},
-   ui.Scroll{id="inner",width=180,height=60,scroll=ui.bind("inner"),
+   ui.Scroll{id="inner",scrollbar=false,width=180,height=60,scroll=ui.bind("inner"),
     ui.Column{id="inner-content",gap=3,clip_children=true,
      ui.Button{id="a",height=28,text="A",on_activate=ui.action("select","a")},
      ui.Button{id="b",height=28,text="B",on_activate=ui.action("select","b")},
@@ -916,7 +916,7 @@ return ui.Panel{id="panel",width=240,height=200,
             .unwrap()
             > 0.
     );
-    for (outer, inner) in [(23., 0.), (23., 31.), (47., 14.), (0., 48.)] {
+    for (outer, inner) in [(23., 0.), (23., 31.), (47.125, 14.375), (0., 48.)] {
         #[cfg(feature = "test-counters")]
         let passes = layout::layout_passes();
         let cached = s

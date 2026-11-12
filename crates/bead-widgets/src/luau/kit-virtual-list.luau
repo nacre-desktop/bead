@@ -4,7 +4,8 @@
 local ui = require("bead.ui")
 return function(p)
   local variable = type(p.row_height)=="function"
-  local total = ui.model_count(p.model)
+  local loaded = ui.model_count(p.model)
+  local total = loaded
   -- Fixed-pitch providers may publish a total beyond their currently loaded prefix.
   if not variable and p.total_count then total=math.max(total,ui.resolve_for_check(p.total_count)) end
   local pitch = not variable and p.row_height+p.gap or 0
@@ -18,17 +19,18 @@ return function(p)
   local prefix = (p.before_height or 0)+(p.before_gap or 0)
   local extent = prefix+rows_extent
   local window_height=p.window_height or p.height
-  local scroll = math.max(0,math.clamp(ui.resolve_for_check(p.scroll),0,math.max(0,extent-window_height))-prefix)
-  local first = 0
+  local scroll, first
   local count = total
   if variable then
+    scroll = math.max(0,math.clamp(ui.resolve_for_check(p.scroll),0,math.max(0,extent-window_height))-prefix)
+    first = 0
     while first<total and offset(first+1)<scroll do first+=1 end
     first=math.max(0,first-1)
     local last=first
     while last<total and offset(last)<scroll+window_height do last+=1 end
     count=math.min(total,last+1)-first
   else
-    first=math.max(0,math.floor(scroll/pitch)-1)
+    first=ui.window_index(p.scroll,pitch,prefix,math.max(0,extent-window_height))
     count=math.min(total-first,math.ceil(window_height/pitch)+2)
   end
   local children = {}
@@ -48,8 +50,13 @@ return function(p)
   space("before",offset(first))
   children[#children+1]=ui.Column{id="window",width="fill",gap=p.gap,shrink=0,
     ui.Repeat{id=p.repeat_id or "rows",model=p.model,key=p.key,first=first,count=count,render=p.render}}
+  if not variable then
+    local available=math.min(count,math.max(0,loaded-first))
+    -- An unloaded window still occupies its declared pitch in the total extent.
+    space("unloaded",(count-available)*pitch-(available==0 and count>0 and p.gap or 0))
+  end
   space("after",math.max(0,rows_extent-offset(first)-math.max(0,offset(first+count)-offset(first)-p.gap)))
-  return ui.Scroll{id=p.id,scroll=p.scroll,width=p.width,height=p.height,grow=p.grow,
+  return ui.Scroll{id=p.id,scroll=p.scroll,scrollbar=p.scrollbar,width=p.width,height=p.height,grow=p.grow,
     position=p.position,left=p.left,top=p.top,
     ui.Column{id="content",width="fill",gap=0,shrink=0,table.unpack(children)}}
 end

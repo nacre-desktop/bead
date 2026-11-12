@@ -15,6 +15,10 @@ pub mod plugins;
 pub mod recovery;
 pub mod schema;
 pub mod script;
+mod scroll_feedback;
+#[cfg(all(test, feature = "test-counters"))]
+mod scroll_measure_tests;
+pub mod scrollbar;
 mod session;
 pub mod status_pill;
 pub mod text_style;
@@ -108,6 +112,12 @@ pub struct Node {
     pub action_arg: Option<Value>,
     #[serde(default)]
     pub scroll_store: Option<String>,
+    /// This node owns a scroll viewport; descendants only inherit its store.
+    #[serde(skip)]
+    pub scrollable: bool,
+    /// Whether the owning scroll viewport displays the framework scrollbar.
+    #[serde(skip)]
+    pub scrollbar: bool,
     /// Content extent minus viewport, inherited by scrollable descendants.
     #[serde(skip)]
     pub scroll_limit: Option<f64>,

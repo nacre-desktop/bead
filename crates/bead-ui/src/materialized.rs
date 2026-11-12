@@ -48,6 +48,11 @@ pub(super) struct Cached {
     scroll: Vec<Scroll>,
     clip_regions: Vec<ClipRegion>,
     floating: Vec<Floating>,
+    parents: Vec<Option<usize>>,
+    scroll_layers: Vec<Option<usize>>,
+    clip_layers: Vec<Option<usize>>,
+    primitive_owners: Vec<usize>,
+    node_owners: Vec<usize>,
     _charge: Option<bead_core::cache::Charge>,
 }
 fn bindings(value: &serde_json::Value, out: &mut BTreeSet<String>) {
@@ -96,6 +101,11 @@ impl Cached {
             scroll: vec![],
             clip_regions: vec![],
             floating: vec![],
+            parents: vec![],
+            scroll_layers: vec![],
+            clip_layers: vec![],
+            primitive_owners: vec![],
+            node_owners: vec![],
         };
         fn walk(
             raw: &RawNode,
@@ -262,6 +272,47 @@ impl Cached {
                 node: id.to_owned(),
             });
         }
+        if !cached.scroll.is_empty() {
+            cached.parents = Vec::with_capacity(scene.layers.len());
+            cached.scroll_layers = Vec::with_capacity(scene.layers.len());
+            cached.clip_layers = Vec::with_capacity(scene.layers.len());
+            cached.node_owners = Vec::with_capacity(nodes.len());
+            for layer in &scene.layers {
+                cached.parents.push(
+                    layer
+                        .parent
+                        .as_ref()
+                        .and_then(|id| scene.layers.iter().position(|l| &l.id == id)),
+                );
+                cached
+                    .scroll_layers
+                    .push(cached.scroll.iter().position(|s| s.id == layer.id));
+                cached
+                    .clip_layers
+                    .push(cached.clip_regions.iter().position(|c| c.id == layer.id));
+            }
+            cached.primitive_owners = vec![usize::MAX; scene.primitives.len()];
+            for (owner, layer) in scene.layers.iter().enumerate() {
+                for index in layer.own.clone() {
+                    cached.primitive_owners[index] = owner;
+                }
+            }
+            for floating in &cached.floating {
+                let Some(owner) = scene.layers.iter().position(|l| l.id == floating.node) else {
+                    return Ok(None);
+                };
+                cached.primitive_owners[floating.index] = owner;
+            }
+            for node in nodes {
+                let Some(owner) = scene.layers.iter().position(|l| l.id == node.id) else {
+                    return Ok(None);
+                };
+                cached.node_owners.push(owner);
+            }
+            if cached.primitive_owners.contains(&usize::MAX) {
+                return Ok(None);
+            }
+        }
         for name in cached
             .structural
             .iter()
@@ -270,6 +321,12 @@ impl Cached {
             cached.values.insert(name.clone(), resolve(name)?);
         }
         let bytes = layout::raw_bytes(&raw)
+            + (cached.parents.capacity()
+                + cached.scroll_layers.capacity()
+                + cached.clip_layers.capacity())
+                * std::mem::size_of::<Option<usize>>()
+            + (cached.primitive_owners.capacity() + cached.node_owners.capacity())
+                * std::mem::size_of::<usize>()
             + cached
                 .scene
                 .primitives
@@ -423,8 +480,8 @@ impl Cached {
                 }
             }
         }
-        fn translated(mut primitive: Primitive, dy: f32) -> Primitive {
-            match &mut primitive {
+        fn translate(primitive: &mut Primitive, dy: f32) {
+            match primitive {
                 Primitive::Arc { rect, .. }
                 | Primitive::Polyline { rect, .. }
                 | Primitive::Rounded { rect, .. }
@@ -432,131 +489,63 @@ impl Cached {
                 | Primitive::Image { rect, .. }
                 | Primitive::Shadow { rect, .. } => *rect = rect.translated(0., dy),
             }
-            primitive
         }
-        let scroll_changed = self
-            .scroll
-            .iter()
-            .any(|scroll| changed.contains_key(&scroll.binding));
-        if scroll_changed {
-            let offsets: BTreeMap<_, _> = self
-                .scroll
-                .iter()
-                .map(|scroll| {
-                    let old = match self.values.get(&scroll.binding) {
-                        Some(Value::Number(v)) => *v,
-                        _ => 0.,
-                    };
-                    let new = match changed.get(&scroll.binding) {
-                        Some(Value::Number(v)) => *v,
-                        _ => old,
-                    };
-                    (
-                        scroll.id.clone(),
-                        (
-                            old.clamp(0., scroll.limit) as f32,
-                            new.clamp(0., scroll.limit) as f32,
-                        ),
-                    )
-                })
-                .collect();
-            let scroll_ids: BTreeSet<_> = self
-                .scroll
-                .iter()
-                .map(|scroll| scroll.id.as_str())
-                .collect();
-            let clip_ids: BTreeSet<_> = self
-                .clip_regions
-                .iter()
-                .map(|region| region.id.as_str())
-                .collect();
-            let clip_by_id: BTreeMap<_, _> = self
-                .clip_regions
-                .iter()
-                .map(|region| (region.id.as_str(), region))
-                .collect();
-            let mut ancestors = BTreeMap::<String, Vec<String>>::new();
-            let mut clip_ancestors = BTreeMap::<String, Vec<String>>::new();
-            for layer in &self.scene.layers {
-                let parent = layer.parent.as_deref();
-                let mut chain = parent
-                    .and_then(|parent| ancestors.get(parent))
-                    .cloned()
-                    .unwrap_or_default();
-                if let Some(parent) = &layer.parent
-                    && scroll_ids.contains(parent.as_str())
-                {
-                    chain.insert(0, parent.clone());
-                }
-                ancestors.insert(layer.id.clone(), chain);
-                let mut clips = parent
-                    .and_then(|parent| clip_ancestors.get(parent))
-                    .cloned()
-                    .unwrap_or_default();
-                if let Some(parent) = &layer.parent
-                    && clip_ids.contains(parent.as_str())
-                {
-                    clips.insert(0, parent.clone());
-                }
-                clip_ancestors.insert(layer.id.clone(), clips);
-            }
-            let ancestor_scrolls = |id: &str| ancestors.get(id).cloned().unwrap_or_default();
-            let shift = |ids: &[String]| {
-                ids.iter()
-                    .map(|id| {
-                        let (old, new) = offsets[id];
-                        old - new
-                    })
-                    .sum::<f32>()
-            };
-            let inherited_clip = |ids: &[String]| -> Option<bead_render::Rect> {
-                let mut clip = None;
-                for id in ids.iter().rev() {
-                    let region = clip_by_id.get(id.as_str())?;
-                    let ancestors = ancestor_scrolls(id);
-                    let dy = shift(&ancestors);
-                    let rect = region.bounds.translated(0., dy);
-                    clip =
-                        Some(clip.map_or(rect, |prior: bead_render::Rect| prior.intersect(rect)));
-                }
-                clip
-            };
-            let mut owner = vec![String::new(); scene.primitives.len()];
-            for layer in &scene.layers {
-                for index in layer.own.clone() {
-                    if index < owner.len() {
-                        owner[index] = layer.id.clone();
+        if self.scroll.iter().any(|s| changed.contains_key(&s.binding)) {
+            // Ownership and clipping topology are invariant until layout changes.
+            // Follow cached indices instead of rebuilding String maps per frame.
+            let shift = |layer: usize| {
+                let mut dy = 0.;
+                let mut parent = self.parents[layer];
+                while let Some(index) = parent {
+                    if let Some(scroll) = self.scroll_layers[index] {
+                        let scroll = &self.scroll[scroll];
+                        let old = match self.values.get(&scroll.binding) {
+                            Some(Value::Number(v)) => *v,
+                            _ => 0.,
+                        };
+                        let new = match changed.get(&scroll.binding) {
+                            Some(Value::Number(v)) => *v,
+                            _ => old,
+                        };
+                        dy +=
+                            old.clamp(0., scroll.limit) as f32 - new.clamp(0., scroll.limit) as f32;
                     }
+                    parent = self.parents[index];
+                }
+                dy
+            };
+            let clip = |layer: usize| {
+                let mut result = None;
+                let mut parent = self.parents[layer];
+                while let Some(index) = parent {
+                    if let Some(region) = self.clip_layers[index] {
+                        let bounds = self.clip_regions[region]
+                            .bounds
+                            .translated(0., shift(index));
+                        result = Some(result.map_or(bounds, |previous: bead_render::Rect| {
+                            previous.intersect(bounds)
+                        }));
+                    }
+                    parent = self.parents[index];
+                }
+                result
+            };
+            for (index, primitive) in scene.primitives.iter_mut().enumerate() {
+                let owner = self.primitive_owners[index];
+                translate(primitive, shift(owner));
+                if let Some(bounds) = clip(owner) {
+                    scene.clips.insert(index, bounds);
+                } else {
+                    scene.clips.remove(&index);
                 }
             }
-            for item in &self.floating {
-                owner[item.index] = item.node.clone();
+            for (index, layer) in scene.layers.iter_mut().enumerate() {
+                layer.bounds = layer.bounds.translated(0., shift(index));
             }
-            if owner.iter().any(String::is_empty) {
-                return Ok(None);
-            }
-            scene.clips.clear();
-            for (index, id) in owner.iter().enumerate() {
-                let ancestors = ancestor_scrolls(id);
-                let dy = shift(&ancestors);
-                if dy != 0. {
-                    scene.primitives[index] = translated(scene.primitives[index].clone(), dy);
-                }
-                if let Some(clip) = inherited_clip(&clip_ancestors[id]) {
-                    scene.clips.insert(index, clip);
-                }
-            }
-            for layer in &mut scene.layers {
-                let ancestors = ancestor_scrolls(&layer.id);
-                layer.bounds = layer.bounds.translated(0., shift(&ancestors));
-            }
-            for node in &mut nodes {
-                let ancestors = ancestor_scrolls(&node.id);
-                let dy = shift(&ancestors);
-                if dy != 0. {
-                    node.draw = translated(node.draw.clone(), dy);
-                }
-                node.clip = inherited_clip(&clip_ancestors[&node.id]);
+            for (index, node) in nodes.iter_mut().enumerate() {
+                let owner = self.node_owners[index];
+                translate(&mut node.draw, shift(owner));
+                node.clip = clip(owner);
             }
         }
         Ok(Some((scene, nodes)))

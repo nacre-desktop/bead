@@ -42,6 +42,7 @@ pub(super) struct Overlay {
     cursor_serial: u32,
     last_draw: Option<Instant>,
     timer: bool,
+    pub(super) callbacks: policy::Callbacks,
     /// B0192: first-frame phase stamps, logged once as `OVERLAY_FIRST_FRAME`.
     phases: Phases,
 }
@@ -59,6 +60,12 @@ impl Phases {
     }
 }
 impl Overlay {
+    pub(super) fn wakeup_at(&self) -> Option<Instant> {
+        self.source.wakeup_at()
+    }
+    pub(super) fn scroll_surface(&self) -> &wl_surface::WlSurface {
+        self.layer.wl_surface()
+    }
     pub(super) fn output_mode_changed(&mut self, output: &wl_output::WlOutput, interval: Duration) {
         if self.output == *output {
             self.source.frame_interval(interval);
@@ -346,6 +353,7 @@ impl App {
             cursor_serial: 0,
             last_draw: None,
             timer: false,
+            callbacks: Default::default(),
             phases: Phases {
                 began,
                 created: began.elapsed().as_secs_f64() * 1000.,
@@ -421,6 +429,7 @@ impl App {
             return;
         };
         let output = overlay.output.clone();
+        self.cancel_scroll(&scroll::Target::Overlay(overlay.epoch()));
         drop(overlay);
         // With no view of either slot up, the primary session may shed its warm caches,
         // as it does when the panel slot closes.
@@ -481,6 +490,9 @@ impl App {
     }
     /// Service wakeups and input for the overlay; the product source stages them.
     pub(super) fn overlay_ui(&mut self, event: UiEvent) {
+        self.source_transaction(event, Self::process_overlay_ui);
+    }
+    fn process_overlay_ui(&mut self, event: UiEvent) {
         if let UiEvent::ResourcesPrepared(result) = event {
             match result {
                 Ok(()) => self.overlay_draw(),
@@ -567,7 +579,9 @@ impl App {
         if !o.configured || self.hidden {
             return;
         }
-        if let Some(last) = o.last_draw {
+        if !self.scrolls.in_frame
+            && let Some(last) = o.last_draw
+        {
             let delay = super::scroll::tick().saturating_sub(last.elapsed());
             if !delay.is_zero() {
                 self.overlay_retry(delay);

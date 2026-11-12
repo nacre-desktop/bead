@@ -26,6 +26,8 @@ ui.Grid { id="grid", width=300, columns=3, child }
 ui.Scroll { id="scroll", width=300, height=200, scroll=ui.bind("offset"), child }
 -- Scroll container; scroll must bind a mutable numeric store.
 ```
+
+Overflowing `Scroll` regions get a themed overlay scrollbar automatically. Use `scrollbar=false` to opt out (also accepted by the kit virtual list). Hosts can override the optional `tokens.scrollbar` geometry, palette roles, alpha, and idle/fade durations; see [the scrolling contract](../specs/0135-scrolling.md). PgUp/PgDn, Home/End, and Up/Down navigate the focused viewport or the viewport under the pointer; TextInput keeps its editing keys.
 ```luau
 ui.Box { id="box", width=80, height=40, fill="surface", child }
 -- General container; supports layout, fill, and border properties.

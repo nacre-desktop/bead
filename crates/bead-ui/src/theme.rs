@@ -16,6 +16,7 @@ pub fn defaults() -> Value {
         serde_json::from_str(bead_kit::DEFAULT_SCALE).expect("Bead default scale is valid JSON");
     value["fonts"] = json!({"sans":"sans-serif", "mono":"monospace", "icon":"icons"});
     value["gradients"] = true.into();
+    value["scrollbar"] = crate::scrollbar::Config::default_tokens();
     value
 }
 
@@ -92,7 +93,23 @@ fn validate(tokens: &Value) -> Result<(), String> {
     if !tokens.get("gradients").is_some_and(Value::is_boolean) {
         return Err("theme gradients must be boolean".into());
     }
+    if let Some(scrollbar) = tokens.get("scrollbar") {
+        crate::scrollbar::validate_tokens(scrollbar)?;
+    }
     Ok(())
+}
+
+/// Snapshot scrollbar tokens, applying partial host overrides over neutral defaults.
+pub fn scrollbar_config() -> crate::scrollbar::Config {
+    let tokens = current();
+    let mut merged = crate::scrollbar::Config::default_tokens();
+    if let (Some(base), Some(overrides)) = (merged.as_object_mut(), tokens["scrollbar"].as_object())
+    {
+        for (key, value) in overrides {
+            base.insert(key.clone(), value.clone());
+        }
+    }
+    serde_json::from_value(merged).unwrap_or_default()
 }
 
 /// Snapshot the current host tokens, including generic defaults when unset.

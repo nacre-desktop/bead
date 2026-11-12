@@ -255,6 +255,10 @@ impl CompositorHandler for App {
             self.in_slot(id, |app| app.frame(conn, qh, surface, time));
             return;
         }
+        let scroll_target = self.scroll_surface_target(surface);
+        if let Some(target) = &scroll_target {
+            self.scroll_frame(target, Instant::now());
+        }
         if let Some(i) = self.surfaces.iter().position(|s| s.wl_surface() == surface) {
             let now_seconds = self.started.elapsed().as_secs_f64();
             let animation_active = if self.surfaces[i].companion {
@@ -271,7 +275,6 @@ impl CompositorHandler for App {
                 self.animations.active(now_seconds)
             };
             let s = &mut self.surfaces[i];
-            s.callbacks.pending = false;
             if bead_core::profile::frame_trace() {
                 println!(
                     "UI_CALLBACK monotonic_ns={} companion={}",
@@ -345,6 +348,10 @@ impl CompositorHandler for App {
             }
             self.pointer_visual_commit(i);
         }
+        if let Some(target) = &scroll_target {
+            self.request_scroll_frame(target);
+        }
+        self.schedule_source_frames();
     }
     fn surface_enter(
         &mut self,
@@ -720,6 +727,10 @@ impl OutputHandler for App {
             .map(|surface| surface.output_name.clone())
             .unwrap_or_else(|| self.output_id(&output));
         if let Some(mut session) = self.output_sessions.remove(&output_id) {
+            self.cancel_scroll(&scroll::Target::Primary(Some((
+                session.epoch,
+                output_id.clone(),
+            ))));
             session.epoch = session.epoch.wrapping_add(1);
             session.source = None;
             if self.active_output.as_deref() == Some(output_id.as_str()) {
@@ -1362,6 +1373,11 @@ impl App {
         true
     }
     fn pointer_event(&mut self, event: &PointerEvent) {
+        if matches!(event.kind, PointerEventKind::Press { .. })
+            && let Some(target) = self.scroll_surface_target(&event.surface)
+        {
+            self.scrolls.interrupt(&target);
+        }
         bead_core::profile::position(
             "pointer_received",
             event.position.0 as f32,
@@ -1713,6 +1729,13 @@ impl KeyboardHandler for App {
                 self.keyboard_surface.is_some()
             );
         }
+        if let Some(target) = self
+            .keyboard_surface
+            .as_ref()
+            .and_then(|surface| self.scroll_surface_target(surface))
+        {
+            self.scrolls.interrupt(&target);
+        }
         if self.keyboard_surface.is_some()
             && self.keyboard_surface.as_ref() == self.window_surface()
         {
@@ -1873,8 +1896,24 @@ impl Dispatch<wayland_client::protocol::wl_callback::WlCallback, FrameData> for 
             wayland_client::protocol::wl_callback::Event::Done { .. }
         ) && state.canvas_surface(&data.surface)
         {
-            state.canvas_frame(&data.surface, data.epoch);
+            state.canvas_frame(&data.surface, data.epoch, data.source_epoch);
             return;
+        }
+        if let wayland_client::protocol::wl_callback::Event::Done { callback_data } = &event {
+            let window = state.window.as_mut().is_some_and(|w| {
+                w.scroll_surface() == &data.surface
+                    && w.epoch() == data.source_epoch
+                    && w.callbacks.accept(data.epoch)
+            });
+            let overlay = state.overlay.as_mut().is_some_and(|o| {
+                o.scroll_surface() == &data.surface
+                    && o.epoch() == data.source_epoch
+                    && o.callbacks.accept(data.epoch)
+            });
+            if window || overlay {
+                CompositorHandler::frame(state, conn, qh, &data.surface, *callback_data);
+                return;
+            }
         }
         if let wayland_client::protocol::wl_callback::Event::Done { callback_data } = event
             && let Some(surface) = state

@@ -617,6 +617,15 @@ impl FolderView {
     }
 }
 impl SceneSource for FolderView {
+    fn scroll_regions(&self) -> Vec<Rect> {
+        self.session.scroll_regions()
+    }
+    fn wakeup_at(&self) -> Option<std::time::Instant> {
+        self.session.preview_deadline()
+    }
+    fn frame_interval(&mut self, interval: Duration) {
+        self.session.set_frame_interval(interval);
+    }
     fn watch(
         &mut self,
         wakeup: Box<dyn Fn(Result<(), String>) + Send>,
@@ -671,6 +680,9 @@ impl SceneSource for FolderView {
                 "right" => self
                     .session
                     .edit_key(crate::ui::input::EditKey::Right, shift)?,
+                "home" | "end" | "up" | "down" | "page-up" | "page-down" => {
+                    self.session.scroll_key(&command, shift, self.pointer)?
+                }
                 _ => None,
             },
             UiEvent::Action { name, argument } => {
@@ -783,6 +795,52 @@ mod tests {
     #[test]
     fn tray_service_enables_the_fallback_watcher() {
         assert!(desktop_config(&BTreeSet::from(["tray".to_owned()])).tray_watcher);
+    }
+
+    #[test]
+    fn folder_source_exposes_content_regions_and_keyboard_animation_wakeups() {
+        let root = std::env::temp_dir().join(format!(
+            "bead-scroll-host-{}-{}",
+            std::process::id(),
+            TEMP_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(root.join("view")).unwrap();
+        std::fs::write(
+            root.join("palette.json"),
+            r#"{"formatVersion":1,"colours":{"surface":"202020"}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("view/behavior.luau"),
+            "return {stores={offset=0},actions={},computed={}}",
+        )
+        .unwrap();
+        std::fs::write(root.join("view/main.luau"),"local ui=require('bead.ui');return ui.Scroll{id='list',width=200,height=100,scroll=ui.bind('offset'),ui.Column{height=600,shrink=0}}").unwrap();
+        let mut view = FolderView::load(
+            root.clone(),
+            "view/main.luau".into(),
+            "palette.json".into(),
+            "Scroll host",
+            (200, 100),
+        )
+        .unwrap();
+        view.stage(UiEvent::Reload).unwrap();
+        assert!(view.commit());
+        assert_eq!(view.scroll_regions(), vec![Rect::new(0., 0., 200., 100.)]);
+        view.stage(UiEvent::Hover { x: 20., y: 40. }).unwrap();
+        view.commit();
+        assert!(
+            view.stage(UiEvent::Command {
+                command: "page-down".into(),
+                shift: false
+            })
+            .unwrap()
+            .is_some()
+        );
+        view.commit();
+        assert!(view.wakeup_at().is_some());
+        drop(view);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

@@ -41,6 +41,17 @@ fn layer_motion_gl_surface_can_be_deferred(
 
 impl App {
     pub(super) fn ui(&mut self, event: UiEvent) {
+        self.source_transaction(event, Self::process_ui);
+    }
+    pub(super) fn source_transaction(&mut self, event: UiEvent, process: fn(&mut Self, UiEvent)) {
+        self.scrolls.ui_depth += 1;
+        process(self, event);
+        self.scrolls.ui_depth -= 1;
+        if self.scrolls.ui_depth == 0 {
+            self.schedule_source_frames();
+        }
+    }
+    fn process_ui(&mut self, event: UiEvent) {
         let _busy = bead_core::profile::Busy::named(|| {
             format!("ui:{}", bead_core::profile::variant_name(&event)).into()
         });

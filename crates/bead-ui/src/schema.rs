@@ -22,6 +22,7 @@ pub fn luau() -> String {
         ("component", "(string,any,any)->any"),
         ("memo", "(string,any,any)->Node"),
         ("resolve_for_check", "(any)->any"),
+        ("window_index", "(any,number,number,number)->number"),
         ("preview_value", "(string,number)->number"),
         (
             "text_width",

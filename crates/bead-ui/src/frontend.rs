@@ -16,6 +16,7 @@ use std::{
 #[cfg(test)]
 thread_local! {
     static BUILD_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static EVAL_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 #[cfg(test)]
@@ -26,6 +27,14 @@ pub(super) fn reset_build_calls() {
 #[cfg(test)]
 pub(super) fn build_calls() -> usize {
     BUILD_CALLS.get()
+}
+#[cfg(test)]
+pub(super) fn reset_eval_calls() {
+    EVAL_CALLS.set(0);
+}
+#[cfg(test)]
+pub(super) fn eval_calls() -> usize {
+    EVAL_CALLS.get()
 }
 pub type Sources = BTreeMap<PathBuf, Vec<u8>>;
 pub type Resolve<'a> = dyn Fn(&str) -> Result<Value, Diagnostic> + 'a;
@@ -133,11 +142,12 @@ return function(name)
 end
 "#;
 /// Host callbacks that read the current build (stores, measurements, fragments).
-const BRIDGED: [&str; 8] = [
+const BRIDGED: [&str; 9] = [
     "text_width",
     "text_line_height",
     "preview_value",
     "resolve_for_check",
+    "window_index",
     "memo",
     "model_count",
     "Repeat",
@@ -245,11 +255,22 @@ struct WidthDependency {
     size: f32,
     width: f32,
 }
+struct WindowDependency {
+    binding: String,
+    pitch: f64,
+    prefix: f64,
+    max_offset: f64,
+    index: u64,
+}
 struct Materialized {
     raw: std::rc::Rc<RawNode>,
     reads: BTreeMap<String, Value>,
     widths: Vec<WidthDependency>,
+    windows: Vec<WindowDependency>,
     _charge: bead_core::cache::Charge,
+}
+fn window_index(offset: f64, pitch: f64, prefix: f64, max_offset: f64) -> u64 {
+    (((offset.clamp(0., max_offset) - prefix).max(0.) / pitch).floor() as u64).saturating_sub(1)
 }
 struct Fragment {
     bytes: usize,
@@ -798,12 +819,19 @@ impl FrontEnd for LuauFrontEnd {
                         && self.measured_width(&text, &dependency.family, dependency.size).to_bits()
                         == dependency.width.to_bits())
             })
+            && cached.windows.iter().all(|dependency| {
+                matches!(resolve(&dependency.binding), Ok(Value::Number(offset))
+                    if offset.is_finite()
+                        && window_index(offset, dependency.pitch, dependency.prefix, dependency.max_offset)
+                        == dependency.index)
+            })
         {
             return Ok(cached.raw.clone());
         }
         let reads = RefCell::new(BTreeMap::new());
         let widths = RefCell::new(Vec::<WidthDependency>::new());
-        let width_overflow = std::cell::Cell::new(false);
+        let windows = RefCell::new(Vec::<WindowDependency>::new());
+        let dependency_overflow = std::cell::Cell::new(false);
         let scopes = RefCell::new(Vec::<BTreeMap<String, Value>>::new());
         let fragments = RefCell::new(Vec::<std::rc::Rc<Fragment>>::new());
         let fragment_remaining = std::cell::Cell::new(8 * bead_core::cache::MIB);
@@ -889,7 +917,7 @@ impl FrontEnd for LuauFrontEnd {
                                 && dependency.size == size
                         }) {
                             if dependencies.len() == 4096 {
-                                width_overflow.set(true);
+                                dependency_overflow.set(true);
                             } else {
                                 dependencies.push(WidthDependency {
                                     binding,
@@ -950,6 +978,88 @@ impl FrontEnd for LuauFrontEnd {
                     }
                     Ok(value)
                 })?,
+            )?;
+            host.set(
+                "window_index",
+                scope.create_function(
+                    |lua, (input, pitch, prefix, max_offset): (mlua::Value, f64, f64, f64)| {
+                        vm.bump();
+                        if !pitch.is_finite()
+                            || pitch <= 0.
+                            || !prefix.is_finite()
+                            || !max_offset.is_finite()
+                            || max_offset < 0.
+                        {
+                            return Err(mlua::Error::runtime("invalid virtual-list window"));
+                        }
+                        let (offset, binding) = match input {
+                            mlua::Value::Table(table) => {
+                                let binding = table.get::<String>("__bind")?;
+                                if binding.is_empty() || binding.len() > 2048 {
+                                    return Err(mlua::Error::runtime("invalid scroll binding"));
+                                }
+                                if let Some((_, grants)) = &self.plugins
+                                    && let Some(id) =
+                                        crate::plugins::owner(&source(lua, entry).file)
+                                    && !grants.get(id).is_some_and(|g| g.topic(&binding))
+                                {
+                                    return Err(mlua::Error::runtime(format!(
+                                        "plugin {id} lacks capability topic:{binding}"
+                                    )));
+                                }
+                                let in_memo = !scopes.borrow().is_empty();
+                                let resolved = if in_memo {
+                                    resolve(&binding)
+                                } else {
+                                    upstream(&binding)
+                                };
+                                let Value::Number(offset) =
+                                    resolved.map_err(mlua::Error::external)?
+                                else {
+                                    return Err(mlua::Error::runtime(
+                                        "virtual-list scroll must be numeric",
+                                    ));
+                                };
+                                if !offset.is_finite() {
+                                    return Err(mlua::Error::runtime(
+                                        "virtual-list scroll must be finite",
+                                    ));
+                                }
+                                (offset, Some(binding))
+                            }
+                            mlua::Value::Number(offset) if offset.is_finite() => (offset, None),
+                            mlua::Value::Integer(offset) => (offset as f64, None),
+                            _ => {
+                                return Err(mlua::Error::runtime(
+                                    "virtual-list scroll must be numeric or bound",
+                                ));
+                            }
+                        };
+                        let index = window_index(offset, pitch, prefix, max_offset);
+                        if let Some(binding) = binding {
+                            let mut dependencies = windows.borrow_mut();
+                            if !dependencies.iter().any(|dependency| {
+                                dependency.binding == binding
+                                    && dependency.pitch == pitch
+                                    && dependency.prefix == prefix
+                                    && dependency.max_offset == max_offset
+                            }) {
+                                if dependencies.len() == 4096 {
+                                    dependency_overflow.set(true);
+                                } else {
+                                    dependencies.push(WindowDependency {
+                                        binding,
+                                        pitch,
+                                        prefix,
+                                        max_offset,
+                                        index,
+                                    });
+                                }
+                            }
+                        }
+                        Ok(index as f64)
+                    },
+                )?,
             )?;
             host.set(
                 "memo",
@@ -1183,6 +1293,8 @@ impl FrontEnd for LuauFrontEnd {
                 .ok_or_else(|| mlua::Error::runtime("missing entry source"))?;
             drop(setup_profile);
             let eval_profile = bead_core::profile::Span::new("markup_eval");
+            #[cfg(test)]
+            EVAL_CALLS.set(EVAL_CALLS.get() + 1);
             let node: mlua::Value = vm.chunk(entry, bytes)?.call(())?;
             drop(eval_profile);
             let _serde_profile = bead_core::profile::Span::new("markup_serde");
@@ -1216,10 +1328,17 @@ impl FrontEnd for LuauFrontEnd {
         if let Ok(raw) = &result {
             let reads = reads.into_inner();
             let widths = widths.into_inner();
+            let windows = windows.into_inner();
             let bytes = crate::layout::raw_bytes(raw)
                 + reads
                     .iter()
                     .map(|(k, v)| k.capacity() + 64 + bead_core::cache::value_bytes(v))
+                    .sum::<usize>()
+                + windows
+                    .iter()
+                    .map(|dependency| {
+                        dependency.binding.capacity() + std::mem::size_of::<WindowDependency>() + 64
+                    })
                     .sum::<usize>()
                 + widths
                     .iter()
@@ -1231,13 +1350,14 @@ impl FrontEnd for LuauFrontEnd {
                     })
                     .sum::<usize>();
             *self.materialized.borrow_mut() = None;
-            if !width_overflow.get()
+            if !dependency_overflow.get()
                 && let Ok(charge) = self.values_budget.reserve(bytes)
             {
                 *self.materialized.borrow_mut() = Some(Materialized {
                     raw: raw.clone(),
                     reads,
                     widths,
+                    windows,
                     _charge: charge,
                 });
             }
@@ -1545,5 +1665,45 @@ mod animation_tests {
         assert_eq!(animations.frame_interval(), Duration::from_millis(16));
         assert_eq!(animations.states["x"].to, 1.);
         assert!(animations.next_frame.unwrap() > snapshot_deadline);
+    }
+}
+
+#[cfg(test)]
+mod window_dependency_tests {
+    use super::*;
+    use std::cell::Cell;
+
+    #[test]
+    fn same_virtual_list_window_skips_actual_markup_evaluation() {
+        let entry = PathBuf::from("ui/main.luau");
+        let mut sources = Sources::new();
+        sources.insert(
+            entry.clone(),
+            br#"local ui=require("bead.ui")
+return ui.Box{id="root",text=tostring(ui.window_index(ui.bind("scroll"),10,0,200))}"#
+                .to_vec(),
+        );
+        let frontend = LuauFrontEnd::new(&entry, &sources).unwrap();
+        let offset = Cell::new(2.);
+        let resolve = |name: &str| {
+            if name == "scroll" {
+                Ok(Value::Number(offset.get()))
+            } else {
+                Err(Diagnostic::new(Path::new("test"), 1, 1, "unknown store"))
+            }
+        };
+        reset_eval_calls();
+        frontend.build(&entry, &resolve).unwrap();
+        assert_eq!(eval_calls(), 1);
+        offset.set(8.);
+        frontend.build(&entry, &resolve).unwrap();
+        assert_eq!(eval_calls(), 1, "same row window should reuse the raw tree");
+        offset.set(25.);
+        frontend.build(&entry, &resolve).unwrap();
+        assert_eq!(
+            eval_calls(),
+            2,
+            "crossing a row boundary should re-evaluate Luau"
+        );
     }
 }

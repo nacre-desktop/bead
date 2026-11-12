@@ -288,11 +288,11 @@ return function(ui, tokens)
         local pitch=p.row_height+p.gap_y
         local rows=math.ceil(math.max(ui.model_count(p.model),value(p.total_count,0))/columns)
         local height=math.max(0,rows*pitch-p.gap_y)
-        local scroll=math.clamp(value(p.scroll,0),0,math.max(0,height-p.height))
-        local first=math.max(0,math.floor(scroll/pitch)-1)
-        -- Never more than viewport + 2 rows; at the top (no row above to overscan) one row fewer.
-        local count=math.min(math.ceil(p.height/pitch)+2,math.floor((scroll+p.height)/pitch)-first+2)
-        return ui.Scroll{id=p.id,scroll=p.scroll,grow=1,
+        local first=ui.window_index(p.scroll or 0,pitch,0,math.max(0,height-p.height))
+        -- Track both edges: fractional viewport heights can change the last row first.
+        local last=ui.window_index(p.scroll or 0,pitch,-p.height-pitch,math.max(0,height-p.height))+2
+        local count=math.min(math.ceil(p.height/pitch)+2,last-first)
+        return ui.Scroll{id=p.id,scroll=p.scroll,scrollbar=p.scrollbar,grow=1,
             ui.Box{id="extent",height=height,shrink=0,width="fill",
                 ui.Grid{id="window",position="absolute",top=first*pitch,width="fill",
                     columns=columns,row_height=p.row_height,gap_x=p.gap_x,gap_y=p.gap_y,
@@ -703,7 +703,7 @@ return function(ui, tokens)
         local list
         if count*SELECT_ROW>list_h and p.scroll~=nil then
             rows.id="entries";rows.width=inner
-            list=ui.Scroll{id="list",scroll=p.scroll,width=inner,height=list_h,shrink=0,ui.Column(rows)}
+            list=ui.Scroll{id="list",scroll=p.scroll,scrollbar=p.scrollbar,width=inner,height=list_h,shrink=0,ui.Column(rows)}
         else
             rows.id="list";rows.width=inner;rows.height=list_h;rows.shrink=0
             list=ui.Column(rows)
