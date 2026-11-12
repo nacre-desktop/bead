@@ -34,12 +34,15 @@ All values are under `desktop.`. Missing numeric readings use `-1`; missing stri
 |---|---|---|
 | `desktop.volume` | Number | Requires `audio`; clamps finite values to 0–1. |
 | `desktop.mute` | Bool | Requires `audio`; sets mute state. |
+| `desktop.mute.toggle` | None | Requires `audio`; sets mute to the inverse of the latest snapshot state. |
 | `desktop.tray.activate` | item ID Text | Requires `tray`; sends pointer coordinates from the action event. |
 | `desktop.tray.secondary` | item ID Text | Requires `tray`; sends pointer coordinates. |
 | `desktop.tray.menu` | item ID Text | Requires `tray`; sends pointer coordinates. |
 | `command.NAME` | Any/unused | Runs declared command `NAME`; unknown names produce no result. |
 
 Wrong arguments produce explicit action errors: `desktop.volume expects a number`, `desktop.mute expects a boolean`, and tray actions require a text item id. Desktop actions against undeclared services report the missing service. Commands run without a shell; output, timeout, and interval limits are in the [manifest reference](manifest.md).
+
+FolderView declares the host actions provided by declared services and commands to view validation, so no behavior handler is needed for them. An undeclared `desktop.*` action reports the required `[services].desktop` declaration; an undeclared `command.NAME` action reports the missing `[commands.NAME]` entry. Other hosts keep behavior-script action validation unless they call `Session::set_host_actions`.
 
 ## Commands stores
 

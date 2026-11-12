@@ -7,7 +7,7 @@ return ui.Row {
     ui.Text { id = "clock", text = ui.bind("desktop.clock"), width = 64, height = 24, text_align = "center", color = "onSurface" },
     ui.Row { id = "right", width = 0, grow = 1, justify = "end", align = "center", gap = 8,
         ui.Text { id = "battery", text = ui.bind("battery"), width = 130, height = 24, color = "onSurfaceVariant" },
-        ui.Button { id = "mute", text = ui.bind("mute"), width = 72, height = 30, color = "onPrimary", fill = "primary", on_activate = ui.resolve_for_check(ui.bind("desktop.audio.available")) and ui.action("desktop.mute", true) or nil },
+        ui.Button { id = "mute", text = ui.bind("mute"), width = 72, height = 30, color = "onPrimary", fill = "primary", on_activate = ui.action("desktop.mute.toggle") },
         ui.Text { id = "volume", text = ui.bind("volume"), width = 120, height = 24, color = "onSurfaceVariant" },
     },
 }

@@ -46,6 +46,7 @@ pub struct Session {
     pub(super) scroll_feedback: crate::scroll_feedback::Feedback,
     pub(super) scrollbar_config: crate::scrollbar::Config,
     pub(super) keyboard_scroll: Option<crate::scroll_feedback::KeyboardMotion>,
+    pub(super) host_actions: std::collections::BTreeSet<String>,
     pub(super) accessibility_label: String,
     font_picker: Option<crate::transcript::Picker>,
     projector: Option<Projector>,
@@ -104,6 +105,10 @@ pub(super) struct DeferredAction {
     pub(super) pointer: (f32, f32),
 }
 impl Session {
+    /// Declare host-handled action names or prefixes (a trailing `*` matches a prefix).
+    pub fn set_host_actions(&mut self, names: impl IntoIterator<Item = String>) {
+        self.host_actions = names.into_iter().collect();
+    }
     /// Set the application label exposed for this session's accessible window root.
     pub fn set_accessibility_label(&mut self, label: impl Into<String>) {
         self.accessibility_label = label.into();
@@ -171,6 +176,7 @@ impl Session {
             scroll_feedback: Default::default(),
             scrollbar_config: crate::theme::scrollbar_config(),
             keyboard_scroll: None,
+            host_actions: Default::default(),
             accessibility_label: "Bead".into(),
             font_picker: None,
             projector: None,
@@ -421,6 +427,7 @@ impl Session {
             &self.stores,
             self.attempts,
             self.font_picker.clone(),
+            &self.host_actions,
         )?;
         generation.set_frame_interval(self.frame_interval);
         bead_core::profile::mark("generation_ready");

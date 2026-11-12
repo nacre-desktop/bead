@@ -200,12 +200,13 @@ impl App {
         }
     }
     fn view(&self, size: (u32, u32)) -> Result<FolderView, Box<dyn Error>> {
-        FolderView::load(
+        FolderView::load_with_services(
             self.root.clone(),
             self.manifest.view.clone(),
             self.manifest.palette.clone(),
             &self.manifest.title,
             size,
+            self.folder_services(),
         )
         .map_err(|e| {
             format!(

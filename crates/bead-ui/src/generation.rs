@@ -79,6 +79,41 @@ mod asset_sharing_tests {
         drop(changed);
         assert!(weak.upgrade().is_none());
     }
+
+    #[test]
+    fn host_actions_bypass_behavior_validation_only_when_declared() {
+        let script = script::Script::load(
+            b"return {stores={},actions={},computed={}}",
+            Path::new("host-actions.luau"),
+        )
+        .unwrap();
+        let allowed = BTreeSet::from([
+            "desktop.mute.toggle".to_owned(),
+            "command.kernel".to_owned(),
+        ]);
+        assert!(validate_action(&script, "desktop.mute.toggle", &allowed).is_ok());
+        assert!(validate_action(&script, "command.kernel", &allowed).is_ok());
+        assert!(validate_action(&script, "local_action", &allowed).is_err());
+        assert!(
+            validate_action(&script, "desktop.volume", &allowed)
+                .unwrap_err()
+                .to_string()
+                .contains("[services].desktop")
+        );
+        assert!(
+            validate_action(&script, "command.missing", &allowed)
+                .unwrap_err()
+                .to_string()
+                .contains("[commands.missing]")
+        );
+        let behavior = script::Script::load(
+            b"return {stores={},actions={['desktop.mute']=function() end,['command.kernel']=function() end},computed={}}",
+            Path::new("behavior-actions.luau"),
+        )
+        .unwrap();
+        assert!(validate_action(&behavior, "desktop.mute", &BTreeSet::new()).is_ok());
+        assert!(validate_action(&behavior, "command.kernel", &BTreeSet::new()).is_ok());
+    }
 }
 fn locate_nodes(path: &Path, bytes: &[u8], nodes: &mut [Node]) {
     let source = String::from_utf8_lossy(bytes);
@@ -114,6 +149,34 @@ fn locate_nodes(path: &Path, bytes: &[u8], nodes: &mut [Node]) {
         }
     }
 }
+fn validate_action(
+    script: &script::Script,
+    name: &str,
+    host_actions: &std::collections::BTreeSet<String>,
+) -> Result<(), Diagnostic> {
+    if host_actions.contains(name)
+        || host_actions
+            .iter()
+            .any(|prefix| prefix.ends_with('*') && name.starts_with(&prefix[..prefix.len() - 1]))
+    {
+        return Ok(());
+    }
+    if script.validate_action(name).is_ok() {
+        return Ok(());
+    }
+    if name.starts_with("desktop.") {
+        return Err(script.error(format!(
+            "host action '{name}' requires its service in [services].desktop"
+        )));
+    }
+    if name.starts_with("command.") {
+        return Err(script.error(format!(
+            "host action '{name}' requires a matching [commands.{}] entry",
+            name.trim_start_matches("command.")
+        )));
+    }
+    script.validate_action(name)
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Document {
@@ -131,6 +194,7 @@ struct Fragment {
     pub(super) nodes: Vec<Node>,
 }
 pub struct Generation {
+    host_actions: std::collections::BTreeSet<String>,
     pub script: script::Script,
     pub nodes: Vec<Node>,
     pub width: f32,
@@ -212,7 +276,7 @@ impl Generation {
         stores: &Stores,
         revision: u64,
     ) -> Result<(Self, Stores), Diagnostic> {
-        Self::load_with_picker(root, entry, stores, revision, None)
+        Self::load_with_picker(root, entry, stores, revision, None, &Default::default())
     }
     pub(super) fn load_with_picker(
         root: &Path,
@@ -220,6 +284,7 @@ impl Generation {
         stores: &Stores,
         revision: u64,
         font_picker: Option<crate::transcript::Picker>,
+        host_actions: &std::collections::BTreeSet<String>,
     ) -> Result<(Self, Stores), Diagnostic> {
         let normalized_entry = entry
             .components()
@@ -227,7 +292,7 @@ impl Generation {
             .collect::<PathBuf>();
         let entry = normalized_entry.as_path();
         if entry.extension().is_some_and(|ext| ext == "luau") {
-            return Self::load_markup(root, entry, stores, revision, font_picker);
+            return Self::load_markup(root, entry, stores, revision, font_picker, host_actions);
         }
         let mut loader = Loader {
             root: root
@@ -392,7 +457,7 @@ impl Generation {
             .into_iter()
             .flatten()
             {
-                script.validate_action(action)?;
+                validate_action(&script, action, host_actions)?;
             }
             if let Some(id) = &node.input
                 && !matches!(stores.get(id), Some(Value::Text(_)))
@@ -407,6 +472,7 @@ impl Generation {
         }
         script.validate_computed(&stores)?;
         let generation = Self {
+            host_actions: host_actions.clone(),
             script,
             nodes,
             width: doc.width,
@@ -432,6 +498,7 @@ impl Generation {
         stores: &Stores,
         revision: u64,
         font_picker: Option<crate::transcript::Picker>,
+        host_actions: &std::collections::BTreeSet<String>,
     ) -> Result<(Self, Stores), Diagnostic> {
         let mut loader = Loader {
             root: root
@@ -613,6 +680,7 @@ impl Generation {
             plugins,
         )?);
         let generation = Self {
+            host_actions: host_actions.clone(),
             script,
             nodes: vec![],
             width: 1100.,
@@ -711,7 +779,7 @@ impl Generation {
                     .into_iter()
                     .flatten()
                 {
-                    self.script.validate_action(action)?;
+                    validate_action(&self.script, action, &self.host_actions)?;
                 }
                 if let Some(input) = &node.input
                     && !matches!(stores.get(input), Some(Value::Text(_)))

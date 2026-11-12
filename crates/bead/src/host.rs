@@ -393,6 +393,9 @@ fn route_folder_action(
     };
     Ok(Some(DesktopRequest::Action(action)))
 }
+fn toggled_mute(snapshot: &Snapshot) -> Value {
+    Value::Bool(!snapshot.audio.muted.unwrap_or(false))
+}
 fn launch_command(
     name: &str,
     specs: &BTreeMap<String, CommandSpec>,
@@ -501,7 +504,25 @@ impl FolderView {
         title: &str,
         size: (u32, u32),
     ) -> Result<Self, Box<dyn Error>> {
-        Self::load_inner(root, view, palette, title, size, None)
+        Self::load_inner(
+            root,
+            view,
+            palette,
+            title,
+            size,
+            None,
+            FolderServices::default(),
+        )
+    }
+    pub fn load_with_services(
+        root: PathBuf,
+        view: PathBuf,
+        palette: PathBuf,
+        title: &str,
+        size: (u32, u32),
+        services: FolderServices,
+    ) -> Result<Self, Box<dyn Error>> {
+        Self::load_inner(root, view, palette, title, size, None, services)
     }
     pub fn load_with_runtime(
         root: PathBuf,
@@ -511,7 +532,8 @@ impl FolderView {
         size: (u32, u32),
         runtime: Arc<FolderServicesRuntime>,
     ) -> Result<Self, Box<dyn Error>> {
-        Self::load_inner(root, view, palette, title, size, Some(runtime))
+        let services = runtime.services.clone();
+        Self::load_inner(root, view, palette, title, size, Some(runtime), services)
     }
     fn load_inner(
         root: PathBuf,
@@ -520,6 +542,7 @@ impl FolderView {
         title: &str,
         size: (u32, u32),
         runtime: Option<Arc<FolderServicesRuntime>>,
+        services: FolderServices,
     ) -> Result<Self, Box<dyn Error>> {
         crate::ui::plugins::configure(
             &root,
@@ -537,6 +560,28 @@ impl FolderView {
         let colors = Palette::read(&palette)?;
         let fallback = empty_scene(size);
         let mut session = Session::new(root, view, palette, colors, fallback);
+        let mut host_actions = Vec::new();
+        for name in ["desktop.volume", "desktop.mute", "desktop.mute.toggle"] {
+            if services.desktop.contains("audio") {
+                host_actions.push(name.to_owned());
+            }
+        }
+        for name in [
+            "desktop.tray.activate",
+            "desktop.tray.secondary",
+            "desktop.tray.menu",
+        ] {
+            if services.desktop.contains("tray") {
+                host_actions.push(name.to_owned());
+            }
+        }
+        host_actions.extend(
+            services
+                .commands
+                .keys()
+                .map(|name| format!("command.{name}")),
+        );
+        session.set_host_actions(host_actions);
         session.set_accessibility_label(title);
         session.set_viewport(size.0, size.1);
         Ok(Self {
@@ -686,6 +731,28 @@ impl SceneSource for FolderView {
                 _ => None,
             },
             UiEvent::Action { name, argument } => {
+                let (name, argument) = if name == "desktop.mute.toggle" {
+                    let Some(snapshot) = self
+                        .runtime
+                        .as_ref()
+                        .and_then(|runtime| runtime.desktop.as_ref())
+                        .map(|desktop| desktop.snapshot())
+                    else {
+                        eprintln!(
+                            "desktop action desktop.mute.toggle: audio service is unavailable"
+                        );
+                        return Ok(None);
+                    };
+                    if !snapshot.audio.connected {
+                        eprintln!(
+                            "desktop action desktop.mute.toggle: audio service is unavailable"
+                        );
+                        return Ok(None);
+                    }
+                    ("desktop.mute".to_owned(), toggled_mute(&snapshot))
+                } else {
+                    (name, argument)
+                };
                 let empty = BTreeSet::new();
                 let declared = self
                     .runtime
@@ -1037,6 +1104,15 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn mute_toggle_inverts_latest_snapshot() {
+        let mut snapshot = Snapshot::default();
+        snapshot.audio.muted = Some(false);
+        assert_eq!(toggled_mute(&snapshot), Value::Bool(true));
+        snapshot.audio.muted = Some(true);
+        assert_eq!(toggled_mute(&snapshot), Value::Bool(false));
     }
 
     #[test]

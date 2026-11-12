@@ -8,7 +8,7 @@ return {
         ["desktop.audio.volume"] = -1,
         ["desktop.audio.muted"] = false,
     },
-    actions = { ["desktop.mute"] = function(_, _) end },
+    actions = {},
     computed = {
         battery = function(s)
             return s["desktop.battery.available"] and ("Battery " .. tostring(s["desktop.battery.percent"]) .. "%") or "Battery unavailable"
