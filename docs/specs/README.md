@@ -1,6 +1,6 @@
 # Framework specifications
 
-This index contains current framework contracts and repository-boundary decisions. Product specifications and evidence remain with the application that owns them.
+This index contains current framework contracts and repository-boundary decisions. Historical Nacre product specifications and evidence live in [Nacre's bead-shell/docs](https://github.com/nacre-desktop/nacre/tree/main/bead-shell/docs).
 
 | Specification | Scope |
 |---|---|
@@ -22,8 +22,8 @@ This index contains current framework contracts and repository-boundary decision
 Planned:
 
 - B0239: MPRIS media service (next integrations slice).
-- B0237: tutorial, gallery, API notes, and in-repo docs site.
+- B0240: smooth scrolling and visible scroll bars in the kit.
+- B0241: host actions pass view validation without shims; a mute toggle.
 - B0238: API stability and versioning plan.
 
-This index covers Bead framework contracts. See [status](../STATUS.md) and the [framework split decision](0214-framework-split.md) for migration state; step 5 closure checks remain with the lead.
 This index covers Bead framework contracts. See the [documentation index](../README.md) for the current framework overview and the [framework ownership decision](0214-framework-split.md).
