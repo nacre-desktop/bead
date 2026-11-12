@@ -14,5 +14,6 @@ This index contains current framework contracts and repository-boundary decision
 | [0214 — Framework split](0214-framework-split.md) | Ownership boundary and migration completion |
 | [0218 — Compositor-driven layer motion](0218-layer-motion.md) | Optional grouped atlas-plane animation for layer surfaces |
 | [0219 — Native layer promotion](0219-native-layer-promotion.md) | Optional compositor-owned floating placement for the existing layer surface |
+| [0232 — GraphCanvas feasibility](0232-graph-canvas.md) | Draft: renderer/layout measurements and general canvas architecture |
 
 This index covers Bead framework contracts. See [status](../STATUS.md) and the [framework split decision](0214-framework-split.md) for migration state; step 5 closure checks remain with the lead.
