@@ -2,8 +2,8 @@
 //! A self-contained host: application state and identity never enter Bead.
 use bead::{
     core::Value,
-    host::FolderView as View,
-    render::{Rect, Scene},
+    host::{FolderView as View, empty_scene},
+    render::Scene,
     wayland::{Options, SceneSource, UiEvent, WindowSpec},
 };
 use std::{collections::BTreeMap, error::Error, path::PathBuf, sync::Arc};
@@ -11,24 +11,6 @@ use std::{collections::BTreeMap, error::Error, path::PathBuf, sync::Arc};
 const APP_ID: &str = "org.bead.Example.MinimalShell";
 const TITLE: &str = "Bead minimal shell";
 const SIZE: (u32, u32) = (440, 300);
-
-fn fallback() -> Scene {
-    Scene {
-        opacity: 1.,
-        motion: None,
-        resource_revision: 0,
-        asset_data: Default::default(),
-        clips: Default::default(),
-        layers: vec![],
-        prepared: Default::default(),
-        font_files: vec![],
-        width: SIZE.0 as f32,
-        slide: None,
-        offset: (0., 0.),
-        bounds: Rect::new(0., 0., SIZE.0 as f32, SIZE.1 as f32),
-        primitives: vec![],
-    }
-}
 
 fn accept(view: &mut View, event: UiEvent) -> Result<Scene, Box<dyn Error>> {
     view.check_render(event)
@@ -114,7 +96,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         min_size: (320, 240),
         size_for_output: None,
         on_resize: None,
-        fallback: fallback(),
+        fallback: empty_scene(SIZE),
         factory: Arc::new(move |_| {
             View::load(
                 root.clone(),
@@ -138,7 +120,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             seconds,
             ..Default::default()
         },
-        fallback(),
+        empty_scene(SIZE),
     )
 }
 

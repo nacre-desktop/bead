@@ -687,7 +687,14 @@ impl OutputHandler for App {
         self.canvas_output_updated(&output);
         if self.options.primary_factory.is_some() {
             let id = self.output_id(&output);
-            let viewport = self.output.info(&output).and_then(|info| info.logical_size);
+            let viewport = if self.options.primary_surface_viewport {
+                self.surfaces
+                    .iter()
+                    .find(|s| s.output == output && !s.companion && s.configured)
+                    .map(|s| (s.width as i32, s.height as i32))
+            } else {
+                self.output.info(&output).and_then(|info| info.logical_size)
+            };
             if let Some(session) = self.output_sessions.get_mut(&id)
                 && let Some(source) = &mut session.source
                 && let Some((width, height)) = viewport
@@ -985,11 +992,17 @@ impl LayerShellHandler for App {
             }
             if self.options.primary_factory.is_some() && !self.surfaces[i].companion {
                 let id = self.surfaces[i].output_name.clone();
-                let viewport = self
-                    .output
-                    .info(&self.surfaces[i].output)
-                    .and_then(|info| info.logical_size)
-                    .filter(|(w, h)| *w > 0 && *h > 0);
+                let viewport = if self.options.primary_surface_viewport {
+                    Some((
+                        self.surfaces[i].width as i32,
+                        self.surfaces[i].height as i32,
+                    ))
+                } else {
+                    self.output
+                        .info(&self.surfaces[i].output)
+                        .and_then(|info| info.logical_size)
+                }
+                .filter(|(w, h)| *w > 0 && *h > 0);
                 if let Some(session) = self.output_sessions.get_mut(&id) {
                     let initial_load = !session.initialized;
                     if let (Some(source), Some((w, h))) = (&mut session.source, viewport) {

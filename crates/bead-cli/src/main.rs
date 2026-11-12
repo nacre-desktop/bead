@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 use bead::{
-    host::FolderView,
-    render::{Rect, Scene},
+    host::{FolderView, empty_scene},
     wayland::{Options, PrimaryFactory, UiEvent, WindowSpec},
 };
 use serde::Deserialize;
@@ -69,23 +68,6 @@ struct App {
     root: PathBuf,
     manifest: Manifest,
 }
-fn fallback(size: (u32, u32)) -> Scene {
-    Scene {
-        opacity: 1.,
-        motion: None,
-        resource_revision: 0,
-        asset_data: Default::default(),
-        clips: Default::default(),
-        layers: vec![],
-        prepared: Default::default(),
-        font_files: vec![],
-        width: size.0 as f32,
-        slide: None,
-        offset: (0., 0.),
-        bounds: Rect::new(0., 0., size.0 as f32, size.1 as f32),
-        primitives: vec![],
-    }
-}
 impl App {
     fn load(folder: &Path) -> Result<Self, Box<dyn Error>> {
         let root = folder
@@ -136,13 +118,19 @@ impl App {
             .into()
         })
     }
+    fn surface_size(&self) -> (u32, u32) {
+        if let Some(w) = &self.manifest.window {
+            (w.size[0], w.size[1])
+        } else {
+            let layer = self.manifest.layer.as_ref().expect("validated surface");
+            match layer.edge {
+                Edge::Top | Edge::Bottom => (1280, layer.size),
+                Edge::Left | Edge::Right => (layer.size, 720),
+            }
+        }
+    }
     fn check(&self) -> Result<(), Box<dyn Error>> {
-        let size = self
-            .manifest
-            .window
-            .as_ref()
-            .map(|w| (w.size[0], w.size[1]))
-            .unwrap_or((440, 80));
+        let size = self.surface_size();
         let mut view = self.view(size)?;
         view.check_render(UiEvent::Reload)
             .map_err(|e| format!("{}: {e}", self.manifest.view.display()))?;
@@ -150,14 +138,8 @@ impl App {
         Ok(())
     }
     fn run(self, seconds: Option<f64>) -> Result<(), Box<dyn Error>> {
-        let surface_size = self
-            .manifest
-            .window
-            .as_ref()
-            .map(|w| (w.size[0], w.size[1]))
-            .or_else(|| self.manifest.layer.as_ref().map(|l| (440, l.size)))
-            .expect("manifest validation requires one surface");
-        let fallback = fallback(surface_size);
+        let surface_size = self.surface_size();
+        let fallback = empty_scene(surface_size);
         let mut options = Options {
             namespace: self.manifest.id.clone(),
             seconds,
@@ -203,7 +185,7 @@ impl App {
                         view.clone(),
                         palette.clone(),
                         &title,
-                        (440, l.size),
+                        surface_size,
                     )
                     .map(|v| Box::new(v) as Box<dyn bead::wayland::SceneSource>)
                     .map_err(|e| e.to_string())
@@ -211,6 +193,7 @@ impl App {
             });
             options.primary_factory = Some(factory);
             options.bar = true;
+            options.primary_surface_viewport = true;
             options.edge = l.edge.into();
             options.bar_size = Some(l.size);
             options.bar_exclusive = l.exclusive;
@@ -314,8 +297,16 @@ mod tests {
     #[test]
     fn accepts_layer_manifest() {
         let p = folder(&format!("{}\n[layer]\nedge='top'\nsize=36\n", base()));
-        assert!(App::load(&p).is_ok());
+        assert_eq!(App::load(&p).unwrap().surface_size(), (1280, 36));
         let _ = std::fs::remove_dir_all(p);
+    }
+    #[test]
+    fn vertical_layer_check_uses_real_thickness() {
+        for edge in ["left", "right"] {
+            let p = folder(&format!("{}\n[layer]\nedge='{edge}'\nsize=36\n", base()));
+            assert_eq!(App::load(&p).unwrap().surface_size(), (36, 720));
+            let _ = std::fs::remove_dir_all(p);
+        }
     }
     #[test]
     fn rejects_both_and_neither_surface_tables() {

@@ -745,6 +745,8 @@ pub enum CanvasLayer {
 pub struct Options {
     /// Optional per-output primary UI source. When absent the legacy shared UI is used.
     pub primary_factory: Option<PrimaryFactory>,
+    /// Lay out primary views in their configured surface instead of the full output.
+    pub primary_surface_viewport: bool,
     pub decorations: Option<DecorationFactory>,
     /// Artwork for the lips [`ShellControl::edge_chrome`] describes.
     pub edge_art: Option<EdgeArt>,
@@ -826,6 +828,7 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             primary_factory: None,
+            primary_surface_viewport: false,
             decorations: None,
             edge_art: None,
             background_blur: false,
