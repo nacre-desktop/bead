@@ -1101,7 +1101,18 @@ impl Session {
             (value, cursor, anchor)
         };
         let preedit = editor.map_or("", |e| e.preedit.as_str());
-        let text_index=scene.primitives.iter().position(|p|matches!(p,Primitive::Text{rect,..}if rect.x>=r.x&&rect.y>=r.y&&rect.x<r.x+r.w&&rect.y<r.y+r.h));
+        // A sibling text draw may overlap the input; prefer its actual displayed text.
+        let text_index = scene
+            .primitives
+            .iter()
+            .position(|p| {
+                matches!(p, Primitive::Text { rect, text, .. } if text == value && rect.x >= r.x && rect.y >= r.y && rect.x < r.x + r.w && rect.y < r.y + r.h)
+            })
+            .or_else(|| {
+                scene.primitives.iter().position(|p| {
+                    matches!(p, Primitive::Text { rect, .. } if rect.x >= r.x && rect.y >= r.y && rect.x < r.x + r.w && rect.y < r.y + r.h)
+                })
+            });
         let Some(index) = text_index else {
             return Ok(());
         };

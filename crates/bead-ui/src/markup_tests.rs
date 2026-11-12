@@ -3314,6 +3314,55 @@ return ui.Panel{id="panel",width=300,height=200,padding=0,
         .count();
     assert_eq!(carets, 1);
 }
+
+#[test]
+fn prefixed_single_line_input_caret_stays_inside_its_bounds() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        r#"local ui=require("bead.ui")
+return ui.Panel{id="panel",width=400,height=160,padding=12,
+ -- A sibling text draw overlaps the lower edge of the input.
+ ui.Box{id="overlay",position="absolute",left=12,top=45,width=360,height=20,
+  ui.Text{id="unrelated",text="Unrelated",width=360,height=20,font_size=16}},
+ ui.TextInput{id="search",text=ui.bind("query"),width=360,height=49}}"#,
+    )
+    .unwrap();
+    for value in [">", "> app search"] {
+        let mut s = session(&f);
+        let input = s
+            .current_nodes
+            .iter()
+            .find(|node| node.id == "panel.search")
+            .unwrap();
+        let bounds = rect(&input.draw);
+        let scene = s
+            .click(bounds.x + 30., bounds.y + bounds.h / 2.)
+            .unwrap()
+            .unwrap();
+        s.commit(scene);
+        let scene = s.key(value, false).unwrap().unwrap();
+        let mut scene = scene;
+        s.decorate_inputs(&mut scene).unwrap();
+        let caret = scene
+            .primitives
+            .iter()
+            .rev()
+            .find_map(|primitive| match primitive {
+                Primitive::Rounded { rect, .. } if rect.w == 1. => Some(*rect),
+                _ => None,
+            })
+            .unwrap();
+        assert!(
+            caret.x >= bounds.x
+                && caret.x + caret.w <= bounds.x + bounds.w
+                && caret.y >= bounds.y
+                && caret.y + caret.h <= bounds.y + bounds.h,
+            "value {value:?}: caret {caret:?} outside input {bounds:?}"
+        );
+    }
+}
+
 #[test]
 fn masked_input_draws_bullets_and_never_exposes_its_value() {
     let f = fixture();
