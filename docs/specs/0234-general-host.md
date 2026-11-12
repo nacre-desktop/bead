@@ -2,7 +2,7 @@
 
 `bead run <folder> [--seconds N]` runs one manifest-defined xdg-toplevel window or primary edge bar; `bead check <folder>` loads, validates and CPU-renders one Luau generation without Wayland. Apps contain a required `bead.toml`, relative in-folder `view/` and palette files, a UI bundle, and optional plugins. The manifest requires identity/title and exactly one window or layer table, rejects unknown keys and paths outside the app folder. Both modes use `bead::host::FolderView`, which owns the shared `Session` event mapping and check renderer. Layer mode uses the existing primary/bar surface path; `Options.bar_size` and `bar_exclusive` expose general static thickness and reservation policy.
 
-Phase 1 provides only view-owned state/actions. It does not provide external services/data, integrations, multiple surfaces, install/package workflows, panels/pearls/overlays/canvases, or a docs site. B0235 owns services. No temporary duplicate implementation remains.
+Phase 1 provides only view-owned state/actions. It does not provide integrations, multiple surfaces, install/package workflows, panels/pearls/overlays/canvases, or a docs site. Folder app services are defined in [0235 — Folder app services](0235-folder-app-services.md). No temporary duplicate implementation remains.
 
 Folder hosts use surface-local scenes without the UI layout's panel shadow margin. `Options.primary_surface_viewport` opts primary sources into their configured layer allocation; its default preserves full-output layout for existing hosts. Offline layer checks assume a 1280×720 output and use the manifest thickness on the short axis; runtime layout uses the actual compositor-configured surface dimensions.
 

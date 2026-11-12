@@ -214,6 +214,10 @@ impl Session {
     pub fn root(&self) -> &Path {
         &self.root
     }
+    /// Whether the current view schema declares a stable store ID.
+    pub fn has_store(&self, id: &str) -> bool {
+        self.stores.get(id).is_some()
+    }
     pub fn restore_on_start(&mut self, values: BTreeMap<String, Value>) {
         self.restore = Some(values);
     }

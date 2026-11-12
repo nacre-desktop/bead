@@ -5,6 +5,7 @@ use bead::{
 };
 use serde::Deserialize;
 use std::{
+    collections::{BTreeMap, BTreeSet},
     error::Error,
     path::{Path, PathBuf},
     sync::Arc,
@@ -22,6 +23,25 @@ struct Manifest {
     palette: PathBuf,
     window: Option<Window>,
     layer: Option<Layer>,
+    services: Option<Services>,
+    commands: Option<BTreeMap<String, DeclaredCommand>>,
+}
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Services {
+    #[serde(default)]
+    desktop: Vec<String>,
+}
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DeclaredCommand {
+    argv: Vec<String>,
+    interval: Option<u64>,
+    #[serde(default = "five")]
+    timeout: u64,
+}
+fn five() -> u64 {
+    5
 }
 fn default_view() -> PathBuf {
     "view/main.luau".into()
@@ -99,15 +119,98 @@ impl App {
         if manifest.layer.as_ref().is_some_and(|l| l.size == 0) {
             return Err(format!("{}: layer.size must be positive", path.display()).into());
         }
+        let known = [
+            "clock",
+            "audio",
+            "battery",
+            "network",
+            "bluetooth",
+            "tray",
+            "session",
+        ];
+        if let Some(services) = &manifest.services {
+            for name in &services.desktop {
+                if !known.contains(&name.as_str()) {
+                    return Err(
+                        format!("{}: unknown desktop service '{name}'", path.display()).into(),
+                    );
+                }
+            }
+        }
+        if let Some(commands) = &manifest.commands {
+            for (name, command) in commands {
+                if name.is_empty()
+                    || name.len() > 32
+                    || !name.bytes().all(|b| {
+                        b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-'
+                    })
+                {
+                    return Err(format!("{}: invalid command name '{name}'", path.display()).into());
+                }
+                if command.argv.is_empty() || command.argv.iter().any(|a| a.contains('\0')) {
+                    return Err(format!(
+                        "{}: command '{name}' argv must be non-empty and contain no NUL",
+                        path.display()
+                    )
+                    .into());
+                }
+                if command.timeout == 0 || command.timeout > 60 {
+                    return Err(format!(
+                        "{}: command '{name}' timeout must be 1..=60 seconds",
+                        path.display()
+                    )
+                    .into());
+                }
+                if command.interval == Some(0) {
+                    return Err(format!(
+                        "{}: command '{name}' interval must be at least 1 second",
+                        path.display()
+                    )
+                    .into());
+                }
+            }
+        }
         Ok(Self { root, manifest })
     }
-    fn view(&self, size: (u32, u32)) -> Result<FolderView, Box<dyn Error>> {
-        FolderView::load(
+    fn folder_services(&self) -> bead::host::FolderServices {
+        bead::host::FolderServices {
+            desktop: self
+                .manifest
+                .services
+                .as_ref()
+                .map(|s| s.desktop.iter().cloned().collect())
+                .unwrap_or_default(),
+            commands: self
+                .manifest
+                .commands
+                .as_ref()
+                .into_iter()
+                .flat_map(|m| m.iter())
+                .map(|(name, cmd)| {
+                    (
+                        name.clone(),
+                        bead::host::CommandSpec {
+                            argv: cmd.argv.clone(),
+                            interval: cmd.interval.map(std::time::Duration::from_secs),
+                            timeout: std::time::Duration::from_secs(cmd.timeout),
+                        },
+                    )
+                })
+                .collect(),
+        }
+    }
+    fn view(
+        &self,
+        size: (u32, u32),
+        services: bead::host::FolderServices,
+    ) -> Result<FolderView, Box<dyn Error>> {
+        FolderView::load_with_services(
             self.root.clone(),
             self.manifest.view.clone(),
             self.manifest.palette.clone(),
             &self.manifest.title,
             size,
+            services,
         )
         .map_err(|e| {
             format!(
@@ -131,7 +234,7 @@ impl App {
     }
     fn check(&self) -> Result<(), Box<dyn Error>> {
         let size = self.surface_size();
-        let mut view = self.view(size)?;
+        let mut view = self.view(size, bead::host::FolderServices::default())?;
         view.check_render(UiEvent::Reload)
             .map_err(|e| format!("{}: {e}", self.manifest.view.display()))?;
         println!("OK {}", self.manifest.title);
@@ -139,6 +242,7 @@ impl App {
     }
     fn run(self, seconds: Option<f64>) -> Result<(), Box<dyn Error>> {
         let surface_size = self.surface_size();
+        let services = self.folder_services();
         let fallback = empty_scene(surface_size);
         let mut options = Options {
             namespace: self.manifest.id.clone(),
@@ -164,9 +268,16 @@ impl App {
                 on_resize: None,
                 fallback: fallback.clone(),
                 factory: Arc::new(move |_| {
-                    FolderView::load(root.clone(), view.clone(), palette.clone(), &title, size)
-                        .map(|v| Box::new(v) as Box<dyn bead::wayland::SceneSource>)
-                        .map_err(|e| e.to_string())
+                    FolderView::load_with_services(
+                        root.clone(),
+                        view.clone(),
+                        palette.clone(),
+                        &title,
+                        size,
+                        services.clone(),
+                    )
+                    .map(|v| Box::new(v) as Box<dyn bead::wayland::SceneSource>)
+                    .map_err(|e| e.to_string())
                 }),
                 model: Arc::new(|_| Default::default()),
             });
@@ -179,13 +290,15 @@ impl App {
                 let view = self.manifest.view.clone();
                 let palette = self.manifest.palette.clone();
                 let title = self.manifest.title.clone();
+                let services = services.clone();
                 move |_| {
-                    FolderView::load(
+                    FolderView::load_with_services(
                         root.clone(),
                         view.clone(),
                         palette.clone(),
                         &title,
                         surface_size,
+                        services.clone(),
                     )
                     .map(|v| Box::new(v) as Box<dyn bead::wayland::SceneSource>)
                     .map_err(|e| e.to_string())
@@ -323,6 +436,60 @@ mod tests {
     fn rejects_unknown_manifest_keys() {
         let p = folder(&format!("{}\nextra=true\n[window]\nsize=[10,10]\n", base()));
         assert!(App::load(&p).is_err());
+        let _ = std::fs::remove_dir_all(p);
+    }
+    #[test]
+    fn accepts_service_subset_and_declared_command() {
+        let p = folder(&format!(
+            "{}\n[window]\nsize=[10,10]\n[services]\ndesktop=['clock','tray']\n[commands.weather]\nargv=['echo','hi']\ninterval=60\n",
+            base()
+        ));
+        let app = App::load(&p).unwrap();
+        assert_eq!(
+            app.folder_services().desktop,
+            BTreeSet::from(["clock".into(), "tray".into()])
+        );
+        assert_eq!(
+            app.folder_services().commands["weather"].argv,
+            vec!["echo", "hi"]
+        );
+        let _ = std::fs::remove_dir_all(p);
+    }
+    #[test]
+    fn rejects_bad_service_and_command_declarations() {
+        for suffix in [
+            "\n[services]\ndesktop=['clock','battery-plus']\n",
+            "\n[commands.BadName]\nargv=['echo']\n",
+            "\n[commands.empty]\nargv=[]\n",
+            "\n[commands.late]\nargv=['echo']\ntimeout=61\n",
+            "\n[commands.zero]\nargv=['echo']\ninterval=0\n",
+        ] {
+            let p = folder(&format!("{}\n[window]\nsize=[10,10]\n{}", base(), suffix));
+            assert!(
+                App::load(&p).is_err(),
+                "accepted invalid manifest suffix: {suffix}"
+            );
+            let _ = std::fs::remove_dir_all(p);
+        }
+    }
+    #[test]
+    fn check_does_not_start_declared_services_or_commands() {
+        let p = folder(&format!(
+            "{}\n[window]\nsize=[10,10]\n[services]\ndesktop=['clock']\n[commands.probe]\nargv=['touch','{}']\ninterval=1\n",
+            base(),
+            std::env::temp_dir()
+                .join(format!("bead-check-command-{}", std::process::id()))
+                .display()
+        ));
+        let marker =
+            std::env::temp_dir().join(format!("bead-check-command-{}", std::process::id()));
+        let _ = std::fs::remove_file(&marker);
+        App::load(&p).unwrap().check().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        assert!(
+            !marker.exists(),
+            "bead check must not run declared commands"
+        );
         let _ = std::fs::remove_dir_all(p);
     }
     #[test]

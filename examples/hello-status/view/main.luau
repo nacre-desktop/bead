@@ -1,0 +1,18 @@
+-- SPDX-License-Identifier: MIT
+local ui = require("bead.ui")
+local muted = ui.resolve_for_check(ui.bind("desktop.audio.muted"))
+local volume = ui.resolve_for_check(ui.bind("desktop.audio.volume"))
+local audio_available = ui.resolve_for_check(ui.bind("desktop.audio.available"))
+local battery_available = ui.resolve_for_check(ui.bind("desktop.battery.available"))
+local battery_percent = ui.resolve_for_check(ui.bind("desktop.battery.percent"))
+return ui.Row {
+    id = "hello-status", width = "fill", height = "fill", align = "center",
+    padding_left = 12, padding_right = 12, gap = 16, fill = "surface",
+    ui.Text { text = ui.bind("desktop.clock"), font_size = 16, color = "primary" },
+    ui.Text { text = "Battery " .. (battery_available and tostring(battery_percent) .. "%" or "unavailable"), font_size = 14, color = "onSurfaceVariant" },
+    ui.Text { text = audio_available and ("Volume " .. tostring(volume)) or "Audio unavailable", font_size = 14, color = "onSurfaceVariant" },
+    ui.Button { text = muted and "Unmute" or "Mute", on_activate = audio_available and ui.action("desktop.mute", not muted) or nil, height = 30, padding = 5, font_size = 13, fill = "primary", color = "onPrimary", radius = 5 },
+    ui.Button { text = "−", on_activate = audio_available and ui.action("desktop.volume", math.max(0, volume - 0.1)) or nil, width = 30, height = 30, font_size = 16, fill = "surface", color = "onSurface", radius = 5 },
+    ui.Button { text = "+", on_activate = audio_available and ui.action("desktop.volume", math.min(1, volume + 0.1)) or nil, width = 30, height = 30, font_size = 16, fill = "surface", color = "onSurface", radius = 5 },
+    ui.Text { text = "Kernel " .. tostring(ui.resolve_for_check(ui.bind("commands.kernel.stdout"))), font_size = 14, color = "onSurface" },
+}

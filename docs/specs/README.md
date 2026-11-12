@@ -4,7 +4,6 @@ This index contains current framework contracts and repository-boundary decision
 
 | Specification | Scope |
 |---|---|
-| [0234 — General folder host](0234-general-host.md) | Run and CPU-check Luau application folders with the `bead` CLI |
 | [0025 — Per-output UI sessions](0025-per-output-ui-sessions.md) | Host-owned output identity and independent UI sessions |
 | [0032 — Internationalization consumer](0032-i18n-consumer.md) | Application-provided translation catalogs |
 | [0035 — Settings stores](0035-settings-stores.md) | Stable-ID state and host-backed persistence |
@@ -16,5 +15,13 @@ This index contains current framework contracts and repository-boundary decision
 | [0218 — Compositor-driven layer motion](0218-layer-motion.md) | Optional grouped atlas-plane animation for layer surfaces |
 | [0219 — Native layer promotion](0219-native-layer-promotion.md) | Optional compositor-owned floating placement for the existing layer surface |
 | [0232 — GraphCanvas feasibility](0232-graph-canvas.md) | Draft: renderer/layout measurements and general canvas architecture |
+| [0234 — General folder host](0234-general-host.md) | Run and CPU-check Luau application folders with the `bead` CLI |
+| [0235 — Folder app services](0235-folder-app-services.md) | Opt-in desktop snapshots, actions, and declared commands for folder apps |
+
+Planned:
+
+- B0236: first integrations slice (MPRIS).
+- B0237: tutorial, gallery, API notes, and in-repo docs site.
+- B0238: API stability and versioning plan.
 
 This index covers Bead framework contracts. See [status](../STATUS.md) and the [framework split decision](0214-framework-split.md) for migration state; step 5 closure checks remain with the lead.

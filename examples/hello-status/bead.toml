@@ -1,0 +1,14 @@
+id = "org.bead.Example.HelloStatus"
+title = "Hello status"
+
+[layer]
+edge = "top"
+size = 42
+exclusive = true
+
+[services]
+desktop = ["clock", "battery", "audio"]
+
+[commands.kernel]
+argv = ["uname", "-r"]
+interval = 60
