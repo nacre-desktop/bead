@@ -21,7 +21,7 @@ use zbus::{
 type Properties = HashMap<String, OwnedValue>;
 type Objects = HashMap<OwnedObjectPath, HashMap<String, Properties>>;
 
-pub fn run(shared: Arc<Shared>, mut receiver: mpsc::Receiver<Command>) {
+pub fn run(shared: Arc<Shared>, mut receiver: mpsc::Receiver<Command>, tray_watcher: bool) {
     super::runtime::block_worker_signals();
     let mut retry = 0;
     while !shared.stop.load(Ordering::SeqCst) {
@@ -37,7 +37,7 @@ pub fn run(shared: Arc<Shared>, mut receiver: mpsc::Receiver<Command>) {
                 break;
             }
         };
-        let result = runtime.block_on(connect(&shared, &mut receiver));
+        let result = runtime.block_on(connect(&shared, &mut receiver, tray_watcher));
         drop(runtime);
         match result {
             Ok(()) => break,
@@ -89,14 +89,17 @@ async fn system_connection() -> zbus::Result<Connection> {
 async fn connect(
     shared: &Arc<Shared>,
     receiver: &mut mpsc::Receiver<Command>,
+    tray_watcher: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let system = system_connection().await?;
+    let session = Connection::session().await?;
+    let _tray_watcher = tray_watcher.then(|| crate::tray_watcher::spawn(session.clone()));
     let rules = zbus::MatchRule::builder()
         .msg_type(zbus::message::Type::Signal)
         .build();
     let mut signals = MessageStream::for_match_rule(rules, &system, Some(64)).await?;
     let tray = Client::new().await?;
-    let tray_actions = Connection::session().await?;
+    let tray_actions = session;
     let mut tray_events = tray.subscribe();
     refresh_sensors(shared, &system).await;
     refresh_lock(shared, &system).await;

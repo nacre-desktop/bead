@@ -141,6 +141,7 @@ async fn private_sni_registration_actions_owner_loss_and_recovery() {
     let service = Desktop::start_config(Config {
         audio: false,
         bus: true,
+        tray_watcher: false,
     });
     async fn wait_replacement(service: &Desktop, old: &str) -> Option<String> {
         tokio::time::timeout(Duration::from_secs(4), async {
@@ -546,6 +547,7 @@ async fn session_bus_reconnect_client_helper() {
     let service = Desktop::start_config(Config {
         audio: false,
         bus: true,
+        tray_watcher: false,
     });
     let mut fixture = tokio::spawn(async {
         let _ = fixture::run().await;

@@ -131,3 +131,4 @@ mod tests;
 
 pub mod notification_bus;
 pub mod notifications;
+pub mod tray_watcher;

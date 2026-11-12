@@ -119,12 +119,14 @@ impl Drop for Subscription {
 pub struct Config {
     pub audio: bool,
     pub bus: bool,
+    pub tray_watcher: bool,
 }
 impl Default for Config {
     fn default() -> Self {
         Self {
             audio: true,
             bus: true,
+            tray_watcher: false,
         }
     }
 }
@@ -170,8 +172,9 @@ impl Desktop {
         let bus_shared = shared.clone();
         let mut workers = Vec::new();
         if config.bus {
+            let tray_watcher = config.tray_watcher;
             workers.push(std::thread::spawn(move || {
-                super::bus::run(bus_shared, receiver)
+                super::bus::run(bus_shared, receiver, tray_watcher)
             }));
         }
         if config.audio {
@@ -322,6 +325,7 @@ mod volume_queue_tests {
         let desktop = Desktop::start_config(Config {
             audio: false,
             bus: false,
+            tray_watcher: false,
         });
         let (sender, _receiver) = pipewire::channel::channel();
         *desktop.shared.audio_sender.lock().unwrap() = Some(sender);
@@ -346,6 +350,7 @@ mod clock_lease_tests {
         let desktop = Desktop::start_config(Config {
             audio: false,
             bus: false,
+            tray_watcher: false,
         });
         assert_eq!(
             desktop.shared.clock_seconds_leases.load(Ordering::Acquire),

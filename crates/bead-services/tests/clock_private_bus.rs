@@ -50,6 +50,7 @@ async fn busy_signal_handler_cannot_skip_a_minute_tick() {
     let desktop = Desktop::start_config(Config {
         audio: false,
         bus: true,
+        tray_watcher: false,
     });
     tokio::time::timeout(Duration::from_secs(10), async {
         while desktop.snapshot().clock.is_empty() {

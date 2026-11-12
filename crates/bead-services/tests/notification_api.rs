@@ -112,6 +112,7 @@ fn composite_host_contract_without_outside_connections() {
     let service = bead_services::Desktop::start_config(bead_services::Config {
         audio: false,
         bus: false,
+        tray_watcher: false,
     });
     let subscription = service.subscribe(|snapshot| {
         assert!(!snapshot.audio.connected);

@@ -98,6 +98,7 @@ fn injected_notification_handle_source_runs_wire_parity_without_ui()
         let desktop = bead::services::Desktop::start_config(bead::services::Config {
             audio: false,
             bus: false,
+            tray_watcher: false,
         });
         let source = bead::source::Desktop::attach(desktop)?;
         assert_eq!(source.snapshot().data["audio"]["connected"], false);

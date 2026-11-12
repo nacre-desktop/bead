@@ -496,6 +496,7 @@ mod clock_projection_tests {
         let host = bead_services::Desktop::start_config(bead_services::Config {
             audio: false,
             bus: false,
+            tray_watcher: false,
         });
         let source = Clock::attach(host.clone()).unwrap();
         assert_eq!(host.subscription_count(), 1);
@@ -530,6 +531,7 @@ mod desktop_view_tests {
         let host = bead_services::Desktop::start_config(bead_services::Config {
             audio: false,
             bus: false,
+            tray_watcher: false,
         });
         let source =
             DesktopView::attach(host.clone(), |s| serde_json::json!({"battery":s.battery}))
