@@ -23,6 +23,7 @@ pub mod gl;
 pub mod gpu;
 #[cfg(feature = "wgpu")]
 pub mod graph_gpu;
+pub mod graph;
 pub mod layer_motion;
 pub mod pointer_paint;
 pub mod retained;
@@ -198,6 +199,17 @@ pub enum Primitive {
         radius: f32,
         blur: f32,
     },
+    /// A graph canvas (spec 0232): shared, versioned world geometry seen through `camera`.
+    /// Frames compare the geometry revision, camera, style and interaction, never every edge.
+    Graph {
+        rect: Rect,
+        #[serde(skip)]
+        geometry: std::sync::Arc<graph::GraphGeometry>,
+        camera: graph::Camera,
+        style: graph::GraphStyle,
+        hover: Option<u32>,
+        selected: Option<u32>,
+    },
 }
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TextShadow {
@@ -213,7 +225,8 @@ impl Primitive {
         | Self::Rounded { rect, .. }
         | Self::Text { rect, .. }
         | Self::Image { rect, .. }
-        | Self::Shadow { rect, .. }) = &mut primitive;
+        | Self::Shadow { rect, .. }
+        | Self::Graph { rect, .. }) = &mut primitive;
         *rect = rect.translated(x, y);
         primitive
     }
@@ -1377,7 +1390,10 @@ impl Renderer for CpuRenderer {
         for p in &scene.primitives {
             if matches!(
                 p,
-                Primitive::Rounded { .. } | Primitive::Arc { .. } | Primitive::Polyline { .. }
+                Primitive::Rounded { .. }
+                    | Primitive::Arc { .. }
+                    | Primitive::Polyline { .. }
+                    | Primitive::Graph { .. }
             ) {
                 continue;
             }
@@ -1544,7 +1560,10 @@ impl Renderer for CpuRenderer {
             .filter(|p| {
                 !matches!(
                     p,
-                    Primitive::Rounded { .. } | Primitive::Arc { .. } | Primitive::Polyline { .. }
+                    Primitive::Rounded { .. }
+                        | Primitive::Arc { .. }
+                        | Primitive::Polyline { .. }
+                        | Primitive::Graph { .. }
                 )
             })
             .any(|p| !self.textures.contains_key(&key(p, scale)))
@@ -1655,7 +1674,9 @@ impl Renderer for CpuRenderer {
                 self.old_mask = Some(region);
             }
             let bounds = match p {
-                Primitive::Arc { rect, .. } | Primitive::Polyline { rect, .. } => *rect,
+                Primitive::Arc { rect, .. }
+                | Primitive::Polyline { rect, .. }
+                | Primitive::Graph { rect, .. } => *rect,
                 Primitive::Rounded { rect, border, .. } => {
                     let pad = border.map_or(1., |(_, w)| w + 1.);
                     Rect::new(
@@ -1798,6 +1819,8 @@ impl Renderer for CpuRenderer {
                         }
                     }
                 }
+                // The legacy painter is not a graph consumer; the tree renderer paints graphs.
+                Primitive::Graph { .. } => {}
                 _ => {
                     let rect = match p {
                         Primitive::Text { rect, .. }

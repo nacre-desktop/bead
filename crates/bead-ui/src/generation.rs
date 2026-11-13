@@ -490,6 +490,7 @@ impl Generation {
                         && *blur <= 64.
                 }
                 Primitive::Image { blur, .. } => blur.is_finite() && (0.0..=32.0).contains(blur),
+                Primitive::Graph { camera, .. } => camera.zoom.is_finite() && camera.zoom > 0.,
             };
             if !valid_shape || !valid_rect(rect(&node.draw)) {
                 return Err(node.diagnostic(format!("invalid geometry for {}", node.id)));

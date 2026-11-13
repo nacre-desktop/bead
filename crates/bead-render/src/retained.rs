@@ -144,7 +144,8 @@ fn content_key(scene: &Scene, scale: f32) -> u64 {
             | Primitive::Rounded { rect, .. }
             | Primitive::Text { rect, .. }
             | Primitive::Image { rect, .. }
-            | Primitive::Shadow { rect, .. } => rect,
+            | Primitive::Shadow { rect, .. }
+            | Primitive::Graph { rect, .. } => rect,
         };
         for f in [r.x, r.y, r.w, r.h] {
             f.to_bits().hash(&mut h);
@@ -225,6 +226,14 @@ fn content_key(scene: &Scene, scale: f32) -> u64 {
                 radius.to_bits().hash(&mut h);
                 blur.to_bits().hash(&mut h);
             }
+            Primitive::Graph {
+                geometry,
+                camera,
+                style,
+                hover,
+                selected,
+                ..
+            } => crate::graph::hash_graph(geometry, camera, style, *hover, *selected, &mut h),
         }
     }
     h.finish()

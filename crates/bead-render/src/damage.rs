@@ -12,6 +12,7 @@ struct Record {
     geometry: Rect,
     clip: Option<Rect>,
     opacity: u32,
+    graph: Option<Box<crate::Primitive>>,
 }
 impl Record {
     fn same_pixels(&self, other: &Self) -> bool {
@@ -204,6 +205,8 @@ impl FrameDamage {
                 geometry,
                 clip,
                 opacity: opacity.to_bits(),
+                graph: matches!(item.primitive, crate::Primitive::Graph { .. })
+                    .then(|| Box::new(item.primitive.clone())),
             };
             current.push(next);
         }
@@ -220,6 +223,27 @@ impl FrameDamage {
                 (Some(old), None) => add(&mut dirty, old.bounds),
                 (Some(old), Some((item, next))) => {
                     if old.same_pixels(next) {
+                        continue;
+                    }
+                    if old.geometry == next.geometry
+                        && old.clip == next.clip
+                        && old.opacity == next.opacity
+                        && let (Some(a), Some(b)) = (&old.graph, &next.graph)
+                        && let Some(regions) = crate::graph::interaction_damage(a, b, frame.scale)
+                    {
+                        for region in regions {
+                            add(
+                                &mut dirty,
+                                intersect(
+                                    region.translated(offset.0, offset.1).pixels(
+                                        frame.scale,
+                                        width,
+                                        height,
+                                    ),
+                                    next.bounds,
+                                ),
+                            );
+                        }
                         continue;
                     }
                     if let Some(raster) = &item.raster

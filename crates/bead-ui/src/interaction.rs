@@ -95,9 +95,15 @@ impl Session {
         if let Some(scene) = self.scrollbar_press(x, y)? {
             return Ok(scene);
         }
+        if self.graph_press(x, y) {
+            return Ok(None);
+        }
         self.click_at(x, y, true, true)
     }
     pub fn release(&mut self) -> Result<Option<Scene>, Diagnostic> {
+        if let Some(scene) = self.graph_release()? {
+            return Ok(scene);
+        }
         if let Some((id, _)) = self.scroll_feedback.capture.take() {
             self.scroll_feedback
                 .leave(&id, std::time::Instant::now(), &self.scrollbar_config);
@@ -336,6 +342,9 @@ impl Session {
     }
     pub fn scroll(&mut self, x: f32, y: f32, delta: f64) -> Result<Option<Scene>, Diagnostic> {
         self.keyboard_scroll = None;
+        if let Some(scene) = self.graph_scroll(x, y, delta)? {
+            return Ok(scene);
+        }
         let Some(generation) = &self.generation else {
             return Ok(None);
         };
@@ -404,6 +413,9 @@ impl Session {
     }
     pub fn drag(&mut self, x: f32, y: f32) -> Result<Option<Scene>, Diagnostic> {
         if let Some(scene) = self.scrollbar_drag(x, y)? {
+            return Ok(scene);
+        }
+        if let Some(scene) = self.graph_drag(x, y)? {
             return Ok(scene);
         }
         let deferred_gesture = self.deferred_gesture;
@@ -478,6 +490,11 @@ impl Session {
         matches!(self.stores.get("bead.focused"),Some(Value::Text(id)) if self.current_nodes.iter().any(|n|n.drag && &n.id==id))
     }
     pub fn hover(&mut self, x: f32, y: f32) -> Result<Option<Scene>, Diagnostic> {
+        // A graph hover change paints on its own; a later generic change supersedes it.
+        let graph = self.graph_hover(x, y)?;
+        Ok(self.hover_widgets(x, y)?.or(graph))
+    }
+    fn hover_widgets(&mut self, x: f32, y: f32) -> Result<Option<Scene>, Diagnostic> {
         let prior = self
             .scroll_feedback
             .pointer

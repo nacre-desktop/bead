@@ -557,6 +557,7 @@ fn primitive_ink_bounds(primitive: &Primitive, scale: f32, offset: (f32, f32)) -
             }
             bitmap_ink_bounds(rect, scale, offset, (0, 0), crate::dimensions(rect, scale))?
         }
+        Primitive::Graph { .. } => rect.translated(offset.0, offset.1),
     };
     finite_rect(bounds).then_some(bounds)
 }

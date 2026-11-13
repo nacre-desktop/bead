@@ -104,6 +104,7 @@ fn visible_bounds(scene: &Scene, output: Option<(u32, u32)>) -> Option<Rect> {
             } if color[3] > 0 && !text.is_empty() => Some(*rect),
             bead_render::Primitive::Image { rect, .. }
             | bead_render::Primitive::Shadow { rect, .. }
+            | bead_render::Primitive::Graph { rect, .. }
                 if rect.w > 0. && rect.h > 0. =>
             {
                 Some(*rect)

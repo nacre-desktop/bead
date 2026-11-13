@@ -1347,6 +1347,9 @@ impl SceneSource for FolderView {
     fn services(&mut self, wakeup: Box<dyn Fn(UiEvent) + Send + Sync>) {
         let wakeup: WakeCallback = Arc::from(wakeup);
         self.wakeup = Some(wakeup.clone());
+        let frame = wakeup.clone();
+        self.session
+            .set_wakeup(Arc::new(move || frame(UiEvent::Model(BTreeMap::new()))));
         if let Some(runtime) = &self.runtime {
             if let Some(id) = self.registration.take() {
                 runtime.unregister(id);

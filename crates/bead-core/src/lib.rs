@@ -4,6 +4,7 @@ pub mod animation;
 pub mod cache;
 pub mod capabilities;
 pub mod edge_hover;
+pub mod graph;
 pub mod pearl;
 pub mod profile;
 pub mod recovery;

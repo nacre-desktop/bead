@@ -91,6 +91,11 @@ pub struct Session {
     pub(super) deferred_gesture: bool,
     pub(super) range_grab: Option<String>,
     pub(super) transfer_capture: Option<TransferCapture>,
+    /// GraphCanvas engines by view node id (spec 0232); dropping one joins its layout thread.
+    pub(super) graphs: BTreeMap<String, crate::graph::Canvas>,
+    pub(super) graph_wake: crate::graph::WakeSlot,
+    /// Label primitives appended after the last graph placement: `(start, count)`.
+    pub(super) graph_labels: Option<(usize, usize)>,
 }
 pub(super) struct TransferCapture {
     pub(super) source: String,
@@ -251,6 +256,33 @@ impl Session {
             deferred_gesture: false,
             range_grab: None,
             transfer_capture: None,
+            graphs: BTreeMap::new(),
+            graph_wake: Default::default(),
+            graph_labels: None,
+        }
+    }
+    /// Install the host frame callback, including snapshots published before registration.
+    pub fn set_wakeup(&mut self, wake: std::sync::Arc<dyn Fn() + Send + Sync>) {
+        *self.graph_wake.lock().unwrap_or_else(|e| e.into_inner()) = Some(wake.clone());
+        if !self.graphs.is_empty() {
+            wake();
+        }
+    }
+    /// Stage a scene patched from the committed one without a new materialization.
+    pub(super) fn patched_pending(&self) -> Pending {
+        Pending {
+            entry: self.entry.clone(),
+            generation: None,
+            animation_checkpoint: None,
+            stores: self.stores.clone(),
+            palette: Palette(self.palette.0.clone()),
+            base_palette: self.base_palette.clone(),
+            runtime_palette: self.runtime_palette.clone(),
+            palette_bytes: None,
+            source_root: self.root.clone(),
+            palette_source: self.palette_path.clone(),
+            watch_revision: 0,
+            nodes: self.current_nodes.clone(),
         }
     }
     /// The UI root this session loads from (plugin configuration is keyed by it).
@@ -511,6 +543,7 @@ impl Session {
             &self.scrollbar_config,
             (std::time::Instant::now(), self.frame_interval),
         );
+        self.attach_graphs(&mut scene, &nodes, &palette)?;
         bead_core::profile::mark("layout_ready");
         self.pending = Some(Pending {
             entry: self.entry.clone(),
@@ -845,7 +878,9 @@ impl Session {
             return Ok(None);
         }
         let (mut scene, mut nodes) = if stores.revision() == base && !animation_due {
-            (self.current.clone(), self.current_nodes.clone())
+            let mut scene = self.current.clone();
+            self.strip_graph_labels(&mut scene);
+            (scene, self.current_nodes.clone())
         } else {
             generation.materialize(&stores, &self.palette, self.viewport)?
         };
@@ -935,6 +970,7 @@ impl Session {
             &self.scrollbar_config,
             (std::time::Instant::now(), self.frame_interval),
         );
+        self.attach_graphs(&mut scene, &nodes, &Palette(self.palette.0.clone()))?;
         scene.font_files = self.current.font_files.clone();
         if self.error.is_some() && self.source_fault {
             let old = self.current.clone();
@@ -985,6 +1021,16 @@ impl Session {
     /// Host-owned models stay current without painting when no binding reads them.
     /// Behavior/input updates continue through the ordinary staged transaction.
     pub fn update_model(
+        &mut self,
+        changes: BTreeMap<String, Value>,
+    ) -> Result<Option<Scene>, Diagnostic> {
+        match self.update_model_inner(changes)? {
+            Some(scene) => Ok(Some(scene)),
+            // A wakeup may carry only a graph layout snapshot.
+            None => self.graph_frame(false),
+        }
+    }
+    fn update_model_inner(
         &mut self,
         changes: BTreeMap<String, Value>,
     ) -> Result<Option<Scene>, Diagnostic> {
@@ -1058,6 +1104,7 @@ impl Session {
             &self.scrollbar_config,
             (std::time::Instant::now(), self.frame_interval),
         );
+        self.attach_graphs(&mut scene, &nodes, &Palette(self.palette.0.clone()))?;
         scene.font_files = self.current.font_files.clone();
         self.pending = Some(Pending {
             entry: self.entry.clone(),
@@ -1102,6 +1149,7 @@ impl Session {
             &self.scrollbar_config,
             (std::time::Instant::now(), self.frame_interval),
         );
+        self.attach_graphs(&mut scene, &nodes, &palette)?;
         scene.font_files = self.current.font_files.clone();
         self.pending = Some(Pending {
             entry: self.entry.clone(),

@@ -3,6 +3,7 @@
 pub mod accessibility;
 pub mod frontend;
 mod generation;
+mod graph;
 pub mod i18n;
 pub mod input;
 mod interaction;
@@ -143,6 +144,9 @@ pub struct Node {
     pub hit_polygon: Option<Vec<[f32; 2]>>,
     #[serde(default)]
     pub label: String,
+    /// GraphCanvas data this node carries to the session-owned graph engine (spec 0232).
+    #[serde(skip)]
+    pub graph: Option<std::sync::Arc<graph::GraphData>>,
 }
 
 /// A validated drag source captured before the movement threshold is crossed.
@@ -177,7 +181,8 @@ pub fn rect(draw: &Primitive) -> Rect {
         | Primitive::Polyline { rect, .. }
         | Primitive::Text { rect, .. }
         | Primitive::Image { rect, .. }
-        | Primitive::Shadow { rect, .. } => *rect,
+        | Primitive::Shadow { rect, .. }
+        | Primitive::Graph { rect, .. } => *rect,
     }
 }
 fn rect_mut(draw: &mut Primitive) -> &mut Rect {
@@ -187,7 +192,8 @@ fn rect_mut(draw: &mut Primitive) -> &mut Rect {
         | Primitive::Polyline { rect, .. }
         | Primitive::Text { rect, .. }
         | Primitive::Image { rect, .. }
-        | Primitive::Shadow { rect, .. } => rect,
+        | Primitive::Shadow { rect, .. }
+        | Primitive::Graph { rect, .. } => rect,
     }
 }
 fn valid_rect(r: Rect) -> bool {

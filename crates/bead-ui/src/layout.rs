@@ -26,9 +26,11 @@ pub enum Widget {
     Polyline,
     Group,
     Box,
+    /// A graph canvas (spec 0232); its data lives in the session's graph engine.
+    Graph,
 }
 impl Widget {
-    pub fn constructors() -> [(&'static str, Self); 13] {
+    pub fn constructors() -> [(&'static str, Self); 14] {
         [
             ("Panel", Self::Panel),
             ("Row", Self::Row),
@@ -43,6 +45,7 @@ impl Widget {
             ("Polyline", Self::Polyline),
             ("Group", Self::Group),
             ("Box", Self::Box),
+            ("Graph", Self::Graph),
         ]
     }
 }
@@ -172,6 +175,16 @@ pub const PROPERTIES: &[&str] = &[
     "selected_fill",
     "multiline",
     "masked",
+    "nodes",
+    "edges",
+    "style",
+    "highlight",
+    "hidden_groups",
+    "selected_node",
+    "on_hover",
+    "on_select",
+    "on_view_changed",
+    "on_pin",
 ];
 pub fn allowed_property(name: &str) -> bool {
     static SORTED: std::sync::OnceLock<[&str; PROPERTIES.len()]> = std::sync::OnceLock::new();
@@ -252,6 +265,7 @@ pub struct ViewSpec {
     pub hover_fill: Option<Json>,
     pub selected_fill: Option<Json>,
     pub motion: Option<bead_render::Motion>,
+    pub graph: Option<std::sync::Arc<crate::graph::GraphData>>,
     pub children: Vec<ViewSpec>,
     pub source: Source,
 }
@@ -751,6 +765,15 @@ impl ViewSpec {
                         })
                         .transpose()
                 };
+            let graph = if raw.kind == Widget::Graph {
+                Some(std::sync::Arc::new(crate::graph::GraphData::parse(
+                    p,
+                    &parse_action,
+                    source,
+                )?))
+            } else {
+                None
+            };
             let on_drag = parse_action("on_drag")?;
             let on_drop = parse_action("on_drop")?;
             for value in [
@@ -955,6 +978,7 @@ impl ViewSpec {
                     .transpose()?,
                 hover_fill: p.get("hover_fill").cloned(),
                 selected_fill: p.get("selected_fill").cloned(),
+                graph,
                 children,
                 source: raw.source.clone(),
             })
@@ -1343,6 +1367,17 @@ pub fn layout(
                 fill,
             });
         }
+        if let Some(graph) = &view.graph {
+            // Geometry, camera and interaction are filled in by the session's graph engine.
+            emit(Primitive::Graph {
+                rect: r,
+                geometry: Default::default(),
+                camera: Default::default(),
+                style: graph.style(palette, source)?,
+                hover: None,
+                selected: None,
+            });
+        }
         out.scene.layers[layer_index].own.end = out.scene.primitives.len();
         let inherited_scroll = view.scroll.as_deref().or(scroll_store);
         let scroll_limit = if view.scroll.is_some() {
@@ -1357,10 +1392,12 @@ pub fn layout(
                 || view.drag_action.is_some()
                 || view.drag_payload.is_some()
                 || view.drop_action.is_some()
-                || view.metadata.is_some())
+                || view.metadata.is_some()
+                || view.graph.is_some())
         {
             out.nodes.push(Node {
                 id: view.id.clone(),
+                graph: view.graph.clone(),
                 metadata: view.metadata.clone(),
                 source: Some((PathBuf::from(&source.file), source.line, 1)),
                 draw: Primitive::Rounded {

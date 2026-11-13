@@ -170,7 +170,8 @@ fn rect(primitive: &bead_render::Primitive) -> Rect {
         | bead_render::Primitive::Image { rect, .. }
         | bead_render::Primitive::Shadow { rect, .. }
         | bead_render::Primitive::Arc { rect, .. }
-        | bead_render::Primitive::Polyline { rect, .. } => *rect,
+        | bead_render::Primitive::Polyline { rect, .. }
+        | bead_render::Primitive::Graph { rect, .. } => *rect,
     }
 }
 fn painted_layer(scene: &Scene, id: &str) -> Option<bead_render::Primitive> {

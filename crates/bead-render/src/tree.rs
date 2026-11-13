@@ -702,7 +702,8 @@ pub fn rect(primitive: &Primitive) -> Rect {
         | Primitive::Rounded { rect, .. }
         | Primitive::Text { rect, .. }
         | Primitive::Image { rect, .. }
-        | Primitive::Shadow { rect, .. } => *rect,
+        | Primitive::Shadow { rect, .. }
+        | Primitive::Graph { rect, .. } => *rect,
     }
 }
 fn local(primitive: &Primitive) -> Primitive {
@@ -713,7 +714,8 @@ fn local(primitive: &Primitive) -> Primitive {
         | Primitive::Rounded { rect, .. }
         | Primitive::Text { rect, .. }
         | Primitive::Image { rect, .. }
-        | Primitive::Shadow { rect, .. } => {
+        | Primitive::Shadow { rect, .. }
+        | Primitive::Graph { rect, .. } => {
             rect.x = 0.;
             rect.y = 0.;
         }
@@ -816,6 +818,17 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
         } => {
             rect(r, hash);
             (radius.to_bits(), blur.to_bits()).hash(hash);
+        }
+        Primitive::Graph {
+            rect: r,
+            geometry,
+            camera,
+            style,
+            hover,
+            selected,
+        } => {
+            rect(r, hash);
+            crate::graph::hash_graph(geometry, camera, style, *hover, *selected, hash);
         }
     }
 }
@@ -1684,6 +1697,7 @@ impl TreeCache {
                 Primitive::Text { .. } => "text",
                 Primitive::Image { .. } => "image",
                 Primitive::Shadow { .. } => "shadow",
+                Primitive::Graph { .. } => "graph",
             };
             let owner = owners[index].as_ref();
             let ordinal = ordinals.entry((owner, kind)).or_default();
@@ -1799,6 +1813,7 @@ impl TreeCache {
             let raster = if kind == "fill"
                 || kind == "arc"
                 || kind == "polyline"
+                || kind == "graph"
                 || raster_hidden
                 || image.is_some()
             {
@@ -2584,6 +2599,7 @@ fn paint_items(
             Primitive::Text { .. } => "paint_text",
             Primitive::Image { .. } => "paint_image",
             Primitive::Shadow { .. } => "paint_shadow",
+            Primitive::Graph { .. } => "paint_graph",
         });
         if item.raster.is_none()
             && matches!(&item.primitive,Primitive::Rounded{fill,border,..} if fill[3]==0 && border.as_ref().is_none_or(|(color,_)|color[3]==0))
@@ -2805,6 +2821,33 @@ fn paint_items(
                 );
                 painted = true;
             }
+        } else if let Primitive::Graph {
+            geometry,
+            camera,
+            style,
+            hover,
+            selected,
+            ..
+        } = &item.primitive
+        {
+            // Painted straight into the strip: no scratch, no retained raster.
+            crate::graph::paint(
+                crate::graph::Strip {
+                    bytes: &mut bytes[begin..end],
+                    width,
+                    strip_y: damage.y,
+                    clip,
+                    scale,
+                    offset,
+                },
+                r,
+                geometry,
+                *camera,
+                style,
+                *hover,
+                *selected,
+            );
+            painted = true;
         } else if let Primitive::Polyline {
             points,
             closed,

@@ -728,7 +728,8 @@ impl Cached {
                 | Primitive::Rounded { rect, .. }
                 | Primitive::Text { rect, .. }
                 | Primitive::Image { rect, .. }
-                | Primitive::Shadow { rect, .. } => *rect = rect.translated(0., dy),
+                | Primitive::Shadow { rect, .. }
+                | Primitive::Graph { rect, .. } => *rect = rect.translated(0., dy),
             }
         }
         if self.scroll.iter().any(|s| changed.contains_key(&s.binding)) {

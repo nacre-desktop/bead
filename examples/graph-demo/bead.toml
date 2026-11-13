@@ -1,0 +1,8 @@
+id = "org.bead.Example.GraphDemo"
+title = "Graph demo"
+view = "view/main.luau"
+palette = "palette.json"
+
+[window]
+size = [960, 640]
+min_size = [480, 320]

@@ -65,6 +65,7 @@ jobs:
           cargo run -p bead-cli --locked -j2 -- check examples/hello-status
           cargo run -p bead-cli --locked -j2 -- check examples/tutorial-bar
           cargo run -p bead-cli --locked -j2 -- check examples/bar-with-panels
+          cargo run -p bead-cli --locked -j2 -- check examples/graph-demo
       - name: Private service owner lifecycle
         run: python3 tools/check-private-services.py
       - name: Private SNI and DBusMenu lifecycle
