@@ -246,7 +246,7 @@ pub struct Source {
     poisoned: bool,
     asynchronous_resources: bool,
     current: Scene,
-    candidate: Option<Arc<Scene>>,
+    candidate: Option<Scene>,
     viewport: Option<(u32, u32)>,
     frame_interval: Option<std::time::Duration>,
 }
@@ -941,7 +941,7 @@ impl SceneSource for Source {
         if let UiEvent::ResourcesPrepared(result) = event {
             result.map_err(|error| -> Box<dyn Error> { error.into() })?;
             self.preparation_retry = false;
-            return Ok(self.candidate.clone().map(Arc::unwrap_or_clone));
+            return Ok(self.candidate.clone());
         }
         if let UiEvent::Worker(packet) = event {
             if packet.has_error() {
@@ -984,8 +984,12 @@ impl SceneSource for Source {
                 Phase::Ready => self.accepted = false,
                 Phase::Accepted => self.accepted = true,
             }
-            self.candidate = packet.scene.as_ref().map(Arc::clone);
-            return Ok(packet.scene.clone().map(Arc::unwrap_or_clone));
+            let scene = Arc::try_unwrap(packet)
+                .map(|packet| packet.scene)
+                .unwrap_or_else(|packet| packet.scene.clone())
+                .map(Arc::unwrap_or_clone);
+            self.candidate = scene.clone();
+            return Ok(scene);
         }
         if matches!(&event, UiEvent::Model(values) if values.is_empty())
             && self.mirror.wakeup_at.is_some()
@@ -1027,7 +1031,7 @@ impl SceneSource for Source {
                 .store(false, std::sync::atomic::Ordering::Release);
             self.accepted = false;
             if let Some(scene) = self.candidate.take() {
-                self.current = Arc::unwrap_or_clone(scene);
+                self.current = scene;
             }
             true
         } else {
