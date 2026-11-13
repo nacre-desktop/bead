@@ -204,6 +204,18 @@ return function(ui, constructors, allowed, arrayMarker)
                     error("node properties need names or ordered children", 2)
                 end
             end
+            if name == "Text" and named.width == "content" then
+                local label = named.text or ""
+                if type(label) ~= "string" and not (type(label) == "table" and label.__bind) then
+                    error("content-sized Text needs text or a text binding", 2)
+                end
+                local family = named.family or ui.default_font_family
+                local size = named.font_size or 16
+                local padding = named.padding or 0
+                local horizontal = type(padding) == "number" and padding * 2 or 0
+                horizontal += (named.padding_left or 0) + (named.padding_right or 0)
+                named.width = ui.text_width(label, family, size) + horizontal
+            end
             if name == "Polyline" and type(named.points) == "table" and next(named.points) == nil then
                 named.points = setmetatable({}, arrayMarker)
             end
@@ -678,6 +690,8 @@ impl Vm {
         lua.set_memory_limit(8 * 1024 * 1024)?;
         lua.sandbox(true)?;
         let sdk = lua.create_table()?;
+        let default_font_family = crate::theme::with_sans_family(str::to_owned);
+        sdk.set("default_font_family", default_font_family)?;
         let host = lua.create_table()?;
         let bridge: Function = lua
             .load(frontend.prelude.bridge.as_slice())

@@ -708,6 +708,19 @@ impl FolderView {
         let colors = Palette::read(&palette)?;
         let fallback = empty_scene(size);
         let mut session = Session::new(root, view, palette, colors, fallback);
+        let mut host_stores = declared_desktop_values(&Snapshot::default(), &services.desktop);
+        if services.desktop.contains("media") {
+            host_stores.extend(media_values(&MediaSnapshot::default(), 0));
+        }
+        for name in services.commands.keys() {
+            host_stores.insert(
+                format!("commands.{name}.stdout"),
+                Value::Text(String::new()),
+            );
+            host_stores.insert(format!("commands.{name}.ok"), Value::Bool(false));
+            host_stores.insert(format!("commands.{name}.error"), Value::Text(String::new()));
+        }
+        session.declare_host_stores(host_stores)?;
         let mut host_actions = Vec::new();
         for name in ["desktop.volume", "desktop.mute", "desktop.mute.toggle"] {
             if services.desktop.contains("audio") {
@@ -1056,6 +1069,102 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static TEMP_ID: AtomicU64 = AtomicU64::new(0);
+
+    #[test]
+    fn folder_services_declare_typed_stores_without_behavior_boilerplate() {
+        let root = std::env::temp_dir().join(format!(
+            "bead-folder-host-stores-{}-{}",
+            std::process::id(),
+            TEMP_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(root.join("view")).unwrap();
+        std::fs::write(
+            root.join("palette.json"),
+            r#"{"formatVersion":1,"colours":{"surface":"202020"}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("view/behavior.luau"),
+            "return {stores={},actions={},computed={}}",
+        )
+        .unwrap();
+        std::fs::write(root.join("view/main.luau"), "local ui=require('bead.ui');return ui.Column{id='root',width='fill',height='fill',ui.Text{id='clock',text=ui.bind('desktop.clock')},ui.Text{id='stdout',text=ui.bind('commands.kernel.stdout')}}").unwrap();
+        let services = FolderServices {
+            desktop: BTreeSet::from(["clock".into()]),
+            commands: BTreeMap::from([(
+                "kernel".into(),
+                CommandSpec {
+                    argv: vec!["uname".into()],
+                    interval: None,
+                    timeout: Duration::from_secs(5),
+                },
+            )]),
+        };
+        let mut view = FolderView::load_with_services(
+            root.clone(),
+            "view/main.luau".into(),
+            "palette.json".into(),
+            "Stores",
+            (400, 80),
+            services.clone(),
+        )
+        .unwrap();
+        let scene = view.check_render(UiEvent::Reload).unwrap();
+        assert!(scene.primitives.iter().any(|primitive| matches!(primitive, crate::render::Primitive::Text { text, .. } if text.is_empty())));
+        assert!(view.session.has_store("desktop.clock"));
+        assert!(view.session.has_store("commands.kernel.stdout"));
+
+        std::fs::write(
+            root.join("view/behavior.luau"),
+            "return {stores={['desktop.clock']=''},actions={},computed={}} ",
+        )
+        .unwrap();
+        assert!(
+            view.check_render(UiEvent::Reload).is_ok(),
+            "same-type view declaration remains valid"
+        );
+        std::fs::write(
+            root.join("view/behavior.luau"),
+            "return {stores={['desktop.clock']=false},actions={},computed={}} ",
+        )
+        .unwrap();
+        let error = view
+            .check_render(UiEvent::Reload)
+            .err()
+            .expect("conflicting view declaration is rejected")
+            .to_string();
+        assert!(
+            error.contains(
+                "host-declared store desktop.clock is Text, but behavior.luau declares Bool"
+            ),
+            "{error}"
+        );
+        drop(view);
+
+        std::fs::write(
+            root.join("view/behavior.luau"),
+            "return {stores={},actions={},computed={}} ",
+        )
+        .unwrap();
+        let mut plain = FolderView::load(
+            root.clone(),
+            "view/main.luau".into(),
+            "palette.json".into(),
+            "No stores",
+            (400, 80),
+        )
+        .unwrap();
+        let error = plain
+            .check_render(UiEvent::Reload)
+            .err()
+            .expect("undeclared host state is rejected")
+            .to_string();
+        assert!(
+            error.contains("unknown"),
+            "host without declarations keeps unknown-state behavior: {error}"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn tray_service_enables_the_fallback_watcher() {

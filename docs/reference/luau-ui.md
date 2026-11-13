@@ -1,6 +1,6 @@
 # Luau UI
 
-Folder views import `bead.ui`. Each element is a constructor taking a property table and child elements. Use stable `id` values for interactive elements and explicit sizes where the layout needs them. `width`/`height` accept numeric sizes and supported layout strings such as `"fill"`; `grow`, `shrink`, `gap`, `padding`, `align`, and `justify` control layout. Exact accepted values are validated by Bead and unsupported properties are errors.
+Folder views import `bead.ui`. Each element is a constructor taking a property table and child elements. Use stable `id` values for interactive elements and explicit sizes where the layout needs them. `width`/`height` accept numeric sizes and supported layout strings such as `"fill"`; `Text.width = "content"` opts into shaped text width plus horizontal padding. Its height behavior is unchanged, and omitted Text width keeps the existing fill default. `grow`, `shrink`, `gap`, `padding`, `align`, and `justify` control layout. Exact accepted values are validated by Bead and unsupported properties are errors.
 
 ## Elements
 
@@ -65,7 +65,7 @@ ui.Group { id="group", child }
 
 ## Bindings and behavior
 
-`ui.bind(name)` creates a live binding to a declared store or computed value. `ui.action(name, argument)` creates an action descriptor for `on_activate`. Runtime host values also need a typed default store in `behavior.luau`.
+`ui.bind(name)` creates a live binding to a declared store or computed value. `ui.action(name, argument)` creates an action descriptor for `on_activate`. Hosts may declare typed defaults for values they publish; folder apps get stores for their declared services and commands automatically. Other hosts must declare published values with `Session::declare_host_stores` or the view behavior schema.
 
 ```luau
 -- behavior.luau

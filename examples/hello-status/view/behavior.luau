@@ -1,29 +1,6 @@
 -- SPDX-License-Identifier: MIT
 return {
-    stores = {
-        ["desktop.clock"] = "",
-        ["desktop.battery.percent"] = -1,
-        ["desktop.battery.available"] = false,
-        ["desktop.audio.available"] = false,
-        ["desktop.audio.volume"] = -1,
-        ["desktop.audio.muted"] = false,
-        ["desktop.media.available"] = false,
-        ["desktop.media.player"] = "",
-        ["desktop.media.status"] = "",
-        ["desktop.media.title"] = "",
-        ["desktop.media.artist"] = "",
-        ["desktop.media.album"] = "",
-        ["desktop.media.length_ms"] = -1,
-        ["desktop.media.position_ms"] = -1,
-        ["desktop.media.art_url"] = "",
-        ["desktop.media.can_play_pause"] = false,
-        ["desktop.media.can_next"] = false,
-        ["desktop.media.can_previous"] = false,
-        ["desktop.media.can_seek"] = false,
-        ["commands.kernel.stdout"] = "",
-        ["commands.kernel.ok"] = false,
-        ["commands.kernel.error"] = "",
-    },
+    stores = {},
     actions = {},
     computed = {
         ["status.battery"] = function(s)

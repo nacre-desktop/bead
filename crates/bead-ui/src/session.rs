@@ -47,6 +47,7 @@ pub struct Session {
     pub(super) scrollbar_config: crate::scrollbar::Config,
     pub(super) keyboard_scroll: Option<crate::scroll_feedback::KeyboardMotion>,
     pub(super) host_actions: std::collections::BTreeSet<String>,
+    pub(super) host_store_defaults: BTreeMap<String, Value>,
     pub(super) accessibility_label: String,
     font_picker: Option<crate::transcript::Picker>,
     projector: Option<Projector>,
@@ -105,6 +106,25 @@ pub(super) struct DeferredAction {
     pub(super) pointer: (f32, f32),
 }
 impl Session {
+    /// Declare typed defaults for values the host may publish. Declarations are
+    /// retained in session state across view reloads.
+    pub fn declare_host_stores(&mut self, defaults: BTreeMap<String, Value>) -> Result<(), String> {
+        let mut combined = self.host_store_defaults.clone();
+        for (key, value) in defaults {
+            if let Some(existing) = combined.get(&key)
+                && std::mem::discriminant(existing) != std::mem::discriminant(&value)
+            {
+                return Err(format!(
+                    "host store {key} was declared with conflicting types"
+                ));
+            }
+            combined.insert(key, value);
+        }
+        let stores = self.stores.reconcile(&combined)?;
+        self.host_store_defaults = combined;
+        self.stores = stores;
+        Ok(())
+    }
     /// Declare host-handled action names or prefixes (a trailing `*` matches a prefix).
     pub fn set_host_actions(&mut self, names: impl IntoIterator<Item = String>) {
         self.host_actions = names.into_iter().collect();
@@ -177,6 +197,7 @@ impl Session {
             scrollbar_config: crate::theme::scrollbar_config(),
             keyboard_scroll: None,
             host_actions: Default::default(),
+            host_store_defaults: BTreeMap::new(),
             accessibility_label: "Bead".into(),
             font_picker: None,
             projector: None,
@@ -428,6 +449,7 @@ impl Session {
             self.attempts,
             self.font_picker.clone(),
             &self.host_actions,
+            &self.host_store_defaults,
         )?;
         generation.set_frame_interval(self.frame_interval);
         bead_core::profile::mark("generation_ready");

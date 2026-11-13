@@ -1,6 +1,35 @@
 // SPDX-License-Identifier: MIT
 //! Tracked source loading and format-independent generation materialization.
 use super::*;
+fn check_host_store_types(
+    view: &BTreeMap<String, Value>,
+    host: &BTreeMap<String, Value>,
+    script: &Path,
+) -> Result<(), Diagnostic> {
+    for (key, host_value) in host {
+        if let Some(view_value) = view.get(key)
+            && std::mem::discriminant(host_value) != std::mem::discriminant(view_value)
+        {
+            let kind = |value: &Value| match value {
+                Value::Bool(_) => "Bool",
+                Value::Number(_) => "Number",
+                Value::Text(_) => "Text",
+                Value::List(_) => "List",
+            };
+            return Err(Diagnostic::new(
+                script,
+                1,
+                1,
+                format!(
+                    "host-declared store {key} is {}, but behavior.luau declares {}",
+                    kind(host_value),
+                    kind(view_value)
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
 #[cfg(test)]
 thread_local! {
     static MATERIALIZE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -276,7 +305,15 @@ impl Generation {
         stores: &Stores,
         revision: u64,
     ) -> Result<(Self, Stores), Diagnostic> {
-        Self::load_with_picker(root, entry, stores, revision, None, &Default::default())
+        Self::load_with_picker(
+            root,
+            entry,
+            stores,
+            revision,
+            None,
+            &Default::default(),
+            &Default::default(),
+        )
     }
     pub(super) fn load_with_picker(
         root: &Path,
@@ -285,6 +322,7 @@ impl Generation {
         revision: u64,
         font_picker: Option<crate::transcript::Picker>,
         host_actions: &std::collections::BTreeSet<String>,
+        host_stores: &BTreeMap<String, Value>,
     ) -> Result<(Self, Stores), Diagnostic> {
         let normalized_entry = entry
             .components()
@@ -292,7 +330,15 @@ impl Generation {
             .collect::<PathBuf>();
         let entry = normalized_entry.as_path();
         if entry.extension().is_some_and(|ext| ext == "luau") {
-            return Self::load_markup(root, entry, stores, revision, font_picker, host_actions);
+            return Self::load_markup(
+                root,
+                entry,
+                stores,
+                revision,
+                font_picker,
+                host_actions,
+                host_stores,
+            );
         }
         let mut loader = Loader {
             root: root
@@ -366,6 +412,7 @@ impl Generation {
         }
         let script = script::Script::load(&loader.read(&doc.script)?, &doc.script)?;
         let mut defaults = script.schema()?;
+        check_host_store_types(&defaults, host_stores, &doc.script)?;
         if defaults
             .insert("bead.focused".into(), Value::Text(String::new()))
             .is_some()
@@ -499,6 +546,7 @@ impl Generation {
         revision: u64,
         font_picker: Option<crate::transcript::Picker>,
         host_actions: &std::collections::BTreeSet<String>,
+        host_stores: &BTreeMap<String, Value>,
     ) -> Result<(Self, Stores), Diagnostic> {
         let mut loader = Loader {
             root: root
@@ -626,6 +674,7 @@ impl Generation {
             &script_path,
         )?;
         let mut defaults = script.schema()?;
+        check_host_store_types(&defaults, host_stores, &script_path)?;
         for (id, value) in [
             ("bead.focused", Value::Text(String::new())),
             ("bead.hovered", Value::Text(String::new())),

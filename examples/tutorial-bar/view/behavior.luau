@@ -1,13 +1,6 @@
 -- SPDX-License-Identifier: MIT
 return {
-    stores = {
-        ["desktop.clock"] = "",
-        ["desktop.battery.available"] = false,
-        ["desktop.battery.percent"] = -1,
-        ["desktop.audio.available"] = false,
-        ["desktop.audio.volume"] = -1,
-        ["desktop.audio.muted"] = false,
-    },
+    stores = {},
     actions = {},
     computed = {
         battery = function(s)

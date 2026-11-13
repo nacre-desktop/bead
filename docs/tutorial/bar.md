@@ -32,20 +32,13 @@ desktop = ["clock", "battery", "audio"]
 
 The `layer` table asks the host for a 36-pixel top-edge bar. `exclusive` defaults to `true`, so the bar reserves that strip. The services list opts into clock, battery, and audio snapshots; services are not started unless declared. The manifest reference explains all keys and limits.
 
-## 2. Declare typed state and display values
+## 2. Derive display values
 
 Create `view/behavior.luau`:
 
 ```luau
 return {
-    stores = {
-        ["desktop.clock"] = "",
-        ["desktop.battery.available"] = false,
-        ["desktop.battery.percent"] = -1,
-        ["desktop.audio.available"] = false,
-        ["desktop.audio.volume"] = -1,
-        ["desktop.audio.muted"] = false,
-    },
+    stores = {},
     actions = {},
     computed = {
         battery = function(s)
@@ -59,7 +52,7 @@ return {
 }
 ```
 
-Every host value the view reads, including `desktop.*` and `commands.*`, must be declared as a store with a default of the matching type. The folder host updates only declared stores. This schema makes values typed and gives the host stable-ID state to preserve across view reloads.
+The declared `clock`, `battery`, and `audio` services provide their typed `desktop.*` stores automatically. Declared commands similarly provide `commands.NAME.stdout`, `.ok`, and `.error`. Add a store only for values your app owns or computes as mutable state.
 
 Use `computed` for display strings and bind those names in the view. A computed function receives the current stores, so its result is refreshed when its inputs change. `ui.resolve_for_check(...)` only resolves a value while checking; text assembled from it will not update as runtime state changes.
 
@@ -84,7 +77,7 @@ return ui.Row {
 }
 ```
 
-The left and right sections each grow into half of the remaining space, which keeps the fixed-width clock centered. Every `Text` has a width, so the first child cannot consume the row; `align = "center"` centers each section's children vertically. `ui.bind` subscribes displayed values to store updates. The mute button sends `desktop.mute.toggle`, so each click flips the latest mute state. It remains wired when audio is unavailable; the host reports a diagnostic and does nothing. The kit Button has no bound disabled state.
+The left and right sections each grow into half of the remaining space, which keeps the fixed-width clock centered. `width = "content"` measures each label and includes its horizontal padding, so siblings keep their space; `align = "center"` centers each section's children vertically. `ui.bind` subscribes displayed values to store updates. The mute button sends `desktop.mute.toggle`, so each click flips the latest mute state. It remains wired when audio is unavailable; the host reports a diagnostic and does nothing. The kit Button has no bound disabled state.
 
 ## Run it
 

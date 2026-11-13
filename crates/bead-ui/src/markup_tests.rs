@@ -1163,6 +1163,52 @@ fn text_measurement_uses_each_sessions_own_font_picker() {
 }
 
 #[test]
+fn content_text_width_measures_text_and_keeps_padding() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        "local ui=require('bead.ui'); return ui.Row{id='row',width=200,height=40,ui.Text{id='label',text='Hello',family='Example Sans',font_size=16,width='content',padding=3,height=24},ui.Text{id='measured',text='Hello',family='Example Sans',font_size=16,width=ui.text_width('Hello','Example Sans',16)+6,padding=3,height=24}}",
+    )
+    .unwrap();
+    let mut session = f.session();
+    session.entry = "ui/main.luau".into();
+    let scene = session.reload().unwrap();
+    let widths: Vec<_> = scene
+        .primitives
+        .iter()
+        .filter_map(|primitive| match primitive {
+            Primitive::Text { text, rect, .. } if text == "Hello" => Some(rect.w),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(widths.len(), 2);
+    assert!(
+        widths[0] >= widths[1] && widths[0] - widths[1] < 1.01,
+        "content width should equal the measured text plus padding, rounded by layout: content={:?}, measured={:?}",
+        widths[0],
+        widths[1]
+    );
+    fs::write(
+        f.0.join("ui/main.luau"),
+        "local ui=require('bead.ui'); return ui.Row{id='row',width=200,height=40,ui.Text{id='label',text='Hello',height=24}}",
+    )
+    .unwrap();
+    let scene = session.reload().unwrap();
+    let default_width = scene
+        .primitives
+        .iter()
+        .find_map(|primitive| match primitive {
+            Primitive::Text { text, rect, .. } if text == "Hello" => Some(rect.w),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(
+        default_width, 200.,
+        "omitted Text width still fills the row"
+    );
+}
+
+#[test]
 fn navigation_loads_the_new_schema_atomically_and_keeps_the_last_good_entry() {
     let f = fixture();
     fs::create_dir_all(f.0.join("other")).unwrap();

@@ -1,6 +1,6 @@
 # Folder app services
 
-Services are opt-in through `[services].desktop` and `[commands.NAME]`. The host publishes only declared desktop service groups, and it updates only keys declared as stores in `behavior.luau`. Declare each key with the matching default type before binding it. `bead check` supplies an empty snapshot and does not start services or commands.
+Services are opt-in through `[services].desktop` and `[commands.NAME]`. The host publishes only declared desktop service groups. FolderView declares typed defaults for the keys published by each declared service and command, so `behavior.luau` can bind them directly. A view may repeat a key with the same type; conflicting types are a validation error. `bead check` supplies an empty snapshot and does not start services or commands.
 
 ## Desktop stores
 
@@ -53,7 +53,7 @@ FolderView declares the host actions provided by declared services and commands 
 
 ## Commands stores
 
-For each declared command, declare these stores in `behavior.luau`:
+Each declared command automatically provides these typed stores:
 
 ```luau
 stores = { ["commands.kernel.stdout"] = "", ["commands.kernel.ok"] = false,
