@@ -2031,12 +2031,13 @@ impl App {
                 // next input finish the motion and invalidate the whole surface.
                 s.redraw |= active;
                 scene.opacity = motion.opacity(progress);
+                let (reveal, edge) = (motion.reveal, motion.edge);
                 let (dx, dy) = scene.panel_offset(progress, open);
                 layer_motion_pose = (dx, dy);
-                opaque_motion = active && (dx != 0. || dy != 0. || (motion.reveal && open));
+                opaque_motion = active && (dx != 0. || dy != 0. || (reveal && open));
                 // A vertical exit retains the open x origin instead of
                 // re-centering from the live surface width every frame.
-                scene.offset = motion_scene_offset(prior_x, motion.edge, open, dx, dy);
+                scene.offset = motion_scene_offset(prior_x, edge, open, dx, dy);
             }
 
             if !panel {
