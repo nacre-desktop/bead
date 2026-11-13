@@ -9,6 +9,12 @@ use std::{
     thread::JoinHandle,
 };
 const STACK_BYTES: usize = 2 * bead_core::cache::MIB;
+fn stack_charge(requested: Option<&str>) -> usize {
+    requested
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(STACK_BYTES)
+        .max(STACK_BYTES)
+}
 pub type Factory = Box<dyn FnOnce() -> Result<Box<dyn SceneSource>, String> + Send>;
 #[derive(Default)]
 struct Mirror {
@@ -33,13 +39,17 @@ impl Mirror {
         self.regions.iter().rev().find(|r| r.contains(x, y))
     }
 
-    fn read(source: &dyn SceneSource, cache: &bead_render::tree::TreeCache) -> Self {
+    fn read(
+        source: &dyn SceneSource,
+        cache: &bead_render::tree::TreeCache,
+        stack_bytes: usize,
+    ) -> Self {
         let _profile = bead_core::profile::Span::new("mirror");
         Self {
             dormant_ready: source.dormant_ready(),
             retained_bytes: source.warm_retained_bytes().and_then(|bytes| {
                 bytes
-                    .checked_add(STACK_BYTES)?
+                    .checked_add(stack_bytes)?
                     .checked_add(cache.retained_bytes())?
                     .checked_add(4096)
             }),
@@ -503,7 +513,10 @@ impl SceneSource for Source {
         let image_policy = self.image_policy;
         let retired = self.retired.clone();
         let pending = self.pending.clone();
-        self.thread = Some(std::thread::Builder::new().stack_size(STACK_BYTES).spawn(move || {
+        // Leave Rust's stack-size policy intact; only admission accounting reads
+        // the request, conservatively charging at least the ordinary default.
+        let stack_bytes = stack_charge(std::env::var("RUST_MIN_STACK").ok().as_deref());
+        self.thread = Some(std::thread::spawn(move || {
             bead_core::profile::mark("worker_started");
             let wakeup: Arc<dyn Fn(UiEvent) + Send + Sync> = Arc::from(wakeup);
             let report = wakeup.clone();
@@ -662,18 +675,28 @@ impl SceneSource for Source {
                             let started = std::time::Instant::now();
                             token += 1;
                             let staged = if resume {
-                                source.resume().and_then(|scene| scene.map(Some).ok_or_else(|| "resume must return a current scene".into()))
-                            } else { source.stage(event) };
+                                source.resume().and_then(|scene| {
+                                    scene
+                                        .map(Some)
+                                        .ok_or_else(|| "resume must return a current scene".into())
+                                })
+                            } else {
+                                source.stage(event)
+                            };
                             let (mut scene, fault) = match staged {
                                 Ok(Some(scene)) => (scene, None),
                                 Ok(None) => {
                                     wakeup(UiEvent::Worker(Arc::new(Packet {
-                                    resume,
-                                animation_frame,
+                                        resume,
+                                        animation_frame,
                                         phase: Phase::Settled,
                                         token,
                                         scene: None,
-                                        mirror: Some(Arc::new(Mirror::read(source.as_ref(), &cache))),
+                                        mirror: Some(Arc::new(Mirror::read(
+                                            source.as_ref(),
+                                            &cache,
+                                            stack_bytes,
+                                        ))),
                                         error: None,
                                         reload,
                                         wallpaper_palette,
@@ -682,9 +705,15 @@ impl SceneSource for Source {
                                 }
                                 Err(error) if resume => {
                                     wakeup(UiEvent::Worker(Arc::new(Packet {
-                                        resume, animation_frame: false, phase: Phase::Failed,
-                                        token, scene: None, mirror: None, error: Some(error.to_string()),
-                                        reload: false, wallpaper_palette: None,
+                                        resume,
+                                        animation_frame: false,
+                                        phase: Phase::Failed,
+                                        token,
+                                        scene: None,
+                                        mirror: None,
+                                        error: Some(error.to_string()),
+                                        reload: false,
+                                        wallpaper_palette: None,
                                     })));
                                     continue;
                                 }
@@ -723,7 +752,9 @@ impl SceneSource for Source {
                                             for job in receiver.try_iter() {
                                                 match job {
                                                     Job::Stop => break 'actor,
-                                                    job => enqueue_pending(&mut queue, job, &pending),
+                                                    job => {
+                                                        enqueue_pending(&mut queue, job, &pending)
+                                                    }
                                                 }
                                             }
                                         }
@@ -735,7 +766,7 @@ impl SceneSource for Source {
                             if let Err(error) = baked {
                                 wakeup(UiEvent::Worker(Arc::new(Packet {
                                     resume,
-                                animation_frame,
+                                    animation_frame,
                                     phase: Phase::Failed,
                                     token,
                                     scene: None,
@@ -808,13 +839,15 @@ impl SceneSource for Source {
                                                     }
                                                 }
                                                 wakeup(UiEvent::Worker(Arc::new(Packet {
-                                    resume,
-                                animation_frame,
+                                                    resume,
+                                                    animation_frame,
                                                     phase: Phase::Accepted,
                                                     token,
                                                     scene: Some(scene),
                                                     mirror: Some(Arc::new(Mirror::read(
-                                                        source.as_ref(), &cache,
+                                                        source.as_ref(),
+                                                        &cache,
+                                                        stack_bytes,
                                                     ))),
                                                     error: fault,
                                                     reload,
@@ -825,13 +858,15 @@ impl SceneSource for Source {
                                                 let mut overlay = source.error_scene(error.clone());
                                                 if bake(&mut cache, &mut overlay, &scales).is_ok() {
                                                     wakeup(UiEvent::Worker(Arc::new(Packet {
-                                    resume,
-                                animation_frame,
+                                                        resume,
+                                                        animation_frame,
                                                         phase: Phase::Accepted,
                                                         token,
                                                         scene: Some(overlay),
                                                         mirror: Some(Arc::new(Mirror::read(
-                                                            source.as_ref(), &cache,
+                                                            source.as_ref(),
+                                                            &cache,
+                                                            stack_bytes,
                                                         ))),
                                                         error: Some(error),
                                                         reload,
@@ -855,7 +890,7 @@ impl SceneSource for Source {
             if result.is_err() {
                 report(UiEvent::Fatal("script worker panicked".into()));
             }
-        }).expect("start script worker"));
+        }));
         if let Some(interval) = self.frame_interval {
             let _ = self.send(Job::FrameInterval(interval));
         }
@@ -2170,5 +2205,12 @@ mod tests {
                 "inactive B still occupies the single budget slot"
             );
         }
+    }
+    #[test]
+    fn requested_stack_changes_admission_charge_without_overriding_rust_policy() {
+        assert_eq!(stack_charge(None), STACK_BYTES);
+        assert_eq!(stack_charge(Some("invalid")), STACK_BYTES);
+        assert_eq!(stack_charge(Some("1048576")), STACK_BYTES);
+        assert_eq!(stack_charge(Some("8388608")), 8 * bead_core::cache::MIB);
     }
 }
