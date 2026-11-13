@@ -36,6 +36,17 @@ All values are under `desktop.`. Missing numeric readings use `-1`; missing stri
 `desktop.date` is provided by the `clock` service. Clock seconds updates are leased when `clock` is declared.
 The optional `media` service selects the active MPRIS player using the policy in [spec 0239](../specs/0239-mpris.md). While it is Playing, `media.position_ms` is extrapolated and refreshed at 1 Hz without additional D-Bus reads.
 The optional `power` service follows power-profiles-daemon and publishes its active profile, available profiles, and performance degradation reason as described in [spec 0244](../specs/0244-power-profiles.md).
+The optional `bluetooth_devices` service publishes BlueZ adapters and devices and provides power, scan, connect, disconnect, and forget actions as described in [spec 0246](../specs/0246-bluetooth.md). Declare it in the folder manifest, then pass a selected device path to the connect action:
+
+```toml
+[services]
+desktop = ["bluetooth_devices"]
+```
+
+```luau
+local devices = stores["desktop.bluetooth_devices.devices"]
+-- An item action can send devices[1].path as its Text argument.
+```
 
 ## Actions
 

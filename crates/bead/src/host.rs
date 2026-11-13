@@ -9,6 +9,7 @@ use bead_core::Value;
 use bead_services::{
     Action as DesktopAction, ClockSecondsLease, Config as DesktopConfig, Desktop, Snapshot,
     Subscription,
+    bluetooth::{Bluetooth as BluetoothDevices, BluetoothAction, BluetoothSnapshot},
     media::{Media, MediaAction, MediaSnapshot},
     power_profiles::{PowerProfiles, PowerProfilesAction, PowerProfilesSnapshot},
 };
@@ -99,6 +100,8 @@ pub struct FolderServicesRuntime {
     _media_subscription: Option<bead_services::media::Subscription>,
     power: Option<Arc<PowerProfiles>>,
     _power_subscription: Option<bead_services::power_profiles::Subscription>,
+    bluetooth_devices: Option<Arc<BluetoothDevices>>,
+    _bluetooth_subscription: Option<bead_services::bluetooth::Subscription>,
     commands: Arc<Mutex<CommandState>>,
     signals: Arc<RuntimeSignals>,
     stop: Arc<(Mutex<bool>, Condvar)>,
@@ -126,6 +129,11 @@ impl FolderServicesRuntime {
             .contains("power")
             .then(PowerProfiles::start_system)
             .flatten();
+        let bluetooth_devices = services
+            .desktop
+            .contains("bluetooth_devices")
+            .then(BluetoothDevices::start_system)
+            .flatten();
         let clock_lease = if services.desktop.contains("clock") {
             desktop
                 .as_ref()
@@ -145,6 +153,14 @@ impl FolderServicesRuntime {
         let power_subscription = power.as_ref().map(|power| {
             let signals = Arc::downgrade(&signals);
             power.subscribe(move |_| {
+                if let Some(signals) = signals.upgrade() {
+                    signals.notify();
+                }
+            })
+        });
+        let bluetooth_subscription = bluetooth_devices.as_ref().map(|service| {
+            let signals = Arc::downgrade(&signals);
+            service.subscribe(move |_| {
                 if let Some(signals) = signals.upgrade() {
                     signals.notify();
                 }
@@ -246,6 +262,8 @@ impl FolderServicesRuntime {
             _media_subscription: media_subscription,
             power,
             _power_subscription: power_subscription,
+            bluetooth_devices,
+            _bluetooth_subscription: bluetooth_subscription,
             commands,
             signals,
             stop,
@@ -468,6 +486,18 @@ fn power_values(snapshot: &PowerProfilesSnapshot) -> BTreeMap<String, Value> {
         ),
     ])
 }
+fn bluetooth_device_values(snapshot: &BluetoothSnapshot) -> BTreeMap<String, Value> {
+    let adapter = snapshot.adapters.first();
+    BTreeMap::from([
+        ("desktop.bluetooth_devices.available".into(),Value::Bool(snapshot.available)),
+        ("desktop.bluetooth_devices.powered".into(),Value::Bool(adapter.is_some_and(|a|a.powered))),
+        ("desktop.bluetooth_devices.discovering".into(),Value::Bool(adapter.is_some_and(|a|a.discovering))),
+        ("desktop.bluetooth_devices.devices".into(),Value::list(snapshot.devices.iter().map(|d|serde_json::json!({"path":d.path,"name":d.name,"address":d.address,"icon":d.icon,"paired":d.paired,"connected":d.connected,"battery":d.battery})).collect())),
+    ])
+}
+fn default_bluetooth_adapter(snapshot: &BluetoothSnapshot) -> Option<String> {
+    snapshot.adapters.first().map(|a| a.path.clone())
+}
 fn media_is_playing(snapshot: &MediaSnapshot) -> bool {
     snapshot
         .active
@@ -506,6 +536,7 @@ enum DesktopRequest {
     Action(DesktopAction),
     Media(MediaRequest),
     Power(PowerRequest),
+    Bluetooth(BluetoothRequest),
     Command(String),
 }
 #[derive(Clone, Debug)]
@@ -519,6 +550,14 @@ enum MediaRequest {
     Next,
     Previous,
     Seek(i64),
+}
+#[derive(Clone, Debug)]
+enum BluetoothRequest {
+    Power(bool),
+    Scan(bool),
+    Connect(String),
+    Disconnect(String),
+    Forget(String),
 }
 fn route_folder_action(
     name: &str,
@@ -544,6 +583,11 @@ fn route_folder_action(
         | "desktop.media.previous"
         | "desktop.media.seek" => "media",
         "desktop.power.set" | "desktop.power.cycle" => "power",
+        "desktop.bluetooth_devices.power"
+        | "desktop.bluetooth_devices.scan"
+        | "desktop.bluetooth_devices.connect"
+        | "desktop.bluetooth_devices.disconnect"
+        | "desktop.bluetooth_devices.forget" => "bluetooth_devices",
         _ => return Err(format!("unknown desktop action '{name}'")),
     };
     if !declared.contains(need) {
@@ -563,6 +607,29 @@ fn route_folder_action(
             _ => return Err(format!("{name} expects no argument")),
         };
         return Ok(Some(DesktopRequest::Media(action)));
+    }
+    if name.starts_with("desktop.bluetooth_devices.") {
+        let action = match (name, argument) {
+            ("desktop.bluetooth_devices.power", Value::Bool(v)) => BluetoothRequest::Power(*v),
+            ("desktop.bluetooth_devices.scan", Value::Bool(v)) => BluetoothRequest::Scan(*v),
+            ("desktop.bluetooth_devices.connect", Value::Text(v)) => {
+                BluetoothRequest::Connect(v.clone())
+            }
+            ("desktop.bluetooth_devices.disconnect", Value::Text(v)) => {
+                BluetoothRequest::Disconnect(v.clone())
+            }
+            ("desktop.bluetooth_devices.forget", Value::Text(v)) => {
+                BluetoothRequest::Forget(v.clone())
+            }
+            ("desktop.bluetooth_devices.power", _) => {
+                return Err("desktop.bluetooth_devices.power expects a boolean".into());
+            }
+            ("desktop.bluetooth_devices.scan", _) => {
+                return Err("desktop.bluetooth_devices.scan expects a boolean".into());
+            }
+            _ => return Err(format!("{name} expects a device path")),
+        };
+        return Ok(Some(DesktopRequest::Bluetooth(action)));
     }
     if name == "desktop.power.set" {
         let Value::Text(profile) = argument else {
@@ -777,6 +844,9 @@ impl FolderView {
         if services.desktop.contains("power") {
             host_stores.extend(power_values(&PowerProfilesSnapshot::default()));
         }
+        if services.desktop.contains("bluetooth_devices") {
+            host_stores.extend(bluetooth_device_values(&BluetoothSnapshot::default()));
+        }
         for name in services.commands.keys() {
             host_stores.insert(
                 format!("commands.{name}.stdout"),
@@ -818,6 +888,19 @@ impl FolderView {
                 ["desktop.power.set", "desktop.power.cycle"]
                     .into_iter()
                     .map(str::to_owned),
+            );
+        }
+        if services.desktop.contains("bluetooth_devices") {
+            host_actions.extend(
+                [
+                    "desktop.bluetooth_devices.power",
+                    "desktop.bluetooth_devices.scan",
+                    "desktop.bluetooth_devices.connect",
+                    "desktop.bluetooth_devices.disconnect",
+                    "desktop.bluetooth_devices.forget",
+                ]
+                .into_iter()
+                .map(str::to_owned),
             );
         }
         host_actions.extend(
@@ -882,6 +965,13 @@ impl FolderView {
                     .as_ref()
                     .map_or_else(PowerProfilesSnapshot::default, |power| power.snapshot());
                 changes.extend(power_values(&snapshot));
+            }
+            if runtime.services.desktop.contains("bluetooth_devices") {
+                let snapshot = runtime
+                    .bluetooth_devices
+                    .as_ref()
+                    .map_or_else(BluetoothSnapshot::default, |service| service.snapshot());
+                changes.extend(bluetooth_device_values(&snapshot));
             }
             for (name, (stdout, ok, error)) in runtime.command_values() {
                 changes.insert(format!("commands.{name}.stdout"), Value::Text(stdout));
@@ -1074,6 +1164,52 @@ impl SceneSource for FolderView {
                                 && let Err(error) =
                                     power.action(PowerProfilesAction::SetProfile(profile))
                             {
+                                eprintln!("desktop action {name}: {error}");
+                            }
+                        }
+                        None
+                    }
+                    Ok(Some(DesktopRequest::Bluetooth(action))) => {
+                        if let Some(service) = self
+                            .runtime
+                            .as_ref()
+                            .and_then(|r| r.bluetooth_devices.as_ref())
+                        {
+                            let snapshot = service.snapshot();
+                            let result = match action {
+                                BluetoothRequest::Power(value) => {
+                                    default_bluetooth_adapter(&snapshot)
+                                        .ok_or_else(|| {
+                                            "no Bluetooth adapter is available".to_owned()
+                                        })
+                                        .and_then(|path| {
+                                            service.action(BluetoothAction::SetPowered(path, value))
+                                        })
+                                }
+                                BluetoothRequest::Scan(value) => {
+                                    default_bluetooth_adapter(&snapshot)
+                                        .ok_or_else(|| {
+                                            "no Bluetooth adapter is available".to_owned()
+                                        })
+                                        .and_then(|path| {
+                                            service.action(if value {
+                                                BluetoothAction::StartDiscovery(path)
+                                            } else {
+                                                BluetoothAction::StopDiscovery(path)
+                                            })
+                                        })
+                                }
+                                BluetoothRequest::Connect(path) => {
+                                    service.action(BluetoothAction::Connect(path))
+                                }
+                                BluetoothRequest::Disconnect(path) => {
+                                    service.action(BluetoothAction::Disconnect(path))
+                                }
+                                BluetoothRequest::Forget(path) => {
+                                    service.action(BluetoothAction::Remove(path))
+                                }
+                            };
+                            if let Err(error) = result {
                                 eprintln!("desktop action {name}: {error}");
                             }
                         }
@@ -1593,6 +1729,120 @@ mod tests {
             )
             .unwrap_err()
             .contains("undeclared service")
+        );
+    }
+
+    #[test]
+    fn bluetooth_device_projection_and_actions_are_opt_in_and_typed() {
+        let empty = bluetooth_device_values(&BluetoothSnapshot::default());
+        assert_eq!(
+            empty["desktop.bluetooth_devices.available"],
+            Value::Bool(false)
+        );
+        assert_eq!(
+            empty["desktop.bluetooth_devices.powered"],
+            Value::Bool(false)
+        );
+        assert!(
+            matches!(&empty["desktop.bluetooth_devices.devices"],Value::List(devices) if devices.is_empty())
+        );
+        let snapshot = BluetoothSnapshot {
+            revision: 1,
+            available: true,
+            adapters: vec![bead_services::bluetooth::BluetoothAdapter {
+                path: "/org/bluez/hci0".into(),
+                name: "adapter".into(),
+                powered: true,
+                discovering: true,
+                pairable: true,
+            }],
+            devices: vec![bead_services::bluetooth::BluetoothDevice {
+                path: "/org/bluez/hci0/dev_AA".into(),
+                adapter: "/org/bluez/hci0".into(),
+                address: "AA".into(),
+                name: "Headphones".into(),
+                icon: "audio-headphones".into(),
+                paired: true,
+                trusted: true,
+                connected: true,
+                battery: Some(73),
+                rssi: Some(-42),
+            }],
+        };
+        let values = bluetooth_device_values(&snapshot);
+        assert_eq!(
+            values["desktop.bluetooth_devices.powered"],
+            Value::Bool(true)
+        );
+        assert_eq!(
+            values["desktop.bluetooth_devices.discovering"],
+            Value::Bool(true)
+        );
+        assert!(
+            matches!(&values["desktop.bluetooth_devices.devices"],Value::List(devices) if devices[0]["name"]=="Headphones"&&devices[0]["battery"]==73)
+        );
+        let declared = BTreeSet::from(["bluetooth_devices".to_owned()]);
+        assert!(matches!(
+            route_folder_action(
+                "desktop.bluetooth_devices.power",
+                &Value::Bool(true),
+                &declared,
+                None
+            ),
+            Ok(Some(DesktopRequest::Bluetooth(BluetoothRequest::Power(
+                true
+            ))))
+        ));
+        assert!(matches!(
+            route_folder_action(
+                "desktop.bluetooth_devices.scan",
+                &Value::Bool(false),
+                &declared,
+                None
+            ),
+            Ok(Some(DesktopRequest::Bluetooth(BluetoothRequest::Scan(
+                false
+            ))))
+        ));
+        assert!(
+            matches!(route_folder_action("desktop.bluetooth_devices.connect",&Value::Text("/device".into()),&declared,None),Ok(Some(DesktopRequest::Bluetooth(BluetoothRequest::Connect(path)))) if path=="/device")
+        );
+        assert!(matches!(
+            route_folder_action(
+                "desktop.bluetooth_devices.disconnect",
+                &Value::Text("/device".into()),
+                &declared,
+                None
+            ),
+            Ok(Some(DesktopRequest::Bluetooth(BluetoothRequest::Disconnect(path)))) if path == "/device"
+        ));
+        assert!(matches!(
+            route_folder_action(
+                "desktop.bluetooth_devices.forget",
+                &Value::Text("/device".into()),
+                &declared,
+                None
+            ),
+            Ok(Some(DesktopRequest::Bluetooth(BluetoothRequest::Forget(path)))) if path == "/device"
+        ));
+        assert!(
+            route_folder_action(
+                "desktop.bluetooth_devices.scan",
+                &Value::Bool(true),
+                &BTreeSet::new(),
+                None
+            )
+            .unwrap_err()
+            .contains("undeclared service")
+        );
+        assert!(
+            route_folder_action(
+                "desktop.bluetooth_devices.forget",
+                &Value::Bool(false),
+                &declared,
+                None
+            )
+            .is_err()
         );
     }
 
