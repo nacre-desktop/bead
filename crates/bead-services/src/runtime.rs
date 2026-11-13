@@ -87,9 +87,6 @@ impl Shared {
         if **old == next {
             return;
         }
-        if old.clock != next.clock {
-            eprintln!("CLOCK_TICK value={}", next.clock);
-        }
         next.revision = old.revision.saturating_add(1);
         let next = Arc::new(next);
         *old = next.clone();
