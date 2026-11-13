@@ -335,7 +335,7 @@ async fn action_async(c: &Connection, s: &Shared, a: BluetoothAction) -> Result<
     match a {
         BluetoothAction::SetPowered(path, value) => {
             validate(&objects, &path, ADAPTER)?;
-            let p = Proxy::new(c, BLUEZ, path.as_str(), "org.freedesktop.DBus.Properties")
+            let p = Proxy::new(c, BLUEZ, path.as_str(), ADAPTER)
                 .await
                 .map_err(|e| e.to_string())?;
             p.set_property("Powered", value)
@@ -382,7 +382,7 @@ async fn action_async(c: &Connection, s: &Shared, a: BluetoothAction) -> Result<
         }
         BluetoothAction::SetTrusted(path, value) => {
             validate(&objects, &path, DEVICE)?;
-            let p = Proxy::new(c, BLUEZ, path.as_str(), "org.freedesktop.DBus.Properties")
+            let p = Proxy::new(c, BLUEZ, path.as_str(), DEVICE)
                 .await
                 .map_err(|e| e.to_string())?;
             p.set_property("Trusted", value)

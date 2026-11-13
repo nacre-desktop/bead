@@ -294,6 +294,7 @@ async fn wait(s: &Bluetooth, p: impl Fn(&bead_services::bluetooth::BluetoothSnap
     .expect("Bluetooth state timeout");
 }
 async fn perform(service: &Arc<Bluetooth>, action: BluetoothAction) -> Result<(), String> {
+    // Bluetooth::action owns a blocking runtime, so keep it off Tokio's executor.
     let service = Arc::clone(service);
     tokio::task::spawn_blocking(move || service.action(action))
         .await
@@ -331,23 +332,19 @@ async fn bluetooth_objects_signals_actions_and_owner_loss() {
             .await
             .is_ok()
     );
-    assert!(
-        perform(
-            &service,
-            BluetoothAction::SetPowered(ADAPTER_PATH.into(), true)
-        )
-        .await
-        .is_ok()
-    );
+    perform(
+        &service,
+        BluetoothAction::SetPowered(ADAPTER_PATH.into(), true),
+    )
+    .await
+    .unwrap();
     wait(&service, |s| s.adapters.first().is_some_and(|a| a.powered)).await;
-    assert!(
-        perform(
-            &service,
-            BluetoothAction::SetTrusted(DEVICE_PATH.into(), true)
-        )
-        .await
-        .is_ok()
-    );
+    perform(
+        &service,
+        BluetoothAction::SetTrusted(DEVICE_PATH.into(), true),
+    )
+    .await
+    .unwrap();
     assert!(
         perform(&service, BluetoothAction::Pair(DEVICE_PATH.into()))
             .await
