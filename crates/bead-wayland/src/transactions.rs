@@ -430,7 +430,7 @@ impl App {
             return;
         }
         if let UiEvent::Overlay(epoch, event) = event {
-            if self.warm_sources.invalidate(true, epoch) {
+            if self.warm_sources.handle_event(true, epoch, &event) {
                 return;
             }
             if self.overlay.as_ref().is_some_and(|o| o.epoch() == epoch) {
@@ -464,7 +464,7 @@ impl App {
             return;
         }
         if let UiEvent::Panel(epoch, event) = event {
-            if self.warm_sources.invalidate(false, epoch) {
+            if self.warm_sources.handle_event(false, epoch, &event) {
                 return;
             }
             if epoch != self.panel_epoch || self.panel_runtime.is_none() {

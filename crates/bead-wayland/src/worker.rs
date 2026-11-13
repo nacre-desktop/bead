@@ -2213,4 +2213,58 @@ mod tests {
         assert_eq!(stack_charge(Some("1048576")), STACK_BYTES);
         assert_eq!(stack_charge(Some("8388608")), 8 * bead_core::cache::MIB);
     }
+    #[test]
+    fn dormant_empty_model_hints_wait_for_resume_but_payloads_and_reload_evict() {
+        for overlay in [false, true] {
+            let factories = Arc::new(AtomicUsize::new(0));
+            let stages = Arc::new(AtomicUsize::new(0));
+            let (source, events) =
+                warm_worker(factories.clone(), stages.clone(), Default::default());
+            let budget = source.warm_retained_bytes().unwrap() + 1024;
+            let mut cache = crate::warm::Cache::default();
+            cache.park(overlay, "hinted".into(), 4, source, budget);
+            assert!(!cache.handle_event(overlay, 3, &UiEvent::Model(Default::default())));
+            for _ in 0..100 {
+                assert!(cache.handle_event(overlay, 4, &UiEvent::Model(Default::default())));
+            }
+            let mut source = cache
+                .take(overlay, "hinted")
+                .expect("empty hints retain source")
+                .source;
+            assert!(source.resume().unwrap().is_none());
+            settle(source.as_mut(), &events);
+            assert_eq!(factories.load(Ordering::SeqCst), 1);
+            assert_eq!(
+                stages.load(Ordering::SeqCst),
+                1,
+                "no hidden model evaluations"
+            );
+            cache.park(overlay, "hinted".into(), 4, source, budget);
+            let payload = UiEvent::Model(std::collections::BTreeMap::from([(
+                "changed".into(),
+                bead_core::Value::Bool(true),
+            )]));
+            assert!(cache.handle_event(overlay, 4, &payload));
+            assert!(
+                cache.take(overlay, "hinted").is_none(),
+                "payload requires cold refresh"
+            );
+            assert!(
+                matches!(
+                    events.recv_timeout(Duration::from_secs(2)),
+                    Err(mpsc::RecvTimeoutError::Disconnected)
+                ),
+                "eviction sends Stop and ends the actual worker"
+            );
+            let (source, _events) =
+                warm_worker(Default::default(), Default::default(), Default::default());
+            let budget = source.warm_retained_bytes().unwrap() + 1024;
+            cache.park(overlay, "reload".into(), 5, source, budget);
+            assert!(cache.handle_event(overlay, 5, &UiEvent::Reload));
+            assert!(
+                cache.take(overlay, "reload").is_none(),
+                "explicit reload keeps force-refresh semantics"
+            );
+        }
+    }
 }

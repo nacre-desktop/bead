@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
-//! Dormant sources own no surfaces. Any wakeup invalidates their cached inputs.
-use crate::SceneSource;
+//! Dormant sources own no surfaces. Payload-free model hints wait for resume.
+use crate::{SceneSource, UiEvent};
 use std::collections::VecDeque;
 
 pub(super) struct Entry {
@@ -62,6 +62,22 @@ impl Cache {
         let entry = self.0.remove(index);
         self.trace();
         entry
+    }
+    /// Consume callbacks for dormant epochs. Empty model hints carry no state:
+    /// mandatory resume polls their producers. Every payload/protocol event still
+    /// invalidates the source, so no data or acknowledgement can be lost.
+    pub fn handle_event(&mut self, overlay: bool, epoch: u64, event: &UiEvent) -> bool {
+        if !self
+            .0
+            .iter()
+            .any(|entry| entry.overlay == overlay && entry.epoch == epoch)
+        {
+            return false;
+        }
+        if !matches!(event, UiEvent::Model(values) if values.is_empty()) {
+            self.invalidate(overlay, epoch);
+        }
+        true
     }
     /// Dropping sends Stop even if a Ready packet is awaiting acknowledgement.
     pub fn invalidate(&mut self, overlay: bool, epoch: u64) -> bool {

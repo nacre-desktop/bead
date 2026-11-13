@@ -561,6 +561,8 @@ pub trait SceneSource {
     /// Refresh host inputs and validate accepted sources before any cached pixels
     /// become visible. Return the current scene even if no inputs changed. A
     /// failure discards the dormant session; the ordinary factory starts afresh.
+    /// Empty Model refresh hints are skipped while dormant: this must poll the
+    /// latest producer state even when no model payload was delivered.
     fn resume(&mut self) -> Result<Option<Scene>, Box<dyn Error>> {
         Err("source does not support dormant reuse".into())
     }
