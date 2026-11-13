@@ -126,6 +126,10 @@ impl Bundle {
     pub fn save(&self, path: &Path) -> Result<()> {
         self.validate()?;
         if existing_private_bundle_matches(path, self) {
+            // A prior rename may have succeeded before its directory sync failed.
+            // Reaffirm durability on retries without rewriting identical data.
+            std::fs::File::open(path)?.sync_all()?;
+            std::fs::File::open(path.parent().ok_or("recovery parent missing")?)?.sync_all()?;
             return Ok(());
         }
         write(path, self)
