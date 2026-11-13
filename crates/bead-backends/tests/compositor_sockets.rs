@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 #![cfg(all(feature = "compositors", unix))]
 
-use bead_backends::{Action, Backend, Event};
+use bead_backends::{Action, Event};
 use serde_json::{Value, json};
 use std::{
     fs,
