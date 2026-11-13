@@ -69,10 +69,11 @@ impl Value {
         }
     }
 }
+/// Copy-on-write: a staged copy shares the committed maps until it commits a change.
 #[derive(Clone, Default, Debug)]
 pub struct Stores {
-    values: BTreeMap<String, Value>,
-    versions: BTreeMap<String, u64>,
+    values: std::sync::Arc<BTreeMap<String, Value>>,
+    versions: std::sync::Arc<BTreeMap<String, u64>>,
     revision: u64,
 }
 impl Stores {
@@ -91,6 +92,10 @@ impl Stores {
     /// Stage schema reconciliation without mutating the live stores. Existing values win.
     pub fn reconcile(&self, schema: &BTreeMap<String, Value>) -> Result<Self, String> {
         let mut next = self.clone();
+        let (values, versions) = (
+            std::sync::Arc::make_mut(&mut next.values),
+            std::sync::Arc::make_mut(&mut next.versions),
+        );
         for (id, default) in schema {
             if id.is_empty()
                 || id.len() > 128
@@ -101,18 +106,18 @@ impl Stores {
             {
                 return Err(format!("invalid state definition {id}"));
             }
-            if let Some(current) = next.values.get(id) {
+            if let Some(current) = values.get(id) {
                 if !current.same_type(default) {
                     return Err(format!(
                         "state {id} changes type; supply an explicit migration later"
                     ));
                 }
             } else {
-                next.values.insert(id.clone(), default.clone());
-                next.versions.insert(id.clone(), 0);
+                values.insert(id.clone(), default.clone());
+                versions.insert(id.clone(), 0);
             }
         }
-        if next.values.len() > 4096 {
+        if values.len() > 4096 {
             return Err("state retention exceeds 4096 stable IDs".into());
         }
         Ok(next)
@@ -136,9 +141,13 @@ impl Stores {
             return Ok(false);
         }
         self.revision += 1;
+        let (values, versions) = (
+            std::sync::Arc::make_mut(&mut self.values),
+            std::sync::Arc::make_mut(&mut self.versions),
+        );
         for (id, value) in changed {
-            self.values.insert(id.clone(), value);
-            self.versions.insert(id, self.revision);
+            values.insert(id.clone(), value);
+            versions.insert(id, self.revision);
         }
         Ok(true)
     }

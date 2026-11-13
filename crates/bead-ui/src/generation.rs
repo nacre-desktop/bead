@@ -794,7 +794,13 @@ impl Generation {
                 // dependencies still used by the committed view.
                 if !self.view_reads_overflow.get() {
                     let mut reads = self.view_reads.borrow_mut();
-                    reads.extend(self.script.store_reads(name, stores));
+                    if stores.get(name).is_some() {
+                        if !reads.contains(name) {
+                            reads.insert(name.to_owned());
+                        }
+                    } else {
+                        reads.extend(self.script.store_reads(name, stores));
+                    }
                     // A host can reconcile its schema during a generation's life.
                     // On overflow use ordinary staging instead of growing this cache.
                     if reads.len() > 4096 {

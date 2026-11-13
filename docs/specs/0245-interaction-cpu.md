@@ -268,3 +268,65 @@ The measured host has not implemented these opt-in contracts. No desktop grant
 or owner live audit has been supplied, so there are no phase-2b shell CPU/PPT or
 look-and-feel acceptance results, and the approximately 1%-of-one-core goal is
 not established. Raw harnesses and logs remain untracked.
+
+## Phase 2c — UI hot paths: hover and focus patches, allocation churn
+
+Scope: the UI-side items of the hot-path audit (B0252): hover/focus as cache
+patches instead of rebuilds, `Stores` copy-on-write, cache-hit read tracking,
+the per-node String churn and global locks in `ViewSpec::from_raw`, Taffy id
+keys, and the raw-view cache's redundant deep compare on animation frames. No
+rendered output changes: each patch is asserted primitive-for-primitive, clip and
+node-box equal to a rebuild from a fresh generation.
+
+`bead.hovered`, `bead.focused` and `bead.focus_visible` are no longer structural
+in the materialized cache. Hover only ever changes a view's box fill and label
+colour (`layout::surface_colors`), so the cache records both colour states for
+every node-bearing view and recolours in place. A box that only one hover state
+draws (a transparent idle fill with a `hover_fill`, or the default hover fill of
+an unfilled button) is inserted in front of the view's own primitives or removed,
+renumbering later layers and clips; a view that drew nothing (so culling cannot be
+told apart) and an uncoloured empty `TextInput` (placeholder colour) still
+rebuild. The focus ring moves with its control, including under scroll; appearing
+or leaving still rebuilds. A text patch on a hovered or selected label now keeps
+the label's hover/selected colour, which previously fell back to `onSurface`.
+
+`Stores` holds its two maps in `Arc`s with copy-on-write commits, so staging a
+transaction no longer copies every store; `from_raw` reads the sans family and
+text style once per build and borrows string properties and the Taffy id keys;
+cache-hit resolves record a read name once instead of allocating per binding.
+
+`ui.animate` markers (A1) were not done: 10 of the 19 call sites in the Nacre
+shell pass the value through `math.min/max/ceil/clamp`, `tostring` or
+comparisons, which Luau's standard library evaluates eagerly and which no
+metatable can defer, so a marker is not source-compatible. The no-API-change step
+remains: animation frames skip the raw-tree deep compare and the second size
+walk. Luau evaluation itself stays the cost of an animation frame.
+
+Measurements: `.lead/bench` harness (B0252, extended), oyster, ubuntu 24.04
+container, Rust 1.99.0 release build, medians of 30 (microseconds / allocator
+calls), base `9469cc81` against this unit, consecutive runs. Timings on that host
+vary by up to a third between runs; allocation counts are exact.
+
+| Path | base | after |
+|---|---:|---:|
+| bar hover crossing | 340 / 2,905 | 40 / 700 |
+| bar focus move (ring) | 352 / 2,955 | 42 / 748 |
+| bar bound text change (patch) | 228 / 4,296 | 98 / 966 |
+| bar update with unchanged value | 11.3 / 342 | 1.7 / 15 |
+| bar `Stores::clone` | 5.0 / 328 | 0.0 / 0 |
+| bar `ViewSpec::from_raw` | 178 / 1,518 | 173 / 723 |
+| bar `layout::layout` | 43 / 359 | 39 / 317 |
+| bar Luau animation frame | 1,289 / 4,466 | 1,286 / 3,212 |
+| panel (300 rows) hover crossing | 2,233 / 15,207 | 285 / 3,145 |
+| panel `ViewSpec::from_raw` | 1,198-1,726 / 8,542 | 1,154-1,461 / 6,700 |
+| panel `layout::layout` | 373 / 3,489 | 354 / 3,186 |
+| panel scroll step (patch, first in a session) | 353 / 3,121 | 348 / 3,111 |
+| panel scroll patch without commit | 185 / 3,121 | 188 / 3,146 |
+
+Scene sizes, `TreeCache::prepare` and damage costs are unchanged. B8 is a no-op at
+this layer: a session's scene never carries prepared frames (the worker bakes
+every packet), so the clear in `scroll_feedback` costs nothing; the fade-frame
+re-bake lives in the worker's `bake` and is a follow-up there. Taffy incremental
+relayout (B6) is not done: after this unit only store-driven structure changes,
+viewport changes and Luau animation frames lay out, and those re-run the
+frontend anyway.

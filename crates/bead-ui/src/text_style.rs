@@ -24,13 +24,13 @@ pub struct TextStyle {
     pub solid: bool,
 }
 impl TextStyle {
-    fn family(&self, name: &str) -> String {
+    pub(crate) fn family(&self, name: &str) -> String {
         self.aliases
             .get(name)
             .cloned()
             .unwrap_or_else(|| name.to_owned())
     }
-    fn size(&self, base: f32, family: &str) -> f32 {
+    pub(crate) fn size(&self, base: f32, family: &str) -> f32 {
         if self.fixed_size_families.contains(family)
             || self
                 .fixed_size_prefixes
@@ -68,6 +68,11 @@ pub fn refresh() {
 pub fn gradients() -> bool {
     let held = STYLE.lock().unwrap_or_else(|p| p.into_inner());
     !held.as_ref().is_some_and(|s| s.solid)
+}
+/// A copy of the style for a whole build, instead of a lock per node.
+pub(crate) fn current() -> TextStyle {
+    let held = STYLE.lock().unwrap_or_else(|p| p.into_inner());
+    held.clone().unwrap_or_default()
 }
 /// The family to draw for a markup family name.
 pub fn family(name: &str) -> String {

@@ -601,15 +601,22 @@ impl LuauFrontEnd {
         if meters.len() >= 8 && !meters.contains_key(family) {
             meters.clear();
         }
-        let meter = meters.entry(family.to_owned()).or_insert_with(|| {
-            self.font_picker.as_ref().map_or_else(
-                || crate::transcript::Meter::fixed(vec![]),
-                |picker| crate::transcript::Meter::new(picker.clone()),
-            )
-        });
+        if !meters.contains_key(family) {
+            meters.insert(
+                family.to_owned(),
+                self.font_picker.as_ref().map_or_else(
+                    || crate::transcript::Meter::fixed(vec![]),
+                    |picker| crate::transcript::Meter::new(picker.clone()),
+                ),
+            );
+        }
         // Whole pixels: layout rounds boxes to the pixel grid, and a fractional box at a
         // fractional x can round narrower than the text, wrapping its last glyph.
-        meter.width(text, family, size).ceil()
+        meters
+            .get_mut(family)
+            .expect("inserted meter")
+            .width(text, family, size)
+            .ceil()
     }
     pub(super) fn resource_bytes(&self) -> (usize, usize, usize) {
         (
@@ -854,9 +861,15 @@ impl FrontEnd for LuauFrontEnd {
         let upstream = resolve;
         let record = |name: &str| {
             let value = upstream(name)?;
-            reads.borrow_mut().insert(name.to_owned(), value.clone());
+            // A build reads one value per name: record each name once per set.
+            let mut reads = reads.borrow_mut();
+            if !reads.contains_key(name) {
+                reads.insert(name.to_owned(), value.clone());
+            }
             for scope in scopes.borrow_mut().iter_mut() {
-                scope.insert(name.to_owned(), value.clone());
+                if !scope.contains_key(name) {
+                    scope.insert(name.to_owned(), value.clone());
+                }
             }
             Ok(value)
         };
@@ -1319,21 +1332,26 @@ impl FrontEnd for LuauFrontEnd {
                 .checked_sub(crate::layout::raw_bytes(&raw))
                 .ok_or_else(|| mlua::Error::runtime("markup exceeds 8 MiB"))?;
             expand_fragments(&mut raw, &fragments.borrow(), &mut remaining)?;
-            Ok(raw)
+            // The expanded size, without a second walk (memo markers count twice).
+            Ok((raw, 8 * bead_core::cache::MIB - remaining))
         });
         // Live VM allocation after this build (retained module state plus
         // not-yet-collected garbage), not an allocator high-water estimate.
         self.vm_build_bytes.set(lua.used_memory());
+        let animating = self.animations.borrow().next_frame.is_some();
         let result = result
-            .map(|raw| {
+            .map(|(raw, raw_bytes)| {
                 // Windowed lists read the offset to choose rows. Between row
                 // boundaries the authored tree is identical: keep its identity
                 // so the materialized cache can update the scroll pose alone.
-                self.materialized
+                // An animation frame changed a value by construction: skip the compare.
+                let raw = self
+                    .materialized
                     .borrow()
                     .as_ref()
-                    .filter(|cached| *cached.raw == raw)
-                    .map_or_else(|| std::rc::Rc::new(raw), |cached| cached.raw.clone())
+                    .filter(|cached| !animating && *cached.raw == raw)
+                    .map_or_else(|| std::rc::Rc::new(raw), |cached| cached.raw.clone());
+                (raw, raw_bytes)
             })
             .map_err(|error| diagnostic(entry, error));
         // A failed build may have left modules half-loaded: start the next one fresh.
@@ -1341,11 +1359,11 @@ impl FrontEnd for LuauFrontEnd {
             *self.vm.borrow_mut() = Some(owned);
         }
         self.animations.borrow_mut().finish_build();
-        if let Ok(raw) = &result {
+        if let Ok((raw, raw_bytes)) = &result {
             let reads = reads.into_inner();
             let widths = widths.into_inner();
             let windows = windows.into_inner();
-            let bytes = crate::layout::raw_bytes(raw)
+            let bytes = raw_bytes
                 + reads
                     .iter()
                     .map(|(k, v)| k.capacity() + 64 + bead_core::cache::value_bytes(v))
@@ -1378,7 +1396,7 @@ impl FrontEnd for LuauFrontEnd {
                 });
             }
         }
-        result
+        result.map(|(raw, _)| raw)
     }
 }
 /// Every store binding and action a plugin's rendered subtree carries must be declared.

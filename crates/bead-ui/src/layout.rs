@@ -255,12 +255,25 @@ pub struct ViewSpec {
     pub children: Vec<ViewSpec>,
     pub source: Source,
 }
-fn number(
-    p: &Map<String, Json>,
-    name: &str,
-    default: f32,
-    source: &Source,
-) -> Result<f32, Diagnostic> {
+/// A node's authored properties with its bindings resolved on top.
+struct Props<'a> {
+    raw: &'a Map<String, Json>,
+    resolved: Map<String, Json>,
+}
+impl Props<'_> {
+    fn get(&self, name: &str) -> Option<&Json> {
+        self.resolved.get(name).or_else(|| self.raw.get(name))
+    }
+    fn contains_key(&self, name: &str) -> bool {
+        self.raw.contains_key(name)
+    }
+}
+/// Per-build host presentation inputs, read once instead of once per node.
+struct Build {
+    default_family: String,
+    text_style: crate::text_style::TextStyle,
+}
+fn number(p: &Props<'_>, name: &str, default: f32, source: &Source) -> Result<f32, Diagnostic> {
     match p.get(name) {
         None => Ok(default),
         Some(v) => v
@@ -298,27 +311,21 @@ fn polygon(value: Option<&Json>, source: &Source) -> Result<Option<Vec<[f32; 2]>
     }
     Ok(Some(result))
 }
-fn text(
-    p: &Map<String, Json>,
+fn text<'a>(
+    p: &'a Props<'_>,
     name: &str,
-    default: &str,
+    default: &'a str,
     source: &Source,
-) -> Result<String, Diagnostic> {
+) -> Result<&'a str, Diagnostic> {
     match p.get(name) {
-        None => Ok(default.into()),
+        None => Ok(default),
         Some(v) => v
             .as_str()
             .filter(|s| s.len() <= 65536)
-            .map(str::to_owned)
             .ok_or_else(|| source.error(format!("{name} must be text"))),
     }
 }
-fn boolean(
-    p: &Map<String, Json>,
-    name: &str,
-    default: bool,
-    source: &Source,
-) -> Result<bool, Diagnostic> {
+fn boolean(p: &Props<'_>, name: &str, default: bool, source: &Source) -> Result<bool, Diagnostic> {
     match p.get(name) {
         None => Ok(default),
         Some(v) => v
@@ -327,7 +334,7 @@ fn boolean(
     }
 }
 fn dimension<T: FromLength + FromPercent + TaffyAuto>(
-    p: &Map<String, Json>,
+    p: &Props<'_>,
     name: &str,
     default: T,
     source: &Source,
@@ -391,9 +398,11 @@ fn binding(value: Option<&Json>) -> Option<&str> {
 }
 impl ViewSpec {
     pub fn from_raw(raw: &RawNode, resolve: &Resolve<'_>) -> Result<Self, Diagnostic> {
+        #[allow(clippy::too_many_arguments)] // Recursive descent shares one fixed build context.
         fn build(
             raw: &RawNode,
             resolve: &Resolve<'_>,
+            host: &Build,
             scope: &str,
             position: usize,
             path: &str,
@@ -404,25 +413,27 @@ impl ViewSpec {
             if *count > 8192 {
                 return Err(raw.source.error("view exceeds8192nodes"));
             }
-            let mut props = std::borrow::Cow::Borrowed(&raw.props);
+            let mut props = Props {
+                raw: &raw.props,
+                resolved: Map::new(),
+            };
             for (name, value) in &raw.props {
                 if !allowed_property(name) {
                     return Err(raw.source.error(format!("unknown property {name}")));
                 }
                 if let Some(path) = binding(Some(value)) {
-                    props.to_mut().insert(
+                    props.resolved.insert(
                         name.clone(),
                         serde_json::to_value(resolve(path)?).map_err(|e| raw.source.error(e))?,
                     );
                 } else if COLOR_PROPERTIES.contains(&name.as_str())
                     && let Some(resolved) = resolve_nested(value, resolve, &raw.source)?
                 {
-                    props.to_mut().insert(name.clone(), resolved);
+                    props.resolved.insert(name.clone(), resolved);
                 }
             }
-            let p = props.as_ref();
+            let p = &props;
             let source = &raw.source;
-            let local = text(p, "id", &format!("_layout{position}"), source)?;
             if matches!(
                 raw.kind,
                 Widget::Button | Widget::TextInput | Widget::Scroll
@@ -430,11 +441,14 @@ impl ViewSpec {
             {
                 return Err(source.error("interactive nodes require stable explicit id"));
             }
-            let scope = format!("{}{}", scope, raw.scope.as_deref().unwrap_or(""));
+            let scope = match raw.scope.as_deref() {
+                Some(own) => format!("{scope}{own}"),
+                None => scope.to_owned(),
+            };
             let id = if p.contains_key("id") {
-                format!("{scope}{local}")
+                format!("{scope}{}", text(p, "id", "", source)?)
             } else {
-                format!("{path}.{local}")
+                format!("{path}._layout{position}")
             };
             if id.len() > 2048 || !seen.insert(id.clone()) {
                 return Err(source.error(format!("duplicate or too long view id {id}")));
@@ -494,11 +508,10 @@ impl ViewSpec {
                 return Err(source
                     .error("Arc angles must be within -360..360 and stroke_width within 1..64"));
             }
-            let family = crate::theme::with_sans_family(|default_family| {
-                text(p, "family", default_family, source)
-            })?;
-            let family = crate::text_style::family(&family);
-            let font_size = crate::text_style::size(font_size, &family);
+            let family = host
+                .text_style
+                .family(text(p, "family", &host.default_family, source)?);
+            let font_size = host.text_style.size(font_size, &family);
             let visible = boolean(p, "visible", true, source)?;
             let mut style = Style {
                 position: Position::Relative,
@@ -540,7 +553,7 @@ impl ViewSpec {
                 _ => 0.,
             };
             if p.contains_key("position") {
-                style.position = match text(p, "position", "relative", source)?.as_str() {
+                style.position = match text(p, "position", "relative", source)? {
                     "relative" => Position::Relative,
                     "absolute" => Position::Absolute,
                     _ => return Err(source.error("position must be relative/absolute")),
@@ -612,14 +625,14 @@ impl ViewSpec {
                 width: length(number(p, "gap_x", gap, source)?),
                 height: length(number(p, "gap_y", gap, source)?),
             };
-            style.align_items = match text(p, "align", "stretch", source)?.as_str() {
+            style.align_items = match text(p, "align", "stretch", source)? {
                 "start" => AlignItems::START,
                 "center" => AlignItems::CENTER,
                 "end" => AlignItems::END,
                 "stretch" => AlignItems::STRETCH,
                 _ => return Err(source.error("align needs start/center/end/stretch")),
             };
-            style.justify_content = match text(p, "justify", "start", source)?.as_str() {
+            style.justify_content = match text(p, "justify", "start", source)? {
                 "start" => AlignContent::START,
                 "center" => AlignContent::CENTER,
                 "end" => AlignContent::END,
@@ -770,7 +783,7 @@ impl ViewSpec {
             };
             let mut children = Vec::new();
             for (i, child) in raw.children.iter().enumerate() {
-                let mut child = build(child, resolve, &child_scope, i, &id, seen, count)?;
+                let mut child = build(child, resolve, host, &child_scope, i, &id, seen, count)?;
                 if raw.kind == Widget::Panel && child.style.size.height.is_auto() {
                     child.style.flex_grow = 1.;
                 }
@@ -780,7 +793,7 @@ impl ViewSpec {
                     children.push(child);
                 }
             }
-            let content = text(p, "text", "", source)?;
+            let content = text(p, "text", "", source)?.to_owned();
             if raw.kind == Widget::Text && !p.contains_key("text") {
                 return Err(source.error("Text requires text"));
             }
@@ -792,7 +805,7 @@ impl ViewSpec {
                 kind: raw.kind,
                 style,
                 text: content,
-                placeholder: text(p, "placeholder", "", source)?,
+                placeholder: text(p, "placeholder", "", source)?.to_owned(),
                 selected: boolean(p, "selected", false, source)?,
                 visible,
                 action: action.as_ref().map(|a| a.0.clone()),
@@ -808,7 +821,7 @@ impl ViewSpec {
                 activate_on_release,
                 focus_on_pointer,
                 focus_ring: boolean(p, "focus_ring", true, source)?,
-                preview_key: text(p, "preview_key", "", source)?,
+                preview_key: text(p, "preview_key", "", source)?.to_owned(),
                 preview_value: number(p, "preview_value", 0., source)?,
                 preview_inset: number(p, "preview_inset", 0., source)?.max(0.),
                 preview_source: p
@@ -846,7 +859,7 @@ impl ViewSpec {
                 sweep_angle,
                 stroke_width,
                 round_caps: boolean(p, "round_caps", true, source)?,
-                image_fit: match text(p, "image_fit", "fill", source)?.as_str() {
+                image_fit: match text(p, "image_fit", "fill", source)? {
                     "fill" => bead_render::ImageFit::Fill,
                     "cover" => bead_render::ImageFit::Cover,
                     _ => return Err(source.error("image_fit must be fill or cover")),
@@ -870,13 +883,13 @@ impl ViewSpec {
                 family,
                 icon: p
                     .get("icon")
-                    .map(|_| text(p, "icon", "", source))
+                    .map(|_| text(p, "icon", "", source).map(str::to_owned))
                     .transpose()?,
                 path: p
                     .get("path")
                     .map(|_| text(p, "path", "", source).map(PathBuf::from))
                     .transpose()?,
-                aria_label: text(p, "aria_label", "", source)?,
+                aria_label: text(p, "aria_label", "", source)?.to_owned(),
                 motion: if p.contains_key("open") {
                     Some(bead_render::Motion {
                         slide_distance: if p.contains_key("slide_distance") {
@@ -908,18 +921,15 @@ impl ViewSpec {
                             None
                         },
                         return_curve: if p.contains_key("return_transition") {
-                            Some(
-                                match text(p, "return_transition", "ease", source)?.as_str() {
-                                    "ease" => bead_core::animation::Curve::EaseOut,
-                                    "ease-in-out" => bead_core::animation::Curve::EaseInOut,
-                                    "spring" => bead_core::animation::Curve::Spring,
-                                    _ => {
-                                        return Err(source.error(
-                                            "return_transition needs ease/ease-in-out/spring",
-                                        ));
-                                    }
-                                },
-                            )
+                            Some(match text(p, "return_transition", "ease", source)? {
+                                "ease" => bead_core::animation::Curve::EaseOut,
+                                "ease-in-out" => bead_core::animation::Curve::EaseInOut,
+                                "spring" => bead_core::animation::Curve::Spring,
+                                _ => {
+                                    return Err(source
+                                        .error("return_transition needs ease/ease-in-out/spring"));
+                                }
+                            })
                         } else {
                             None
                         },
@@ -949,7 +959,20 @@ impl ViewSpec {
                 source: raw.source.clone(),
             })
         }
-        build(raw, resolve, "", 0, "view", &mut BTreeSet::new(), &mut 0)
+        let host = Build {
+            default_family: crate::theme::with_sans_family(str::to_owned),
+            text_style: crate::text_style::current(),
+        };
+        build(
+            raw,
+            resolve,
+            &host,
+            "",
+            0,
+            "view",
+            &mut BTreeSet::new(),
+            &mut 0,
+        )
     }
 }
 fn first_label(view: &ViewSpec) -> String {
@@ -1019,6 +1042,47 @@ pub(super) fn color(
             .map_err(|_| source.error("color requires a palette role or RGBA array")),
     }
 }
+/// The box fill and text colour of a view in its idle or hovered state: the only
+/// outputs of a layout that depend on `bead.hovered`.
+pub(super) fn surface_colors(
+    view: &ViewSpec,
+    hovered: bool,
+    palette: &Palette,
+) -> Result<([u8; 4], [u8; 4]), Diagnostic> {
+    let palette_role = |name: &str, default| palette.get(name).unwrap_or(default);
+    let body = palette_role("surface", [24, 24, 24, 255]);
+    let ink = palette_role("onSurface", [240, 240, 240, 255]);
+    let selected = view.selected || hovered;
+    let fill = color(
+        if hovered {
+            view.hover_fill.as_ref().or(view.fill.as_ref())
+        } else if view.selected {
+            view.selected_fill.as_ref().or(view.fill.as_ref())
+        } else {
+            view.fill.as_ref()
+        },
+        if view.kind == Widget::Panel {
+            body
+        } else if selected || view.kind == Widget::TextInput {
+            palette_role("surfaceContainer", body)
+        } else {
+            [0, 0, 0, 0]
+        },
+        palette,
+        &view.source,
+    )?;
+    let foreground = color(
+        view.color.as_ref(),
+        if selected {
+            palette_role("primary", ink)
+        } else {
+            ink
+        },
+        palette,
+        &view.source,
+    )?;
+    Ok((fill, foreground))
+}
 fn intersect(a: Rect, b: Rect) -> Option<Rect> {
     let x = a.x.max(b.x);
     let y = a.y.max(b.y);
@@ -1044,10 +1108,10 @@ pub fn layout(
     LAYOUT_PASSES.set(LAYOUT_PASSES.get().wrapping_add(1));
     let mut tree = TaffyTree::<()>::new();
     let mut ids = BTreeMap::new();
-    fn add(
-        view: &ViewSpec,
+    fn add<'a>(
+        view: &'a ViewSpec,
         tree: &mut TaffyTree<()>,
-        ids: &mut BTreeMap<String, NodeId>,
+        ids: &mut BTreeMap<&'a str, NodeId>,
     ) -> Result<NodeId, Diagnostic> {
         let children = view
             .children
@@ -1057,7 +1121,7 @@ pub fn layout(
         let id = tree
             .new_with_children(view.style.clone(), &children)
             .map_err(|e| view.source.error(e))?;
-        ids.insert(view.id.clone(), id);
+        ids.insert(view.id.as_str(), id);
         Ok(id)
     }
     let root = add(view, &mut tree, &mut ids)?;
@@ -1110,7 +1174,7 @@ pub fn layout(
     fn draw(
         view: &ViewSpec,
         tree: &TaffyTree<()>,
-        ids: &BTreeMap<String, NodeId>,
+        ids: &BTreeMap<&str, NodeId>,
         parent: (f32, f32),
         parent_layer: Option<&str>,
         clip: Option<Rect>,
@@ -1126,7 +1190,7 @@ pub fn layout(
             return Ok(());
         }
         let l = tree
-            .layout(ids[&view.id])
+            .layout(ids[view.id.as_str()])
             .map_err(|e| view.source.error(e))?;
         let r = Rect::new(
             parent.0 + l.location.x + view.translate_x,
@@ -1151,35 +1215,10 @@ pub fn layout(
         });
         let source = &view.source;
         let palette_role = |name: &str, default| palette.get(name).unwrap_or(default);
-        let body = palette_role("surface", [24, 24, 24, 255]);
         let ink = palette_role("onSurface", [240, 240, 240, 255]);
         let muted = palette_role("onSurfaceVariant", ink);
         let accent = palette_role("primary", ink);
-        let selected = view.selected || hover == view.id;
-        let fill = color(
-            if hover == view.id {
-                view.hover_fill.as_ref().or(view.fill.as_ref())
-            } else if view.selected {
-                view.selected_fill.as_ref().or(view.fill.as_ref())
-            } else {
-                view.fill.as_ref()
-            },
-            if view.kind == Widget::Panel {
-                body
-            } else if selected || view.kind == Widget::TextInput {
-                palette_role("surfaceContainer", body)
-            } else {
-                [0, 0, 0, 0]
-            },
-            palette,
-            source,
-        )?;
-        let foreground = color(
-            view.color.as_ref(),
-            if selected { accent } else { ink },
-            palette,
-            source,
-        )?;
+        let (fill, foreground) = surface_colors(view, hover == view.id, palette)?;
         let mut emit = |primitive: Primitive| {
             if !own_visible && !retain_offscreen {
                 return;

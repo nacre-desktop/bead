@@ -35,6 +35,39 @@ struct Floating {
     index: usize,
     node: String,
 }
+/// A view `bead.hovered` can name: its box and label primitives with both colour states.
+struct Hover {
+    id: String,
+    rounded: Option<usize>,
+    text: Option<usize>,
+    idle: ([u8; 4], [u8; 4]),
+    hot: ([u8; 4], [u8; 4]),
+    /// Whether the idle and the hovered state draw a box (a transparent one is not drawn).
+    boxed: (bool, bool),
+    /// Where a box appears when the other state draws one: in front of the view's own
+    /// primitives. `None` when the view drew nothing, so the patch cannot tell whether
+    /// it was culled, and misses instead.
+    insert_at: Option<usize>,
+    radius: f32,
+    /// An empty input shows its placeholder in the muted colour: its label colour
+    /// cannot be patched from the hover state alone.
+    input: bool,
+}
+impl Hover {
+    fn wants_box(&self, hot: bool) -> bool {
+        if hot { self.boxed.1 } else { self.boxed.0 }
+    }
+}
+#[cfg(test)]
+thread_local! {
+    static PATCH_HITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+#[cfg(test)]
+pub(super) fn patch_hits() -> usize {
+    PATCH_HITS.get()
+}
+/// Reserved interaction stores the patch handles without a rebuild.
+const INTERACTION: [&str; 3] = ["bead.hovered", "bead.focused", "bead.focus_visible"];
 pub(super) struct Cached {
     raw: Rc<RawNode>,
     scene: Scene,
@@ -45,6 +78,7 @@ pub(super) struct Cached {
     values: BTreeMap<String, Value>,
     structural: BTreeSet<String>,
     text: Vec<Text>,
+    hover: Vec<Hover>,
     scroll: Vec<Scroll>,
     panel_open: Option<String>,
     clip_regions: Vec<ClipRegion>,
@@ -75,6 +109,53 @@ fn bindings(value: &serde_json::Value, out: &mut BTreeSet<String>) {
         }
     }
 }
+/// Take primitive `index` out of `scene`, renumbering layers and clips after it.
+fn remove_primitive(scene: &mut Scene, index: usize) {
+    scene.primitives.remove(index);
+    scene.clips = std::mem::take(&mut scene.clips)
+        .into_iter()
+        .filter(|(i, _)| *i != index)
+        .map(|(i, clip)| (if i > index { i - 1 } else { i }, clip))
+        .collect();
+    for layer in &mut scene.layers {
+        if layer.own.start > index {
+            layer.own.start -= 1;
+        }
+        if layer.own.end > index {
+            layer.own.end -= 1;
+        }
+        if layer.subtree_end > index {
+            layer.subtree_end -= 1;
+        }
+    }
+}
+/// Put `primitive` in front of layer `owner`'s own primitives (at `index`), with their clip.
+fn insert_primitive(scene: &mut Scene, index: usize, owner: usize, primitive: Primitive) {
+    let clip = scene.clips.get(&index).copied();
+    scene.primitives.insert(index, primitive);
+    scene.clips = std::mem::take(&mut scene.clips)
+        .into_iter()
+        .map(|(i, clip)| (if i >= index { i + 1 } else { i }, clip))
+        .collect();
+    if let Some(clip) = clip {
+        scene.clips.insert(index, clip);
+    }
+    for (position, layer) in scene.layers.iter_mut().enumerate() {
+        // Layers precede their descendants: an empty ancestor range ending here stays
+        // before the new primitive, a later layer starting here moves behind it.
+        let after = position > owner;
+        if layer.own.start > index || (layer.own.start == index && after) {
+            layer.own.start += 1;
+        }
+        if layer.own.end > index || (layer.own.end == index && (after || position == owner)) {
+            layer.own.end += 1;
+        }
+        if layer.subtree_end > index || (layer.subtree_end == index && (after || position == owner))
+        {
+            layer.subtree_end += 1;
+        }
+    }
+}
 impl Cached {
     pub fn new(
         raw: Rc<RawNode>,
@@ -93,12 +174,9 @@ impl Cached {
             viewport,
             palette: Palette(palette.0.clone()),
             values: BTreeMap::new(),
-            structural: BTreeSet::from([
-                "bead.focused".into(),
-                "bead.hovered".into(),
-                "bead.focus_visible".into(),
-            ]),
+            structural: BTreeSet::new(),
             text: vec![],
+            hover: vec![],
             scroll: vec![],
             panel_open: None,
             clip_regions: vec![],
@@ -109,16 +187,67 @@ impl Cached {
             primitive_owners: vec![],
             node_owners: vec![],
         };
+        /// Layer and node positions by view id, built once per cache.
+        struct Index<'a> {
+            layers: BTreeMap<&'a str, usize>,
+            nodes: BTreeMap<&'a str, usize>,
+        }
+        let index = Index {
+            layers: scene
+                .layers
+                .iter()
+                .enumerate()
+                .map(|(i, l)| (l.id.as_str(), i))
+                .collect(),
+            nodes: nodes
+                .iter()
+                .enumerate()
+                .map(|(i, n)| (n.id.as_str(), i))
+                .collect(),
+        };
         fn walk(
             raw: &RawNode,
             view: &ViewSpec,
             cached: &mut Cached,
+            lookup: &Index<'_>,
             palette: &Palette,
             implicit_parent_label: bool,
             root: bool,
         ) -> Result<bool, Diagnostic> {
             if raw.kind != view.kind {
                 return Ok(false);
+            }
+            let own = lookup
+                .layers
+                .get(view.id.as_str())
+                .map(|&layer| cached.scene.layers[layer].own.clone());
+            let primitive = |kind: fn(&Primitive) -> bool| {
+                own.clone()
+                    .and_then(|own| own.into_iter().find(|i| kind(&cached.scene.primitives[*i])))
+            };
+            if lookup.nodes.contains_key(view.id.as_str()) {
+                let idle = layout::surface_colors(view, false, palette)?;
+                let hot = layout::surface_colors(view, true, palette)?;
+                if idle != hot {
+                    let boxed =
+                        |fill: [u8; 4]| fill[3] > 0 || view.border_width > 0. || view.selected;
+                    cached.hover.push(Hover {
+                        id: view.id.clone(),
+                        rounded: primitive(|p| matches!(p, Primitive::Rounded { .. })),
+                        text: (view.kind != Widget::TextInput)
+                            .then(|| primitive(|p| matches!(p, Primitive::Text { .. })))
+                            .flatten(),
+                        idle,
+                        hot,
+                        boxed: (boxed(idle.0), boxed(hot.0)),
+                        insert_at: own
+                            .as_ref()
+                            .filter(|own| !own.is_empty() && view.kind != Widget::Panel)
+                            .map(|own| own.start),
+                        radius: view.radius,
+                        input: view.kind == Widget::TextInput,
+                    });
+                }
             }
             for (property, value) in &raw.props {
                 let mut names = BTreeSet::new();
@@ -136,27 +265,12 @@ impl Cached {
                     && !implicit_parent_label
                     && value.get("__bind").is_some();
                 if text {
-                    let index = cached
-                        .scene
-                        .layers
-                        .iter()
-                        .find(|l| l.id == view.id)
-                        .and_then(|l| {
-                            l.own.clone().find(|i| {
-                                matches!(cached.scene.primitives[*i], Primitive::Text { .. })
-                            })
-                        });
-                    if let Some(index) = index {
-                        let foreground = layout::color(
-                            view.color.as_ref(),
-                            palette.get("onSurface").unwrap_or([240, 240, 240, 255]),
-                            palette,
-                            &view.source,
-                        )?;
+                    if let Some(index) = primitive(|p| matches!(p, Primitive::Text { .. })) {
+                        let foreground = layout::surface_colors(view, false, palette)?.1;
                         cached.text.push(Text {
                             masked: view.masked,
                             node: if view.aria_label.is_empty() && !view.masked {
-                                cached.nodes.iter().position(|n| n.id == view.id)
+                                lookup.nodes.get(view.id.as_str()).copied()
                             } else {
                                 None
                             },
@@ -201,6 +315,7 @@ impl Cached {
                     raw,
                     view,
                     cached,
+                    lookup,
                     palette,
                     implicit_parent_label || (view.action.is_some() && view.aria_label.is_empty()),
                     false,
@@ -210,7 +325,7 @@ impl Cached {
             }
             Ok(true)
         }
-        if !walk(&raw, view, &mut cached, palette, false, true)? {
+        if !walk(&raw, view, &mut cached, &index, palette, false, true)? {
             return Ok(None);
         }
         fn scrolls(view: &ViewSpec, scene: &Scene, nodes: &[Node], out: &mut Vec<Scroll>) {
@@ -327,10 +442,12 @@ impl Cached {
         for name in cached
             .structural
             .iter()
-            .chain(cached.text.iter().map(|t| &t.binding))
-            .chain(cached.panel_open.iter())
+            .map(String::as_str)
+            .chain(cached.text.iter().map(|t| t.binding.as_str()))
+            .chain(cached.panel_open.as_deref())
+            .chain(INTERACTION)
         {
-            cached.values.insert(name.clone(), resolve(name)?);
+            cached.values.insert(name.to_owned(), resolve(name)?);
         }
         let bytes = layout::raw_bytes(&raw)
             + (cached.parents.capacity()
@@ -397,6 +514,11 @@ impl Cached {
                 })
                 .sum::<usize>()
             + cached
+                .hover
+                .iter()
+                .map(|h| h.id.capacity() + std::mem::size_of::<Hover>())
+                .sum::<usize>()
+            + cached
                 .scroll
                 .iter()
                 .map(|s| s.id.capacity() + s.binding.capacity() + 96)
@@ -430,6 +552,14 @@ impl Cached {
             }
         }
     }
+    /// The layer owning primitive `index` in the cached scene.
+    fn primitive_layer(&self, index: usize) -> usize {
+        self.scene
+            .layers
+            .iter()
+            .position(|layer| layer.own.contains(&index))
+            .expect("own primitive")
+    }
     pub fn patch(
         &self,
         raw: &Rc<RawNode>,
@@ -459,11 +589,15 @@ impl Cached {
             if value != *old {
                 let scroll_binding = self.scroll.iter().any(|scroll| &scroll.binding == name);
                 let panel_open_binding = self.panel_open.as_ref().is_some_and(|open| open == name);
-                if self.structural.contains(name)
-                    || !(matches!(value, Value::Text(_))
-                        || (scroll_binding && matches!(value, Value::Number(_)))
-                        || (panel_open_binding && matches!(value, Value::Bool(_))))
-                {
+                let typed = match name.as_str() {
+                    "bead.focus_visible" => matches!(value, Value::Bool(_)),
+                    _ => {
+                        matches!(value, Value::Text(_))
+                            || (scroll_binding && matches!(value, Value::Number(_)))
+                            || (panel_open_binding && matches!(value, Value::Bool(_)))
+                    }
+                };
+                if self.structural.contains(name) || !typed {
                     if bead_core::profile::enabled() {
                         println!("INPUT_PATCH_MISS kind=structural binding={name}");
                     }
@@ -472,6 +606,50 @@ impl Cached {
                 changed.insert(name.clone(), value);
             }
         }
+        // The focus ring is one primitive after the last layer: it stays, moves or misses.
+        let focus_target =
+            if changed.contains_key("bead.focused") || changed.contains_key("bead.focus_visible") {
+                let current = |name: &str| changed.get(name).or(self.values.get(name));
+                let visible = current("bead.focus_visible") != Some(&Value::Bool(false));
+                let node = match current("bead.focused") {
+                    Some(Value::Text(id)) if visible && !id.is_empty() => {
+                        self.nodes.iter().position(|n| &n.id == id && n.focus_ring)
+                    }
+                    _ => None,
+                };
+                if self.floating.len() != usize::from(node.is_some()) {
+                    if bead_core::profile::enabled() {
+                        println!("INPUT_PATCH_MISS kind=focus_ring");
+                    }
+                    return Ok(None);
+                }
+                node
+            } else {
+                None
+            };
+        if let Some(Value::Text(next)) = changed.get("bead.hovered") {
+            let previous = match self.values.get("bead.hovered") {
+                Some(Value::Text(id)) => id.as_str(),
+                _ => "",
+            };
+            // shortcut: only node-bearing views are tracked, a host-set hover id of a plain
+            // container is ignored here; track every view if a host ever needs that.
+            for (id, hot) in [(previous, false), (next.as_str(), true)] {
+                if let Some(hover) = self.hover.iter().find(|h| h.id == id)
+                    && (hover.wants_box(hot)
+                        && hover.rounded.is_none()
+                        && hover.insert_at.is_none()
+                        || hover.input && hover.idle.1 != hover.hot.1)
+                {
+                    if bead_core::profile::enabled() {
+                        println!("INPUT_PATCH_MISS kind=hover_box id={id}");
+                    }
+                    return Ok(None);
+                }
+            }
+        }
+        #[cfg(test)]
+        PATCH_HITS.set(PATCH_HITS.get() + 1);
         let mut scene = self.scene.clone();
         let mut nodes = self.nodes.clone();
         if let Some(open) = &self.panel_open
@@ -485,6 +663,13 @@ impl Cached {
             };
             motion.open = *value;
         }
+        let hovered = match changed
+            .get("bead.hovered")
+            .or(self.values.get("bead.hovered"))
+        {
+            Some(Value::Text(id)) => id.as_str(),
+            _ => "",
+        };
         for text in &self.text {
             if let Some(Value::Text(value)) = changed.get(&text.binding)
                 && let Primitive::Text {
@@ -492,6 +677,11 @@ impl Cached {
                 } = &mut scene.primitives[text.index]
             {
                 let placeholder = value.is_empty() && text.placeholder.is_some();
+                let hot = self
+                    .hover
+                    .iter()
+                    .find(|h| h.text == Some(text.index) && h.id == hovered)
+                    .map(|h| h.hot.1);
                 *paint = if placeholder {
                     text.placeholder.clone().unwrap_or_default()
                 } else if text.masked {
@@ -502,10 +692,32 @@ impl Cached {
                 *color = if placeholder {
                     text.muted
                 } else {
-                    text.foreground
+                    hot.unwrap_or(text.foreground)
                 };
                 if let Some(node) = text.node {
                     nodes[node].label = paint.clone();
+                }
+            }
+        }
+        if let Some(Value::Text(next)) = changed.get("bead.hovered") {
+            let previous = match self.values.get("bead.hovered") {
+                Some(Value::Text(id)) => id.as_str(),
+                _ => "",
+            };
+            for (id, hot) in [(previous, false), (next.as_str(), true)] {
+                let Some(hover) = self.hover.iter().find(|h| h.id == id) else {
+                    continue;
+                };
+                let (fill, foreground) = if hot { hover.hot } else { hover.idle };
+                if let Some(index) = hover.rounded
+                    && let Primitive::Rounded { fill: paint, .. } = &mut scene.primitives[index]
+                {
+                    *paint = fill;
+                }
+                if let Some(index) = hover.text
+                    && let Primitive::Text { color, .. } = &mut scene.primitives[index]
+                {
+                    *color = foreground;
                 }
             }
         }
@@ -575,6 +787,49 @@ impl Cached {
                 let owner = self.node_owners[index];
                 translate(&mut node.draw, shift(owner));
                 node.clip = clip(owner);
+            }
+        }
+        if let (Some(node), Some(ring)) = (focus_target, self.floating.first()) {
+            let node = &nodes[node];
+            if let Primitive::Rounded { rect, .. } = &mut scene.primitives[ring.index] {
+                *rect = crate::rect(&node.draw);
+            }
+            match node.clip {
+                Some(clip) => scene.clips.insert(ring.index, clip),
+                None => scene.clips.remove(&ring.index),
+            };
+        }
+        // Last, since it renumbers primitives: a box that only one hover state draws.
+        if let Some(Value::Text(next)) = changed.get("bead.hovered") {
+            let previous = match self.values.get("bead.hovered") {
+                Some(Value::Text(id)) => id.as_str(),
+                _ => "",
+            };
+            // Cached indices: a removal before the insertion point shifts it by one.
+            let mut removed = None;
+            for (id, hot) in [(previous, false), (next.as_str(), true)] {
+                let Some(hover) = self.hover.iter().find(|h| h.id == id) else {
+                    continue;
+                };
+                match (hover.wants_box(hot), hover.rounded) {
+                    (false, Some(index)) => {
+                        remove_primitive(&mut scene, index);
+                        removed = Some(index);
+                    }
+                    (true, None) => {
+                        let cached_at = hover.insert_at.expect("checked before patching");
+                        let at = cached_at - usize::from(removed.is_some_and(|r| r < cached_at));
+                        let layer = self.primitive_layer(cached_at);
+                        let primitive = Primitive::Rounded {
+                            rect: scene.layers[layer].bounds,
+                            radius: hover.radius,
+                            fill: if hot { hover.hot.0 } else { hover.idle.0 },
+                            border: None,
+                        };
+                        insert_primitive(&mut scene, at, layer, primitive);
+                    }
+                    _ => {}
+                }
             }
         }
         Ok(Some((scene, nodes)))
