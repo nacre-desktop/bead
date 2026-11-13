@@ -36,14 +36,42 @@ struct DispatchData {
     events: Mutex<Vec<LayerMotionEvent>>,
 }
 
+/// The protocol value of a curve at a bound protocol `version`: out-quint, in-cubic and
+/// out-back exist since version 3; a motion using them on an older compositor stays on the
+/// client frame path (never approximated).
+pub(crate) fn protocol_curve(
+    curve: bead_core::animation::Curve,
+    version: u32,
+) -> Option<bead_layer_motion_v1::Curve> {
+    use bead_core::animation::Curve;
+    Some(match curve {
+        Curve::Linear => bead_layer_motion_v1::Curve::Linear,
+        Curve::EaseOut => bead_layer_motion_v1::Curve::EaseOutCubic,
+        Curve::EaseInOut => bead_layer_motion_v1::Curve::EaseInOutCubic,
+        Curve::EmphasizedAccelerate => bead_layer_motion_v1::Curve::EmphasizedAccelerate,
+        Curve::Spring => bead_layer_motion_v1::Curve::Spring,
+        Curve::OutQuint if version >= 3 => bead_layer_motion_v1::Curve::EaseOutQuint,
+        Curve::InCubic if version >= 3 => bead_layer_motion_v1::Curve::EaseInCubic,
+        Curve::OutBack if version >= 3 => bead_layer_motion_v1::Curve::EaseOutBack,
+        Curve::InCubic | Curve::OutQuint | Curve::OutBack => return None,
+    })
+}
+/// Whether every curve a scene's motion can use exists at a bound protocol version.
+pub(crate) fn curves_supported(motion: &bead_render::Motion, version: u32) -> bool {
+    protocol_curve(motion.transition(true).1, version).is_some()
+        && protocol_curve(motion.transition(false).1, version).is_some()
+}
 impl LayerMotionManager {
     /// Bind the protocol when the compositor advertises it.
     pub(crate) fn bind(globals: &GlobalList, qh: &QueueHandle<App>) -> Option<Self> {
-        globals.bind(qh, 1..=2, ()).ok().map(Self)
+        globals.bind(qh, 1..=3, ()).ok().map(Self)
     }
 
     pub(crate) fn supports_reveal(&self) -> bool {
         self.0.version() >= 2
+    }
+    pub(crate) fn supports_curves(&self, motion: &bead_render::Motion) -> bool {
+        curves_supported(motion, self.0.version())
     }
 
     /// Create a controller associated with a layer-role surface.
@@ -291,14 +319,7 @@ impl LayerMotionController {
                 self.proxy.set_reveal_shadow(0, 0., 0., 0., 0.);
             }
         }
-        let curve = match plan.curve {
-            bead_core::animation::Curve::EaseOut => bead_layer_motion_v1::Curve::EaseOutCubic,
-            bead_core::animation::Curve::EaseInOut => bead_layer_motion_v1::Curve::EaseInOutCubic,
-            bead_core::animation::Curve::EmphasizedAccelerate => {
-                bead_layer_motion_v1::Curve::EmphasizedAccelerate
-            }
-            bead_core::animation::Curve::Spring => bead_layer_motion_v1::Curve::Spring,
-        };
+        let curve = protocol_curve(plan.curve, self.proxy.version())?;
         self.proxy.set_curve(curve);
         let serial = self.next_serial;
         self.next_serial = self.next_serial.wrapping_add(1).max(1);
@@ -569,6 +590,57 @@ impl Dispatch<BeadLayerMotionV1, Arc<DispatchData>> for App {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn protocol_curves_follow_the_bound_version() {
+        use bead_core::animation::Curve;
+        for version in [1, 2] {
+            assert_eq!(super::protocol_curve(Curve::OutQuint, version), None);
+            assert_eq!(super::protocol_curve(Curve::InCubic, version), None);
+            assert_eq!(super::protocol_curve(Curve::OutBack, version), None);
+            assert_eq!(
+                super::protocol_curve(Curve::EaseOut, version),
+                Some(bead_layer_motion_v1::Curve::EaseOutCubic)
+            );
+        }
+        assert_eq!(
+            super::protocol_curve(Curve::OutQuint, 3),
+            Some(bead_layer_motion_v1::Curve::EaseOutQuint)
+        );
+        assert_eq!(
+            super::protocol_curve(Curve::InCubic, 3),
+            Some(bead_layer_motion_v1::Curve::EaseInCubic)
+        );
+        assert_eq!(
+            super::protocol_curve(Curve::OutBack, 3),
+            Some(bead_layer_motion_v1::Curve::EaseOutBack)
+        );
+        assert_eq!(bead_layer_motion_v1::Curve::EaseOutQuint as u32, 5);
+        assert_eq!(bead_layer_motion_v1::Curve::EaseInCubic as u32, 6);
+        assert_eq!(bead_layer_motion_v1::Curve::EaseOutBack as u32, 7);
+        let mut motion = bead_render::Motion {
+            id: "m".into(),
+            open: true,
+            duration: 0.24,
+            return_duration: None,
+            return_curve: None,
+            spring: false,
+            curve: Some(Curve::OutQuint),
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            fade: false,
+            reveal: false,
+            progress: 1.,
+            parts: Vec::new(),
+            art: None,
+            body: None,
+        };
+        // An out-quint open stays on the client path on a v2 compositor and goes to a v3 one.
+        assert!(!super::curves_supported(&motion, 2));
+        assert!(super::curves_supported(&motion, 3));
+        motion.curve = None;
+        assert!(super::curves_supported(&motion, 1));
+    }
     use super::*;
     use crate::layer_motion_protocol::server::{
         bead_layer_motion_manager_v1::BeadLayerMotionManagerV1 as ServerMotionManager,
@@ -897,6 +969,7 @@ mod tests {
                 progress: 1.,
                 parts: Vec::new(),
                 art: None,
+                body: None,
             }),
             resource_revision: 0,
             asset_data: Default::default(),

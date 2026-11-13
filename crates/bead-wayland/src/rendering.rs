@@ -101,6 +101,7 @@ mod layer_motion_renderer_tests {
             progress: 0.,
             parts: Vec::new(),
             art: None,
+            body: None,
         });
         let reveal = bead_render::tree::TreeCpuRenderer::snapshot(&scene, 1.).unwrap();
         assert!(!accepted_frozen_snapshot(&reveal, &scene, 1.).unwrap());
@@ -342,6 +343,9 @@ mod layer_motion_handoff_tests {
 }
 
 fn content_body(scene: &Scene) -> Option<bead_render::Rect> {
+    if let Some(body) = scene.motion.as_ref().and_then(|m| m.body) {
+        return Some(body);
+    }
     scene
         .layers
         .iter()
@@ -2400,6 +2404,12 @@ impl App {
                 && let Some(mut source_scene) = layer_motion_source_scene
                 && s.native.is_none()
                 && s.layer_motion.is_some()
+                && self.layer_motion_manager.as_ref().is_some_and(|manager| {
+                    scene
+                        .motion
+                        .as_ref()
+                        .is_some_and(|motion| manager.supports_curves(motion))
+                })
                 && (!s.layer_motion_active
                     || s.layer_motion_open != Some(opening)
                     || s.layer_motion_ui_serial != s.ui_serial)
@@ -4162,6 +4172,7 @@ mod input_tests {
             progress: 1.,
             parts: Vec::new(),
             art: None,
+            body: None,
         });
         scene.offset = (32., -18.);
         assert_eq!(content_input_rect(&scene), Some([32, 32, 200, 50]));

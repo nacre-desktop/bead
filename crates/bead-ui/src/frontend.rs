@@ -169,21 +169,39 @@ return function(ui, constructors, allowed, arrayMarker)
         if result == nil then error(label .. " must be a number", 3) end
         return result
     end
+    local function amount(value, label)
+        if type(value) == "table" and (value.__bind or value.__animate) then return value end
+        return number_arg(value, label)
+    end
     ui.alpha = function(role, alpha)
         -- A colour expression (a tint) keeps its own alpha under this one.
-        return {role=type(role)=="table" and (role.base ~= nil or role.role ~= nil) and role or string_arg(role, "alpha role"), alpha=type(alpha)=="table" and alpha.__bind and alpha or number_arg(alpha, "alpha")}
+        return {role=type(role)=="table" and (role.base ~= nil or role.role ~= nil) and role or string_arg(role, "alpha role"), alpha=amount(alpha, "alpha")}
     end
     ui.tint = function(base, over, alpha)
         return {base=type(base)=="table" and base or string_arg(base,"tint base"),
-            over=type(over)=="table" and over or string_arg(over,"tint over"), alpha=type(alpha)=="table" and alpha.__bind and alpha or number_arg(alpha, "tint alpha")}
+            over=type(over)=="table" and over or string_arg(over,"tint over"), alpha=amount(alpha, "tint alpha")}
     end
     ui.bind = function(name)
         return {__bind=string_arg(name, "bind name")}
     end
+    -- The colour between two roles; the amount may be a ui.animated/ui.pulse marker.
+    ui.mix = function(from, to, amount) return ui.tint(from, to, amount) end
     ui.animate = function(key, target, duration, transition)
         return ui.__animate(string_arg(key, "animation key"), number_arg(target, "animation target"),
             number_arg(duration, "animation duration"), string_arg(transition, "animation transition"))
     end
+    -- Opt-in sampled animation: a marker the layout/paint stage evaluates every frame.
+    ui.animated = function(key, target, duration, transition, from)
+        return {__animate=ui.__animated(string_arg(key, "animation key"), number_arg(target, "animation target"),
+            number_arg(duration, "animation duration"), string_arg(transition, "animation transition"),
+            from ~= nil and number_arg(from, "animation start value") or nil)}
+    end
+    -- Attention loop lo -> hi -> lo every period, sampled like ui.animated.
+    ui.pulse = function(key, period, lo, hi)
+        return {__animate=ui.__pulse(string_arg(key, "pulse key"), number_arg(period, "pulse period"),
+            number_arg(lo, "pulse low"), number_arg(hi, "pulse high"))}
+    end
+    table.freeze(ui.motion.duration); table.freeze(ui.motion.curve); table.freeze(ui.motion)
     ui.action = function(name, argument)
         return {name=string_arg(name, "action name"), argument=argument}
     end
@@ -237,6 +255,8 @@ return function(ui, constructors, allowed, arrayMarker)
         -- the same resolution and every property still receives its type check.
         if type(value) == "table" and value.__bind ~= nil then
             value = ui.resolve_for_check(value)
+        elseif type(value) == "table" and value.__animate ~= nil then
+            value = value.__animate.to
         end
         if type(schema) == "string" then
             if type(value) ~= schema then return " must be " .. schema end
@@ -332,27 +352,27 @@ pub struct LuauFrontEnd {
     /// Active plugins' grants and the UI root their faults are recorded against (spec 0203).
     plugins: Option<(PathBuf, Arc<BTreeMap<String, crate::plugins::Grants>>)>,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum AnimationCurve {
-    Linear,
-    OutCubic,
-    OutBack,
-    InOutCubic,
-}
+use bead_core::animation::Curve;
 #[derive(Clone, Copy)]
 struct ScalarMotion {
     from: f64,
     to: f64,
     started: Instant,
     duration: Duration,
-    curve: AnimationCurve,
+    curve: Curve,
+    /// `ui.animated`: the view holds a marker that layout and paint sample per frame, so the
+    /// raw tree stays time-independent and animation frames need no Luau run.
+    sampled: bool,
+    /// `ui.pulse`: from -> to -> from every `duration`, until the key leaves the view.
+    looping: bool,
 }
 #[derive(Clone, Default)]
 struct Animations {
     states: BTreeMap<String, ScalarMotion>,
     seen: BTreeSet<String>,
-    next_frame: Option<Instant>,
     frame_interval: Duration,
+    /// When the last build sampled the motions: the next deadline is the frame after it.
+    armed: Option<Instant>,
 }
 #[derive(Clone)]
 pub(super) struct AnimationSnapshot(Animations);
@@ -393,15 +413,18 @@ impl Animations {
         } else {
             interval
         };
-        if self.frame_interval == interval {
-            return;
-        }
         self.frame_interval = interval;
-        let now = Instant::now();
-        self.next_frame = self
-            .states
+    }
+    fn active(motion: &ScalarMotion, now: Instant) -> bool {
+        motion.from != motion.to && (motion.looping || now < motion.started + motion.duration)
+    }
+    /// The next display frame any running motion needs; computed from the motions, so a build
+    /// served from the raw cache keeps its frame pacing.
+    fn next_frame(&self, now: Instant) -> Option<Instant> {
+        let interval = self.frame_interval();
+        self.states
             .values()
-            .filter(|motion| motion.from != motion.to && now < motion.started + motion.duration)
+            .filter(|motion| Self::active(motion, now))
             .map(|motion| {
                 animation_frame_deadline(
                     now,
@@ -410,7 +433,13 @@ impl Animations {
                     motion.started + motion.duration,
                 )
             })
-            .min();
+            .min()
+    }
+    /// A running `ui.animate` value: its number is baked into the raw tree, which must rebuild.
+    fn eager_active(&self, now: Instant) -> bool {
+        self.states
+            .values()
+            .any(|motion| !motion.sampled && Self::active(motion, now))
     }
     fn restore(&mut self, snapshot: AnimationSnapshot) {
         let frame_interval = self.frame_interval();
@@ -420,24 +449,6 @@ impl Animations {
     }
     fn begin_build(&mut self) {
         self.seen.clear();
-        self.next_frame = None;
-    }
-    fn animate(
-        &mut self,
-        key: String,
-        target: f64,
-        duration: f64,
-        transition: &str,
-        now: Instant,
-    ) -> Result<f64, &'static str> {
-        self.animate_as(
-            key,
-            target,
-            duration,
-            transition,
-            now,
-            bead_core::animation::reduced_motion(),
-        )
     }
     fn animate_as(
         &mut self,
@@ -448,23 +459,65 @@ impl Animations {
         now: Instant,
         reduced: bool,
     ) -> Result<f64, &'static str> {
-        if key.is_empty() || key.len() > 256 || !target.is_finite() {
+        self.motion_as(key, target, duration, transition, now, reduced, false, None)
+            .map(|motion| if reduced { target } else { motion.value(now) })
+    }
+    /// `ui.pulse`: a loop between `lo` and `hi`; reduced motion holds at `hi`.
+    fn pulse_as(
+        &mut self,
+        key: String,
+        period: f64,
+        lo: f64,
+        hi: f64,
+        now: Instant,
+        reduced: bool,
+    ) -> Result<ScalarMotion, &'static str> {
+        if key.is_empty() || key.len() > 256 || !lo.is_finite() || !hi.is_finite() {
+            return Err("animation key or target is invalid");
+        }
+        if !period.is_finite() || !(0.001..=60.).contains(&period) {
+            return Err("pulse period must be between 0.001 and 60 seconds");
+        }
+        if !self.states.contains_key(&key) && self.states.len() >= 1024 {
+            return Err("a view may animate at most 1024 scalar values");
+        }
+        self.seen.insert(key.clone());
+        let motion = self.states.entry(key).or_insert(ScalarMotion {
+            from: if reduced { hi } else { lo },
+            to: hi,
+            started: now,
+            duration: Duration::from_secs_f64(period),
+            curve: Curve::EaseInOut,
+            sampled: true,
+            looping: !reduced,
+        });
+        Ok(*motion)
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn motion_as(
+        &mut self,
+        key: String,
+        target: f64,
+        duration: f64,
+        transition: &str,
+        now: Instant,
+        reduced: bool,
+        sampled: bool,
+        initial: Option<f64>,
+    ) -> Result<ScalarMotion, &'static str> {
+        if key.is_empty()
+            || key.len() > 256
+            || !target.is_finite()
+            || initial.is_some_and(|v| !v.is_finite())
+        {
             return Err("animation key or target is invalid");
         }
         if !duration.is_finite() || !(0. ..=60.).contains(&duration) {
             return Err("animation duration must be between 0 and 60 seconds");
         }
-        let curve = match transition {
-            "linear" => AnimationCurve::Linear,
-            "out-cubic" => AnimationCurve::OutCubic,
-            "out-back" => AnimationCurve::OutBack,
-            "in-out-cubic" => AnimationCurve::InOutCubic,
-            _ => {
-                return Err(
-                    "animation transition must be linear, out-cubic, out-back, or in-out-cubic",
-                );
-            }
-        };
+        let curve = Curve::parse(transition).ok_or(
+            "animation transition must be linear, out-cubic, in-cubic, out-quint, in-out-cubic, out-back, in-quart or spring",
+        )?;
         if !self.states.contains_key(&key) && self.states.len() >= 1024 {
             return Err("a view may animate at most 1024 scalar values");
         }
@@ -480,7 +533,7 @@ impl Animations {
             let from = if reduced || duration == 0. {
                 target
             } else {
-                current.unwrap_or(target)
+                current.unwrap_or(initial.unwrap_or(target))
             };
             self.states.insert(
                 key.clone(),
@@ -490,21 +543,15 @@ impl Animations {
                     started: now,
                     duration: Duration::from_secs_f64(duration.max(0.001)),
                     curve,
+                    sampled,
+                    looping: false,
                 },
             );
         }
-        let motion = self.states.get(&key).expect("inserted animation");
-        let value = if reduced { target } else { motion.value(now) };
-        if !reduced && now < motion.started + motion.duration && motion.from != motion.to {
-            let deadline = animation_frame_deadline(
-                now,
-                motion.started,
-                self.frame_interval(),
-                motion.started + motion.duration,
-            );
-            self.next_frame = Some(self.next_frame.map_or(deadline, |old| old.min(deadline)));
-        }
-        Ok(value)
+        let motion = self.states.get_mut(&key).expect("inserted animation");
+        motion.sampled = sampled;
+        motion.looping = false;
+        Ok(*motion)
     }
     fn finish_build(&mut self) {
         self.states.retain(|key, _| self.seen.contains(key));
@@ -512,20 +559,23 @@ impl Animations {
 }
 impl ScalarMotion {
     fn value(self, now: Instant) -> f64 {
-        let t = (now.saturating_duration_since(self.started).as_secs_f64()
-            / self.duration.as_secs_f64())
-        .clamp(0., 1.);
-        let eased = match self.curve {
-            AnimationCurve::Linear => t,
-            AnimationCurve::OutCubic => 1. - (1. - t).powi(3),
-            AnimationCurve::OutBack => {
-                let shifted = t - 1.;
-                1. + 2.70158 * shifted.powi(3) + 1.70158 * shifted.powi(2)
-            }
-            AnimationCurve::InOutCubic if t < 0.5 => 4. * t.powi(3),
-            AnimationCurve::InOutCubic => 1. - (-2. * t + 2.).powi(3) / 2.,
-        };
-        self.from + (self.to - self.from) * eased
+        let mut t =
+            now.saturating_duration_since(self.started).as_secs_f64() / self.duration.as_secs_f64();
+        if self.looping {
+            t = t.rem_euclid(2.);
+            t = if t > 1. { 2. - t } else { t };
+        }
+        self.from + (self.to - self.from) * f64::from(self.curve.ease(t.clamp(0., 1.) as f32))
+    }
+    /// The marker `ui.animated` hands the view: enough to sample the motion without this state.
+    fn marker(self, now: Instant) -> serde_json::Value {
+        let start = bead_core::animation::clock_ns()
+            .saturating_sub(now.saturating_duration_since(self.started).as_nanos() as u64);
+        serde_json::json!({
+            "from": self.from, "to": self.to, "start": start,
+            "duration": self.duration.as_secs_f64(), "curve": self.curve.name(),
+            "loop": self.looping,
+        })
     }
 }
 impl LuauFrontEnd {
@@ -635,7 +685,8 @@ impl LuauFrontEnd {
         *self.vm.borrow_mut() = None;
     }
     pub(super) fn animation_deadline(&self) -> Option<Instant> {
-        self.animations.borrow().next_frame
+        let animations = self.animations.borrow();
+        animations.next_frame(animations.armed?)
     }
     pub(super) fn set_frame_interval(&self, interval: Duration) {
         self.animations.borrow_mut().set_frame_interval(interval);
@@ -726,11 +777,78 @@ impl Vm {
                     animated.set(animated.get() + 1);
                     animations
                         .borrow_mut()
-                        .animate(key, target, duration, &transition, Instant::now())
+                        .animate_as(
+                            key,
+                            target,
+                            duration,
+                            &transition,
+                            Instant::now(),
+                            bead_core::animation::reduced_motion(),
+                        )
                         .map_err(mlua::Error::runtime)
                 },
             )?,
         )?;
+        let animations = frontend.animations.clone();
+        sdk.set(
+            "__animated",
+            lua.create_function(
+                move |lua,
+                      (key, target, duration, transition, from): (
+                    String,
+                    f64,
+                    f64,
+                    String,
+                    Option<f64>,
+                )| {
+                    let now = Instant::now();
+                    let motion = animations
+                        .borrow_mut()
+                        .motion_as(
+                            key,
+                            target,
+                            duration,
+                            &transition,
+                            now,
+                            bead_core::animation::reduced_motion(),
+                            true,
+                            from,
+                        )
+                        .map_err(mlua::Error::runtime)?;
+                    lua.to_value(&motion.marker(now))
+                },
+            )?,
+        )?;
+        let animations = frontend.animations.clone();
+        sdk.set(
+            "__pulse",
+            lua.create_function(move |lua, (key, period, lo, hi): (String, f64, f64, f64)| {
+                let now = Instant::now();
+                let motion = animations
+                    .borrow_mut()
+                    .pulse_as(
+                        key,
+                        period,
+                        lo,
+                        hi,
+                        now,
+                        bead_core::animation::reduced_motion(),
+                    )
+                    .map_err(mlua::Error::runtime)?;
+                lua.to_value(&motion.marker(now))
+            })?,
+        )?;
+        let motion = lua.to_value(&serde_json::json!({
+            "duration": bead_core::animation::DURATIONS
+                .iter()
+                .map(|(name, seconds)| (*name, *seconds))
+                .collect::<BTreeMap<_, _>>(),
+            "curve": Curve::NAMES
+                .iter()
+                .map(|(name, _)| (name.replace('-', "_"), *name))
+                .collect::<BTreeMap<_, _>>(),
+        }))?;
+        sdk.set("motion", motion)?;
         sdk.set("tr", crate::i18n::lua_function(&lua)?)?;
         let handed_over = native_time.clone();
         sdk.set(
@@ -841,7 +959,9 @@ impl FrontEnd for LuauFrontEnd {
         #[cfg(test)]
         BUILD_CALLS.set(BUILD_CALLS.get() + 1);
         crate::graph_data::begin_build();
-        if self.animation_deadline().is_none()
+        // Served from the cache or rebuilt, this build is a frame: pace the next one from here.
+        self.animations.borrow_mut().armed = Some(Instant::now());
+        if !self.animations.borrow().eager_active(Instant::now())
             && let Some(cached) = &*self.materialized.borrow()
             && cached
                 .reads
@@ -1365,7 +1485,7 @@ impl FrontEnd for LuauFrontEnd {
         // Live VM allocation after this build (retained module state plus
         // not-yet-collected garbage), not an allocator high-water estimate.
         self.vm_build_bytes.set(lua.used_memory());
-        let animating = self.animations.borrow().next_frame.is_some();
+        let animating = self.animations.borrow().eager_active(Instant::now());
         let result = result
             .map(|(raw, raw_bytes)| {
                 // Windowed lists read the offset to choose rows. Between row
@@ -1411,7 +1531,9 @@ impl FrontEnd for LuauFrontEnd {
                     })
                     .sum::<usize>();
             *self.materialized.borrow_mut() = None;
+            // A tree built mid-motion holds interpolated `ui.animate` numbers: never serve it again.
             if !dependency_overflow.get()
+                && !animating
                 && let Ok(charge) = self.values_budget.reserve(bytes)
             {
                 *self.materialized.borrow_mut() = Some(Materialized {
@@ -1536,21 +1658,23 @@ mod animation_tests {
             to: 1.,
             started: start,
             duration: Duration::from_secs(1),
-            curve: AnimationCurve::OutCubic,
+            curve: Curve::EaseOut,
+            sampled: false,
+            looping: false,
         };
         assert_eq!(out.value(start), 0.);
         assert!((out.value(start + Duration::from_millis(250)) - 0.578125).abs() < 1e-9);
         assert_eq!(out.value(start + Duration::from_secs(1)), 1.);
 
         let in_out = ScalarMotion {
-            curve: AnimationCurve::InOutCubic,
+            curve: Curve::EaseInOut,
             ..out
         };
         assert!((in_out.value(start + Duration::from_millis(250)) - 0.0625).abs() < 1e-9);
         assert_eq!(in_out.value(start + Duration::from_millis(500)), 0.5);
 
         let out_back = ScalarMotion {
-            curve: AnimationCurve::OutBack,
+            curve: Curve::OutBack,
             ..out
         };
         let settle = out_back.value(start + Duration::from_millis(600));
@@ -1589,12 +1713,95 @@ mod animation_tests {
             .unwrap();
         animations.finish_build();
         assert_eq!(after_retarget, before_retarget);
-        assert!(animations.next_frame.is_some());
+        assert!(animations.next_frame(midpoint).is_some());
+        assert!(animations.eager_active(midpoint));
 
         animations.begin_build();
         animations.finish_build();
         assert!(animations.states.is_empty());
-        assert!(animations.next_frame.is_none());
+        assert!(animations.next_frame(midpoint).is_none());
+    }
+
+    #[test]
+    fn sampled_markers_keep_frame_pacing_without_blocking_the_raw_cache() {
+        let start = Instant::now();
+        let mut animations = Animations::default();
+        animations.set_frame_interval(Duration::from_millis(8));
+        animations.begin_build();
+        let motion = animations
+            .motion_as(
+                "w".into(),
+                300.,
+                0.2,
+                "out-quint",
+                start,
+                false,
+                true,
+                Some(120.),
+            )
+            .unwrap();
+        animations.finish_build();
+        assert_eq!(
+            (motion.from, motion.to),
+            (120., 300.),
+            "a fresh key starts at `from`"
+        );
+        let mid = start + Duration::from_millis(100);
+        animations.begin_build();
+        let motion = animations
+            .motion_as("w".into(), 424., 0.2, "out-quint", mid, false, true, None)
+            .unwrap();
+        animations.finish_build();
+        let marker = motion.marker(mid);
+        assert!(marker["from"].as_f64().unwrap() > 120. && marker["from"].as_f64().unwrap() < 300.);
+        assert_eq!(marker["to"], 424.);
+        assert_eq!(marker["curve"], "out-quint");
+        assert_eq!(marker["duration"], 0.2);
+        // Paced like an eager motion, but the raw tree may be served from the cache.
+        assert_eq!(
+            animations.next_frame(mid),
+            Some(mid + Duration::from_millis(8))
+        );
+        assert!(!animations.eager_active(mid));
+        // Retargeting mid-flight continues from the sampled value.
+        let later = mid + Duration::from_millis(100);
+        let sampled = motion.value(later);
+        animations.begin_build();
+        let retarget = animations
+            .motion_as("w".into(), 300., 0.2, "out-cubic", later, false, true, None)
+            .unwrap();
+        animations.finish_build();
+        assert_eq!(retarget.from, sampled);
+        assert_eq!(retarget.value(later), sampled);
+        assert!(
+            animations
+                .next_frame(later + Duration::from_millis(250))
+                .is_none()
+        );
+        assert!(matches!(
+            animations.motion_as("w".into(), 1., 0.2, "bounce", later, false, true, None),
+            Err(_)
+        ));
+        // A pulse loops lo -> hi -> lo and keeps asking for frames; reduced motion holds at hi.
+        animations.begin_build();
+        let pulse = animations
+            .pulse_as("p".into(), 1., 0.5, 1., start, false)
+            .unwrap();
+        animations.finish_build();
+        assert!(pulse.marker(start)["loop"].as_bool().unwrap());
+        assert_eq!(pulse.value(start), 0.5);
+        assert_eq!(pulse.value(start + Duration::from_secs(1)), 1.);
+        assert_eq!(pulse.value(start + Duration::from_secs(2)), 0.5);
+        assert!(
+            animations
+                .next_frame(start + Duration::from_secs(30))
+                .is_some()
+        );
+        assert!(!animations.eager_active(start));
+        let held = Animations::default()
+            .pulse_as("p".into(), 1., 0.5, 1., start, true)
+            .unwrap();
+        assert_eq!((held.from, held.to, held.looping), (1., 1., false));
     }
 
     #[test]
@@ -1606,14 +1813,14 @@ mod animation_tests {
             Ok(42.)
         );
         animations.finish_build();
-        assert!(animations.next_frame.is_none());
+        assert!(animations.next_frame(Instant::now()).is_none());
         animations.begin_build();
         assert_eq!(
             animations.animate_as("x".into(), 42., 0.3, "out-cubic", Instant::now(), false),
             Ok(42.)
         );
         animations.finish_build();
-        assert!(animations.next_frame.is_none());
+        assert!(animations.next_frame(Instant::now()).is_none());
     }
 
     #[test]
@@ -1679,14 +1886,16 @@ mod animation_tests {
                     to: 0.,
                     started: start,
                     duration: Duration::from_secs(1),
-                    curve: AnimationCurve::Linear,
+                    curve: Curve::Linear,
+                    sampled: false,
+                    looping: false,
                 },
             );
             animations.begin_build();
             animations
                 .animate_as("x".into(), 1., 0.3, "linear", start, false)
                 .unwrap();
-            deadlines.push(animations.next_frame.unwrap());
+            deadlines.push(animations.next_frame(start).unwrap());
         }
         assert_eq!(deadlines[0] - start, intervals[0]);
         assert_eq!(deadlines[1] - start, intervals[1]);
@@ -1706,7 +1915,9 @@ mod animation_tests {
                 to: 0.,
                 started: start,
                 duration: Duration::from_secs(1),
-                curve: AnimationCurve::Linear,
+                curve: Curve::Linear,
+                sampled: false,
+                looping: false,
             },
         );
         animations.begin_build();
@@ -1714,7 +1925,7 @@ mod animation_tests {
             .animate_as("x".into(), 1., 0.3, "linear", start, false)
             .unwrap();
         let snapshot = AnimationSnapshot(animations.clone());
-        let snapshot_deadline = snapshot.0.next_frame.unwrap();
+        let snapshot_deadline = snapshot.0.next_frame(start).unwrap();
         let rejected = start + Duration::from_millis(5);
         animations.set_frame_interval(Duration::from_millis(16));
         animations.begin_build();
@@ -1725,7 +1936,7 @@ mod animation_tests {
         animations.restore(snapshot);
         assert_eq!(animations.frame_interval(), Duration::from_millis(16));
         assert_eq!(animations.states["x"].to, 1.);
-        assert!(animations.next_frame.unwrap() > snapshot_deadline);
+        assert!(animations.next_frame(start).unwrap() > snapshot_deadline);
     }
 }
 

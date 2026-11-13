@@ -13,13 +13,106 @@ pub fn set_reduced_motion(reduced: bool) {
 pub fn reduced_motion() -> bool {
     REDUCED.load(Ordering::Relaxed)
 }
+/// Named easing tokens; one list for every place a curve is named (Luau `ui.animate`,
+/// `Panel.transition`, host motion specs and the compositor mapping).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Curve {
+    Linear,
+    /// `out-cubic`, the default opening curve (alias `ease`).
     EaseOut,
+    /// `in-out-cubic` (alias `ease-in-out`).
     EaseInOut,
-    /// Accelerating exit curve that commits most travel to its final frames.
+    /// `in-quart`: accelerating exit curve that commits most travel to its final frames.
     EmphasizedAccelerate,
     Spring,
+    InCubic,
+    OutQuint,
+    /// Soft overshoot (settles from about 1.1); use on scale, never on panel geometry.
+    OutBack,
+}
+impl Curve {
+    pub const NAMES: [(&'static str, Curve); 8] = [
+        ("linear", Curve::Linear),
+        ("out-cubic", Curve::EaseOut),
+        ("in-cubic", Curve::InCubic),
+        ("out-quint", Curve::OutQuint),
+        ("in-out-cubic", Curve::EaseInOut),
+        ("out-back", Curve::OutBack),
+        ("in-quart", Curve::EmphasizedAccelerate),
+        ("spring", Curve::Spring),
+    ];
+    /// The canonical names above plus the older `Panel.transition` spellings.
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "ease" | "ease-out" => Some(Curve::EaseOut),
+            "ease-in" => Some(Curve::InCubic),
+            "ease-in-out" => Some(Curve::EaseInOut),
+            _ => Self::NAMES
+                .iter()
+                .find(|(n, _)| *n == name)
+                .map(|(_, c)| *c),
+        }
+    }
+    pub fn name(self) -> &'static str {
+        Self::NAMES
+            .iter()
+            .find(|(_, c)| *c == self)
+            .expect("named")
+            .0
+    }
+    /// Eased progress for `t` in 0..=1 (clamped). Every curve starts at 0 and ends at 1.
+    pub fn ease(self, t: f32) -> f32 {
+        let t = t.clamp(0., 1.);
+        match self {
+            Curve::Linear => t,
+            Curve::EaseOut => 1. - (1. - t).powi(3),
+            Curve::EaseInOut if t < 0.5 => 4. * t.powi(3),
+            Curve::EaseInOut => 1. - (-2. * t + 2.).powi(3) / 2.,
+            Curve::EmphasizedAccelerate => t.powi(4),
+            Curve::Spring => {
+                let x = 8. * t;
+                (1. - (1. + x) * (-x).exp()) / (1. - 9. * (-8_f32).exp())
+            }
+            Curve::InCubic => t.powi(3),
+            Curve::OutQuint => 1. - (1. - t).powi(5),
+            Curve::OutBack => {
+                // c1 = 1.70158, c3 = c1 + 1 (the compositor protocol uses the same constants).
+                let s = t - 1.;
+                1. + 2.70158 * s.powi(3) + 1.70158 * s.powi(2)
+            }
+        }
+    }
+}
+/// Named durations in seconds (the review's 120 Hz motion table); `ui.motion.duration` in Luau.
+pub const DURATIONS: [(&str, f64); 17] = [
+    ("hover", 0.09),
+    ("press", 0.06),
+    ("release", 0.12),
+    ("trace", 0.12),
+    ("fade", 0.16),
+    ("pulse", 1.6),
+    ("peek", 0.2),
+    ("open", 0.22),
+    ("close", 0.16),
+    ("slide", 0.24),
+    ("drop", 0.26),
+    ("switch", 0.18),
+    ("badge", 0.14),
+    ("osd_in", 0.16),
+    ("osd_out", 0.2),
+    ("toast", 0.22),
+    ("dock", 0.22),
+];
+pub fn duration(name: &str) -> Option<f64> {
+    DURATIONS.iter().find(|(n, _)| *n == name).map(|(_, d)| *d)
+}
+/// Nanoseconds since the process' animation epoch: a clock serialisable into view markers.
+pub fn clock_ns() -> u64 {
+    static EPOCH: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    EPOCH
+        .get_or_init(std::time::Instant::now)
+        .elapsed()
+        .as_nanos() as u64
 }
 #[derive(Clone, Copy)]
 struct Motion {
@@ -170,21 +263,7 @@ impl Animations {
         } else {
             ((now - motion.started) / motion.duration).clamp(0., 1.) as f32
         };
-        let progress = match motion.curve {
-            Curve::EaseOut => 1. - (1. - t).powi(3),
-            Curve::EaseInOut => {
-                if t < 0.5 {
-                    4. * t.powi(3)
-                } else {
-                    1. - (-2. * t + 2.).powi(3) / 2.
-                }
-            }
-            Curve::EmphasizedAccelerate => t.powi(4),
-            Curve::Spring => {
-                let x = 8. * t;
-                (1. - (1. + x) * (-x).exp()) / (1. - 9. * (-8_f32).exp())
-            }
-        };
+        let progress = motion.curve.ease(t);
         Some((motion.from + (motion.to - motion.from) * progress, t < 1.))
     }
     pub fn active(&self, now: f64) -> bool {
@@ -281,6 +360,48 @@ mod tests {
         ] {
             assert_eq!(a.value("preview", time).unwrap(), (expected, time < 1.));
         }
+    }
+    #[test]
+    fn every_curve_has_exact_endpoints_and_the_expected_shape() {
+        for (name, curve) in Curve::NAMES {
+            assert_eq!(Curve::parse(name), Some(curve));
+            assert_eq!(curve.name(), name);
+            assert_eq!(curve.ease(0.), 0., "{name}");
+            assert!((curve.ease(1.) - 1.).abs() < 1e-6, "{name}");
+            assert_eq!(curve.ease(-1.), 0.);
+            assert!((curve.ease(2.) - 1.).abs() < 1e-6);
+            let mut last = 0.;
+            let mut peak = 0_f32;
+            for i in 1..=200 {
+                let v = curve.ease(i as f32 / 200.);
+                peak = peak.max(v);
+                if curve != Curve::OutBack {
+                    assert!(v >= last - 1e-6, "{name} not monotonic at {i}");
+                    assert!((0. ..=1. + 1e-6).contains(&v), "{name} leaves 0..1 at {i}");
+                }
+                last = v;
+            }
+            if curve == Curve::OutBack {
+                assert!(peak > 1.05 && peak < 1.11, "out-back overshoot {peak}");
+            }
+        }
+        assert_eq!(Curve::parse("ease"), Some(Curve::EaseOut));
+        assert_eq!(Curve::parse("ease-in-out"), Some(Curve::EaseInOut));
+        assert_eq!(Curve::parse("ease-out"), Some(Curve::EaseOut));
+        assert_eq!(Curve::parse("ease-in"), Some(Curve::InCubic));
+        assert_eq!(duration("pulse"), Some(1.6));
+        assert_eq!(Curve::parse("bounce"), None);
+        assert!((Curve::EaseOut.ease(0.25) - 0.578125).abs() < 1e-6);
+        assert!((Curve::OutQuint.ease(0.5) - 0.96875).abs() < 1e-6);
+        assert!((Curve::InCubic.ease(0.5) - 0.125).abs() < 1e-6);
+        // Spring settles: within 1 % of the target over the last fifth and never over 1.
+        for i in 160..=200 {
+            assert!((Curve::Spring.ease(i as f32 / 200.) - 1.).abs() < 0.01);
+        }
+        assert_eq!(duration("open"), Some(0.22));
+        assert_eq!(duration("hover"), Some(0.09));
+        assert_eq!(duration("bogus"), None);
+        assert!(clock_ns() <= clock_ns());
     }
     #[test]
     fn reduced_motion_reaches_every_target_at_once_and_keeps_nothing_active() {

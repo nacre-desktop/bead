@@ -1,7 +1,10 @@
 -- SPDX-License-Identifier: MIT
 -- Framework components. Palette roles are supplied by the existing Orient palette.
 return function(ui, tokens)
-    local kit = {tokens=tokens, motion={color=.200, state=.120, text=.400}}
+    -- Durations: the framework's named tokens (ui.motion.duration) plus the kit's own.
+    local motion = table.clone(ui.motion.duration)
+    motion.color, motion.state, motion.text = .200, .120, .400
+    local kit = {tokens=tokens, motion=table.freeze(motion)}
     local function value(v, fallback)
         if v == nil then return fallback end
         return ui.resolve_for_check(v)

@@ -416,6 +416,8 @@ pub struct Motion {
     /// first revealing frame: they shrink with `progress` so the growing edge keeps its rounded corners and shadow.
     pub parts: Vec<(usize, Primitive)>,
     pub art: Option<RevealArt>,
+    /// The body named by the view (`Panel.body`): the reveal grows this rectangle, not the scene bounds.
+    pub body: Option<Rect>,
 }
 impl Motion {
     /// Direction-specific animation settings. Exits are deliberately shorter
@@ -634,6 +636,9 @@ impl Scene {
     /// The open-state body of a revealing panel: the scene bounds less the 32 px shadow margin the presenter
     /// offsets by; else the first shadow (30 px outside its body) or the largest fill.
     fn reveal_body(&self) -> Option<Rect> {
+        if let Some(body) = self.motion.as_ref().and_then(|m| m.body) {
+            return Some(body);
+        }
         let from_parts = self.motion.as_ref().and_then(|m| {
             m.parts.iter().find_map(|(_, p)| match p {
                 Primitive::Rounded { rect, .. } => Some(*rect),
@@ -759,20 +764,30 @@ impl Scene {
         let Some(m) = &mut self.motion else { return };
         m.progress = progress;
         for (index, original) in &m.parts {
+            // Each part keeps its offsets from the body (a shadow margin, a joined-edge
+            // extension), so the revealed part is the body's shape at the smaller size.
+            let follow = |rect: &Rect| {
+                Rect::new(
+                    now.x + rect.x - body.x,
+                    now.y + rect.y - body.y,
+                    now.w + rect.w - body.w,
+                    now.h + rect.h - body.h,
+                )
+            };
             let shaped = match original {
                 Primitive::Rounded {
+                    rect,
                     radius,
                     fill,
                     border,
-                    ..
                 } => Primitive::Rounded {
-                    rect: now,
+                    rect: follow(rect),
                     radius: *radius,
                     fill: *fill,
                     border: *border,
                 },
-                Primitive::Shadow { radius, blur, .. } => Primitive::Shadow {
-                    rect: Rect::new(now.x - 30., now.y - 30., now.w + 60., now.h + 60.),
+                Primitive::Shadow { rect, radius, blur } => Primitive::Shadow {
+                    rect: follow(rect),
                     radius: *radius,
                     blur: *blur,
                 },
@@ -2740,6 +2755,7 @@ mod tests {
                 (2, scene.primitives[2].clone()),
             ],
             art: None,
+            body: None,
         });
         let mut prepared_cache = tree::TreeCache::default();
         prepared_cache.prepare(&scene, 1.).unwrap();
@@ -2806,6 +2822,7 @@ mod tests {
             progress: 0.5,
             parts: Vec::new(),
             art: None,
+            body: None,
         });
         let mut cache = tree::TreeCache::default();
         cache.prepare(&scene, 1.5).unwrap();
@@ -3076,6 +3093,7 @@ mod tests {
             progress: 1.,
             parts: Vec::new(),
             art: None,
+            body: None,
         });
         scene.reveal(0.5);
         let Primitive::Rounded { rect, radius, .. } = &scene.primitives[1] else {
@@ -3150,6 +3168,7 @@ mod tests {
             progress: 1.,
             parts: Vec::new(),
             art: None,
+            body: None,
         });
         let original = serde_json::to_vec(&scene.primitives)?;
         let mut cache = tree::TreeCache::default();
@@ -3231,6 +3250,7 @@ mod tests {
                 progress: 1.,
                 parts: Vec::new(),
                 art: None,
+                body: None,
             }),
             resource_revision: 0,
             asset_data: Default::default(),

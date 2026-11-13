@@ -15,3 +15,7 @@ size = [260, 128]
 [panels.volume]
 view = "view/volume.luau"
 size = [260, 140]
+
+[panels.status]
+view = "view/status.luau"
+size = [424, 300]

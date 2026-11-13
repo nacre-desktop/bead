@@ -1000,6 +1000,7 @@ mod tests {
                 progress: 1.,
                 parts: Vec::new(),
                 art: None,
+                body: None,
             }),
             resource_revision: 0,
             asset_data: Default::default(),

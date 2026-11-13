@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: MIT
 return {
-    stores = {},
-    actions = {},
+    stores = { grown = false },
+    actions = { grow = function(s) s.grown = not s.grown end },
     computed = {
         volume = function(s)
             if not s["desktop.audio.available"] then return "No audio" end

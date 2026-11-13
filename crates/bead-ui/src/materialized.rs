@@ -66,9 +66,59 @@ thread_local! {
 pub(super) fn patch_hits() -> usize {
     PATCH_HITS.get()
 }
+/// A `ui.animated` marker in the view and what its sampled value patches.
+struct Animated {
+    marker: serde_json::Value,
+    kind: Animate,
+}
+enum Animate {
+    /// `radius`: the view's own box and shadow.
+    Radius {
+        rounded: Option<usize>,
+        shadow: Option<usize>,
+    },
+    /// An `ui.alpha(role, marker)` amount: `base` is the colour at amount 1.
+    Alpha {
+        primitive: usize,
+        slot: Slot,
+        base: [u8; 4],
+    },
+    /// An `ui.mix(a, b, marker)` amount between two colours.
+    Mix {
+        primitive: usize,
+        slot: Slot,
+        from: [u8; 4],
+        to: [u8; 4],
+    },
+    /// `join`: how far the box and shadow reach behind the joined edge (`extent` = radius).
+    Join {
+        rounded: Option<usize>,
+        shadow: Option<usize>,
+        edge: bead_core::Edge,
+        radius: f32,
+    },
+    /// `translate_x`/`translate_y`: the layer's subtree shifts by (sample - base).
+    Translate {
+        layer: usize,
+        vertical: bool,
+        base: f32,
+    },
+    /// Any other property: the cached layout is stale until the motion ends.
+    Layout,
+}
+#[derive(Clone, Copy)]
+enum Slot {
+    Fill,
+    Text,
+    Border,
+}
 /// Reserved interaction stores the patch handles without a rebuild.
 const INTERACTION: [&str; 3] = ["bead.hovered", "bead.focused", "bead.focus_visible"];
 pub(super) struct Cached {
+    /// When the scene was built: a motion finished by then is already at its target.
+    built_ns: u64,
+    animated: Vec<Animated>,
+    body_layer: Option<usize>,
     raw: Rc<RawNode>,
     scene: Scene,
     nodes: Vec<Node>,
@@ -168,6 +218,12 @@ impl Cached {
     ) -> Result<Option<Self>, Diagnostic> {
         let mut cached = Self {
             _charge: None,
+            built_ns: bead_core::animation::clock_ns(),
+            animated: vec![],
+            body_layer: view
+                .body
+                .as_ref()
+                .and_then(|body| scene.layers.iter().position(|l| &l.id == body)),
             raw: raw.clone(),
             scene: scene.clone(),
             nodes: nodes.to_vec(),
@@ -250,6 +306,90 @@ impl Cached {
                 }
             }
             for (property, value) in &raw.props {
+                if let Some(marker) = layout::marker(value) {
+                    let kind = match (property.as_str(), lookup.layers.get(view.id.as_str())) {
+                        // A joined box moves its rect with the radius too: rebuild instead.
+                        ("radius", _) if view.join_edge.is_none() => Animate::Radius {
+                            rounded: primitive(|p| matches!(p, Primitive::Rounded { .. })),
+                            shadow: primitive(|p| matches!(p, Primitive::Shadow { .. })),
+                        },
+                        ("join", _) if view.join_edge.is_some() => Animate::Join {
+                            rounded: primitive(|p| matches!(p, Primitive::Rounded { .. })),
+                            shadow: primitive(|p| matches!(p, Primitive::Shadow { .. })),
+                            edge: view.join_edge.expect("checked"),
+                            radius: view.radius,
+                        },
+                        ("translate_x", Some(&layer)) => Animate::Translate {
+                            layer,
+                            vertical: false,
+                            base: view.translate_x,
+                        },
+                        ("translate_y", Some(&layer)) => Animate::Translate {
+                            layer,
+                            vertical: true,
+                            base: view.translate_y,
+                        },
+                        _ => Animate::Layout,
+                    };
+                    cached.animated.push(Animated {
+                        marker: marker.clone(),
+                        kind,
+                    });
+                    continue;
+                }
+                if let Some(marker) = value.get("alpha").and_then(layout::marker) {
+                    let (index, slot) = match property.as_str() {
+                        "fill" => (
+                            primitive(|p| matches!(p, Primitive::Rounded { .. })),
+                            Slot::Fill,
+                        ),
+                        "color" => (
+                            primitive(|p| matches!(p, Primitive::Text { .. })),
+                            Slot::Text,
+                        ),
+                        "border_color" => (
+                            primitive(|p| matches!(p, Primitive::Rounded { .. })),
+                            Slot::Border,
+                        ),
+                        _ => (None, Slot::Fill),
+                    };
+                    let colour = |expression: &serde_json::Value| {
+                        layout::color(Some(expression), [0; 4], palette, &raw.source)
+                    };
+                    // A hovered view recolours the same primitive: leave that to a rebuild.
+                    let kind = match (
+                        index,
+                        value.get("role"),
+                        value.get("base"),
+                        value.get("over"),
+                    ) {
+                        (Some(primitive), Some(role), _, _)
+                            if !cached.hover.iter().any(|h| h.id == view.id) =>
+                        {
+                            Animate::Alpha {
+                                primitive,
+                                slot,
+                                base: colour(&serde_json::json!({ "role": role, "alpha": 1. }))?,
+                            }
+                        }
+                        (Some(primitive), None, Some(base), Some(over))
+                            if !cached.hover.iter().any(|h| h.id == view.id) =>
+                        {
+                            Animate::Mix {
+                                primitive,
+                                slot,
+                                from: colour(base)?,
+                                to: colour(over)?,
+                            }
+                        }
+                        _ => Animate::Layout,
+                    };
+                    cached.animated.push(Animated {
+                        marker: marker.clone(),
+                        kind,
+                    });
+                    continue;
+                }
                 let mut names = BTreeSet::new();
                 bindings(value, &mut names);
                 let panel_open = root
@@ -398,7 +538,11 @@ impl Cached {
                 node: id.to_owned(),
             });
         }
-        if !cached.scroll.is_empty() {
+        let translated = cached
+            .animated
+            .iter()
+            .any(|a| matches!(a.kind, Animate::Translate { .. }));
+        if !cached.scroll.is_empty() || translated {
             cached.parents = Vec::with_capacity(scene.layers.len());
             cached.scroll_layers = Vec::with_capacity(scene.layers.len());
             cached.clip_layers = Vec::with_capacity(scene.layers.len());
@@ -583,6 +727,16 @@ impl Cached {
             }
             return Ok(None);
         }
+        let now_ns = bead_core::animation::clock_ns();
+        // A layout-affecting motion still running when this scene was built: relayout (no Luau).
+        if self.animated.iter().any(|a| {
+            matches!(a.kind, Animate::Layout) && layout::marker_active(&a.marker, self.built_ns)
+        }) {
+            if bead_core::profile::enabled() {
+                println!("INPUT_PATCH_MISS kind=animated_layout");
+            }
+            return Ok(None);
+        }
         let mut changed = BTreeMap::new();
         for (name, old) in &self.values {
             let value = resolve(name)?;
@@ -721,7 +875,97 @@ impl Cached {
                 }
             }
         }
-        fn translate(primitive: &mut Primitive, dy: f32) {
+        for animated in &self.animated {
+            let Some(value) = layout::sample(&animated.marker, now_ns) else {
+                continue;
+            };
+            match animated.kind {
+                Animate::Radius { rounded, shadow } => {
+                    for index in [rounded, shadow].into_iter().flatten() {
+                        if let Primitive::Rounded { radius, .. }
+                        | Primitive::Shadow { radius, .. } = &mut scene.primitives[index]
+                        {
+                            *radius = value as f32;
+                        }
+                    }
+                }
+                Animate::Join {
+                    rounded,
+                    shadow,
+                    edge,
+                    radius,
+                } => {
+                    let extent = (value.clamp(0., 1.) as f32) * radius;
+                    for index in [rounded, shadow].into_iter().flatten() {
+                        // The cached rect already reaches `base` behind the edge: re-extend from its clip.
+                        if let Some(clip) = scene.clips.get(&index).copied()
+                            && let Primitive::Rounded { rect, .. } | Primitive::Shadow { rect, .. } =
+                                &mut scene.primitives[index]
+                        {
+                            use bead_core::Edge;
+                            match edge {
+                                Edge::Top => {
+                                    rect.h -= clip.y - rect.y - extent;
+                                    rect.y = clip.y - extent;
+                                }
+                                Edge::Bottom => rect.h = clip.y + clip.h - rect.y + extent,
+                                Edge::Left => {
+                                    rect.w -= clip.x - rect.x - extent;
+                                    rect.x = clip.x - extent;
+                                }
+                                Edge::Right => rect.w = clip.x + clip.w - rect.x + extent,
+                            }
+                        }
+                    }
+                }
+                Animate::Mix {
+                    primitive,
+                    slot,
+                    from,
+                    to,
+                } => {
+                    let amount = value.clamp(0., 1.);
+                    let colour = std::array::from_fn(|i| {
+                        (f64::from(from[i]) * (1. - amount) + f64::from(to[i]) * amount).round()
+                            as u8
+                    });
+                    match (slot, &mut scene.primitives[primitive]) {
+                        (Slot::Fill, Primitive::Rounded { fill, .. }) => *fill = colour,
+                        (Slot::Text, Primitive::Text { color, .. }) => *color = colour,
+                        (
+                            Slot::Border,
+                            Primitive::Rounded {
+                                border: Some(border),
+                                ..
+                            },
+                        ) => border.0 = colour,
+                        _ => {}
+                    }
+                }
+                Animate::Alpha {
+                    primitive,
+                    slot,
+                    base,
+                } => {
+                    let mut colour = base;
+                    colour[3] = (f64::from(base[3]) * value.clamp(0., 1.)).round() as u8;
+                    match (slot, &mut scene.primitives[primitive]) {
+                        (Slot::Fill, Primitive::Rounded { fill, .. }) => *fill = colour,
+                        (Slot::Text, Primitive::Text { color, .. }) => *color = colour,
+                        (
+                            Slot::Border,
+                            Primitive::Rounded {
+                                border: Some(border),
+                                ..
+                            },
+                        ) => border.0 = colour,
+                        _ => {}
+                    }
+                }
+                Animate::Translate { .. } | Animate::Layout => {}
+            }
+        }
+        fn translate(primitive: &mut Primitive, dx: f32, dy: f32) {
             match primitive {
                 Primitive::Arc { rect, .. }
                 | Primitive::Polyline { rect, .. }
@@ -729,14 +973,40 @@ impl Cached {
                 | Primitive::Text { rect, .. }
                 | Primitive::Image { rect, .. }
                 | Primitive::Shadow { rect, .. }
-                | Primitive::Graph { rect, .. } => *rect = rect.translated(0., dy),
+                | Primitive::Graph { rect, .. } => *rect = rect.translated(dx, dy),
             }
         }
-        if self.scroll.iter().any(|s| changed.contains_key(&s.binding)) {
+        let translated = self
+            .animated
+            .iter()
+            .any(|a| matches!(a.kind, Animate::Translate { .. }));
+        if translated || self.scroll.iter().any(|s| changed.contains_key(&s.binding)) {
             // Ownership and clipping topology are invariant until layout changes.
             // Follow cached indices instead of rebuilding String maps per frame.
             let shift = |layer: usize| {
-                let mut dy = 0.;
+                let (mut dx, mut dy) = (0., 0.);
+                // A translated view moves its own box and everything below it.
+                let mut at = Some(layer);
+                while let Some(index) = at {
+                    for animated in &self.animated {
+                        if let Animate::Translate {
+                            layer,
+                            vertical,
+                            base,
+                        } = animated.kind
+                            && layer == index
+                        {
+                            let delta = layout::sample(&animated.marker, now_ns)
+                                .map_or(0., |v| v as f32 - base);
+                            if vertical {
+                                dy += delta;
+                            } else {
+                                dx += delta;
+                            }
+                        }
+                    }
+                    at = self.parents[index];
+                }
                 let mut parent = self.parents[layer];
                 while let Some(index) = parent {
                     if let Some(scroll) = self.scroll_layers[index] {
@@ -754,16 +1024,15 @@ impl Cached {
                     }
                     parent = self.parents[index];
                 }
-                dy
+                (dx, dy)
             };
             let clip = |layer: usize| {
                 let mut result = None;
                 let mut parent = self.parents[layer];
                 while let Some(index) = parent {
                     if let Some(region) = self.clip_layers[index] {
-                        let bounds = self.clip_regions[region]
-                            .bounds
-                            .translated(0., shift(index));
+                        let (dx, dy) = shift(index);
+                        let bounds = self.clip_regions[region].bounds.translated(dx, dy);
                         result = Some(result.map_or(bounds, |previous: bead_render::Rect| {
                             previous.intersect(bounds)
                         }));
@@ -774,7 +1043,8 @@ impl Cached {
             };
             for (index, primitive) in scene.primitives.iter_mut().enumerate() {
                 let owner = self.primitive_owners[index];
-                translate(primitive, shift(owner));
+                let (dx, dy) = shift(owner);
+                translate(primitive, dx, dy);
                 if let Some(bounds) = clip(owner) {
                     scene.clips.insert(index, bounds);
                 } else {
@@ -782,12 +1052,25 @@ impl Cached {
                 }
             }
             for (index, layer) in scene.layers.iter_mut().enumerate() {
-                layer.bounds = layer.bounds.translated(0., shift(index));
+                let (dx, dy) = shift(index);
+                layer.bounds = layer.bounds.translated(dx, dy);
             }
             for (index, node) in nodes.iter_mut().enumerate() {
                 let owner = self.node_owners[index];
-                translate(&mut node.draw, shift(owner));
+                let (dx, dy) = shift(owner);
+                translate(&mut node.draw, dx, dy);
                 node.clip = clip(owner);
+            }
+        }
+        // The body's parts and bounds follow whatever the patches above changed.
+        if let Some(motion) = &mut scene.motion
+            && motion.body.is_some()
+        {
+            for (index, original) in &mut motion.parts {
+                *original = scene.primitives[*index].clone();
+            }
+            if let Some(layer) = self.body_layer {
+                motion.body = Some(scene.layers[layer].bounds);
             }
         }
         if let (Some(node), Some(ring)) = (focus_target, self.floating.first()) {

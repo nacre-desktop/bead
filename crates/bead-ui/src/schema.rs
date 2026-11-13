@@ -17,6 +17,13 @@ pub fn luau() -> String {
         ("bind", "(string)->any"),
         ("action", "(string,any?)->any"),
         ("animate", "(string,number,number,string)->number"),
+        ("animated", "(string,number,number,string,number?)->any"),
+        ("pulse", "(string,number,number,number)->any"),
+        ("mix", "(any,any,any)->any"),
+        (
+            "motion",
+            "{duration:{[string]:number}, curve:{[string]:string}}",
+        ),
         ("alpha", "(string,number)->any"),
         ("tint", "(string,string,number)->any"),
         ("component", "(string,any,any)->any"),

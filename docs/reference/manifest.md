@@ -18,7 +18,7 @@
 | `[commands.NAME].interval` | Optional positive integer seconds; no default periodic run. | `interval = 60` |
 | `[commands.NAME].timeout` | Integer seconds, default `5`, range 1–60. | `timeout = 10` |
 | `[panels.NAME].view` | Required relative path inside the app folder; its sibling `behavior.luau` and `bundle.json` apply. Panels require `[layer]`. | `view = "view/calendar.luau"` |
-| `[panels.NAME].size` | Required `[u32, u32]` logical size; both > 0. | `size = [260, 120]` |
+| `[panels.NAME].size` | Required `[u32, u32]` logical size; both > 0. A panel whose body regrows (`Panel.body`, [spec 0263](../specs/0263-motion-tokens-and-retarget.md)) declares its maximum here. | `size = [260, 120]` |
 
 Command names are 1–32 ASCII characters, each lowercase letter, digit, `_`, or `-`. Command process output is capped at 64 KiB and stored stdout at 4 KiB. Interval executions do not overlap.
 

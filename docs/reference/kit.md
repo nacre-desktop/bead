@@ -1,6 +1,6 @@
 # `bead.kit`
 
-`bead.kit` is the embedded Luau module of reusable components. It exposes `kit.tokens` and component constructors; property details can evolve with the source. The list below names the current component surface, with its primary role and key inputs. All components use caller-provided IDs and content. Consult [COMPONENTS.md](../COMPONENTS.md) for kit/theme context; this page is the API name index and avoids duplicating that overview.
+`bead.kit` is the embedded Luau module of reusable components. It exposes `kit.tokens`, `kit.motion` (the `ui.motion.duration` tokens plus the kit's `color`, `state` and `text` durations) and component constructors; property details can evolve with the source. The list below names the current component surface, with its primary role and key inputs. All components use caller-provided IDs and content. Consult [COMPONENTS.md](../COMPONENTS.md) for kit/theme context; this page is the API name index and avoids duplicating that overview.
 
 - `Button`, `IconButton`, `StatusIcon`, `Switch`: controls; `text`, `checked`, `on_activate`, dimensions, colors.
 - `Fill`: gradient fill primitive; `from`, `to`, `width`, `height`.

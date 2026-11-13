@@ -10,7 +10,7 @@
     requiring client commits for each animation frame.
   </description>
 
-  <interface name="bead_layer_motion_manager_v1" version="2">
+  <interface name="bead_layer_motion_manager_v1" version="3">
     <description summary="Create presentation controllers for layer surfaces"/>
     <enum name="error">
       <entry name="invalid_surface" value="0" summary="Surface has no layer-shell role"/>
@@ -28,7 +28,7 @@
     </request>
   </interface>
 
-  <interface name="bead_layer_motion_v1" version="2">
+  <interface name="bead_layer_motion_v1" version="3">
     <description summary="Group animation of atlas presentation planes">
       Plane requests are double-buffered with the associated wl_surface state.
       The animate request starts one shared timeline for all configured planes
@@ -52,6 +52,9 @@
       <entry name="ease_in_out_cubic" value="2"/>
       <entry name="emphasized_accelerate" value="3"/>
       <entry name="spring" value="4"/>
+      <entry name="ease_out_quint" value="5" since="3"/>
+      <entry name="ease_in_cubic" value="6" since="3"/>
+      <entry name="ease_out_back" value="7" since="3"/>
     </enum>
     <enum name="opacity_mode">
       <description summary="Opacity interpolation function"/>

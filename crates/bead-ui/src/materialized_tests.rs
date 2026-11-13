@@ -440,3 +440,126 @@ return ui.Row{id='root',width=300,height=40,fill='surface',
     assert!(width(&scene) <= 200. && width(&scene) > 50.);
     assert!(session.preview_deadline().is_some());
 }
+
+#[test]
+fn sampled_markers_patch_paint_properties_without_luau_or_relayout() {
+    let view = r#"local ui=require('bead.ui')
+local m=ui.motion
+local target=ui.resolve_for_check(ui.bind('target'))
+return ui.Row{id='root',width=300,height=60,fill='surface',
+ ui.Box{id='box',width=100,height=40,fill=ui.alpha('primary',ui.animated('a',target/200,m.duration.open,m.curve.out_cubic)),
+  radius=ui.animated('r',target/10,0.2,'out-quint'),translate_x=ui.animated('x',target,0.2,'out-cubic'),
+  ui.Text{id='label',text='Hi',width=50,height=20,color=ui.alpha('onSurface',ui.animated('t',target/200,0.2,'linear'))},
+  ui.Button{id='hit',text='Go',width=40,height=20,on_activate=ui.action('noop')}}}"#;
+    let behavior = "return {stores={target=0},actions={noop=function(s) end},computed={}}";
+    let (_fixture, mut session) = interaction_fixture(view, behavior);
+    session.set_frame_interval(std::time::Duration::from_millis(4));
+    let box_ = |scene: &Scene| match scene
+        .primitives
+        .iter()
+        .find(|p| matches!(p, Primitive::Rounded { rect, .. } if rect.w == 100.))
+    {
+        Some(Primitive::Rounded {
+            rect, radius, fill, ..
+        }) => (rect.x, *radius, fill[3]),
+        _ => panic!("no box"),
+    };
+    let scene = session
+        .update(BTreeMap::from([("target".into(), Value::Number(200.))]))
+        .unwrap()
+        .unwrap();
+    let start = box_(&scene);
+    assert!(start.0 < 200. && start.1 < 20. && start.2 < 255);
+    session.commit(scene);
+    let hit_start = rect(&node(&session, "hit").draw).x - start.0;
+    frontend::reset_eval_calls();
+    let hits = patch_hits();
+    #[cfg(feature = "test-counters")]
+    let passes = layout::layout_passes();
+    let mut last = start;
+    let mut frames = 0;
+    while let Some(deadline) = session.preview_deadline() {
+        std::thread::sleep(deadline.saturating_duration_since(std::time::Instant::now()));
+        let Some(scene) = session.update_model(BTreeMap::new()).unwrap() else {
+            break;
+        };
+        let next = box_(&scene);
+        assert!(next.0 >= last.0 && next.1 >= last.1 && next.2 >= last.2);
+        // Every frame is one patch of the cached scene: no Luau, no layout.
+        assert_eq!(frontend::eval_calls(), 0);
+        last = next;
+        session.commit(scene);
+        assert_eq!(
+            rect(&node(&session, "hit").draw).x - next.0,
+            hit_start,
+            "node boxes move with the view"
+        );
+        frames += 1;
+        assert!(frames < 200);
+    }
+    assert!(frames > 3);
+    assert_eq!(last, (200., 20., 255), "exact final geometry");
+    assert_eq!(patch_hits(), hits + frames);
+    #[cfg(feature = "test-counters")]
+    assert_eq!(layout::layout_passes(), passes);
+    // A retarget continues from the sampled value: one Luau run, no jump.
+    let scene = session
+        .update(BTreeMap::from([("target".into(), Value::Number(100.))]))
+        .unwrap()
+        .unwrap();
+    let evaluated = frontend::eval_calls();
+    assert!(evaluated >= 1);
+    assert_eq!(box_(&scene), (200., 20., 255));
+    session.commit(scene);
+    std::thread::sleep(std::time::Duration::from_millis(250));
+    let scene = session.update_model(BTreeMap::new()).unwrap().unwrap();
+    assert_eq!(box_(&scene), (100., 10., 128));
+    assert_eq!(frontend::eval_calls(), evaluated, "frames after a retarget run no Luau");
+}
+
+#[test]
+fn sampled_layout_markers_relayout_without_luau_until_the_motion_ends() {
+    let view = r#"local ui=require('bead.ui')
+return ui.Row{id='root',width=300,height=40,fill='surface',
+ ui.Box{id='bar',width=ui.animated('w',ui.resolve_for_check(ui.bind('target')),0.05,'linear'),height=20,fill='primary'}}"#;
+    let behavior = "return {stores={target=10},actions={},computed={}}";
+    let (_fixture, mut session) = interaction_fixture(view, behavior);
+    session.set_frame_interval(std::time::Duration::from_millis(5));
+    let width = |scene: &Scene| {
+        match scene.primitives.iter().find(
+        |p| matches!(p, Primitive::Rounded { fill, .. } if fill[3] == 255 && fill != &[16, 16, 16, 255]),
+    ) {
+        Some(Primitive::Rounded { rect, .. }) => rect.w,
+        _ => panic!("no bar"),
+    }
+    };
+    let scene = session
+        .update(BTreeMap::from([("target".into(), Value::Number(200.))]))
+        .unwrap()
+        .unwrap();
+    let mut last = width(&scene);
+    assert!(last < 200.);
+    session.commit(scene);
+    frontend::reset_eval_calls();
+    let hits = patch_hits();
+    let mut frames = 0;
+    while let Some(deadline) = session.preview_deadline() {
+        std::thread::sleep(deadline.saturating_duration_since(std::time::Instant::now()));
+        let Some(scene) = session.update_model(BTreeMap::new()).unwrap() else {
+            break;
+        };
+        let next = width(&scene);
+        assert!(next >= last);
+        last = next;
+        session.commit(scene);
+        frames += 1;
+        assert!(frames < 100);
+    }
+    assert_eq!(last, 200.);
+    assert!(frames > 1);
+    assert_eq!(frontend::eval_calls(), 0, "no frame evaluates Luau");
+    assert_eq!(patch_hits(), hits, "a width motion relayouts");
+    assert!(session.preview_deadline().is_none());
+    // Settled: the next unrelated wakeup hits the raw cache and the scene patch.
+    assert!(session.update_model(BTreeMap::new()).unwrap().is_none());
+}

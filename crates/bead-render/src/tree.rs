@@ -5681,6 +5681,7 @@ mod tests {
             progress: 1.,
             parts: Vec::new(),
             art: None,
+            body: None,
         });
         let mut worker = TreeCache::default();
         worker.prepare(&scene, 1.).unwrap();
@@ -5771,6 +5772,7 @@ mod tests {
             progress: 0.2,
             parts: vec![(1, scene.primitives[1].clone())],
             art: None,
+            body: None,
         });
         scene.reveal(0.2);
         let mut expected = TreeCache::default();
@@ -5808,6 +5810,7 @@ mod tests {
             progress: 0.2,
             parts: vec![(1, scene.primitives[1].clone())],
             art: None,
+            body: None,
         });
         scene.reveal(0.2);
 
@@ -5925,6 +5928,7 @@ mod tests {
             progress: 1.,
             parts: vec![],
             art: None,
+            body: None,
         });
         scene.reveal(1.);
         let mut worker = TreeCache::default();
@@ -6248,6 +6252,7 @@ mod tests {
             progress: 1.,
             parts: vec![(0, scene.primitives[0].clone())],
             art: None,
+            body: None,
         });
         let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
         worker.prepare(&scene, 1.).unwrap();
@@ -7562,6 +7567,7 @@ mod tests {
                 progress: 1.,
                 parts: Vec::new(),
                 art: None,
+                body: None,
             });
             let mut cache = TreeCache::default();
             cache.prepare(&scene, scale).unwrap();
@@ -7916,6 +7922,7 @@ mod tests {
             progress: 0.5,
             parts: vec![(1, first), (1, last.clone())],
             art: None,
+            body: None,
         });
         let fingerprint = SnapshotFingerprint::new(&pose, 1.).unwrap();
 
@@ -7947,6 +7954,7 @@ mod tests {
             progress: 0.,
             parts: Vec::new(),
             art: None,
+            body: None,
         });
         let snapshot = TreeCpuRenderer::snapshot(&scene, 1.).unwrap();
         assert!(snapshot.snapshot_fingerprint.is_none());
@@ -8709,5 +8717,209 @@ mod tests {
             retained == full,
             "partial repair must exactly match the clipped full frame"
         );
+    }
+    /// A panel scene whose root is a transparent max-size surface and whose body (joined to the
+    /// top edge, with its shadow) is `body`: what `Panel.body` + `join_edge="top"` lay out.
+    fn body_scene(body: Rect) -> Scene {
+        let radius = 24.;
+        let shadow = Rect::new(
+            body.x - 30.,
+            body.y - 30. - radius,
+            body.w + 60.,
+            body.h + 60. + radius,
+        );
+        let joined = Rect::new(body.x, body.y - radius, body.w, body.h + radius);
+        let mut scene = Scene::empty(488., 584.);
+        scene.bounds = Rect::new(-32., -32., 488., 584.);
+        scene.offset = (32., 32.);
+        scene.primitives = vec![
+            Primitive::Shadow {
+                rect: shadow,
+                radius,
+                blur: 10.,
+            },
+            Primitive::Rounded {
+                rect: joined,
+                radius,
+                fill: [30, 30, 40, 255],
+                border: None,
+            },
+            Primitive::Rounded {
+                rect: Rect::new(body.x + 16., body.y + 16., 80., 24.),
+                radius: 6.,
+                fill: [200, 80, 80, 255],
+                border: None,
+            },
+        ];
+        scene.clips = BTreeMap::from([
+            (
+                0,
+                Rect::new(body.x - 30., body.y, body.w + 60., body.h + 30.),
+            ),
+            (1, body),
+        ]);
+        scene.layers = vec![
+            crate::SceneLayer {
+                id: "root".into(),
+                parent: None,
+                own: 0..0,
+                subtree_end: 3,
+                bounds: Rect::new(0., 0., 424., 520.),
+            },
+            crate::SceneLayer {
+                id: "body".into(),
+                parent: Some("root".into()),
+                own: 0..2,
+                subtree_end: 3,
+                bounds: body,
+            },
+            crate::SceneLayer {
+                id: "chip".into(),
+                parent: Some("body".into()),
+                own: 2..3,
+                subtree_end: 3,
+                bounds: Rect::new(body.x + 16., body.y + 16., 80., 24.),
+            },
+        ];
+        scene.motion = Some(crate::Motion {
+            id: "peek".into(),
+            open: true,
+            duration: 0.22,
+            return_duration: None,
+            return_curve: None,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            fade: false,
+            reveal: true,
+            progress: 1.,
+            parts: vec![
+                (0, scene.primitives[0].clone()),
+                (1, scene.primitives[1].clone()),
+            ],
+            art: None,
+            body: Some(body),
+        });
+        scene
+    }
+    #[test]
+    fn a_declared_body_reveals_from_its_edge_with_joined_corners_and_clips_input_to_itself() {
+        let body = Rect::new(124., 0., 300., 160.);
+        let mut scene = body_scene(body);
+        for progress in [0., 0.25, 0.5, 1.] {
+            scene.reveal(progress);
+            let window = scene.reveal_window_at(progress).unwrap();
+            assert!((window.y + window.h - (body.y + body.h * progress)).abs() < 1e-3);
+            let Primitive::Rounded { rect, radius, .. } = scene.primitives[1] else {
+                panic!()
+            };
+            // The box keeps its extension behind the joined edge (square there), its radius,
+            // and grows to exactly the revealed part of the body.
+            assert_eq!((rect.x, rect.y, rect.w, radius), (124., -24., 300., 24.));
+            assert!(
+                (rect.h - (24. + 160. * progress)).abs() < 1e-3,
+                "{progress}: {rect:?}"
+            );
+            let Primitive::Shadow { rect, .. } = scene.primitives[0] else {
+                panic!()
+            };
+            assert!((rect.h - (84. + 160. * progress)).abs() < 1e-3);
+            assert_eq!(scene.clips[&1], body, "the joined edge stays clipped");
+        }
+        // Fully open restores the laid-out parts exactly.
+        let (Primitive::Rounded { rect: restored, .. }, Primitive::Rounded { rect: laid_out, .. }) =
+            (&scene.primitives[1], &body_scene(body).primitives[1])
+        else {
+            panic!()
+        };
+        assert_eq!(restored, laid_out);
+        // A retarget mid-reveal: the body grew; the reveal follows the new body continuously.
+        let grown = Rect::new(0., 0., 424., 300.);
+        let mut scene = body_scene(grown);
+        scene.reveal(0.5);
+        let Primitive::Rounded { rect, .. } = scene.primitives[1] else {
+            panic!()
+        };
+        assert_eq!((rect.x, rect.w, rect.h), (0., 424., 24. + 150.));
+        assert_eq!(scene.reveal_window_at(0.5).unwrap().h, 4096. + 150.);
+    }
+    #[test]
+    fn body_frames_damage_only_the_union_of_the_old_and_new_body() {
+        // The peek grows to the panel over 26 frames; the max-size surface around it is untouched.
+        let (w, h, scale) = (732, 876, 1.5);
+        let mut renderer = TreeCpuRenderer::default();
+        let mut tracker = crate::damage::FrameDamage::default();
+        let mut pixels = vec![0; w as usize * h as usize * 4];
+        let mut previous: Option<Rect> = None;
+        let mut worst = 0usize;
+        for frame in 0..=26 {
+            let t = frame as f32 / 26.;
+            let eased = 1. - (1. - t).powi(3);
+            let body = Rect::new(
+                124. - 124. * eased,
+                0.,
+                300. + 124. * eased,
+                160. + 360. * eased,
+            );
+            let scene = body_scene(body);
+            renderer.prepare(&scene, scale).unwrap();
+            let prepared = renderer.prepared_frame().unwrap();
+            let regions = tracker
+                .update(&prepared, scene.offset, scene.opacity, w, h)
+                .unwrap();
+            let damage = regions
+                .iter()
+                .copied()
+                .fold(Damage::full(0, 0), Damage::union);
+            renderer
+                .render(
+                    &scene,
+                    ShmTarget {
+                        bytes: &mut pixels,
+                        width: w,
+                        height: h,
+                        scale,
+                        format: PixelFormat::Bgra,
+                    },
+                    damage,
+                )
+                .unwrap();
+            if let Some(previous) = previous {
+                let allowed = Rect::new(
+                    (previous.x.min(body.x) - 30. + 32. - 2.) * scale,
+                    (previous.y.min(body.y) - 30. - 24. + 32. - 2.) * scale,
+                    ((previous.x + previous.w).max(body.x + body.w) - previous.x.min(body.x)
+                        + 60.
+                        + 4.)
+                        * scale,
+                    ((previous.y + previous.h).max(body.y + body.h) - previous.y.min(body.y)
+                        + 60.
+                        + 24.
+                        + 4.)
+                        * scale,
+                );
+                assert!(
+                    damage.x as f32 >= allowed.x.floor()
+                        && damage.y as f32 >= allowed.y.floor()
+                        && (damage.x + damage.w) as f32 <= (allowed.x + allowed.w).ceil()
+                        && (damage.y + damage.h) as f32 <= (allowed.y + allowed.h).ceil(),
+                    "frame {frame}: damage {damage:?} leaves the body union {allowed:?}"
+                );
+                assert_ne!(damage, Damage::full(w, h));
+                let bytes: usize = regions
+                    .iter()
+                    .map(|d| d.w as usize * d.h as usize * 4)
+                    .sum();
+                worst = worst.max(bytes);
+            }
+            previous = Some(body);
+        }
+        // Reported: bytes painted per grow frame at scale 1.5 vs the 2880x1800 output (46.7 MB).
+        println!(
+            "PEEK_GROW_DAMAGE worst_bytes_per_frame={worst} full_surface_bytes={}",
+            w * h * 4
+        );
+        assert!(worst < 2_600_000, "{worst}");
     }
 }

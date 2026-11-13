@@ -132,6 +132,9 @@ pub const PROPERTIES: &[&str] = &[
     "border_width",
     "radius",
     "shadow",
+    "body",
+    "join_edge",
+    "join",
     "font_size",
     "font_weight",
     "text_shadow_blur",
@@ -232,6 +235,11 @@ pub struct ViewSpec {
     pub border_width: f32,
     pub radius: f32,
     pub shadow: bool,
+    /// Root `Panel` only: the id of the child that is the panel body (reveal, input region).
+    pub body: Option<String>,
+    /// The edge this box is attached to: its two corners there are square at `join` = 1.
+    pub join_edge: Option<bead_core::Edge>,
+    pub join: f32,
     pub blur: f32,
     pub start_angle: f32,
     pub sweep_angle: f32,
@@ -282,6 +290,32 @@ impl Props<'_> {
 struct Build {
     default_family: String,
     text_style: crate::text_style::TextStyle,
+    /// One clock per build: every `ui.animated` marker samples the same instant.
+    now_ns: u64,
+}
+/// The `ui.animated` marker inside a property value, if it is one.
+pub(crate) fn marker(value: &Json) -> Option<&Json> {
+    value.get("__animate")
+}
+/// Whether the marker's motion still runs at `now_ns`.
+pub(crate) fn marker_active(marker: &Json, now_ns: u64) -> bool {
+    let start = marker.get("start").and_then(Json::as_u64).unwrap_or(0);
+    let duration = marker.get("duration").and_then(Json::as_f64).unwrap_or(0.);
+    marker.get("loop").and_then(Json::as_bool) == Some(true)
+        || now_ns < start.saturating_add((duration * 1e9) as u64)
+}
+/// The marker's value at `now_ns`; `None` when it is malformed.
+pub(crate) fn sample(marker: &Json, now_ns: u64) -> Option<f64> {
+    let number = |key: &str| marker.get(key).and_then(Json::as_f64);
+    let (from, to, duration) = (number("from")?, number("to")?, number("duration")?);
+    let start = marker.get("start").and_then(Json::as_u64)?;
+    let curve = bead_core::animation::Curve::parse(marker.get("curve")?.as_str()?)?;
+    let mut t = now_ns.saturating_sub(start) as f64 / (duration.max(1e-9) * 1e9);
+    if marker.get("loop").and_then(Json::as_bool) == Some(true) {
+        t = t.rem_euclid(2.);
+        t = if t > 1. { 2. - t } else { t };
+    }
+    Some(from + (to - from) * f64::from(curve.ease(t.clamp(0., 1.) as f32)))
 }
 fn number(p: &Props<'_>, name: &str, default: f32, source: &Source) -> Result<f32, Diagnostic> {
     match p.get(name) {
@@ -383,6 +417,7 @@ fn resolve_nested(
     value: &Json,
     resolve: &Resolve<'_>,
     source: &Source,
+    now_ns: u64,
 ) -> Result<Option<Json>, Diagnostic> {
     let Json::Object(object) = value else {
         return Ok(None);
@@ -396,7 +431,12 @@ fn resolve_nested(
                 serde_json::to_value(resolve(path)?).map_err(|e| source.error(e))?,
             );
             changed = true;
-        } else if let Some(next) = resolve_nested(inner, resolve, source)? {
+        } else if let Some(marker) = marker(inner) {
+            let value =
+                sample(marker, now_ns).ok_or_else(|| source.error("invalid animation marker"))?;
+            out.insert(key.clone(), Json::from(value));
+            changed = true;
+        } else if let Some(next) = resolve_nested(inner, resolve, source, now_ns)? {
             out.insert(key.clone(), next);
             changed = true;
         }
@@ -436,8 +476,13 @@ impl ViewSpec {
                         name.clone(),
                         serde_json::to_value(resolve(path)?).map_err(|e| raw.source.error(e))?,
                     );
+                } else if let Some(marker) = marker(value) {
+                    let value = sample(marker, host.now_ns)
+                        .ok_or_else(|| raw.source.error("invalid animation marker"))?;
+                    props.resolved.insert(name.clone(), Json::from(value));
                 } else if COLOR_PROPERTIES.contains(&name.as_str())
-                    && let Some(resolved) = resolve_nested(value, resolve, &raw.source)?
+                    && let Some(resolved) =
+                        resolve_nested(value, resolve, &raw.source, host.now_ns)?
                 {
                     props.resolved.insert(name.clone(), resolved);
                 }
@@ -792,8 +837,15 @@ impl ViewSpec {
             if p.contains_key("focus_on_pointer") && raw.kind != Widget::Button {
                 return Err(source.error("focus_on_pointer is only valid on Button"));
             }
-            if p.contains_key("shadow") && raw.kind != Widget::Panel {
-                return Err(source.error("shadow is only valid on Panel"));
+            if p.contains_key("shadow") && !matches!(raw.kind, Widget::Panel | Widget::Box) {
+                return Err(source.error("shadow is only valid on Panel or Box"));
+            }
+            if p.contains_key("body") && (raw.kind != Widget::Panel || path != "view") {
+                return Err(source.error("body is only valid on the root Panel"));
+            }
+            let join = number(p, "join", 1., source)?;
+            if !(0. ..=1.).contains(&join) {
+                return Err(source.error("join needs 0..1"));
             }
             let child_scope = if p.contains_key("id") && raw.kind != Widget::Group {
                 format!("{id}.")
@@ -893,7 +945,19 @@ impl ViewSpec {
                     if raw.kind == Widget::Panel { 12. } else { 9. },
                     source,
                 )?,
-                shadow: boolean(p, "shadow", true, source)?,
+                shadow: boolean(p, "shadow", raw.kind == Widget::Panel, source)?,
+                body: p
+                    .get("body")
+                    .map(|_| text(p, "body", "", source).map(|id| format!("{scope}{id}")))
+                    .transpose()?,
+                join_edge: p
+                    .get("join_edge")
+                    .map(|value| {
+                        serde_json::from_value(value.clone())
+                            .map_err(|_| source.error("join_edge needs top/bottom/left/right"))
+                    })
+                    .transpose()?,
+                join,
                 font_size,
                 font_weight,
                 text_shadow_blur,
@@ -929,6 +993,7 @@ impl ViewSpec {
                         progress: 1.,
                         parts: Vec::new(),
                         art: None,
+                        body: None,
                         open: boolean(p, "open", true, source)?,
                         duration: f64::from(number(p, "duration", 0.2, source)?),
                         return_duration: if p.contains_key("return_duration") {
@@ -983,6 +1048,7 @@ impl ViewSpec {
         let host = Build {
             default_family: crate::theme::with_sans_family(str::to_owned),
             text_style: crate::text_style::current(),
+            now_ns: bead_core::animation::clock_ns(),
         };
         build(
             raw,
@@ -1240,22 +1306,39 @@ pub fn layout(
         let muted = palette_role("onSurfaceVariant", ink);
         let accent = palette_role("primary", ink);
         let (fill, foreground) = surface_colors(view, hover == view.id, palette)?;
-        let mut emit = |primitive: Primitive| {
+        // A joined edge: the box (and its shadow, `join_margin` = 30) reaches `join * radius`
+        // behind that edge and is clipped at it, so its two corners there are square and flush
+        // with the surface it hangs from.
+        let joined = view.join_edge.map(|edge| (edge, view.join * view.radius));
+        let mut emit = |primitive: Primitive, join_margin: Option<f32>| {
             if !own_visible && !retain_offscreen {
                 return;
             }
             let index = out.scene.primitives.len();
+            let (primitive, bounds) = match (joined, join_margin) {
+                (Some((edge, extent)), Some(margin)) => {
+                    let at_edge = joined_clip(r, edge, margin);
+                    let bounds = clip.map_or(at_edge, |c| {
+                        intersect(c, at_edge).unwrap_or(Rect::new(0., 0., 0., 0.))
+                    });
+                    (joined_rect(primitive, edge, extent), Some(bounds))
+                }
+                _ => (primitive, clip),
+            };
             out.scene.primitives.push(primitive);
-            if let Some(c) = clip {
+            if let Some(c) = bounds {
                 out.scene.clips.insert(index, c);
             }
         };
-        if view.kind == Widget::Panel && view.shadow {
-            emit(Primitive::Shadow {
-                rect: Rect::new(r.x - 30., r.y - 30., r.w + 60., r.h + 60.),
-                radius: view.radius,
-                blur: 10.,
-            });
+        if view.shadow {
+            emit(
+                Primitive::Shadow {
+                    rect: Rect::new(r.x - 30., r.y - 30., r.w + 60., r.h + 60.),
+                    radius: view.radius,
+                    blur: 10.,
+                },
+                Some(30.),
+            );
         }
         let border = (view.border_width > 0. || view.selected)
             .then(|| {
@@ -1272,12 +1355,15 @@ pub fn layout(
             .map(|(c, w)| c.map(|c| (c, w)))
             .transpose()?;
         if view.kind != Widget::Polyline && (fill[3] > 0 || border.is_some()) {
-            emit(Primitive::Rounded {
-                rect: r,
-                radius: view.radius,
-                fill,
-                border,
-            });
+            emit(
+                Primitive::Rounded {
+                    rect: r,
+                    radius: view.radius,
+                    fill,
+                    border,
+                },
+                Some(0.),
+            );
         }
         if view.kind == Widget::Text
             || (!view.text.is_empty() && matches!(view.kind, Widget::Button | Widget::TextInput))
@@ -1285,40 +1371,43 @@ pub fn layout(
         {
             let padding = l.padding;
             let input_empty = view.kind == Widget::TextInput && view.text.is_empty();
-            emit(Primitive::Text {
-                rect: Rect::new(
-                    r.x + padding.left,
-                    r.y + padding.top,
-                    (r.w - padding.left - padding.right).max(1.),
-                    (r.h - padding.top - padding.bottom).max(1.),
-                ),
-                text: if input_empty {
-                    view.placeholder.clone()
-                } else if view.masked && view.input.is_some() {
-                    crate::input::mask(&view.text)
-                } else {
-                    view.text.clone()
+            emit(
+                Primitive::Text {
+                    rect: Rect::new(
+                        r.x + padding.left,
+                        r.y + padding.top,
+                        (r.w - padding.left - padding.right).max(1.),
+                        (r.h - padding.top - padding.bottom).max(1.),
+                    ),
+                    text: if input_empty {
+                        view.placeholder.clone()
+                    } else if view.masked && view.input.is_some() {
+                        crate::input::mask(&view.text)
+                    } else {
+                        view.text.clone()
+                    },
+                    family: view.family.clone(),
+                    weight: view.font_weight,
+                    align: view.text_align,
+                    size: view.font_size,
+                    color: if input_empty { muted } else { foreground },
+                    shadow: if view.text_shadow_blur > 0. {
+                        Some(bead_render::TextShadow {
+                            color: color(
+                                view.text_shadow_color.as_ref(),
+                                [0, 0, 0, 128],
+                                palette,
+                                source,
+                            )?,
+                            blur: view.text_shadow_blur,
+                            offset_y: view.text_shadow_y,
+                        })
+                    } else {
+                        None
+                    },
                 },
-                family: view.family.clone(),
-                weight: view.font_weight,
-                align: view.text_align,
-                size: view.font_size,
-                color: if input_empty { muted } else { foreground },
-                shadow: if view.text_shadow_blur > 0. {
-                    Some(bead_render::TextShadow {
-                        color: color(
-                            view.text_shadow_color.as_ref(),
-                            [0, 0, 0, 128],
-                            palette,
-                            source,
-                        )?,
-                        blur: view.text_shadow_blur,
-                        offset_y: view.text_shadow_y,
-                    })
-                } else {
-                    None
-                },
-            });
+                None,
+            );
         }
         if view.kind == Widget::Image {
             let path = if let Some(icon) = &view.icon {
@@ -1328,29 +1417,35 @@ pub fn layout(
                     .clone()
                     .ok_or_else(|| source.error("Image requires icon or path"))?
             };
-            emit(Primitive::Image {
-                blur: view.blur,
-                fit: view.image_fit,
-                clip_polygon: view.clip_polygon.clone(),
-                tint: view
-                    .tint
-                    .as_ref()
-                    .map(|tint| color(Some(tint), foreground, palette, source))
-                    .transpose()?,
-                rect: r,
-                path,
-            });
+            emit(
+                Primitive::Image {
+                    blur: view.blur,
+                    fit: view.image_fit,
+                    clip_polygon: view.clip_polygon.clone(),
+                    tint: view
+                        .tint
+                        .as_ref()
+                        .map(|tint| color(Some(tint), foreground, palette, source))
+                        .transpose()?,
+                    rect: r,
+                    path,
+                },
+                None,
+            );
         }
         if view.kind == Widget::Arc {
             let arc_color = color(view.color.as_ref(), accent, palette, source)?;
-            emit(Primitive::Arc {
-                rect: r,
-                start_angle: view.start_angle,
-                sweep_angle: view.sweep_angle,
-                stroke_width: view.stroke_width,
-                color: arc_color,
-                round_caps: view.round_caps,
-            });
+            emit(
+                Primitive::Arc {
+                    rect: r,
+                    start_angle: view.start_angle,
+                    sweep_angle: view.sweep_angle,
+                    stroke_width: view.stroke_width,
+                    color: arc_color,
+                    round_caps: view.round_caps,
+                },
+                None,
+            );
         }
         if view.kind == Widget::Polyline {
             let line_color = color(view.color.as_ref(), accent, palette, source)?;
@@ -1359,15 +1454,18 @@ pub fn layout(
                 .as_ref()
                 .map(|v| color(Some(v), accent, palette, source))
                 .transpose()?;
-            emit(Primitive::Polyline {
-                rect: r,
-                points: view.points.clone(),
-                closed: view.closed,
-                stroke_width: view.stroke_width,
-                color: line_color,
-                round_caps: view.round_caps,
-                fill,
-            });
+            emit(
+                Primitive::Polyline {
+                    rect: r,
+                    points: view.points.clone(),
+                    closed: view.closed,
+                    stroke_width: view.stroke_width,
+                    color: line_color,
+                    round_caps: view.round_caps,
+                    fill,
+                },
+                None,
+            );
         }
         if let Some(graph) = &view.graph {
             // Geometry, camera and interaction are filled in by the session's graph engine.
@@ -1507,7 +1605,75 @@ pub fn layout(
         &hover,
         &mut output,
     )?;
+    if let Some(body) = &view.body {
+        // The named child is the panel body: the reveal grows it from its edge, its box and
+        // shadow are the parts that keep their corners while growing, and input stops at it.
+        let layer = output
+            .scene
+            .layers
+            .iter()
+            .find(|layer| &layer.id == body)
+            .ok_or_else(|| view.source.error("body names no visible child"))?;
+        let parts = layer
+            .own
+            .clone()
+            .filter(|i| {
+                matches!(
+                    output.scene.primitives[*i],
+                    Primitive::Rounded { .. } | Primitive::Shadow { .. }
+                )
+            })
+            .map(|i| (i, output.scene.primitives[i].clone()))
+            .collect();
+        let bounds = layer.bounds;
+        if let Some(motion) = &mut output.scene.motion {
+            motion.body = Some(bounds);
+            motion.parts = parts;
+        }
+    }
     Ok(output)
+}
+/// `primitive` grown by `extent` behind `edge`: the part that `joined_clip` cuts off.
+fn joined_rect(mut primitive: Primitive, edge: bead_core::Edge, extent: f32) -> Primitive {
+    if let Primitive::Rounded { rect, .. } | Primitive::Shadow { rect, .. } = &mut primitive {
+        use bead_core::Edge;
+        match edge {
+            Edge::Top => {
+                rect.y -= extent;
+                rect.h += extent;
+            }
+            Edge::Bottom => rect.h += extent,
+            Edge::Left => {
+                rect.x -= extent;
+                rect.w += extent;
+            }
+            Edge::Right => rect.w += extent,
+        }
+    }
+    primitive
+}
+/// `r` plus `margin` on every side but the joined edge, which stays flush.
+fn joined_clip(r: Rect, edge: bead_core::Edge, margin: f32) -> Rect {
+    use bead_core::Edge;
+    let mut c = Rect::new(
+        r.x - margin,
+        r.y - margin,
+        r.w + 2. * margin,
+        r.h + 2. * margin,
+    );
+    match edge {
+        Edge::Top => {
+            c.y = r.y;
+            c.h -= margin;
+        }
+        Edge::Bottom => c.h -= margin,
+        Edge::Left => {
+            c.x = r.x;
+            c.w -= margin;
+        }
+        Edge::Right => c.w -= margin,
+    }
+    c
 }
 
 #[cfg(test)]

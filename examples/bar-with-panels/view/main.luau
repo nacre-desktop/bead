@@ -9,4 +9,6 @@ return ui.Row {
         fill = "surface", color = "onSurface", on_activate = ui.action("panel.toggle", "calendar") },
     ui.Button { id = "volume", text = ui.bind("volume"), width = 130, height = 28, padding = 4, font_size = 14, radius = 5,
         fill = "surface", color = "onSurfaceVariant", on_activate = ui.action("panel.toggle", "volume") },
+    ui.Button { id = "status", text = "Status", width = 72, height = 28, padding = 4, font_size = 14, radius = 5,
+        fill = "surface", color = "onSurfaceVariant", on_activate = ui.action("panel.toggle", "status") },
 }

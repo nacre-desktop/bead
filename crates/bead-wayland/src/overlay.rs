@@ -1097,6 +1097,7 @@ mod tests {
             progress: 0.,
             parts: Vec::new(),
             art: None,
+            body: None,
         };
         let (open_duration, open_curve) = motion.transition(true);
         let (close_duration, close_curve) = motion.transition(false);
