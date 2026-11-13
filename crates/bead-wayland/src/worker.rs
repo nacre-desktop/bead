@@ -13,6 +13,7 @@ pub type Factory = Box<dyn FnOnce() -> Result<Box<dyn SceneSource>, String> + Se
 #[derive(Default)]
 struct Mirror {
     retained_bytes: Option<usize>,
+    dormant_ready: bool,
     wakeup_at: Option<std::time::Instant>,
     drag_visuals: Vec<crate::DragVisual>,
     focused_dismiss: bool,
@@ -35,6 +36,7 @@ impl Mirror {
     fn read(source: &dyn SceneSource, cache: &bead_render::tree::TreeCache) -> Self {
         let _profile = bead_core::profile::Span::new("mirror");
         Self {
+            dormant_ready: source.dormant_ready(),
             retained_bytes: source.warm_retained_bytes().and_then(|bytes| {
                 bytes
                     .checked_add(STACK_BYTES)?
@@ -398,6 +400,7 @@ impl SceneSource for Source {
     fn dormant_ready(&self) -> bool {
         !self.poisoned
             && !self.asynchronous_resources
+            && self.mirror.dormant_ready
             && self.pending.load(std::sync::atomic::Ordering::Acquire) == 0
             && self.candidate.is_none()
             && !self.retired.load(std::sync::atomic::Ordering::Acquire)

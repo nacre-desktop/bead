@@ -455,34 +455,39 @@ impl App {
         };
         let output = overlay.output.clone();
         self.cancel_scroll(&scroll::Target::Overlay(overlay.epoch()));
-        let source = std::mem::replace(
-            &mut overlay.source,
-            Box::new(worker::Source::new(
-                Box::new(|| Err("retired overlay".into())),
-                Scene {
-                    primitives: vec![],
-                    layers: vec![],
-                    asset_data: Default::default(),
-                    clips: Default::default(),
-                    prepared: Default::default(),
-                    font_files: vec![],
-                    opacity: 1.,
-                    motion: None,
-                    resource_revision: 0,
-                    width: 1.,
-                    slide: None,
-                    offset: (0., 0.),
-                    bounds: Rect::new(0., 0., 1., 1.),
-                },
-            )),
-        );
-        self.warm_sources.park(
-            true,
-            overlay.name.clone(),
-            overlay.epoch,
-            source,
-            self.options.warm_source_budget,
-        );
+        if self.options.warm_source_budget > 0
+            && overlay.source.dormant_ready()
+            && overlay.source.warm_retained_bytes().is_some()
+        {
+            let source = std::mem::replace(
+                &mut overlay.source,
+                Box::new(worker::Source::new(
+                    Box::new(|| Err("retired overlay".into())),
+                    Scene {
+                        primitives: vec![],
+                        layers: vec![],
+                        asset_data: Default::default(),
+                        clips: Default::default(),
+                        prepared: Default::default(),
+                        font_files: vec![],
+                        opacity: 1.,
+                        motion: None,
+                        resource_revision: 0,
+                        width: 1.,
+                        slide: None,
+                        offset: (0., 0.),
+                        bounds: Rect::new(0., 0., 1., 1.),
+                    },
+                )),
+            );
+            self.warm_sources.park(
+                true,
+                overlay.name.clone(),
+                overlay.epoch,
+                source,
+                self.options.warm_source_budget,
+            );
+        }
         drop(overlay);
         // With no view of either slot up, the primary session may shed its warm caches,
         // as it does when the panel slot closes.
