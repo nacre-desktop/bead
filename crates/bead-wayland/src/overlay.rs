@@ -206,6 +206,9 @@ impl App {
         if self.hidden {
             return;
         }
+        // Reserve the requested source before parking the old overlay. Its
+        // ownership moves directly into the synchronous open path.
+        let warm = self.warm_sources.take(true, view);
         if let Some(shown) = &mut self.overlay {
             if shown.name == view {
                 // Re-offered while fading out: stay.
@@ -224,11 +227,16 @@ impl App {
             }
             self.release_overlay();
         }
-        if let Err(error) = self.open_overlay(view, output) {
+        if let Err(error) = self.open_overlay(view, output, warm) {
             eprintln!("COMPANION_ERROR {error}");
         }
     }
-    fn open_overlay(&mut self, view: &str, output: Option<&str>) -> Result<(), String> {
+    fn open_overlay(
+        &mut self,
+        view: &str,
+        output: Option<&str>,
+        warm: Option<warm::Entry>,
+    ) -> Result<(), String> {
         let began = Instant::now();
         let layer_kind = self
             .options
@@ -280,7 +288,7 @@ impl App {
         self.place_overlay(&layer, &output, &spec.fallback, spec.position.as_ref());
         layer.commit();
         self.overlay_epoch = self.overlay_epoch.wrapping_add(1);
-        let warm = self.warm_sources.take(true, view);
+        let warm = warm.or_else(|| self.warm_sources.take(true, view));
         let reused = warm.is_some();
         let epoch = warm
             .as_ref()
@@ -455,7 +463,10 @@ impl App {
         };
         let output = overlay.output.clone();
         self.cancel_scroll(&scroll::Target::Overlay(overlay.epoch()));
+        // A replacement while still open must retire its interaction state.
+        // Worker readiness additionally requires the close transaction to settle.
         if self.options.warm_source_budget > 0
+            && !overlay.open
             && overlay.source.dormant_ready()
             && overlay.source.warm_retained_bytes().is_some()
         {
@@ -570,7 +581,7 @@ impl App {
             let _ = overlay.source.stage(event);
             self.release_overlay();
             self.warm_sources.take(true, &name);
-            if let Err(error) = self.open_overlay(&name, output.as_deref()) {
+            if let Err(error) = self.open_overlay(&name, output.as_deref(), None) {
                 self.fail(error);
             }
             return;

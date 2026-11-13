@@ -2098,4 +2098,77 @@ mod tests {
         cache.park(false, "coalesced".into(), 8, source, budget);
         assert!(cache.take(false, "coalesced").is_some());
     }
+    #[test]
+    fn six_alternating_named_cycles_keep_two_factories_with_one_dormant_slot() {
+        for overlay in [false, true] {
+            let factories = Arc::new(AtomicUsize::new(0));
+            let stages = Arc::new(AtomicUsize::new(0));
+            let (mut active, a_events) =
+                warm_worker(factories.clone(), stages.clone(), Default::default());
+            let (mut other, b_events) =
+                warm_worker(factories.clone(), stages.clone(), Default::default());
+            let budget = active
+                .warm_retained_bytes()
+                .unwrap()
+                .max(other.warm_retained_bytes().unwrap())
+                + 1024;
+            other.stage(UiEvent::PanelVisibility(false)).unwrap();
+            settle(other.as_mut(), &b_events);
+            let mut cache = crate::warm::Cache::default();
+            cache.park(overlay, "B".into(), 2, other, budget);
+            let (mut active_name, mut active_epoch) = ("A", 1);
+            for requested in ["B", "A"].into_iter().cycle().take(12) {
+                active.stage(UiEvent::PanelVisibility(false)).unwrap();
+                settle(
+                    active.as_mut(),
+                    if active_name == "A" {
+                        &a_events
+                    } else {
+                        &b_events
+                    },
+                );
+                // Match both slot lifecycles: reserve requested source FIRST,
+                // then retire the current source into the one-entry budget.
+                let next = cache
+                    .take(overlay, requested)
+                    .expect("alternating target stays warm");
+                cache.park(overlay, active_name.into(), active_epoch, active, budget);
+                active = next.source;
+                active_name = requested;
+                active_epoch = next.epoch;
+                active.stage(UiEvent::PanelVisibility(true)).unwrap();
+                settle(
+                    active.as_mut(),
+                    if requested == "A" {
+                        &a_events
+                    } else {
+                        &b_events
+                    },
+                );
+                assert!(active.resume().unwrap().is_none());
+                settle(
+                    active.as_mut(),
+                    if requested == "A" {
+                        &a_events
+                    } else {
+                        &b_events
+                    },
+                );
+            }
+            assert_eq!(
+                factories.load(Ordering::SeqCst),
+                2,
+                "one initial factory per named view"
+            );
+            assert_eq!(
+                stages.load(Ordering::SeqCst),
+                27,
+                "two initial stages, one initial close, and close/open for twelve swaps"
+            );
+            assert!(
+                cache.take(overlay, "B").is_some(),
+                "inactive B still occupies the single budget slot"
+            );
+        }
+    }
 }

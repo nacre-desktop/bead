@@ -361,24 +361,27 @@ impl App {
         }
     }
     // Resolve before retirement: an unknown view must leave the current one intact.
-    fn select_panel(&mut self, name: Option<&str>) -> Result<(), String> {
+    fn select_panel(&mut self, name: Option<&str>) -> Result<Option<warm::Entry>, String> {
         let Some(panels) = &self.options.panels else {
-            return Ok(());
+            return Ok(None);
         };
         let (name, spec) = panels.resolve(name)?;
         if self.panel_name.as_deref() == Some(name) {
-            return Ok(());
+            return Ok(None);
         }
         self.notify_panel_owner(UiEvent::PanelSelected(name.to_owned()));
         let name = name.to_owned();
         let mut spec = spec.clone();
         spec.initial_open = false;
+        // The target leaves the dormant budget before parking the retiring
+        // source, so a one-entry budget can alternate two warm views.
+        let warm = self.warm_sources.take(false, &name);
         if self.panel_runtime.is_some() {
             self.release_panel();
         }
         self.options.panel_spec = Some(spec);
         self.panel_name = Some(name);
-        Ok(())
+        Ok(warm)
     }
 
     pub(super) fn panel_navigated(&mut self, name: String) {
@@ -474,7 +477,7 @@ impl App {
         }
         // A missing output must fail before retiring the old worker/surface.
         self.validate_panel_output(output)?;
-        self.select_panel(name)?;
+        let warm = self.select_panel(name)?;
         self.panel_center = center;
         self.panel_anchor = anchor;
         if let Some(panels) = &self.options.panels
@@ -483,7 +486,7 @@ impl App {
         {
             spec.engages_decorations = anchor.is_none() && original.engages_decorations;
         }
-        self.start_panel(output, open)
+        self.start_panel_with_source(output, open, warm)
     }
     pub(super) fn open_panel(&mut self, output: Option<&str>) -> Result<(), String> {
         self.request_panel(None, output, true)
@@ -676,6 +679,14 @@ impl App {
         )
     }
     pub(super) fn start_panel(&mut self, output: Option<&str>, open: bool) -> Result<(), String> {
+        self.start_panel_with_source(output, open, None)
+    }
+    fn start_panel_with_source(
+        &mut self,
+        output: Option<&str>,
+        open: bool,
+        warm: Option<warm::Entry>,
+    ) -> Result<(), String> {
         bead_core::profile::mark("panel_admission");
         let _busy = bead_core::profile::Busy::new("start_panel");
         let traced = bead_core::profile::frame_trace().then(|| {
@@ -685,7 +696,7 @@ impl App {
                 self.panel_runtime.is_some(),
             )
         });
-        let result = self.start_panel_inner(output, open);
+        let result = self.start_panel_inner(output, open, warm);
         if let Some((wall, cpu, retained)) = traced {
             bead_core::profile::trace("start_panel", || {
                 format!(
@@ -699,7 +710,12 @@ impl App {
         }
         result
     }
-    fn start_panel_inner(&mut self, output: Option<&str>, open: bool) -> Result<(), String> {
+    fn start_panel_inner(
+        &mut self,
+        output: Option<&str>,
+        open: bool,
+        warm: Option<warm::Entry>,
+    ) -> Result<(), String> {
         if open && self.panel_name.as_deref() == Some("wallpaper") {
             eprintln!(
                 "WALLPAPER_OPEN_PANEL_START monotonic_ns={} retained_runtime={}",
@@ -857,10 +873,11 @@ impl App {
             );
         }
         self.cancel_scroll(&scroll::Target::Panel(self.panel_epoch));
-        let warm = self
-            .panel_name
-            .as_deref()
-            .and_then(|name| self.warm_sources.take(false, name));
+        let warm = warm.or_else(|| {
+            self.panel_name
+                .as_deref()
+                .and_then(|name| self.warm_sources.take(false, name))
+        });
         let reused = warm.is_some();
         self.panel_epoch = warm
             .as_ref()
@@ -1300,6 +1317,7 @@ impl App {
         }
     }
     fn release_panel_body(&mut self, check_app_lifetime: bool) {
+        let closed = !self.panel_target;
         self.clear_promotion_pending();
         self.panel_cover = None;
         self.panel_dock_transition = None;
@@ -1340,7 +1358,10 @@ impl App {
         self.panel_epoch = self.next_epoch();
         drop(self.dismiss.take());
         if let Some(source) = self.panel_runtime.take() {
+            // Open replacements cold-retire: only an acknowledged closed source
+            // may preserve interaction state. Worker readiness fences its close.
             if check_app_lifetime
+                && closed
                 && self.pearl.is_none()
                 && self.options.app.is_none()
                 && let Some(name) = self.panel_name.clone()
