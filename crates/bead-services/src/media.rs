@@ -5,10 +5,9 @@ use std::{
     collections::{BTreeMap, HashMap},
     sync::{
         Arc, Mutex, Weak,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicU64, Ordering},
     },
     thread::JoinHandle,
-    time::Duration,
 };
 use zbus::{
     Connection, Proxy,
@@ -57,7 +56,6 @@ struct Shared {
     playing_order: Mutex<Vec<String>>,
     callbacks: Mutex<BTreeMap<u64, Callback>>,
     next: AtomicU64,
-    stop: AtomicBool,
     stopped: tokio::sync::Notify,
 }
 impl Shared {
@@ -106,45 +104,33 @@ impl Media {
     /// Connect to the session bus and start, returning `None` if it is unavailable.
     #[doc(hidden)]
     pub fn start_session() -> Option<Arc<Self>> {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .ok()
-            .and_then(|rt| rt.block_on(Connection::session()).ok())
-            .map(Self::start)
+        let (runtime, connection) = crate::bus::connect_blocking(Connection::session())?;
+        Some(Self::spawn(Some(runtime), connection))
     }
     pub fn start(connection: Connection) -> Arc<Self> {
+        Self::spawn(None, connection)
+    }
+    fn spawn(runtime: Option<tokio::runtime::Runtime>, connection: Connection) -> Arc<Self> {
         let shared = Arc::new(Shared {
             snapshot: Mutex::new(Arc::new(MediaSnapshot::default())),
             playing_order: Mutex::new(Vec::new()),
             callbacks: Mutex::new(BTreeMap::new()),
             next: AtomicU64::new(1),
-            stop: AtomicBool::new(false),
             stopped: tokio::sync::Notify::new(),
         });
-        let state = shared.clone();
-        let worker_connection = connection.clone();
-        let worker = std::thread::spawn(move || {
-            let Ok(rt) = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-            else {
-                return;
-            };
-            while !state.stop.load(Ordering::Acquire) {
-                if rt
-                    .block_on(run(worker_connection.clone(), state.clone()))
-                    .is_ok()
-                {
-                    break;
-                }
-                state.change(|s| {
+        let conn = connection.clone();
+        let worker = crate::bus::spawn_worker(
+            runtime,
+            shared.clone(),
+            |s| &s.stopped,
+            |s| {
+                s.change(|s| {
                     s.players.clear();
                     s.active = None;
-                });
-                std::thread::sleep(Duration::from_millis(200));
-            }
-        });
+                })
+            },
+            move |s| run(conn.clone(), s),
+        );
         Arc::new(Self {
             shared,
             connection,
@@ -192,7 +178,6 @@ impl Media {
 }
 impl Drop for Media {
     fn drop(&mut self) {
-        self.shared.stop.store(true, Ordering::Release);
         self.shared.stopped.notify_one();
         if let Some(worker) = self.worker.lock().unwrap_or_else(|e| e.into_inner()).take() {
             let _ = worker.join();
@@ -226,7 +211,6 @@ async fn run(connection: Connection, shared: Arc<Shared>) -> zbus::Result<()> {
     }
     loop {
         tokio::select! {
-            _ = shared.stopped.notified() => return Ok(()),
             owner = owners.next() => {
                 let signal = owner.ok_or(zbus::Error::Failure("owner stream ended".into()))?;
                 let change = signal.args()?;

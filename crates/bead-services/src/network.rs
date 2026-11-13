@@ -160,10 +160,7 @@ impl Network {
     /// Connect to the system bus and start, returning `None` if it is unavailable.
     #[doc(hidden)]
     pub fn start_system() -> Option<Arc<Self>> {
-        // The connection's reader task lives on the runtime that built it, so the worker keeps
-        // driving that runtime instead of dropping it here.
-        let runtime = runtime().ok()?;
-        let connection = runtime.block_on(crate::bus::system_connection()).ok()?;
+        let (runtime, connection) = crate::bus::connect_blocking(crate::bus::system_connection())?;
         Some(Self::spawn(Some(runtime), connection))
     }
     pub fn start(connection: Connection) -> Arc<Self> {
@@ -177,26 +174,14 @@ impl Network {
             stopped: tokio::sync::Notify::new(),
             scans: Mutex::new(HashMap::new()),
         });
-        let state = shared.clone();
         let conn = connection.clone();
-        let worker = std::thread::spawn(move || {
-            let Some(rt) = runtime.or_else(|| self::runtime().ok()) else {
-                return;
-            };
-            rt.block_on(async {
-                loop {
-                    tokio::select! {
-                        _ = state.stopped.notified() => break,
-                        _ = run(conn.clone(), state.clone()) => {},
-                    }
-                    state.publish(NetworkSnapshot::default());
-                    tokio::select! {
-                        _ = state.stopped.notified() => break,
-                        _ = tokio::time::sleep(Duration::from_millis(200)) => {},
-                    }
-                }
-            });
-        });
+        let worker = crate::bus::spawn_worker(
+            runtime,
+            shared.clone(),
+            |s| &s.stopped,
+            |s| s.publish(NetworkSnapshot::default()),
+            move |s| run(conn.clone(), s),
+        );
         Arc::new(Self {
             shared,
             connection,
@@ -267,7 +252,7 @@ impl Network {
                 .ok_or_else(|| format!("unknown saved connection '{path}'"))
         };
         let c = &self.connection;
-        let rt = runtime().map_err(|e| e.to_string())?;
+        let rt = crate::bus::runtime().map_err(|e| e.to_string())?;
         match action {
             NetworkAction::SetWirelessEnabled(on) => rt.block_on(call(
                 c,
@@ -364,11 +349,6 @@ impl Drop for Network {
     }
 }
 
-fn runtime() -> std::io::Result<tokio::runtime::Runtime> {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-}
 async fn run(c: Connection, s: Arc<Shared>) -> zbus::Result<()> {
     let dbus = DBusProxy::new(&c).await?;
     let mut owners = dbus

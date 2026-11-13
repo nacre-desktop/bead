@@ -26,6 +26,21 @@ use std::{
     time::Duration,
 };
 
+/// Every desktop service a folder app may declare; hosts validate manifests against it.
+pub const DESKTOP_SERVICES: [&str; 12] = [
+    "clock",
+    "audio",
+    "battery",
+    "network",
+    "bluetooth",
+    "tray",
+    "session",
+    "media",
+    "power",
+    "bluetooth_devices",
+    "network_devices",
+    "workspaces",
+];
 #[derive(Clone, Debug, Default)]
 pub struct FolderServices {
     pub desktop: BTreeSet<String>,
@@ -1751,6 +1766,52 @@ mod tests {
     }
 
     #[test]
+    fn clicked_host_actions_are_routed_natively_not_through_behavior_actions() {
+        let root = std::env::temp_dir().join(format!(
+            "bead-folder-host-click-{}-{}",
+            std::process::id(),
+            TEMP_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(root.join("view")).unwrap();
+        std::fs::write(
+            root.join("palette.json"),
+            r#"{"formatVersion":1,"colours":{"surface":"202020"}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("view/behavior.luau"),
+            "return {stores={},actions={},computed={}}",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("view/main.luau"),
+            "local ui=require('bead.ui');return ui.Row{id='root',width='fill',height='fill',ui.Button{id='play',width=120,height=30,text='Play',on_activate=ui.action('desktop.media.play_pause')},ui.Button{id='later',width=120,height=30,text='Later',activate_on_release=true,on_activate=ui.action('desktop.media.next')}}",
+        )
+        .unwrap();
+        let mut view = FolderView::load_with_services(
+            root.clone(),
+            "view/main.luau".into(),
+            "palette.json".into(),
+            "Host actions",
+            (400, 40),
+            FolderServices {
+                desktop: BTreeSet::from(["media".into()]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        view.stage(UiEvent::Reload).unwrap();
+        view.commit();
+        for (x, y) in [(60., 15.), (180., 15.)] {
+            view.stage(UiEvent::Click { x, y })
+                .unwrap_or_else(|e| panic!("press at {x}: {e}"));
+            view.stage(UiEvent::Release)
+                .unwrap_or_else(|e| panic!("release at {x}: {e}"));
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn tray_service_enables_the_fallback_watcher() {
         assert!(desktop_config(&BTreeSet::from(["tray".to_owned()])).tray_watcher);
     }
@@ -2706,6 +2767,23 @@ mod tests {
         drop(second);
         drop(runtime);
         let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn runtime_with_every_service_declared_stops_within_a_bound() {
+        let runtime = FolderServicesRuntime::start(FolderServices {
+            desktop: DESKTOP_SERVICES.iter().map(|s| (*s).into()).collect(),
+            ..Default::default()
+        })
+        .unwrap();
+        std::thread::sleep(Duration::from_millis(300));
+        let started = std::time::Instant::now();
+        drop(runtime);
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "service workers must stop promptly: {:?}",
+            started.elapsed()
+        );
     }
 
     #[test]

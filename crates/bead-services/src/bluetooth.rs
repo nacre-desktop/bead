@@ -166,18 +166,25 @@ impl Bluetooth {
     /// Connect to the system bus and start, returning `None` if it is unavailable.
     #[doc(hidden)]
     pub fn start_system() -> Option<Arc<Self>> {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .ok()
-            .and_then(|rt| rt.block_on(system_connection()).ok())
-            .map(Self::start)
+        let (runtime, connection) = crate::bus::connect_blocking(crate::bus::system_connection())?;
+        Some(Self::spawn(
+            Some(runtime),
+            connection,
+            Duration::from_secs(30),
+        ))
     }
     pub fn start(connection: Connection) -> Arc<Self> {
-        Self::start_with_timeout(connection, Duration::from_secs(30))
+        Self::spawn(None, connection, Duration::from_secs(30))
     }
     #[doc(hidden)]
     pub fn start_with_timeout(connection: Connection, scan_timeout: Duration) -> Arc<Self> {
+        Self::spawn(None, connection, scan_timeout)
+    }
+    fn spawn(
+        runtime: Option<tokio::runtime::Runtime>,
+        connection: Connection,
+        scan_timeout: Duration,
+    ) -> Arc<Self> {
         let shared = Arc::new(Shared {
             snapshot: Mutex::new(Arc::new(BluetoothSnapshot::default())),
             objects: Mutex::new(HashMap::new()),
@@ -188,20 +195,14 @@ impl Bluetooth {
             deadlines: Mutex::new(HashMap::new()),
             deadline_changed: tokio::sync::Notify::new(),
         });
-        let state = shared.clone();
         let conn = connection.clone();
-        let worker = std::thread::spawn(move || {
-            let Ok(rt) = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-            else {
-                return;
-            };
-            while rt.block_on(run(conn.clone(), state.clone())).is_err() {
-                state.replace(false, HashMap::new());
-                std::thread::sleep(Duration::from_millis(200));
-            }
-        });
+        let worker = crate::bus::spawn_worker(
+            runtime,
+            shared.clone(),
+            |s| &s.stopped,
+            |s| s.replace(false, HashMap::new()),
+            move |s| run(conn.clone(), s),
+        );
         Arc::new(Self {
             shared,
             connection,
@@ -256,15 +257,6 @@ impl Drop for Bluetooth {
     }
 }
 
-async fn system_connection() -> zbus::Result<Connection> {
-    if let Ok(address) = std::env::var("DBUS_SYSTEM_BUS_ADDRESS") {
-        zbus::connection::Builder::address(address.as_str())?
-            .build()
-            .await
-    } else {
-        Connection::system().await
-    }
-}
 async fn run(c: Connection, s: Arc<Shared>) -> zbus::Result<()> {
     let dbus = DBusProxy::new(&c).await?;
     let mut owners = dbus.receive_name_owner_changed().await?;
@@ -288,7 +280,6 @@ async fn run(c: Connection, s: Arc<Shared>) -> zbus::Result<()> {
     }
     loop {
         tokio::select! {
-            _=s.stopped.notified()=>return Ok(()),
             changed=owners.next()=>{let changed=changed.ok_or(zbus::Error::Failure("owner stream ended".into()))?;let args=changed.args()?;if args.name().as_str()==BLUEZ {owner=args.new_owner().as_ref().filter(|v|!v.as_str().is_empty()).map(|v|v.to_string());s.deadlines.lock().unwrap_or_else(|e|e.into_inner()).clear();if owner.is_some(){refresh(&c,&s).await}else{s.replace(false,HashMap::new());}}},
             message=signals.next()=>{if let Some(Ok(m))=message{let h=m.header();let sender=h.sender().map(|v|v.to_string());if owner==sender{let iface=h.interface().map(|v|v.as_str());if (iface==Some("org.freedesktop.DBus.Properties")&&h.member().is_some_and(|v|v.as_str()=="PropertiesChanged"))||(iface==Some(OM)&&h.member().is_some_and(|v|matches!(v.as_str(),"InterfacesAdded"|"InterfacesRemoved"))){refresh(&c,&s).await;}}}},
             _=async {tokio::select!{_=s.deadline_changed.notified()=>{},_=async {let deadline=s.deadlines.lock().unwrap_or_else(|e|e.into_inner()).values().min().copied();if let Some(deadline)=deadline{tokio::time::sleep_until(deadline).await}else{std::future::pending::<()>().await}}=>{}}}=>{let now=tokio::time::Instant::now();let expired={let mut deadlines=s.deadlines.lock().unwrap_or_else(|e|e.into_inner());let expired=deadlines.iter().filter(|(_,d)|**d<=now).map(|(p,_)|p.clone()).collect::<Vec<_>>();for p in &expired{deadlines.remove(p);}expired};for p in expired{let _=call(&c,&p,ADAPTER,"StopDiscovery",&()).await;}refresh(&c,&s).await;},

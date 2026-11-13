@@ -6,8 +6,9 @@ use crate::{
 use futures_util::StreamExt;
 use std::{
     collections::HashMap,
+    future::Future,
     sync::{Arc, atomic::Ordering},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use system_tray::{
     client::Client,
@@ -56,7 +57,6 @@ pub fn run(shared: Arc<Shared>, mut receiver: mpsc::Receiver<Command>, tray_watc
                 Command::Tasks(reply) => {
                     let _ = reply.send((0, 0));
                 }
-                Command::ClockResolutionChanged => {}
                 Command::Action(_, reply) => {
                     let _ = reply.send(Err("D-Bus disconnected".into()));
                 }
@@ -86,6 +86,53 @@ pub(crate) async fn system_connection() -> zbus::Result<Connection> {
         Connection::system().await
     }
 }
+pub(crate) fn runtime() -> std::io::Result<tokio::runtime::Runtime> {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+}
+/// Build a connection on a fresh runtime and hand both back: zbus's reader task lives on the
+/// runtime that built the connection, so the worker must keep driving it (`spawn_worker`).
+pub(crate) fn connect_blocking(
+    connect: impl Future<Output = zbus::Result<Connection>>,
+) -> Option<(tokio::runtime::Runtime, Connection)> {
+    let runtime = runtime().ok()?;
+    let connection = runtime.block_on(connect).ok()?;
+    Some((runtime, connection))
+}
+/// Drive `run` on a worker thread until `stopped` is notified; a failed `run` publishes `reset`
+/// and retries shortly. `runtime` is the one from `connect_blocking` when the service made its
+/// own connection.
+pub(crate) fn spawn_worker<S, F>(
+    runtime: Option<tokio::runtime::Runtime>,
+    shared: Arc<S>,
+    stopped: fn(&S) -> &tokio::sync::Notify,
+    reset: fn(&S),
+    run: impl Fn(Arc<S>) -> F + Send + 'static,
+) -> std::thread::JoinHandle<()>
+where
+    S: Send + Sync + 'static,
+    F: Future<Output = zbus::Result<()>>,
+{
+    std::thread::spawn(move || {
+        let Some(rt) = runtime.or_else(|| self::runtime().ok()) else {
+            return;
+        };
+        rt.block_on(async {
+            loop {
+                tokio::select! {
+                    _ = stopped(&shared).notified() => break,
+                    result = run(shared.clone()) => if result.is_ok() { break },
+                }
+                reset(&shared);
+                tokio::select! {
+                    _ = stopped(&shared).notified() => break,
+                    _ = tokio::time::sleep(Duration::from_millis(200)) => {},
+                }
+            }
+        });
+    })
+}
 async fn connect(
     shared: &Arc<Shared>,
     receiver: &mut mpsc::Receiver<Command>,
@@ -104,36 +151,13 @@ async fn connect(
     refresh_sensors(shared, &system).await;
     refresh_lock(shared, &system).await;
     refresh_tray(shared, &tray);
-    let mut clock_sample = None;
-    let mut clock_slot = None;
     loop {
         if shared.stop.load(Ordering::SeqCst) {
             return Ok(());
         }
-        let wall_now = SystemTime::now();
-        let monotonic_now = tokio::time::Instant::now();
-        let seconds_enabled = shared.clock_seconds_leases.load(Ordering::Acquire) > 0;
-        // A signal handler can straddle the boundary while the select's sleep
-        // is cancelled. Publish the current slot before arming the next one,
-        // even when the wall and monotonic clocks have advanced together.
-        let due = clock_slot_changed(&mut clock_slot, wall_now, seconds_enabled);
-        if due
-            || clock_sample.is_some_and(|(previous_wall, previous_monotonic)| {
-                clock_drifted(
-                    wall_now.duration_since(previous_wall).unwrap_or_default(),
-                    monotonic_now.duration_since(previous_monotonic),
-                )
-            })
-        {
-            shared.change(update_clock);
-        }
-        clock_sample = Some((wall_now, monotonic_now));
-        let delay = next_clock_delay(wall_now, seconds_enabled);
         tokio::select! {
-            _=tokio::time::sleep(delay)=>{},
             command=receiver.recv()=>match command {
                 Some(Command::Stop)|None=>return Ok(()),
-                Some(Command::ClockResolutionChanged)=>shared.change(update_clock),
                 Some(Command::Tasks(reply))=>{ let retained=tray.retained_watcher_tasks().await.unwrap_or(0); let _=reply.send((tokio::runtime::Handle::current().metrics().num_alive_tasks(),retained)); },
                 Some(Command::Action(action,reply))=>{
                     let result=tokio::time::timeout(Duration::from_secs(2),tray_action(shared, &tray, &tray_actions, action)).await.map_err(|_|"D-Bus action timeout".to_string()).and_then(|r|r);
@@ -202,6 +226,44 @@ async fn refresh_lock(shared: &Shared, connection: &Connection) {
     .and_then(Result::ok)
     .unwrap_or(false);
     shared.change(|s| s.session.locked = locked);
+}
+/// Publish the wall clock at every minute (or, under a seconds lease, second) boundary without
+/// any bus; resume and resolution changes refresh early through `clock_wait`.
+pub(crate) fn run_clock(shared: Arc<Shared>) {
+    super::runtime::block_worker_signals();
+    let mut slot = None;
+    let mut sample: Option<(SystemTime, Instant)> = None;
+    loop {
+        let wall_now = SystemTime::now();
+        let monotonic_now = Instant::now();
+        let seconds_enabled = shared.clock_seconds_leases.load(Ordering::Acquire) > 0;
+        if clock_slot_changed(&mut slot, wall_now, seconds_enabled)
+            || sample.is_some_and(|(wall, monotonic)| {
+                clock_drifted(
+                    wall_now.duration_since(wall).unwrap_or_default(),
+                    monotonic_now.duration_since(monotonic),
+                )
+            })
+        {
+            shared.change(update_clock);
+        }
+        sample = Some((wall_now, monotonic_now));
+        let guard = shared
+            .clock_wait
+            .0
+            .lock()
+            .unwrap_or_else(crate::runtime::poisoned);
+        if shared.stop.load(Ordering::SeqCst) {
+            return;
+        }
+        if (shared.clock_seconds_leases.load(Ordering::Acquire) > 0) != seconds_enabled {
+            continue; // a lease changed while publishing; recompute the slot and delay
+        }
+        let _ = shared
+            .clock_wait
+            .1
+            .wait_timeout(guard, next_clock_delay(wall_now, seconds_enabled));
+    }
 }
 fn update_clock(snapshot: &mut crate::Snapshot) {
     let (text, seconds_text, date) = clock();

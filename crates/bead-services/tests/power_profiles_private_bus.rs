@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+use bead_services::power_profiles::PowerProfiles;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -138,4 +139,20 @@ async fn power_profiles_discovery_changes_action_and_fallback() {
     drop(props);
     drop(legacy);
     wait_for(&service, |s| !s.available && s.profiles.is_empty()).await;
+    // The production constructor: its connection must outlive the runtime that built it, and
+    // dropping the service must stop the worker promptly.
+    let (_primary, _) = fake(NEW, "performance").await;
+    let service = tokio::task::spawn_blocking(PowerProfiles::start_system)
+        .await
+        .unwrap()
+        .expect("private system bus");
+    wait_for(&service, |s| s.available && s.active == "performance").await;
+    let (done, finished) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        drop(service);
+        let _ = done.send(());
+    });
+    finished
+        .recv_timeout(Duration::from_secs(5))
+        .expect("power profiles shutdown must not hang");
 }

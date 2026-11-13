@@ -8,7 +8,6 @@ use std::{
         atomic::{AtomicU64, Ordering},
     },
     thread::JoinHandle,
-    time::Duration,
 };
 use zbus::{Connection, Proxy, fdo::DBusProxy, zvariant::OwnedValue};
 
@@ -91,42 +90,27 @@ impl PowerProfiles {
     /// Connect to the system bus and start when it is available.
     #[doc(hidden)]
     pub fn start_system() -> Option<Arc<Self>> {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .ok()
-            .and_then(|runtime| runtime.block_on(system_connection()).ok())
-            .map(Self::start)
+        let (runtime, connection) = crate::bus::connect_blocking(crate::bus::system_connection())?;
+        Some(Self::spawn(Some(runtime), connection))
     }
     pub fn start(connection: Connection) -> Arc<Self> {
+        Self::spawn(None, connection)
+    }
+    fn spawn(runtime: Option<tokio::runtime::Runtime>, connection: Connection) -> Arc<Self> {
         let shared = Arc::new(Shared {
             snapshot: Mutex::new(Arc::new(PowerProfilesSnapshot::default())),
             callbacks: Mutex::new(BTreeMap::new()),
             next: AtomicU64::new(1),
             stopped: tokio::sync::Notify::new(),
         });
-        let state = shared.clone();
-        let worker_connection = connection.clone();
-        let worker = std::thread::spawn(move || {
-            let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-            else {
-                return;
-            };
-            while runtime
-                .block_on(run(worker_connection.clone(), state.clone()))
-                .is_err()
-            {
-                state.change(|snapshot| {
-                    snapshot.available = false;
-                    snapshot.active.clear();
-                    snapshot.profiles.clear();
-                    snapshot.degraded.clear();
-                });
-                std::thread::sleep(Duration::from_millis(200));
-            }
-        });
+        let conn = connection.clone();
+        let worker = crate::bus::spawn_worker(
+            runtime,
+            shared.clone(),
+            |s| &s.stopped,
+            |s| s.change(unavailable),
+            move |s| run(conn.clone(), s),
+        );
         Arc::new(Self {
             shared,
             connection,
@@ -193,14 +177,11 @@ impl Drop for PowerProfiles {
         }
     }
 }
-async fn system_connection() -> zbus::Result<Connection> {
-    if let Ok(address) = std::env::var("DBUS_SYSTEM_BUS_ADDRESS") {
-        zbus::connection::Builder::address(address.as_str())?
-            .build()
-            .await
-    } else {
-        Connection::system().await
-    }
+fn unavailable(snapshot: &mut PowerProfilesSnapshot) {
+    snapshot.available = false;
+    snapshot.active.clear();
+    snapshot.profiles.clear();
+    snapshot.degraded.clear();
 }
 async fn current_name(connection: &Connection) -> Result<&'static str, String> {
     let dbus = DBusProxy::new(connection)
@@ -224,7 +205,6 @@ async fn run(connection: Connection, shared: Arc<Shared>) -> zbus::Result<()> {
     refresh(&connection, &shared).await;
     loop {
         tokio::select! {
-            _ = shared.stopped.notified() => return Ok(()),
             owner = owners.next() => {
                 let signal = owner.ok_or(zbus::Error::Failure("owner stream ended".into()))?;
                 if NAMES.contains(&signal.args()?.name().as_str()) { refresh(&connection, &shared).await; }
@@ -243,12 +223,7 @@ async fn run(connection: Connection, shared: Arc<Shared>) -> zbus::Result<()> {
 }
 async fn refresh(connection: &Connection, shared: &Shared) {
     let Ok(name) = current_name(connection).await else {
-        shared.change(|s| {
-            s.available = false;
-            s.active.clear();
-            s.profiles.clear();
-            s.degraded.clear();
-        });
+        shared.change(unavailable);
         return;
     };
     let Ok(proxy) = Proxy::new(connection, name, PATH, INTERFACE).await else {

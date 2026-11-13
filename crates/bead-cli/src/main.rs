@@ -137,23 +137,9 @@ impl App {
         if manifest.layer.as_ref().is_some_and(|l| l.size == 0) {
             return Err(format!("{}: layer.size must be positive", path.display()).into());
         }
-        let known = [
-            "clock",
-            "audio",
-            "battery",
-            "network",
-            "bluetooth",
-            "tray",
-            "session",
-            "media",
-            "power",
-            "bluetooth_devices",
-            "network_devices",
-            "workspaces",
-        ];
         if let Some(services) = &manifest.services {
             for name in &services.desktop {
-                if !known.contains(&name.as_str()) {
+                if !bead::host::DESKTOP_SERVICES.contains(&name.as_str()) {
                     return Err(
                         format!("{}: unknown desktop service '{name}'", path.display()).into(),
                     );

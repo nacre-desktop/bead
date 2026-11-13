@@ -1106,7 +1106,8 @@ return ui.Row{id="row",width=400,height=40,justify="center",
                 _ => None,
             })
             .unwrap();
-        assert!((rect.x + rect.w / 2. - 200.).abs() < 0.1);
+        // Whole-pixel label widths centre within half a pixel on the pixel grid.
+        assert!((rect.x + rect.w / 2. - 200.).abs() <= 0.5);
         assert!(rect.w > 0.);
         widths.push(rect.w);
         s.commit(scene);
@@ -1160,6 +1161,47 @@ fn text_measurement_uses_each_sessions_own_font_picker() {
     assert_eq!(first_calls.load(Ordering::SeqCst), 2);
     assert_eq!(second_calls.load(Ordering::SeqCst), 1);
     assert_eq!(replacement_calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn content_text_never_wraps_when_layout_rounds_its_box() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        "local ui=require('bead.ui'); return ui.Row{id='row',width=600,height=40,padding_left=0.6,gap=3,ui.Text{id='a',text='Tutorial',width='content',height=24},ui.Text{id='b',text='10:22',width='content',height=24},ui.Text{id='c',text='Audio unavailable',width='content',font_size=14,height=24},ui.Text{id='d',text='Nothing playing',width='content',font_size=14,height=24},ui.Text{id='e',text='Mute',width='content',font_size=13,height=24}}",
+    )
+    .unwrap();
+    let fonts = Path::new(env!("CARGO_MANIFEST_DIR")).join("../bead-test/fonts");
+    let font_files = vec![
+        fonts.join("IBMPlexSans.ttf"),
+        fonts.join("FixtureSymbols.ttf"),
+    ];
+    let mut session = f.session();
+    session.entry = "ui/main.luau".into();
+    let picked = font_files.clone();
+    session.set_font_picker_if_missing(std::sync::Arc::new(move |_| picked.clone()));
+    let mut scene = session.reload().unwrap();
+    // Paint with the same files the measurement picked.
+    scene.font_files = font_files;
+    let texts: Vec<_> = scene
+        .primitives
+        .iter()
+        .filter_map(|primitive| match primitive {
+            Primitive::Text {
+                text,
+                rect,
+                family,
+                size,
+                ..
+            } => Some((text.clone(), *rect, family.clone(), *size)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(texts.len(), 5);
+    for (text, rect, family, size) in texts {
+        let lines = bead_render::text_lines(&scene, &text, &family, size, rect.w).unwrap();
+        assert_eq!(lines, 1, "{text:?} wraps in its content box {rect:?}");
+    }
 }
 
 #[test]

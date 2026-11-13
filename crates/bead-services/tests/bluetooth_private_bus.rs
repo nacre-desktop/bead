@@ -438,4 +438,20 @@ async fn bluetooth_objects_signals_actions_and_owner_loss() {
     drop(emitter);
     drop(owner);
     wait(&service, |s| !s.available).await;
+    // The production constructor: its connection must outlive the runtime that built it, and
+    // dropping the service must stop the worker promptly.
+    let (_owner, _state) = fixture().await;
+    let service = tokio::task::spawn_blocking(Bluetooth::start_system)
+        .await
+        .unwrap()
+        .expect("private system bus");
+    wait(&service, |s| s.available && s.devices.len() == 1).await;
+    let (done, finished) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        drop(service);
+        let _ = done.send(());
+    });
+    finished
+        .recv_timeout(Duration::from_secs(5))
+        .expect("Bluetooth shutdown must not hang");
 }

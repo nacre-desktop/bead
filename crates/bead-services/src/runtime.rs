@@ -50,7 +50,6 @@ pub enum Action {
 pub(crate) enum Command {
     Action(Action, std::sync::mpsc::Sender<Result<(), String>>),
     Tasks(std::sync::mpsc::Sender<(usize, usize)>),
-    ClockResolutionChanged,
     Stop,
 }
 /// Immutable snapshots are published atomically; poisoned read/bookkeeping locks
@@ -66,10 +65,18 @@ pub(crate) struct Shared {
     next: AtomicU64,
     pub stop: AtomicBool,
     pub clock_seconds_leases: std::sync::atomic::AtomicUsize,
+    /// Wakes the clock worker on lease changes and stop.
+    pub clock_wait: (Mutex<()>, std::sync::Condvar),
     pub audio_sender: Mutex<Option<pipewire::channel::Sender<super::audio::Command>>>,
     pub audio_wait: (Mutex<()>, std::sync::Condvar),
 }
 impl Shared {
+    /// Wake the clock worker to re-read the lease count; taking the lock first means the worker
+    /// either sees the new count under its own lock or is already waiting on the condvar.
+    pub fn wake_clock(&self) {
+        drop(self.clock_wait.0.lock().unwrap_or_else(poisoned));
+        self.clock_wait.1.notify_all();
+    }
     pub fn change(&self, mutate: impl FnOnce(&mut Snapshot)) {
         let mut old = self
             .snapshot
@@ -138,13 +145,12 @@ pub struct Desktop {
 /// Keeps the shared desktop clock at second resolution while held.
 pub struct ClockSecondsLease {
     shared: Weak<Shared>,
-    sender: mpsc::Sender<Command>,
 }
 impl Drop for ClockSecondsLease {
     fn drop(&mut self) {
         if let Some(shared) = self.shared.upgrade() {
             shared.clock_seconds_leases.fetch_sub(1, Ordering::AcqRel);
-            let _ = self.sender.try_send(Command::ClockResolutionChanged);
+            shared.wake_clock();
         }
     }
 }
@@ -165,12 +171,16 @@ impl Desktop {
             next: AtomicU64::new(1),
             stop: AtomicBool::new(false),
             clock_seconds_leases: std::sync::atomic::AtomicUsize::new(0),
+            clock_wait: (Mutex::new(()), std::sync::Condvar::new()),
             audio_sender: Mutex::new(None),
             audio_wait: (Mutex::new(()), std::sync::Condvar::new()),
         });
         let (sender, receiver) = mpsc::channel(64);
         let bus_shared = shared.clone();
-        let mut workers = Vec::new();
+        let clock_shared = shared.clone();
+        let mut workers = vec![std::thread::spawn(move || {
+            super::bus::run_clock(clock_shared)
+        })];
         if config.bus {
             let tray_watcher = config.tray_watcher;
             workers.push(std::thread::spawn(move || {
@@ -198,10 +208,9 @@ impl Desktop {
         self.shared
             .clock_seconds_leases
             .fetch_add(1, Ordering::AcqRel);
-        let _ = self.sender.try_send(Command::ClockResolutionChanged);
+        self.shared.wake_clock();
         ClockSecondsLease {
             shared: Arc::downgrade(&self.shared),
-            sender: self.sender.clone(),
         }
     }
     pub fn subscribe(
@@ -276,7 +285,17 @@ impl Desktop {
             .len()
     }
     pub fn stop(&self) {
-        self.shared.stop.store(true, Ordering::SeqCst);
+        {
+            // Under the clock lock so the clock worker cannot miss the wakeup.
+            let _guard = self
+                .shared
+                .clock_wait
+                .0
+                .lock()
+                .unwrap_or_else(crate::runtime::poisoned);
+            self.shared.stop.store(true, Ordering::SeqCst);
+        }
+        self.shared.clock_wait.1.notify_all();
         let _ = self.sender.try_send(Command::Stop);
         if let Some(sender) = self
             .shared
@@ -344,6 +363,39 @@ mod volume_queue_tests {
 #[cfg(test)]
 mod clock_lease_tests {
     use super::*;
+    use std::time::{Duration, Instant};
+
+    fn wait(desktop: &Desktop, limit: Duration, ready: impl Fn(&Snapshot) -> bool) -> bool {
+        let deadline = Instant::now() + limit;
+        while !ready(&desktop.snapshot()) {
+            if Instant::now() > deadline {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        true
+    }
+
+    #[test]
+    fn clock_ticks_without_any_bus_and_stops_promptly() {
+        let desktop = Desktop::start_config(Config {
+            audio: false,
+            bus: false,
+            tray_watcher: false,
+        });
+        assert!(wait(&desktop, Duration::from_secs(5), |s| s.clock.len() == 5));
+        let first = desktop.snapshot().clock_seconds.clone();
+        assert_eq!(first.len(), 8);
+        let lease = desktop.clock_seconds_lease();
+        let ticked = wait(&desktop, Duration::from_secs(3), |s| {
+            s.clock_seconds != first
+        });
+        assert!(ticked, "a seconds lease must tick every second");
+        drop(lease);
+        let started = Instant::now();
+        desktop.stop();
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
 
     #[test]
     fn seconds_clock_leases_share_demand_and_release_to_minute_mode() {

@@ -278,4 +278,19 @@ async fn mpris_discovery_updates_actions_and_owner_loss() {
     first.release_name(NAME).await.unwrap();
     wait_for(&media, |s| s.players.len() == 1 && s.players[0].id == NAME2).await;
     assert_eq!(media.snapshot().active.as_deref(), Some(NAME2));
+    // The production constructor: its connection must outlive the runtime that built it, and
+    // dropping the service must stop the worker promptly.
+    let media = tokio::task::spawn_blocking(Media::start_session)
+        .await
+        .unwrap()
+        .expect("private session bus");
+    wait_for(&media, |s| s.players.len() == 1 && s.players[0].id == NAME2).await;
+    let (done, finished) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        drop(media);
+        let _ = done.send(());
+    });
+    finished
+        .recv_timeout(Duration::from_secs(5))
+        .expect("media shutdown must not hang");
 }

@@ -607,7 +607,9 @@ impl LuauFrontEnd {
                 |picker| crate::transcript::Meter::new(picker.clone()),
             )
         });
-        meter.width(text, family, size)
+        // Whole pixels: layout rounds boxes to the pixel grid, and a fractional box at a
+        // fractional x can round narrower than the text, wrapping its last glyph.
+        meter.width(text, family, size).ceil()
     }
     pub(super) fn resource_bytes(&self) -> (usize, usize, usize) {
         (
