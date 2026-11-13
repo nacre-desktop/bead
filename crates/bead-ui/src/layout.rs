@@ -230,6 +230,9 @@ pub struct ViewSpec {
     pub scroll: Option<String>,
     pub scrollbar: bool,
     pub fill: Option<Json>,
+    /// The fill amount is an animation marker: draw the box even while it is transparent,
+    /// so the paint patch has a primitive to recolour.
+    pub animated_fill: bool,
     pub color: Option<Json>,
     pub border_color: Option<Json>,
     pub border_width: f32,
@@ -917,6 +920,12 @@ impl ViewSpec {
                 scroll,
                 scrollbar: boolean(p, "scrollbar", true, source)?,
                 fill: p.get("fill").cloned(),
+                animated_fill: raw
+                    .props
+                    .get("fill")
+                    .and_then(|v| v.get("alpha"))
+                    .and_then(marker)
+                    .is_some(),
                 color: p.get("color").cloned(),
                 border_color: p.get("border_color").cloned(),
                 drag: boolean(p, "drag", false, source)?,
@@ -948,7 +957,7 @@ impl ViewSpec {
                 shadow: boolean(p, "shadow", raw.kind == Widget::Panel, source)?,
                 body: p
                     .get("body")
-                    .map(|_| text(p, "body", "", source).map(|id| format!("{scope}{id}")))
+                    .map(|_| text(p, "body", "", source).map(|id| format!("{child_scope}{id}")))
                     .transpose()?,
                 join_edge: p
                     .get("join_edge")
@@ -1048,7 +1057,7 @@ impl ViewSpec {
         let host = Build {
             default_family: crate::theme::with_sans_family(str::to_owned),
             text_style: crate::text_style::current(),
-            now_ns: bead_core::animation::clock_ns(),
+            now_ns: bead_core::animation::build_clock(),
         };
         build(
             raw,
@@ -1354,7 +1363,8 @@ pub fn layout(
             })
             .map(|(c, w)| c.map(|c| (c, w)))
             .transpose()?;
-        if view.kind != Widget::Polyline && (fill[3] > 0 || border.is_some()) {
+        if view.kind != Widget::Polyline && (fill[3] > 0 || border.is_some() || view.animated_fill)
+        {
             emit(
                 Primitive::Rounded {
                     rect: r,

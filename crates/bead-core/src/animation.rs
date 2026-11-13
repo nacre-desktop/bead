@@ -114,6 +114,22 @@ pub fn clock_ns() -> u64 {
         .elapsed()
         .as_nanos() as u64
 }
+thread_local! {
+    static BUILD_CLOCK: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
+}
+/// Stamp the current view build: every marker started and sampled in it shares this instant,
+/// so a motion's first frame shows exactly its `from`.
+pub fn begin_build_clock() -> u64 {
+    let now = clock_ns();
+    BUILD_CLOCK.with(|clock| clock.set(Some(now)));
+    now
+}
+/// The current build's clock, or the live clock outside a build.
+pub fn build_clock() -> u64 {
+    BUILD_CLOCK
+        .with(|clock| clock.get())
+        .unwrap_or_else(clock_ns)
+}
 #[derive(Clone, Copy)]
 struct Motion {
     from: f32,

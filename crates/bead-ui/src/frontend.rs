@@ -557,6 +557,10 @@ impl Animations {
         self.states.retain(|key, _| self.seen.contains(key));
     }
 }
+/// The instant the current build started: every motion it starts or samples shares it.
+fn build_instant(animations: &RefCell<Animations>) -> Instant {
+    animations.borrow().armed.unwrap_or_else(Instant::now)
+}
 impl ScalarMotion {
     fn value(self, now: Instant) -> f64 {
         let mut t =
@@ -568,8 +572,9 @@ impl ScalarMotion {
         self.from + (self.to - self.from) * f64::from(self.curve.ease(t.clamp(0., 1.) as f32))
     }
     /// The marker `ui.animated` hands the view: enough to sample the motion without this state.
+    /// `now` is the build instant, so the marker's clock agrees with the build's sampling clock.
     fn marker(self, now: Instant) -> serde_json::Value {
-        let start = bead_core::animation::clock_ns()
+        let start = bead_core::animation::build_clock()
             .saturating_sub(now.saturating_duration_since(self.started).as_nanos() as u64);
         serde_json::json!({
             "from": self.from, "to": self.to, "start": start,
@@ -775,6 +780,7 @@ impl Vm {
                 move |_, (key, target, duration, transition): (String, f64, f64, String)| {
                     // An animated value depends on time and the build: count it.
                     animated.set(animated.get() + 1);
+                    let now = build_instant(&animations);
                     animations
                         .borrow_mut()
                         .animate_as(
@@ -782,7 +788,7 @@ impl Vm {
                             target,
                             duration,
                             &transition,
-                            Instant::now(),
+                            now,
                             bead_core::animation::reduced_motion(),
                         )
                         .map_err(mlua::Error::runtime)
@@ -801,7 +807,7 @@ impl Vm {
                     String,
                     Option<f64>,
                 )| {
-                    let now = Instant::now();
+                    let now = build_instant(&animations);
                     let motion = animations
                         .borrow_mut()
                         .motion_as(
@@ -823,7 +829,7 @@ impl Vm {
         sdk.set(
             "__pulse",
             lua.create_function(move |lua, (key, period, lo, hi): (String, f64, f64, f64)| {
-                let now = Instant::now();
+                let now = build_instant(&animations);
                 let motion = animations
                     .borrow_mut()
                     .pulse_as(
@@ -961,6 +967,7 @@ impl FrontEnd for LuauFrontEnd {
         crate::graph_data::begin_build();
         // Served from the cache or rebuilt, this build is a frame: pace the next one from here.
         self.animations.borrow_mut().armed = Some(Instant::now());
+        bead_core::animation::begin_build_clock();
         if !self.animations.borrow().eager_active(Instant::now())
             && let Some(cached) = &*self.materialized.borrow()
             && cached
@@ -1778,10 +1785,11 @@ mod animation_tests {
                 .next_frame(later + Duration::from_millis(250))
                 .is_none()
         );
-        assert!(matches!(
-            animations.motion_as("w".into(), 1., 0.2, "bounce", later, false, true, None),
-            Err(_)
-        ));
+        assert!(
+            animations
+                .motion_as("w".into(), 1., 0.2, "bounce", later, false, true, None)
+                .is_err()
+        );
         // A pulse loops lo -> hi -> lo and keeps asking for frames; reduced motion holds at hi.
         animations.begin_build();
         let pulse = animations

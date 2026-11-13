@@ -8921,5 +8921,55 @@ mod tests {
             w * h * 4
         );
         assert!(worst < 2_600_000, "{worst}");
+        // By phase: at rest nothing is painted; a paint-only marker frame (the chip's fill alpha)
+        // damages that node's bounds only, not the body; the full panel at rest paints nothing.
+        let mut phase = |name: &str, scene: &Scene, within: Option<Rect>| -> usize {
+            renderer.prepare(scene, scale).unwrap();
+            let prepared = renderer.prepared_frame().unwrap();
+            let regions = tracker
+                .update(&prepared, scene.offset, scene.opacity, w, h)
+                .unwrap();
+            let bytes: usize = regions
+                .iter()
+                .map(|d| d.w as usize * d.h as usize * 4)
+                .sum();
+            if let Some(within) = within {
+                let allowed = within.translated(32., 32.);
+                for d in &regions {
+                    assert!(
+                        d.x as f32 >= ((allowed.x - 2.) * scale).floor()
+                            && d.y as f32 >= ((allowed.y - 2.) * scale).floor()
+                            && (d.x + d.w) as f32 <= ((allowed.x + allowed.w + 2.) * scale).ceil()
+                            && (d.y + d.h) as f32 <= ((allowed.y + allowed.h + 2.) * scale).ceil(),
+                        "{name}: damage {d:?} leaves {allowed:?}"
+                    );
+                }
+            }
+            println!("PEEK_PHASE_DAMAGE phase={name} bytes={bytes}");
+            bytes
+        };
+        let peek = Rect::new(124., 0., 300., 160.);
+        let mut scene = body_scene(peek);
+        phase("peek-first", &scene, None);
+        assert_eq!(
+            phase("peek-rest", &scene, Some(Rect::new(0., 0., 0., 0.))),
+            0
+        );
+        let chip = Rect::new(peek.x + 16., peek.y + 16., 80., 24.);
+        for alpha in [128, 200, 255] {
+            if let Primitive::Rounded { fill, .. } = &mut scene.primitives[2] {
+                fill[3] = alpha;
+            }
+            let bytes = phase("peek-paint-only", &scene, Some(chip));
+            assert!(
+                bytes > 0 && bytes <= ((chip.w + 4.) * (chip.h + 4.) * scale * scale * 4.) as usize
+            );
+        }
+        let full = body_scene(Rect::new(0., 0., 424., 520.));
+        phase("panel-first", &full, None);
+        assert_eq!(
+            phase("panel-rest", &full, Some(Rect::new(0., 0., 0., 0.))),
+            0
+        );
     }
 }

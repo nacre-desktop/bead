@@ -21,7 +21,7 @@ return ui.Panel {
         ui.Row {
             id = "actions", gap = 8,
             ui.Button { id = "grow", text = grown and "Less" or "More", width = 72, height = 28, padding = 4, font_size = 13, radius = 5,
-                fill = ui.mix("surfaceContainer", "primary", ui.animated("status.grow", grown and 1 or 0, m.duration.switch, "out-cubic")),
+                fill = ui.mix("surfaceContainerHighest", "primary", ui.animated("status.grow", grown and 1 or 0, m.duration.switch, "out-cubic")),
                 color = "onSurface", on_activate = ui.action("grow") },
             ui.Button { id = "close", text = "Close", width = 60, height = 28, padding = 4, font_size = 13, radius = 5,
                 fill = "surface", color = "onSurfaceVariant", on_activate = ui.action("panel.close") },

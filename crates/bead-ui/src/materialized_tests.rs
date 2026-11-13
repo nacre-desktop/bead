@@ -514,7 +514,11 @@ return ui.Row{id='root',width=300,height=60,fill='surface',
     std::thread::sleep(std::time::Duration::from_millis(250));
     let scene = session.update_model(BTreeMap::new()).unwrap().unwrap();
     assert_eq!(box_(&scene), (100., 10., 128));
-    assert_eq!(frontend::eval_calls(), evaluated, "frames after a retarget run no Luau");
+    assert_eq!(
+        frontend::eval_calls(),
+        evaluated,
+        "frames after a retarget run no Luau"
+    );
 }
 
 #[test]

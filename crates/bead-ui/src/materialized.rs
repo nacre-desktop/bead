@@ -104,7 +104,7 @@ enum Animate {
         base: f32,
     },
     /// Any other property: the cached layout is stale until the motion ends.
-    Layout,
+    Layout { property: String },
 }
 #[derive(Clone, Copy)]
 enum Slot {
@@ -218,7 +218,7 @@ impl Cached {
     ) -> Result<Option<Self>, Diagnostic> {
         let mut cached = Self {
             _charge: None,
-            built_ns: bead_core::animation::clock_ns(),
+            built_ns: bead_core::animation::build_clock(),
             animated: vec![],
             body_layer: view
                 .body
@@ -329,7 +329,9 @@ impl Cached {
                             vertical: true,
                             base: view.translate_y,
                         },
-                        _ => Animate::Layout,
+                        _ => Animate::Layout {
+                            property: property.clone(),
+                        },
                     };
                     cached.animated.push(Animated {
                         marker: marker.clone(),
@@ -382,7 +384,9 @@ impl Cached {
                                 to: colour(over)?,
                             }
                         }
-                        _ => Animate::Layout,
+                        _ => Animate::Layout {
+                            property: property.clone(),
+                        },
                     };
                     cached.animated.push(Animated {
                         marker: marker.clone(),
@@ -729,11 +733,14 @@ impl Cached {
         }
         let now_ns = bead_core::animation::clock_ns();
         // A layout-affecting motion still running when this scene was built: relayout (no Luau).
-        if self.animated.iter().any(|a| {
-            matches!(a.kind, Animate::Layout) && layout::marker_active(&a.marker, self.built_ns)
+        if let Some(property) = self.animated.iter().find_map(|a| match &a.kind {
+            Animate::Layout { property } if layout::marker_active(&a.marker, self.built_ns) => {
+                Some(property)
+            }
+            _ => None,
         }) {
             if bead_core::profile::enabled() {
-                println!("INPUT_PATCH_MISS kind=animated_layout");
+                println!("INPUT_PATCH_MISS kind=animated_layout property={property}");
             }
             return Ok(None);
         }
@@ -962,7 +969,7 @@ impl Cached {
                         _ => {}
                     }
                 }
-                Animate::Translate { .. } | Animate::Layout => {}
+                Animate::Translate { .. } | Animate::Layout { .. } => {}
             }
         }
         fn translate(primitive: &mut Primitive, dx: f32, dy: f32) {
