@@ -2,8 +2,9 @@
 //! GraphCanvas engine (spec 0232). A `Graph` view node carries its handed-over data; the
 //! session keeps one `Canvas` per node id: the layout worker, the latest positions, the
 //! camera and the hover/selection state. Camera, hover and layout snapshots patch the
-//! committed scene directly without re-running Luau; data and style changes arrive through
-//! ordinary materialization and are reconciled by id.
+//! committed scene directly without re-running Luau; data, highlight and style changes arrive
+//! through ordinary materialization and are reconciled by id. Keyboard: the canvas is
+//! focusable; arrows walk a focused node, Enter activates it, Escape clears it.
 use crate::{Diagnostic, Node, Session, graph_data::GraphResource, layout::Source};
 use bead_core::{
     Value,
@@ -14,21 +15,33 @@ use bead_render::{
     graph::{Camera, GraphGeometry, GraphStyle},
 };
 use serde_json::{Map, Value as Json};
-use std::sync::{Arc, Mutex};
+use std::collections::BTreeMap;
+use std::{
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 /// Host wake callback shared with layout workers; set once the host registers its event sink.
 pub(crate) type WakeSlot = Arc<Mutex<Option<Arc<dyn Fn() + Send + Sync>>>>;
 type ActionParser<'a> = dyn Fn(&str) -> Result<Option<(String, Option<Value>)>, Diagnostic> + 'a;
 const LABEL_WIDTH: f32 = 200.;
 const HIT_CELL: f32 = 64.;
+const DOUBLE_CLICK: Duration = Duration::from_millis(400);
+/// Keyboard focus pans the camera over this long when the node is off screen.
+const PAN: Duration = Duration::from_millis(240);
+/// A focused node this close to the canvas edge counts as off screen.
+const EDGE_MARGIN: f32 = 16.;
 
 /// Parsed `Graph` properties; colours stay unresolved until the palette is known.
 #[derive(Default)]
 pub struct GraphData {
     pub topology: Arc<GraphResource>,
     pub style: Map<String, Json>,
+    /// Node ids drawn at full strength while everything else dims; empty means no dimming.
+    pub highlight: Vec<String>,
     pub on_hover: Option<String>,
     pub on_select: Option<String>,
+    pub on_activate: Option<String>,
 }
 impl GraphData {
     /// `p` reads one authored property with its binding resolved.
@@ -50,12 +63,28 @@ impl GraphData {
             Some(Json::Object(style)) => style.clone(),
             Some(_) => return Err(source.error("style must be a record")),
         };
+        // An id, or a record with an `id` (store lists hold records).
+        let id = |v: &Json| match v.get("id").unwrap_or(v) {
+            Json::String(s) => Some(s.clone()),
+            Json::Number(n) => Some(n.to_string()),
+            _ => None,
+        };
+        let highlight = match p("highlight") {
+            None | Some(Json::Null) => Vec::new(),
+            Some(Json::Array(ids)) => ids
+                .iter()
+                .map(|v| id(v).ok_or_else(|| source.error("highlight must list node ids")))
+                .collect::<Result<_, _>>()?,
+            Some(_) => return Err(source.error("highlight must list node ids")),
+        };
         let name = |property: &str| Ok::<_, Diagnostic>(action(property)?.map(|(name, _)| name));
         Ok(Self {
             topology,
             style,
+            highlight,
             on_hover: name("on_hover")?,
             on_select: name("on_select")?,
+            on_activate: name("on_activate")?,
         })
     }
     /// Resolve theme roles and thresholds; absent slots fall back to palette roles.
@@ -94,6 +123,7 @@ impl GraphData {
             edge: slot("edge", "outlineVariant", d.edge, 150)?,
             hover: slot("hover", "secondary", d.hover, 255)?,
             selected: slot("selected", "onSurface", d.selected, 255)?,
+            focus: slot("focus", "primaryContainer", d.focus, 255)?,
             label: slot("label", "onSurface", d.label, 255)?,
             label_size: number(
                 "label_size",
@@ -138,6 +168,12 @@ pub(crate) struct Canvas {
     user_moved: bool,
     hover: Option<u32>,
     selected: Option<u32>,
+    /// Keyboard focus: set by a click or the arrows, cleared by Escape.
+    focus: Option<u32>,
+    highlight: Arc<[bool]>,
+    last_click: Option<(u32, Instant)>,
+    /// Camera centre glide towards an off-screen focused node.
+    pan: Option<([f32; 2], [f32; 2], Instant)>,
     press: Option<Press>,
 }
 fn seed_position(i: usize, n: usize) -> Point {
@@ -186,6 +222,10 @@ impl Canvas {
             user_moved: false,
             hover: None,
             selected: None,
+            focus: None,
+            highlight: Arc::from([]),
+            last_click: None,
+            pan: None,
             press: None,
         };
         canvas.reconcile(data, style);
@@ -205,6 +245,8 @@ impl Canvas {
             let remap = |i: Option<u32>| i.and_then(|i| new.index(&old.nodes[i as usize].id));
             self.hover = remap(self.hover);
             self.selected = remap(self.selected);
+            self.focus = remap(self.focus);
+            self.last_click = None;
             if let Some(press) = &mut self.press {
                 press.node = remap(press.node);
             }
@@ -249,6 +291,16 @@ impl Canvas {
                 hot,
             });
             self.positions = positions.into();
+        }
+        if !Arc::ptr_eq(old, new) || data.highlight != self.data.highlight {
+            let mut mask = vec![false; new.nodes.len() * usize::from(!data.highlight.is_empty())];
+            for i in data.highlight.iter().filter_map(|id| new.index(id)) {
+                mask[i as usize] = true;
+            }
+            if mask[..] != self.highlight[..] {
+                self.highlight = mask.into();
+                self.geometry_dirty = true;
+            }
         }
         self.radii_dirty |= style.node_radius != self.style.node_radius;
         self.hit_grid_dirty |= self.radii_dirty;
@@ -316,6 +368,7 @@ impl Canvas {
                 positions: self.positions.clone(),
                 radii,
                 edges: self.data.topology.edges.clone(),
+                highlight: self.highlight.clone(),
             });
             self.geometry_dirty = false;
             self.radii_dirty = false;
@@ -327,13 +380,15 @@ impl Canvas {
         let r = self.rect;
         (s[0] >= r.x && s[1] >= r.y && s[0] < r.x + r.w && s[1] < r.y + r.h).then_some(s)
     }
-    /// Label primitives in priority order: hovered, selected, then every visible node by
-    /// weight once zoomed past `label_zoom`; capped by `max_labels` and the free text slots.
+    /// Label primitives in priority order: focused (beyond the cap), hovered, selected, then
+    /// every visible node by weight once zoomed past `label_zoom`; capped by `max_labels` and
+    /// the free text slots.
     fn labels(&self, clip: Option<Rect>, remaining: usize) -> Vec<(Primitive, Rect)> {
-        let cap = usize::from(self.style.max_labels).min(remaining);
+        let cap =
+            (usize::from(self.style.max_labels) + usize::from(self.focus.is_some())).min(remaining);
         let zoomed = self.camera.zoom >= self.style.label_zoom;
         let by_weight = self.data.topology.priority.iter().copied();
-        let candidates = [self.hover, self.selected]
+        let candidates = [self.focus, self.hover, self.selected]
             .into_iter()
             .flatten()
             .chain(zoomed.then_some(by_weight).into_iter().flatten());
@@ -403,6 +458,62 @@ impl Canvas {
     }
     fn id(&self, i: u32) -> String {
         self.data.topology.nodes[i as usize].id.to_string()
+    }
+    /// Nearest node inside the 90° cone around `dir` from `from`, preferring nodes that
+    /// share an edge with it; None when the cone is empty.
+    fn walk(&self, from: u32, dir: [f32; 2]) -> Option<u32> {
+        let p = self.positions[from as usize];
+        let score = |j: u32| {
+            let q = self.positions[j as usize];
+            let v = [q[0] - p[0], q[1] - p[1]];
+            let (d2, along) = (v[0] * v[0] + v[1] * v[1], v[0] * dir[0] + v[1] * dir[1]);
+            // Inside the cone: the component along the arrow is at least the one across it.
+            (j != from && along > 0. && 2. * along * along >= d2).then_some(d2)
+        };
+        let nearest = |candidates: &mut dyn Iterator<Item = u32>| {
+            candidates
+                .filter_map(|j| score(j).map(|d| (d, j)))
+                .min_by(|a, b| a.0.total_cmp(&b.0))
+                .map(|(_, j)| j)
+        };
+        let edges = &self.data.topology.edges;
+        nearest(&mut edges.iter().filter_map(|&[a, b]| match from {
+            f if f == a => Some(b),
+            f if f == b => Some(a),
+            _ => None,
+        }))
+        .or_else(|| nearest(&mut (0..self.positions.len() as u32)))
+    }
+    /// Glide the camera onto `i` when it sits outside the viewport (minus a margin).
+    fn reveal(&mut self, i: u32, now: Instant) {
+        let s = self.camera.to_screen(self.rect, self.positions[i as usize]);
+        let r = self.rect;
+        if s[0] >= r.x + EDGE_MARGIN
+            && s[1] >= r.y + EDGE_MARGIN
+            && s[0] < r.x + r.w - EDGE_MARGIN
+            && s[1] < r.y + r.h - EDGE_MARGIN
+        {
+            return;
+        }
+        self.pan = Some((self.camera.center, self.positions[i as usize], now));
+        self.user_moved = true;
+        self.fitted = true;
+    }
+    /// Advance the focus pan; true when the camera moved.
+    fn tick_pan(&mut self, now: Instant) -> bool {
+        let Some((from, to, start)) = self.pan else {
+            return false;
+        };
+        let t = (now.duration_since(start).as_secs_f32() / PAN.as_secs_f32()).min(1.);
+        let e = 1. - (1. - t) * (1. - t);
+        self.camera.center = [
+            from[0] + (to[0] - from[0]) * e,
+            from[1] + (to[1] - from[1]) * e,
+        ];
+        if t >= 1. {
+            self.pan = None;
+        }
+        true
     }
 }
 
@@ -484,6 +595,7 @@ impl Session {
                 style,
                 hover,
                 selected,
+                focus,
                 ..
             } = &mut scene.primitives[index]
             {
@@ -492,6 +604,7 @@ impl Session {
                 *style = canvas.style;
                 *hover = canvas.hover;
                 *selected = canvas.selected;
+                *focus = canvas.focus;
             }
             labels.extend(canvas.labels(clip, text_slots.saturating_sub(labels.len())));
         }
@@ -510,15 +623,24 @@ impl Session {
             scene.clips.retain(|index, _| *index < start);
         }
     }
+    /// Next frame of a keyboard focus pan, for the host's wakeup.
+    pub(crate) fn graph_deadline(&self) -> Option<Instant> {
+        self.graphs
+            .values()
+            .any(|c| c.pan.is_some())
+            .then(|| Instant::now() + self.frame_interval)
+    }
     /// Patch the committed scene with the newest layout, camera and interaction state.
-    /// Returns nothing when `force` is false and no snapshot arrived.
+    /// Returns nothing when `force` is false and neither a snapshot nor a pan frame is due.
     pub(crate) fn graph_frame(&mut self, force: bool) -> Result<Option<Scene>, Diagnostic> {
         if self.graphs.is_empty() || self.generation.is_none() {
             return Ok(None);
         }
+        let now = Instant::now();
         let mut snapshots = false;
         for canvas in self.graphs.values_mut() {
             snapshots |= canvas.pull();
+            snapshots |= canvas.tick_pan(now);
         }
         if !snapshots && !force {
             return Ok(None);
@@ -534,10 +656,25 @@ impl Session {
         &mut self,
         actions: Vec<(String, Value)>,
     ) -> Result<Option<Scene>, Diagnostic> {
-        let Some(generation) = self.generation.as_ref().filter(|_| !actions.is_empty()) else {
+        self.graph_actions_with(actions, BTreeMap::new())
+    }
+    fn graph_actions_with(
+        &mut self,
+        actions: Vec<(String, Value)>,
+        changes: BTreeMap<String, Value>,
+    ) -> Result<Option<Scene>, Diagnostic> {
+        let changed = changes.iter().any(|(k, v)| self.stores.get(k) != Some(v));
+        let Some(generation) = self
+            .generation
+            .as_ref()
+            .filter(|_| !actions.is_empty() || changed)
+        else {
             return self.graph_frame(true);
         };
         let mut stores = self.stores.clone();
+        stores
+            .commit(changes)
+            .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
         for (name, argument) in actions {
             stores = generation.script.action(&name, &stores, argument)?;
         }
@@ -592,8 +729,8 @@ impl Session {
         });
         true
     }
-    fn pressed_canvas(&mut self) -> Option<&mut Canvas> {
-        self.graphs.values_mut().find(|c| c.press.is_some())
+    fn pressed_canvas(&mut self) -> Option<(&String, &mut Canvas)> {
+        self.graphs.iter_mut().find(|(_, c)| c.press.is_some())
     }
     /// Pan once the pointer left a small slop around the press.
     pub(crate) fn graph_drag(
@@ -601,7 +738,7 @@ impl Session {
         x: f32,
         y: f32,
     ) -> Result<Option<Option<Scene>>, Diagnostic> {
-        let Some(canvas) = self.pressed_canvas() else {
+        let Some((_, canvas)) = self.pressed_canvas() else {
             return Ok(None);
         };
         let press = canvas.press.as_mut().unwrap();
@@ -618,23 +755,99 @@ impl Session {
         canvas.user_moved = true;
         self.graph_frame(true).map(Some)
     }
-    /// A click (no pan) on a node selects it and runs `on_select` with its id.
+    /// A click (no pan) on a node selects and focuses it and runs `on_select` with its id;
+    /// a second click on it within `DOUBLE_CLICK` also runs `on_activate`. Pointer focus
+    /// routes the keyboard to the canvas without painting its focus ring.
     pub(crate) fn graph_release(&mut self) -> Result<Option<Option<Scene>>, Diagnostic> {
-        let Some(canvas) = self.pressed_canvas() else {
+        let Some((id, canvas)) = self.pressed_canvas() else {
             return Ok(None);
         };
+        let id = id.clone();
         let press = canvas.press.take().unwrap();
         let Some(node) = press.node.filter(|_| !press.moved) else {
             return Ok(Some(None));
         };
+        let now = Instant::now();
+        let double = canvas
+            .last_click
+            .is_some_and(|(n, at)| n == node && now.duration_since(at) < DOUBLE_CLICK);
+        canvas.last_click = (!double).then_some((node, now));
         canvas.selected = Some(node);
+        canvas.focus = Some(node);
         let actions = canvas
             .data
             .on_select
             .iter()
+            .chain(canvas.data.on_activate.iter().filter(|_| double))
             .map(|action| (action.clone(), Value::Text(canvas.id(node))))
             .collect();
-        self.graph_actions(actions).map(Some)
+        let mut focus = BTreeMap::from([("bead.focused".to_owned(), Value::Text(id))]);
+        if self.stores.get("bead.focus_visible").is_some() {
+            focus.insert("bead.focus_visible".into(), Value::Bool(false));
+        }
+        self.graph_actions_with(actions, focus).map(Some)
+    }
+    /// Keyboard on the focused canvas: arrows walk the focused node to the nearest neighbour
+    /// in that direction, Enter runs `on_activate`, Escape clears focus and selection. None
+    /// when no canvas has the focus or the command is not one of these.
+    pub fn graph_key(&mut self, command: &str) -> Result<Option<Option<Scene>>, Diagnostic> {
+        let Some(Value::Text(focused)) = self.stores.get("bead.focused").cloned() else {
+            return Ok(None);
+        };
+        let Some(canvas) = self.graphs.get_mut(&focused) else {
+            return Ok(None);
+        };
+        let dir = match command {
+            "left" => [-1., 0.],
+            "right" => [1., 0.],
+            "up" => [0., -1.],
+            "down" => [0., 1.],
+            "enter" => {
+                let actions = canvas
+                    .focus
+                    .and_then(|i| Some((canvas.data.on_activate.clone()?, canvas.id(i))))
+                    .map(|(action, id)| (action, Value::Text(id)))
+                    .into_iter()
+                    .collect();
+                return self.graph_actions(actions).map(Some);
+            }
+            "escape" => {
+                let cleared = canvas.selected.take().is_some();
+                canvas.focus = None;
+                let actions = canvas
+                    .data
+                    .on_select
+                    .iter()
+                    .filter(|_| cleared)
+                    .map(|action| (action.clone(), Value::Text(String::new())))
+                    .collect();
+                return self.graph_actions(actions).map(Some);
+            }
+            _ => return Ok(None),
+        };
+        if canvas.positions.is_empty() {
+            return Ok(Some(None));
+        }
+        let next = match canvas.focus {
+            Some(from) => canvas.walk(from, dir),
+            // Nothing focused yet: start at the node nearest the viewport centre.
+            None => {
+                let c = canvas.camera.center;
+                (0..canvas.positions.len() as u32).min_by(|&a, &b| {
+                    let d = |i: u32| {
+                        let p = canvas.positions[i as usize];
+                        (p[0] - c[0]).powi(2) + (p[1] - c[1]).powi(2)
+                    };
+                    d(a).total_cmp(&d(b))
+                })
+            }
+        };
+        let Some(next) = next else {
+            return Ok(Some(None));
+        };
+        canvas.focus = Some(next);
+        canvas.reveal(next, Instant::now());
+        self.graph_frame(true).map(Some)
     }
     /// Wheel zoom around the pointer; a scene when the pointer is over a canvas.
     pub(crate) fn graph_scroll(
@@ -668,11 +881,12 @@ impl Session {
 mod tests {
     use super::*;
     use crate::tests::Fixture;
-    use std::{collections::BTreeMap, fs};
+    use std::fs;
 
     const BEHAVIOR: &str = r#"return {
- stores={hovered="",selected=""},
- actions={hover=function(s,id) s.hovered=id end, select=function(s,id) s.selected=id end},
+ stores={hovered="",selected="",activated="",lit={}},
+ actions={hover=function(s,id) s.hovered=id end, select=function(s,id) s.selected=id end,
+  activate=function(s,id) s.activated=id s.lit={{id=id}} end},
  computed={}
 }"#;
     fn view(label_b: &str) -> String {
@@ -683,7 +897,8 @@ return ui.Column{{id="root",width=400,height=300,
  kit.GraphCanvas{{id="canvas",width=400,height=300,
   graph=ui.graph({{{{id="a",label="Alpha",weight=5}},{{id="b",label="{label_b}"}},{{id="c"}}}},
    {{{{from="a",to="b"}},{{from="b",to="c"}}}}),
-  style={{label_zoom=0,node_radius=1}},on_hover=ui.action("hover"),on_select=ui.action("select")}}}}"#
+  style={{label_zoom=0,node_radius=1}},highlight=ui.bind("lit"),on_hover=ui.action("hover"),
+  on_select=ui.action("select"),on_activate=ui.action("activate")}}}}"#
         )
     }
     fn session() -> (Fixture, Session) {
@@ -723,6 +938,194 @@ return ui.Column{{id="root",width=400,height=300,
     }
     fn text(s: &Session, store: &str) -> Option<Value> {
         s.stores.get(store).cloned()
+    }
+    fn data(nodes: &str, edges: &str) -> Arc<GraphData> {
+        let lua = mlua::Lua::new();
+        let (n, e): (mlua::Table, mlua::Table) =
+            lua.load(format!("return {nodes}, {edges}")).eval().unwrap();
+        Arc::new(GraphData {
+            topology: Arc::new(GraphResource::from_lua(&n, &e).unwrap()),
+            ..Default::default()
+        })
+    }
+    fn canvas(nodes: &str, edges: &str) -> Canvas {
+        let rect = Rect::new(0., 0., 400., 300.);
+        Canvas::new(
+            &data(nodes, edges),
+            GraphStyle::default(),
+            rect,
+            &WakeSlot::default(),
+        )
+        .unwrap()
+    }
+    fn snapshot(c: &Canvas) -> Snapshot {
+        let start = Instant::now();
+        loop {
+            if let Some(snapshot) = c.worker.take_snapshot() {
+                return snapshot;
+            }
+            assert!(
+                start.elapsed() < Duration::from_secs(10),
+                "no layout snapshot"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+    /// Apply snapshots until the layout settles; the worker then parks and publishes nothing.
+    fn settle(c: &mut Canvas) {
+        while !c.settled_fit {
+            let next = snapshot(c);
+            c.apply_snapshot(next);
+        }
+    }
+    /// Settle, then pin the three nodes at x = -100, 0, 100 under a unit camera, so they sit
+    /// at screen (100, 150), (200, 150) and (300, 150).
+    fn place(s: &mut Session) {
+        let c = s.graphs.get_mut("root.canvas").unwrap();
+        settle(c);
+        c.positions = Arc::from([[-100., 0.], [0., 0.], [100., 0.]]);
+        // The settled snapshot asked for a re-fit; keep this camera instead.
+        (c.camera, c.fitted) = (Camera::default(), true);
+        (c.geometry_dirty, c.hit_grid_dirty) = (true, true);
+    }
+    fn labels(scene: &Scene) -> Vec<String> {
+        scene
+            .primitives
+            .iter()
+            .filter_map(|p| match p {
+                Primitive::Text { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn activation_highlight_and_the_keyboard_walk() {
+        let (_f, mut s) = session();
+        place(&mut s);
+        let (ax, ay) = screen(&s, 0);
+        let click = |s: &mut Session| {
+            assert!(s.click(ax, ay).unwrap().is_none());
+            let scene = s.release().unwrap().unwrap();
+            s.commit(scene);
+        };
+        click(&mut s);
+        assert_eq!(text(&s, "selected"), Some(Value::Text("a".into())));
+        assert_eq!(text(&s, "activated"), Some(Value::Text(String::new())));
+        let c = &s.graphs["root.canvas"];
+        let (revision, positions) = (c.command_revision, c.positions.clone());
+        let (edges, radii) = (c.geometry.edges.clone(), c.geometry.radii.clone());
+        assert!(
+            c.geometry.highlight.is_empty(),
+            "nothing dims without a set"
+        );
+        // The second click is a double-click: it activates, and the action lights node a.
+        click(&mut s);
+        assert_eq!(text(&s, "activated"), Some(Value::Text("a".into())));
+        let c = &s.graphs["root.canvas"];
+        assert_eq!(&*c.geometry.highlight, &[true, false, false]);
+        // Paint-only: no worker command, the same positions, edges and radii.
+        assert_eq!(c.command_revision, revision);
+        assert!(Arc::ptr_eq(&c.positions, &positions));
+        assert!(Arc::ptr_eq(&c.geometry.edges, &edges));
+        assert!(Arc::ptr_eq(&c.geometry.radii, &radii));
+        assert_eq!(
+            s.stores.get("bead.focused"),
+            Some(&Value::Text("root.canvas".into()))
+        );
+
+        // Right walks along the a-b edge; b is on screen, so the camera stays.
+        let scene = s
+            .edit_key(crate::input::EditKey::Right, false)
+            .unwrap()
+            .unwrap();
+        s.commit(scene);
+        let c = &s.graphs["root.canvas"];
+        assert_eq!((c.focus, c.selected), (Some(1), Some(0)));
+        assert!(c.pan.is_none() && c.camera == Camera::default());
+        // The focused label survives a zero label cap.
+        s.graphs.get_mut("root.canvas").unwrap().style.max_labels = 0;
+        let scene = s.graph_frame(true).unwrap().unwrap();
+        assert_eq!(labels(&scene), ["Beta"]);
+        s.commit(scene);
+
+        // Enter activates the focused node; Escape clears focus and selection.
+        let scene = s.activate_focused().unwrap().unwrap();
+        s.commit(scene);
+        assert_eq!(text(&s, "activated"), Some(Value::Text("b".into())));
+        assert_eq!(
+            text(&s, "selected"),
+            Some(Value::Text("a".into())),
+            "on_select stays select-only"
+        );
+        let scene = s.graph_key("escape").unwrap().unwrap().unwrap();
+        s.commit(scene);
+        let c = &s.graphs["root.canvas"];
+        assert_eq!((c.focus, c.selected), (None, None));
+        assert_eq!(text(&s, "selected"), Some(Value::Text(String::new())));
+        // With nothing focused, an arrow starts at the node nearest the camera centre.
+        s.scroll_key("up", false, None).unwrap();
+        assert_eq!(s.graphs["root.canvas"].focus, Some(1));
+    }
+
+    #[test]
+    fn arrows_prefer_a_linked_node_in_the_cone_and_stay_when_it_is_empty() {
+        // From o: e (linked) and the nearer n lie to the right, u above; nothing left or below.
+        let mut c = canvas(
+            "{{id='o'},{id='e'},{id='n'},{id='u'}}",
+            "{{from='o',to='e'}}",
+        );
+        c.positions = Arc::from([[0., 0.], [100., 30.], [40., 0.], [10., -50.]]);
+        let walk = |dir| c.walk(0, dir).map(|i| c.id(i));
+        assert_eq!(walk([1., 0.]).as_deref(), Some("e"), "linked beats nearer");
+        assert_eq!(
+            walk([0., -1.]).as_deref(),
+            Some("u"),
+            "else the nearest in the cone"
+        );
+        assert_eq!(walk([-1., 0.]), None, "empty cone: stay");
+        assert_eq!(walk([0., 1.]), None, "e is outside the downward cone");
+    }
+
+    #[test]
+    fn keyboard_focus_pans_only_to_reveal_an_off_screen_node() {
+        let mut c = canvas("{{id='a'},{id='b'}}", "{}");
+        c.positions = Arc::from([[0., 0.], [1000., 0.]]);
+        c.camera = Camera::default();
+        let t = Instant::now();
+        c.reveal(0, t);
+        assert!(c.pan.is_none(), "an on-screen node keeps the camera");
+        c.reveal(1, t);
+        assert!(c.tick_pan(t + PAN / 2));
+        let x = c.camera.center[0];
+        assert!(x > 500. && x < 1000., "eased half-way: {x}");
+        assert!(c.tick_pan(t + PAN));
+        assert_eq!(c.camera.center, [1000., 0.]);
+        assert!(c.pan.is_none() && !c.tick_pan(t + PAN * 2));
+    }
+
+    /// Hiding nodes by handing over a filtered graph (spec 0232 2c): every surviving node
+    /// keeps its exact position, and the worker answers at once, settled, without stepping.
+    #[test]
+    fn a_filtered_graph_keeps_survivors_in_place_without_a_new_settle() {
+        let ring = "{{from='a',to='b'},{from='b',to='c'},{from='c',to='d'},{from='d',to='a'}}";
+        let mut c = canvas("{{id='a'},{id='b'},{id='c'},{id='d'}}", ring);
+        settle(&mut c);
+        let at = |c: &Canvas, id: &str| c.positions[c.data.topology.index(id).unwrap() as usize];
+        let before = ["a", "b", "d"].map(|id| at(&c, id));
+        let style = c.style;
+        c.reconcile(
+            &data(
+                "{{id='a'},{id='b'},{id='d'}}",
+                "{{from='a',to='b'},{from='d',to='a'}}",
+            ),
+            style,
+        );
+        assert_eq!(["a", "b", "d"].map(|id| at(&c, id)), before);
+        let answer = snapshot(&c);
+        assert_eq!(answer.command_revision, c.command_revision);
+        assert!(answer.settled, "the settle restarted");
+        assert_eq!(&*answer.positions, &*c.positions);
     }
 
     #[test]

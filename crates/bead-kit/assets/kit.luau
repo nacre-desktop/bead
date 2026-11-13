@@ -405,10 +405,12 @@ return function(ui, tokens)
     function kit.ListRow(p) return kit.Button(props(p,{height=40,width="fill",text_align="left"})) end
     -- A graph canvas (spec 0232). `graph=ui.graph(nodes, edges)` hands `{{id,label?,weight?}}` and
     -- `{{from,to}}` to Rust once (from a module, so the tables can go); Rust reconciles by id and owns
-    -- layout, hit testing, pan, zoom, hover, selection and labels. `on_hover` gets the node id ("" when
-    -- nothing is hovered) and `on_select` the clicked node's id. `style` holds palette roles (`node`,
-    -- `edge`, `hover`, `selected`, `label`) and numbers (`node_radius`, `label_size`, `label_zoom`,
-    -- `max_labels`, `lod_zoom`, `far_edge_alpha`).
+    -- layout, hit testing, pan, zoom, hover, selection, keyboard focus and labels. `on_hover` gets the
+    -- node id ("" when nothing is hovered), `on_select` the clicked node's id ("" when Escape clears) and
+    -- `on_activate` the double-clicked or Enter-activated node's id. `highlight` lists node ids (or binds a
+    -- list store of `{id}` records) drawn at full strength while the rest dims. `style` holds palette
+    -- roles (`node`, `edge`, `hover`, `selected`, `focus`, `label`) and numbers (`node_radius`,
+    -- `label_size`, `label_zoom`, `max_labels`, `lod_zoom`, `far_edge_alpha`).
     function kit.GraphCanvas(p) return ui.Graph(props(p,{width="fill",height="fill",fill="surface",radius=tokens.radii.small})) end
     function kit.Card(p) return ui.Column(props(p,{padding=tokens.spacing.md,gap=tokens.spacing.sm,radius=tokens.radii.medium,fill="surfaceContainer"})) end
     function kit.TextInput(p) return ui.TextInput(props(p,{height=40,padding=tokens.spacing.sm,radius=tokens.radii.small,font_size=tokens.text.body*4/3})) end

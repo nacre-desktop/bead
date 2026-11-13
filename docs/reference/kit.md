@@ -31,7 +31,7 @@
 - `ChipRow`: compact choices; items, `per_row`, `on_change`.
 - `ImagePick`: image hit grid; `icon`, `cols`, `rows`, `on_pick`.
 - `PreviewCard`: miniature desktop preview; dimensions, labels, colors, optional image.
-- `GraphCanvas`: force-directed graph view (spec 0232); `graph = ui.graph(nodes, edges)` (handed over once, best from a module), `style`, `on_hover`, `on_select`. Layout, hit testing, pan, zoom, selection and labels run in Rust; data is reconciled by stable id and lives once in Rust after hand-over.
+- `GraphCanvas`: force-directed graph view (spec 0232); `graph = ui.graph(nodes, edges)` (handed over once, best from a module), `style` (palette roles `node`, `edge`, `hover`, `selected`, `focus`, `label`; numbers `node_radius`, `label_size`, `label_zoom`, `max_labels`, `lod_zoom`, `far_edge_alpha`), `highlight` (node ids, or a bound list store of `{id=...}` records: those nodes and their edges at full strength, the rest dimmed; nil/empty dims nothing), `on_hover` (id or `""`), `on_select` (click; `""` when Escape clears), `on_activate` (double-click, or Enter on the focused node). The canvas is focusable: arrows walk the focused node to the nearest neighbour in that direction (camera glides only if it is off screen), Enter activates, Escape clears; the focused node's label is always shown. Layout, hit testing, pan, zoom, selection and labels run in Rust; data is reconciled by stable id and lives once in Rust after hand-over.
 
 Item callbacks (`on_change`, `on_pick`, `on_touch`, `on_action`, `ListEditor`'s `on_remove`, and the `CollectionSwitcher` callbacks) take an action name, and the component supplies the argument, such as the chosen item's `id`. Other `on_*` props take a `ui.action(...)` descriptor.
 

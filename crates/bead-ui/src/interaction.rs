@@ -944,6 +944,9 @@ impl Session {
         ))
     }
     pub fn activate_focused(&mut self) -> Result<Option<Scene>, Diagnostic> {
+        if let Some(scene) = self.graph_key("enter")? {
+            return Ok(scene);
+        }
         let Some(Value::Text(focused)) = self.stores.get("bead.focused") else {
             return Ok(None);
         };
@@ -977,6 +980,14 @@ impl Session {
         key: input::EditKey,
         shift: bool,
     ) -> Result<Option<Scene>, Diagnostic> {
+        let arrow = match key {
+            input::EditKey::Left => "left",
+            input::EditKey::Right => "right",
+            _ => "",
+        };
+        if let Some(scene) = self.graph_key(arrow)? {
+            return Ok(scene);
+        }
         let Some((id, store, mut text)) = self.focused_input() else {
             return Ok(None);
         };

@@ -54,7 +54,7 @@ pub struct Session {
     projector: Option<Projector>,
     pointer_input: std::rc::Rc<std::cell::Cell<bool>>,
     pub(super) preview_deadline: Option<std::time::Instant>,
-    frame_interval: std::time::Duration,
+    pub(super) frame_interval: std::time::Duration,
     pointer_inside: bool,
     pointer_seen: bool,
     edge_hover: bead_core::edge_hover::EdgeHover,
@@ -700,6 +700,7 @@ impl Session {
             animation,
             self.scroll_feedback.deadline,
             self.keyboard_scroll.as_ref().map(|m| m.next),
+            self.graph_deadline(),
         ]
         .into_iter()
         .flatten()

@@ -1477,6 +1477,7 @@ impl SceneSource for FolderView {
             UiEvent::Command { command, shift } => match command.as_str() {
                 "tab" => self.session.focus_next(shift)?,
                 "enter" | "space" => self.session.activate_focused()?,
+                "escape" => self.session.graph_key("escape")?.flatten(),
                 "left" => self
                     .session
                     .edit_key(crate::ui::input::EditKey::Left, shift)?,

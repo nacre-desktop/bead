@@ -212,6 +212,7 @@ pub enum Primitive {
         style: graph::GraphStyle,
         hover: Option<u32>,
         selected: Option<u32>,
+        focus: Option<u32>,
     },
 }
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]

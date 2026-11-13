@@ -233,8 +233,11 @@ fn content_key(scene: &Scene, scale: f32) -> u64 {
                 style,
                 hover,
                 selected,
+                focus,
                 ..
-            } => crate::graph::hash_graph(geometry, camera, style, *hover, *selected, &mut h),
+            } => {
+                crate::graph::hash_graph(geometry, camera, style, *hover, *selected, *focus, &mut h)
+            }
         }
     }
     h.finish()

@@ -199,6 +199,9 @@ impl Session {
         shift: bool,
         pointer: Option<(f32, f32)>,
     ) -> Result<Option<Scene>, Diagnostic> {
+        if let Some(scene) = self.graph_key(command)? {
+            return Ok(scene);
+        }
         if matches!(command, "home" | "end" | "up" | "down") && self.focused_input().is_some() {
             return match command {
                 "home" => self.edit_key(crate::input::EditKey::Home, shift),

@@ -181,6 +181,7 @@ pub const PROPERTIES: &[&str] = &[
     "masked",
     "graph",
     "style",
+    "highlight",
     "on_hover",
     "on_select",
 ];
@@ -764,8 +765,10 @@ impl ViewSpec {
             } else {
                 None
             };
+            // A graph's `on_activate` takes a node id from its canvas, not the generic action.
             let action = p
                 .get("on_activate")
+                .filter(|_| raw.kind != Widget::Graph)
                 .map(|v| {
                     let name = v
                         .get("name")
@@ -1487,6 +1490,7 @@ pub fn layout(
                     style: graph.style(palette, source)?,
                     hover: None,
                     selected: None,
+                    focus: None,
                 },
                 None,
             );
@@ -1545,7 +1549,7 @@ pub fn layout(
                 scrollable: view.scroll.is_some(),
                 scrollbar: view.scroll.is_some() && view.scrollbar,
                 scroll_limit,
-                focusable: view.action.is_some() || view.input.is_some(),
+                focusable: view.action.is_some() || view.input.is_some() || view.graph.is_some(),
                 multiline: view.multiline && view.input.is_some(),
                 masked: view.masked && view.input.is_some(),
                 drag: view.drag,

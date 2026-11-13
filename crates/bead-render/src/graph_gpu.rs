@@ -4,7 +4,7 @@
 //! rewrites one 96-byte camera/interaction uniform and records two instanced draws. Nodes
 //! are SDF discs and edges anti-aliased line quads, both built in the vertex shader, so pan,
 //! zoom and hover never tessellate or re-upload geometry. Labels are not drawn here; the
-//! text layer places them with [`GraphGpu::to_screen`].
+//! session places them as text with the same camera affine.
 //!
 //! wgpu is the only Bead GPU path that exposes a device for custom pipelines (the native-gl
 //! path only exposes femtovg's canvas API); the same buffers and shader logic can follow
@@ -12,10 +12,8 @@
 use crate::Result;
 use wgpu::util::DeviceExt;
 
-/// Node flag: not drawn, and its edges are skipped.
-pub const HIDDEN: u32 = 1;
-/// Node flag: drawn in `Frame::highlight`; a non-empty highlight set dims everything else.
-pub const HIGHLIGHTED: u32 = 2;
+/// Node flag: full strength while `Frame::any_highlighted` dims every other node and edge.
+pub const HIGHLIGHTED: u32 = 1;
 
 /// Retained per-node attributes (12 bytes on the GPU). Colours are straight RGBA8.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -47,15 +45,16 @@ pub struct Frame {
     /// Below the LOD threshold: every fourth unfocused edge at `far_edge_alpha`.
     pub far: bool,
     pub far_edge_alpha: u8,
-    /// True when any node carries [`HIGHLIGHTED`]: unfocused nodes/edges get `dim_alpha`.
+    /// True when a highlight set is active: unfocused nodes/edges get `dim_alpha`.
     pub any_highlighted: bool,
     /// Alpha applied to nodes and edges outside a non-empty highlight set.
     pub dim_alpha: u8,
     pub hover: Option<u32>,
     pub selected: Option<u32>,
+    pub focus: Option<u32>,
     pub hover_color: [u8; 4],
     pub selected_color: [u8; 4],
-    pub highlight_color: [u8; 4],
+    pub focus_color: [u8; 4],
     /// Edge stroke width in logical px.
     pub line_width: f32,
 }
@@ -73,9 +72,10 @@ impl Default for Frame {
             dim_alpha: 70,
             hover: None,
             selected: None,
+            focus: None,
             hover_color: [255, 190, 40, 255],
             selected_color: [255, 255, 255, 255],
-            highlight_color: [255, 160, 90, 255],
+            focus_color: [120, 190, 255, 255],
             line_width: 1.,
         }
     }
@@ -85,8 +85,9 @@ const SHADER: &str = r#"
 struct Camera {
     a: f32, bx: f32, by: f32, half_width: f32,
     viewport: vec2<f32>, far_alpha: f32, dim_alpha: f32,
-    hover: u32, selected: u32, flags: u32, ring: f32,
-    hover_color: vec4<f32>, selected_color: vec4<f32>, highlight_color: vec4<f32>,
+    hover: u32, selected: u32, focus: u32, flags: u32,
+    ring: f32, pad0: f32, pad1: f32, pad2: f32,
+    hover_color: vec4<f32>, selected_color: vec4<f32>, focus_color: vec4<f32>,
 };
 struct Attr { radius: f32, color: u32, flags: u32 };
 struct Edge { a: u32, b: u32, color: u32 };
@@ -105,7 +106,7 @@ fn corner(v: u32) -> vec2<f32> {
     return vec2<f32>(x, y);
 }
 fn focused(i: u32) -> bool {
-    return i == cam.hover || i == cam.selected || (attrs[i].flags & 2u) != 0u;
+    return i == cam.hover || i == cam.selected || i == cam.focus || (attrs[i].flags & 1u) != 0u;
 }
 fn dim(c: vec4<f32>, focus: bool) -> vec4<f32> {
     if ((cam.flags & 2u) != 0u && !focus) { return vec4<f32>(c.rgb, c.a * cam.dim_alpha); }
@@ -122,11 +123,11 @@ struct NodeOut {
 @vertex fn node_vs(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> NodeOut {
     var o: NodeOut;
     let at = attrs[i];
-    if ((at.flags & 1u) != 0u) { o.pos = vec4<f32>(0.0); return o; }
     o.r = clamp(at.radius * cam.a, 1.0, 64.0);
-    o.fill = select(dim(unpack4x8unorm(at.color), false), cam.highlight_color, (at.flags & 2u) != 0u);
+    o.fill = dim(unpack4x8unorm(at.color), focused(i));
     o.ring = vec4<f32>(0.0);
     if (i == cam.hover) { o.ring = cam.hover_color; } else if (i == cam.selected) { o.ring = cam.selected_color; }
+    else if (i == cam.focus) { o.ring = cam.focus_color; }
     o.local = corner(v) * (o.r + cam.ring + 1.0);
     o.pos = clip(device(positions[i]) + o.local);
     return o;
@@ -151,7 +152,7 @@ struct EdgeOut {
     o.pos = vec4<f32>(0.0);
     let e = edges[i];
     let n = arrayLength(&positions);
-    if (e.a >= n || e.b >= n || ((attrs[e.a].flags | attrs[e.b].flags) & 1u) != 0u) { return o; }
+    if (e.a >= n || e.b >= n) { return o; }
     let focus = focused(e.a) || focused(e.b);
     let far = (cam.flags & 1u) != 0u;
     if (far && !focus && (i % 4u) != 0u) { return o; }
@@ -260,7 +261,7 @@ impl GraphGpu {
         };
         let uniform = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("bead-graph-camera"),
-            size: 96,
+            size: 112,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -353,7 +354,7 @@ impl GraphGpu {
             &position_words(positions),
         );
     }
-    /// Attribute/mask change (colour, radius, hidden/highlight flags) for a node range.
+    /// Attribute/mask change (colour, radius, highlight flag) for a node range.
     pub fn set_nodes(&self, queue: &wgpu::Queue, first: usize, nodes: &[Node]) {
         self.write(queue, &self.attrs, first * 12, &node_words(nodes));
     }
@@ -362,7 +363,7 @@ impl GraphGpu {
             queue.write_buffer(buffer, offset as u64, bytes);
         }
     }
-    /// Per-frame camera/interaction update: one 96-byte uniform write.
+    /// Per-frame camera/interaction update: one 112-byte uniform write.
     pub fn frame(&mut self, queue: &wgpu::Queue, frame: Frame) {
         self.frame = frame;
         let (a, bx, by) = self.transform();
@@ -380,12 +381,16 @@ impl GraphGpu {
             (f32::from(frame.dim_alpha) / 255.).to_bits(),
             frame.hover.unwrap_or(none),
             frame.selected.unwrap_or(none),
+            frame.focus.unwrap_or(none),
             flags,
             (2. * frame.scale).to_bits(),
+            0,
+            0,
+            0,
         ];
         data.extend(f(frame.hover_color));
         data.extend(f(frame.selected_color));
-        data.extend(f(frame.highlight_color));
+        data.extend(f(frame.focus_color));
         queue.write_buffer(&self.uniform, 0, &words(data));
     }
     /// Records the edge and node draws into `pass` (target format as in [`Self::new`]).
@@ -407,14 +412,6 @@ impl GraphGpu {
         pass.draw(0..6, 0..self.edge_count);
         pass.set_pipeline(&self.nodes);
         pass.draw(0..6, 0..self.node_count);
-    }
-    /// Logical-px position of a world point under the last [`Self::frame`], for the text layer.
-    pub fn to_screen(&self, world: [f32; 2]) -> [f32; 2] {
-        let (a, bx, by) = self.transform();
-        [
-            (world[0] * a + bx) / self.frame.scale,
-            (world[1] * a + by) / self.frame.scale,
-        ]
     }
     /// GPU bytes held by the retained buffers.
     pub fn gpu_bytes(&self) -> u64 {
@@ -593,7 +590,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn draws_discs_edges_rings_and_hides_nodes_or_skips() {
+    fn draws_discs_edges_rings_and_dims_outside_the_highlight() {
         let Some((_, device, queue)) = gpu() else {
             println!("GRAPH_GPU skipped: no Vulkan adapter");
             return;
@@ -644,8 +641,8 @@ pub(crate) mod tests {
             pixels(&device, &queue, &tex, w, h)
         };
         let p = render(&mut graph, frame);
-        let [x, y] = graph.to_screen(positions[0]);
-        assert_eq!((x, y), (12., 32.));
+        // Node 0 at world (-20, 0): 20 px left of the 64 px canvas centre.
+        let (x, y) = (12., 32.);
         assert_eq!(px(p.clone(), x, y), node.color, "node disc");
         assert_eq!(px(p.clone(), x, y - 4.), frame.hover_color, "hover ring");
         // The 1 px edge lies on the row boundary: coverage splits across rows 31 and 32.
@@ -653,11 +650,22 @@ pub(crate) mod tests {
         assert!((254..=256).contains(&edge), "edge midpoint coverage {edge}");
         assert_eq!(px(p.clone(), 32., 36.), [0; 4], "beside the edge");
         assert_eq!(px(p.clone(), 2., 2.), [0; 4], "background");
+        let p = render(
+            &mut graph,
+            Frame {
+                hover: None,
+                focus: Some(0),
+                ..frame
+            },
+        );
+        assert_eq!(px(p, x, y - 4.), frame.focus_color, "focus ring");
+        // A highlight mask is a node attribute write: node 1 keeps full strength, node 0 and
+        // its colour dim, while the edge touching node 1 stays at full strength.
         graph.set_nodes(
             &queue,
             1,
             &[Node {
-                flags: HIDDEN,
+                flags: HIGHLIGHTED,
                 ..node
             }],
         );
@@ -666,15 +674,25 @@ pub(crate) mod tests {
             &mut graph,
             Frame {
                 hover: None,
+                any_highlighted: true,
                 ..frame
             },
         );
-        assert_eq!(px(p.clone(), 12., 42.), node.color, "moved node");
+        assert_eq!(px(p.clone(), 52., 32.), node.color, "highlighted node");
         assert_eq!(px(p.clone(), 12., 32.), [0; 4], "old position");
-        assert_eq!(px(p.clone(), 52., 32.), [0; 4], "hidden node");
-        assert_eq!(px(p.clone(), 32., 31.), [0; 4], "edge of a hidden node");
-        assert_eq!(px(p, 32., 32.), [0; 4], "edge of a hidden node");
-        assert_eq!(graph.gpu_bytes(), 96 + 16 + 24 + 12);
+        // Inside node 0's disc, behind the start of the full-strength edge from its centre.
+        let dimmed = px(p.clone(), 10., 43.);
+        assert!(
+            (65..=75).contains(&dimmed[3]) && dimmed[3] < node.color[3],
+            "dimmed node {dimmed:?}"
+        );
+        // At slope 1/4 a 1 px line covers 1/cos θ ≈ 1.03 rows per column (about 263).
+        let edge = u16::from(px(p.clone(), 32., 36.)[3]) + u16::from(px(p, 32., 37.)[3]);
+        assert!(
+            (240..=280).contains(&edge),
+            "edge into the highlight {edge}"
+        );
+        assert_eq!(graph.gpu_bytes(), 112 + 16 + 24 + 12);
     }
 
     /// Standalone bench: `cargo test -p bead-render --features wgpu --release graph_gpu -- --ignored --nocapture`.

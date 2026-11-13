@@ -900,9 +900,10 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
             style,
             hover,
             selected,
+            focus,
         } => {
             rect(r, hash);
-            crate::graph::hash_graph(geometry, camera, style, *hover, *selected, hash);
+            crate::graph::hash_graph(geometry, camera, style, *hover, *selected, *focus, hash);
         }
     }
 }
@@ -3049,6 +3050,7 @@ fn paint_items(
             style,
             hover,
             selected,
+            focus,
             ..
         } = &item.primitive
         {
@@ -3068,6 +3070,7 @@ fn paint_items(
                 style,
                 *hover,
                 *selected,
+                *focus,
             );
             painted = true;
         } else if let Primitive::Polyline {

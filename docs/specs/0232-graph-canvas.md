@@ -1,6 +1,6 @@
 # 0232 — GraphCanvas feasibility
 
-Status: phase 2a engine, CPU path and GPU hookup implemented; memory gate missed by 0.35 MiB (1.35 MiB median against 1 MiB, floor per component below), lead decision pending; the Luau contract stays provisional until the consumer's design arrives; phase 2b adds the retained GPU path and validates 120 Hz on real GPUs.
+Status: phase 2a engine, CPU path and GPU hookup implemented; memory gate missed by 0.35 MiB (1.35 MiB median against 1 MiB, floor per component below), lead decision pending; the Luau contract stays provisional until the consumer's design arrives; phase 2b adds the retained GPU path and validates 120 Hz on real GPUs; phase 2c adds activation, highlight, keyboard focus and GPU labels above the graph for the reader-beside-graph view.
 
 Target: 2,000 nodes / 10,000 edges at 120 Hz (8.33 ms/frame), including pan/zoom; quiescent when unchanged.
 Applications own content, persistence and theme policy; phase 2b API refinements await consumer design.
@@ -232,11 +232,10 @@ What exists (after the follow-up simplicity pass):
 
 Removed by the simplicity pass because neither `kit.GraphCanvas` nor the demo needs them (bring
 back with a consumer): the `nodes=`/`edges=` input form (one form remains), node drag/pinning
-(`on_pin`, the `Pin` command, `pinned` data), double-click `on_activate`, `on_view_changed`,
-controlled `selected`, `highlight`/`hidden_groups` masks with dimming, node groups, and the
-`graph_layout`/`set_graph_layout` export/import. Keyboard navigation, context menus, focus
-animation, `neighborhood` masks and LOD hysteresis stay open. `GraphGpu` keeps its hidden/highlight
-node flags (phase 2b); the canvas passes none.
+(`on_pin`, the `Pin` command, `pinned` data), `on_view_changed`, controlled `selected`,
+`hidden_groups` (a filtered `ui.graph` replaces it, phase 2c), node groups, and the
+`graph_layout`/`set_graph_layout` export/import. Context menus, `focus(id)`, `neighborhood`
+masks and LOD hysteresis stay open. Phase 2c brought back `on_activate` and `highlight`.
 
 Rollback: an update rejected while the view builds (for example an edge naming a missing node)
 leaves every canvas's topology, positions and worker revision untouched
@@ -326,20 +325,18 @@ stay in `.lead/`.
 ## Phase 2b: retained GPU graph path
 
 `bead_render::graph_gpu::GraphGpu` (feature `wgpu`) keeps the graph in three GPU storage
-buffers (positions 8 B/node, node attributes 12 B/node: radius, RGBA8, hidden/highlight flags,
-edges 12 B/edge: two indices, RGBA8) plus one 96-byte uniform (camera transform, viewport,
-line width, LOD/dim flags and alphas, hover/selected index, hover/selected/highlight colours).
+buffers (positions 8 B/node, node attributes 12 B/node: radius, RGBA8, highlight flag,
+edges 12 B/edge: two indices, RGBA8) plus one 112-byte uniform (camera transform, viewport,
+line width, LOD/dim flags and alphas, hover/selected/focus indices and ring colours).
 A frame writes that uniform and records two instanced draws of six vertices each: edges as
 line quads (vertex shader reads both endpoints from the position buffer, fragment coverage
 from the distance to the segment, 1 px anti-aliasing both across and at the butt ends) and
-nodes as quads with an SDF disc (fill over an optional hover/selected ring, radius clamped to
-1–64 device px like the CPU painter). Hidden nodes and their edges, far-LOD decimation
-(every fourth unfocused edge at `far_edge_alpha`) and highlight dimming are decided in the
-vertex shader from the retained flags, so no CPU culling, tessellation or re-upload happens on
+nodes as quads with an SDF disc (fill over an optional hover/selected/focus ring, radius clamped to
+1–64 device px like the CPU painter). Far-LOD decimation (every fourth unfocused edge at
+`far_edge_alpha`) and highlight dimming are decided in the vertex shader from the retained flag, so no CPU culling, tessellation or re-upload happens on
 pan, zoom, hover, selection or LOD changes; viewport clipping is the GPU's. Output is
 premultiplied source-over into the caller's render pass, scissored to the canvas rectangle.
-Labels are not drawn: `to_screen(world)` gives the logical-px position of a node under the
-last frame (the same affine the shader uses) for the existing text path and its priority cap.
+Labels are not drawn here; they stay text primitives above the graph (phase 2c).
 
 Backend: wgpu, because it is the only Bead GPU path that hands out a device for custom
 pipelines; native-gl exposes femtovg's canvas API only, so the same buffers and shader logic
@@ -349,7 +346,7 @@ fallback.
 Updates: `upload(device, positions, nodes, edges)` per data revision (reallocates, validates
 counts and edge indices); `set_positions(queue, first, positions)` per layout snapshot
 (16,000 B for 2k nodes, or a range for a drag); `set_nodes(queue, first, nodes)` per
-mask/style change (24,000 B); `frame(queue, Frame)` per frame (96 B); `draw(&mut pass)`.
+mask/style change (24,000 B); `frame(queue, Frame)` per frame (112 B); `draw(&mut pass)`.
 Damage: camera changes repaint the canvas rectangle; hover/selection are a uniform write and
 the same repaint, which the numbers below show is far below one 120 Hz frame.
 
@@ -385,7 +382,7 @@ Vello's tile pipeline for its LOD scene and is not touched by this path: here th
 is 4–7× cheaper than the full case at both sizes, proportional to fragments, with the same
 CPU cost.
 
-Memory for 2k/10k: GPU 160,096 B (0.153 MiB, `gpu_bytes()`); CPU-side retained state is the
+Memory for 2k/10k: GPU 160,112 B (0.153 MiB, `gpu_bytes()`); CPU-side retained state is the
 handles and the last `Frame` (about 150 B); uploads stage a transient byte vector of the
 same size as the buffer written. Against the 1 MiB proposal this leaves about 0.85 MiB for
 layout, indexes and labels. No raster cache is involved.
@@ -393,27 +390,99 @@ layout, indexes and labels. No raster cache is involved.
 Integration contract for phase 2a (`Primitive::Graph { rect, geometry, camera, style, hover, selected }`):
 the GPU renderer keeps one `GraphGpu` per canvas resource; when `geometry.revision` (or the
 `Arc` identity) changes it calls `upload` with `nodes[i] = Node { radius: radii[i], color:
-style.node, flags: HIDDEN/HIGHLIGHTED from the masks }` and `edges` from the index pairs with
+style.node, flags: HIGHLIGHTED from the mask }` and `edges` from the index pairs with
 `style.edge`; a layout snapshot with unchanged topology calls `set_positions` only; a mask or
 style change calls `set_nodes`. Per frame it calls `frame` with `rect` offset by the scene
 offset, the output scale and size, `camera.center`/`camera.zoom`, `far = camera.zoom <
-style.lod_zoom`, `any_highlighted = geometry.highlighted.iter().any(|h| *h)`, the style
+style.lod_zoom`, `any_highlighted = !geometry.highlight.is_empty()`, the style
 alphas and colours and `hover`/`selected`, then `draw` in the pass that follows the retained
 layer blit. The CPU bake must skip `Primitive::Graph` when this path draws it, and the layer
-content key must not include the camera. Text labels use `to_screen` per labelled node.
+content key must not include the camera.
 
 Hooked up (phase 2a follow-up): `bead_render::gpu::GpuRenderer` (wgpu femtovg kind) keeps one
 `GraphGpu` per `Primitive::Graph` (by primitive index) and syncs it from the shared geometry
 arrays by identity: a new edge array, node count or edge colour re-uploads everything, a new
 position array (a layout snapshot) calls `set_positions`, a new radius array or node colour calls
-`set_nodes`; hover, selection and the camera are the per-frame uniform. The graphs are drawn in
+`set_nodes` (as does a new highlight mask, phase 2c); hover, selection, focus and the camera
+are the per-frame uniform. The graphs are drawn in
 one extra render pass (`LoadOp::Load`) on the target after femtovg's layer blit, scissored to each
 canvas. `prepare` bakes the retained layer from a copy of the scene whose graph primitives are
 transparent rectangles, so neither the layer key nor its pixels follow the graph or the camera,
-and the CPU painter never runs on this path. Labels stay `Text` primitives placed by the session
-with the CPU camera's affine (the shader's), so they are baked into the layer under the graph and a
-pan still re-bakes the layer while labels are visible (a label overlay is the follow-up). The
-canvas passes no hidden/highlight flags. The Vello comparison kind and native GL draw nothing for
+and the CPU painter never runs on this path. Labels draw above the graph through an overlay
+bake (phase 2c). The Vello comparison kind and native GL draw nothing for
 the primitive. `gpu::tests::wgpu_path_draws_graphs_after_the_layer_blit` (any Vulkan adapter,
 llvmpipe in CI containers) proves the bake stays empty and camera-independent and that the drawn
 pixels, including the hover ring, land inside the canvas rectangle.
+
+## Phase 2c: activation, highlight, keyboard focus, labels above the GPU graph
+
+For a reader-beside-graph view: the graph picks what the reader shows, and the reader's
+context lights up part of the graph.
+
+- `on_activate = ui.action(...)` runs with the node id on a double-click (a second click on the
+  same node within 400 ms) and on Enter for the keyboard-focused node. `on_select` still runs only
+  for clicks (and with `""` when Escape clears the selection). A graph's `on_activate` is not the
+  node's generic action, so generic activation and accessibility never call it without an id.
+- `highlight = {ids}`, or a bound list store of `{id = ...}` records (store lists hold records):
+  those nodes and every edge touching them draw at full strength, everything else at
+  `bead_render::graph::DIM_ALPHA` (70/255, one constant); nil or empty dims nothing, unknown ids
+  are ignored, and highlighted edges survive far-LOD decimation. Paint-only: the canvas turns the
+  set into a per-node mask on the shared geometry; positions, radii and the edge array keep their
+  identity and the layout worker hears nothing. The GPU path then rewrites only the node
+  attribute buffer (`set_nodes`, 24,000 B for 2k nodes); the CPU path repaints the canvas once,
+  as for a style change, with no other geometry work. Tests:
+  `graph::tests::activation_highlight_and_the_keyboard_walk` (ui),
+  `graph::tests::highlight_keeps_its_nodes_and_edges_and_dims_the_rest` (CPU painter),
+  `gpu::tests::graph_slot_rewrites_only_the_mask_for_a_highlight` and
+  `graph_gpu::tests::draws_discs_edges_rings_and_dims_outside_the_highlight` (wgpu).
+- Keyboard: a graph canvas is focusable (Tab, or a click on a node, which does not paint the
+  canvas focus ring). Arrows move the focused node: inside the 90° cone around the arrow (the
+  component along the arrow at least the one across it) the nearest node sharing an edge wins,
+  else the nearest node in the cone; an empty cone keeps the focus. With nothing focused, an arrow
+  starts at the node nearest the camera centre. Enter runs `on_activate`; Escape clears focus and
+  selection. The focused node gets a ring in `style.focus` (palette `primaryContainer`; a hover or
+  selection ring on the same node wins) and its label is always shown, one beyond `max_labels`.
+  The camera moves only when the focused node is outside the canvas or within 16 px of its edge:
+  the centre eases onto the node over 240 ms, patched into the scene per frame without Luau
+  (`Session::graph_deadline` wakes the host).
+- Hidden groups: a filtered `ui.graph(...)` is enough, so `hidden_groups` stays out. Survivors keep
+  their exact positions (reconciled by id) and the worker's `Replace` marks no node hot, so the
+  layout is settled at once: one snapshot of the same positions, no step and no new settle
+  (`graph::tests::a_filtered_graph_keeps_survivors_in_place_without_a_new_settle`). Nodes that come
+  back are new to the canvas: they start 40 world units from a placed neighbour and settle locally
+  with their neighbours, not at their old spot.
+- Labels above the GPU graph: `GpuRenderer::prepare` bakes two layers around the graph pass. The
+  base holds everything up to the last graph (graphs as transparent rectangles) and nothing past
+  the last scene layer, so labels moving with the camera never change its key; the overlay holds
+  everything after the last graph (labels, the focus ring, later widgets), sized to their bounds,
+  and is blitted after the graphs. A pan with labels visible re-bakes only the overlay. Cost: the
+  overlay is one more RGBA layer and texture of those bounds on the GPU path only (up to
+  1280×800×4 = 4 MB each when labels spread over a full-window canvas). `graph_gpu`'s hidden flag
+  and `to_screen` are deleted; the highlight flag is wired, and the uniform carries the focus
+  index and colour (112 bytes). `gpu::tests::wgpu_path_draws_graphs_after_the_layer_blit` checks
+  that a primitive after the graph lands above it and that neither the camera nor a moved label
+  changes the base key.
+
+Memory, same method as phase 2a (five alternating fresh-process pairs of an empty-graph control
+against the 2k/10k demo, release, CPU renderer, 1280×800, settled layout and a completed frame;
+`Pss_Anon + Pss_Shmem + SwapPss`; the phase 2a memory host, Ubuntu 24.04 container, 6 CPUs / 6 GiB). The phase 2a
+probe was not kept, so a new ignored probe drives the folder host (`FolderView::load` and
+`check_render`, staged snapshots until 1.5 s pass without one, the latest frame rendered on both
+sides) and measured the previous main and this phase in one session: paired increase median
+1,408 KiB before (pairs 1,328–1,460; phase 2a recorded 1,384) and 1,452 KiB after (1,396–1,484),
+so **+44 KiB**. Clean file-backed PSS did not grow. The GPU overlay is not on this path.
+
+Checks (secondary build host, `nacre-ci/ubuntu-bead` image, Rust 1.99.0): the full `ci.yml`
+replica (fmt, boundaries, warnings-denied Clippy, `cargo test --workspace` 676 passed, feature
+checks, minimal hosts, `bead check` on all six example apps, private service lifecycles,
+cargo-deny for every crate); Clippy for `bead-render --features wgpu`; the wgpu tests on lavapipe.
+A private headless sway capture (debug `bead run`, pixman, 1280×800, input from a kept-alive
+virtual pointer and keyboard, since synthetic `swaymsg` clicks reach no client without a pointer
+device) waited for the layout to settle, then hovered and clicked a hub (label, ring, `selected
+n1250`), walked right and down with the arrows (focus ring and label on n51, then n826, while
+n1250 kept its selection ring), pressed Enter (`activated n826`; the hubs and their edges at full
+strength, the rest dimmed, labels above), Escape (`cleared`) and double-clicked the hub
+(`activated n1250`), without `UI_ERROR`.
+
+Lines (product / tests, against the previous main): bead-ui +249/−17 / +194/−4, bead-render
++183/−56 / +140/−15, bead-kit +6/−4 (comment), bead +1.

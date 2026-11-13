@@ -2,7 +2,7 @@
 //! GPU composition of the identical raster layer used by the CPU fallback.
 //! Content is baked once; animation changes only image position and opacity.
 use crate::{
-    Damage, Primitive, RenderTarget, Renderer, RendererKind, Result, Scene, ShmTarget,
+    Damage, Primitive, Rect, RenderTarget, Renderer, RendererKind, Result, Scene, ShmTarget,
     graph::{GraphGeometry, GraphStyle},
     graph_gpu::{self, GraphGpu},
     retained::LayerCache,
@@ -240,17 +240,19 @@ impl GraphSlot {
         queue: &wgpu::Queue,
         geometry: &Arc<GraphGeometry>,
         style: &GraphStyle,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let nodes = || {
             (0..geometry.positions.len())
                 .map(|i| graph_gpu::Node {
                     radius: geometry.radii.get(i).copied().unwrap_or(3.),
                     color: style.node,
-                    flags: 0,
+                    flags: u32::from(geometry.highlight.get(i) == Some(&true))
+                        * graph_gpu::HIGHLIGHTED,
                 })
                 .collect::<Vec<_>>()
         };
-        match &self.geometry {
+        // True when everything was re-uploaded; a highlight or layout change only writes buffers.
+        let upload = match &self.geometry {
             Some(old)
                 if Arc::ptr_eq(&old.edges, &geometry.edges)
                     && old.positions.len() == geometry.positions.len()
@@ -259,9 +261,13 @@ impl GraphSlot {
                 if !Arc::ptr_eq(&old.positions, &geometry.positions) {
                     self.gpu.set_positions(queue, 0, &geometry.positions);
                 }
-                if !Arc::ptr_eq(&old.radii, &geometry.radii) || self.style.node != style.node {
+                if !Arc::ptr_eq(&old.radii, &geometry.radii)
+                    || !Arc::ptr_eq(&old.highlight, &geometry.highlight)
+                    || self.style.node != style.node
+                {
                     self.gpu.set_nodes(queue, 0, &nodes());
                 }
+                false
             }
             _ => {
                 let edges: Vec<_> = geometry
@@ -275,16 +281,20 @@ impl GraphSlot {
                     .collect();
                 self.gpu
                     .upload(device, &geometry.positions, &nodes(), &edges)?;
+                true
             }
-        }
+        };
         self.geometry = Some(geometry.clone());
         self.style = *style;
-        Ok(())
+        Ok(upload)
     }
 }
 pub struct GpuRenderer {
     kind: RendererKind,
     cache: LayerCache,
+    /// Primitives after the last graph (its labels), baked apart and blitted above the graphs.
+    overlay: LayerCache,
+    overlay_image: Option<(u64, femtovg::ImageId, bead_core::cache::Charge)>,
     graphs: std::collections::BTreeMap<usize, GraphSlot>,
     femto: Option<femtovg::Canvas<femtovg::renderer::WGPURenderer>>,
     femto_image: Option<femtovg::ImageId>,
@@ -301,6 +311,8 @@ impl GpuRenderer {
         Self {
             kind,
             cache: LayerCache::default(),
+            overlay: LayerCache::default(),
+            overlay_image: None,
             graphs: Default::default(),
             femto: None,
             femto_image: None,
@@ -360,6 +372,7 @@ impl GpuRenderer {
                 style,
                 hover,
                 selected,
+                focus,
             } = &scene.primitives[index]
             else {
                 continue;
@@ -385,13 +398,14 @@ impl GpuRenderer {
                     zoom: camera.zoom,
                     far: camera.zoom < style.lod_zoom,
                     far_edge_alpha: style.far_edge_alpha,
-                    any_highlighted: false,
-                    dim_alpha: 255,
+                    any_highlighted: !geometry.highlight.is_empty(),
+                    dim_alpha: crate::graph::DIM_ALPHA,
                     hover: *hover,
                     selected: *selected,
+                    focus: *focus,
                     hover_color: style.hover,
                     selected_color: style.selected,
-                    highlight_color: style.node,
+                    focus_color: style.focus,
                     line_width: 1.,
                 },
             );
@@ -399,6 +413,46 @@ impl GpuRenderer {
         }
         drop(pass);
         target.queue.submit([encoder.finish()]);
+        Ok(())
+    }
+    /// Blit the overlay layer (labels and anything else drawn after the graphs) on top.
+    fn draw_overlay(&mut self, scene: &Scene, target: &GpuTarget<'_>) -> Result<()> {
+        let canvas = self.femto.as_mut().unwrap();
+        let Some(layer) = self.overlay.layer.as_ref() else {
+            if let Some((_, old, _)) = self.overlay_image.take() {
+                canvas.delete_image(old);
+            }
+            return Ok(());
+        };
+        let (w, h) = (layer.pixels.width(), layer.pixels.height());
+        if self
+            .overlay_image
+            .as_ref()
+            .is_none_or(|(key, ..)| *key != layer.key)
+        {
+            let charge = self
+                .image_budget
+                .reserve(w as usize * h as usize * 4 + 128)?;
+            let image = canvas.create_image(
+                femtovg::ImageSource::Rgba(imgref::Img::new(
+                    layer.pixels.data().as_rgba(),
+                    w as usize,
+                    h as usize,
+                )),
+                femtovg::ImageFlags::PREMULTIPLIED,
+            )?;
+            if let Some((_, old, _)) = self.overlay_image.replace((layer.key, image, charge)) {
+                canvas.delete_image(old);
+            }
+        }
+        let image = self.overlay_image.as_ref().unwrap().1;
+        let x = ((scene.offset.0 + layer.origin.0) * layer.scale).round();
+        let y = ((scene.offset.1 + layer.origin.1) * layer.scale).round();
+        let mut path = femtovg::Path::new();
+        path.rect(x, y, w as f32, h as f32);
+        let paint = femtovg::Paint::image(image, x, y, w as f32, h as f32, 0., scene.opacity);
+        canvas.fill_path(&path, &paint);
+        target.queue.submit(canvas.flush_to_output(target.texture));
         Ok(())
     }
     fn upload(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<()> {
@@ -520,23 +574,60 @@ impl Renderer for GpuRenderer {
         true
     }
     fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
-        if self.kind == RendererKind::Femtovg && self.graphs_in(scene).next().is_some() {
-            // The GPU path draws graphs: bake the layer without them, so neither its key
-            // nor its pixels follow the camera.
-            let mut baked = scene.clone();
-            for primitive in &mut baked.primitives {
-                if let Primitive::Graph { rect, .. } = primitive {
-                    *primitive = Primitive::Rounded {
-                        rect: *rect,
-                        radius: 0.,
-                        fill: [0; 4],
-                        border: None,
-                    };
-                }
+        self.overlay.layer = None;
+        let Some(last) = self
+            .graphs_in(scene)
+            .last()
+            .filter(|_| self.kind == RendererKind::Femtovg)
+        else {
+            return self.cache.prepare(scene, scale);
+        };
+        // The GPU path draws graphs between two bakes: the layer below them (graphs as
+        // transparent rectangles, so neither its key nor its pixels follow the camera) and
+        // an overlay of everything after the last graph, sized to its own bounds.
+        let blank = |primitive: &mut Primitive| {
+            *primitive = Primitive::Rounded {
+                rect: crate::tree::rect(primitive),
+                radius: 0.,
+                fill: [0; 4],
+                border: None,
+            };
+        };
+        let mut below = scene.clone();
+        // Primitives past every layer (graph labels, the focus ring) leave the base bake, so
+        // labels that move with the camera never change its key.
+        let keep = scene
+            .layers
+            .iter()
+            .map(|l| l.own.end.max(l.subtree_end))
+            .fold(last + 1, usize::max);
+        below.primitives.truncate(keep);
+        below.clips.retain(|i, _| *i < keep);
+        for (i, primitive) in below.primitives.iter_mut().enumerate() {
+            if i > last || matches!(primitive, Primitive::Graph { .. }) {
+                blank(primitive);
             }
-            return self.cache.prepare(&baked, scale);
         }
-        self.cache.prepare(scene, scale)
+        let mut above = scene.clone();
+        let mut bounds: Option<Rect> = None;
+        for (i, primitive) in above.primitives.iter_mut().enumerate() {
+            if i > last {
+                let r = crate::tree::rect(primitive);
+                bounds = Some(bounds.map_or(r, |b| b.union(r)));
+            } else {
+                blank(primitive);
+            }
+        }
+        self.cache.prepare(&below, scale)?;
+        if let Some(bounds) = bounds {
+            let bounds = Rect::new(bounds.x - 2., bounds.y - 2., bounds.w + 4., bounds.h + 4.)
+                .intersect(scene.bounds);
+            if bounds.w > 0. && bounds.h > 0. {
+                above.bounds = bounds;
+                self.overlay.prepare(&above, scale)?;
+            }
+        }
+        Ok(())
     }
     fn render(&mut self, _: &Scene, _: ShmTarget<'_>, _: Damage) -> Result<()> {
         Err("GPU renderer needs a GPU target; CPU fallback uses the same Scene".into())
@@ -579,6 +670,7 @@ impl Renderer for GpuRenderer {
                 target.queue.submit(canvas.flush_to_output(target.texture));
                 let scale = layer.scale;
                 self.draw_graphs(scene, &target, scale)?;
+                self.draw_overlay(scene, &target)?;
             }
             RendererKind::Vello => {
                 if self.vello.is_none() {
@@ -644,12 +736,11 @@ impl Renderer for GpuRenderer {
 mod tests {
     use super::*;
     use crate::{
-        Rect,
         graph::{Camera, GraphGeometry, GraphStyle},
         graph_gpu::tests::{gpu, pixels, target},
     };
 
-    fn scene(geometry: &Arc<GraphGeometry>, zoom: f32, hover: Option<u32>) -> Scene {
+    fn scene(geometry: &Arc<GraphGeometry>, zoom: f32, hover: Option<u32>, label: f32) -> Scene {
         let mut scene = Scene::empty(64., 64.);
         scene.primitives.push(Primitive::Graph {
             rect: Rect::new(8., 8., 48., 48.),
@@ -661,6 +752,14 @@ mod tests {
             style: GraphStyle::default(),
             hover,
             selected: None,
+            focus: None,
+        });
+        // Drawn after the graph (as labels are): at `label` 16 it lands above node 0 at (20, 32).
+        scene.primitives.push(Primitive::Rounded {
+            rect: Rect::new(label, 28., 8., 8.),
+            radius: 0.,
+            fill: [10, 200, 30, 255],
+            border: None,
         });
         scene
     }
@@ -680,23 +779,27 @@ mod tests {
             ..Default::default()
         });
         let mut renderer = GpuRenderer::new(RendererKind::Femtovg);
-        renderer.prepare(&scene(&geometry, 1., None), 1.).unwrap();
+        renderer
+            .prepare(&scene(&geometry, 1., None, 16.), 1.)
+            .unwrap();
         let key = renderer.cache.layer.as_ref().unwrap().key;
         let baked = renderer.cache.layer.as_ref().unwrap().pixels.clone();
         assert!(
             baked.data().iter().all(|b| *b == 0),
             "graph baked on the CPU"
         );
-        renderer.prepare(&scene(&geometry, 2., None), 1.).unwrap();
+        renderer
+            .prepare(&scene(&geometry, 2., None, 30.), 1.)
+            .unwrap();
         assert_eq!(
             renderer.cache.layer.as_ref().unwrap().key,
             key,
-            "camera in key"
+            "camera or a moved label in the base key"
         );
 
         let (texture, _) = target(&device, 64, 64);
         let mut draw = |hover| {
-            let scene = scene(&geometry, 1., hover);
+            let scene = scene(&geometry, 1., hover, 16.);
             renderer.prepare(&scene, 1.).unwrap();
             renderer
                 .draw(
@@ -717,6 +820,19 @@ mod tests {
         let plain = draw(None);
         let alpha = |bytes: &[u8]| -> u64 { bytes.chunks(4).map(|p| u64::from(p[3])).sum() };
         assert!(alpha(&plain) > 0, "nothing drawn");
+        let px = |p: &[u8], x: usize, y: usize| -> [u8; 4] {
+            p[(y * 64 + x) * 4..][..4].try_into().unwrap()
+        };
+        assert_eq!(
+            px(&plain, 20, 32),
+            [10, 200, 30, 255],
+            "overlay above node 0"
+        );
+        assert_eq!(
+            px(&plain, 44, 32),
+            GraphStyle::default().node,
+            "node 1 survives the overlay blit"
+        );
         for y in 0..64u32 {
             for x in 0..64u32 {
                 let a = plain[((y * 64 + x) * 4 + 3) as usize];
@@ -729,5 +845,49 @@ mod tests {
         let hovered = draw(Some(0));
         assert!(alpha(&hovered) > alpha(&plain), "hover ring missing");
         assert_eq!(renderer.graphs.len(), 1);
+    }
+
+    /// A highlight change is a node-attribute write, and a layout snapshot a position write;
+    /// only new topology re-uploads.
+    #[test]
+    fn graph_slot_rewrites_only_the_mask_for_a_highlight() {
+        let Some((_, device, queue)) = gpu() else {
+            eprintln!("no Vulkan adapter: skipped");
+            return;
+        };
+        let geometry = Arc::new(GraphGeometry {
+            positions: Arc::from([[-12., 0.], [12., 0.]]),
+            radii: Arc::from([4., 4.]),
+            edges: Arc::from([[0, 1]]),
+            ..Default::default()
+        });
+        let style = GraphStyle::default();
+        let mut slot = GraphSlot {
+            gpu: GraphGpu::new(&device, wgpu::TextureFormat::Rgba8Unorm),
+            geometry: None,
+            style,
+        };
+        assert!(slot.sync(&device, &queue, &geometry, &style).unwrap());
+        let next = |g: GraphGeometry| {
+            Arc::new(GraphGeometry {
+                revision: g.revision + 1,
+                ..g
+            })
+        };
+        let lit = next(GraphGeometry {
+            highlight: Arc::from([true, false]),
+            ..(*geometry).clone()
+        });
+        assert!(!slot.sync(&device, &queue, &lit, &style).unwrap());
+        let moved = next(GraphGeometry {
+            positions: Arc::from([[-10., 0.], [10., 0.]]),
+            ..(*lit).clone()
+        });
+        assert!(!slot.sync(&device, &queue, &moved, &style).unwrap());
+        let rewired = next(GraphGeometry {
+            edges: Arc::from([[1, 0]]),
+            ..(*moved).clone()
+        });
+        assert!(slot.sync(&device, &queue, &rewired, &style).unwrap());
     }
 }

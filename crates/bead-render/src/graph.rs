@@ -16,7 +16,11 @@ pub struct GraphGeometry {
     pub positions: Arc<[[f32; 2]]>,
     pub radii: Arc<[f32]>,
     pub edges: Arc<[[u32; 2]]>,
+    /// Per-node highlight mask; empty means no highlight set, so nothing is dimmed.
+    pub highlight: Arc<[bool]>,
 }
+/// Alpha of nodes and edges outside a non-empty highlight set.
+pub const DIM_ALPHA: u8 = 70;
 /// `screen = rect.center + (world - center) * zoom`, in logical pixels.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Camera {
@@ -52,6 +56,8 @@ pub struct GraphStyle {
     pub edge: [u8; 4],
     pub hover: [u8; 4],
     pub selected: [u8; 4],
+    /// Ring of the keyboard-focused node.
+    pub focus: [u8; 4],
     pub label: [u8; 4],
     pub label_size: f32,
     /// From this zoom on, visible nodes get labels by weight until `max_labels`.
@@ -70,6 +76,7 @@ impl Default for GraphStyle {
             edge: [105, 115, 130, 150],
             hover: [255, 190, 40, 255],
             selected: [255, 255, 255, 255],
+            focus: [120, 190, 255, 255],
             label: [220, 220, 220, 255],
             label_size: 13.,
             label_zoom: 1.2,
@@ -86,6 +93,7 @@ pub(crate) fn hash_graph(
     style: &GraphStyle,
     hover: Option<u32>,
     selected: Option<u32>,
+    focus: Option<u32>,
     hash: &mut impl Hasher,
 ) {
     // Independent canvases can have equal revision counters. Include the resource
@@ -108,11 +116,13 @@ pub(crate) fn hash_graph(
         style.edge,
         style.hover,
         style.selected,
+        style.focus,
         style.label,
         style.max_labels,
         style.far_edge_alpha,
         hover,
         selected,
+        focus,
     )
         .hash(hash);
 }
@@ -131,6 +141,7 @@ pub(crate) fn interaction_damage(
         style,
         hover,
         selected,
+        focus,
     } = new
     else {
         return None;
@@ -142,6 +153,7 @@ pub(crate) fn interaction_damage(
         style: old_style,
         hover: old_hover,
         selected: old_selected,
+        focus: old_focus,
     } = old
     else {
         return None;
@@ -154,7 +166,11 @@ pub(crate) fn interaction_damage(
         return None;
     }
     let mut changed = Vec::new();
-    for (a, b) in [(hover, old_hover), (selected, old_selected)] {
+    for (a, b) in [
+        (hover, old_hover),
+        (selected, old_selected),
+        (focus, old_focus),
+    ] {
         if a != b {
             for id in [*a, *b].into_iter().flatten() {
                 if !changed.contains(&id) {
@@ -317,6 +333,7 @@ impl Canvas<'_> {
     }
 }
 /// Paint `geometry` through `camera` into `rect`, clipped to the strip's clip and the rect.
+#[allow(clippy::too_many_arguments)] // One painter for every interaction state.
 pub fn paint(
     strip: Strip<'_>,
     rect: Rect,
@@ -325,6 +342,7 @@ pub fn paint(
     style: &GraphStyle,
     hover: Option<u32>,
     selected: Option<u32>,
+    focus: Option<u32>,
 ) {
     let scale = strip.scale;
     let (ox, oy) = strip.offset;
@@ -349,7 +367,17 @@ pub fn paint(
     let device = |p: [f32; 2]| [p[0] * a + bx, p[1] * a + by];
     let n = geometry.positions.len();
     let far = camera.zoom < style.lod_zoom;
-    let focused = |i: usize| Some(i as u32) == hover || Some(i as u32) == selected;
+    let dimmed = !geometry.highlight.is_empty();
+    let focused = |i: usize| {
+        [hover, selected, focus].contains(&Some(i as u32))
+            || geometry.highlight.get(i).copied().unwrap_or(false)
+    };
+    let dim = |mut color: [u8; 4], focus: bool| {
+        if dimmed && !focus {
+            color[3] = (u16::from(color[3]) * u16::from(DIM_ALPHA) / 255) as u8;
+        }
+        color
+    };
     let (fx0, fy0, fx1, fy1) = (
         canvas.x0 as f32 - 1.,
         canvas.y0 as f32 - 1.,
@@ -377,6 +405,7 @@ pub fn paint(
         if far {
             color[3] = style.far_edge_alpha;
         }
+        let color = dim(color, focus);
         if color[3] > 0 {
             canvas.line(p, q, color);
         }
@@ -392,8 +421,10 @@ pub fn paint(
             canvas.disc(p, ring, style.hover);
         } else if Some(i as u32) == selected {
             canvas.disc(p, ring, style.selected);
+        } else if Some(i as u32) == focus {
+            canvas.disc(p, ring, style.focus);
         }
-        canvas.disc(p, r, style.node);
+        canvas.disc(p, r, dim(style.node, focused(i)));
     }
 }
 
@@ -425,6 +456,7 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
                 .into(),
+            ..Default::default()
         }
     }
     fn strip(w: u32, h: u32) -> Vec<u8> {
@@ -453,6 +485,7 @@ mod tests {
             &GraphStyle::default(),
             hover,
             None,
+            None,
         );
     }
     fn alpha_sum(bytes: &[u8]) -> u64 {
@@ -471,6 +504,7 @@ mod tests {
             positions: Arc::from([[-10., 0.], [10., 0.], [500., 500.]]),
             radii: Arc::from([3.; 3]),
             edges: Arc::from([[0, 1], [1, 2]]),
+            ..Default::default()
         };
         let (w, h) = (64, 64);
         let mut plain = strip(w, h);
@@ -493,6 +527,7 @@ mod tests {
             &GraphStyle::default(),
             None,
             None,
+            None,
         );
         for y in 0..h {
             for x in 0..w {
@@ -509,6 +544,37 @@ mod tests {
             alpha_sum(&hovered) > alpha_sum(&plain),
             "hover ring adds coverage"
         );
+    }
+    #[test]
+    fn highlight_keeps_its_nodes_and_edges_and_dims_the_rest() {
+        // Node 0 is lit; edge 0-1 touches it, edge 2-3 does not.
+        let positions: Arc<[[f32; 2]]> =
+            Arc::from([[-20., -10.], [20., -10.], [-20., 10.], [20., 10.]]);
+        let plain = GraphGeometry {
+            revision: 1,
+            positions,
+            radii: Arc::from([3.; 4]),
+            edges: Arc::from([[0, 1], [2, 3]]),
+            ..Default::default()
+        };
+        let lit = GraphGeometry {
+            highlight: Arc::from([true, false, false, false]),
+            ..plain.clone()
+        };
+        let (w, h) = (64, 64);
+        let (mut a, mut b) = (strip(w, h), strip(w, h));
+        paint_into(&mut a, w, h, &plain, Camera::default(), None);
+        paint_into(&mut b, w, h, &lit, Camera::default(), None);
+        let alpha = |p: &[u8], x: u32, y: u32| p[((y * w + x) * 4 + 3) as usize];
+        // Node centres sit at (12, 22), (52, 22), (12, 42), (52, 42); edge midpoints at x 32.
+        assert_eq!(alpha(&b, 12, 22), alpha(&a, 12, 22), "lit node");
+        assert_eq!(alpha(&b, 32, 22), alpha(&a, 32, 22), "edge of the lit node");
+        assert!(
+            alpha(&a, 52, 22) > 0 && alpha(&b, 52, 22) < alpha(&a, 52, 22),
+            "neighbour dims"
+        );
+        assert!(alpha(&b, 32, 42) < alpha(&a, 32, 42), "unrelated edge dims");
+        assert!(alpha(&b, 12, 42) < alpha(&a, 12, 42), "unrelated node dims");
     }
     #[test]
     fn far_zoom_decimates_edges() {
@@ -564,6 +630,7 @@ mod tests {
                             style: GraphStyle::default(),
                             hover,
                             selected,
+                            focus: selected,
                         },
                     }],
                 };
