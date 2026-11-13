@@ -1887,12 +1887,13 @@ pub fn swizzle(bytes: &mut [u8], width: u32, d: Damage) {
 fn shadow_svg(w: f32, h: f32, radius: f32, blur: f32) -> String {
     let pad = blur * 3.;
     format!(
-        "<svg xmlns='http://www.w3.org/2000/svg' width='{w}' height='{h}'><defs><filter id='s' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='{blur}'/></filter></defs><rect x='{pad}' y='{pad}' width='{}' height='{}' rx='{radius}' fill='black' fill-opacity='.32' filter='url(#s)'/></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg' width='{w}' height='{h}'><defs><filter id='s' filterUnits='userSpaceOnUse' x='0' y='0' width='{w}' height='{h}'><feGaussianBlur stdDeviation='{blur}'/></filter></defs><rect x='{pad}' y='{pad}' width='{}' height='{}' rx='{radius}' fill='black' fill-opacity='.32' filter='url(#s)'/></svg>",
         w - 2. * pad,
         h - 2. * pad
     )
 }
 fn shadow_pixmap(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixmap> {
+    let _span = bead_core::profile::Span::new("shadow_raster");
     let (w, h) = dimensions(rect, scale);
     type Shadows = Vec<((u32, u32, u32, u32, u32), std::sync::Arc<Pixmap>)>;
     static SHADOWS: std::sync::OnceLock<std::sync::Mutex<Shadows>> = std::sync::OnceLock::new();
@@ -1924,18 +1925,31 @@ fn shadow_pixmap(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixma
     // Bake a small template with enough room for radius + 3 sigma on either side.
     let cut = ((radius + 6. * blur) * scale).ceil() as u32;
     let side = cut * 2 + 2;
-    if cut == 0 || w < side || h < side {
+    // Per axis: a span of at least `side` px is corner, straight stretch, corner from the
+    // square template; a shorter span is rendered at its own size (the corners overlap), so a
+    // revealing panel's thin shadow costs one narrow Gaussian instead of a full-width one.
+    let axis = |n: u32| -> ([u32; 4], [u32; 4], u32) {
+        if cut > 0 && n >= side {
+            ([0, cut, side - cut, side], [0, cut, n - cut, n], side)
+        } else {
+            ([0, n, n, n], [0, n, n, n], n)
+        }
+    };
+    let (sx, xs, tw) = axis(w);
+    let (sy, ys, th) = axis(h);
+    if (tw, th) == (w, h) {
         return Ok(cache_osd(svg_pixmap(
             shadow_svg(rect.w, rect.h, radius, blur).as_bytes(),
             w,
             h,
         )?));
     }
-    // The Gaussian template depends on radius, blur and scale only. A revealing panel re-shapes its
-    // shadow every frame, so rendering the template again each time cost tens of milliseconds.
-    type Templates = Vec<((u32, u32, u32), std::sync::Arc<Pixmap>)>;
+    // The Gaussian template depends on radius, blur, scale and the short axis only. A revealing
+    // panel re-shapes its shadow every frame, so rendering it full size each time cost tens of
+    // milliseconds.
+    type Templates = Vec<((u32, u32, u32, u32, u32), std::sync::Arc<Pixmap>)>;
     static TEMPLATES: std::sync::Mutex<Templates> = std::sync::Mutex::new(Vec::new());
-    let template_key = (radius.to_bits(), blur.to_bits(), scale.to_bits());
+    let template_key = (radius.to_bits(), blur.to_bits(), scale.to_bits(), tw, th);
     let cached = TEMPLATES.lock().ok().and_then(|templates| {
         templates
             .iter()
@@ -1945,11 +1959,10 @@ fn shadow_pixmap(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixma
     let template = if let Some(template) = cached {
         template
     } else {
-        let logical_side = side as f32 / scale;
         let template = std::sync::Arc::new(svg_pixmap(
-            shadow_svg(logical_side, logical_side, radius, blur).as_bytes(),
-            side,
-            side,
+            shadow_svg(tw as f32 / scale, th as f32 / scale, radius, blur).as_bytes(),
+            tw,
+            th,
         )?);
         if let Ok(mut templates) = TEMPLATES.lock() {
             if templates.len() >= 6 {
@@ -1960,22 +1973,17 @@ fn shadow_pixmap(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixma
         template
     };
     let mut result = Pixmap::new(w, h).ok_or("shadow allocation")?;
-    let src = [0, cut, side - cut, side];
-    let xs = [0, cut, w - cut, w];
-    let ys = [0, cut, h - cut, h];
     for row in 0..3 {
         for col in 0..3 {
-            let tile = template
-                .clone_rect(
-                    tiny_skia::IntRect::from_xywh(
-                        src[col] as i32,
-                        src[row] as i32,
-                        src[col + 1] - src[col],
-                        src[row + 1] - src[row],
-                    )
-                    .ok_or("shadow tile")?,
-                )
-                .ok_or("shadow crop")?;
+            let Some(rect) = tiny_skia::IntRect::from_xywh(
+                sx[col] as i32,
+                sy[row] as i32,
+                sx[col + 1] - sx[col],
+                sy[row + 1] - sy[row],
+            ) else {
+                continue; // an empty tile on a short axis
+            };
+            let tile = template.clone_rect(rect).ok_or("shadow crop")?;
             // Separable nine-patch: corners stay at native resolution, edge tangents stretch.
             let tr = Transform::from_scale(
                 (xs[col + 1] - xs[col]) as f32 / tile.width() as f32,
@@ -3755,6 +3763,27 @@ mod tests {
             .max()
             .unwrap();
         assert!(max <= 2, "shadow channel difference {max}/255");
+    }
+
+    #[test]
+    fn thin_shadows_stretch_the_narrow_template_and_keep_the_gaussian_look() {
+        // A top-edge reveal of a short body: wide, but shorter than the square template, so only
+        // the x axis is a nine-patch (B0270: this was a full-width Gaussian per reveal frame).
+        let scale = 1.5;
+        for h in [62., 90., 150., 200.] {
+            let rect = Rect::new(0., 0., 360., h);
+            let (w, hp) = dimensions(rect, scale);
+            let exact = svg_pixmap(shadow_svg(rect.w, rect.h, 16., 10.).as_bytes(), w, hp).unwrap();
+            let fast = shadow_pixmap(rect, 16., 10., scale).unwrap();
+            let max = exact
+                .data()
+                .iter()
+                .zip(fast.data())
+                .map(|(a, b)| a.abs_diff(*b))
+                .max()
+                .unwrap();
+            assert!(max <= 2, "h={h}: shadow channel difference {max}/255");
+        }
     }
 
     fn solid_png(color: [u8; 4]) -> Vec<u8> {
