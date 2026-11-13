@@ -218,7 +218,7 @@ fn enqueue(queue: &mut VecDeque<Job>, mut job: Job) -> bool {
     counted && (replace || combined)
 }
 fn complete_pending(pending: &std::sync::atomic::AtomicUsize) {
-    let _ = pending.fetch_update(
+    let _ = pending.try_update(
         std::sync::atomic::Ordering::AcqRel,
         std::sync::atomic::Ordering::Acquire,
         |count| Some(count.saturating_sub(1)),

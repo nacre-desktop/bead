@@ -65,7 +65,7 @@ impl Cache {
     }
     /// Consume callbacks for dormant epochs. Empty model hints carry no state:
     /// mandatory resume polls their producers. Every payload/protocol event still
-    /// invalidates the source, so no data or acknowledgement can be lost.
+    /// retires the source, so stale state or a waiting acknowledgement cannot survive.
     pub fn handle_event(&mut self, overlay: bool, epoch: u64, event: &UiEvent) -> bool {
         if !self
             .0
