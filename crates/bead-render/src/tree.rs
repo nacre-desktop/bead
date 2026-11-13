@@ -520,6 +520,7 @@ pub struct TreeCache {
     edges: Vec<(u64, Option<EdgeTemplate>)>,
     /// The last frame derived for a reveal pose (frame key, progress bits, scale bits): an unchanged pose is not rebuilt.
     revealed_pose: Option<((u64, u32, u32), Arc<Frame>)>,
+    validated_frame: Weak<Frame>,
 }
 
 /// Exact content identity for worker-prepared or frozen CPU panel content.
@@ -528,7 +529,7 @@ pub struct TreeCache {
 struct SnapshotFingerprint {
     scale_bits: u32,
     resource_revision: u64,
-    metadata: Vec<u8>,
+    metadata: u64,
     assets: Vec<(PathBuf, Weak<[u8]>)>,
 }
 
@@ -551,62 +552,67 @@ fn cpu_content_scene(scene: &Scene) -> Scene {
 }
 
 impl SnapshotFingerprint {
+    fn content_hash(scene: &Scene, scale: f32) -> u64 {
+        let mut metadata = std::collections::hash_map::DefaultHasher::new();
+        scale.to_bits().hash(&mut metadata);
+        scene.width.to_bits().hash(&mut metadata);
+        for value in [
+            scene.bounds.x,
+            scene.bounds.y,
+            scene.bounds.w,
+            scene.bounds.h,
+        ] {
+            value.to_bits().hash(&mut metadata);
+        }
+        scene.font_files.len().hash(&mut metadata);
+        scene.font_files.hash(&mut metadata);
+        scene.layers.len().hash(&mut metadata);
+        for layer in &scene.layers {
+            layer.id.hash(&mut metadata);
+            layer.parent.hash(&mut metadata);
+            layer.own.start.hash(&mut metadata);
+            layer.own.end.hash(&mut metadata);
+            layer.subtree_end.hash(&mut metadata);
+            for value in [
+                layer.bounds.x,
+                layer.bounds.y,
+                layer.bounds.w,
+                layer.bounds.h,
+            ] {
+                value.to_bits().hash(&mut metadata);
+            }
+        }
+        scene.clips.len().hash(&mut metadata);
+        for (index, clip) in &scene.clips {
+            index.hash(&mut metadata);
+            for value in [clip.x, clip.y, clip.w, clip.h] {
+                value.to_bits().hash(&mut metadata);
+            }
+        }
+        scene.primitives.len().hash(&mut metadata);
+        let reveal_parts = scene.motion.as_ref().filter(|motion| motion.reveal);
+        for (index, primitive) in scene.primitives.iter().enumerate() {
+            let primitive = reveal_parts
+                .and_then(|motion| motion.parts.iter().rev().find(|(part, _)| *part == index))
+                .map_or(primitive, |(_, original)| original);
+            hash_primitive(primitive, false, &mut metadata);
+        }
+        metadata.finish()
+    }
+
     fn new(scene: &Scene, scale: f32) -> Result<Self> {
         if !scale.is_finite() || scale <= 0. {
             return Err("invalid layer scale".into());
         }
-        let content = cpu_content_scene(scene);
-        let layers = content
-            .layers
-            .iter()
-            .map(|layer| {
-                (
-                    &layer.id,
-                    &layer.parent,
-                    layer.own.start,
-                    layer.own.end,
-                    layer.subtree_end,
-                    [
-                        layer.bounds.x.to_bits(),
-                        layer.bounds.y.to_bits(),
-                        layer.bounds.w.to_bits(),
-                        layer.bounds.h.to_bits(),
-                    ],
-                )
-            })
-            .collect::<Vec<_>>();
-        let clips = content
-            .clips
-            .iter()
-            .map(|(index, clip)| {
-                (
-                    *index,
-                    [
-                        clip.x.to_bits(),
-                        clip.y.to_bits(),
-                        clip.w.to_bits(),
-                        clip.h.to_bits(),
-                    ],
-                )
-            })
-            .collect::<Vec<_>>();
-        let metadata = serde_json::to_vec(&(
-            scale.to_bits(),
-            content.width.to_bits(),
-            [
-                content.bounds.x.to_bits(),
-                content.bounds.y.to_bits(),
-                content.bounds.w.to_bits(),
-                content.bounds.h.to_bits(),
-            ],
-            &content.font_files,
-            layers,
-            clips,
-            &content.primitives,
-        ))?;
-        let assets = content
+        let metadata = Self::content_hash(scene, scale);
+        let reveal_art = scene
+            .motion
+            .as_ref()
+            .is_some_and(|motion| motion.reveal && motion.art.is_some());
+        let assets = scene
             .asset_data
             .iter()
+            .filter(|(path, _)| !reveal_art || !path.to_string_lossy().starts_with("@reveal-art-"))
             .map(|(path, bytes)| (path.clone(), Arc::downgrade(bytes)))
             .collect();
         Ok(Self {
@@ -621,17 +627,27 @@ impl SnapshotFingerprint {
         if self.scale_bits != scale.to_bits() {
             return Ok(false);
         }
-        let current = Self::new(scene, scale)?;
-        Ok(self.metadata == current.metadata
-            && self.assets.len() == current.assets.len()
-            && self.assets.iter().zip(&current.assets).all(
-                |((old_path, old_bytes), (path, bytes))| {
+        let reveal_art = scene
+            .motion
+            .as_ref()
+            .is_some_and(|motion| motion.reveal && motion.art.is_some());
+        let assets = scene
+            .asset_data
+            .iter()
+            .filter(|(path, _)| !reveal_art || !path.to_string_lossy().starts_with("@reveal-art-"));
+        Ok(self.metadata == Self::content_hash(scene, scale)
+            && self.assets.len() == assets.clone().count()
+            && self
+                .assets
+                .iter()
+                .zip(assets)
+                .all(|((old_path, old_bytes), (path, bytes))| {
                     old_path == path
-                        && (Weak::ptr_eq(old_bytes, bytes)
-                            || matches!((old_bytes.upgrade(), bytes.upgrade()),
-                                (Some(old), Some(current)) if old.as_ref() == current.as_ref()))
-                },
-            ))
+                        && (std::ptr::eq(old_bytes.as_ptr(), Arc::as_ptr(bytes))
+                            || old_bytes
+                                .upgrade()
+                                .is_some_and(|old| old.as_ref() == bytes.as_ref()))
+                }))
     }
 
     fn matches_snapshot(&self, scene: &Scene, scale: f32) -> Result<bool> {
@@ -1580,7 +1596,17 @@ impl TreeCache {
                     Some(revealed) => Arc::new(revealed),
                     None => frame.clone(),
                 };
-                validate_frame_rasters(&candidate.items)?;
+                if !self
+                    .validated_frame
+                    .upgrade()
+                    .is_some_and(|validated| Arc::ptr_eq(&validated, &candidate))
+                {
+                    // Image upload sizes can change while hydrating, so cache only immutable frames.
+                    validate_frame_rasters(&candidate.items)?;
+                    if candidate.items.iter().all(|item| item.image.is_none()) {
+                        self.validated_frame = Arc::downgrade(&candidate);
+                    }
+                }
                 candidate
             };
             // Validate before retiring the last good fallback. Worker-prepared
@@ -1617,19 +1643,19 @@ impl TreeCache {
             self.raster = CpuRenderer::default();
             self.font_files = scene.font_files.clone();
         }
-        let mut owners = vec![String::new(); scene.primitives.len()];
+        let mut owners: Vec<Option<&str>> = vec![None; scene.primitives.len()];
         for layer in &scene.layers {
             for index in layer.own.clone() {
                 let owner = owners
                     .get_mut(index)
                     .ok_or("invalid layer primitive range")?;
-                if !owner.is_empty() {
+                if owner.is_some() {
                     return Err("overlapping layer ownership".into());
                 }
-                *owner = layer.id.clone();
+                *owner = (!layer.id.is_empty()).then_some(layer.id.as_str());
             }
         }
-        let mut ordinals = BTreeMap::<(String, &'static str), usize>::new();
+        let mut ordinals = BTreeMap::<(&str, &'static str), usize>::new();
         let mut items = Vec::with_capacity(scene.primitives.len());
         let mut keys = Vec::with_capacity(scene.primitives.len());
         let mut asset_keys = BTreeMap::new();
@@ -1655,13 +1681,17 @@ impl TreeCache {
                 Primitive::Image { .. } => "image",
                 Primitive::Shadow { .. } => "shadow",
             };
-            let owner = if owners[index].is_empty() {
-                format!("primitive-{index}")
+            let mut fallback_ordinal = 0;
+            let ordinal = if let Some(owner) = owners[index] {
+                ordinals.entry((owner, kind)).or_default()
             } else {
-                owners[index].clone()
+                &mut fallback_ordinal
             };
-            let ordinal = ordinals.entry((owner.clone(), kind)).or_default();
-            let id = format!("{owner}/{kind}/{ordinal}");
+            let id = if let Some(owner) = owners[index] {
+                format!("{owner}/{kind}/{ordinal}")
+            } else {
+                format!("primitive-{index}/{kind}/{ordinal}")
+            };
             *ordinal += 1;
             let key = signature(scene, primitive, scale, &mut asset_keys);
             keys.push(key);
@@ -2018,6 +2048,7 @@ impl TreeCache {
         let mut layers = Vec::with_capacity(scene.layers.len());
         for layer in &scene.layers {
             let mut key = std::collections::hash_map::DefaultHasher::new();
+            layer.id.hash(&mut key);
             let mut own = Vec::new();
             for index in layer.own.clone() {
                 let item = items.get(index).ok_or("retained node range invalid")?;
@@ -6454,6 +6485,47 @@ mod tests {
     }
 
     #[test]
+    fn retained_nodes_keep_their_layer_identity_when_layers_reorder_or_rename() {
+        let mut before = scene();
+        before.layers = vec![
+            crate::SceneLayer {
+                id: "first".into(),
+                parent: None,
+                own: 0..1,
+                subtree_end: 2,
+                bounds: Rect::new(2., 2., 8., 8.),
+            },
+            crate::SceneLayer {
+                id: "second".into(),
+                parent: None,
+                own: 1..2,
+                subtree_end: 2,
+                bounds: Rect::new(2., 12., 8., 3.),
+            },
+        ];
+        let mut cache = TreeCache::default();
+        cache.prepare(&before, 1.).unwrap();
+        let updates = cache.node_updates;
+
+        let mut after = before.clone();
+        after.layers[0].id = "renamed".into();
+        after.layers.swap(0, 1);
+        cache.prepare(&after, 1.).unwrap();
+        let layers = &cache.frame.as_ref().unwrap().layers;
+        assert_eq!(layers[0].layer.id, "second");
+        assert_eq!(layers[1].layer.id, "renamed");
+        assert_eq!(cache.node_updates, updates + 1);
+
+        // Empty layer IDs historically share the unowned-primitive fallback.
+        after.layers[0].id.clear();
+        cache.prepare(&after, 1.).unwrap();
+        assert_eq!(
+            cache.frame.as_ref().unwrap().items[1].id,
+            "primitive-1/fill/0"
+        );
+    }
+
+    #[test]
     fn a_moved_paint_slot_does_not_compare_unusable_pixels() {
         let before = scene();
         let mut after = before.clone();
@@ -7411,6 +7483,49 @@ mod tests {
         assert_eq!(snapshot.flattened.as_ref().unwrap().1, 1.5);
         assert_eq!(snapshot.flattened.as_ref().unwrap().0, scaled_key);
         assert_snapshot_pixels_match_reference(&mut snapshot, &changed_clip, 1.5);
+    }
+
+    #[test]
+    fn snapshot_fingerprint_uses_the_last_duplicate_reveal_part_and_detects_content_edits() {
+        let mut pose = scene();
+        let first = Primitive::Rounded {
+            rect: Rect::new(1., 1., 2., 2.),
+            radius: 0.,
+            fill: [1, 2, 3, 255],
+            border: None,
+        };
+        let last = Primitive::Rounded {
+            rect: Rect::new(1., 1., 3., 2.),
+            radius: 0.,
+            fill: [4, 5, 6, 255],
+            border: None,
+        };
+        pose.motion = Some(crate::Motion {
+            id: "fingerprint-reveal".into(),
+            open: false,
+            duration: 0.2,
+            return_duration: None,
+            return_curve: None,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Bottom,
+            slide_distance: None,
+            fade: true,
+            reveal: true,
+            progress: 0.5,
+            parts: vec![(1, first), (1, last.clone())],
+            art: None,
+        });
+        let fingerprint = SnapshotFingerprint::new(&pose, 1.).unwrap();
+
+        let mut expected = scene();
+        expected.primitives[1] = last;
+        assert!(fingerprint.matches_content(&expected, 1.).unwrap());
+
+        if let Primitive::Rounded { fill, .. } = &mut expected.primitives[1] {
+            *fill = [10, 11, 12, 255];
+        }
+        assert!(!fingerprint.matches_content(&expected, 1.).unwrap());
     }
 
     #[test]

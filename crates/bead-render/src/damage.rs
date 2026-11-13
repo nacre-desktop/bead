@@ -26,6 +26,7 @@ impl Record {
 pub struct FrameDamage {
     previous: Vec<Record>,
     dimensions: Option<(u32, u32, u32)>,
+    alignment: Vec<u16>,
 }
 fn intersect(a: Damage, b: Damage) -> Damage {
     let x = a.x.max(b.x);
@@ -91,7 +92,11 @@ fn add(regions: &mut Vec<Damage>, mut next: Damage) {
 /// Pair the items that differ between two frames, in order. Identical records are matched by a
 /// bounded longest-common-subsequence over the differing middle; each unmatched run between two
 /// matches then pairs by position, with the surplus an insertion or a removal.
-fn align(old: &[Record], new: &[Record]) -> Vec<(Option<usize>, Option<usize>)> {
+fn align(
+    old: &[Record],
+    new: &[Record],
+    length: &mut Vec<u16>,
+) -> Vec<(Option<usize>, Option<usize>)> {
     const CELLS: usize = 1 << 16;
     let common = old.len().min(new.len());
     let prefix = (0..common)
@@ -105,7 +110,8 @@ fn align(old: &[Record], new: &[Record]) -> Vec<(Option<usize>, Option<usize>)> 
     let mut anchors = Vec::new();
     if rows > 0 && columns > 0 && rows * columns <= CELLS {
         let width = columns + 1;
-        let mut length = vec![0u16; (rows + 1) * width];
+        length.resize((rows + 1) * width, 0);
+        length.fill(0);
         for i in (0..rows).rev() {
             for j in (0..columns).rev() {
                 length[i * width + j] = if old[prefix + i].same_pixels(&new[prefix + j]) {
@@ -203,7 +209,7 @@ impl FrameDamage {
         }
         // Damage is a comparison of ordered pixels, not UI state IDs. Identical items stay clean even
         // when an insert or removal moved their paint slot (grid <-> list keeps the search bar).
-        for (old, new) in align(&self.previous, &current) {
+        for (old, new) in align(&self.previous, &current, &mut self.alignment) {
             let (old, new) = (
                 old.map(|i| &self.previous[i]),
                 new.map(|i| (&frame.items[i], &current[i])),
