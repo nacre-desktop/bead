@@ -5,6 +5,7 @@ use crate::{
     ui::Session,
     wayland::{SceneSource, UiEvent},
 };
+use bead_backends::{Action as CompositorAction, Backend as CompositorBackend, Id as CompositorId};
 use bead_core::Value;
 use bead_services::{
     Action as DesktopAction, ClockSecondsLease, Config as DesktopConfig, Desktop, Snapshot,
@@ -115,6 +116,8 @@ pub struct FolderServicesRuntime {
     _bluetooth_subscription: Option<bead_services::bluetooth::Subscription>,
     network_devices: Option<Arc<NetworkDevices>>,
     _network_subscription: Option<bead_services::network::Subscription>,
+    compositor: Option<Arc<dyn CompositorBackend>>,
+    _compositor_subscription: Option<bead_backends::Subscription>,
     commands: Arc<Mutex<CommandState>>,
     signals: Arc<RuntimeSignals>,
     stop: Arc<(Mutex<bool>, Condvar)>,
@@ -127,7 +130,13 @@ impl FolderServicesRuntime {
         if services.desktop.is_empty() && services.commands.is_empty() {
             return None;
         }
-        let desktop = if services.desktop.is_empty() {
+        let desktop_enabled = services.desktop.iter().any(|service| {
+            matches!(
+                service.as_str(),
+                "audio" | "battery" | "network" | "bluetooth" | "tray" | "session" | "clock"
+            )
+        });
+        let desktop = if !desktop_enabled {
             None
         } else {
             Some(Desktop::start_config(desktop_config(&services.desktop)))
@@ -151,6 +160,11 @@ impl FolderServicesRuntime {
             .desktop
             .contains("network_devices")
             .then(NetworkDevices::start_system)
+            .flatten();
+        let compositor = services
+            .desktop
+            .contains("workspaces")
+            .then(bead_backends::detect)
             .flatten();
         let clock_lease = if services.desktop.contains("clock") {
             desktop
@@ -187,6 +201,14 @@ impl FolderServicesRuntime {
         let network_subscription = network_devices
             .as_ref()
             .map(|service| service.subscribe(notifier(&signals)));
+        let compositor_subscription = compositor.as_ref().map(|backend| {
+            let signals = Arc::downgrade(&signals);
+            backend.subscribe(Box::new(move |_| {
+                if let Some(signals) = signals.upgrade() {
+                    signals.notify();
+                }
+            }))
+        });
         let subscription = desktop.as_ref().map(|desktop| {
             let signals = Arc::downgrade(&signals);
             desktop.subscribe(move |_| {
@@ -287,6 +309,8 @@ impl FolderServicesRuntime {
             _bluetooth_subscription: bluetooth_subscription,
             network_devices,
             _network_subscription: network_subscription,
+            compositor,
+            _compositor_subscription: compositor_subscription,
             commands,
             signals,
             stop,
@@ -411,6 +435,50 @@ pub fn desktop_values(snapshot: &Snapshot) -> BTreeMap<String, Value> {
     put("tray", Value::list(snapshot.tray.iter().map(|item| serde_json::json!({"id": item.id, "title": item.title, "icon_name": item.icon_name, "attention": item.attention, "has_menu": item.has_menu})).collect()));
     put("session.locked", Value::Bool(snapshot.session.locked));
     values
+}
+fn compositor_values(snapshot: Option<&bead_backends::Snapshot>) -> BTreeMap<String, Value> {
+    BTreeMap::from([
+        (
+            "desktop.workspaces".into(),
+            Value::list(snapshot.map_or_else(Vec::new, |snapshot| {
+                snapshot
+                    .workspaces
+                    .iter()
+                    .map(|workspace| {
+                        serde_json::json!({
+                            "id": workspace.id.0,
+                            "index": workspace.index,
+                            "name": workspace.name,
+                            "output": workspace.output.as_ref().map_or_else(String::new, |id| id.0.clone()),
+                            "active": workspace.active,
+                            "focused": workspace.focused,
+                            "urgent": workspace.urgent,
+                        })
+                    })
+                    .collect()
+            })),
+        ),
+        (
+            "desktop.window.title".into(),
+            Value::Text(
+                snapshot
+                    .and_then(bead_backends::Snapshot::focused_window)
+                    .map_or_else(String::new, |window| window.title.clone()),
+            ),
+        ),
+        (
+            "desktop.window.app_id".into(),
+            Value::Text(
+                snapshot
+                    .and_then(bead_backends::Snapshot::focused_window)
+                    .map_or_else(String::new, |window| window.app_id.clone()),
+            ),
+        ),
+        (
+            "desktop.compositor".into(),
+            Value::Text(snapshot.map_or_else(String::new, |snapshot| snapshot.backend.clone())),
+        ),
+    ])
 }
 fn monotonic_ms() -> u64 {
     bead_services::media::monotonic_millis()
@@ -621,7 +689,7 @@ fn declared_desktop_values(
     snapshot: &Snapshot,
     declared: &BTreeSet<String>,
 ) -> BTreeMap<String, Value> {
-    desktop_values(snapshot)
+    let mut values = desktop_values(snapshot)
         .into_iter()
         .filter(|(key, _)| {
             key.strip_prefix("desktop.")
@@ -634,7 +702,11 @@ fn declared_desktop_values(
                 })
                 .is_some_and(|service| declared.contains(service))
         })
-        .collect()
+        .collect::<BTreeMap<_, _>>();
+    if declared.contains("workspaces") {
+        values.extend(compositor_values(None));
+    }
+    values
 }
 
 #[derive(Clone, Debug)]
@@ -644,7 +716,17 @@ enum DesktopRequest {
     Power(PowerRequest),
     Bluetooth(BluetoothRequest),
     Network(NetworkRequest),
+    Compositor(CompositorAction),
     Command(String),
+}
+fn send_compositor_action(
+    backend: Option<&dyn CompositorBackend>,
+    action: CompositorAction,
+) -> Result<(), String> {
+    let Some(backend) = backend else {
+        return Err("no compositor detected (niri or Hyprland)".into());
+    };
+    backend.action(action).map_err(|error| error.to_string())
 }
 #[derive(Clone, Debug)]
 enum PowerRequest {
@@ -708,12 +790,50 @@ fn route_folder_action(
         | "desktop.network_devices.connect"
         | "desktop.network_devices.disconnect"
         | "desktop.network_devices.forget" => "network_devices",
+        "desktop.workspace.focus" | "desktop.window.focus" => "workspaces",
         _ => return Err(format!("unknown desktop action '{name}'")),
     };
     if !declared.contains(need) {
         return Err(format!(
             "desktop action '{name}' requires undeclared service '{need}'"
         ));
+    }
+    if name == "desktop.workspace.focus" {
+        let action = match argument {
+            Value::Number(index)
+                if index.is_finite()
+                    && index.fract() == 0.
+                    && *index >= i64::MIN as f64
+                    && *index < i64::MAX as f64 =>
+            {
+                CompositorAction::SwitchWorkspaceIndex {
+                    index: *index as i64,
+                }
+            }
+            Value::Text(id) if !id.is_empty() => CompositorAction::SwitchWorkspace {
+                workspace: CompositorId(id.clone()),
+            },
+            Value::Number(_) => {
+                return Err(
+                    "desktop.workspace.focus expects an integer index or workspace id".into(),
+                );
+            }
+            _ => return Err("desktop.workspace.focus expects a number index or text id".into()),
+        };
+        return Ok(Some(DesktopRequest::Compositor(action)));
+    }
+    if name == "desktop.window.focus" {
+        let Value::Text(id) = argument else {
+            return Err("desktop.window.focus expects a window id".into());
+        };
+        if id.is_empty() {
+            return Err("desktop.window.focus expects a non-empty window id".into());
+        }
+        return Ok(Some(DesktopRequest::Compositor(
+            CompositorAction::FocusWindow {
+                window: CompositorId(id.clone()),
+            },
+        )));
     }
     if name.starts_with("desktop.media.") {
         let action = match name {
@@ -1022,6 +1142,13 @@ impl FolderView {
                 .map(str::to_owned),
             );
         }
+        if services.desktop.contains("workspaces") {
+            host_actions.extend(
+                ["desktop.workspace.focus", "desktop.window.focus"]
+                    .into_iter()
+                    .map(str::to_owned),
+            );
+        }
         if services.desktop.contains("power") {
             host_actions.extend(
                 ["desktop.power.set", "desktop.power.cycle"]
@@ -1131,6 +1258,13 @@ impl FolderView {
                     .as_ref()
                     .map_or_else(NetworkSnapshot::default, |service| service.snapshot());
                 changes.extend(network_device_values(&snapshot));
+            }
+            if runtime.services.desktop.contains("workspaces") {
+                let snapshot = runtime
+                    .compositor
+                    .as_ref()
+                    .map(|backend| backend.snapshot());
+                changes.extend(compositor_values(snapshot.as_deref()));
             }
             for (name, (stdout, ok, error)) in runtime.command_values() {
                 changes.insert(format!("commands.{name}.stdout"), Value::Text(stdout));
@@ -1386,6 +1520,16 @@ impl SceneSource for FolderView {
                         }
                         None
                     }
+                    Ok(Some(DesktopRequest::Compositor(action))) => {
+                        let backend = self
+                            .runtime
+                            .as_ref()
+                            .and_then(|runtime| runtime.compositor.as_deref());
+                        if let Err(error) = send_compositor_action(backend, action) {
+                            eprintln!("desktop action {name}: {error}");
+                        }
+                        None
+                    }
                     Ok(Some(DesktopRequest::Command(command))) => {
                         if let Some(runtime) = &self.runtime {
                             runtime.run_command(&command);
@@ -1501,9 +1645,9 @@ mod tests {
             "return {stores={},actions={},computed={}}",
         )
         .unwrap();
-        std::fs::write(root.join("view/main.luau"), "local ui=require('bead.ui');return ui.Column{id='root',width='fill',height='fill',ui.Text{id='clock',text=ui.bind('desktop.clock')},ui.Text{id='stdout',text=ui.bind('commands.kernel.stdout')}}").unwrap();
+        std::fs::write(root.join("view/main.luau"), "local ui=require('bead.ui');return ui.Column{id='root',width='fill',height='fill',ui.Text{id='clock',text=ui.bind('desktop.clock')},ui.Text{id='stdout',text=ui.bind('commands.kernel.stdout')},ui.Button{id='focus-workspace',text='Workspace',on_activate=ui.action('desktop.workspace.focus',2)},ui.Button{id='focus-window',text='Window',on_activate=ui.action('desktop.window.focus','window:opaque')}}").unwrap();
         let services = FolderServices {
-            desktop: BTreeSet::from(["clock".into()]),
+            desktop: BTreeSet::from(["clock".into(), "workspaces".into()]),
             commands: BTreeMap::from([(
                 "kernel".into(),
                 CommandSpec {
@@ -1525,6 +1669,10 @@ mod tests {
         let scene = view.check_render(UiEvent::Reload).unwrap();
         assert!(scene.primitives.iter().any(|primitive| matches!(primitive, crate::render::Primitive::Text { text, .. } if text.is_empty())));
         assert!(view.session.has_store("desktop.clock"));
+        assert!(view.session.has_store("desktop.workspaces"));
+        assert!(view.session.has_store("desktop.window.title"));
+        assert!(view.session.has_store("desktop.window.app_id"));
+        assert!(view.session.has_store("desktop.compositor"));
         assert!(view.session.has_store("commands.kernel.stdout"));
 
         std::fs::write(
@@ -2180,6 +2328,149 @@ mod tests {
                 .keys()
                 .any(|key| key.starts_with("desktop.network.")),
             "network_devices does not publish the Desktop network summary"
+        );
+    }
+
+    #[test]
+    fn compositor_projection_and_actions_are_opt_in_and_typed() {
+        let empty = compositor_values(None);
+        assert!(matches!(&empty["desktop.workspaces"], Value::List(items) if items.is_empty()));
+        assert_eq!(empty["desktop.window.title"], Value::Text(String::new()));
+        assert_eq!(empty["desktop.window.app_id"], Value::Text(String::new()));
+        assert_eq!(empty["desktop.compositor"], Value::Text(String::new()));
+
+        let snapshot = bead_backends::Snapshot {
+            backend: "niri".into(),
+            workspaces: vec![bead_backends::Workspace {
+                id: CompositorId("workspace:opaque".into()),
+                name: "main".into(),
+                index: 2,
+                output: Some(CompositorId("output:opaque".into())),
+                active: true,
+                focused: true,
+                urgent: false,
+                fixed_slot: false,
+                visiting: false,
+            }],
+            windows: vec![bead_backends::Window {
+                id: CompositorId("window:opaque".into()),
+                title: "Editor".into(),
+                app_id: "org.example.Editor".into(),
+                workspace: None,
+                output: None,
+                focused: true,
+                floating: false,
+                fullscreen: None,
+                urgent: false,
+            }],
+            ..Default::default()
+        };
+        let values = compositor_values(Some(&snapshot));
+        assert!(matches!(&values["desktop.workspaces"], Value::List(items)
+            if items[0]["id"] == "workspace:opaque" && items[0]["index"] == 2
+                && items[0]["name"] == "main" && items[0]["output"] == "output:opaque"
+                && items[0]["active"] == true && items[0]["focused"] == true
+                && items[0]["urgent"] == false));
+        assert_eq!(values["desktop.window.title"], Value::Text("Editor".into()));
+        assert_eq!(
+            values["desktop.window.app_id"],
+            Value::Text("org.example.Editor".into())
+        );
+        assert_eq!(values["desktop.compositor"], Value::Text("niri".into()));
+
+        let declared = BTreeSet::from(["workspaces".to_owned()]);
+        let index_action = route_folder_action(
+            "desktop.workspace.focus",
+            &Value::Number(2.),
+            &declared,
+            None,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(matches!(
+            index_action,
+            DesktopRequest::Compositor(CompositorAction::SwitchWorkspaceIndex { index: 2 })
+        ));
+        let id_action = route_folder_action(
+            "desktop.workspace.focus",
+            &Value::Text("workspace:opaque".into()),
+            &declared,
+            None,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(matches!(
+            id_action,
+            DesktopRequest::Compositor(CompositorAction::SwitchWorkspace { workspace })
+                if workspace.0 == "workspace:opaque"
+        ));
+        let window_action = route_folder_action(
+            "desktop.window.focus",
+            &Value::Text("window:opaque".into()),
+            &declared,
+            None,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(matches!(
+            window_action,
+            DesktopRequest::Compositor(CompositorAction::FocusWindow { window })
+                if window.0 == "window:opaque"
+        ));
+        assert!(
+            route_folder_action(
+                "desktop.workspace.focus",
+                &Value::Number(1.5),
+                &declared,
+                None
+            )
+            .is_err()
+        );
+        assert!(
+            route_folder_action("desktop.window.focus", &Value::Bool(true), &declared, None)
+                .is_err()
+        );
+        assert!(
+            route_folder_action(
+                "desktop.workspace.focus",
+                &Value::Number(1.),
+                &BTreeSet::new(),
+                None
+            )
+            .unwrap_err()
+            .contains("undeclared service 'workspaces'")
+        );
+
+        struct FakeBackend {
+            actions: Mutex<Vec<CompositorAction>>,
+        }
+        impl CompositorBackend for FakeBackend {
+            fn snapshot(&self) -> Arc<bead_backends::Snapshot> {
+                Arc::new(bead_backends::Snapshot::default())
+            }
+            fn action(&self, action: CompositorAction) -> Result<(), bead_backends::Error> {
+                self.actions.lock().unwrap().push(action);
+                Ok(())
+            }
+            fn subscribe(
+                &self,
+                _callback: Box<dyn Fn(bead_backends::Event) + Send + Sync>,
+            ) -> bead_backends::Subscription {
+                bead_backends::Subscription::new(|| {})
+            }
+        }
+        let fake = FakeBackend {
+            actions: Mutex::new(Vec::new()),
+        };
+        let action = CompositorAction::FocusWindow {
+            window: CompositorId("window:opaque".into()),
+        };
+        send_compositor_action(Some(&fake), action.clone()).unwrap();
+        assert_eq!(fake.actions.lock().unwrap().as_slice(), &[action]);
+        assert!(
+            send_compositor_action(None, CompositorAction::SwitchWorkspaceIndex { index: 1 })
+                .unwrap_err()
+                .contains("no compositor detected")
         );
     }
 

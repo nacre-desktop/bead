@@ -149,6 +149,7 @@ impl App {
             "power",
             "bluetooth_devices",
             "network_devices",
+            "workspaces",
         ];
         if let Some(services) = &manifest.services {
             for name in &services.desktop {
