@@ -176,3 +176,82 @@ Open: 50 ms / 8 MiB data ingestion, total feature memory, real-GPU timings and a
 font/label workload and priority caps; precise persistence and accessibility contracts;
 callback/action representation, controlled-selection semantics and consumer design approval.
 Spec/index only; no production module/API. Spikes/evidence are ignored; delete seven days after review.
+
+## Phase 2b: retained GPU graph path
+
+`bead_render::graph_gpu::GraphGpu` (feature `wgpu`) keeps the graph in three GPU storage
+buffers (positions 8 B/node, node attributes 12 B/node: radius, RGBA8, hidden/highlight flags,
+edges 12 B/edge: two indices, RGBA8) plus one 96-byte uniform (camera transform, viewport,
+line width, LOD/dim flags and alphas, hover/selected index, hover/selected/highlight colours).
+A frame writes that uniform and records two instanced draws of six vertices each: edges as
+line quads (vertex shader reads both endpoints from the position buffer, fragment coverage
+from the distance to the segment, 1 px anti-aliasing both across and at the butt ends) and
+nodes as quads with an SDF disc (fill over an optional hover/selected ring, radius clamped to
+1–64 device px like the CPU painter). Hidden nodes and their edges, far-LOD decimation
+(every fourth unfocused edge at `far_edge_alpha`) and highlight dimming are decided in the
+vertex shader from the retained flags, so no CPU culling, tessellation or re-upload happens on
+pan, zoom, hover, selection or LOD changes; viewport clipping is the GPU's. Output is
+premultiplied source-over into the caller's render pass, scissored to the canvas rectangle.
+Labels are not drawn: `to_screen(world)` gives the logical-px position of a node under the
+last frame (the same affine the shader uses) for the existing text path and its priority cap.
+
+Backend: wgpu, because it is the only Bead GPU path that hands out a device for custom
+pipelines; native-gl exposes femtovg's canvas API only, so the same buffers and shader logic
+can follow there once a raw GL binding is allowed. The CPU painter from phase 2a stays the
+fallback.
+
+Updates: `upload(device, positions, nodes, edges)` per data revision (reallocates, validates
+counts and edge indices); `set_positions(queue, first, positions)` per layout snapshot
+(16,000 B for 2k nodes, or a range for a drag); `set_nodes(queue, first, nodes)` per
+mask/style change (24,000 B); `frame(queue, Frame)` per frame (96 B); `draw(&mut pass)`.
+Damage: camera changes repaint the canvas rectangle; hover/selection are a uniform write and
+the same repaint, which the numbers below show is far below one 120 Hz frame.
+
+Bench (`cargo test -p bead-render --features wgpu --release graph_gpu -- --ignored --nocapture`):
+the same seeded 2k/10k graph, logical viewport 1280×800 at scale 1 and 2.25, 200 frames per
+case after 10 warm-ups, each frame waited to completion; cells are median/p95 ms. `cpu` is
+uniform write + draw recording + submit, `done` is submit to completion, `gpu` is the pass
+from its timestamp queries. Cases: full repaint, pan (4,2) per frame, zoom ×1.01 alternating,
+hover toggling one node, and far-pan (zoom 0.4 below `lod_zoom`, a quarter of the edges).
+Upload of all buffers 0.092 ms and a full position snapshot 0.149 ms on the GTX (0.207 / 0.591 ms
+on llvmpipe). GPU timestamps were available on both adapters.
+
+| Host / adapter | Resolution | Full | Pan | Zoom | Hover | Far-pan |
+|---|---|---:|---:|---:|---:|---:|
+| oyster llvmpipe (LLVM 20.1.2, Mesa 25.2.8, 8 CPUs, software, not representative) cpu | 1280x800 | 0.042/0.061 | 0.038/0.052 | 0.041/0.062 | 0.041/0.060 | 0.033/0.049 |
+| same, done | 1280x800 | 57.05/70.53 | 52.95/68.18 | 57.43/69.96 | 57.16/69.71 | 13.67/16.54 |
+| same, cpu | 2880x1800 | 0.065/0.073 | 0.065/0.075 | 0.066/0.074 | 0.065/0.073 | 0.050/0.064 |
+| same, done | 2880x1800 | 135.23/163.84 | 124.69/160.84 | 134.59/162.73 | 137.34/164.13 | 19.66/21.47 |
+| GTX 1650 SUPER (NVIDIA 595.91.07, Vulkan, containerised) cpu | 1280x800 | 0.050/0.059 | 0.051/0.061 | 0.051/0.062 | 0.052/0.062 | 0.050/0.059 |
+| same, done | 1280x800 | 1.087/1.105 | 0.937/1.074 | 0.973/0.985 | 0.971/0.983 | 0.205/0.214 |
+| same, gpu | 1280x800 | 0.985/0.990 | 0.829/0.957 | 0.861/0.866 | 0.860/0.865 | 0.100/0.102 |
+| same, cpu | 2880x1800 | 0.053/0.069 | 0.053/0.062 | 0.052/0.066 | 0.050/0.063 | 0.050/0.059 |
+| same, done | 2880x1800 | 2.846/2.869 | 2.628/2.850 | 2.856/2.874 | 2.850/2.871 | 0.409/0.432 |
+| same, gpu | 2880x1800 | 2.718/2.729 | 2.486/2.714 | 2.720/2.734 | 2.720/2.735 | 0.299/0.301 |
+
+The CPU side is 0.04–0.07 ms per frame in every case, so the frame cost is fragment work
+only (about 10k line quads of 1.5 px half-width plus 2k discs). On a software rasterizer that
+work is the whole budget; on the GTX 1650 SUPER every case completes in 0.2–1.1 ms at
+1280×800 and 0.4–2.9 ms at 2880×1800 (p95), under the 8.33 ms frame with headroom for
+labels and compositing, and pan/zoom/hover cost the same as a full repaint, as designed.
+Phase 1b's LOD-vector anomaly (12–21 ms at 1280×800, faster at 2880×1800) is specific to
+Vello's tile pipeline for its LOD scene and is not touched by this path: here the far-LOD case
+is 4–7× cheaper than the full case at both sizes, proportional to fragments, with the same
+CPU cost.
+
+Memory for 2k/10k: GPU 160,096 B (0.153 MiB, `gpu_bytes()`); CPU-side retained state is the
+handles and the last `Frame` (about 150 B); uploads stage a transient byte vector of the
+same size as the buffer written. Against the 1 MiB proposal this leaves about 0.85 MiB for
+layout, indexes and labels. No raster cache is involved.
+
+Integration contract for phase 2a (`Primitive::Graph { rect, geometry, camera, style, hover, selected }`):
+the GPU renderer keeps one `GraphGpu` per canvas resource; when `geometry.revision` (or the
+`Arc` identity) changes it calls `upload` with `nodes[i] = Node { radius: radii[i], color:
+style.node, flags: HIDDEN/HIGHLIGHTED from the masks }` and `edges` from the index pairs with
+`style.edge`; a layout snapshot with unchanged topology calls `set_positions` only; a mask or
+style change calls `set_nodes`. Per frame it calls `frame` with `rect` offset by the scene
+offset, the output scale and size, `camera.center`/`camera.zoom`, `far = camera.zoom <
+style.lod_zoom`, `any_highlighted = geometry.highlighted.iter().any(|h| *h)`, the style
+alphas and colours and `hover`/`selected`, then `draw` in the pass that follows the retained
+layer blit. The CPU bake must skip `Primitive::Graph` when this path draws it, and the layer
+content key must not include the camera. Text labels use `to_screen` per labelled node.
