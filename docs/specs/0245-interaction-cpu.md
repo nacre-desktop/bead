@@ -154,6 +154,9 @@ measure CPU **and** PPT, verify smooth transitions, and retain the steady-idle l
 
 Status: framework checks passed; host integration and desktop acceptance pending.
 
+The unit is rebased onto phase 2a on main (`9b065d1a`); the release measurements
+below retain their original baseline and candidate revision identifiers.
+
 The teardown is in the framework: `select_panel` releases the previous named
 worker when selecting another view, bypassing the ordinary 120-second same-view
 keepalive. Overlays release their worker after closing. The host factory then
@@ -243,10 +246,10 @@ and rejected resume. The small actor fixture declares 16 KiB of source ownership
 its admission charge is 2,117,910 bytes against a 2,118,934-byte test budget.
 This is a conservative admission proof, distinct from the 300-row heap measurement.
 Warnings-denied Clippy caught a deprecated atomic spelling, corrected to
-`try_update` before the final gate. D2/CPU/CI4 passed the complete
-`.github/workflows/ci.yml` replica on code revision `e1636fbf`, including formatting,
+`try_update` before the final gate. D2/CPU/CI5 passed the complete
+`.github/workflows/ci.yml` replica on rebased revision `ba11a057`, including formatting,
 boundary/negative controls, workspace Clippy/tests, all renderer feature checks,
-every example app and minimal-host proof, private service/tray/clock proofs, and
+every example app and minimal-host proof, private service/network/tray/clock proofs, and
 all per-manifest dependency/license checks. Source checksums matched before and
 after the run. The final follow-up changes documentation only. Cargo-deny's
 existing locked `async-executor 1.14.0` yanked-version warning is non-fatal.
