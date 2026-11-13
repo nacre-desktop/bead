@@ -16,7 +16,7 @@ Two design-review asks from the Nacre bar: status icons drawn in a palette colou
 
 `@icon:NAME` paths are host slots. `bead check` no longer tries to read them from the bundle (the materialized path did, failing with the view file's name). The folder host (`FolderView`, so `bead check` and `bead run`) now fills a slot with `NAME.svg` (preferred) or `NAME.png` found under `icons/hicolor` or `pixmaps` of `XDG_DATA_HOME` and `XDG_DATA_DIRS`, memoised per name; there is no `index.theme` inheritance or size matching yet. A renderer that reaches an unfilled slot reports `icon "NAME": not supplied by the host or found in an icon theme` instead of a bare "No such file".
 
-Open issue (pre-existing, not changed here): under `bead run` with the CPU renderer, a folder app with any `ui.Image` on a `[layer]` surface shows "Reload failed" (`UI_ERROR CPU worker preparation pending`). `FolderView` does not implement `SceneSource::prepare_cpu`, so the layer transaction's deferred image preparation hits the default error. A plain untinted `path=` image reproduces it; `[window]` surfaces go through the worker and render.
+Fixed later by B0268 (`85086edf`): under `bead run`, a `[layer]` folder app's image failed with `UI_ERROR CPU worker preparation pending` because the CLI passed a plain `FolderView` instead of wrapping the bar's view in `bead_wayland::worker::Source`, as windows, panels and Nacre's bars do.
 
 ## `kit.Badge`
 
