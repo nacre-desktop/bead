@@ -1,16 +1,19 @@
 # `bead.kit`
 
-`bead.kit` is the embedded Luau module of reusable components. It exposes `kit.tokens`, `kit.motion` (the `ui.motion.duration` tokens plus the kit's `color`, `state` and `text` durations) and component constructors; property details can evolve with the source. The list below names the current component surface, with its primary role and key inputs. All components use caller-provided IDs and content. Consult [COMPONENTS.md](../COMPONENTS.md) for kit/theme context; this page is the API name index and avoids duplicating that overview.
+`bead.kit` is the embedded Luau module of reusable components. It exposes `kit.tokens`, `kit.metrics` (read-only review radii `panel` 24, `tile` 18, `row` 12, `chip` 18 and text sizes `caption` 12, `label` 13, `body` 14, `title` 16, in logical px), `kit.motion` (the `ui.motion.duration` tokens plus the kit's `color`, `state` and `text` durations) and component constructors; property details can evolve with the source. The list below names the current component surface, with its primary role and key inputs. All components use caller-provided IDs and content. Consult [COMPONENTS.md](../COMPONENTS.md) for kit/theme context; this page is the API name index and avoids duplicating that overview.
 
 - `Button`, `IconButton`, `StatusIcon`, `Switch`: controls; `text`, `checked`, `on_activate`, dimensions, colors.
 - `Fill`: gradient fill primitive; `from`, `to`, `width`, `height`.
 - `SliderValue`, `Slider`: numeric range control; `value`, `min`, `max`, `step`, `on_change`.
-- `Tile`, `ToggleTile`, `LinkTile`, `ButtonTile`, `SliderTile`: standard tiles; `label`, `detail`, `icon`, `on`, `value` (`SliderTile`), action props.
+- `Tile`, `ToggleTile`, `LinkTile`, `ButtonTile`, `SliderTile`: standard tiles; `label`, `detail`, `icon`, `on`, `value` (`SliderTile`), action props; `SliderTile` also takes an end slot, a 28 px round icon button: `end_icon`, `on_end`, `end_label`, `end_color`.
 - `TileGrid`: rows of tiles; `tiles` (`{size, build}`), `sizes` (per-row count and height for each size), `width`, `gap`.
 - `ReorderList`: drag-to-reorder rows; `items` (`{id, label, build}`), `width`, `item_height`, `gap`, `on_touch`, optional `remove`.
 - `SegmentedControl`: exclusive choices; `items` (`{id, label}`), `value`, `on_change`.
+- `Segment`: pill segment control (spec 0274); `options` (`{id, label, selected?, enabled?}`), `value` (marks the selected id when options do not), `enabled`, `aria_label`, `on_change` (action name, receives the option id).
+- `LinkRow`: settings row that navigates; `title` (or `label`), optional `subtitle` (or `description`) and `icon`, `enabled`, `on_activate`; chevron at the end.
+- `Chip`: 36 px pill; `text`, optional `icon`, `on` (primaryContainer fill), `on_activate`. `Tag`: 11 px mono tag with an outline border; `text`.
 - `VirtualGrid`: virtualized keyed model; `model`, `key`, `render`, `scroll`.
-- `Transcript`: scrolling message list; `cells` (windowed model), `extent`, `width`, `on_action`.
+- `Transcript`: scrolling message list; `cells` (windowed model), `extent`, `width`, `on_action`. The Rust `transcript::Entry` that produces the cells takes `align_end` and `max_width` (a fraction of the row; 0 = full) per message, and an empty `label` drops the caption band (spec 0274).
 - `Composer`: multi-line message input; `text`, `placeholder`, `on_activate` (Enter; Shift+Enter breaks the line).
 - `PasswordField`: masked/revealed text; `text`, `revealed`, `on_toggle`.
 - `ActionButton`, `PillButton`, `ConfirmButton`: action variants; label/text and activation props.

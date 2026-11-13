@@ -435,9 +435,9 @@ impl Motion {
             )
         } else {
             (
+                // A host-authored return duration is honoured as written (it may exceed the open).
                 self.return_duration
-                    .unwrap_or((self.duration * 0.7).min(0.22))
-                    .min((self.duration * 0.75).max(0.001)),
+                    .unwrap_or_else(|| (self.duration * 0.7).min(0.22)),
                 bead_core::animation::Curve::EmphasizedAccelerate,
             )
         }
@@ -4142,5 +4142,41 @@ mod symbol_ink_tests {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod motion_transition_tests {
+    use super::*;
+
+    fn motion(duration: f64, return_duration: Option<f64>) -> Motion {
+        Motion {
+            id: "m".into(),
+            open: true,
+            duration,
+            return_duration,
+            return_curve: None,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            fade: false,
+            reveal: false,
+            progress: 1.,
+            parts: Vec::new(),
+            art: None,
+            body: None,
+        }
+    }
+
+    /// B0274: a host-authored close duration is used as written, longer than the open too
+    /// (the review's OSD opens in .16 s and closes in .2 s); the default stays 0.7x, at most .22 s.
+    #[test]
+    fn close_duration_may_exceed_the_open_and_defaults_are_unchanged() {
+        assert_eq!(motion(0.16, Some(0.2)).transition(false).0, 0.2);
+        assert_eq!(motion(0.22, Some(0.2)).transition(false).0, 0.2);
+        assert!((motion(0.36, None).transition(false).0 - 0.22).abs() < 1e-9);
+        assert!((motion(0.2, None).transition(false).0 - 0.14).abs() < 1e-9);
+        assert_eq!(motion(0.16, Some(0.2)).transition(true).0, 0.16);
     }
 }

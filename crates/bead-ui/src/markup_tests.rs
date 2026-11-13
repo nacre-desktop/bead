@@ -4423,3 +4423,93 @@ return ui.Row{id="bar",width=400,height=50,gap=10,
         );
     }
 }
+
+/// B0274: the kit batch (`Segment`, `LinkRow`, `Chip`, `Tag`, `SliderTile`'s end slot) lays out to the
+/// review's metrics: 36 px chip pills of radius 18 (`on` = primaryContainer), a 34 px segment track
+/// with a primary selected option, a 56 px link row with a chevron, an 11 px mono tag with an
+/// outline border, tiles of radius 18, and a 28 px end button.
+#[test]
+fn kit_batch_components_use_the_review_metrics() {
+    let f = fixture();
+    fs::write(
+        f.0.join("palette.json"),
+        r#"{"formatVersion":1,"mode":"dark","colours":{"surface":"202020","onSurface":"eeeeee","onSurfaceVariant":"aaaaaa","primary":"90c0f0","onPrimary":"102030","primaryContainer":"304050","onPrimaryContainer":"d0e0f0","surfaceContainer":"282828","surfaceContainerHigh":"303030","surfaceContainerHighest":"383838","secondary":"a0d0b0","outline":"778899"}}"#,
+    )
+    .unwrap();
+    fs::write(f.0.join("ui/main.luau"),r#"local ui=require("bead.ui");local kit=require("bead.kit")
+return ui.Column{id="gallery",width=420,height=520,gap=6,
+ kit.Segment{id="seg",value="b",on_change="select",options={{id="a",label="One"},{id="b",label="Two"}}},
+ kit.Chip{id="chip-on",text="Wi-Fi",icon="wifi",on=true,on_activate=ui.action("select","a")},
+ kit.Chip{id="chip-off",text="Quiet",on=false,on_activate=ui.action("select","b")},
+ kit.Tag{id="tag",text="codex"},
+ kit.LinkRow{id="link",title="Open sidebar",subtitle="Edge and width",on_activate=ui.action("select","a")},
+ kit.SliderTile{id="tile",width=380,height=56,label="Volume",icon="volume_up",detail="60%",value=60,on_change="select",on_toggle=ui.action("select","a"),end_icon="mic",on_end=ui.action("select","b")}}"#).unwrap();
+    let session = session(&f);
+    let primitives = &session.current.primitives;
+    let node = |id: &str| {
+        rect(
+            &session
+                .view_nodes()
+                .iter()
+                .find(|n| n.id.ends_with(id))
+                .unwrap_or_else(|| panic!("node {id}"))
+                .draw,
+        )
+    };
+    let rounded = |r: Rect| {
+        primitives.iter().find_map(|p| match p {
+            Primitive::Rounded {
+                rect,
+                radius,
+                fill,
+                border,
+            } if *rect == r => Some((*radius, *fill, *border)),
+            _ => None,
+        })
+    };
+    let (on, off) = (node(".chip-on"), node(".chip-off"));
+    assert_eq!((on.h, off.h), (36., 36.));
+    let (radius, fill, _) = rounded(on).expect("chip-on pill");
+    assert_eq!((radius, fill), (18., [0x30, 0x40, 0x50, 255]));
+    assert_eq!(
+        rounded(off).expect("chip-off pill").1,
+        [0x30, 0x30, 0x30, 255]
+    );
+    assert!(on.w > off.w, "the icon widens the chip");
+    let tag = node(".tag");
+    assert_eq!(tag.h, 20.);
+    let (radius, _, border) = rounded(tag).expect("tag box");
+    assert_eq!(
+        (radius, border.map(|b| b.0)),
+        (6., Some([0x77, 0x88, 0x99, 255]))
+    );
+    assert!(primitives.iter().any(
+        |p| matches!(p, Primitive::Text { text, size, .. } if text == "codex" && *size == 11.)
+    ));
+    let seg = node(".seg");
+    assert_eq!(seg.h, 34.);
+    let chosen = node(".option-2");
+    assert_eq!(
+        rounded(chosen).expect("selected option").1,
+        [0x90, 0xc0, 0xf0, 255]
+    );
+    assert!(
+        rounded(node(".option-1")).is_none(),
+        "an unselected option draws no fill"
+    );
+    assert_eq!(node(".link").h, 56.);
+    assert!(
+        primitives
+            .iter()
+            .any(|p| matches!(p, Primitive::Text { text, .. } if text == "chevron_right"))
+    );
+    let tile = node(".tile");
+    assert_eq!(rounded(tile).expect("tile").0, 18.);
+    let end = node(".end");
+    assert_eq!((end.w, end.h), (28., 28.));
+    assert_eq!(
+        end.x + end.w,
+        tile.x + tile.w - 8.,
+        "end slot sits 8 px from the tile edge"
+    );
+}

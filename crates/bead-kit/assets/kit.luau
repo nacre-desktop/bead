@@ -4,7 +4,12 @@ return function(ui, tokens)
     -- Durations: the framework's named tokens (ui.motion.duration) plus the kit's own.
     local motion = table.clone(ui.motion.duration)
     motion.color, motion.state, motion.text = .200, .120, .400
-    local kit = {tokens=tokens, motion=table.freeze(motion)}
+    -- Review metrics in logical px (spec 0274): the corner radii and type sizes tiles, rows and chips share.
+    local metrics={radius=table.freeze{panel=24,tile=18,row=12,chip=18},text=table.freeze{caption=12,label=13,body=14,title=16}}
+    local kit = {tokens=tokens, motion=table.freeze(motion), metrics=table.freeze(metrics)}
+    -- Hover fill one step deeper while the pointer is down (`bead.pressed` is global, the hover fill is per node).
+    local function hover_amount() return ui.resolve_for_check(ui.bind("bead.pressed")) and .12 or .08 end
+    local function press_fill(base) return ui.tint(base,"onSurface",hover_amount()) end
     local function value(v, fallback)
         if v == nil then return fallback end
         return ui.resolve_for_check(v)
@@ -151,15 +156,14 @@ return function(ui, tokens)
         return ui.Text{id=id,text=name,family=tokens.fonts.icon,font_size=size,width=size+2,height=24,shrink=0,color=color}
     end
     -- Tile geometry: icon at 14, text from 44, 8 px right margin (24 more for a navigation
-    -- chevron that sits 12 from the edge), 3 px between label and detail, a 1 px outline, radius 24 (20 stacked).
+    -- chevron that sits 12 from the edge), 3 px between label and detail, a 1 px outline, radius `metrics.radius.tile`.
     local tile_glyph=(tokens.icons.large-1)*4/3
     local function tile(p,kind)
         local color,armed=ink(p),p.available~=false
         local pad=tokens.spacing.lg
         local main_w=p.width-(p.on_detail and 40 or 0)
-        local caption=tokens.text.caption*4/3
-        local small=(tokens.text.caption-1)*4/3
-        local radius=p.stacked and tokens.radii.large or tokens.spacing.xxl
+        local small=metrics.text.caption
+        local radius=metrics.radius.tile
         local body
         if p.stacked then
             body=ui.Column{id="body",width=main_w,height=p.height,padding_top=9,gap=tokens.spacing.xs,align="center",
@@ -168,8 +172,7 @@ return function(ui, tokens)
         else
             local text_x=44
             local text_w=main_w-text_x-tokens.spacing.sm-(kind=="link" and tile_glyph+tokens.spacing.sm or 0)
-            local label_size=tokens.text.caption*4/3
-            local labels={ui.Text{id="label",text=p.label,width=text_w,height=18,font_size=label_size,font_weight=500,color=color}}
+            local labels={ui.Text{id="label",text=p.label,width=text_w,height=18,font_size=metrics.text.body,font_weight=600,color=color}}
             if p.detail and p.detail~="" then
                 -- Network and Bluetooth names may take a second line; height follows the estimated wrap.
                 local lines=p.detail_lines and (#p.detail*small*.5>text_w and 2 or 1) or 1
@@ -184,10 +187,10 @@ return function(ui, tokens)
             body=ui.Row{id="body",width=main_w,height=p.height,padding_left=pad,gap=text_x-pad-tile_glyph-2,align="center",table.unpack(children)}
         end
         local kids={kit.Button{id="main",width=main_w,height=p.height,padding=0,radius=radius,fill="transparent",
-            hover_fill=ui.alpha("onSurface",.08),aria_label=p.aria_label or p.label,on_activate=armed and p.on_activate or nil,body}}
+            hover_fill=ui.alpha("onSurface",hover_amount()),aria_label=p.aria_label or p.label,on_activate=armed and p.on_activate or nil,body}}
         if p.on_detail then
             kids[2]=kit.Button{id="detail-open",width=40,height=p.height,padding=0,radius=radius,fill="transparent",
-                hover_fill=ui.alpha("onSurface",.08),aria_label=p.detail_label or p.label,on_activate=p.on_detail,
+                hover_fill=ui.alpha("onSurface",hover_amount()),aria_label=p.detail_label or p.label,on_activate=p.on_detail,
                 ui.Row{id="chevron-row",width=40,height=p.height,align="center",justify="center",glyph("chevron","chevron_right",color)}}
         end
         return ui.Row(props(kids,{id=p.id,width=p.width,height=p.height,radius=radius,align="center",
@@ -204,7 +207,9 @@ return function(ui, tokens)
         local color,armed=ink({available=p.available}),p.available~=false
         local W,H=p.width,p.height
         local detail=p.on_detail~=nil
-        local right=detail and 40 or 8
+        local edge=detail and 40 or 8
+        -- Optional end slot (`end_icon`, `on_end`, `end_color`): a 28 px round icon button, e.g. mute or mic.
+        local right=edge+(p.end_icon and 36 or 0)
         local local_label=p.local_label
         if local_label==nil and p.detail and p.detail~="" then
             local_label={id="../value",format={prefix="",suffix="%",precision=0}}
@@ -215,20 +220,25 @@ return function(ui, tokens)
             local_label=local_label}
         local control=kit.Slider(slider_props)
         local kids={
-            ui.Text{id="label",position="absolute",left=46,top=7,width=W-46-(detail and 86 or 54),height=16,font_size=(tokens.text.caption-1)*4/3,
+            ui.Text{id="label",position="absolute",left=46,top=7,width=W-46-(detail and 86 or 54),height=16,font_size=metrics.text.caption,
                 color="onSurfaceVariant",text=p.caption or p.label},
             kit.IconButton{id="toggle",position="absolute",left=8,top=17,width=32,height=32,padding=0,radius=tokens.radii.full,
                 font_size=17*4/3,text=p.icon,fill="transparent",hover_fill=ui.alpha("onSurface",.08),color=armed and "primary" or "onSurfaceVariant",
                 aria_label=p.toggle_label or p.label,on_activate=armed and p.on_toggle or nil},
             control,
             ui.Text{id="value",position="absolute",left=W-right-48,top=29,width=48,height=20,text_align="right",
-                font_size=tokens.text.caption*4/3,color="onSurfaceVariant",text=kit.SliderValue(slider_props,p.detail or "")}}
+                font_size=metrics.text.caption,color="onSurfaceVariant",text=kit.SliderValue(slider_props,p.detail or "")}}
         if detail then
             kids[#kids+1]=kit.IconButton{id="detail",position="absolute",left=W-36,top=22,width=32,height=32,padding=0,radius=tokens.radii.full,
                 font_size=17*4/3,text="chevron_right",fill="transparent",hover_fill=ui.alpha("onSurface",.08),color=armed and "onSurface" or "onSurfaceVariant",
                 aria_label=p.detail_label or p.label,on_activate=armed and p.on_detail or nil}
         end
-        return ui.Box(props(kids,{id=p.id,width=W,height=H,radius=18,fill=ui.alpha("surfaceContainer",.65)}))
+        if p.end_icon then
+            kids[#kids+1]=kit.IconButton{id="end",position="absolute",left=W-edge-28,top=24,width=28,height=28,padding=0,radius=tokens.radii.full,
+                font_size=15*4/3,text=p.end_icon,fill="transparent",hover_fill=ui.alpha("onSurface",.08),color=armed and (p.end_color or "onSurfaceVariant") or "onSurfaceVariant",
+                aria_label=p.end_label or p.end_icon,on_activate=armed and p.on_end or nil}
+        end
+        return ui.Box(props(kids,{id=p.id,width=W,height=H,radius=metrics.radius.tile,fill=ui.alpha("surfaceContainer",.65)}))
     end
     -- Packs tiles into rows by size: `sizes[size]={per_row,height}`; a tile is
     -- `{size,build=function(width,height) return node end}`. A change of size starts a new row. Returns the
@@ -284,6 +294,53 @@ return function(ui, tokens)
                 on_activate=ui.action(p.on_change,item.id)}
         end
         return ui.Row(props(children,{id=p.id,gap=tokens.spacing.xs}))
+    end
+    -- Pill segment (spec 0274): a `surfaceContainerHigh` track with one full-radius option each, the
+    -- selected one `primary`. `options` are `{id,label,selected?,enabled?}`; `value` marks the selected id
+    -- when options do not. `on_change` is an action name that receives the option id.
+    function kit.Segment(p)
+        local on=p.enabled~=false
+        local size=tokens.text.caption*4/3
+        local height=tokens.spacing.huge+tokens.spacing.hairline
+        local current=value(p.value,nil)
+        local pill={id=p.id or "segment",height=height,shrink=0,padding=tokens.spacing.xs,gap=tokens.spacing.hairline,align="center",
+            radius=tokens.radii.full,fill=ui.alpha("surfaceContainerHigh",on and 1 or .4)}
+        for i,o in ipairs(p.options) do
+            local live=on and o.enabled~=false
+            local chosen=o.selected or (current~=nil and o.id==current)
+            local base=chosen and "primary" or "surfaceContainerHigh"
+            local ink=chosen and "onPrimary" or (live and "onSurfaceVariant" or "onSurface")
+            local width=math.ceil(ui.text_width(o.label,ui.default_font_family,size))+2*tokens.spacing.md+tokens.spacing.hairline
+            local option_h=height-2*tokens.spacing.xs
+            pill[#pill+1]=kit.Button{id="option-"..i,width=width,height=option_h,padding=0,padding_top=(option_h-20)/2,shrink=0,
+                radius=tokens.radii.full,selected=chosen,justify="center",align="center",
+                fill=chosen and "primary" or "transparent",
+                hover_fill=live and press_fill(base) or (chosen and "primary" or "transparent"),
+                aria_label=(p.aria_label or "")..": "..o.label,on_activate=live and ui.action(p.on_change,o.id) or nil,
+                ui.Text{id="label",text=o.label,width=width,height=20,text_align="center",
+                    font_size=size,font_weight=500,color=ui.alpha(ink,live and 1 or .4)}}
+        end
+        return ui.Row(pill)
+    end
+    -- Settings row that navigates: `title` (or `label`), optional `subtitle` (or `description`) and `icon`,
+    -- a chevron at the end and a row-wide hover tint. `on_activate` is a `ui.action(...)`.
+    function kit.LinkRow(p)
+        local on=p.enabled~=false and p.on_activate~=nil
+        local title=p.title or p.label or ""
+        local subtitle=p.subtitle or p.description or ""
+        local glyph_px=tokens.icons.large*4/3
+        local row={id="body",width="fill",height="100%",gap=tokens.spacing.md,align="center",
+            padding_left=tokens.spacing.sm,padding_right=tokens.spacing.sm}
+        if p.icon then
+            row[#row+1]=ui.Text{id="icon",text=p.icon,family=tokens.fonts.icon,font_size=glyph_px,width=glyph_px+2,height=24,shrink=0,color="onSurfaceVariant"}
+        end
+        row[#row+1]=ui.Column{id="labels",grow=1,gap=tokens.spacing.hairline,justify="center",
+            ui.Text{id="label",text=title,font_size=metrics.text.body,height=20,color=on and "onSurface" or "onSurfaceVariant"},
+            ui.Text{id="description",text=subtitle,visible=subtitle~="",font_size=metrics.text.caption,height=16,color="onSurfaceVariant"}}
+        row[#row+1]=ui.Text{id="chevron",text="chevron_right",family=tokens.fonts.icon,font_size=glyph_px,width=glyph_px+2,height=24,shrink=0,color="onSurfaceVariant"}
+        return kit.Button{id=p.id,width="fill",height=p.height or 56,shrink=0,padding=0,radius=metrics.radius.row,
+            fill="transparent",hover_fill=on and ui.alpha("onSurface",.06) or "transparent",aria_label=title,
+            on_activate=on and p.on_activate or nil,ui.Row(row)}
     end
     -- Keep the complete model and scroll extent; materialize viewport + one row each side.
     function kit.VirtualGrid(p)
@@ -428,6 +485,36 @@ return function(ui, tokens)
             width=math.max(15,math.ceil(ui.text_width(text,p.family or ui.default_font_family,10))+8),
             text=text,text_align="center",font_size=10,font_weight=600,fill=tone,
             color=badge_ink[tone] or "surface",visible=text~="" and text~="0"},{tone=true}))
+    end
+    -- Filter chip (spec 0274): a 36 px pill, optional leading `icon`, `on` fills `primaryContainer`.
+    function kit.Chip(p)
+        local text=tostring(value(p.text,"") or "")
+        local on=value(p.on,false)
+        local ink=on and "onPrimaryContainer" or "onSurface"
+        local base=on and "primaryContainer" or "surfaceContainerHigh"
+        local glyph_px=tokens.icons.large*4/3
+        local label_w=math.ceil(ui.text_width(text,ui.default_font_family,metrics.text.label))+tokens.spacing.hairline
+        local pad=tokens.spacing.lg
+        local kids={}
+        if p.icon then
+            kids[#kids+1]=ui.Text{id="icon",text=p.icon,family=tokens.fonts.icon,font_size=glyph_px,width=glyph_px+2,height=24,shrink=0,
+                color=on and "onPrimaryContainer" or "onSurfaceVariant"}
+        end
+        kids[#kids+1]=ui.Text{id="label",text=text,width=label_w,height=20,shrink=0,font_size=metrics.text.label,font_weight=500,color=ink}
+        local width=2*pad+label_w+(p.icon and glyph_px+2+tokens.spacing.sm or 0)
+        return kit.Button(props(p,{width=width,height=36,padding=0,radius=metrics.radius.chip,shrink=0,fill=base,hover_fill=press_fill(base),
+            aria_label=text,
+            ui.Row{id="content",width=width,height=36,align="center",justify="center",gap=tokens.spacing.sm,table.unpack(kids)}},
+            {text=true,icon=true,on=true}))
+    end
+    -- Small mono tag (spec 0274): 11 px mono text in an `outline` border, radius 6.
+    function kit.Tag(p)
+        local text=tostring(value(p.text,"") or "")
+        local mono=tokens.fonts.mono
+        local width=math.ceil(ui.text_width(text,mono,11))+2*tokens.spacing.sm+2
+        return ui.Row(props(p,{width=width,height=20,shrink=0,align="center",justify="center",radius=6,border_width=1,border_color="outline",
+            ui.Text{id="label",text=text,family=mono,font_size=11,width=width-2,height=16,text_align="center",color="onSurfaceVariant"}},
+            {text=true}))
     end
     function kit.Bar(p)
         local e=edge(p);local vertical=e=="left" or e=="right"

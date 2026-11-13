@@ -224,6 +224,29 @@ pub struct Entry {
     /// For Markdown: (button label, action prefix); one button per closed code block,
     /// with argument `{prefix}:{key}:{index}`.
     pub code_action: Option<(String, String)>,
+    /// Right-align the message in the row (a user message); false keeps it at the left edge.
+    pub align_end: bool,
+    /// Widest the message may be, as a fraction of the row (0.88 = 88 %); 0 or at least 1 means the full row.
+    pub max_width: f32,
+}
+impl Entry {
+    /// The message's own width and its left offset in a row `full` wide.
+    fn span(&self, full: f32) -> (f32, f32) {
+        let width = if self.max_width > 0. && self.max_width < 1. {
+            (full * self.max_width).floor()
+        } else {
+            full
+        };
+        (width, if self.align_end { full - width } else { 0. })
+    }
+    /// Top of the content: below the label band, or the plain padding when there is no label.
+    fn top(&self, s: &Scale) -> f32 {
+        if self.label.is_empty() {
+            s.md
+        } else {
+            s.md * 2. + s.xs + 1.
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -332,6 +355,11 @@ impl Flow<'_> {
 }
 
 fn lay(meter: &Meter, style: &Style, entry: &Entry, blocks: &[Block]) -> Laid {
+    let (width, shift) = entry.span(style.width);
+    let style = &Style {
+        width,
+        ..style.clone()
+    };
     let s = &style.scale;
     let (pad, body, small) = (s.md, s.body, s.caption - s.xs / 3.);
     let inner = style.width - 2. * pad;
@@ -340,22 +368,24 @@ fn lay(meter: &Meter, style: &Style, entry: &Entry, blocks: &[Block]) -> Laid {
         style,
         cells: Vec::new(),
         id: &entry.key,
-        y: pad * 2. + s.xs + 1.,
+        y: entry.top(s),
     };
     // The bubble comes first so it paints under everything; its height is patched last.
     flow.fill(0., 0., style.width, 0., &entry.fill, s.md + s.xs / 4.);
-    let mut label = Cell::at(
-        flow.next_id(),
-        Kind::Text,
-        pad,
-        pad * 0.75,
-        inner,
-        small * 1.4,
-    );
-    label.text = entry.label.clone();
-    label.size = small;
-    label.color = "primary".into();
-    flow.cells.push(label);
+    if !entry.label.is_empty() {
+        let mut label = Cell::at(
+            flow.next_id(),
+            Kind::Text,
+            pad,
+            pad * 0.75,
+            inner,
+            small * 1.4,
+        );
+        label.text = entry.label.clone();
+        label.size = small;
+        label.color = "primary".into();
+        flow.cells.push(label);
+    }
     if !entry.markdown {
         let used = flow.text(pad, inner, &entry.text, body, false, "onSurface");
         flow.y += used;
@@ -467,6 +497,9 @@ fn lay(meter: &Meter, style: &Style, entry: &Entry, blocks: &[Block]) -> Laid {
     }
     let height = button_y + button_h + pad - 1.;
     flow.cells[0].h = height;
+    for cell in &mut flow.cells {
+        cell.x += shift;
+    }
     Laid { cells: flow.cells }
 }
 
@@ -481,10 +514,14 @@ fn text_height(meter: &Meter, style: &Style, text: &str, size: f32, mono: bool, 
 /// Measure row geometry without allocating scene cells. This lets `window` build cells
 /// only for rows near the viewport while retaining exact extent and stable scroll offsets.
 fn measure(meter: &Meter, style: &Style, entry: &Entry, blocks: &[Block]) -> f32 {
+    let style = &Style {
+        width: entry.span(style.width).0,
+        ..style.clone()
+    };
     let s = &style.scale;
     let (pad, body) = (s.md, s.body);
     let inner = style.width - 2. * pad;
-    let mut y = pad * 2. + s.xs + 1.;
+    let mut y = entry.top(s);
     if !entry.markdown {
         y += text_height(meter, style, &entry.text, body, false, inner);
     } else {
@@ -600,6 +637,8 @@ impl Transcript {
                 entry.markdown,
                 &entry.actions,
                 &entry.code_action,
+                entry.align_end,
+                entry.max_width.to_bits(),
                 self.style.width.to_bits(),
             )
                 .hash(&mut hash);
