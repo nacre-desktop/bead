@@ -1132,6 +1132,11 @@ impl Session {
         )
         .ok()
     }
+    /// Clone accepted content for a validated dormant resume without evaluation
+    /// or layout. Call sources_current and refresh host models before reuse.
+    pub fn current_scene(&self) -> Scene {
+        self.current.clone()
+    }
     pub fn view_nodes(&self) -> &[Node] {
         &self.current_nodes
     }
@@ -1272,6 +1277,8 @@ mod warm_tests {
         let fixture = crate::tests::Fixture::new();
         let mut session = fixture.session();
         assert!(session.sources_current());
+        let revision = session.current.resource_revision;
+        assert_eq!(session.current_scene().resource_revision, revision);
         session.relayout().unwrap();
         assert!(
             session.sources_current(),
