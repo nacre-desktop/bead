@@ -80,7 +80,81 @@ pub struct Script {
     path: PathBuf,
     deadline: Rc<Cell<Instant>>,
     remaining: Cell<Duration>,
+    builtin_require: Function,
+    builtin_math: Table,
+    builtin_random: Function,
+    builtin_randomseed: Function,
+    action_taint: Option<Rc<Cell<bool>>>,
+    action_vm: RefCell<Option<Box<Script>>>,
     cache: RefCell<bead_core::cache::Lru<String, Cached>>,
+}
+
+fn behavior_exports(
+    lua: &Lua,
+    bytes: &[u8],
+    name: &str,
+    tainted: Option<Rc<Cell<bool>>>,
+    builtin_require: &Function,
+    builtin_math: &Table,
+) -> mlua::Result<Table> {
+    let globals = lua.globals();
+    globals.set("tr", crate::i18n::lua_function(lua)?)?;
+    let modules = lua.create_table()?;
+    let builtin_require = builtin_require.clone();
+    let require_taint = tainted.clone();
+    globals.set(
+        "require",
+        lua.create_function(move |lua, module_name: String| {
+            let Some(module) = module_name.strip_prefix("bead.widgets.") else {
+                if let Some(tainted) = &require_taint {
+                    tainted.set(true);
+                }
+                return builtin_require.call::<mlua::Value>(module_name);
+            };
+            let cached: mlua::Value = modules.get(module_name.as_str())?;
+            if !cached.is_nil() {
+                return Ok(cached);
+            }
+            let source = bead_widgets::behavior_source(module).ok_or_else(|| {
+                mlua::Error::runtime(format!("{module_name} is not a behavior module"))
+            })?;
+            let code = crate::frontend::bytecode(source.as_bytes())?;
+            let value: mlua::Value = lua
+                .load(&*code)
+                .set_name(format!("@{module_name}"))
+                .eval()?;
+            modules.set(module_name, value.clone())?;
+            Ok(value)
+        })?,
+    )?;
+    globals.set(
+        "copy_value",
+        lua.create_function(|lua, value: mlua::Value| {
+            let json: serde_json::Value = lua.from_value_with(
+                value,
+                mlua::serde::DeserializeOptions::new().encode_empty_tables_as_array(false),
+            )?;
+            json_value(lua, &json)
+        })?,
+    )?;
+    if let Some(tainted) = tainted {
+        for key in ["random", "randomseed"] {
+            let original: Function = builtin_math.get(key)?;
+            let tainted = tainted.clone();
+            builtin_math.set(
+                key,
+                lua.create_function(move |_, args: mlua::MultiValue| {
+                    tainted.set(true);
+                    original.call::<mlua::MultiValue>(args)
+                })?,
+            )?;
+        }
+    }
+    lua.sandbox(true)?;
+    match crate::frontend::bytecode(bytes) {
+        Ok(code) => lua.load(&*code).set_name(format!("@{name}")).eval(),
+        Err(_) => lua.load(bytes).set_name(format!("@{name}")).eval(),
+    }
 }
 impl Script {
     pub fn validate_source(bytes: &[u8], path: &Path) -> Result<(), Diagnostic> {
@@ -100,6 +174,14 @@ impl Script {
     }
 
     pub fn load(bytes: &[u8], path: &Path) -> Result<Self, Diagnostic> {
+        Self::load_inner(bytes, path, false)
+    }
+
+    fn load_action(bytes: &[u8], path: &Path) -> Result<Self, Diagnostic> {
+        Self::load_inner(bytes, path, true)
+    }
+
+    fn load_inner(bytes: &[u8], path: &Path, action: bool) -> Result<Self, Diagnostic> {
         let lua = Lua::new();
         let deadline = Rc::new(Cell::new(Instant::now() + Duration::from_millis(50)));
         let limit = deadline.clone();
@@ -112,54 +194,28 @@ impl Script {
                 Ok(VmState::Continue)
             }
         });
+        lua.set_memory_limit(8 * 1024 * 1024)
+            .map_err(|e| lua_error(path, e))?;
+        let builtin_require: Function = lua
+            .globals()
+            .get("require")
+            .map_err(|e| lua_error(path, e))?;
+        let builtin_math: Table = lua.globals().get("math").map_err(|e| lua_error(path, e))?;
+        let builtin_random: Function =
+            builtin_math.get("random").map_err(|e| lua_error(path, e))?;
+        let builtin_randomseed: Function = builtin_math
+            .get("randomseed")
+            .map_err(|e| lua_error(path, e))?;
+        let tainted = action.then(|| Rc::new(Cell::new(false)));
         let name = path.to_string_lossy();
-        let exports = (|| -> mlua::Result<Table> {
-            lua.set_memory_limit(8 * 1024 * 1024)?;
-            lua.globals().set("tr", crate::i18n::lua_function(&lua)?)?;
-            // Behavior VMs share the pure widget algorithms, never a view SDK.
-            // Keep the existing Luau resolver for other names and cache embedded
-            // modules within this VM just as ordinary require does.
-            let original_require: Function = lua.globals().get("require")?;
-            let modules = lua.create_table()?;
-            lua.globals().set(
-                "require",
-                lua.create_function(move |lua, name: String| {
-                    let Some(module) = name.strip_prefix("bead.widgets.") else {
-                        return original_require.call::<mlua::Value>(name);
-                    };
-                    let cached: mlua::Value = modules.get(name.as_str())?;
-                    if !cached.is_nil() {
-                        return Ok(cached);
-                    }
-                    let source = bead_widgets::behavior_source(module).ok_or_else(|| {
-                        mlua::Error::runtime(format!("{name} is not a behavior module"))
-                    })?;
-                    let code = crate::frontend::bytecode(source.as_bytes())?;
-                    let value: mlua::Value =
-                        lua.load(&*code).set_name(format!("@{name}")).eval()?;
-                    modules.set(name, value.clone())?;
-                    Ok(value)
-                })?,
-            )?;
-            // Luau protects serde's array metatable from table.clone/getmetatable.
-            // JSON copying preserves empty containers without exposing that metatable.
-            lua.globals().set(
-                "copy_value",
-                lua.create_function(|lua, value: mlua::Value| {
-                    let json: serde_json::Value = lua.from_value_with(
-                        value,
-                        mlua::serde::DeserializeOptions::new().encode_empty_tables_as_array(false),
-                    )?;
-                    json_value(lua, &json)
-                })?,
-            )?;
-            lua.sandbox(true)?;
-            // B0202: cached bytecode when it compiles; text otherwise, for the syntax message.
-            match crate::frontend::bytecode(bytes) {
-                Ok(code) => lua.load(&*code).set_name(format!("@{name}")).eval(),
-                Err(_) => lua.load(bytes).set_name(format!("@{name}")).eval(),
-            }
-        })()
+        let exports = behavior_exports(
+            &lua,
+            bytes,
+            &name,
+            tainted.clone(),
+            &builtin_require,
+            &builtin_math,
+        )
         .map_err(|e| lua_error(path, e))?;
         bead_core::profile::mark("vm_ready");
         Ok(Self {
@@ -169,6 +225,12 @@ impl Script {
             path: path.to_path_buf(),
             deadline,
             remaining: Cell::new(Duration::from_millis(50)),
+            builtin_require,
+            builtin_math,
+            builtin_random,
+            builtin_randomseed,
+            action_taint: tainted,
+            action_vm: RefCell::new(None),
             cache: RefCell::new(bead_core::cache::Lru::new(
                 "computed-values",
                 8 * bead_core::cache::MIB,
@@ -203,6 +265,11 @@ impl Script {
     }
     pub fn memory_bytes(&self) -> usize {
         self.lua.used_memory()
+            + self
+                .action_vm
+                .borrow()
+                .as_ref()
+                .map_or(0, |action| action.lua.used_memory())
     }
     pub fn binding_count(&self) -> usize {
         self.cache.borrow().len()
@@ -265,11 +332,60 @@ impl Script {
             .map_err(|e| lua_error(&self.path, e))
     }
     pub fn action(&self, name: &str, stores: &Stores, arg: Value) -> Result<Stores, Diagnostic> {
-        // Failed actions cannot mutate even lexical state in the current script VM.
-        let candidate = Self::load(&self.source, &self.path)?;
+        // Failed actions discard their candidate VM so hidden state rolls back.
+        let pooled = self.action_vm.borrow_mut().take();
+        let reused = pooled.is_some();
+        let mut candidate = match pooled {
+            Some(candidate) => *candidate,
+            None => Self::load_action(&self.source, &self.path)?,
+        };
+        if reused {
+            candidate.prepare_action(&self.source)?;
+        }
         let result = candidate.execute_action(name, stores, arg);
+        let reusable = result.is_ok()
+            && !candidate
+                .action_taint
+                .as_ref()
+                .is_some_and(|tainted| tainted.get());
+        if reusable && candidate.reset_action().is_ok() {
+            candidate.source.clear();
+            *self.action_vm.borrow_mut() = Some(Box::new(candidate));
+        }
         bead_core::profile::mark("luau_handler_ready");
         result
+    }
+    fn prepare_action(&mut self, source: &[u8]) -> Result<(), Diagnostic> {
+        self.deadline
+            .set(Instant::now() + Duration::from_millis(50));
+        let tainted = Rc::new(Cell::new(false));
+        let name = self.path.to_string_lossy();
+        let exports = behavior_exports(
+            &self.lua,
+            source,
+            &name,
+            Some(tainted.clone()),
+            &self.builtin_require,
+            &self.builtin_math,
+        )
+        .map_err(|e| lua_error(&self.path, e))?;
+        self.exports = exports;
+        self.action_taint = Some(tainted);
+        Ok(())
+    }
+    fn reset_action(&mut self) -> mlua::Result<()> {
+        self.exports = self.lua.create_table()?;
+        self.action_taint = None;
+        self.lua.sandbox(false)?;
+        let globals = self.lua.globals();
+        globals.set("require", self.builtin_require.clone())?;
+        self.builtin_math
+            .set("random", self.builtin_random.clone())?;
+        self.builtin_math
+            .set("randomseed", self.builtin_randomseed.clone())?;
+        globals.set("tr", mlua::Value::Nil)?;
+        globals.set("copy_value", mlua::Value::Nil)?;
+        self.lua.gc_collect()
     }
     fn execute_action(
         &self,
@@ -576,6 +692,16 @@ mod action_isolation_tests {
             Some(&Value::Number(2.))
         );
         assert!(script.action("fail", &stores, Value::Bool(true)).is_err());
+        assert!(script.action_vm.borrow().is_none());
+        assert_eq!(
+            script
+                .action("mutate", &stores, Value::Bool(true))
+                .unwrap()
+                .get("value"),
+            Some(&Value::Number(2.))
+        );
+        assert!(script.action_vm.borrow().is_some());
+        std::thread::sleep(Duration::from_millis(70));
         assert_eq!(
             script
                 .action("mutate", &stores, Value::Bool(true))
@@ -608,5 +734,93 @@ mod action_isolation_tests {
                 .get("value"),
             Some(&Value::Number(2.))
         );
+    }
+
+    #[test]
+    fn successful_actions_do_not_retain_embedded_module_tables() {
+        let script = Script::load(
+            br#"local module=require("bead.widgets.drag-geometry"); return {
+                stores={value=0}, actions={mutate=function(s)
+                    module.counter=(module.counter or 0)+1
+                    s.value=module.counter
+                end}, computed={}
+            }"#,
+            Path::new("module-isolation.luau"),
+        )
+        .unwrap();
+        let stores = Stores::default()
+            .reconcile(&script.schema().unwrap())
+            .unwrap();
+
+        for _ in 0..2 {
+            assert_eq!(
+                script
+                    .action("mutate", &stores, Value::Bool(true))
+                    .unwrap()
+                    .get("value"),
+                Some(&Value::Number(1.))
+            );
+        }
+    }
+
+    #[test]
+    fn fallback_require_and_caught_rng_calls_discard_the_action_vm() {
+        let script = Script::load(
+            br#"return {stores={value=0},actions={
+                fallback=function(s) pcall(require,"b0254_missing_module") end,
+                random=function(s) math.randomseed(123); math.random() end,
+                random_caught=function(s) pcall(math.randomseed,123); pcall(math.random) end
+            },computed={}}"#,
+            Path::new("tainted-action.luau"),
+        )
+        .unwrap();
+        let stores = Stores::default()
+            .reconcile(&script.schema().unwrap())
+            .unwrap();
+
+        script
+            .action("fallback", &stores, Value::Bool(true))
+            .unwrap();
+        assert!(script.action_vm.borrow().is_none());
+        script.action("random", &stores, Value::Bool(true)).unwrap();
+        assert!(script.action_vm.borrow().is_none());
+        script
+            .action("random_caught", &stores, Value::Bool(true))
+            .unwrap();
+        assert!(script.action_vm.borrow().is_none());
+    }
+
+    #[test]
+    fn action_time_and_memory_failures_discard_a_warmed_vm() {
+        let script = Script::load(
+            br#"return {stores={value=0},actions={
+                noop=function(s) end,
+                memory=function(s) s.value=string.rep("x",16777216) end,
+                timeout=function(s) while true do end end
+            },computed={}}"#,
+            Path::new("action-limits.luau"),
+        )
+        .unwrap();
+        let stores = Stores::default()
+            .reconcile(&script.schema().unwrap())
+            .unwrap();
+
+        script.action("noop", &stores, Value::Bool(true)).unwrap();
+        assert!(script.action_vm.borrow().is_some());
+        let memory_error = script
+            .action("memory", &stores, Value::Bool(true))
+            .unwrap_err();
+        assert!(memory_error.message.to_lowercase().contains("memory"));
+        assert!(script.action_vm.borrow().is_none());
+        script.action("noop", &stores, Value::Bool(true)).unwrap();
+        assert!(script.action_vm.borrow().is_some());
+        let timeout_error = script
+            .action("timeout", &stores, Value::Bool(true))
+            .unwrap_err();
+        assert!(timeout_error.message.contains("50 ms"));
+        assert!(script.action_vm.borrow().is_none());
+        script.action("noop", &stores, Value::Bool(true)).unwrap();
+        assert!(script.action_vm.borrow().is_some());
+        assert!(script.memory_bytes() <= 16 * bead_core::cache::MIB);
     }
 }
