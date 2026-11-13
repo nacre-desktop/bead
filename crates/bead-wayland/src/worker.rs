@@ -81,7 +81,7 @@ pub struct Packet {
     animation_frame: bool,
     phase: Phase,
     token: u64,
-    scene: Option<Scene>,
+    scene: Option<Arc<Scene>>,
     mirror: Option<Arc<Mirror>>,
     error: Option<String>,
     reload: bool,
@@ -246,7 +246,7 @@ pub struct Source {
     poisoned: bool,
     asynchronous_resources: bool,
     current: Scene,
-    candidate: Option<Scene>,
+    candidate: Option<Arc<Scene>>,
     viewport: Option<(u32, u32)>,
     frame_interval: Option<std::time::Duration>,
 }
@@ -792,12 +792,13 @@ impl SceneSource for Source {
                                 started.elapsed().as_secs_f64() * 1000.,
                                 cache.builds
                             );
+                            let scene = Arc::new(scene);
                             wakeup(UiEvent::Worker(Arc::new(Packet {
                                 resume,
                                 animation_frame,
                                 phase: Phase::Ready,
                                 token,
-                                scene: Some(scene.clone()),
+                                scene: Some(Arc::clone(&scene)),
                                 mirror: None,
                                 error: fault.clone(),
                                 reload,
@@ -862,7 +863,7 @@ impl SceneSource for Source {
                                                         animation_frame,
                                                         phase: Phase::Accepted,
                                                         token,
-                                                        scene: Some(overlay),
+                                                        scene: Some(Arc::new(overlay)),
                                                         mirror: Some(Arc::new(Mirror::read(
                                                             source.as_ref(),
                                                             &cache,
@@ -940,7 +941,7 @@ impl SceneSource for Source {
         if let UiEvent::ResourcesPrepared(result) = event {
             result.map_err(|error| -> Box<dyn Error> { error.into() })?;
             self.preparation_retry = false;
-            return Ok(self.candidate.clone());
+            return Ok(self.candidate.clone().map(Arc::unwrap_or_clone));
         }
         if let UiEvent::Worker(packet) = event {
             if packet.has_error() {
@@ -983,8 +984,8 @@ impl SceneSource for Source {
                 Phase::Ready => self.accepted = false,
                 Phase::Accepted => self.accepted = true,
             }
-            self.candidate = packet.scene.clone();
-            return Ok(packet.scene.clone());
+            self.candidate = packet.scene.as_ref().map(Arc::clone);
+            return Ok(packet.scene.clone().map(Arc::unwrap_or_clone));
         }
         if matches!(&event, UiEvent::Model(values) if values.is_empty())
             && self.mirror.wakeup_at.is_some()
@@ -1026,7 +1027,7 @@ impl SceneSource for Source {
                 .store(false, std::sync::atomic::Ordering::Release);
             self.accepted = false;
             if let Some(scene) = self.candidate.take() {
-                self.current = scene;
+                self.current = Arc::unwrap_or_clone(scene);
             }
             true
         } else {

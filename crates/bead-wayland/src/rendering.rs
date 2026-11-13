@@ -718,6 +718,39 @@ impl Drop for PanelSnapshotWorker {
         }
     }
 }
+fn panel_snapshot_worker_failure(
+    worker: &mut PanelSnapshotWorker,
+    completed: bool,
+) -> Option<&'static str> {
+    if completed {
+        return None;
+    }
+    if worker.join().is_some_and(|result| result.is_err()) {
+        Some("panel CPU snapshot worker panicked")
+    } else {
+        Some("panel CPU snapshot worker disconnected")
+    }
+}
+#[cfg(test)]
+mod panel_snapshot_worker_tests {
+    use super::{PanelSnapshotWorker, panel_snapshot_worker_failure};
+
+    #[test]
+    fn channel_close_after_completion_is_ignored() {
+        let mut worker = PanelSnapshotWorker(Some(std::thread::spawn(|| {})));
+        assert!(worker.join().unwrap().is_ok());
+        assert_eq!(panel_snapshot_worker_failure(&mut worker, true), None);
+    }
+
+    #[test]
+    fn disconnected_panicking_worker_is_reported() {
+        let mut worker = PanelSnapshotWorker(Some(std::thread::spawn(|| panic!("worker panic"))));
+        assert_eq!(
+            panel_snapshot_worker_failure(&mut worker, false),
+            Some("panel CPU snapshot worker panicked")
+        );
+    }
+}
 fn shm_compact_idle(surface: &Surface) -> Duration {
     if surface
         .keyboard_visible
@@ -916,7 +949,7 @@ impl App {
             return Ok(());
         }
         let scene = scene.clone();
-        let (sender, receiver) = std::sync::mpsc::channel();
+        let (sender, receiver) = calloop::channel::channel();
         let snapshot_started_ns = monotonic_ns();
         bead_core::vprintln!(
             "PANEL_CPU_SNAPSHOT_BEGIN monotonic_ns={} epoch={} close_epoch={} ui_serial={}",
@@ -935,13 +968,11 @@ impl App {
             })?;
         self.panel_snapshot_pending = true;
         let mut worker = PanelSnapshotWorker(Some(worker));
-        if let Err(error) = self.loop_handle.insert_source(
-            Timer::from_duration(Duration::from_millis(2)),
-            move |_, _, app| match receiver.try_recv() {
-                Err(std::sync::mpsc::TryRecvError::Empty) => {
-                    TimeoutAction::ToDuration(Duration::from_millis(2))
-                }
-                result => {
+        let mut completed = false;
+        if let Err(error) = self.loop_handle.insert_source(receiver, move |event, _, app| {
+            match event {
+                calloop::channel::Event::Msg(result) => {
+                    completed = true;
                     let joined = worker.join().is_some_and(|result| result.is_ok());
                     let snapshot_completed_ns = monotonic_ns();
                     bead_core::vprintln!(
@@ -955,7 +986,7 @@ impl App {
                     app.panel_snapshot_pending = false;
                     if !joined {
                         app.fail("panel CPU snapshot worker panicked");
-                        return TimeoutAction::Drop;
+                        return;
                     }
                     let current_scale = app
                         .surfaces
@@ -970,8 +1001,7 @@ impl App {
                         && app.panel_ui_serial == ui_serial
                         && current_scale.to_bits() == scale.to_bits();
                     if current {
-                        match result.unwrap_or_else(|_| Err("snapshot worker disconnected".into()))
-                        {
+                        match result {
                             Ok(snapshot) => {
                                 #[cfg(feature = "native-gl")]
                                 let accepted = if app.companion.as_ref().is_some_and(
@@ -1041,10 +1071,15 @@ impl App {
                     {
                         app.fail(error);
                     }
-                    TimeoutAction::Drop
                 }
-            },
-        ) {
+                calloop::channel::Event::Closed => {
+                    if let Some(error) = panel_snapshot_worker_failure(&mut worker, completed) {
+                        app.panel_snapshot_pending = false;
+                        app.fail(error);
+                    }
+                }
+            }
+        }) {
             self.panel_snapshot_pending = false;
             return Err(error.into());
         }
@@ -1955,7 +1990,7 @@ impl App {
             }
             let scale = s.scale120 as f32 / 120.;
             let mut opaque_motion = self.options.animate;
-            if let Some(motion) = scene.motion.clone() {
+            if let Some(motion) = scene.motion.as_ref() {
                 let prior_x = scene.offset.0;
                 let now = self.started.elapsed().as_secs_f64();
                 let open = if self.options.animate {
