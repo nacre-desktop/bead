@@ -5,5 +5,11 @@ edition.workspace=true
 rust-version.workspace=true
 license="MIT"
 publish=false
+
+[features]
+default = ["compositors"]
+compositors = ["dep:serde_json"]
+
 [dependencies]
 serde={version="1",features=["derive"]}
+serde_json={version="1",optional=true}

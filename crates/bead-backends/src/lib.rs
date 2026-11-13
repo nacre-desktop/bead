@@ -1,7 +1,37 @@
 // SPDX-License-Identifier: MIT
-//! Compositor-neutral snapshots/actions. Native transports remain in GPL adapters.
+//! Compositor-neutral snapshots/actions and clean-room compositor adapters.
+//! Optional native transports use the documented niri and Hyprland IPC protocols.
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fmt, sync::Arc};
+#[cfg(feature = "compositors")]
+mod transport;
+#[cfg(feature = "compositors")]
+pub mod niri {
+    use super::Backend;
+    use std::{path::PathBuf, sync::Arc};
+    /// Connect to the niri socket at `$NIRI_SOCKET` or an explicit path.
+    pub fn connect(path: impl Into<PathBuf>) -> Arc<dyn Backend> {
+        super::transport::connect("niri", path.into())
+    }
+}
+#[cfg(feature = "compositors")]
+pub mod hyprland {
+    use super::Backend;
+    use std::{path::PathBuf, sync::Arc};
+    /// Connect to a Hyprland instance directory containing its two IPC sockets.
+    pub fn connect(directory: impl Into<PathBuf>) -> Arc<dyn Backend> {
+        super::transport::connect("hyprland", directory.into())
+    }
+}
+/// Detect niri first, then Hyprland, from the standard compositor environment.
+#[cfg(feature = "compositors")]
+pub fn detect() -> Option<Arc<dyn Backend>> {
+    transport::detect(
+        std::env::var_os("NIRI_SOCKET"),
+        std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE"),
+        std::env::var_os("XDG_RUNTIME_DIR"),
+    )
+}
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Id(pub String);
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -123,6 +153,10 @@ pub enum Action {
     },
     SwitchWorkspace {
         workspace: Id,
+    },
+    /// Focus a workspace by its compositor-neutral numeric index.
+    SwitchWorkspaceIndex {
+        index: i64,
     },
     MoveWindow {
         window: Id,
