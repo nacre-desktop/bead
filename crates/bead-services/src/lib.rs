@@ -129,6 +129,7 @@ pub use runtime::{Action, ClockSecondsLease, Config, Desktop, Subscription};
 #[cfg(test)]
 mod tests;
 
+pub mod media;
 pub mod notification_bus;
 pub mod notifications;
 pub mod tray_watcher;

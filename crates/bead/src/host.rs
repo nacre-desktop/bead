@@ -9,6 +9,7 @@ use bead_core::Value;
 use bead_services::{
     Action as DesktopAction, ClockSecondsLease, Config as DesktopConfig, Desktop, Snapshot,
     Subscription,
+    media::{Media, MediaAction, MediaSnapshot},
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -94,10 +95,13 @@ pub struct FolderServicesRuntime {
     desktop: Option<Arc<Desktop>>,
     _subscription: Option<Subscription>,
     _clock_lease: Option<ClockSecondsLease>,
+    media: Option<Arc<Media>>,
+    _media_subscription: Option<bead_services::media::Subscription>,
     commands: Arc<Mutex<CommandState>>,
     signals: Arc<RuntimeSignals>,
     stop: Arc<(Mutex<bool>, Condvar)>,
     scheduler: Mutex<Option<std::thread::JoinHandle<()>>>,
+    media_tick: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 impl FolderServicesRuntime {
     /// Start one shared runtime, or return `None` when nothing was declared.
@@ -110,6 +114,11 @@ impl FolderServicesRuntime {
         } else {
             Some(Desktop::start_config(desktop_config(&services.desktop)))
         };
+        let media = services
+            .desktop
+            .contains("media")
+            .then(Media::start_session)
+            .flatten();
         let clock_lease = if services.desktop.contains("clock") {
             desktop
                 .as_ref()
@@ -118,6 +127,14 @@ impl FolderServicesRuntime {
             None
         };
         let signals = Arc::new(RuntimeSignals::default());
+        let media_subscription = media.as_ref().map(|media| {
+            let signals = Arc::downgrade(&signals);
+            media.subscribe(move |_| {
+                if let Some(signals) = signals.upgrade() {
+                    signals.notify();
+                }
+            })
+        });
         let subscription = desktop.as_ref().map(|desktop| {
             let signals = Arc::downgrade(&signals);
             desktop.subscribe(move |_| {
@@ -142,6 +159,33 @@ impl FolderServicesRuntime {
             }
         }
         let stop = Arc::new((Mutex::new(false), Condvar::new()));
+        let media_tick = media.as_ref().map(|media| {
+            let media = media.clone();
+            let signals = signals.clone();
+            let stop_signal = stop.clone();
+            std::thread::spawn(move || {
+                let mut last_tick = monotonic_ms();
+                loop {
+                    let stopped = stop_signal.0.lock().unwrap();
+                    if *stopped {
+                        break;
+                    }
+                    let (stopped, timeout) = stop_signal
+                        .1
+                        .wait_timeout(stopped, Duration::from_secs(1))
+                        .unwrap();
+                    if *stopped {
+                        break;
+                    }
+                    drop(stopped);
+                    let now = monotonic_ms();
+                    if timeout.timed_out() && media_tick_due(&media.snapshot(), last_tick, now) {
+                        signals.notify();
+                        last_tick = now;
+                    }
+                }
+            })
+        });
         let scheduler = if intervals.is_empty() {
             None
         } else {
@@ -183,10 +227,13 @@ impl FolderServicesRuntime {
             desktop,
             _subscription: subscription,
             _clock_lease: clock_lease,
+            media,
+            _media_subscription: media_subscription,
             commands,
             signals,
             stop,
             scheduler: Mutex::new(scheduler),
+            media_tick: Mutex::new(media_tick),
         }))
     }
 
@@ -220,6 +267,9 @@ impl Drop for FolderServicesRuntime {
         *stopped.lock().unwrap() = true;
         wake.notify_all();
         if let Some(thread) = self.scheduler.lock().unwrap().take() {
+            let _ = thread.join();
+        }
+        if let Some(thread) = self.media_tick.lock().unwrap().take() {
             let _ = thread.join();
         }
     }
@@ -304,6 +354,90 @@ pub fn desktop_values(snapshot: &Snapshot) -> BTreeMap<String, Value> {
     put("session.locked", Value::Bool(snapshot.session.locked));
     values
 }
+fn monotonic_ms() -> u64 {
+    bead_services::media::monotonic_millis()
+}
+fn media_values(snapshot: &MediaSnapshot, now: u64) -> BTreeMap<String, Value> {
+    let player = snapshot
+        .active
+        .as_ref()
+        .and_then(|id| snapshot.players.iter().find(|p| &p.id == id));
+    let position = player
+        .map(|p| {
+            if p.status == "Playing" {
+                p.position_ms
+                    .saturating_add(now.saturating_sub(p.position_at) as i64)
+                    .min(if p.length_ms > 0 {
+                        p.length_ms
+                    } else {
+                        i64::MAX
+                    })
+            } else {
+                p.position_ms
+            }
+        })
+        .unwrap_or(-1);
+    let mut values = BTreeMap::new();
+    macro_rules! put {
+        ($key:expr, $value:expr) => {
+            values.insert(format!("desktop.media.{}", $key), $value);
+        };
+    }
+    put!("available", Value::Bool(player.is_some()));
+    put!(
+        "player",
+        Value::Text(player.map_or_else(String::new, |p| p.identity.clone()))
+    );
+    put!(
+        "status",
+        Value::Text(player.map_or_else(String::new, |p| p.status.clone()))
+    );
+    put!(
+        "title",
+        Value::Text(player.map_or_else(String::new, |p| p.title.clone()))
+    );
+    put!(
+        "artist",
+        Value::Text(player.map_or_else(String::new, |p| p.artist.clone()))
+    );
+    put!(
+        "album",
+        Value::Text(player.map_or_else(String::new, |p| p.album.clone()))
+    );
+    put!(
+        "art_url",
+        Value::Text(player.map_or_else(String::new, |p| p.art_url.clone()))
+    );
+    put!(
+        "length_ms",
+        Value::Number(player.map_or(-1, |p| p.length_ms) as f64)
+    );
+    put!("position_ms", Value::Number(position as f64));
+    put!(
+        "can_play_pause",
+        Value::Bool(player.is_some_and(|p| p.can_play_pause))
+    );
+    put!("can_next", Value::Bool(player.is_some_and(|p| p.can_next)));
+    put!(
+        "can_previous",
+        Value::Bool(player.is_some_and(|p| p.can_previous))
+    );
+    put!("can_seek", Value::Bool(player.is_some_and(|p| p.can_seek)));
+    values
+}
+fn media_is_playing(snapshot: &MediaSnapshot) -> bool {
+    snapshot
+        .active
+        .as_ref()
+        .and_then(|id| snapshot.players.iter().find(|p| &p.id == id))
+        .is_some_and(|p| p.status == "Playing")
+}
+fn media_tick_due(snapshot: &MediaSnapshot, last_tick: u64, now: u64) -> bool {
+    media_is_playing(snapshot) && now.saturating_sub(last_tick) >= 1_000
+}
+fn media_position_due(snapshot: &MediaSnapshot, last_tick: Option<u64>, now: u64) -> bool {
+    !media_is_playing(snapshot) || last_tick.is_none_or(|last| now.saturating_sub(last) >= 1_000)
+}
 fn declared_desktop_values(
     snapshot: &Snapshot,
     declared: &BTreeSet<String>,
@@ -327,7 +461,15 @@ fn declared_desktop_values(
 #[derive(Clone, Debug)]
 enum DesktopRequest {
     Action(DesktopAction),
+    Media(MediaRequest),
     Command(String),
+}
+#[derive(Clone, Debug)]
+enum MediaRequest {
+    PlayPause,
+    Next,
+    Previous,
+    Seek(i64),
 }
 fn route_folder_action(
     name: &str,
@@ -348,12 +490,29 @@ fn route_folder_action(
     let need = match name {
         "desktop.volume" | "desktop.mute" => "audio",
         "desktop.tray.activate" | "desktop.tray.secondary" | "desktop.tray.menu" => "tray",
+        "desktop.media.play_pause"
+        | "desktop.media.next"
+        | "desktop.media.previous"
+        | "desktop.media.seek" => "media",
         _ => return Err(format!("unknown desktop action '{name}'")),
     };
     if !declared.contains(need) {
         return Err(format!(
             "desktop action '{name}' requires undeclared service '{need}'"
         ));
+    }
+    if name.starts_with("desktop.media.") {
+        let action = match name {
+            "desktop.media.play_pause" => MediaRequest::PlayPause,
+            "desktop.media.next" => MediaRequest::Next,
+            "desktop.media.previous" => MediaRequest::Previous,
+            "desktop.media.seek" => match argument {
+                Value::Number(v) if v.is_finite() && *v >= 0. => MediaRequest::Seek(*v as i64),
+                _ => return Err("desktop.media.seek expects a non-negative number".into()),
+            },
+            _ => return Err(format!("{name} expects no argument")),
+        };
+        return Ok(Some(DesktopRequest::Media(action)));
     }
     let point = pointer
         .map(|(x, y)| (x.round() as i32, y.round() as i32))
@@ -494,6 +653,7 @@ pub struct FolderView {
     initialized: bool,
     needs_external_refresh: bool,
     last_revision: Option<u64>,
+    last_media_position_tick: Option<u64>,
     pointer: Option<(f32, f32)>,
 }
 impl FolderView {
@@ -575,6 +735,18 @@ impl FolderView {
                 host_actions.push(name.to_owned());
             }
         }
+        if services.desktop.contains("media") {
+            host_actions.extend(
+                [
+                    "desktop.media.play_pause",
+                    "desktop.media.next",
+                    "desktop.media.previous",
+                    "desktop.media.seek",
+                ]
+                .into_iter()
+                .map(str::to_owned),
+            );
+        }
         host_actions.extend(
             services
                 .commands
@@ -593,6 +765,7 @@ impl FolderView {
             initialized: false,
             needs_external_refresh: false,
             last_revision: None,
+            last_media_position_tick: None,
             pointer: None,
         })
     }
@@ -611,6 +784,24 @@ impl FolderView {
                         &runtime.services.desktop,
                     ));
                 }
+            }
+            if runtime.services.desktop.contains("media") {
+                let snapshot = runtime
+                    .media
+                    .as_ref()
+                    .map_or_else(MediaSnapshot::default, |media| media.snapshot());
+                let now = monotonic_ms();
+                let mut values = media_values(&snapshot, now);
+                if media_is_playing(&snapshot) {
+                    if media_position_due(&snapshot, self.last_media_position_tick, now) {
+                        self.last_media_position_tick = Some(now);
+                    } else {
+                        values.remove("desktop.media.position_ms");
+                    }
+                } else {
+                    self.last_media_position_tick = None;
+                }
+                changes.extend(values);
             }
             for (name, (stdout, ok, error)) in runtime.command_values() {
                 changes.insert(format!("commands.{name}.stdout"), Value::Text(stdout));
@@ -770,6 +961,25 @@ impl SceneSource for FolderView {
                             }
                         } else {
                             eprintln!("desktop action {name}: desktop service is not enabled");
+                        }
+                        None
+                    }
+                    Ok(Some(DesktopRequest::Media(action))) => {
+                        if let Some(media) = self.runtime.as_ref().and_then(|r| r.media.as_ref()) {
+                            let active = media.snapshot().active;
+                            let result = active
+                                .ok_or_else(|| "no active media player".to_owned())
+                                .and_then(|id| {
+                                    media.action(match action {
+                                        MediaRequest::PlayPause => MediaAction::PlayPause(id),
+                                        MediaRequest::Next => MediaAction::Next(id),
+                                        MediaRequest::Previous => MediaAction::Previous(id),
+                                        MediaRequest::Seek(ms) => MediaAction::Seek(id, ms),
+                                    })
+                                });
+                            if let Err(e) = result {
+                                eprintln!("desktop action {name}: {e}");
+                            }
                         }
                         None
                     }
@@ -1049,6 +1259,80 @@ mod tests {
         assert_eq!(
             subset.keys().cloned().collect::<Vec<_>>(),
             vec!["desktop.clock", "desktop.clock.seconds", "desktop.date"]
+        );
+    }
+
+    #[test]
+    fn media_projection_and_position_tick_use_controlled_monotonic_time() {
+        let empty = media_values(&MediaSnapshot::default(), 10_000);
+        assert_eq!(empty["desktop.media.available"], Value::Bool(false));
+        assert_eq!(empty["desktop.media.player"], Value::Text(String::new()));
+        assert_eq!(empty["desktop.media.position_ms"], Value::Number(-1.));
+        let player = bead_services::media::Player {
+            id: "org.mpris.MediaPlayer2.example".into(),
+            identity: "Example Player".into(),
+            status: "Playing".into(),
+            title: "Track".into(),
+            artist: "One, Two".into(),
+            length_ms: 20_000,
+            position_ms: 5_000,
+            position_at: 10_000,
+            can_play_pause: true,
+            ..Default::default()
+        };
+        let snapshot = MediaSnapshot {
+            revision: 1,
+            players: vec![player],
+            active: Some("org.mpris.MediaPlayer2.example".into()),
+        };
+        assert!(media_is_playing(&snapshot));
+        let values = media_values(&snapshot, 11_000);
+        assert_eq!(values["desktop.media.available"], Value::Bool(true));
+        assert_eq!(
+            values["desktop.media.player"],
+            Value::Text("Example Player".into())
+        );
+        assert_eq!(values["desktop.media.position_ms"], Value::Number(6_000.));
+        let mut paused = snapshot.clone();
+        paused.players[0].status = "Paused".into();
+        assert!(!media_is_playing(&paused));
+        assert!(!media_tick_due(&paused, 10_000, 12_000));
+        assert!(!media_tick_due(&snapshot, 10_000, 10_999));
+        assert!(media_tick_due(&snapshot, 10_000, 11_000));
+        assert!(!media_position_due(&snapshot, Some(10_000), 10_999));
+        assert!(media_position_due(&snapshot, Some(10_000), 11_000));
+        assert!(media_position_due(&snapshot, None, 10_000));
+        assert!(media_position_due(&paused, Some(10_000), 10_001));
+        assert_eq!(
+            media_values(&paused, 15_000)["desktop.media.position_ms"],
+            Value::Number(5_000.)
+        );
+    }
+
+    #[test]
+    fn media_actions_route_only_when_declared_and_validate_seek() {
+        let declared = BTreeSet::from(["media".to_owned()]);
+        assert!(matches!(
+            route_folder_action("desktop.media.next", &Value::Bool(false), &declared, None),
+            Ok(Some(DesktopRequest::Media(MediaRequest::Next)))
+        ));
+        assert!(matches!(
+            route_folder_action("desktop.media.seek", &Value::Number(1200.), &declared, None),
+            Ok(Some(DesktopRequest::Media(MediaRequest::Seek(1200))))
+        ));
+        assert!(
+            route_folder_action("desktop.media.seek", &Value::Number(-1.), &declared, None)
+                .is_err()
+        );
+        assert!(
+            route_folder_action(
+                "desktop.media.play_pause",
+                &Value::Bool(false),
+                &BTreeSet::new(),
+                None
+            )
+            .unwrap_err()
+            .contains("undeclared service")
         );
     }
 

@@ -127,6 +127,7 @@ impl App {
             "bluetooth",
             "tray",
             "session",
+            "media",
         ];
         if let Some(services) = &manifest.services {
             for name in &services.desktop {
