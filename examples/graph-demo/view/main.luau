@@ -1,10 +1,9 @@
 -- SPDX-License-Identifier: MIT
 local ui = require("bead.ui")
 local kit = require("bead.kit")
-local graph = require("./graph")
 return ui.Column {
     id = "graph-demo", width = "fill", height = "fill", padding = 12, gap = 8, fill = "surface",
-    kit.GraphCanvas { id = "canvas", grow = 1, nodes = graph.nodes, edges = graph.edges,
+    kit.GraphCanvas { id = "canvas", grow = 1, graph = require("./graph"),
         selected = ui.bind("selected"), fill = ui.alpha("onSurface", 0.04),
         on_hover = ui.action("hover"), on_select = ui.action("select"), on_activate = ui.action("activate"),
         on_pin = ui.action("pin"), on_view_changed = ui.action("view") },

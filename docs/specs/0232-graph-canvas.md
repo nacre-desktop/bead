@@ -204,13 +204,27 @@ What exists:
   Labels are ordinary `Text` primitives appended by the session (hovered > selected >
   highlighted by weight > visible nodes by weight once `zoom >= label_zoom`), capped by
   `max_labels` (default 32, at most 256) and the remaining shared 1,024 scene text slots.
-  The legacy `CpuRenderer`, native GL and wgpu painters draw nothing for the primitive (wgpu
-  composites the tree renderer's CPU frame, so it shows the graph); none of them fail on it.
+  The legacy `CpuRenderer` and native GL draw nothing for the primitive and do not fail on it;
+  the wgpu femtovg renderer draws it through the retained GPU path (below).
+- `bead_ui::graph_data`: the data crosses the Luau boundary once. `ui.graph(nodes, edges)` walks the
+  Luau tables straight into one `GraphResource` (ids and labels as `Box<str>`, interned group index,
+  `f32` weight, `Arc<[[u32; 2]]>` edges, an id-sorted index and a weight-sorted label priority;
+  20k nodes / 100k edges caps, duplicate ids, missing edge ends and non-finite weights rejected
+  there) and returns a handle that serializes into the view tree as a small token, so the
+  materialized JSON tree never holds the graph. Equal content keeps its token, so an unchanged
+  view still patches in place; a stale token is a diagnostic, and a handle built in a pure
+  module (the demo does this) is cached with the module, so the Luau tables are garbage after
+  hand-over. `kit.GraphCanvas` accepts `graph = ui.graph(...)` or `nodes`/`edges` (then it hands
+  over per build).
 - `bead_ui::graph`: one `Canvas` per `Graph` view node, owned by the `Session` and surviving view
-  reloads. View data is parsed once per materialization and reconciled by id: a rename, weight,
+  reloads. The canvas shares the `GraphResource` and its edge array with the view node, the
+  worker command and the render geometry (no copies after ingest), holds positions as the
+  worker's latest `Arc<[Point]>` snapshot, and reuses the radius/mask arrays until attributes
+  change. Data is reconciled by id: a rename, weight,
   group, highlight or style change never reaches the worker; node/edge/pin changes send one
   `Replace` where kept nodes keep their positions, new nodes start 40 world units from a placed
-  neighbour (or in the scatter) and settle locally. A world-space uniform grid narrows hit tests;
+  neighbour (or in the scatter) and settle locally. A flat sorted world-space grid
+  (`bead_core::graph::Grid`, shared with the layout step) narrows hit tests;
   position and radius changes invalidate it. Interaction indices and runtime pins follow stable IDs. Pointer:
   press on a node then drag moves and pins it (`Pin` command; `on_pin{id,x,y}` on release), press
   on empty canvas then drag pans, wheel zooms around the pointer (`on_view_changed{zoom,cx,cy}`),
@@ -221,9 +235,9 @@ What exists:
   (for example `root.canvas`) and export/import positions and
   pin flags by id. Host wake: `Session::set_wakeup` (the `bead` host wires it to an empty model
   event).
-- `kit.GraphCanvas{ id, nodes, edges, style?, highlight?, hidden_groups?, selected?, on_hover?,
+- `kit.GraphCanvas{ id, graph | nodes, edges, style?, highlight?, hidden_groups?, selected?, on_hover?,
   on_select?, on_activate?, on_pin?, on_view_changed? }` over the `ui.Graph` widget
-  (`selected` maps to the widget's `selected_node`). Keyboard navigation, context menu, focus
+  (`selected` maps to the widget's `selected_node`, the data to its `graph` token). Keyboard navigation, context menu, focus
   animation, `neighborhood` masks and hysteresis at the LOD threshold are still open.
 - `examples/graph-demo`: seeded 2k/10k graph generated in Luau, status line with hover, select,
   activate, pin and view events; `bead check examples/graph-demo` runs in CI.
@@ -395,3 +409,18 @@ style.lod_zoom`, `any_highlighted = geometry.highlighted.iter().any(|h| *h)`, th
 alphas and colours and `hover`/`selected`, then `draw` in the pass that follows the retained
 layer blit. The CPU bake must skip `Primitive::Graph` when this path draws it, and the layer
 content key must not include the camera. Text labels use `to_screen` per labelled node.
+
+Hooked up (phase 2a follow-up): `bead_render::gpu::GpuRenderer` (wgpu femtovg kind) keeps one
+`GraphGpu` per `Primitive::Graph` (by primitive index) and syncs it from the shared geometry
+arrays by identity: a new edge array or node count (or edge colour) re-uploads everything, a new
+position array calls `set_positions`, new radius/mask arrays or a node colour call `set_nodes`;
+hover, selection and the camera are the per-frame uniform. The graphs are drawn in one extra
+render pass (`LoadOp::Load`) on the swapchain texture after femtovg's layer blit, scissored to
+each canvas. `prepare` bakes the retained layer from a copy of the scene whose graph primitives
+are transparent rectangles, so the layer key and pixels ignore the graph and the camera; labels
+stay `Text` primitives placed by the session with the same affine as `GraphGpu::to_screen`, so
+a pan still re-bakes the layer for the moved labels (a label overlay layer is the follow-up).
+The Vello comparison kind and native GL still draw nothing for the primitive.
+`gpu::tests::wgpu_path_draws_graphs_after_the_layer_blit` (any Vulkan adapter, llvmpipe in
+CI containers) proves the bake stays empty and camera-independent and that the drawn pixels,
+including the hover ring, land inside the canvas rectangle.

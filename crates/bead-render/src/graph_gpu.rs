@@ -442,12 +442,12 @@ fn node_words(nodes: &[Node]) -> Vec<u8> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::time::Instant;
 
     /// Any Vulkan adapter (`B0232_ADAPTER=discrete|integrated|cpu` narrows it), or None.
-    fn gpu() -> Option<(wgpu::Adapter, wgpu::Device, wgpu::Queue)> {
+    pub(crate) fn gpu() -> Option<(wgpu::Adapter, wgpu::Device, wgpu::Queue)> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
             display: None,
@@ -477,7 +477,11 @@ mod tests {
         println!("GRAPH_GPU_ADAPTER {:?}", adapter.get_info());
         Some((adapter, device, queue))
     }
-    fn target(device: &wgpu::Device, w: u32, h: u32) -> (wgpu::Texture, wgpu::TextureView) {
+    pub(crate) fn target(
+        device: &wgpu::Device,
+        w: u32,
+        h: u32,
+    ) -> (wgpu::Texture, wgpu::TextureView) {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: None,
             size: wgpu::Extent3d {
@@ -509,7 +513,7 @@ mod tests {
         buffer.unmap();
         bytes
     }
-    fn pixels(
+    pub(crate) fn pixels(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         tex: &wgpu::Texture,

@@ -21,9 +21,9 @@ pub mod damage;
 pub mod gl;
 #[cfg(feature = "wgpu")]
 pub mod gpu;
+pub mod graph;
 #[cfg(feature = "wgpu")]
 pub mod graph_gpu;
-pub mod graph;
 pub mod layer_motion;
 pub mod pointer_paint;
 pub mod retained;

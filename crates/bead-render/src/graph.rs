@@ -7,26 +7,27 @@
 use crate::{Damage, Rect};
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 /// World-space graph geometry, replaced as a whole whenever anything in it changes.
 #[derive(Clone, Debug, Default)]
 pub struct GraphGeometry {
     pub revision: u64,
-    pub positions: Vec<[f32; 2]>,
-    pub radii: Vec<f32>,
-    pub edges: Vec<[u32; 2]>,
+    pub positions: Arc<[[f32; 2]]>,
+    pub radii: Arc<[f32]>,
+    pub edges: Arc<[[u32; 2]]>,
     /// Per node, or empty when nothing is hidden.
-    pub hidden: Vec<bool>,
+    pub hidden: Arc<[bool]>,
     /// Per node, or empty when nothing is highlighted (then nothing is dimmed).
-    pub highlighted: Vec<bool>,
+    pub highlighted: Arc<[bool]>,
 }
 impl GraphGeometry {
     pub fn bytes(&self) -> usize {
-        self.positions.capacity() * 8
-            + self.radii.capacity() * 4
-            + self.edges.capacity() * 8
-            + self.hidden.capacity()
-            + self.highlighted.capacity()
+        self.positions.len() * 8
+            + self.radii.len() * 4
+            + self.edges.len() * 8
+            + self.hidden.len()
+            + self.highlighted.len()
     }
 }
 /// `screen = rect.center + (world - center) * zoom`, in logical pixels.
@@ -205,7 +206,7 @@ pub(crate) fn interaction_damage(
         ));
     }
     if camera.zoom < style.lod_zoom || geometry.highlighted.iter().any(|h| *h) {
-        for [a, b] in &geometry.edges {
+        for [a, b] in geometry.edges.iter() {
             if !changed.contains(a) && !changed.contains(b) {
                 continue;
             }
@@ -456,8 +457,9 @@ mod tests {
             revision: 1,
             positions: (0..n)
                 .map(|_| [next() * 1480. - 740., next() * 1000. - 500.])
-                .collect(),
-            radii: vec![3.; n],
+                .collect::<Vec<_>>()
+                .into(),
+            radii: vec![3.; n].into(),
             edges: (0..m)
                 .map(|_| {
                     [
@@ -465,9 +467,10 @@ mod tests {
                         (next() * n as f32) as u32 % n as u32,
                     ]
                 })
-                .collect(),
-            hidden: vec![],
-            highlighted: vec![],
+                .collect::<Vec<_>>()
+                .into(),
+            hidden: Arc::from([]),
+            highlighted: Arc::from([]),
         }
     }
     fn strip(w: u32, h: u32) -> Vec<u8> {
@@ -511,11 +514,11 @@ mod tests {
     fn paints_inside_the_rect_and_marks_hover() {
         let geometry = GraphGeometry {
             revision: 1,
-            positions: vec![[-10., 0.], [10., 0.], [500., 500.]],
-            radii: vec![3.; 3],
-            edges: vec![[0, 1], [1, 2]],
-            hidden: vec![],
-            highlighted: vec![],
+            positions: Arc::from([[-10., 0.], [10., 0.], [500., 500.]]),
+            radii: Arc::from([3.; 3]),
+            edges: Arc::from([[0, 1], [1, 2]]),
+            hidden: Arc::from([]),
+            highlighted: Arc::from([]),
         };
         let (w, h) = (64, 64);
         let mut plain = strip(w, h);
@@ -556,7 +559,7 @@ mod tests {
         );
         let mut hidden = strip(w, h);
         let mut g = geometry.clone();
-        g.hidden = vec![true, true, true];
+        g.hidden = vec![true, true, true].into();
         paint_into(&mut hidden, w, h, &g, Camera::default(), None);
         assert_eq!(alpha_sum(&hidden), 0);
     }
@@ -583,9 +586,9 @@ mod tests {
     fn interaction_damage_matches_full_repaint() {
         use crate::tree::{Frame, Item, paint};
         let geometry = Arc::new(GraphGeometry {
-            positions: vec![[-30., -10.], [20., 10.], [50., -20.]],
-            radii: vec![3.; 3],
-            edges: vec![[0, 1], [1, 2]],
+            positions: Arc::from([[-30., -10.], [20., 10.], [50., -20.]]),
+            radii: Arc::from([3.; 3]),
+            edges: Arc::from([[0, 1], [1, 2]]),
             ..Default::default()
         });
         for scale in [1., 1.5] {

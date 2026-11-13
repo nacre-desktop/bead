@@ -175,8 +175,7 @@ pub const PROPERTIES: &[&str] = &[
     "selected_fill",
     "multiline",
     "masked",
-    "nodes",
-    "edges",
+    "graph",
     "style",
     "highlight",
     "hidden_groups",
@@ -767,7 +766,7 @@ impl ViewSpec {
                 };
             let graph = if raw.kind == Widget::Graph {
                 Some(std::sync::Arc::new(crate::graph::GraphData::parse(
-                    p,
+                    &|name| p.get(name),
                     &parse_action,
                     source,
                 )?))

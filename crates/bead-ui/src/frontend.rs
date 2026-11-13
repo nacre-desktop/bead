@@ -732,6 +732,19 @@ impl Vm {
             )?,
         )?;
         sdk.set("tr", crate::i18n::lua_function(&lua)?)?;
+        let handed_over = native_time.clone();
+        sdk.set(
+            "graph",
+            lua.create_function(move |lua, (nodes, edges): (Table, Table)| {
+                // Native ingest, excluded from the 50 ms markup budget like text measurement.
+                let started = bead_core::profile::thread_cpu_ns();
+                let handle = crate::graph_data::hand_over(lua, &nodes, &edges);
+                handed_over.set(
+                    handed_over.get() + bead_core::profile::thread_cpu_ns().saturating_sub(started),
+                );
+                handle
+            })?,
+        )?;
         if let Some((root, grants)) = &frontend.plugins {
             let checked = grants.clone();
             sdk.set(
@@ -827,6 +840,7 @@ impl FrontEnd for LuauFrontEnd {
     ) -> Result<std::rc::Rc<RawNode>, Diagnostic> {
         #[cfg(test)]
         BUILD_CALLS.set(BUILD_CALLS.get() + 1);
+        crate::graph_data::begin_build();
         if self.animation_deadline().is_none()
             && let Some(cached) = &*self.materialized.borrow()
             && cached

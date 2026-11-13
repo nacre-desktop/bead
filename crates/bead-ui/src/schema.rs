@@ -31,6 +31,7 @@ pub fn luau() -> String {
         ("text_line_height", "(string,number)->number"),
         ("model_count", "(any)->number"),
         ("tr", "(string,any?)->string"),
+        ("graph", "({any},{any})->any"),
         // Present only in bundles that mount plugins (spec 0203).
         ("plugin_gate", "(string,any)->any"),
         ("plugin_fault", "(string,string)->()"),

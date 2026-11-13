@@ -4,6 +4,7 @@ pub mod accessibility;
 pub mod frontend;
 mod generation;
 mod graph;
+mod graph_data;
 pub mod i18n;
 pub mod input;
 mod interaction;

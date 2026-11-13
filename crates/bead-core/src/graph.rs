@@ -4,13 +4,42 @@
 //! condvar at zero CPU until a topology, pin or restore command arrives. Positions reach
 //! the UI as latest-only snapshots; a host wake callback fires once per pending snapshot.
 use std::{
-    collections::HashMap,
-    sync::{Arc, Condvar, Mutex},
+    sync::{Arc, Condvar, Mutex, MutexGuard},
     thread,
 };
 
 pub type Point = [f32; 2];
 type Wake = Arc<dyn Fn() + Send + Sync>;
+
+/// Flat spatial bins shared by layout and UI hit testing.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Grid(Vec<([i32; 2], u32)>);
+impl Grid {
+    pub fn cell(point: Point, cell_size: f32) -> [i32; 2] {
+        [
+            (point[0] / cell_size).floor() as i32,
+            (point[1] / cell_size).floor() as i32,
+        ]
+    }
+    pub fn update(&mut self, positions: &[Point], cell_size: f32) {
+        self.0.clear();
+        self.0.reserve(positions.len());
+        self.0.extend(
+            positions
+                .iter()
+                .enumerate()
+                .map(|(i, &point)| (Self::cell(point, cell_size), i as u32)),
+        );
+        self.0.sort_unstable_by_key(|entry| entry.0);
+    }
+    pub fn at(&self, cell: [i32; 2]) -> impl Iterator<Item = usize> + '_ {
+        let start = self.0.partition_point(|entry| entry.0 < cell);
+        self.0[start..]
+            .iter()
+            .take_while(move |entry| entry.0 == cell)
+            .map(|entry| entry.1 as usize)
+    }
+}
 
 const CELL: f32 = 56.;
 const REPULSION: f32 = 1200.;
@@ -26,14 +55,17 @@ const QUIET_STEPS: u32 = 12;
 const MAX_STEPS: u32 = 3000;
 
 /// Positions, velocities and topology, owned by the layout thread.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Layout {
     pub positions: Vec<Point>,
     velocities: Vec<Point>,
     pub pinned: Vec<bool>,
-    /// 1 while a node still settles, 0 once it is frozen; local reheats warm only a few nodes.
-    heat: Vec<f32>,
-    pub edges: Vec<[u32; 2]>,
+    /// True while a node still settles; local reheats warm only a few nodes.
+    heat: Vec<bool>,
+    pub edges: Arc<[[u32; 2]]>,
+    grid: Grid,
+    force: Vec<Point>,
+    degree: Vec<u32>,
     alpha: f32,
     quiet: u32,
     steps: u32,
@@ -46,7 +78,7 @@ pub enum Command {
     Replace {
         positions: Vec<Point>,
         pinned: Vec<bool>,
-        edges: Vec<[u32; 2]>,
+        edges: Arc<[[u32; 2]]>,
         hot: Vec<bool>,
     },
     /// Move and/or pin one node (a drag); unpinning reheats it and its neighbours.
@@ -66,23 +98,16 @@ pub struct Snapshot {
 }
 impl Layout {
     pub fn settled(&self) -> bool {
-        self.quiet >= QUIET_STEPS || self.steps >= MAX_STEPS || self.heat.iter().all(|h| *h == 0.)
+        self.quiet >= QUIET_STEPS || self.steps >= MAX_STEPS || self.heat.iter().all(|h| !h)
     }
-    fn neighbours(&self, node: usize) -> impl Iterator<Item = usize> + '_ {
-        self.edges.iter().filter_map(move |[a, b]| {
-            (*a as usize == node)
-                .then_some(*b as usize)
-                .or((*b as usize == node).then_some(*a as usize))
-        })
-    }
-    fn reheat(&mut self, nodes: &[usize]) {
-        for &node in nodes {
-            let near: Vec<usize> = self.neighbours(node).collect();
-            for i in near.into_iter().chain([node]) {
-                if let Some(h) = self.heat.get_mut(i) {
-                    *h = 1.;
-                }
-            }
+    fn reheat(&mut self, hot: impl Fn(usize) -> bool) {
+        for (i, heat) in self.heat.iter_mut().enumerate() {
+            *heat |= hot(i);
+        }
+        for &[a, b] in self.edges.iter() {
+            let (a, b) = (a as usize, b as usize);
+            self.heat[a] |= hot(b);
+            self.heat[b] |= hot(a);
         }
         self.alpha = ALPHA_START;
         self.quiet = 0;
@@ -107,13 +132,21 @@ impl Layout {
                 self.positions = positions;
                 self.velocities = vec![[0., 0.]; n];
                 self.pinned = pinned;
-                self.heat = vec![0.; n];
+                self.heat = vec![false; n];
                 self.edges = edges;
-                let warm: Vec<usize> = (0..n).filter(|i| hot[*i]).collect();
-                if warm.is_empty() {
+                self.grid.0.clear();
+                self.force.resize(n, [0., 0.]);
+                self.degree.resize(n, 0);
+                self.degree.fill(0);
+                for [a, b] in self.edges.iter() {
+                    self.degree[*a as usize] += 1;
+                    self.degree[*b as usize] += 1;
+                }
+                let warm = hot.iter().any(|hot| *hot);
+                if !warm {
                     self.quiet = QUIET_STEPS;
                 } else {
-                    self.reheat(&warm);
+                    self.reheat(|i| hot[i]);
                 }
             }
             Command::Pin {
@@ -130,7 +163,7 @@ impl Layout {
                 }
                 self.velocities[i] = [0., 0.];
                 if self.pinned[i] && !pinned {
-                    self.reheat(&[i]);
+                    self.reheat(|node| node == i);
                 }
                 self.pinned[i] = pinned;
             }
@@ -138,24 +171,17 @@ impl Layout {
     }
     /// One integration step; returns the mean velocity² of the nodes still settling.
     pub fn step(&mut self) -> f32 {
-        let n = self.positions.len();
-        let mut bins: HashMap<(i32, i32), Vec<usize>> = HashMap::new();
-        let cell = |p: &Point| ((p[0] / CELL).floor() as i32, (p[1] / CELL).floor() as i32);
+        self.grid.update(&self.positions, CELL);
+        self.force.fill([0., 0.]);
         for (i, p) in self.positions.iter().enumerate() {
-            bins.entry(cell(p)).or_default().push(i);
-        }
-        let mut force = vec![[0f32, 0f32]; n];
-        for (i, p) in self.positions.iter().enumerate() {
-            if self.heat[i] == 0. || self.pinned[i] {
+            if !self.heat[i] || self.pinned[i] {
                 continue;
             }
-            let (cx, cy) = cell(p);
+            let [cx, cy] = Grid::cell(*p, CELL);
             for dx in -1..=1 {
                 for dy in -1..=1 {
-                    let Some(ids) = bins.get(&(cx + dx, cy + dy)) else {
-                        continue;
-                    };
-                    for &j in ids {
+                    let cell = [cx.saturating_add(dx), cy.saturating_add(dy)];
+                    for j in self.grid.at(cell) {
                         if i == j {
                             continue;
                         }
@@ -164,8 +190,8 @@ impl Layout {
                         let d2 = x * x + y * y + 0.01;
                         if d2 < CELL * CELL * 2.25 {
                             let k = REPULSION / (d2 * d2.sqrt());
-                            force[i][0] += x * k;
-                            force[i][1] += y * k;
+                            self.force[i][0] += x * k;
+                            self.force[i][1] += y * k;
                         }
                     }
                 }
@@ -173,12 +199,7 @@ impl Layout {
         }
         // Each edge contribution is divided by the endpoint degree so hubs do not
         // accumulate an unbounded net force.
-        let mut degree = vec![0u32; n];
-        for [a, b] in &self.edges {
-            degree[*a as usize] += 1;
-            degree[*b as usize] += 1;
-        }
-        for [a, b] in &self.edges {
+        for [a, b] in self.edges.iter() {
             let (a, b) = (*a as usize, *b as usize);
             let (x, y) = (
                 self.positions[b][0] - self.positions[a][0],
@@ -186,19 +207,19 @@ impl Layout {
             );
             let d = (x * x + y * y).sqrt().max(0.01);
             let k = ((d - SPRING_LENGTH) * SPRING_K).clamp(-0.6, 0.6);
-            let ka = k / degree[a].max(1) as f32;
-            let kb = k / degree[b].max(1) as f32;
-            force[a][0] += x / d * ka;
-            force[a][1] += y / d * ka;
-            force[b][0] -= x / d * kb;
-            force[b][1] -= y / d * kb;
+            let ka = k / self.degree[a].max(1) as f32;
+            let kb = k / self.degree[b].max(1) as f32;
+            self.force[a][0] += x / d * ka;
+            self.force[a][1] += y / d * ka;
+            self.force[b][0] -= x / d * kb;
+            self.force[b][1] -= y / d * kb;
         }
         let (mut kinetic, mut moving) = (0f64, 0usize);
-        for (i, f) in force.iter().enumerate() {
-            if self.pinned[i] || self.heat[i] == 0. {
+        for (i, f) in self.force.iter().enumerate() {
+            if self.pinned[i] || !self.heat[i] {
                 continue;
             }
-            let gain = self.alpha * self.heat[i];
+            let gain = self.alpha;
             let v = &mut self.velocities[i];
             v[0] = (v[0] + f[0].clamp(-30., 30.) * gain) * DAMPING;
             v[1] = (v[1] + f[1].clamp(-30., 30.) * gain) * DAMPING;
@@ -216,24 +237,30 @@ impl Layout {
             0
         };
         if self.settled() {
-            self.heat.fill(0.);
+            self.heat.fill(false);
             self.velocities.fill([0., 0.]);
         }
         energy
     }
 }
 
-struct Inbox {
+#[derive(Default)]
+struct State {
     commands: Vec<(u64, Command)>,
     next_command_revision: u64,
     stop: bool,
+    snapshot: Option<Snapshot>,
+    tid: Option<u64>,
 }
+#[derive(Default)]
 struct Shared {
-    inbox: Mutex<Inbox>,
+    state: Mutex<State>,
     wake: Condvar,
-    snapshot: Mutex<Option<Snapshot>>,
-    /// Linux thread id of the worker, for CPU accounting in tests and diagnostics.
-    tid: Mutex<Option<u64>>,
+}
+impl Shared {
+    fn lock(&self) -> MutexGuard<'_, State> {
+        self.state.lock().unwrap_or_else(|e| e.into_inner())
+    }
 }
 /// Owns the layout thread; dropping it stops and joins the thread.
 pub struct Worker {
@@ -243,16 +270,7 @@ pub struct Worker {
 impl Worker {
     /// `wake` is called once whenever a snapshot becomes pending after the last one was taken.
     pub fn spawn(wake: Option<Wake>) -> std::io::Result<Self> {
-        let shared = Arc::new(Shared {
-            inbox: Mutex::new(Inbox {
-                commands: Vec::new(),
-                next_command_revision: 0,
-                stop: false,
-            }),
-            wake: Condvar::new(),
-            snapshot: Mutex::new(None),
-            tid: Mutex::new(None),
-        });
+        let shared = Arc::new(Shared::default());
         let thread_shared = shared.clone();
         let join = thread::Builder::new()
             .name("bead-graph-layout".into())
@@ -264,7 +282,7 @@ impl Worker {
     }
     /// Queue a change; reject snapshots older than the returned command revision.
     pub fn send(&self, command: Command) -> u64 {
-        let mut inbox = self.shared.inbox.lock().unwrap_or_else(|e| e.into_inner());
+        let mut inbox = self.shared.lock();
         inbox.next_command_revision += 1;
         let revision = inbox.next_command_revision;
         if matches!(&command, Command::Replace { .. }) {
@@ -276,23 +294,15 @@ impl Worker {
     }
     /// The newest unread snapshot, consumed at most once per frame by the caller.
     pub fn take_snapshot(&self) -> Option<Snapshot> {
-        self.shared
-            .snapshot
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .take()
+        self.shared.lock().snapshot.take()
     }
     pub fn thread_id(&self) -> Option<u64> {
-        *self.shared.tid.lock().unwrap_or_else(|e| e.into_inner())
+        self.shared.lock().tid
     }
 }
 impl Drop for Worker {
     fn drop(&mut self) {
-        self.shared
-            .inbox
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .stop = true;
+        self.shared.lock().stop = true;
         self.shared.wake.notify_one();
         if let Some(join) = self.join.take() {
             let _ = join.join();
@@ -304,14 +314,14 @@ fn run(shared: &Shared, wake: Option<Wake>) {
     {
         // SAFETY: gettid has no preconditions and only reads the calling thread's id.
         let tid = unsafe { libc::gettid() };
-        *shared.tid.lock().unwrap_or_else(|e| e.into_inner()) = Some(tid as u64);
+        shared.lock().tid = Some(tid as u64);
     }
     let mut layout = Layout::default();
     let mut revision = 0u64;
     let mut command_revision = 0u64;
     loop {
         let commands = {
-            let mut inbox = shared.inbox.lock().unwrap_or_else(|e| e.into_inner());
+            let mut inbox = shared.lock();
             while inbox.commands.is_empty() && !inbox.stop && layout.settled() {
                 inbox = shared.wake.wait(inbox).unwrap_or_else(|e| e.into_inner());
             }
@@ -329,14 +339,27 @@ fn run(shared: &Shared, wake: Option<Wake>) {
         }
         revision += 1;
         let pending = {
-            let mut slot = shared.snapshot.lock().unwrap_or_else(|e| e.into_inner());
+            let mut state = shared.lock();
+            let slot = &mut state.snapshot;
             let was_empty = slot.is_none();
-            *slot = Some(Snapshot {
-                revision,
-                command_revision,
-                positions: layout.positions.as_slice().into(),
-                settled: layout.settled(),
+            let reusable = slot.as_mut().and_then(|snapshot| {
+                Arc::get_mut(&mut snapshot.positions)
+                    .filter(|positions| positions.len() == layout.positions.len())
             });
+            if let Some(positions) = reusable {
+                positions.copy_from_slice(&layout.positions);
+            } else {
+                *slot = Some(Snapshot {
+                    revision,
+                    command_revision,
+                    positions: layout.positions.as_slice().into(),
+                    settled: layout.settled(),
+                });
+            }
+            let snapshot = slot.as_mut().unwrap();
+            snapshot.revision = revision;
+            snapshot.command_revision = command_revision;
+            snapshot.settled = layout.settled();
             was_empty
         };
         if pending && let Some(wake) = &wake {
@@ -378,7 +401,7 @@ mod tests {
         Command::Replace {
             positions,
             pinned: vec![false; n],
-            edges,
+            edges: edges.into(),
             hot: vec![true; n],
         }
     }
@@ -420,7 +443,7 @@ mod tests {
         layout.apply(Command::Replace {
             positions: vec![[1., 2.], [3., 4.]],
             pinned: vec![false, true],
-            edges: vec![[0, 1]],
+            edges: Arc::from([[0, 1]]),
             hot: vec![true, false],
         });
         let before = layout.clone();
@@ -428,18 +451,11 @@ mod tests {
         layout.apply(Command::Replace {
             positions: vec![[f32::NAN, 0.], [3., 4.]],
             pinned: vec![false, false],
-            edges: vec![[0, 1]],
+            edges: Arc::from([[0, 1]]),
             hot: vec![false, false],
         });
 
-        assert_eq!(layout.positions, before.positions);
-        assert_eq!(layout.velocities, before.velocities);
-        assert_eq!(layout.pinned, before.pinned);
-        assert_eq!(layout.heat, before.heat);
-        assert_eq!(layout.edges, before.edges);
-        assert_eq!(layout.alpha, before.alpha);
-        assert_eq!(layout.quiet, before.quiet);
-        assert_eq!(layout.steps, before.steps);
+        assert_eq!(layout, before);
     }
 
     #[test]
@@ -448,7 +464,7 @@ mod tests {
         let first = worker.send(Command::Replace {
             positions: vec![[1., 2.]],
             pinned: vec![true],
-            edges: vec![],
+            edges: Arc::from([]),
             hot: vec![false],
         });
         let old = wait_settled(&worker);
@@ -481,7 +497,7 @@ mod tests {
         let steps = settle(&mut layout);
         assert!(steps < MAX_STEPS, "ran to the cap after {steps} steps");
         assert!(layout.settled());
-        assert!(layout.heat.iter().all(|h| *h == 0.));
+        assert!(layout.heat.iter().all(|h| !h));
     }
     #[test]
     fn pinned_nodes_hold_and_a_frozen_replace_keeps_positions() {
@@ -514,18 +530,27 @@ mod tests {
         let before = layout.positions.clone();
         let mut positions = before.clone();
         positions.push([before[0][0] + 20., before[0][1]]);
-        let mut edges = layout.edges.clone();
+        let mut edges = layout.edges.to_vec();
         edges.push([0, 60]);
         let mut hot = vec![false; 61];
         hot[60] = true;
         layout.apply(Command::Replace {
             positions,
             pinned: vec![false; 61],
-            edges,
+            edges: edges.into(),
             hot,
         });
         settle(&mut layout);
-        let warm: std::collections::BTreeSet<usize> = layout.neighbours(60).chain([60]).collect();
+        let warm: std::collections::BTreeSet<usize> = layout
+            .edges
+            .iter()
+            .filter_map(|[a, b]| {
+                (*a == 60)
+                    .then_some(*b as usize)
+                    .or((*b == 60).then_some(*a as usize))
+            })
+            .chain([60])
+            .collect();
         for (i, p) in before.iter().enumerate() {
             if !warm.contains(&i) {
                 assert_eq!(layout.positions[i], *p, "node {i} moved on a local add");
@@ -566,7 +591,7 @@ mod tests {
         worker.send(Command::Replace {
             positions: positions.clone(),
             pinned: vec![true, false, false],
-            edges: vec![[0, 1], [1, 2]],
+            edges: Arc::from([[0, 1], [1, 2]]),
             hot: vec![false; 3],
         });
         let snapshot = wait_settled(&worker);
