@@ -521,6 +521,71 @@ pub struct TreeCache {
     /// The last frame derived for a reveal pose (frame key, progress bits, scale bits): an unchanged pose is not rebuilt.
     revealed_pose: Option<((u64, u32, u32), Arc<Frame>)>,
     validated_frame: Weak<Frame>,
+    /// B8: the frame hash of the last generated frame before its trailing fill layers.
+    fill_tail: Option<FillTail>,
+}
+#[cfg(test)]
+thread_local! {
+    static FILL_TAIL_HITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+struct FillTail {
+    /// The frame it describes, by address and content key (a Weak would block `Arc::get_mut`).
+    frame: (usize, u64),
+    start: usize,
+    first_layer: usize,
+    bounds: [u32; 4],
+    hash: std::collections::hash_map::DefaultHasher,
+}
+/// The trailing run of parentless layers that each own one fill and nothing else (scroll
+/// feedback thumbs): its first primitive and first layer.
+fn fill_tail(scene: &Scene) -> (usize, usize) {
+    let (mut start, mut first) = (scene.primitives.len(), scene.layers.len());
+    while let Some(layer) = first.checked_sub(1).map(|i| &scene.layers[i]) {
+        if layer.parent.is_some()
+            || start == 0
+            || layer.own != (start - 1..start)
+            || layer.subtree_end != start
+            || !matches!(scene.primitives[start - 1], Primitive::Rounded { .. })
+        {
+            break;
+        }
+        (start, first) = (start - 1, first - 1);
+    }
+    (start, first)
+}
+fn rect_bits(r: Rect) -> [u32; 4] {
+    [r.x, r.y, r.w, r.h].map(f32::to_bits)
+}
+fn same_primitive(a: &Primitive, b: &Primitive) -> bool {
+    let hash = |p| {
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        hash_primitive(p, false, &mut hash);
+        hash.finish()
+    };
+    hash(a) == hash(b)
+}
+/// A retained layer's content key and its own item ids.
+fn layer_key<'a>(
+    layer: &crate::SceneLayer,
+    items: &'a [Item],
+    keys: &[u64],
+    child_ids: &[&str],
+) -> Result<(u64, Vec<&'a str>)> {
+    let mut key = std::collections::hash_map::DefaultHasher::new();
+    let mut own = Vec::new();
+    for index in layer.own.clone() {
+        let item = items.get(index).ok_or("retained node range invalid")?;
+        let r = rect(&item.primitive);
+        for f in [r.x - layer.bounds.x, r.y - layer.bounds.y, r.w, r.h] {
+            f.to_bits().hash(&mut key);
+        }
+        keys[index].hash(&mut key);
+        own.push(item.id.as_str());
+    }
+    own.hash(&mut key);
+    child_ids.hash(&mut key);
+    layer.parent.hash(&mut key);
+    Ok((key.finish(), own))
 }
 
 /// Exact content identity for worker-prepared or frozen CPU panel content.
@@ -1544,6 +1609,281 @@ impl TreeCache {
             _accounting: None,
         }))
     }
+    /// Account, validate and install a generated frame; release entries it does not use.
+    fn finish_frame(
+        &mut self,
+        scene: &Scene,
+        scale: f32,
+        items: Vec<Item>,
+        layers: Vec<LayerPose>,
+        assets: Vec<Arc<AssetLease>>,
+        key: u64,
+    ) -> Result<Arc<Frame>> {
+        let bytes = items
+            .iter()
+            .map(|i| {
+                i.id.capacity() + crate::primitive_bytes(&i.primitive) + std::mem::size_of::<Item>()
+                    // Conservatively cover a frame-owned raster delta wrapper,
+                    // including frames that share the cache's original wrapper.
+                    + i.raster.as_ref().map_or(0, |_| std::mem::size_of::<Raster>())
+            })
+            .sum::<usize>()
+            + layers.capacity() * std::mem::size_of::<LayerPose>()
+            + assets.capacity() * std::mem::size_of::<Arc<AssetLease>>();
+        validate_frame_rasters(&items)?;
+        // Validate the complete candidate while the previous frame remains
+        // available. Old entries may be needed for the current paint and are
+        // retired only after every fallible prepare step succeeds.
+        loop {
+            let retained_bytes = self
+                .entries
+                .values()
+                .map(|entry| {
+                    entry.raster.pixels.data().len()
+                        + entry
+                            .previous
+                            .as_ref()
+                            .map_or(0, |previous| previous.pixels.data().len())
+                })
+                .sum::<usize>();
+            if self.entries.len() <= 1024 && retained_bytes <= STEADY_RASTER_LIMIT {
+                break;
+            }
+            if self.evict_previous_variant() {
+                continue;
+            }
+            let victim = self
+                .entries
+                .iter()
+                .filter(|(_, e)| e.touched != self.serial)
+                .min_by_key(|(_, e)| e.touched)
+                .map(|(key, _)| key.clone());
+            let Some(victim) = victim else {
+                return Err("active retained rasters exceed cache budget".into());
+            };
+            self.entries.remove(&victim);
+        }
+        let accounting = Some(
+            self.frame_budget
+                .get_or_insert_with(|| {
+                    bead_core::cache::Budget::new(
+                        "prepared-frame-metadata",
+                        8 * bead_core::cache::MIB,
+                    )
+                })
+                .reserve(bytes)?,
+        );
+        let frame = Arc::new(Frame {
+            native_resource_budget: self.resource_budget.clone(),
+            _assets: assets,
+            _accounting: accounting,
+            items,
+            scale,
+            key,
+            layer_count: if scene.layers.is_empty() {
+                scene.primitives.len()
+            } else {
+                scene.layers.len()
+            },
+            layers,
+        });
+        self.frame = Some(frame.clone());
+        // A scroll source already materializes its visible rows and a small
+        // neighbour window. Keeping every previously visited row here defeats
+        // that bound: raster and node identities survive until the much larger
+        // byte/entry LRU limits are reached. Keep the current frame's entries,
+        // including its one exact prior image extent, and release stale rows.
+        let scale_bits = scale.to_bits();
+        self.entries
+            .retain(|(_, bits), entry| *bits != scale_bits || entry.touched == self.serial);
+        self.nodes
+            .retain(|(_, bits), (_, touched)| *bits != scale_bits || *touched == self.serial);
+        Ok(frame)
+    }
+    /// B8: a scene that repeats the last generated frame before its trailing fill layers
+    /// (scroll feedback thumbs) reuses that frame's items and layer poses and builds only
+    /// those layers. Every reused item is compared with the scene (posed, clipped) first.
+    fn prepare_fill_tail(&mut self, scene: &Scene, scale: f32) -> Result<bool> {
+        let (start, first) = fill_tail(scene);
+        let (Some(tail), Some(previous)) = (self.fill_tail.as_ref(), self.frame.clone()) else {
+            return Ok(false);
+        };
+        let tail_layers = &scene.layers[first..];
+        if tail.start != start
+            || tail.first_layer != first
+            || tail.bounds != rect_bits(scene.bounds)
+            || (start == scene.primitives.len() && previous.items.len() == start)
+            || tail.frame != (Arc::as_ptr(&previous) as usize, previous.key)
+            || previous.scale != scale
+            || self.image_policy != ImagePolicy::Dense
+            || self.font_files != scene.font_files
+            || tail_layers.iter().zip(first..).any(|(layer, at)| {
+                scene.layers.iter().enumerate().any(|(other_at, other)| {
+                    (other_at != at && other.id == layer.id)
+                        || other.parent.as_ref() == Some(&layer.id)
+                })
+            })
+        {
+            return Ok(false);
+        }
+        let mut owned = vec![false; start];
+        for (layer, pose) in scene.layers[..first].iter().zip(&previous.layers) {
+            if pose.layer.id != layer.id
+                || pose.layer.parent != layer.parent
+                || pose.bounds != layer.bounds
+                || pose.layer.own.len() != layer.own.len()
+                || layer.own.end > start
+            {
+                return Ok(false);
+            }
+            for (id, index) in pose.layer.own.iter().zip(layer.own.clone()) {
+                if previous.items[index].id != *id {
+                    return Ok(false);
+                }
+                owned[index] = true;
+            }
+        }
+        let mut asset_keys = BTreeMap::new();
+        for (index, primitive) in scene.primitives[..start].iter().enumerate() {
+            let item = &previous.items[index];
+            // An unowned primitive's id is `primitive-{index}/{kind}/0`.
+            let unowned_id = || {
+                item.id
+                    .strip_prefix("primitive-")
+                    .and_then(|rest| rest.split_once('/'))
+                    .and_then(|(n, _)| n.parse::<usize>().ok())
+                    == Some(index)
+            };
+            if item.clip != scene.clip_at(index)
+                || !same_primitive(&item.primitive, primitive)
+                || (!owned[index] && !unowned_id())
+                || (matches!(primitive, Primitive::Image { .. })
+                    && item.raster.as_ref().is_some_and(|raster| {
+                        raster.key != signature(scene, primitive, scale, &mut asset_keys)
+                    }))
+            {
+                return Ok(false);
+            }
+        }
+        let mut hash = tail.hash.clone();
+        // Reused entries and nodes stay current, exactly as a full prepare would touch them.
+        self.serial += 1;
+        let scale_bits = scale.to_bits();
+        for ((_, bits), entry) in &mut self.entries {
+            if *bits == scale_bits {
+                entry.touched = self.serial;
+            }
+        }
+        for ((_, bits), (_, touched)) in &mut self.nodes {
+            if *bits == scale_bits {
+                *touched = self.serial;
+            }
+        }
+        let mut items = Vec::with_capacity(scene.primitives.len());
+        items.extend_from_slice(&previous.items[..start]);
+        let mut keys = vec![0; scene.primitives.len()];
+        for (layer, index) in tail_layers.iter().zip(start..) {
+            let primitive = &scene.primitives[index];
+            let id = format!("{}/fill/0", layer.id);
+            keys[index] = signature(scene, primitive, scale, &mut asset_keys);
+            id.hash(&mut hash);
+            keys[index].hash(&mut hash);
+            hash_primitive(primitive, false, &mut hash);
+            let clip = scene.clip_at(index);
+            if let Some(clip) = clip {
+                for value in [clip.x, clip.y, clip.w, clip.h] {
+                    value.to_bits().hash(&mut hash);
+                }
+            }
+            let (dx, dy) = scene.content_offset(index);
+            items.push(Item {
+                image: None,
+                id,
+                primitive: primitive.translated(dx, dy),
+                clip,
+                raster: None,
+            });
+        }
+        let mut layers = Vec::with_capacity(scene.layers.len());
+        layers.extend_from_slice(&previous.layers[..first]);
+        for layer in tail_layers {
+            let (key, own) = layer_key(layer, &items, &keys, &[])?;
+            layers.push(LayerPose {
+                layer: self.retained_node(layer, own, Vec::new(), key, scale)?,
+                bounds: layer.bounds,
+            });
+        }
+        let frame = self.finish_frame(scene, scale, items, layers, Vec::new(), hash.finish())?;
+        if let Some(tail) = self.fill_tail.as_mut() {
+            tail.frame = (Arc::as_ptr(&frame) as usize, frame.key);
+        }
+        #[cfg(test)]
+        FILL_TAIL_HITS.set(FILL_TAIL_HITS.get() + 1);
+        Ok(true)
+    }
+    /// The retained node for `layer` with content `key`, reused while the key holds.
+    fn retained_node(
+        &mut self,
+        layer: &crate::SceneLayer,
+        own: Vec<&str>,
+        child_ids: Vec<&str>,
+        key: u64,
+        scale: f32,
+    ) -> Result<Arc<RetainedLayer>> {
+        let slot = (layer.id.clone(), scale.to_bits());
+        if self.nodes.get(&slot).is_none_or(|(old, _)| old.key != key) {
+            let own: Vec<String> = own.into_iter().map(str::to_owned).collect();
+            let child_ids: Vec<String> = child_ids.into_iter().map(str::to_owned).collect();
+            let bytes = 192
+                + 2 * layer.id.capacity()
+                + layer.parent.as_ref().map_or(0, String::capacity)
+                + (own.capacity() + child_ids.capacity()) * std::mem::size_of::<String>()
+                + own
+                    .iter()
+                    .chain(&child_ids)
+                    .map(String::capacity)
+                    .sum::<usize>();
+            let budget = self.node_budget.get_or_insert_with(|| {
+                bead_core::cache::Budget::new("retained-node-metadata", 8 * bead_core::cache::MIB)
+            });
+            let charge = loop {
+                match budget.reserve(bytes) {
+                    Ok(c) => break c,
+                    Err(e) => {
+                        let victim = self
+                            .nodes
+                            .iter()
+                            .filter(|(_, (_, age))| *age != self.serial)
+                            .min_by_key(|(_, (_, age))| *age)
+                            .map(|(k, _)| k.clone());
+                        if let Some(k) = victim {
+                            self.nodes.remove(&k);
+                        } else {
+                            return Err(e.into());
+                        }
+                    }
+                }
+            };
+            self.nodes.insert(
+                slot.clone(),
+                (
+                    Arc::new(RetainedLayer {
+                        _charge: charge,
+                        id: layer.id.clone(),
+                        parent: layer.parent.clone(),
+                        own,
+                        children: child_ids,
+                        key,
+                    }),
+                    self.serial,
+                ),
+            );
+            self.node_updates += 1;
+        }
+        let (retained, touched) = self.nodes.get_mut(&slot).ok_or("retained node missing")?;
+        *touched = self.serial;
+        Ok(retained.clone())
+    }
     pub fn prepare(&mut self, scene: &Scene, scale: f32) -> Result<()> {
         if self.image_policy != ImagePolicy::Dense && self.resource_budget.is_none() {
             let budget = bead_core::cache::Budget::new(
@@ -1631,10 +1971,14 @@ impl TreeCache {
             }
             self.frame = Some(candidate);
             self.revealed_pose = pose.zip(self.frame.clone());
+            self.fill_tail = None;
             return Ok(());
         }
         if !scale.is_finite() || scale <= 0. {
             return Err("invalid layer scale".into());
+        }
+        if self.prepare_fill_tail(scene, scale)? {
+            return Ok(());
         }
         self.asset_leases
             .retain(|_, lease| lease.strong_count() > 0);
@@ -1689,7 +2033,12 @@ impl TreeCache {
         ] {
             value.to_bits().hash(&mut frame_hash);
         }
+        let (tail_start, tail_layer) = fill_tail(scene);
+        let mut tail_hash = None;
         for (index, primitive) in scene.primitives.iter().enumerate() {
+            if index == tail_start {
+                tail_hash = Some(frame_hash.clone());
+            }
             let kind = match primitive {
                 Primitive::Arc { .. } => "arc",
                 Primitive::Polyline { .. } => "polyline",
@@ -2047,6 +2396,7 @@ impl TreeCache {
                 raster,
             });
         }
+        let tail_hash = tail_hash.unwrap_or_else(|| frame_hash.clone());
         let mut children = BTreeMap::<&str, Vec<&str>>::new();
         for layer in &scene.layers {
             if let Some(parent) = &layer.parent {
@@ -2058,79 +2408,10 @@ impl TreeCache {
         }
         let mut layers = Vec::with_capacity(scene.layers.len());
         for layer in &scene.layers {
-            let mut key = std::collections::hash_map::DefaultHasher::new();
-            let mut own = Vec::new();
-            for index in layer.own.clone() {
-                let item = items.get(index).ok_or("retained node range invalid")?;
-                let r = rect(&item.primitive);
-                for f in [r.x - layer.bounds.x, r.y - layer.bounds.y, r.w, r.h] {
-                    f.to_bits().hash(&mut key);
-                }
-                keys[index].hash(&mut key);
-                own.push(item.id.as_str());
-            }
             let child_ids = children.remove(layer.id.as_str()).unwrap_or_default();
-            own.hash(&mut key);
-            child_ids.hash(&mut key);
-            layer.parent.hash(&mut key);
-            let key = key.finish();
-            let slot = (layer.id.clone(), scale.to_bits());
-            if self.nodes.get(&slot).is_none_or(|(old, _)| old.key != key) {
-                let own: Vec<String> = own.into_iter().map(str::to_owned).collect();
-                let child_ids: Vec<String> = child_ids.into_iter().map(str::to_owned).collect();
-                let bytes = 192
-                    + 2 * layer.id.capacity()
-                    + layer.parent.as_ref().map_or(0, String::capacity)
-                    + (own.capacity() + child_ids.capacity()) * std::mem::size_of::<String>()
-                    + own
-                        .iter()
-                        .chain(&child_ids)
-                        .map(String::capacity)
-                        .sum::<usize>();
-                let budget = self.node_budget.get_or_insert_with(|| {
-                    bead_core::cache::Budget::new(
-                        "retained-node-metadata",
-                        8 * bead_core::cache::MIB,
-                    )
-                });
-                let charge = loop {
-                    match budget.reserve(bytes) {
-                        Ok(c) => break c,
-                        Err(e) => {
-                            let victim = self
-                                .nodes
-                                .iter()
-                                .filter(|(_, (_, age))| *age != self.serial)
-                                .min_by_key(|(_, (_, age))| *age)
-                                .map(|(k, _)| k.clone());
-                            if let Some(k) = victim {
-                                self.nodes.remove(&k);
-                            } else {
-                                return Err(e.into());
-                            }
-                        }
-                    }
-                };
-                self.nodes.insert(
-                    slot.clone(),
-                    (
-                        Arc::new(RetainedLayer {
-                            _charge: charge,
-                            id: layer.id.clone(),
-                            parent: layer.parent.clone(),
-                            own,
-                            children: child_ids,
-                            key,
-                        }),
-                        self.serial,
-                    ),
-                );
-                self.node_updates += 1;
-            }
-            let (retained, touched) = self.nodes.get_mut(&slot).ok_or("retained node missing")?;
-            *touched = self.serial;
+            let (key, own) = layer_key(layer, &items, &keys, &child_ids)?;
             layers.push(LayerPose {
-                layer: retained.clone(),
+                layer: self.retained_node(layer, own, child_ids, key, scale)?,
                 bounds: layer.bounds,
             });
         }
@@ -2146,85 +2427,14 @@ impl TreeCache {
             };
             self.nodes.remove(&victim);
         }
-        let bytes = items
-            .iter()
-            .map(|i| {
-                i.id.capacity() + crate::primitive_bytes(&i.primitive) + std::mem::size_of::<Item>()
-                    // Conservatively cover a frame-owned raster delta wrapper,
-                    // including frames that share the cache's original wrapper.
-                    + i.raster.as_ref().map_or(0, |_| std::mem::size_of::<Raster>())
-            })
-            .sum::<usize>()
-            + layers.capacity() * std::mem::size_of::<LayerPose>()
-            + assets.capacity() * std::mem::size_of::<Arc<AssetLease>>();
-        validate_frame_rasters(&items)?;
-        // Validate the complete candidate while the previous frame remains
-        // available. Old entries may be needed for the current paint and are
-        // retired only after every fallible prepare step succeeds.
-        loop {
-            let retained_bytes = self
-                .entries
-                .values()
-                .map(|entry| {
-                    entry.raster.pixels.data().len()
-                        + entry
-                            .previous
-                            .as_ref()
-                            .map_or(0, |previous| previous.pixels.data().len())
-                })
-                .sum::<usize>();
-            if self.entries.len() <= 1024 && retained_bytes <= STEADY_RASTER_LIMIT {
-                break;
-            }
-            if self.evict_previous_variant() {
-                continue;
-            }
-            let victim = self
-                .entries
-                .iter()
-                .filter(|(_, e)| e.touched != self.serial)
-                .min_by_key(|(_, e)| e.touched)
-                .map(|(key, _)| key.clone());
-            let Some(victim) = victim else {
-                return Err("active retained rasters exceed cache budget".into());
-            };
-            self.entries.remove(&victim);
-        }
-        let accounting = Some(
-            self.frame_budget
-                .get_or_insert_with(|| {
-                    bead_core::cache::Budget::new(
-                        "prepared-frame-metadata",
-                        8 * bead_core::cache::MIB,
-                    )
-                })
-                .reserve(bytes)?,
-        );
-        let frame = Arc::new(Frame {
-            native_resource_budget: self.resource_budget.clone(),
-            _assets: assets,
-            _accounting: accounting,
-            items,
-            scale,
-            key: frame_hash.finish(),
-            layer_count: if scene.layers.is_empty() {
-                scene.primitives.len()
-            } else {
-                scene.layers.len()
-            },
-            layers,
+        let frame = self.finish_frame(scene, scale, items, layers, assets, frame_hash.finish())?;
+        self.fill_tail = Some(FillTail {
+            frame: (Arc::as_ptr(&frame) as usize, frame.key),
+            start: tail_start,
+            first_layer: tail_layer,
+            bounds: rect_bits(scene.bounds),
+            hash: tail_hash,
         });
-        self.frame = Some(frame);
-        // A scroll source already materializes its visible rows and a small
-        // neighbour window. Keeping every previously visited row here defeats
-        // that bound: raster and node identities survive until the much larger
-        // byte/entry LRU limits are reached. Keep the current frame's entries,
-        // including its one exact prior image extent, and release stale rows.
-        let scale_bits = scale.to_bits();
-        self.entries
-            .retain(|(_, bits), entry| *bits != scale_bits || entry.touched == self.serial);
-        self.nodes
-            .retain(|(_, bits), (_, touched)| *bits != scale_bits || *touched == self.serial);
         Ok(())
     }
 }
@@ -6522,6 +6732,123 @@ mod tests {
             Some(first.key)
         );
         assert_eq!(after.items[1].raster.as_ref().unwrap().base_key, None);
+    }
+
+    #[test]
+    fn scroll_thumb_frames_reuse_the_content_and_equal_a_full_prepare() {
+        // Content: an image row, an unowned fill, a clipped child text; then one thumb layer.
+        let content = |text: &str, thumb: Option<u8>| {
+            let mut scene = scene();
+            scene.primitives.push(Primitive::Text {
+                rect: Rect::new(2., 16., 16., 6.),
+                text: text.into(),
+                family: "IBM Plex Sans".into(),
+                size: 5.,
+                color: [255, 255, 255, 255],
+                weight: 400,
+                align: None,
+                shadow: None,
+            });
+            scene.clips.insert(2, Rect::new(0., 0., 24., 20.));
+            scene.layers[0].subtree_end = 3;
+            scene.layers.push(crate::SceneLayer {
+                id: "label".into(),
+                parent: Some("row".into()),
+                own: 2..3,
+                subtree_end: 3,
+                bounds: Rect::new(2., 16., 16., 6.),
+            });
+            if let Some(alpha) = thumb {
+                scene.primitives.push(Primitive::Rounded {
+                    rect: Rect::new(20., 2., 3., 9.),
+                    radius: 1.5,
+                    fill: [200, 200, 200, alpha],
+                    border: None,
+                });
+                scene.clips.insert(3, Rect::new(0., 0., 24., 20.));
+                scene.layers.push(crate::SceneLayer {
+                    id: "@scrollbar:list".into(),
+                    parent: None,
+                    own: 3..4,
+                    subtree_end: 4,
+                    bounds: Rect::new(20., 2., 3., 9.),
+                });
+            }
+            scene
+        };
+        type Described = (
+            u64,
+            usize,
+            Vec<(
+                String,
+                Option<Rect>,
+                u64,
+                Option<(u64, (u32, u32), Vec<u8>)>,
+            )>,
+            Vec<(String, Option<String>, Vec<String>, Vec<String>, u64, Rect)>,
+        );
+        let describe = |frame: &Frame| -> Described {
+            let items = frame
+                .items
+                .iter()
+                .map(|item| {
+                    let mut hash = std::collections::hash_map::DefaultHasher::new();
+                    hash_primitive(&item.primitive, false, &mut hash);
+                    let raster = item
+                        .raster
+                        .as_ref()
+                        .map(|r| (r.key, r.origin, r.pixels.data().to_vec()));
+                    assert!(item.image.is_none());
+                    (item.id.clone(), item.clip, hash.finish(), raster)
+                })
+                .collect();
+            let layers = frame
+                .layers
+                .iter()
+                .map(|pose| {
+                    let l = &pose.layer;
+                    let (own, children) = (l.own.clone(), l.children.clone());
+                    (
+                        l.id.clone(),
+                        l.parent.clone(),
+                        own,
+                        children,
+                        l.key,
+                        pose.bounds,
+                    )
+                })
+                .collect();
+            (frame.key, frame.layer_count, items, layers)
+        };
+        let mut bounds_changed = content("Row", Some(30));
+        bounds_changed.bounds.h += 1.;
+        let steps = [
+            (content("Row", Some(255)), false),
+            (content("Row", Some(200)), true),
+            (content("Row", Some(90)), true),
+            (content("Row", None), true),
+            (content("Row", Some(40)), true),
+            (content("Changed", Some(40)), false),
+            (content("Changed", Some(30)), true),
+            (bounds_changed, false),
+        ];
+        let mut cache = TreeCache::default();
+        for (step, (scene, reused)) in steps.iter().enumerate() {
+            let hits = FILL_TAIL_HITS.get();
+            cache.prepare(scene, 1.).unwrap();
+            assert_eq!(
+                FILL_TAIL_HITS.get() - hits,
+                usize::from(*reused),
+                "step {step}"
+            );
+            let mut full = TreeCache::default();
+            full.prepare(scene, 1.).unwrap();
+            assert_eq!(
+                describe(cache.frame.as_ref().unwrap()),
+                describe(full.frame.as_ref().unwrap()),
+                "step {step}"
+            );
+        }
     }
 
     #[test]
