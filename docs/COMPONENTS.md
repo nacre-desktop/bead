@@ -6,4 +6,4 @@ Hosts provide theme tokens, gradients, and font-family choices through the theme
 
 `bead-widgets` provides reusable forms, placement, drag geometry, measurement, virtual-list modules, and an opaque atomic JSON/revision store. Hosts supply catalogs, bindings, actions, geometry policies, animation settings, and storage paths.
 
-The kit includes buttons, icons, sliders, switches, tiles, segmented controls, lists, cards, popovers, tooltips, and text inputs. Components retain stable identity across reloads where their host bindings use stable IDs. Framework widgets do not add plugin capabilities or application routes.
+The kit includes buttons, icons, sliders, switches, tiles, segmented controls, lists, cards, badges, popovers, tooltips, text inputs, and a graph canvas. Components retain stable identity across reloads where their host bindings use stable IDs. Framework widgets do not add plugin capabilities or application routes.

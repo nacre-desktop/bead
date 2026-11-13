@@ -45,9 +45,9 @@ ui.TextInput { id="name", text=ui.bind("name"), placeholder="Name" }
 -- Editable input; text must bind to a mutable store.
 ```
 ```luau
-ui.Image { id="image", icon="wallpaper", width=120, height=80 }
--- Image slot; the host supplies the asset represented by icon (folder apps look it up in the
--- hicolor icon directories; `path` names a bundle file instead).
+ui.Image { id="image", path="logo.png", width=120, height=80 }
+-- Image file inside the app folder. icon="NAME" names a host slot instead (folder apps look
+-- NAME up in the hicolor icon directories).
 -- tint="secondary" (a palette role, `ui.alpha(...)` or `ui.tint(...)`) draws the image's alpha as a
 -- mask filled with that colour, so themed icons and symbol glyphs follow the palette.
 ```
@@ -75,16 +75,17 @@ ui.Group { id="group", child }
 return { stores={ count=0 }, actions={ increment=function(s) s.count += 1 end },
     computed={ label=function(s) return "Count " .. tostring(s.count) end } }
 -- main.luau
+local ui = require("bead.ui")
 return ui.Button { id="count", text=ui.bind("label"), on_activate=ui.action("increment") }
 ```
 
 For a live display, derive text in `computed` and bind it. `ui.resolve_for_check` resolves values during checks only; it does not create a runtime subscription. A view that reads an undeclared host key will not receive that value. Use a store for editable input and bind it directly to `TextInput.text`.
 
-Render a list store with `ui.Repeat { id = "rows", model = ui.bind("NAME"), key = "id", render = function(item) return ui.Text { text = item.name } end }`: one element per record, keyed by that field (see [hello-status](../../examples/hello-status/)). Other helpers: `ui.alpha(role, alpha)` and `ui.tint(base, over, alpha)` build colour values, `ui.text_width(text, family, size)` measures text (`ui.default_font_family` is the default family), and `ui.component(name, schema, render)` wraps a render function with property type checks.
+Render a list store with `ui.Repeat { id = "rows", model = ui.bind("NAME"), key = "id", render = function(item) return ui.Text { text = item.name } end }`: one element per record, keyed by that field (see [hello-status](../../examples/hello-status/)). Other helpers: `ui.alpha(role, alpha)` and `ui.tint(base, over, alpha)` build colour values, `ui.text_width(text, family, size)` measures text (`ui.default_font_family` is the default family), `ui.component(name, schema, render)` wraps a render function with property type checks, and `ui.graph(nodes, edges)` hands graph data to Rust once for [`kit.GraphCanvas`](kit.md).
 
 ## Motion
 
-`ui.motion` is a frozen table of tokens: `ui.motion.duration.<name>` (seconds: `hover` .09, `press` .06, `release` .12, `trace` .12, `badge` .14, `close` .16, `fade` .16, `osd_in` .16, `switch` .18, `peek` .2, `osd_out` .2, `open` .22, `toast` .22, `dock` .22, `slide` .24, `drop` .26, `pulse` 1.6) and `ui.motion.curve.<name>` (the curve strings `linear`, `out-cubic`, `in-cubic`, `out-quint`, `in-out-cubic`, `out-back`, `in-quart`, `spring`; `ease`, `ease-out`, `ease-in` and `ease-in-out` remain accepted). The same names work in `ui.animate`, `ui.animated` and `Panel.transition`; see [spec 0263](../specs/0263-motion-tokens-and-retarget.md).
+`ui.motion` is a frozen table of tokens: `ui.motion.duration.<name>` (seconds: `hover` .09, `press` .06, `release` .12, `trace` .12, `badge` .14, `close` .16, `fade` .16, `osd_in` .16, `switch` .18, `peek` .2, `osd_out` .2, `open` .22, `toast` .22, `dock` .22, `slide` .24, `drop` .26, `pulse` 1.6) and `ui.motion.curve.<name>` (keyed with `_` for `-`, so `m.curve.out_cubic` is `"out-cubic"`; the curve strings `linear`, `out-cubic`, `in-cubic`, `out-quint`, `in-out-cubic`, `out-back`, `in-quart`, `spring`; `ease`, `ease-out`, `ease-in` and `ease-in-out` remain accepted). The same names work in `ui.animate`, `ui.animated` and `Panel.transition`; see [spec 0263](../specs/0263-motion-tokens-and-retarget.md).
 
 ```luau
 local m = ui.motion

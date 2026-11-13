@@ -46,7 +46,7 @@ All values are under `desktop.`. Missing numeric readings use `-1`; missing stri
 When PipeWire (`audio`) or the system D-Bus is missing or drops, the host retries with exponential backoff capped at 60 s and logs each distinct failure once; it reconnects on the next attempt after the service appears.
 The optional `media` service selects the active MPRIS player using the policy in [spec 0239](../specs/0239-mpris.md). While it is Playing, `media.position_ms` is extrapolated and refreshed at 1 Hz without additional D-Bus reads.
 The optional `power` service follows power-profiles-daemon and publishes its active profile, available profiles, and performance degradation reason as described in [spec 0244](../specs/0244-power-profiles.md).
-The optional `bluetooth_devices` service publishes BlueZ adapters and devices and provides power, scan, connect, disconnect, and forget actions as described in [spec 0246](../specs/0246-bluetooth.md). Declare it in the folder manifest, then pass a selected device path to the connect action:
+The optional `bluetooth_devices` service publishes BlueZ adapters and devices and provides power, scan, connect, disconnect, and forget actions as described in [spec 0246](../specs/0246-bluetooth.md). Declare it in the folder manifest, then send a device's `path` to the connect action:
 
 ```toml
 [services]
@@ -54,8 +54,13 @@ desktop = ["bluetooth_devices"]
 ```
 
 ```luau
-local devices = stores["desktop.bluetooth_devices.devices"]
--- An item action can send devices[1].path as its Text argument.
+local ui = require("bead.ui")
+return ui.Row { id = "devices", width = "fill", height = "fill", gap = 4,
+    ui.Repeat { id = "device", model = ui.bind("desktop.bluetooth_devices.devices"), key = "path", render = function(device)
+        return ui.Button { id = "connect", text = device.name, width = 200, height = 30,
+            on_activate = ui.action("desktop.bluetooth_devices.connect", device.path) }
+    end },
+}
 ```
 
 The optional `network_devices` service follows NetworkManager and is separate from the `network` summary; see [spec 0247](../specs/0247-network.md). `connect` takes an SSID from `access_points`: known networks use their saved profile, open networks are added without secrets, and other secured networks report `secured network needs a password agent`.

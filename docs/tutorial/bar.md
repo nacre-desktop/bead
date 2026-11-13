@@ -2,7 +2,7 @@
 
 In about 15 minutes, make a top-edge bar with a title, live clock, battery reading, and a mute button. You need the `bead` CLI and a Wayland session to run it. The app itself is three files and fewer than 50 lines; palette and bundle files are host boilerplate and are not counted.
 
-Create `examples/tutorial-bar/` with this layout:
+From the repository root, create a folder `my-bar/` with this layout (the finished app is in `examples/tutorial-bar/`):
 
 ```text
 bead.toml
@@ -12,7 +12,7 @@ view/main.luau
 view/bundle.json
 ```
 
-`palette.json` and `view/bundle.json` are generated or copied boilerplate. Copy them from `examples/hello-bar/`; the app's behavior, layout, and services are in the three files below.
+`palette.json` and `view/bundle.json` are boilerplate: copy them from `examples/hello-bar/`; the app's behavior, layout, and services are in the three files below.
 
 ## 1. Declare the bar and its services
 
@@ -84,8 +84,8 @@ The left and right sections each grow into half of the remaining space, which ke
 From the repository root:
 
 ```sh
-bead check examples/tutorial-bar
-bead run examples/tutorial-bar
+bead check my-bar
+bead run my-bar
 ```
 
 `check` validates and CPU-renders without starting desktop services. `run` starts the declared services and opens the layer surface in your Wayland session.

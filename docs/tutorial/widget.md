@@ -2,7 +2,7 @@
 
 Add a plugin widget to the [tutorial bar](bar.md). The widget lives in its own folder, shows a greeting picked by a setting, and the bar mounts it without knowing its name. You need the `bead` CLI and a Wayland session to run it.
 
-From the repository root, copy the tutorial bar to work on:
+Work in the `my-bar/` folder from the bar tutorial. If you skipped it, copy the finished bar from the repository root:
 
 ```sh
 cp -r examples/tutorial-bar my-bar
