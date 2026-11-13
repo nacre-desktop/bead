@@ -71,7 +71,7 @@ return ui.Row {
     ui.Text { id = "clock", text = ui.bind("desktop.clock"), width = "content", height = 24, text_align = "center", color = "onSurface" },
     ui.Row { id = "right", width = 0, grow = 1, justify = "end", align = "center", gap = 8,
         ui.Text { id = "battery", text = ui.bind("battery"), width = "content", height = 24, color = "onSurfaceVariant" },
-        ui.Button { id = "mute", text = ui.bind("mute"), width = 72, height = 30, color = "onPrimary", fill = "primary", on_activate = ui.action("desktop.mute.toggle") },
+        ui.Button { id = "mute", text = ui.bind("mute"), width = 72, height = 30, padding = 4, font_size = 14, color = "onPrimary", fill = "primary", on_activate = ui.action("desktop.mute.toggle") },
         ui.Text { id = "volume", text = ui.bind("volume"), width = "content", height = 24, color = "onSurfaceVariant" },
     },
 }
