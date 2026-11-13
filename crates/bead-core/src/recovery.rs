@@ -28,6 +28,11 @@ fn read<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
     }
     Ok(serde_json::from_slice(&bytes)?)
 }
+fn write_json(writer: &mut impl Write, value: &impl Serialize) -> serde_json::Result<()> {
+    let bytes = serde_json::to_vec(value)?;
+    writer.write_all(&bytes).map_err(serde_json::Error::io)?;
+    Ok(())
+}
 fn write(path: &Path, value: &impl Serialize) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let parent = path.parent().ok_or("recovery parent missing")?;
@@ -48,7 +53,7 @@ fn write(path: &Path, value: &impl Serialize) -> Result<()> {
             .create_new(true)
             .mode(0o600)
             .open(&temporary)?;
-        serde_json::to_writer(&mut file, value)?;
+        write_json(&mut file, value)?;
         file.flush()?;
         if file.metadata()?.len() > MAX_FILE {
             return Err("encoded recovery exceeds budget".into());
@@ -63,6 +68,7 @@ fn write(path: &Path, value: &impl Serialize) -> Result<()> {
     }
     result
 }
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Bundle {
@@ -328,5 +334,79 @@ impl Drop for Watchdog {
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Bundle, write_json};
+    use std::io::{self, Write};
+
+    struct CountingWriter {
+        writes: usize,
+        bytes: usize,
+        fail_write: bool,
+    }
+
+    impl Write for CountingWriter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.writes += 1;
+            if self.fail_write {
+                return Err(io::Error::new(io::ErrorKind::BrokenPipe, "write failed"));
+            }
+            self.bytes += bytes.len();
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn recovery_json_writer_reduces_write_calls_independent_of_size() {
+        for size in [1024, 128 * 1024] {
+            let bundle = Bundle {
+                version: 1,
+                entry: "main.luau".into(),
+                palette: vec![b'p'; 128],
+                files: [
+                    ("main.luau".into(), vec![b'x'; size]),
+                    ("behavior.luau".into(), vec![b'y'; 128]),
+                ]
+                .into(),
+            };
+            let mut old = CountingWriter {
+                writes: 0,
+                bytes: 0,
+                fail_write: false,
+            };
+            serde_json::to_writer(&mut old, &bundle).unwrap();
+            let old_writes = old.writes;
+            let mut buffered = CountingWriter {
+                writes: 0,
+                bytes: 0,
+                fail_write: false,
+            };
+            write_json(&mut buffered, &bundle).unwrap();
+            assert_eq!(buffered.writes, 1);
+            assert_eq!(buffered.bytes, old.bytes);
+            eprintln!(
+                "recovery writer bytes={} old_write_calls={} buffered_write_calls={}",
+                buffered.bytes, old_writes, buffered.writes
+            );
+        }
+    }
+
+    #[test]
+    fn json_writer_preserves_data_write_error_kind() {
+        let mut writer = CountingWriter {
+            writes: 0,
+            bytes: 0,
+            fail_write: true,
+        };
+        let error = write_json(&mut writer, &vec![1, 2, 3]).unwrap_err();
+        assert!(error.is_io());
+        assert_eq!(error.io_error_kind(), Some(io::ErrorKind::BrokenPipe));
     }
 }

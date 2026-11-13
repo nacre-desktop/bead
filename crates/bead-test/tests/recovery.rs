@@ -106,6 +106,68 @@ fn startup_last_good_requires_first_frame_and_retains_original_reload_target() -
     );
     Ok(())
 }
+
+#[test]
+fn reopened_recovery_skips_unchanged_and_atomically_saves_changed_sources() -> Result<()> {
+    use std::os::unix::fs::MetadataExt;
+
+    let f = Fixture::new()?;
+    let path = f.0.join("state/good.json");
+    let mut first = f.load()?;
+    first.presented()?;
+    drop(first);
+
+    let held = std::fs::File::open(&path)?;
+    let original_inode = held.metadata()?.ino();
+    let original_bytes = std::fs::read(&path)?;
+    let mut second = f.load()?;
+    second.presented()?;
+    assert_eq!(
+        std::fs::metadata(&path)?.ino(),
+        original_inode,
+        "unchanged reopen must not atomically replace the saved bundle"
+    );
+    assert_eq!(std::fs::read(&path)?, original_bytes);
+    drop(second);
+    let source = f.0.join("source/main.luau");
+    let changed = format!("{}\n-- changed source\n", std::fs::read_to_string(&source)?);
+    std::fs::write(source, &changed)?;
+    let mut third = f.load()?;
+    assert_eq!(std::fs::metadata(&path)?.ino(), original_inode);
+    third.presented()?;
+    assert_ne!(std::fs::metadata(&path)?.ino(), original_inode);
+    assert_eq!(
+        Bundle::load(&path)?.files[Path::new("main.luau")],
+        changed.as_bytes()
+    );
+    let old_bundle: Bundle = serde_json::from_reader(held)?;
+    assert_ne!(old_bundle.files[Path::new("main.luau")], changed.as_bytes());
+    Ok(())
+}
+
+#[test]
+fn corrupt_recovery_bundle_is_replaced_after_valid_first_presentation() -> Result<()> {
+    let f = Fixture::new()?;
+    let path = f.0.join("state/good.json");
+    std::fs::create_dir_all(path.parent().ok_or("recovery parent")?)?;
+    std::fs::write(&path, b"not valid recovery JSON")?;
+    let source = f.0.join("source/main.luau");
+    let original = std::fs::read(&source)?;
+    std::fs::write(&source, "invalid Luau !!!!")?;
+    assert!(
+        f.load().is_err(),
+        "corrupt recovery cannot replace invalid source"
+    );
+    std::fs::write(source, original)?;
+
+    let mut ui = f.load()?;
+    assert!(!ui.session.recovered_on_start());
+    ui.presented()?;
+    let repaired = Bundle::load(&path)?;
+    assert_eq!(repaired.entry, Path::new("main.luau"));
+    Ok(())
+}
+
 #[test]
 fn unpresented_invalid_bundle_and_path_escape_never_replace_last_good() -> Result<()> {
     let f = Fixture::new()?;
@@ -242,6 +304,8 @@ fn safe_mode_bar_is_a_headless_cpu_scene_without_script_or_layout() -> Result<()
 }
 #[test]
 fn late_presentation_saves_its_own_validated_bundle_and_never_rolls_back() -> Result<()> {
+    use std::os::unix::fs::MetadataExt;
+
     let f = Fixture::new()?;
     let mut ui = f.load()?;
     let revision = ui.scene().resource_revision;
@@ -259,8 +323,13 @@ fn late_presentation_saves_its_own_validated_bundle_and_never_rolls_back() -> Re
         Bundle::load(&saved)?.files[Path::new("main.luau")] == original,
         "late first frame must save its own sources"
     );
+    let old_file = std::fs::File::open(&saved)?;
+    let old_inode = old_file.metadata()?.ino();
     ui.session.presented(newer)?;
     assert!(Bundle::load(&saved)?.files[Path::new("main.luau")] == changed.as_bytes());
+    assert_ne!(std::fs::metadata(&saved)?.ino(), old_inode);
+    let old_bundle: Bundle = serde_json::from_reader(old_file)?;
+    assert_eq!(old_bundle.files[Path::new("main.luau")], original);
     ui.session.presented(revision)?;
     assert!(
         Bundle::load(&saved)?.files[Path::new("main.luau")] == changed.as_bytes(),
