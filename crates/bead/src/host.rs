@@ -11,7 +11,7 @@ use bead_services::{
     Action as DesktopAction, ClockSecondsLease, Config as DesktopConfig, Desktop, Snapshot,
     Subscription,
     bluetooth::{Bluetooth as BluetoothDevices, BluetoothAction, BluetoothSnapshot},
-    media::{Media, MediaAction, MediaSnapshot},
+    media::{Media, MediaAction, MediaSnapshot, monotonic_millis},
     network::{Network as NetworkDevices, NetworkAction, NetworkSnapshot},
     power_profiles::{PowerProfiles, PowerProfilesAction, PowerProfilesSnapshot},
 };
@@ -189,49 +189,24 @@ impl FolderServicesRuntime {
             None
         };
         let signals = Arc::new(RuntimeSignals::default());
-        let media_subscription = media.as_ref().map(|media| {
-            let signals = Arc::downgrade(&signals);
-            media.subscribe(move |_| {
-                if let Some(signals) = signals.upgrade() {
-                    signals.notify();
-                }
-            })
-        });
-        let power_subscription = power.as_ref().map(|power| {
-            let signals = Arc::downgrade(&signals);
-            power.subscribe(move |_| {
-                if let Some(signals) = signals.upgrade() {
-                    signals.notify();
-                }
-            })
-        });
-        let bluetooth_subscription = bluetooth_devices.as_ref().map(|service| {
-            let signals = Arc::downgrade(&signals);
-            service.subscribe(move |_| {
-                if let Some(signals) = signals.upgrade() {
-                    signals.notify();
-                }
-            })
-        });
+        let media_subscription = media
+            .as_ref()
+            .map(|media| media.subscribe(notifier(&signals)));
+        let power_subscription = power
+            .as_ref()
+            .map(|power| power.subscribe(notifier(&signals)));
+        let bluetooth_subscription = bluetooth_devices
+            .as_ref()
+            .map(|service| service.subscribe(notifier(&signals)));
         let network_subscription = network_devices
             .as_ref()
             .map(|service| service.subscribe(notifier(&signals)));
-        let compositor_subscription = compositor.as_ref().map(|backend| {
-            let signals = Arc::downgrade(&signals);
-            backend.subscribe(Box::new(move |_| {
-                if let Some(signals) = signals.upgrade() {
-                    signals.notify();
-                }
-            }))
-        });
-        let subscription = desktop.as_ref().map(|desktop| {
-            let signals = Arc::downgrade(&signals);
-            desktop.subscribe(move |_| {
-                if let Some(signals) = signals.upgrade() {
-                    signals.notify();
-                }
-            })
-        });
+        let compositor_subscription = compositor
+            .as_ref()
+            .map(|backend| backend.subscribe(Box::new(notifier(&signals))));
+        let subscription = desktop
+            .as_ref()
+            .map(|desktop| desktop.subscribe(notifier(&signals)));
         let commands = Arc::new(Mutex::new(CommandState::default()));
         let wake: WakeCallback = {
             let signals = signals.clone();
@@ -253,7 +228,7 @@ impl FolderServicesRuntime {
             let signals = signals.clone();
             let stop_signal = stop.clone();
             std::thread::spawn(move || {
-                let mut last_tick = monotonic_ms();
+                let mut last_tick = monotonic_millis();
                 loop {
                     let stopped = stop_signal.0.lock().unwrap();
                     if *stopped {
@@ -267,7 +242,7 @@ impl FolderServicesRuntime {
                         break;
                     }
                     drop(stopped);
-                    let now = monotonic_ms();
+                    let now = monotonic_millis();
                     if timeout.timed_out() && media_tick_due(&media.snapshot(), last_tick, now) {
                         signals.notify();
                         last_tick = now;
@@ -494,9 +469,6 @@ fn compositor_values(snapshot: Option<&bead_backends::Snapshot>) -> BTreeMap<Str
             Value::Text(snapshot.map_or_else(String::new, |snapshot| snapshot.backend.clone())),
         ),
     ])
-}
-fn monotonic_ms() -> u64 {
-    bead_services::media::monotonic_millis()
 }
 fn media_values(snapshot: &MediaSnapshot, now: u64) -> BTreeMap<String, Value> {
     let player = snapshot
@@ -1012,25 +984,6 @@ fn execute_command(spec: &CommandSpec) -> (String, bool, String) {
     }
 }
 
-/// An empty, surface-sized fallback for a folder host.
-pub fn empty_scene(size: (u32, u32)) -> Scene {
-    Scene {
-        opacity: 1.,
-        motion: None,
-        resource_revision: 0,
-        asset_data: Default::default(),
-        clips: Default::default(),
-        layers: vec![],
-        prepared: Default::default(),
-        font_files: vec![],
-        width: size.0 as f32,
-        slide: None,
-        offset: (0., 0.),
-        bounds: Rect::new(0., 0., size.0 as f32, size.1 as f32),
-        primitives: vec![],
-    }
-}
-
 /// A Luau-backed scene source rooted in an application's folder.
 pub struct FolderView {
     pub session: Session,
@@ -1138,7 +1091,7 @@ impl FolderView {
             root.join(palette)
         };
         let colors = Palette::read(&palette)?;
-        let fallback = empty_scene(size);
+        let fallback = Scene::empty(size.0 as f32, size.1 as f32);
         let mut session = Session::new(root, view, palette, colors, fallback);
         let mut host_stores = declared_desktop_values(&Snapshot::default(), &services.desktop);
         if services.desktop.contains("media") {
@@ -1285,7 +1238,7 @@ impl FolderView {
                     .media
                     .as_ref()
                     .map_or_else(MediaSnapshot::default, |media| media.snapshot());
-                let now = monotonic_ms();
+                let now = monotonic_millis();
                 let mut values = media_values(&snapshot, now);
                 if media_is_playing(&snapshot) {
                     if media_position_due(&snapshot, self.last_media_position_tick, now) {

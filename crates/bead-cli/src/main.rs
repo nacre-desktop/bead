@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 use bead::{
-    host::{FolderServicesRuntime, FolderView, empty_scene},
+    host::{FolderServicesRuntime, FolderView},
     render::{RendererKind, Scene},
     wayland::{Options, PanelSpec, Panels, PrimaryFactory, UiEvent, WindowSpec},
 };
@@ -285,7 +285,7 @@ impl App {
                             Some(None),
                         )
                     }),
-                    fallback: empty_scene(size),
+                    fallback: Scene::empty(size.0 as f32, size.1 as f32),
                     fallback_factory: None,
                     renderer,
                     position: Some(Arc::new(
@@ -377,7 +377,7 @@ impl App {
     fn run(self, seconds: Option<f64>) -> Result<(), Box<dyn Error>> {
         let surface_size = self.surface_size();
         let runtime = FolderServicesRuntime::start(self.folder_services());
-        let fallback = empty_scene(surface_size);
+        let fallback = Scene::empty(surface_size.0 as f32, surface_size.1 as f32);
         let mut options = Options {
             namespace: self.manifest.id.clone(),
             seconds,

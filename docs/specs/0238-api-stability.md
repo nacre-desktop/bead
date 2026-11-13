@@ -81,6 +81,12 @@ For `#[non_exhaustive]`, migrate known consumers in a preparatory revision befor
 | `crates/bead-wayland/src/lib.rs` | `Options` combines generic host controls with debug/test and app-shaped flags | Potentially remove/rehome fields; line savings not estimated until API use audit |
 | `crates/bead-test/src/lib.rs` and proof-only modules | Test harness/metrics are exported publicly despite serving tests | Unknown; hide any item without an external consumer and count actual deletions in the cleanup unit |
 
+Already removed in the 2026-11 bloat cleanup (B0253 audit):
+
+- B0256: `vendor/fontconfig` and the `gpu`/`vello` feature aliases (the `wgpu` feature stays).
+- B0257: `bead::source::{Desktop, HostedNotifications}`, `Notifications::private`, the extra `notification_bus::Server::start*` wrappers, `Mirror::needs_snapshot`, two duplicate monotonic clocks.
+- B0258: `bead::host::empty_scene` (use `Scene::empty`), `Session::asset_snapshot`, `Session::local_range_feedback` (use `local_range_feedback_with_label`).
+
 Do not retain temporary duplicate implementations during cleanup. If a compatibility copy is required, record its owner and delete it when the replacement is trusted; no such copy is proposed here.
 
 ## 6. Recommended next units

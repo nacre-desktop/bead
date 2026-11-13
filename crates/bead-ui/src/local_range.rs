@@ -101,18 +101,6 @@ impl Session {
             })
     }
 
-    /// Update one authored range's accepted local feedback without evaluating its view.
-    pub fn local_range_feedback(
-        &mut self,
-        id: &str,
-        x: f32,
-        format: Option<&serde_json::Value>,
-    ) -> Result<Option<Value>, Diagnostic> {
-        Ok(self
-            .local_range_feedback_with_label(id, x, format, None)?
-            .map(|feedback| feedback.argument))
-    }
-
     /// Update one range's preview stores and optionally patch a fixed text layer in the
     /// accepted scene. This deliberately does not evaluate Luau or relayout the view.
     pub fn local_range_feedback_with_label(

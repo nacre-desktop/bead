@@ -2,7 +2,7 @@
 //! A self-contained host: application state and identity never enter Bead.
 use bead::{
     core::Value,
-    host::{FolderView as View, empty_scene},
+    host::FolderView as View,
     render::Scene,
     wayland::{Options, SceneSource, UiEvent, WindowSpec},
 };
@@ -96,7 +96,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         min_size: (320, 240),
         size_for_output: None,
         on_resize: None,
-        fallback: empty_scene(SIZE),
+        fallback: Scene::empty(SIZE.0 as f32, SIZE.1 as f32),
         factory: Arc::new(move |_| {
             View::load(
                 root.clone(),
@@ -120,7 +120,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             seconds,
             ..Default::default()
         },
-        empty_scene(SIZE),
+        Scene::empty(SIZE.0 as f32, SIZE.1 as f32),
     )
 }
 
