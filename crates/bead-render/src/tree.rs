@@ -2032,13 +2032,13 @@ impl TreeCache {
                 raster,
             });
         }
-        let mut children = BTreeMap::<String, Vec<String>>::new();
+        let mut children = BTreeMap::<&str, Vec<&str>>::new();
         for layer in &scene.layers {
             if let Some(parent) = &layer.parent {
                 children
-                    .entry(parent.clone())
+                    .entry(parent.as_str())
                     .or_default()
-                    .push(layer.id.clone());
+                    .push(layer.id.as_str());
             }
         }
         let mut layers = Vec::with_capacity(scene.layers.len());
@@ -2052,15 +2052,17 @@ impl TreeCache {
                     f.to_bits().hash(&mut key);
                 }
                 keys[index].hash(&mut key);
-                own.push(item.id.clone());
+                own.push(item.id.as_str());
             }
-            let child_ids = children.remove(&layer.id).unwrap_or_default();
+            let child_ids = children.remove(layer.id.as_str()).unwrap_or_default();
             own.hash(&mut key);
             child_ids.hash(&mut key);
             layer.parent.hash(&mut key);
             let key = key.finish();
             let slot = (layer.id.clone(), scale.to_bits());
             if self.nodes.get(&slot).is_none_or(|(old, _)| old.key != key) {
+                let own: Vec<String> = own.into_iter().map(str::to_owned).collect();
+                let child_ids: Vec<String> = child_ids.into_iter().map(str::to_owned).collect();
                 let bytes = 192
                     + 2 * layer.id.capacity()
                     + layer.parent.as_ref().map_or(0, String::capacity)

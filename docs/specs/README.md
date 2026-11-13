@@ -26,5 +26,6 @@ This index contains current framework contracts and repository-boundary decision
 | [0247 — Network devices service](0247-network.md) | Event-driven NetworkManager device, access point and saved-connection snapshots and controls for folder apps |
 | [0249 — Compositor adapters](0249-compositor-adapters.md) | Clean-room niri and Hyprland IPC snapshots and folder workspace focus |
 | [0250 — Popup panels for folder apps](0250-folder-app-panels.md) | Manifest-declared Luau popups a bar opens with `panel.*` actions |
+| [0254 — Render and worker hot paths](0254-hotpath-render.md) | Scene handoff, action isolation, and render preparation costs |
 
 This index covers Bead framework contracts. See the [documentation index](../README.md) for the current framework overview and the [framework ownership decision](0214-framework-split.md).
