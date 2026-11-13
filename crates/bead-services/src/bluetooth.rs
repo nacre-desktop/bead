@@ -241,9 +241,7 @@ impl Bluetooth {
         }
     }
     pub fn action(&self, action: BluetoothAction) -> Result<(), String> {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
+        crate::bus::runtime()
             .map_err(|e| e.to_string())?
             .block_on(action_async(&self.connection, &self.shared, action))
     }

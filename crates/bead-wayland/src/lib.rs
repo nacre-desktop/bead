@@ -51,6 +51,7 @@ pub(crate) use runtime::{output_event_is_current, output_scope_matches};
 pub use window::{WindowFactory, WindowModel, WindowSpec};
 mod warm;
 pub mod worker;
+use bead_core::profile::monotonic_ns;
 use bead_render::{
     Damage, PixelFormat, Rect, RenderTarget, Renderer, RendererKind, Scene, ShmTarget,
 };
@@ -1138,17 +1139,6 @@ pub fn run_with_renderer(
     renderer: Box<dyn Renderer>,
 ) -> Result<(), Box<dyn Error>> {
     run_runtime(options, scene, renderer, None)
-}
-fn monotonic_ns() -> u64 {
-    let mut ts = libc::timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
-    // SAFETY: initialized writable timespec for CLOCK_MONOTONIC.
-    unsafe {
-        libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts);
-    }
-    ts.tv_sec as u64 * 1_000_000_000 + ts.tv_nsec as u64
 }
 fn percentile(samples: &[f64], p: f64) -> f64 {
     if samples.is_empty() {

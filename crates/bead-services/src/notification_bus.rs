@@ -601,29 +601,6 @@ impl Server {
             .try_send(Request::new(command))
             .map_err(|e| e.to_string())
     }
-    pub fn start(
-        socket: PathBuf,
-        history: PathBuf,
-        callback: impl Fn(Value) + Send + Sync + 'static,
-    ) -> Result<Self, String> {
-        Self::start_with_lifecycle(socket, history, callback, || {})
-    }
-    pub fn start_with_lifecycle(
-        socket: PathBuf,
-        history: PathBuf,
-        callback: impl Fn(Value) + Send + Sync + 'static,
-        on_stop: impl Fn() + Send + 'static,
-    ) -> Result<Self, String> {
-        Self::start_with_options(socket, history, Options::default(), callback, on_stop)
-    }
-    pub fn start_configured(
-        socket: PathBuf,
-        history: PathBuf,
-        options: Options,
-        callback: impl Fn(Value) + Send + Sync + 'static,
-    ) -> Result<Self, String> {
-        Self::start_with_options(socket, history, options, callback, || {})
-    }
     pub fn start_with_options(
         socket: PathBuf,
         history: PathBuf,

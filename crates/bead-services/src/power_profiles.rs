@@ -153,9 +153,7 @@ impl PowerProfiles {
         if !self.snapshot().profiles.contains(&profile) {
             return Err(format!("unknown power profile '{profile}'"));
         }
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
+        crate::bus::runtime()
             .map_err(|e| e.to_string())?
             .block_on(async {
                 let name = current_name(&self.connection).await?;

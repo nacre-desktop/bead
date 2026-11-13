@@ -319,10 +319,8 @@ dependencies = [
  "bead-ui",
  "bead-wayland",
  "bead-widgets",
- "futures-util",
  "serde_json",
  "tokio",
- "zbus",
 ]
 
 [[package]]

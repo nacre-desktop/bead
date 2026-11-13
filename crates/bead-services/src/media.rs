@@ -169,9 +169,7 @@ impl Media {
         }
     }
     pub fn action(&self, action: MediaAction) -> Result<(), String> {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
+        crate::bus::runtime()
             .map_err(|e| e.to_string())?
             .block_on(action_async(&self.connection, &self.shared, action))
     }
@@ -239,7 +237,7 @@ async fn run(connection: Connection, shared: Arc<Shared>) -> zbus::Result<()> {
                     if h.interface().is_some_and(|i|i.as_str()=="org.freedesktop.DBus.Properties") && h.member().is_some_and(|m|m.as_str()=="PropertiesChanged") {
                         if let Some(name) = h.sender().and_then(|sender| names_by_owner.get(sender.as_str())).cloned() { refresh(&connection,&shared,name).await; }
                     } else if h.interface().is_some_and(|i|i.as_str()==PLAYER) && h.member().is_some_and(|m|m.as_str()=="Seeked") && let (Some(sender),Ok(position))=(h.sender(),message.body().deserialize::<i64>()) && let Some(name)=names_by_owner.get(sender.as_str()) {
-                        let id=name.clone(); shared.change(|s| { if let Some(p)=s.players.iter_mut().find(|p|p.id==id) { p.position_ms=(position/1000).max(0); p.position_at=now_ms(); } });
+                        let id=name.clone(); shared.change(|s| { if let Some(p)=s.players.iter_mut().find(|p|p.id==id) { p.position_ms=(position/1000).max(0); p.position_at=monotonic_millis(); } });
                     }
                 }
             }
@@ -262,9 +260,6 @@ pub fn monotonic_millis() -> u64 {
             .saturating_add(t.tv_nsec as u64 / 1_000_000)
     }
 }
-fn now_ms() -> u64 {
-    monotonic_millis()
-}
 async fn refresh(connection: &Connection, shared: &Shared, name: String) {
     let old = shared
         .snapshot
@@ -280,7 +275,7 @@ async fn refresh(connection: &Connection, shared: &Shared, name: String) {
         if old.as_ref().is_none_or(|old| old.status != player.status) {
             if let Ok(position) = read_position(connection, &name).await {
                 player.position_ms = position;
-                player.position_at = now_ms();
+                player.position_at = monotonic_millis();
             }
         } else if let Some(old) = &old {
             player.position_ms = old.position_ms;
@@ -351,7 +346,7 @@ async fn read_player(c: &Connection, name: &str) -> zbus::Result<Player> {
         album: val_string(&metadata, "xesam:album"),
         length_ms: val_i64(&metadata, "mpris:length") / 1000,
         position_ms: 0,
-        position_at: now_ms(),
+        position_at: monotonic_millis(),
         art_url: val_string(&metadata, "mpris:artUrl"),
         track_id: val_path(&metadata, "mpris:trackid"),
         can_play_pause: val_bool(&props, "CanPlayPause"),

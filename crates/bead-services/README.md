@@ -29,6 +29,6 @@ service.stop().await?;
 
 The request queue holds at most 64 requests. `call` has a three-second deadline and acknowledges processing errors; timeout does not undo a completed side effect. Dropping the handle requests nonblocking cancellation, including when a host cancels its owning task. `stop` waits for service shutdown, unregisters only this instance's interfaces and name, and preserves history. The standard notification name is acquired with `DoNotQueue`, never replacement or queuing.
 
-`PrivateBus` explicitly owns a private dbus-daemon for fixtures. `Server::start` is a compatibility wrapper that owns a private bus, current-thread runtime, and worker thread; the hostable `start` API above creates none of those. `Desktop::start_config(Config)` exposes independently selectable audio and D-Bus service lanes and provides snapshot, subscription, call, and stop methods.
+`PrivateBus` explicitly owns a private dbus-daemon for fixtures. `Server::start_with_options` is a compatibility wrapper that owns a private bus, current-thread runtime, and worker thread; the hostable `start` API above creates none of those. `Desktop::start_config(Config)` exposes independently selectable audio and D-Bus service lanes and provides snapshot, subscription, call, and stop methods.
 
 `cargo test -p bead-services --test notification_api` runs the notification API tests on a private bus without a compositor or UI.

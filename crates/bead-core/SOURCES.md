@@ -12,4 +12,4 @@
 
 ## In-process adapters
 
-`bead::source::HostedNotifications` attaches a hostable notification handle to a `Source`; it forwards snapshots and calls without defining an application wire protocol. `bead-test::source::FakeSource` drives deterministic headless UI and timeout tests. Wire framing, peer authentication, and automatic socket reconnect belong to whichever transport a host supplies.
+`bead::source` adapts in-process services (`Notifications`, `Clock`, `DesktopView`) to a `Source`; they forward snapshots and calls without defining an application wire protocol. `bead-test::source::FakeSource` drives deterministic headless UI and timeout tests. Wire framing, peer authentication, and automatic socket reconnect belong to whichever transport a host supplies.
