@@ -46,6 +46,7 @@ pub(super) struct Cached {
     structural: BTreeSet<String>,
     text: Vec<Text>,
     scroll: Vec<Scroll>,
+    panel_open: Option<String>,
     clip_regions: Vec<ClipRegion>,
     floating: Vec<Floating>,
     parents: Vec<Option<usize>>,
@@ -99,6 +100,7 @@ impl Cached {
             ]),
             text: vec![],
             scroll: vec![],
+            panel_open: None,
             clip_regions: vec![],
             floating: vec![],
             parents: vec![],
@@ -113,6 +115,7 @@ impl Cached {
             cached: &mut Cached,
             palette: &Palette,
             implicit_parent_label: bool,
+            root: bool,
         ) -> Result<bool, Diagnostic> {
             if raw.kind != view.kind {
                 return Ok(false);
@@ -120,6 +123,13 @@ impl Cached {
             for (property, value) in &raw.props {
                 let mut names = BTreeSet::new();
                 bindings(value, &mut names);
+                let panel_open = root
+                    && raw.kind == Widget::Panel
+                    && property == "open"
+                    && value.get("__bind").is_some();
+                if panel_open && let Some(binding) = names.first() {
+                    cached.panel_open = Some(binding.clone());
+                }
                 let text = property == "text"
                     && matches!(view.kind, Widget::Text | Widget::TextInput)
                     && view.children.is_empty()
@@ -163,7 +173,7 @@ impl Cached {
                 } else if property == "scroll" && view.kind == Widget::Scroll {
                     // Scroll is the only numeric binding that changes geometry
                     // without changing the layout tree; resolve it after traversal.
-                } else {
+                } else if !panel_open {
                     cached.structural.extend(names);
                 }
             }
@@ -193,13 +203,14 @@ impl Cached {
                     cached,
                     palette,
                     implicit_parent_label || (view.action.is_some() && view.aria_label.is_empty()),
+                    false,
                 )? {
                     return Ok(false);
                 }
             }
             Ok(true)
         }
-        if !walk(&raw, view, &mut cached, palette, false)? {
+        if !walk(&raw, view, &mut cached, palette, false, true)? {
             return Ok(None);
         }
         fn scrolls(view: &ViewSpec, scene: &Scene, nodes: &[Node], out: &mut Vec<Scroll>) {
@@ -317,6 +328,7 @@ impl Cached {
             .structural
             .iter()
             .chain(cached.text.iter().map(|t| &t.binding))
+            .chain(cached.panel_open.iter())
         {
             cached.values.insert(name.clone(), resolve(name)?);
         }
@@ -390,6 +402,10 @@ impl Cached {
                 .map(|s| s.id.capacity() + s.binding.capacity() + 96)
                 .sum::<usize>()
             + cached
+                .panel_open
+                .as_ref()
+                .map_or(0, |open| open.capacity() + 32)
+            + cached
                 .clip_regions
                 .iter()
                 .map(|region| region.id.capacity() + std::mem::size_of::<bead_render::Rect>() + 32)
@@ -442,9 +458,11 @@ impl Cached {
             let value = resolve(name)?;
             if value != *old {
                 let scroll_binding = self.scroll.iter().any(|scroll| &scroll.binding == name);
+                let panel_open_binding = self.panel_open.as_ref().is_some_and(|open| open == name);
                 if self.structural.contains(name)
                     || !(matches!(value, Value::Text(_))
-                        || (scroll_binding && matches!(value, Value::Number(_))))
+                        || (scroll_binding && matches!(value, Value::Number(_)))
+                        || (panel_open_binding && matches!(value, Value::Bool(_))))
                 {
                     if bead_core::profile::enabled() {
                         println!("INPUT_PATCH_MISS kind=structural binding={name}");
@@ -456,6 +474,17 @@ impl Cached {
         }
         let mut scene = self.scene.clone();
         let mut nodes = self.nodes.clone();
+        if let Some(open) = &self.panel_open
+            && let Some(value) = changed.get(open)
+        {
+            let Value::Bool(value) = value else {
+                return Ok(None);
+            };
+            let Some(motion) = &mut scene.motion else {
+                return Ok(None);
+            };
+            motion.open = *value;
+        }
         for text in &self.text {
             if let Some(Value::Text(value)) = changed.get(&text.binding)
                 && let Primitive::Text {

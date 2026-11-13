@@ -205,3 +205,6 @@ mod tests;
 
 #[cfg(test)]
 mod markup_tests;
+
+#[cfg(test)]
+mod materialized_tests;
