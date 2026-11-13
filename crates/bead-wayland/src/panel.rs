@@ -798,7 +798,7 @@ impl App {
                     self.create_dismiss(&output)?;
                 }
                 let qh = self.qh.clone();
-                self.add_output(&qh, output);
+                self.add_output(&qh, output.clone());
             }
             if let Some((scene, _, _)) = &self.companion {
                 for surface in self.surfaces.iter().filter(|s| s.companion) {
@@ -819,9 +819,30 @@ impl App {
                     surface.presented_generation = None;
                 }
             }
-            // PanelVisibility forces a draw of the last prepared scene even if
-            // its worker is still refreshing service data in the background.
+            let resume = self.options.warm_source_budget > 0
+                && self
+                    .panel_runtime
+                    .as_ref()
+                    .is_some_and(|source| source.warm_retained_bytes().is_some());
+            if resume {
+                self.panel_resuming = true;
+                if let Some((width, height)) =
+                    self.output.info(&output).and_then(|info| info.logical_size)
+                {
+                    self.panel_runtime
+                        .as_mut()
+                        .unwrap()
+                        .viewport(width.max(1) as u32, height.max(1) as u32);
+                }
+            }
             self.panel_ui(UiEvent::PanelVisibility(true));
+            if resume {
+                self.panel_runtime
+                    .as_mut()
+                    .unwrap()
+                    .resume()
+                    .map_err(|error| error.to_string())?;
+            }
             return Ok(());
         }
         if let Some(m) = &spec.fallback.motion
@@ -836,11 +857,19 @@ impl App {
             );
         }
         self.cancel_scroll(&scroll::Target::Panel(self.panel_epoch));
-        self.panel_epoch = self.next_epoch();
+        let warm = self
+            .panel_name
+            .as_deref()
+            .and_then(|name| self.warm_sources.take(false, name));
+        let reused = warm.is_some();
+        self.panel_epoch = warm
+            .as_ref()
+            .map_or_else(|| self.next_epoch(), |entry| entry.epoch);
         let epoch = self.panel_epoch;
         self.panel_reload_pending = false;
         self.panel_ready = false;
-        self.panel_fallback_ready = fallback_ready;
+        self.panel_resuming = reused;
+        self.panel_fallback_ready = fallback_ready && !reused;
         #[cfg(feature = "native-gl")]
         {
             self.panel_cpu_cached = false;
@@ -864,14 +893,19 @@ impl App {
         }
         self.sync_all_decorations()?;
         let factory = spec.factory.clone();
-        let mut source: Box<dyn SceneSource> = Box::new(
-            worker::Source::new(Box::new(move || factory(open)), spec.fallback.clone())
-                .with_image_policy(if spec.renderer == bead_render::RendererKind::FemtovgGl {
-                    bead_render::tree::ImagePolicy::UploadOnly
-                } else {
-                    bead_render::tree::ImagePolicy::Dense
-                }),
-        );
+        let mut source: Box<dyn SceneSource> =
+            warm.map(|entry| entry.source).unwrap_or_else(|| {
+                Box::new(
+                    worker::Source::new(Box::new(move || factory(open)), spec.fallback.clone())
+                        .with_image_policy(
+                            if spec.renderer == bead_render::RendererKind::FemtovgGl {
+                                bead_render::tree::ImagePolicy::UploadOnly
+                            } else {
+                                bead_render::tree::ImagePolicy::Dense
+                            },
+                        ),
+                )
+            });
         let sender = self
             .event_sender
             .clone()
@@ -935,7 +969,18 @@ impl App {
                 self.wallpaper_panel_palette_settled(epoch, &palette, true);
             }
         }
-        self.panel_ui(UiEvent::Reload);
+        if reused {
+            self.panel_ui(UiEvent::PanelVisibility(open));
+            // The resume packet alone releases the first-frame fence. Palette
+            // and service transactions queued ahead of it stay invisible.
+            self.panel_runtime
+                .as_mut()
+                .unwrap()
+                .resume()
+                .map_err(|error| error.to_string())?;
+        } else {
+            self.panel_ui(UiEvent::Reload);
+        }
         if !open {
             self.loop_handle
                 .insert_source(
@@ -978,6 +1023,30 @@ impl App {
         Ok(())
     }
     pub(super) fn panel_ui(&mut self, event: UiEvent) {
+        if self.panel_resuming
+            && (matches!(&event, UiEvent::Worker(packet) if packet.has_error() || packet.resume_failed())
+                || matches!(
+                    &event,
+                    UiEvent::Fatal(_) | UiEvent::WatchError(_) | UiEvent::ResourcesPrepared(Err(_))
+                ))
+        {
+            let output = self
+                .panel_output
+                .as_ref()
+                .and_then(|output| self.output.info(output))
+                .and_then(|info| info.name);
+            let open = self.panel_target;
+            // A rejected resume must never expose the source's old current scene.
+            drop(self.panel_runtime.take());
+            self.release_panel();
+            if let Err(error) = self.start_panel(output.as_deref(), open) {
+                self.fail(error);
+            }
+            return;
+        }
+        if matches!(&event, UiEvent::Worker(packet) if packet.resumed()) {
+            self.panel_resuming = false;
+        }
         let closing_event = matches!(&event, UiEvent::PanelVisibility(false));
         let _busy = bead_core::profile::Busy::named(|| {
             format!("panel_ui:{}", bead_core::profile::variant_name(&event)).into()
@@ -1033,7 +1102,7 @@ impl App {
         if self.pearl.is_none() {
             self.settle_edge_exit();
         }
-        if !changed && !force_draw {
+        if self.panel_resuming || (!changed && !force_draw) {
             return;
         }
         if changed
@@ -1270,7 +1339,22 @@ impl App {
         self.cancel_scroll(&scroll::Target::Panel(self.panel_epoch));
         self.panel_epoch = self.next_epoch();
         drop(self.dismiss.take());
-        drop(self.panel_runtime.take());
+        if let Some(source) = self.panel_runtime.take() {
+            if check_app_lifetime
+                && self.pearl.is_none()
+                && self.options.app.is_none()
+                && let Some(name) = self.panel_name.clone()
+            {
+                self.warm_sources.park(
+                    false,
+                    name,
+                    retired_panel_epoch,
+                    source,
+                    self.options.warm_source_budget,
+                );
+            }
+        }
+        self.panel_resuming = false;
         drop(self.companion.take());
         self.panel_animations = Default::default();
         self.options.companion = None;

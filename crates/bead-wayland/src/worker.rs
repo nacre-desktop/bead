@@ -8,9 +8,11 @@ use std::{
     sync::{Arc, Weak, mpsc},
     thread::JoinHandle,
 };
+const STACK_BYTES: usize = 2 * bead_core::cache::MIB;
 pub type Factory = Box<dyn FnOnce() -> Result<Box<dyn SceneSource>, String> + Send>;
 #[derive(Default)]
 struct Mirror {
+    retained_bytes: Option<usize>,
     wakeup_at: Option<std::time::Instant>,
     drag_visuals: Vec<crate::DragVisual>,
     focused_dismiss: bool,
@@ -30,9 +32,15 @@ impl Mirror {
         self.regions.iter().rev().find(|r| r.contains(x, y))
     }
 
-    fn read(source: &dyn SceneSource) -> Self {
+    fn read(source: &dyn SceneSource, cache: &bead_render::tree::TreeCache) -> Self {
         let _profile = bead_core::profile::Span::new("mirror");
         Self {
+            retained_bytes: source.warm_retained_bytes().and_then(|bytes| {
+                bytes
+                    .checked_add(STACK_BYTES)?
+                    .checked_add(cache.retained_bytes())?
+                    .checked_add(4096)
+            }),
             wakeup_at: source.wakeup_at(),
             drag_visuals: source.drag_visuals(),
             focused_dismiss: source.focused_dismiss(),
@@ -57,6 +65,7 @@ enum Phase {
     Failed,
 }
 pub struct Packet {
+    resume: bool,
     animation_frame: bool,
     phase: Phase,
     token: u64,
@@ -75,6 +84,12 @@ impl std::fmt::Debug for Packet {
     }
 }
 impl Packet {
+    pub fn resumed(&self) -> bool {
+        self.resume && matches!(self.phase, Phase::Accepted) && self.error.is_none()
+    }
+    pub fn resume_failed(&self) -> bool {
+        self.resume && (matches!(self.phase, Phase::Failed) || self.error.is_some())
+    }
     pub fn has_error(&self) -> bool {
         self.error.is_some()
     }
@@ -116,6 +131,7 @@ enum Job {
     Idle(bool),
     FrameInterval(std::time::Duration),
     Stage(UiEvent, Vec<f32>),
+    Resume(Vec<f32>),
     ContentScroll(UiEvent, Vec<f32>),
     Viewport(u32, u32),
     Watch(Box<dyn Fn(Result<(), String>) + Send>),
@@ -124,7 +140,12 @@ enum Job {
 }
 // Pointer positions are replaceable only within the same gesture. Every other
 // job is an ordering barrier (especially press, release and model updates).
-fn enqueue(queue: &mut VecDeque<Job>, mut job: Job) {
+fn enqueue(queue: &mut VecDeque<Job>, mut job: Job) -> bool {
+    let counted = matches!(
+        &job,
+        Job::Stage(..) | Job::ContentScroll(..) | Job::Resume(..)
+    );
+    let mut combined = false;
     // Combine content travel before doing layout, without combining wheel actions
     // on volume/workspace/tray controls or crossing an input/acknowledgement barrier.
     if let (Some(Job::ContentScroll(previous, old_scales)), Job::ContentScroll(next, scales)) =
@@ -161,6 +182,7 @@ fn enqueue(queue: &mut VecDeque<Job>, mut job: Job) {
         if let Some((previous, next)) = pair {
             *next += previous;
             queue.pop_back();
+            combined = true;
         }
     }
     let replace = match (queue.back(), &job) {
@@ -181,6 +203,19 @@ fn enqueue(queue: &mut VecDeque<Job>, mut job: Job) {
         queue.pop_back();
     }
     queue.push_back(job);
+    counted && (replace || combined)
+}
+fn complete_pending(pending: &std::sync::atomic::AtomicUsize) {
+    let _ = pending.fetch_update(
+        std::sync::atomic::Ordering::AcqRel,
+        std::sync::atomic::Ordering::Acquire,
+        |count| Some(count.saturating_sub(1)),
+    );
+}
+fn enqueue_pending(queue: &mut VecDeque<Job>, job: Job, pending: &std::sync::atomic::AtomicUsize) {
+    if enqueue(queue, job) {
+        complete_pending(pending);
+    }
 }
 
 pub struct Source {
@@ -195,6 +230,9 @@ pub struct Source {
     token: u64,
     accepted: bool,
     frame_pending: bool,
+    pending: Arc<std::sync::atomic::AtomicUsize>,
+    poisoned: bool,
+    asynchronous_resources: bool,
     current: Scene,
     candidate: Option<Scene>,
     viewport: Option<(u32, u32)>,
@@ -214,6 +252,9 @@ impl Source {
             token: 0,
             accepted: false,
             frame_pending: false,
+            pending: Default::default(),
+            poisoned: false,
+            asynchronous_resources: false,
             current: fallback,
             candidate: None,
             viewport: None,
@@ -351,6 +392,26 @@ fn release_cached_prepared(
     true
 }
 impl SceneSource for Source {
+    fn warm_retained_bytes(&self) -> Option<usize> {
+        self.mirror.retained_bytes
+    }
+    fn dormant_ready(&self) -> bool {
+        !self.poisoned
+            && !self.asynchronous_resources
+            && self.pending.load(std::sync::atomic::Ordering::Acquire) == 0
+            && self.candidate.is_none()
+            && !self.retired.load(std::sync::atomic::Ordering::Acquire)
+    }
+    fn resume(&mut self) -> Result<Option<Scene>, Box<dyn Error>> {
+        self.pending
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        if let Err(error) = self.send(Job::Resume(self.scales.clone())) {
+            complete_pending(&self.pending);
+            return Err(error);
+        }
+        Ok(None)
+    }
+
     fn wakeup_at(&self) -> Option<std::time::Instant> {
         if self.frame_pending {
             None
@@ -370,6 +431,9 @@ impl SceneSource for Source {
     ) -> Result<(), Box<dyn Error>> {
         self.preparation_retry |= self.candidate.is_some();
         if request.mark_requested() {
+            // Resource jobs can grow the baker after its mirrored byte snapshot.
+            // Until those jobs have byte-completion fences, use the cold path.
+            self.asynchronous_resources = true;
             self.send(Job::PrepareCpu(request))?;
         }
         Ok(())
@@ -410,6 +474,7 @@ impl SceneSource for Source {
         if images.is_empty() {
             return Ok(());
         }
+        self.asynchronous_resources = true;
         if let Err(error) = self.send(Job::PrepareImages(images.clone())) {
             for image in images {
                 image.finish_request(None);
@@ -434,7 +499,8 @@ impl SceneSource for Source {
         bead_core::profile::mark("worker_spawn");
         let image_policy = self.image_policy;
         let retired = self.retired.clone();
-        self.thread = Some(std::thread::spawn(move || {
+        let pending = self.pending.clone();
+        self.thread = Some(std::thread::Builder::new().stack_size(STACK_BYTES).spawn(move || {
             bead_core::profile::mark("worker_started");
             let wakeup: Arc<dyn Fn(UiEvent) + Send + Sync> = Arc::from(wakeup);
             let report = wakeup.clone();
@@ -444,6 +510,7 @@ impl SceneSource for Source {
                     Ok(source) => source,
                     Err(error) => {
                         wakeup(UiEvent::Worker(Arc::new(Packet {
+                            resume: false,
                             animation_frame: false,
                             phase: Phase::Failed,
                             token: 0,
@@ -478,7 +545,7 @@ impl SceneSource for Source {
                     for job in receiver.try_iter() {
                         match job {
                             Job::Stop => break 'actor,
-                            job => enqueue(&mut queue, job),
+                            job => enqueue_pending(&mut queue, job, &pending),
                         }
                     }
                     let job = if let Some(job) = queue.pop_front() {
@@ -510,7 +577,13 @@ impl SceneSource for Source {
                         }
                         Err(job) => job,
                     };
+                    let resume = matches!(&job, Job::Resume(_));
+                    let job = match job {
+                        Job::Resume(scales) => Job::Stage(UiEvent::Relayout, scales),
+                        job => job,
+                    };
                     match job {
+                        Job::Resume(_) => unreachable!("resume converted above"),
                         Job::PrepareImages(_) | Job::PrepareCpu(_) => {
                             unreachable!("resource jobs handled above")
                         }
@@ -585,18 +658,30 @@ impl SceneSource for Source {
                             let _profile = bead_core::profile::Span::new("worker");
                             let started = std::time::Instant::now();
                             token += 1;
-                            let (mut scene, fault) = match source.stage(event) {
+                            let staged = if resume {
+                                source.resume().and_then(|scene| scene.map(Some).ok_or_else(|| "resume must return a current scene".into()))
+                            } else { source.stage(event) };
+                            let (mut scene, fault) = match staged {
                                 Ok(Some(scene)) => (scene, None),
                                 Ok(None) => {
                                     wakeup(UiEvent::Worker(Arc::new(Packet {
-                                        animation_frame,
+                                    resume,
+                                animation_frame,
                                         phase: Phase::Settled,
                                         token,
                                         scene: None,
-                                        mirror: Some(Arc::new(Mirror::read(source.as_ref()))),
+                                        mirror: Some(Arc::new(Mirror::read(source.as_ref(), &cache))),
                                         error: None,
                                         reload,
                                         wallpaper_palette,
+                                    })));
+                                    continue;
+                                }
+                                Err(error) if resume => {
+                                    wakeup(UiEvent::Worker(Arc::new(Packet {
+                                        resume, animation_frame: false, phase: Phase::Failed,
+                                        token, scene: None, mirror: None, error: Some(error.to_string()),
+                                        reload: false, wallpaper_palette: None,
                                     })));
                                     continue;
                                 }
@@ -635,7 +720,7 @@ impl SceneSource for Source {
                                             for job in receiver.try_iter() {
                                                 match job {
                                                     Job::Stop => break 'actor,
-                                                    job => enqueue(&mut queue, job),
+                                                    job => enqueue_pending(&mut queue, job, &pending),
                                                 }
                                             }
                                         }
@@ -646,7 +731,8 @@ impl SceneSource for Source {
                             }
                             if let Err(error) = baked {
                                 wakeup(UiEvent::Worker(Arc::new(Packet {
-                                    animation_frame,
+                                    resume,
+                                animation_frame,
                                     phase: Phase::Failed,
                                     token,
                                     scene: None,
@@ -673,6 +759,7 @@ impl SceneSource for Source {
                                 cache.builds
                             );
                             wakeup(UiEvent::Worker(Arc::new(Packet {
+                                resume,
                                 animation_frame,
                                 phase: Phase::Ready,
                                 token,
@@ -718,12 +805,13 @@ impl SceneSource for Source {
                                                     }
                                                 }
                                                 wakeup(UiEvent::Worker(Arc::new(Packet {
-                                                    animation_frame,
+                                    resume,
+                                animation_frame,
                                                     phase: Phase::Accepted,
                                                     token,
                                                     scene: Some(scene),
                                                     mirror: Some(Arc::new(Mirror::read(
-                                                        source.as_ref(),
+                                                        source.as_ref(), &cache,
                                                     ))),
                                                     error: fault,
                                                     reload,
@@ -734,12 +822,13 @@ impl SceneSource for Source {
                                                 let mut overlay = source.error_scene(error.clone());
                                                 if bake(&mut cache, &mut overlay, &scales).is_ok() {
                                                     wakeup(UiEvent::Worker(Arc::new(Packet {
-                                                        animation_frame,
+                                    resume,
+                                animation_frame,
                                                         phase: Phase::Accepted,
                                                         token,
                                                         scene: Some(overlay),
                                                         mirror: Some(Arc::new(Mirror::read(
-                                                            source.as_ref(),
+                                                            source.as_ref(), &cache,
                                                         ))),
                                                         error: Some(error),
                                                         reload,
@@ -753,7 +842,7 @@ impl SceneSource for Source {
                                         }
                                         break;
                                     }
-                                    Ok(job) => enqueue(&mut queue, job),
+                                    Ok(job) => enqueue_pending(&mut queue, job, &pending),
                                 }
                             }
                         }
@@ -763,7 +852,7 @@ impl SceneSource for Source {
             if result.is_err() {
                 report(UiEvent::Fatal("script worker panicked".into()));
             }
-        }));
+        }).expect("start script worker"));
         if let Some(interval) = self.frame_interval {
             let _ = self.send(Job::FrameInterval(interval));
         }
@@ -816,6 +905,17 @@ impl SceneSource for Source {
             return Ok(self.candidate.clone());
         }
         if let UiEvent::Worker(packet) = event {
+            if packet.has_error() {
+                self.poisoned = true;
+            } else if packet.is_accepted() {
+                self.poisoned = false;
+            }
+            if matches!(
+                packet.phase,
+                Phase::Accepted | Phase::Settled | Phase::Failed
+            ) {
+                complete_pending(&self.pending);
+            }
             self.token = packet.token;
             if packet.animation_frame
                 && matches!(
@@ -864,11 +964,16 @@ impl SceneSource for Source {
                 .any(|r| *x >= r.x && *y >= r.y && *x < r.x + r.w && *y < r.y + r.h),
             _ => false,
         };
-        self.send(if content_scroll {
+        self.pending
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        if let Err(error) = self.send(if content_scroll {
             Job::ContentScroll(event, self.scales.clone())
         } else {
             Job::Stage(event, self.scales.clone())
-        })?;
+        }) {
+            complete_pending(&self.pending);
+            return Err(error);
+        }
         Ok(None)
     }
     fn validate(&self) -> Result<(), Box<dyn Error>> {
@@ -1152,6 +1257,7 @@ mod tests {
         assert!(receiver.try_recv().is_err());
         let packet = |animation_frame, phase, mirror| {
             UiEvent::Worker(Arc::new(Packet {
+                resume: false,
                 animation_frame,
                 phase,
                 token: 1,
@@ -1794,5 +1900,199 @@ mod tests {
             receiver.recv_timeout(Duration::from_secs(2)).unwrap(),
             UiEvent::Fatal(_)
         ));
+    }
+    struct Warm {
+        stages: Arc<AtomicUsize>,
+        fail: Arc<std::sync::atomic::AtomicBool>,
+    }
+    impl SceneSource for Warm {
+        fn warm_retained_bytes(&self) -> Option<usize> {
+            Some(16 * 1024)
+        }
+        fn resume(&mut self) -> Result<Option<Scene>, Box<dyn Error>> {
+            if self.fail.load(Ordering::SeqCst) {
+                return Err("stale source".into());
+            }
+            Ok(Some(scene()))
+        }
+        fn watch(
+            &mut self,
+            _: Box<dyn Fn(Result<(), String>) + Send>,
+        ) -> Result<(), Box<dyn Error>> {
+            Ok(())
+        }
+        fn stage(&mut self, _: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+            self.stages.fetch_add(1, Ordering::SeqCst);
+            Ok(Some(scene()))
+        }
+        fn validate(&self) -> Result<(), Box<dyn Error>> {
+            Ok(())
+        }
+        fn state_summary(&self) -> String {
+            String::new()
+        }
+        fn commit(&mut self) -> bool {
+            true
+        }
+        fn error_scene(&mut self, _: String) -> Scene {
+            scene()
+        }
+    }
+    fn warm_worker(
+        factories: Arc<AtomicUsize>,
+        stages: Arc<AtomicUsize>,
+        fail: Arc<std::sync::atomic::AtomicBool>,
+    ) -> (Box<dyn SceneSource>, mpsc::Receiver<UiEvent>) {
+        let mut source: Box<dyn SceneSource> = Box::new(Source::new(
+            Box::new(move || {
+                factories.fetch_add(1, Ordering::SeqCst);
+                Ok(Box::new(Warm { stages, fail }))
+            }),
+            scene(),
+        ));
+        let (sender, receiver) = mpsc::channel();
+        source.services(Box::new(move |event| {
+            let _ = sender.send(event);
+        }));
+        source.stage(UiEvent::Reload).unwrap();
+        settle(source.as_mut(), &receiver);
+        (source, receiver)
+    }
+    fn settle(source: &mut dyn SceneSource, receiver: &mpsc::Receiver<UiEvent>) {
+        let ready = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(matches!(&ready, UiEvent::Worker(packet) if matches!(packet.phase, Phase::Ready)));
+        assert!(source.stage(ready).unwrap().is_some());
+        assert!(!source.dormant_ready(), "Ready is not committed");
+        assert!(!source.commit());
+        let accepted = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(matches!(&accepted, UiEvent::Worker(packet) if packet.is_accepted()));
+        source.stage(accepted).unwrap();
+        assert!(source.commit());
+        assert!(source.dormant_ready());
+    }
+    #[test]
+    fn six_dormant_cycles_reuse_one_factory_and_resume_through_ack() {
+        let factories = Arc::new(AtomicUsize::new(0));
+        let stages = Arc::new(AtomicUsize::new(0));
+        let (mut source, receiver) =
+            warm_worker(factories.clone(), stages.clone(), Default::default());
+        let charge = source.warm_retained_bytes().unwrap();
+        assert!(
+            charge >= STACK_BYTES,
+            "charge includes the reserved stack, not an RSS claim"
+        );
+        let mut cache = crate::warm::Cache::default();
+        for _ in 0..6 {
+            cache.park(false, "view".into(), 7, source, charge + 1024);
+            let entry = cache.take(false, "view").expect("admitted settled worker");
+            assert_eq!(entry.epoch, 7);
+            source = entry.source;
+            assert!(
+                source.resume().unwrap().is_none(),
+                "cached pixels wait for Accepted"
+            );
+            assert!(!source.dormant_ready(), "queued resume cannot park");
+            settle(source.as_mut(), &receiver);
+        }
+        assert_eq!(factories.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            stages.load(Ordering::SeqCst),
+            1,
+            "resume does not replay initial stage"
+        );
+        println!("warm_cycles=6 factories=1 initial_stages=1 admission_charge_bytes={charge}");
+    }
+    #[test]
+    fn dormant_admission_rejects_queued_transactions_and_over_budget_sources() {
+        let (mut source, receiver) =
+            warm_worker(Default::default(), Default::default(), Default::default());
+        assert!(source.dormant_ready());
+        source.stage(UiEvent::Relayout).unwrap();
+        assert!(
+            !source.dormant_ready(),
+            "counter covers the gap before Ready arrives"
+        );
+        let mut cache = crate::warm::Cache::default();
+        cache.park(false, "pending".into(), 1, source, usize::MAX);
+        assert!(cache.take(false, "pending").is_none());
+        drop(receiver);
+        let (source, _receiver) =
+            warm_worker(Default::default(), Default::default(), Default::default());
+        let charge = source.warm_retained_bytes().unwrap();
+        cache.park(false, "large".into(), 2, source, charge - 1);
+        assert!(cache.take(false, "large").is_none());
+    }
+    #[test]
+    fn dormant_budget_evicts_oldest_and_wakeups_match_slot_and_original_epoch() {
+        let mut cache = crate::warm::Cache::default();
+        for epoch in [1, 2] {
+            let (source, _receiver) =
+                warm_worker(Default::default(), Default::default(), Default::default());
+            let budget = source.warm_retained_bytes().unwrap() + 1024;
+            cache.park(false, epoch.to_string(), epoch, source, budget);
+        }
+        assert!(
+            cache.take(false, "1").is_none(),
+            "oldest source evicted before admission"
+        );
+        assert!(
+            !cache.invalidate(true, 2),
+            "overlay epochs cannot evict panels"
+        );
+        assert!(
+            !cache.invalidate(false, 1),
+            "stale epochs cannot evict a replacement"
+        );
+        assert!(
+            cache.invalidate(false, 2),
+            "any dormant source wakeup retires the worker"
+        );
+        assert!(cache.take(false, "2").is_none());
+    }
+    #[test]
+    fn rejected_resume_returns_no_cached_pixels_and_cannot_be_reparked() {
+        let fail = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let (mut source, receiver) =
+            warm_worker(Default::default(), Default::default(), fail.clone());
+        fail.store(true, Ordering::SeqCst);
+        assert!(source.resume().unwrap().is_none());
+        let failed = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(
+            matches!(&failed, UiEvent::Worker(packet) if packet.resume_failed() && packet.scene.is_none())
+        );
+        assert!(source.stage(failed).is_err());
+        assert!(!source.dormant_ready());
+        let mut cache = crate::warm::Cache::default();
+        cache.park(false, "failed".into(), 3, source, usize::MAX);
+        assert!(cache.take(false, "failed").is_none());
+    }
+    #[test]
+    fn coalesced_pointer_jobs_release_pending_credit_before_parking() {
+        let stages = Arc::new(AtomicUsize::new(0));
+        let (mut source, receiver) =
+            warm_worker(Default::default(), stages.clone(), Default::default());
+        source.stage(UiEvent::Relayout).unwrap();
+        let ready = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        source.stage(ready).unwrap();
+        // Hold Ack until all samples are queued, so the actor combines them while
+        // waiting for this first transaction's GPU acceptance.
+        for x in 0..100 {
+            source.stage(UiEvent::Hover { x: x as f32, y: 1. }).unwrap();
+        }
+        assert!(!source.dormant_ready());
+        assert!(!source.commit());
+        let accepted = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        source.stage(accepted).unwrap();
+        assert!(source.commit());
+        settle(source.as_mut(), &receiver);
+        assert_eq!(
+            stages.load(Ordering::SeqCst),
+            3,
+            "initial + relayout + one combined hover"
+        );
+        let budget = source.warm_retained_bytes().unwrap() + 1024;
+        let mut cache = crate::warm::Cache::default();
+        cache.park(false, "coalesced".into(), 8, source, budget);
+        assert!(cache.take(false, "coalesced").is_some());
     }
 }

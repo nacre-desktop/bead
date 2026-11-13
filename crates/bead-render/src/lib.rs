@@ -940,6 +940,15 @@ impl Default for CpuRenderer {
     }
 }
 impl CpuRenderer {
+    fn charged_bytes(&self) -> usize {
+        self.glyph_budget.used()
+            + self.textures.bytes()
+            + self
+                .mask_charge
+                .as_ref()
+                .map_or(0, bead_core::cache::Charge::bytes)
+    }
+
     fn cap_glyphs(&mut self) -> Result<()> {
         self.glyph_charge = None;
         // This renderer never requests outlines. Avoid retaining dependency-only data.

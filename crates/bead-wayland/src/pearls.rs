@@ -257,6 +257,7 @@ pub(crate) struct Group {
     cover: Option<(u64, Vec<Surface>)>,
     dock_transition: Option<DockTransition>,
     reload_pending: bool,
+    resuming: bool,
     target: bool,
     output: Option<wl_output::WlOutput>,
     companion: Option<(Scene, Box<dyn Renderer>, RendererKind)>,
@@ -287,6 +288,7 @@ impl Group {
             cover: None,
             dock_transition: None,
             reload_pending: false,
+            resuming: false,
             target: false,
             output: None,
             companion: None,
@@ -407,6 +409,7 @@ impl App {
         swap(&mut self.panel_cover, &mut g.cover);
         swap(&mut self.panel_dock_transition, &mut g.dock_transition);
         swap(&mut self.panel_reload_pending, &mut g.reload_pending);
+        swap(&mut self.panel_resuming, &mut g.resuming);
         swap(&mut self.panel_target, &mut g.target);
         swap(&mut self.panel_output, &mut g.output);
         swap(&mut self.companion, &mut g.companion);

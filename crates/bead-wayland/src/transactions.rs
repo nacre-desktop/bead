@@ -430,6 +430,9 @@ impl App {
             return;
         }
         if let UiEvent::Overlay(epoch, event) = event {
+            if self.warm_sources.invalidate(true, epoch) {
+                return;
+            }
             if self.overlay.as_ref().is_some_and(|o| o.epoch() == epoch) {
                 // A view retires itself when its content vanishes.
                 if matches!(&*event, UiEvent::CompanionVisibility(false)) {
@@ -461,6 +464,9 @@ impl App {
             return;
         }
         if let UiEvent::Panel(epoch, event) = event {
+            if self.warm_sources.invalidate(false, epoch) {
+                return;
+            }
             if epoch != self.panel_epoch || self.panel_runtime.is_none() {
                 // A detached pearl's worker keeps its own epoch.
                 self.with_epoch(epoch, |app| app.ui(UiEvent::Panel(epoch, event)));
@@ -1048,7 +1054,7 @@ impl App {
                     }
                 }
                 self.scene = scene;
-                if self.processing_panel && !self.panel_ready {
+                if self.processing_panel && !self.panel_ready && !self.panel_resuming {
                     self.panel_content_ready();
                 }
                 if self.options.panel && (self.processing_panel || self.scene.motion.is_some()) {

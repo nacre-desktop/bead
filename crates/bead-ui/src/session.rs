@@ -73,6 +73,7 @@ pub struct Session {
     pub(super) generation: Option<Generation>,
     pub(super) pending: Option<Pending>,
     pub(super) watch_revision: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    accepted_watch_revision: u64,
     pub(crate) current: Scene,
     pub(super) current_nodes: Vec<Node>,
     pub(super) editors: BTreeMap<String, input::Editor>,
@@ -226,6 +227,7 @@ impl Session {
             generation: None,
             pending: None,
             watch_revision: Default::default(),
+            accepted_watch_revision: 0,
             current: fallback,
             current_nodes: vec![],
             viewport: (1200., 800.),
@@ -549,6 +551,7 @@ impl Session {
             base_palette,
             runtime_palette,
             nodes,
+            watch_revision,
             ..
         }) = self.pending.take()
         {
@@ -560,6 +563,7 @@ impl Session {
                 {
                     self.recovered = None;
                 }
+                self.accepted_watch_revision = watch_revision;
                 self.generation = Some(generation);
                 self.error = None;
                 self.source_fault = false;
@@ -1131,6 +1135,38 @@ impl Session {
     pub fn view_nodes(&self) -> &[Node] {
         &self.current_nodes
     }
+    /// Validate an accepted generation before resuming a dormant host view.
+    /// This performs no Luau evaluation or layout. Hosts must also refresh their
+    /// own models and relayout changed viewports before admitting the first frame.
+    /// Also use this during validation of staged store/layout updates: those keep
+    /// the accepted source generation. A staged reload instead uses check_sources.
+    /// A false result requires the ordinary atomic reload transaction.
+    pub fn sources_current(&self) -> bool {
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|pending| pending.generation.is_some())
+            || self.recovered.is_some()
+            || self.source_fault
+            || self.retry_reload
+        {
+            return false;
+        }
+        let revision = self
+            .watch_revision
+            .load(std::sync::atomic::Ordering::SeqCst);
+        self.accepted_watch_revision == revision
+            && self
+                .generation
+                .as_ref()
+                .is_some_and(|generation| generation.check_sources(&self.root).is_ok())
+            && Palette::read(&self.palette_path)
+                .is_ok_and(|palette| palette.0 == self.base_palette.0)
+            && self
+                .watch_revision
+                .load(std::sync::atomic::Ordering::SeqCst)
+                == revision
+    }
     pub fn check_sources(&self) -> Result<(), Diagnostic> {
         if let Some(pending) = &self.pending
             && let Some(generation) = &pending.generation
@@ -1226,4 +1262,52 @@ fn merged_palette(base: &Palette, overlay: Option<&Palette>) -> Palette {
     let mut colours = base.0.as_ref().clone();
     colours.extend(overlay.0.iter().map(|(key, value)| (key.clone(), *value)));
     Palette(colours.into())
+}
+
+#[cfg(test)]
+mod warm_tests {
+    use super::*;
+    #[test]
+    fn accepted_sources_and_palette_are_checked_without_a_pending_reload() {
+        let fixture = crate::tests::Fixture::new();
+        let mut session = fixture.session();
+        assert!(session.sources_current());
+        session.relayout().unwrap();
+        assert!(
+            session.sources_current(),
+            "staged stores/layout retain the accepted source snapshot"
+        );
+        let scene = session.reload().unwrap();
+        assert!(
+            !session.sources_current(),
+            "staged reload uses check_sources instead"
+        );
+        session.commit(scene);
+        assert!(session.sources_current());
+        let source = fixture.0.join("behavior.luau");
+        let original = fs::read(&source).unwrap();
+        fs::write(&source, b"return {}").unwrap();
+        assert!(
+            !session.sources_current(),
+            "accepted sources, not just pending sources"
+        );
+        fs::write(&source, original).unwrap();
+        assert!(session.sources_current());
+        fs::write(
+            fixture.0.join("palette.json"),
+            r#"{"formatVersion":1,"colours":{"surface":"ffffff"}}"#,
+        )
+        .unwrap();
+        assert!(!session.sources_current());
+        let scene = session.reload().unwrap();
+        session.commit(scene);
+        assert!(session.sources_current());
+        session
+            .watch_revision
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        assert!(
+            !session.sources_current(),
+            "watch-only dependencies also invalidate reuse"
+        );
+    }
 }

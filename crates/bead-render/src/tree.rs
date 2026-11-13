@@ -924,6 +924,24 @@ impl TreeCache {
         Ok(lease)
     }
 
+    /// Retained prepared and raster-scratch charges, including shared frames.
+    /// The host source's conservative bound must additionally cover uncharged
+    /// tree/map metadata and opaque shared font-system allocations.
+    pub fn retained_bytes(&self) -> usize {
+        [
+            &self.upload_budget,
+            &self.resource_budget,
+            &self.bake_scratch_budget,
+            &self.raster_budget,
+            &self.node_budget,
+            &self.frame_budget,
+        ]
+        .into_iter()
+        .flatten()
+        .map(bead_core::cache::Budget::used)
+        .sum::<usize>()
+            + self.raster.charged_bytes()
+    }
     pub fn set_image_policy(&mut self, policy: ImagePolicy) {
         self.image_policy = policy;
     }

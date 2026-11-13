@@ -49,6 +49,7 @@ use runtime::App;
 pub use runtime::run_runtime;
 pub(crate) use runtime::{output_event_is_current, output_scope_matches};
 pub use window::{WindowFactory, WindowModel, WindowSpec};
+mod warm;
 pub mod worker;
 use bead_render::{
     Damage, PixelFormat, Rect, RenderTarget, Renderer, RendererKind, Scene, ShmTarget,
@@ -544,6 +545,26 @@ pub struct DragFill {
     pub to: [u8; 4],
 }
 pub trait SceneSource {
+    /// Opt in to dormant reuse with a conservative upper bound for this source's
+    /// retained heap, including captured host state, exported scene/mirror copies
+    /// and uncharged actor/tree/font metadata. Unknown ownership must return None.
+    /// The worker additionally charges its reserved stack and prepared allocations.
+    /// This is an admission upper bound, not a measured resident-memory value.
+    fn warm_retained_bytes(&self) -> Option<usize> {
+        None
+    }
+    /// Whether this source has no unaccepted or queued transactions. The worker
+    /// enforces this separately from the optional retained-byte declaration.
+    fn dormant_ready(&self) -> bool {
+        true
+    }
+    /// Refresh host inputs and validate accepted sources before any cached pixels
+    /// become visible. Return the current scene even if no inputs changed. A
+    /// failure discards the dormant session; the ordinary factory starts afresh.
+    fn resume(&mut self) -> Result<Option<Scene>, Box<dyn Error>> {
+        Err("source does not support dormant reuse".into())
+    }
+
     fn drag_visuals(&self) -> Vec<DragVisual> {
         Vec::new()
     }
@@ -756,6 +777,10 @@ pub struct Options {
     pub panel_spec: Option<PanelSpec>,
     /// Optional named views sharing the existing one-resident-panel lifecycle.
     pub panels: Option<Panels>,
+    /// Total dormant-source admission budget (disabled by default), including
+    /// conservative worker-stack charges. Sources
+    /// without a trustworthy retained-byte bound always use cold creation.
+    pub warm_source_budget: usize,
     /// B0053: views offered into the overlay slot (see [`UiEvent::CompanionOffer`]).
     pub overlays: Option<Overlays>,
     /// Optional output-sized canvas views, created on first offer per output and name.
@@ -835,6 +860,7 @@ impl Default for Options {
             namespace: "bead-dev".into(),
             panel_spec: None,
             panels: None,
+            warm_source_budget: 0,
             overlays: None,
             canvases: None,
             canvas_layers: Default::default(),

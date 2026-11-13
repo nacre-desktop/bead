@@ -28,6 +28,7 @@ pub(super) struct Overlay {
     asked: (u32, u32),
     size: (u32, u32),
     configured: bool,
+    resuming: bool,
     scale120: u32,
     fractional: Option<WpFractionalScaleV1>,
     viewport: Option<WpViewport>,
@@ -211,7 +212,13 @@ impl App {
                 if !shown.open {
                     shown.open = true;
                     shown.close_token = shown.close_token.wrapping_add(1);
+                    let resume = self.options.warm_source_budget > 0
+                        && shown.source.warm_retained_bytes().is_some();
+                    shown.resuming = resume;
                     self.overlay_ui(UiEvent::PanelVisibility(true));
+                    if resume && let Err(error) = self.overlay.as_mut().unwrap().source.resume() {
+                        self.fail(error);
+                    }
                 }
                 return;
             }
@@ -273,12 +280,19 @@ impl App {
         self.place_overlay(&layer, &output, &spec.fallback, spec.position.as_ref());
         layer.commit();
         self.overlay_epoch = self.overlay_epoch.wrapping_add(1);
-        let epoch = self.overlay_epoch;
+        let warm = self.warm_sources.take(true, view);
+        let reused = warm.is_some();
+        let epoch = warm
+            .as_ref()
+            .map_or(self.overlay_epoch, |entry| entry.epoch);
         let factory = spec.factory.clone();
-        let mut source: Box<dyn SceneSource> = Box::new(worker::Source::new(
-            Box::new(move || factory(true)),
-            spec.fallback.clone(),
-        ));
+        let mut source: Box<dyn SceneSource> =
+            warm.map(|entry| entry.source).unwrap_or_else(|| {
+                Box::new(worker::Source::new(
+                    Box::new(move || factory(true)),
+                    spec.fallback.clone(),
+                ))
+            });
         let sender = self
             .event_sender
             .clone()
@@ -340,6 +354,7 @@ impl App {
             asked: size,
             size,
             configured: false,
+            resuming: reused,
             scale120,
             fractional,
             viewport,
@@ -365,8 +380,18 @@ impl App {
         if let Some(palette) = self.wallpaper_palette.clone() {
             self.overlay_ui(UiEvent::WallpaperPalette(palette));
         }
-        self.overlay_ui(UiEvent::Reload);
-        self.overlay_ui(UiEvent::PanelVisibility(true));
+        if reused {
+            self.overlay_ui(UiEvent::PanelVisibility(true));
+            self.overlay
+                .as_mut()
+                .unwrap()
+                .source
+                .resume()
+                .map_err(|error| error.to_string())?;
+        } else {
+            self.overlay_ui(UiEvent::Reload);
+            self.overlay_ui(UiEvent::PanelVisibility(true));
+        }
         println!("OVERLAY_OPEN view={view} epoch={epoch}");
         Ok(())
     }
@@ -425,11 +450,39 @@ impl App {
         );
     }
     pub(super) fn release_overlay(&mut self) {
-        let Some(overlay) = self.overlay.take() else {
+        let Some(mut overlay) = self.overlay.take() else {
             return;
         };
         let output = overlay.output.clone();
         self.cancel_scroll(&scroll::Target::Overlay(overlay.epoch()));
+        let source = std::mem::replace(
+            &mut overlay.source,
+            Box::new(worker::Source::new(
+                Box::new(|| Err("retired overlay".into())),
+                Scene {
+                    primitives: vec![],
+                    layers: vec![],
+                    asset_data: Default::default(),
+                    clips: Default::default(),
+                    prepared: Default::default(),
+                    font_files: vec![],
+                    opacity: 1.,
+                    motion: None,
+                    resource_revision: 0,
+                    width: 1.,
+                    slide: None,
+                    offset: (0., 0.),
+                    bounds: Rect::new(0., 0., 1., 1.),
+                },
+            )),
+        );
+        self.warm_sources.park(
+            true,
+            overlay.name.clone(),
+            overlay.epoch,
+            source,
+            self.options.warm_source_budget,
+        );
         drop(overlay);
         // With no view of either slot up, the primary session may shed its warm caches,
         // as it does when the panel slot closes.
@@ -437,7 +490,7 @@ impl App {
             self.primary_idle(&output, true);
         }
         #[cfg(all(target_os = "linux", target_env = "gnu"))]
-        // SAFETY: allocator trim only; the source, renderer and buffers are gone.
+        // SAFETY: allocator trim only; surface resources are gone, admitted sources may remain warm.
         unsafe {
             libc::malloc_trim(0);
         }
@@ -493,6 +546,35 @@ impl App {
         self.source_transaction(event, Self::process_overlay_ui);
     }
     fn process_overlay_ui(&mut self, event: UiEvent) {
+        if self
+            .overlay
+            .as_ref()
+            .is_some_and(|overlay| overlay.resuming)
+            && (matches!(&event, UiEvent::Worker(packet) if packet.has_error() || packet.resume_failed())
+                || matches!(
+                    &event,
+                    UiEvent::Fatal(_) | UiEvent::WatchError(_) | UiEvent::ResourcesPrepared(Err(_))
+                ))
+        {
+            let Some(overlay) = self.overlay.as_mut() else {
+                return;
+            };
+            let name = overlay.name.clone();
+            let output = self.output.info(&overlay.output).and_then(|info| info.name);
+            // Mark uncacheable before release, and restart through the cold path.
+            let _ = overlay.source.stage(event);
+            self.release_overlay();
+            self.warm_sources.take(true, &name);
+            if let Err(error) = self.open_overlay(&name, output.as_deref()) {
+                self.fail(error);
+            }
+            return;
+        }
+        if matches!(&event, UiEvent::Worker(packet) if packet.resumed())
+            && let Some(overlay) = &mut self.overlay
+        {
+            overlay.resuming = false;
+        }
         if let UiEvent::ResourcesPrepared(result) = event {
             match result {
                 Ok(()) => self.overlay_draw(),
@@ -573,6 +655,13 @@ impl App {
             });
     }
     fn overlay_draw(&mut self) {
+        if self
+            .overlay
+            .as_ref()
+            .is_some_and(|overlay| overlay.resuming)
+        {
+            return;
+        }
         let Some(o) = self.overlay.as_mut() else {
             return;
         };

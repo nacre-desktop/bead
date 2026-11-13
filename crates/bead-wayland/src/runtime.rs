@@ -19,6 +19,7 @@ pub(super) struct App {
     pub(super) edge_surfaces: Vec<edges::EdgeSurface>,
     pub(super) edge: edges::EdgeState,
     pub(super) panel_runtime: Option<Box<dyn SceneSource>>,
+    pub(super) warm_sources: warm::Cache,
     pub(super) panel_epoch: u64,
     pub(super) panel_name: Option<String>,
     pub(super) panel_center: Option<f32>,
@@ -29,6 +30,7 @@ pub(super) struct App {
     pub(super) panel_dock_transition: Option<pearls::DockTransition>,
     /// The panel's own scene has been committed at least once (no dark/empty first frame before).
     pub(super) panel_ready: bool,
+    pub(super) panel_resuming: bool,
     /// A validated app snapshot can be shown while its live panel worker starts.
     pub(super) panel_fallback_ready: bool,
     pub(super) panel_reload_pending: bool,
@@ -356,6 +358,7 @@ pub fn run_runtime(
         edge_surfaces: Vec::new(),
         edge: Default::default(),
         panel_runtime: None,
+        warm_sources: Default::default(),
         panel_epoch: 0,
         panel_name,
         panel_center: None,
@@ -365,6 +368,7 @@ pub fn run_runtime(
         panel_cover: None,
         panel_dock_transition: None,
         panel_ready: true,
+        panel_resuming: false,
         panel_fallback_ready: false,
         panel_reload_pending: false,
         panel_target: false,

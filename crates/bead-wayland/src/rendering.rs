@@ -1582,7 +1582,7 @@ impl App {
         if self.surfaces[index].companion {
             // A worker failure publishes an error scene. A loading worker must never
             // expose the fallback buffer, even when hydration takes longer than a frame.
-            if !self.panel_ready && !self.panel_fallback_ready {
+            if self.panel_resuming || (!self.panel_ready && !self.panel_fallback_ready) {
                 self.surfaces[index].redraw = true;
                 return;
             }
