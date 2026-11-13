@@ -35,5 +35,3 @@ wayland-server = "=0.31.11"
 default = ["native-gl"]
 native-gl = ["bead-render/native-gl", "dep:raw-window-handle"]
 wgpu = ["bead-render/wgpu", "dep:raw-window-handle"]
-vello = ["wgpu"]
-gpu = ["native-gl", "wgpu"]

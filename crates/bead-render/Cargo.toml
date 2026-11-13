@@ -28,6 +28,3 @@ glutin = { version = "0.32", default-features = false, features = ["egl", "wayla
 default = ["native-gl"]
 native-gl = ["dep:femtovg", "dep:raw-window-handle", "dep:rgb", "dep:imgref", "dep:glutin"]
 wgpu = ["dep:wgpu", "dep:vello", "dep:femtovg", "femtovg/wgpu", "dep:pollster", "dep:raw-window-handle", "dep:rgb", "dep:imgref"]
-vello = ["wgpu"]
-# Compatibility for explicit historical benchmark invocations.
-gpu = ["native-gl", "wgpu"]

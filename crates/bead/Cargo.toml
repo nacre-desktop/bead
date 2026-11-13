@@ -21,8 +21,6 @@ bead-backends={path="../bead-backends"}
 default=["native-gl"]
 native-gl=["bead-render/native-gl","bead-wayland/native-gl"]
 wgpu=["bead-render/wgpu","bead-wayland/wgpu"]
-vello=["wgpu"]
-gpu=["native-gl","wgpu"]
 
 [dev-dependencies]
 zbus = { version = "=5.19.0", default-features = false, features = ["tokio"] }

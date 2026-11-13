@@ -19,7 +19,7 @@ Nacre accepted step 3 at `8c56db8960b63b6d4cfabd98e2c281c85c03e68c`. Import comm
 | Historical docs, feasibility, README and notices | Under `bead-shell/` |
 | Product `deny.toml` | `bead-shell/deny-product.toml` |
 
-Bead retains rewritten framework guides/contracts, MIT text, upstream font/vendor notices, `crates/bead*`, `vendor/`, `examples/minimal-shell`, `examples/plugins/hello`, and neutral tooling. Product runtime code and assets are removed without changing framework behavior.
+Bead retains rewritten framework guides/contracts, MIT text, upstream font/vendor notices, `crates/bead*`, `vendor/system-tray/`, `examples/minimal-shell`, `examples/plugins/hello`, and neutral tooling. Product runtime code and assets are removed without changing framework behavior.
 
 ## Migration status
 

@@ -69,7 +69,7 @@ For `#[non_exhaustive]`, migrate known consumers in a preparatory revision befor
 - [ ] Decide package shape. **Recommendation:** consolidate the folder CLI into the `bead` package and publish one supported package first. Publishing only `bead` + `bead-cli` is not currently sufficient: the facade has path dependencies on the internal workspace crates, which crates.io cannot resolve as path dependencies. If not consolidated, publish the complete dependency closure or replace path edges with versioned dependencies.
 - [ ] Check names immediately before release. Read-only crates.io API queries for `bead`, `bead-cli`, `bead-core`, `bead-kit`, `bead-render`, `bead-services`, `bead-ui`, `bead-wayland`, `bead-widgets`, `bead-backends`, `bead-wallpaper`, and `bead-test` returned no parseable response in this environment; availability is **unchecked**.
 - [ ] Add per-package `description`, `repository`, `readme`, and useful `keywords`; current manifests lack these fields. Confirm package names, categories, include/exclude rules, and dependency/license metadata.
-- [ ] Preserve root `LICENSE` and third-party notices. Existing notices include `vendor/system-tray/LICENSE`, `vendor/fontconfig/LICENSE`, and `crates/bead-test/fonts/README.md`; verify every packaged asset/source notice is present in the crate archive.
+- [ ] Preserve root `LICENSE` and third-party notices. Existing notices include `vendor/system-tray/LICENSE` and `crates/bead-test/fonts/README.md`; verify every packaged asset/source notice is present in the crate archive.
 - [ ] Set docs.rs metadata/features explicitly; verify default and documented optional renderer builds on docs.rs-compatible Linux. Do not enable mutually exclusive/heavy backend combinations by accident.
 - [ ] Audit `cargo package --list`/crate archives, `cargo deny` licenses, all path dependencies, and the standalone minimal-shell proof after package restructuring.
 
@@ -77,7 +77,6 @@ For `#[non_exhaustive]`, migrate known consumers in a preparatory revision befor
 
 | Candidate | Evidence | Estimate |
 |---|---|---:|
-| `crates/bead/src/host.rs` | 1,333 lines; duplicate `ServiceWakeup`/`WakeCallback` aliases at 40–41; three tray action arms at 375–385 | ~3–8 lines saved now; broader host split should be avoided unless it removes code |
 | `crates/bead-wayland/src/scroll.rs` | B0240 implementation is about 1,052 lines and was just added to the framework surface | ~0 lines until duplication/dead paths are demonstrated; first review API and ownership boundaries |
 | `crates/bead-wayland/src/lib.rs` | `Options` combines generic host controls with debug/test and app-shaped flags | Potentially remove/rehome fields; line savings not estimated until API use audit |
 | `crates/bead-test/src/lib.rs` and proof-only modules | Test harness/metrics are exported publicly despite serving tests | Unknown; hide any item without an external consumer and count actual deletions in the cleanup unit |
