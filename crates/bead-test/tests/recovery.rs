@@ -169,6 +169,49 @@ fn corrupt_recovery_bundle_is_replaced_after_valid_first_presentation() -> Resul
 }
 
 #[test]
+fn unchanged_bundle_only_skips_save_with_private_regular_files() -> Result<()> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
+
+    let f = Fixture::new()?;
+    let path = f.0.join("state/good.json");
+    let parent = path.parent().ok_or("recovery parent")?;
+    let mut first = f.load()?;
+    first.presented()?;
+    drop(first);
+
+    std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o755))?;
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644))?;
+    let insecure_inode = std::fs::metadata(&path)?.ino();
+    let mut second = f.load()?;
+    second.presented()?;
+    assert_eq!(
+        std::fs::metadata(parent)?.permissions().mode() & 0o777,
+        0o700
+    );
+    assert_eq!(
+        std::fs::metadata(&path)?.permissions().mode() & 0o777,
+        0o600
+    );
+    assert_ne!(std::fs::metadata(&path)?.ino(), insecure_inode);
+
+    let target = f.0.join("state/linked-target.json");
+    let saved_bytes = std::fs::read(&path)?;
+    std::fs::write(&target, &saved_bytes)?;
+    std::fs::remove_file(&path)?;
+    symlink(&target, &path)?;
+    let mut third = f.load()?;
+    third.presented()?;
+    assert!(!std::fs::symlink_metadata(&path)?.file_type().is_symlink());
+    assert_eq!(std::fs::read(target)?, saved_bytes);
+
+    let linked_parent = f.0.join("state-link");
+    symlink(parent, &linked_parent)?;
+    let bundle = Bundle::load(&path)?;
+    assert!(bundle.save(&linked_parent.join("other.json")).is_err());
+    Ok(())
+}
+
+#[test]
 fn unpresented_invalid_bundle_and_path_escape_never_replace_last_good() -> Result<()> {
     let f = Fixture::new()?;
     let ui = f.load()?;

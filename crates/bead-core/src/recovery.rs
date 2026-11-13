@@ -68,8 +68,35 @@ fn write(path: &Path, value: &impl Serialize) -> Result<()> {
     }
     result
 }
+fn existing_private_bundle_matches(path: &Path, value: &Bundle) -> bool {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
-#[derive(Serialize, Deserialize)]
+    let Some(parent) = path.parent() else {
+        return false;
+    };
+    let (Ok(parent_meta), Ok(file_meta)) = (
+        std::fs::symlink_metadata(parent),
+        std::fs::symlink_metadata(path),
+    ) else {
+        return false;
+    };
+    // SAFETY: geteuid has no preconditions and does not access memory.
+    let euid = unsafe { libc::geteuid() };
+    if !parent_meta.is_dir()
+        || parent_meta.file_type().is_symlink()
+        || parent_meta.uid() != euid
+        || parent_meta.permissions().mode() & 0o7777 != 0o700
+        || !file_meta.is_file()
+        || file_meta.file_type().is_symlink()
+        || file_meta.uid() != euid
+        || file_meta.permissions().mode() & 0o7777 != 0o600
+    {
+        return false;
+    }
+    Bundle::load(path).is_ok_and(|saved| saved == *value)
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Bundle {
     pub version: u32,
@@ -98,6 +125,9 @@ impl Bundle {
     }
     pub fn save(&self, path: &Path) -> Result<()> {
         self.validate()?;
+        if existing_private_bundle_matches(path, self) {
+            return Ok(());
+        }
         write(path, self)
     }
     pub fn load(path: &Path) -> Result<Self> {

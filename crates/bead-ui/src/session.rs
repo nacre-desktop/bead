@@ -306,12 +306,6 @@ impl Session {
         else {
             return Ok(());
         };
-        if self.recovery_fingerprint.is_none() {
-            self.recovery_fingerprint = bead_core::recovery::Bundle::load(path)
-                .ok()
-                .as_ref()
-                .map(recovery_fingerprint);
-        }
         if self.recovery_fingerprint != Some(*fingerprint) {
             #[cfg(test)]
             RECOVERY_SERIALIZE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
