@@ -313,21 +313,7 @@ fn a_transient_plugin_timeout_keeps_the_last_scene_and_retries_on_the_next_updat
     let entry = temp.0.join("ui/main.luau");
     let view = "local ui=require('bead.ui')\nlocal index=require('../plugins/index')\nlocal entry=index.plugins[1]\nlocal package=require('../'..entry.widgets[1].module)({ui=ui,plugin={id=entry.id,settings=entry.values}})\nlocal ok,node=pcall(package.render)\nif not ok then ui.plugin_fault(entry.id,tostring(node)); return ui.Text{id='failed',text='faulted',width=100,height=20} end\nreturn node";
     fs::write(&entry, view).unwrap();
-    let fallback = bead_render::Scene {
-        opacity: 1.,
-        motion: None,
-        resource_revision: 0,
-        asset_data: Default::default(),
-        clips: Default::default(),
-        layers: Vec::new(),
-        prepared: Default::default(),
-        font_files: vec![],
-        width: 100.,
-        slide: None,
-        primitives: vec![],
-        offset: (0., 0.),
-        bounds: bead_render::Rect::new(0., 0., 100., 100.),
-    };
+    let fallback = bead_render::Scene::empty(100., 100.);
     let mut session = crate::Session::new(
         temp.0.clone(),
         "ui/main.luau".into(),

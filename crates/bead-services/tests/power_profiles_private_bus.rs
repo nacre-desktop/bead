@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+mod support;
 use bead_services::power_profiles::PowerProfiles;
 use std::{
     collections::HashMap,
@@ -67,20 +68,7 @@ async fn wait_for(
     service: &bead_services::power_profiles::PowerProfiles,
     predicate: impl Fn(&bead_services::power_profiles::PowerProfilesSnapshot) -> bool,
 ) {
-    let result = tokio::time::timeout(Duration::from_secs(3), async {
-        loop {
-            if predicate(&service.snapshot()) {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await;
-    assert!(
-        result.is_ok(),
-        "power profiles state timeout: {:?}",
-        service.snapshot()
-    );
+    support::wait_for(|| service.snapshot(), predicate).await
 }
 
 #[tokio::test]

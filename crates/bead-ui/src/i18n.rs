@@ -20,6 +20,7 @@ pub enum Message {
     Text(String),
     Plural { one: String, other: String },
 }
+#[cfg(test)]
 impl Message {
     fn bytes(&self) -> usize {
         match self {
@@ -91,6 +92,7 @@ pub fn revision() -> u64 {
     with(|s| s.revision)
 }
 /// Bytes held by the fetched catalog (ids and texts, without map overhead).
+#[cfg(test)]
 pub fn resident_bytes() -> usize {
     with(|s| s.entries.iter().map(|(k, v)| k.len() + v.bytes()).sum())
 }

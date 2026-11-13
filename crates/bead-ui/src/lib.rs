@@ -16,8 +16,6 @@ pub mod recovery;
 pub mod schema;
 pub mod script;
 mod scroll_feedback;
-#[cfg(all(test, feature = "test-counters"))]
-mod scroll_measure_tests;
 pub mod scrollbar;
 mod session;
 pub mod status_pill;

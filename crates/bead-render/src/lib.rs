@@ -460,6 +460,24 @@ pub struct Scene {
     pub bounds: Rect,
 }
 impl Scene {
+    /// A fully opaque scene of this size with nothing in it.
+    pub fn empty(width: f32, height: f32) -> Self {
+        Self {
+            opacity: 1.,
+            motion: None,
+            resource_revision: 0,
+            asset_data: Default::default(),
+            clips: Default::default(),
+            layers: vec![],
+            prepared: Default::default(),
+            font_files: vec![],
+            width,
+            slide: None,
+            primitives: vec![],
+            offset: (0., 0.),
+            bounds: Rect::new(0., 0., width, height),
+        }
+    }
     /// Pose a panel motion. Revealing panels grow from their dock while opening;
     /// closing moves the complete scene as one unit so content cannot escape the
     /// shrinking body at the final edge.

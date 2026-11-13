@@ -336,21 +336,7 @@ mod tests {
                 calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 Err("factory should stay cold in catalog checks".into())
             }),
-            fallback: bead_render::Scene {
-                opacity: 1.,
-                motion: None,
-                resource_revision: 0,
-                asset_data: Default::default(),
-                clips: Default::default(),
-                layers: Vec::new(),
-                prepared: Default::default(),
-                font_files: Vec::new(),
-                width: 1.,
-                slide: None,
-                primitives: Vec::new(),
-                offset: (0., 0.),
-                bounds: bead_render::Rect::new(0., 0., 1., 1.),
-            },
+            fallback: bead_render::Scene::empty(1., 1.),
             fallback_factory: None,
             renderer: bead_render::RendererKind::Cpu,
         }

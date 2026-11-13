@@ -2,8 +2,7 @@
 //! Deterministic headless tests through Bead's actual frontend, stores and CPU tree.
 use bead_core::Value;
 use bead_render::{
-    Damage, Palette, PixelFormat, Primitive, Rect, Renderer, Scene, ShmTarget,
-    tree::TreeCpuRenderer,
+    Damage, Palette, PixelFormat, Primitive, Renderer, Scene, ShmTarget, tree::TreeCpuRenderer,
 };
 use bead_ui::Session;
 use std::{
@@ -131,21 +130,7 @@ impl Harness {
         {
             return Err("invalid headless dimensions/scale".into());
         }
-        let fallback = Scene {
-            opacity: 1.,
-            motion: None,
-            resource_revision: 0,
-            asset_data: Default::default(),
-            clips: Default::default(),
-            layers: vec![],
-            prepared: Default::default(),
-            font_files: vec![],
-            width: config.width as f32,
-            slide: None,
-            primitives: vec![],
-            offset: (0., 0.),
-            bounds: Rect::new(0., 0., config.width as f32, config.height as f32),
-        };
+        let fallback = Scene::empty(config.width as f32, config.height as f32);
         let mut session = Session::new(
             root.canonicalize()?,
             entry.into(),

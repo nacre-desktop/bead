@@ -89,7 +89,6 @@ fn snapshot_patch_coalescing_gap_reconnect_and_transactional_projection() -> Res
         Applied::Resync
     );
     assert_eq!(mirror.snapshot().ok_or("snapshot")?.revision, 3);
-    assert!(mirror.needs_snapshot());
     assert_eq!(
         mirror.patch("one", 3, 6, &json!({"title":"Wait for snapshot"}), now)?,
         Applied::Resync

@@ -368,9 +368,6 @@ impl Mirror {
     pub fn snapshot(&self) -> Option<&Snapshot> {
         self.snapshot.as_deref()
     }
-    pub fn needs_snapshot(&self) -> bool {
-        self.resync
-    }
     pub fn stale(&self) -> bool {
         self.stale_since.is_some()
     }

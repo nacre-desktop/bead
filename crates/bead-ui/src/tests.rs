@@ -49,21 +49,7 @@ impl Fixture {
         .unwrap();
     }
     pub(super) fn session(&self) -> Session {
-        let fallback = Scene {
-            opacity: 1.,
-            motion: None,
-            resource_revision: 0,
-            asset_data: Default::default(),
-            clips: Default::default(),
-            layers: Vec::new(),
-            prepared: Default::default(),
-            font_files: vec![],
-            width: 100.,
-            slide: None,
-            primitives: vec![],
-            offset: (0., 0.),
-            bounds: Rect::new(0., 0., 100., 100.),
-        };
+        let fallback = Scene::empty(100., 100.);
         let mut session = Session::new(
             self.0.clone(),
             "main.json".into(),

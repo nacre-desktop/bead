@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 //! MPRIS discovery, signal updates, owner loss and actions on a private bus.
+mod support;
 use bead_services::media::{Media, MediaAction};
 use std::{
     collections::HashMap,
@@ -116,17 +117,7 @@ impl Root {
 }
 
 async fn wait_for(media: &Media, predicate: impl Fn(&bead_services::media::MediaSnapshot) -> bool) {
-    tokio::time::timeout(Duration::from_secs(3), async {
-        loop {
-            let s = media.snapshot();
-            if predicate(&s) {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("media state timeout");
+    support::wait_for(|| media.snapshot(), predicate).await
 }
 
 #[tokio::test]

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 //! BlueZ ObjectManager, property notifications, owner lifecycle, and controls on a private bus.
+mod support;
 use bead_services::bluetooth::{Bluetooth, BluetoothAction};
 use std::{
     collections::HashMap,
@@ -282,16 +283,7 @@ async fn fixture() -> (Connection, Arc<Mutex<State>>) {
     (c, state)
 }
 async fn wait(s: &Bluetooth, p: impl Fn(&bead_services::bluetooth::BluetoothSnapshot) -> bool) {
-    tokio::time::timeout(Duration::from_secs(3), async {
-        loop {
-            if p(&s.snapshot()) {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("Bluetooth state timeout");
+    support::wait_for(|| s.snapshot(), p).await
 }
 async fn perform(service: &Arc<Bluetooth>, action: BluetoothAction) -> Result<(), String> {
     // Bluetooth::action owns a blocking runtime, so keep it off Tokio's executor.
@@ -359,22 +351,11 @@ async fn bluetooth_objects_signals_actions_and_owner_loss() {
         .await
         .is_ok()
     );
-    tokio::time::timeout(Duration::from_secs(3), async {
-        loop {
-            if state
-                .lock()
-                .unwrap()
-                .calls
-                .iter()
-                .any(|call| call == "StopDiscovery")
-            {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("bounded discovery did not stop");
+    support::wait_for(
+        || state.lock().unwrap().calls.clone(),
+        |calls| calls.iter().any(|call| call == "StopDiscovery"),
+    )
+    .await;
     let adapter = Proxy::new(&owner, NAME, ADAPTER_PATH, "org.bluez.Adapter1")
         .await
         .unwrap();

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 //! NetworkManager discovery, signals, validated actions, and owner loss on a private bus.
+mod support;
 use bead_services::network::{Network, NetworkAction, NetworkPrimary, NetworkSnapshot};
 use std::{
     collections::HashMap,
@@ -340,16 +341,7 @@ async fn fixture() -> (Connection, Calls) {
     (c, calls)
 }
 async fn wait(s: &Network, p: impl Fn(&NetworkSnapshot) -> bool) {
-    tokio::time::timeout(Duration::from_secs(3), async {
-        loop {
-            if p(&s.snapshot()) {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .unwrap_or_else(|_| panic!("network state timeout: {:#?}", s.snapshot()));
+    support::wait_for(|| s.snapshot(), p).await
 }
 async fn perform(
     service: &Arc<Network>,
