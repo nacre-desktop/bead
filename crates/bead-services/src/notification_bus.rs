@@ -470,7 +470,7 @@ impl PrivateBus {
             || meta.uid() != unsafe { libc::geteuid() }
             || meta.permissions().mode() & 0o077 != 0
         {
-            return Err("private bus needs an owned mode0700 directory and unused socket".into());
+            return Err("private bus needs an owned mode 0700 directory and unused socket".into());
         }
         let daily = PathBuf::from(format!("/run/user/{}/bus", unsafe { libc::geteuid() }));
         if socket == daily

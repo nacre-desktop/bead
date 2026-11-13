@@ -574,7 +574,12 @@ impl Generation {
                 let path = directory.join(item.file_name());
                 count += 1;
                 if count > 256 {
-                    return Err(Diagnostic::new(&path, 1, 1, "UI bundle exceeds256sources"));
+                    return Err(Diagnostic::new(
+                        &path,
+                        1,
+                        1,
+                        "UI bundle exceeds 256 sources",
+                    ));
                 }
                 if item
                     .file_type()
@@ -623,7 +628,7 @@ impl Generation {
                     &manifest,
                     1,
                     1,
-                    "UI bundle exceeds256sources",
+                    "UI bundle exceeds 256 sources",
                 ));
             }
             for module in bundle.modules {

@@ -477,7 +477,14 @@ fn validate_path(root: &Path, path: &Path) -> Result<(), Box<dyn Error>> {
 fn usage() -> &'static str {
     "Usage:\n  bead run <folder> [--seconds N]\n  bead check <folder>\n\nRuns or validates a Luau application folder."
 }
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() {
+    // Display, not the Debug form `main() -> Result` prints, so multi-line errors stay readable.
+    if let Err(error) = run() {
+        eprintln!("Error: {error}");
+        std::process::exit(1);
+    }
+}
+fn run() -> Result<(), Box<dyn Error>> {
     let mut args = std::env::args().skip(1);
     let Some(cmd) = args.next() else {
         eprintln!("{}", usage());

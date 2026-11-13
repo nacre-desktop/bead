@@ -1711,7 +1711,7 @@ fn panel_return_duration_is_optional_and_bounded() {
                 .err()
                 .unwrap()
                 .message
-                .contains("return_duration needs0..60 seconds")
+                .contains("return_duration needs 0..60 seconds")
         );
     }
 }

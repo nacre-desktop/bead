@@ -83,7 +83,7 @@ impl Clipboard {
     }
     pub fn set(&mut self, text: String, serial: u32, qh: &QueueHandle<App>) -> Result<(), String> {
         if text.len() > 65536 {
-            return Err("clipboard text exceeds64KiB".into());
+            return Err("clipboard text exceeds 64 KiB".into());
         }
         let text = Arc::new(text);
         if let (Some(manager), Some(device)) = (&self.ext, &self.ext_device) {
@@ -140,7 +140,7 @@ fn read_pipe(mut file: std::fs::File) -> Result<String, String> {
             Ok(n) => {
                 bytes.extend_from_slice(&buf[..n]);
                 if bytes.len() > 65536 {
-                    return Err("clipboard text exceeds64KiB".into());
+                    return Err("clipboard text exceeds 64 KiB".into());
                 }
             }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {

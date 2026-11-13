@@ -126,7 +126,7 @@ fn receive(stream: &mut UnixStream, deadline: Instant) -> Result<Vec<u8>, String
             Ok(n) => {
                 bytes.extend_from_slice(&buffer[..n]);
                 if bytes.len() > MAX_FRAME {
-                    return Err("command frame exceeds64KiB".into());
+                    return Err("command frame exceeds 64 KiB".into());
                 }
                 if let Some(end) = bytes.iter().position(|b| *b == b'\n') {
                     if end + 1 != bytes.len() {
@@ -145,7 +145,7 @@ fn send(stream: &mut UnixStream, value: &impl Serialize, deadline: Instant) -> R
     let mut bytes = serde_json::to_vec(value).map_err(|e| e.to_string())?;
     bytes.push(b'\n');
     if bytes.len() > MAX_FRAME {
-        return Err("command reply exceeds64KiB".into());
+        return Err("command reply exceeds 64 KiB".into());
     }
     let mut offset = 0;
     while offset < bytes.len() {

@@ -8,7 +8,7 @@ use std::{
 };
 pub fn read(path: &Path, limit: usize) -> Result<Vec<u8>, String> {
     if limit > 8 * 1024 * 1024 {
-        return Err("file limit exceeds8MiB".into());
+        return Err("file limit exceeds 8 MiB".into());
     }
     let mut file = std::fs::OpenOptions::new()
         .read(true)

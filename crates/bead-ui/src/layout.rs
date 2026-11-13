@@ -328,7 +328,7 @@ fn number(p: &Props<'_>, name: &str, default: f32, source: &Source) -> Result<f3
             .as_f64()
             .filter(|n| n.is_finite() && n.abs() <= 20000.)
             .map(|n| n as f32)
-            .ok_or_else(|| source.error(format!("{name} must be a finite number within20000"))),
+            .ok_or_else(|| source.error(format!("{name} must be a finite number within 20000"))),
     }
 }
 fn polygon(value: Option<&Json>, source: &Source) -> Result<Option<Vec<[f32; 2]>>, Diagnostic> {
@@ -465,7 +465,7 @@ impl ViewSpec {
         ) -> Result<ViewSpec, Diagnostic> {
             *count += 1;
             if *count > 8192 {
-                return Err(raw.source.error("view exceeds8192nodes"));
+                return Err(raw.source.error("view exceeds 8192 nodes"));
             }
             let mut props = Props {
                 raw: &raw.props,
@@ -514,7 +514,7 @@ impl ViewSpec {
             }
             let font_size = number(p, "font_size", 16., source)?;
             if !(1. ..=256.).contains(&font_size) {
-                return Err(source.error("font_size must be1..256"));
+                return Err(source.error("font_size must be 1..256"));
             }
             let font_weight = number(p, "font_weight", 400., source)?;
             if !(1. ..=1000.).contains(&font_weight) || font_weight.fract() != 0. {
@@ -708,7 +708,7 @@ impl ViewSpec {
                     || start + columns > 4097.
                 {
                     return Err(source
-                        .error("column_start/column_span need integer1..4096 within the grid"));
+                        .error("column_start/column_span need integer 1..4096 within the grid"));
                 }
                 style.grid_column = taffy::geometry::Line {
                     start: line(start as i16),
@@ -732,7 +732,7 @@ impl ViewSpec {
                 } else {
                     let columns = number(p, "columns", 3., source)?;
                     if !(1. ..=4096.).contains(&columns) || columns.fract() != 0. {
-                        return Err(source.error("columns needs integer1..4096"));
+                        return Err(source.error("columns needs integer 1..4096"));
                     }
                     style.grid_template_columns =
                         std::iter::repeat_n(fr(1.), columns as usize).collect();
@@ -992,7 +992,7 @@ impl ViewSpec {
                             let value = number(p, "slide_distance", 0., source)?;
                             if !(0. ..=4000.).contains(&value) {
                                 return Err(
-                                    source.error("slide_distance needs0..4000 logical pixels")
+                                    source.error("slide_distance needs 0..4000 logical pixels")
                                 );
                             }
                             Some(value)
@@ -1011,7 +1011,7 @@ impl ViewSpec {
                         return_duration: if p.contains_key("return_duration") {
                             let value = number(p, "return_duration", 0., source)?;
                             if !(0. ..=60.).contains(&value) {
-                                return Err(source.error("return_duration needs0..60 seconds"));
+                                return Err(source.error("return_duration needs 0..60 seconds"));
                             }
                             Some(f64::from(value))
                         } else {
@@ -1109,7 +1109,7 @@ pub(super) fn color(
                 .get("alpha")
                 .and_then(Json::as_f64)
                 .filter(|a| (0. ..=1.).contains(a))
-                .ok_or_else(|| source.error("alpha needs0..1"))?;
+                .ok_or_else(|| source.error("alpha needs 0..1"))?;
             let mut c = match role {
                 Json::String(role) => palette.get(role).map_err(|e| source.error(e))?,
                 // A tint or another alpha expression: its own alpha is scaled by this one.
@@ -1130,7 +1130,7 @@ pub(super) fn color(
                 .get("alpha")
                 .and_then(Json::as_f64)
                 .filter(|a| (0. ..=1.).contains(a))
-                .ok_or_else(|| source.error("tint amount needs0..1"))?;
+                .ok_or_else(|| source.error("tint amount needs 0..1"))?;
             let a = color(Some(base), default, palette, source)?;
             let b = color(Some(over), default, palette, source)?;
             Ok(std::array::from_fn(|i| {
@@ -1238,7 +1238,7 @@ pub fn layout(
         || root_size.width > 4000.
         || root_size.height > 4000.
     {
-        return Err(view.source.error("panel size must be1..4000"));
+        return Err(view.source.error("panel size must be 1..4000"));
     }
     let mut output = LaidOut {
         scene: Scene {
