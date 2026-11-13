@@ -3511,6 +3511,12 @@ impl App {
             // Reverse handoff: native resources retire only after the attached
             // destination has committed accepted content, never on dock request.
             self.panel_cover = None;
+            // The panel's input rect or position may have changed: move the catcher's hole.
+            if let Some(enabled) = self.dismiss.as_ref().map(|d| d.enabled)
+                && let Err(error) = self.set_dismiss_enabled(enabled)
+            {
+                self.fail(error);
+            }
         }
         let motion_label = traced_frame
             .and(motion_clock.as_ref())

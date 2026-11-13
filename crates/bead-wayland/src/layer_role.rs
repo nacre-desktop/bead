@@ -56,6 +56,41 @@ impl LayerState {
         }
         self
     }
+
+    /// Where the layer-shell protocol puts a `size` (configured) surface on an `output` of that
+    /// logical size, for a surface that ignores exclusive zones: anchored to one edge it keeps
+    /// that margin, a stretched axis starts at its margin, otherwise it is centred.
+    pub(crate) fn origin(&self, size: (u32, u32), output: (i32, i32)) -> (i32, i32) {
+        let [top, right, bottom, left] = self.margin;
+        let [x, y] = [
+            (
+                Anchor::LEFT,
+                Anchor::RIGHT,
+                self.size.0,
+                size.0,
+                output.0,
+                left,
+                right,
+            ),
+            (
+                Anchor::TOP,
+                Anchor::BOTTOM,
+                self.size.1,
+                size.1,
+                output.1,
+                top,
+                bottom,
+            ),
+        ]
+        .map(|(low, high, requested, extent, span, near, far)| {
+            match (self.anchor.contains(low), self.anchor.contains(high)) {
+                (true, high) if !high || requested == 0 => near,
+                (false, true) => span - extent as i32 - far,
+                _ => (span - extent as i32) / 2,
+            }
+        });
+        (x, y)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -237,6 +272,37 @@ mod tests {
             ..LayerState::default()
         };
         assert_eq!(sized.valid(), sized);
+    }
+
+    #[test]
+    fn origin_follows_anchor_margin_and_centring() {
+        let at = |anchor, size, margin| {
+            LayerState {
+                anchor,
+                size,
+                margin,
+                ..LayerState::default()
+            }
+            .origin((size.0.max(260), size.1.max(128)), (1920, 1200))
+        };
+        // Folder panels and positioners: top-left margins are the origin.
+        assert_eq!(
+            at(Anchor::TOP | Anchor::LEFT, (260, 128), [36, 0, 0, 1524]),
+            (1524, 36)
+        );
+        // Default placement: top edge only, centred horizontally.
+        assert_eq!(at(Anchor::TOP, (260, 128), [70, 0, 0, 0]), (830, 70));
+        assert_eq!(
+            at(Anchor::RIGHT | Anchor::TOP, (260, 128), [40, 70, 0, 0]),
+            (1590, 40)
+        );
+        assert_eq!(
+            at(Anchor::BOTTOM | Anchor::LEFT, (260, 128), [0, 0, 70, 12]),
+            (12, 1002)
+        );
+        // Both edges: stretched starts at its margin, sized is centred.
+        assert_eq!(at(Anchor::all(), (0, 0), [5, 0, 0, 7]), (7, 5));
+        assert_eq!(at(Anchor::all(), (260, 128), [5, 0, 0, 7]), (830, 536));
     }
 
     #[test]

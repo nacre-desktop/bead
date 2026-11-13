@@ -1564,6 +1564,21 @@ impl App {
                 .unwrap_or_default()
                 .iter()
                 .map(|r| [r.x as i32, r.y as i32, r.w as i32, r.h as i32])
+                // Stacking inside one layer is the compositor's choice (sway 1.9 keeps the
+                // older catcher above the panel), so the catcher never covers the panel's input.
+                .chain(
+                    self.surfaces
+                        .iter()
+                        .filter(|s| s.companion && s.output == output && s.configured)
+                        .filter(|s| s.input_visible == Some(true))
+                        .map(|s| {
+                            let (x, y) = s.layer.state().origin((s.width, s.height), size);
+                            let [dx, dy, w, h] =
+                                s.input_rect
+                                    .unwrap_or([0, 0, s.width as i32, s.height as i32]);
+                            [x + dx, y + dy, w, h]
+                        }),
+                )
                 .collect()
         } else {
             Vec::new()
