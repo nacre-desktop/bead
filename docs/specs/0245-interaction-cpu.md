@@ -148,3 +148,109 @@ percent means share of current shell CPU, and candidates overlap.
 Run the smallest buffered-writer experiment first, then session/static-work reuse;
 reprofile kernel/syscall costs before promising the target. Alternate controls,
 measure CPU **and** PPT, verify smooth transitions, and retain the steady-idle lead.
+
+## Phase 2b — warm source and static layout reuse
+
+Status: framework implementation; host integration and desktop acceptance pending.
+
+The teardown is in the framework: `select_panel` releases the previous named
+worker when selecting another view, bypassing the ordinary 120-second same-view
+keepalive. Overlays release their worker after closing. The host factory then
+constructs a new session. Changing `retain_when_closed` alone does not fix named
+view switching. Native scene motion already applies offset/opacity to prepared
+content; arbitrary Luau `ui.animate` values can change layout and remain dynamic.
+
+A root Panel's bound `open` property now patches `Scene.motion.open` using the
+existing materialized cache. Structural uses of the same binding still relayout;
+palette, viewport and source invalidation retain their ordinary paths.
+
+`Options.warm_source_budget` opts into a shared, bounded dormant-source cache;
+its default is zero. A source must declare a conservative ownership bound through
+`SceneSource::warm_retained_bytes` and implement `resume` to refresh its host inputs.
+Only closed, settled workers can park. Requested entries leave the cache before
+the retiring view enters, so alternating two views needs one dormant slot.
+Surfaces, renderer instances, focus and protocol objects follow normal teardown.
+Payload-free model refresh hints keep the source warm; mandatory resume polls
+current producers. Reload, payload, protocol and error callbacks evict the source.
+Hidden views do not run model updates or retain a queue of events.
+Asynchronous image/CPU hydration currently makes a worker ineligible for parking.
+
+Reopening uses the normal surface path with an acknowledgement barrier before
+showing cached content. Palette and visibility updates precede resume; failed
+validation cold-creates the view. `Session::sources_current` checks accepted source
+bytes, palette and watcher revision without evaluation, including during staged
+store/layout updates. Staged source reloads still use `check_sources` and atomic
+commit. `current_scene` exports accepted content without rebuilding. Hosts must
+also refresh their own models, account for changed geometry, and validate again
+before accepting the resumed transaction. Recovery persistence is unchanged.
+
+### Measurements and acceptance
+
+D2/CPU/bench2 compares `fa28eea6` with `daaf5b19` in an Ubuntu 24.04 container,
+Rust 1.99.0 release build. The compositor-free fixture has 300 bound list rows
+and six open/close cycles. Preparation and display use separate caches, matching
+the worker/render ownership boundary. The initial harness incorrectly shared
+those roles and is excluded from the following tables. Numbers are medians of
+six cycles; wall time is not shell CPU usage. Cold creates a new Session per open;
+resident keeps one Session and prepares its content once before the cycles.
+
+| Metric | Baseline cold | Baseline resident | Candidate resident |
+|---|---:|---:|---:|
+| Open: UI + preparation + display adoption, ms | 30.880 | 1.668 | 0.477 |
+| Close: same stages, ms | 1.735 | 1.704 | 0.479 |
+| UI open alone, ms | 11.159 | 1.281 | 0.091 |
+| UI close alone, ms | 1.338 | 1.300 | 0.096 |
+| Allocation calls/open, all measured stages | 63,376 | 15,077 | 6,434 |
+| Allocation calls/close, all measured stages | 15,077 | 15,077 | 6,436 |
+| Luau evaluations/open-close cycle | 1 | 0 | 0 |
+| Materialize calls/open-close cycle | 2 | 2 | 2 (cached patches) |
+| Layouts/open-close cycle | 2 | 2 | 0 |
+| Builder preparation calls/open-close cycle | 2 | 2 | 2 |
+| Raster builds/open-close cycle | 301 | 0 | 0 |
+
+The candidate's cold open remains 30.164 ms: warm retention, rather than faster
+initial construction, supplies that saving. The separate worker tests exercise
+actual source admission/resume; the table isolates Session/render work and does
+not claim that the measured production host has enabled retention.
+
+Both revisions' 360 prepared pose frames have **zero** evaluations,
+materializations, layouts, display scene preparations, raster builds, and
+allocation calls. Median frame preparation is 1 microsecond (maximum 5).
+This confirms the existing pose-only path; it is not a new animation speedup.
+Model expansion/restoration, successful atomic reload, and rejection of invalid
+source without replacing the accepted view also pass in this harness.
+
+Candidate retained Rust allocation delta is 3,013,712 bytes (2.87 MiB) for the
+Session plus exported scene, and 10,609,771 bytes (10.12 MiB) with the synthetic
+CPU builder/display content retained. Peak tracked allocation delta is 10.41 MiB.
+These exclude worker stack and untracked native/shared ownership; they are not
+RSS. Behavior/markup VM diagnostics are 533,576/1,566,692 bytes and must not be
+added to allocator deltas as though their ownership were disjoint. Production
+panel memory cannot be inferred from this text-only fixture.
+
+Executed benchmark command: `cargo test -p bead-ui --features test-counters
+--release --locked -j2 panel_open_close_baseline -- --ignored --nocapture`.
+Focused suites passed: 164 Wayland, 128 renderer, and 186 UI tests. Actual-worker
+tests retain one factory across six reopens and two factories across six A/B
+cycles, for both slot kinds with one dormant-entry budget. They also cover pending
+transaction rejection, coalesced input readiness, budget eviction, epoch isolation
+and rejected resume. The small actor fixture declares 16 KiB of source ownership;
+its admission charge is 2,117,910 bytes against a 2,118,934-byte test budget.
+This is a conservative admission proof, distinct from the 300-row heap measurement.
+Warnings-denied Clippy caught a deprecated atomic spelling, now corrected to
+`try_update`; final full-CI verification is pending.
+
+Dormant admission charges include the declared host bound, a conservative worker
+stack allowance (at least 2 MiB, increased for larger `RUST_MIN_STACK` requests),
+prepared/raster cache charges, and actor/cache metadata. Thread creation retains
+Rust's existing stack policy.
+Shared budget handles may be counted conservatively more than once. Hosts must
+include opaque shared fonts and uncharged tree metadata in their declaration;
+unknown ownership stays cold. Admission charges are not measured resident memory.
+No additional dormant retention is enabled by default. A real host budget and its
+retained-memory measurement remain part of host integration.
+
+The measured host has not implemented these opt-in contracts. No desktop grant
+or owner live audit has been supplied, so there are no phase-2b shell CPU/PPT or
+look-and-feel acceptance results, and the approximately 1%-of-one-core goal is
+not established. Raw harnesses and logs remain untracked.
