@@ -349,6 +349,26 @@ impl App {
         })
         .map_err(|e| format!("{} / {}: {e}", self.root.display(), view.display()).into())
     }
+    /// The bar's source. As for windows and panels, its script and CPU image preparation run
+    /// on a worker actor: a bare `FolderView` cannot prepare images for the CPU renderer.
+    fn primary_factory(&self, runtime: Option<Arc<FolderServicesRuntime>>) -> PrimaryFactory {
+        let size = self.surface_size();
+        let panel_actions = self.panel_actions(true);
+        let root = self.root.clone();
+        let view = self.manifest.view.clone();
+        let palette = self.manifest.palette.clone();
+        let title = self.manifest.title.clone();
+        Arc::new(move |_: String| {
+            let (root, view, palette) = (root.clone(), view.clone(), palette.clone());
+            let (title, runtime) = (title.clone(), runtime.clone());
+            Ok(Box::new(bead::wayland::worker::Source::new(
+                Box::new(move || {
+                    load_source(root, view, palette, title, size, runtime, panel_actions)
+                }),
+                Scene::empty(size.0 as f32, size.1 as f32),
+            )) as Box<dyn bead::wayland::SceneSource>)
+        })
+    }
     fn surface_size(&self) -> (u32, u32) {
         if let Some(w) = &self.manifest.window {
             (w.size[0], w.size[1])
@@ -412,32 +432,13 @@ impl App {
             options.interactive = true;
             options.keyboard_focus = true;
         } else if let Some(l) = &self.manifest.layer {
-            let panel_actions = self.panel_actions(true);
-            let factory: PrimaryFactory = Arc::new({
-                let root = self.root.clone();
-                let view = self.manifest.view.clone();
-                let palette = self.manifest.palette.clone();
-                let title = self.manifest.title.clone();
-                let runtime = runtime.clone();
-                move |_| {
-                    load_source(
-                        root.clone(),
-                        view.clone(),
-                        palette.clone(),
-                        title.clone(),
-                        surface_size,
-                        runtime.clone(),
-                        panel_actions,
-                    )
-                }
-            });
             if let Some((panels, default)) =
                 self.panel_catalog(runtime.clone(), options.renderer)?
             {
                 options.panels = Some(panels);
                 options.panel_spec = Some(default);
             }
-            options.primary_factory = Some(factory);
+            options.primary_factory = Some(self.primary_factory(runtime.clone()));
             options.bar = true;
             options.primary_surface_viewport = true;
             options.edge = l.edge.into();
@@ -652,6 +653,71 @@ mod tests {
         .unwrap();
         let error = App::load(&p).unwrap().check().unwrap_err().to_string();
         assert!(error.contains("icon \"no-such-icon\""), "{error}");
+        let _ = std::fs::remove_dir_all(p);
+    }
+    /// B0268: a bar with an image renders under the CPU renderer. A bare `FolderView`
+    /// refused the renderer's CPU preparation, so `bead run` showed "Reload failed".
+    #[test]
+    fn layer_image_renders_through_the_cpu_preparation_path() {
+        let p = folder(&format!("{}\n[layer]\nedge='top'\nsize=36\n", base()));
+        std::fs::write(
+            p.join("logo.svg"),
+            r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##,
+        )
+        .unwrap();
+        std::fs::write(
+            p.join("view/main.luau"),
+            "local ui=require('bead.ui'); return ui.Image{id='logo',path='logo.svg',width='fill',height='fill'}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            p.join("view/behavior.luau"),
+            "return {stores={},actions={},computed={}}\n",
+        )
+        .unwrap();
+        let app = App::load(&p).unwrap();
+        let mut source = app.primary_factory(None)("test".into()).unwrap();
+        let (sender, events) = std::sync::mpsc::channel();
+        source.services(Box::new(move |event| {
+            let _ = sender.send(event);
+        }));
+        let mut renderer = bead::render::renderer(RendererKind::Cpu).unwrap();
+        // The host loop: staged scenes and finished preparation both arrive as events.
+        let mut scene = source.stage(UiEvent::Reload).unwrap();
+        let scene = loop {
+            if let Some(scene) = &scene {
+                match renderer.prepare_on_ui(scene, 1.) {
+                    Ok(()) => break scene.clone(),
+                    Err(error) => {
+                        let pending = error
+                            .downcast_ref::<bead::render::tree::CpuResourcesPending>()
+                            .unwrap_or_else(|| panic!("unexpected render error: {error}"));
+                        source.prepare_cpu(pending.request.clone()).unwrap();
+                    }
+                }
+            }
+            let event = events
+                .recv_timeout(std::time::Duration::from_secs(10))
+                .expect("source event");
+            scene = source.stage(event).unwrap().or(scene);
+        };
+        let (w, h) = app.surface_size();
+        let mut pixels = vec![0; (w * h * 4) as usize];
+        renderer
+            .render(
+                &scene,
+                bead::render::ShmTarget {
+                    bytes: &mut pixels,
+                    width: w,
+                    height: h,
+                    scale: 1.,
+                    format: bead::render::PixelFormat::Rgba,
+                },
+                bead::render::Damage::full(w, h),
+            )
+            .unwrap();
+        let at = ((8 * w + 8) * 4) as usize;
+        assert_eq!(pixels[at..at + 3], [0x12, 0x34, 0x56], "image pixels");
         let _ = std::fs::remove_dir_all(p);
     }
     #[test]
