@@ -38,7 +38,6 @@ struct CommandState {
     results: BTreeMap<String, (String, bool, String)>,
     active: BTreeSet<String>,
 }
-type ServiceWakeup = Arc<dyn Fn(UiEvent) + Send + Sync>;
 type WakeCallback = Arc<dyn Fn(UiEvent) + Send + Sync>;
 
 fn desktop_config(services: &BTreeSet<String>) -> DesktopConfig {
@@ -144,7 +143,7 @@ impl FolderServicesRuntime {
             })
         });
         let commands = Arc::new(Mutex::new(CommandState::default()));
-        let wake: ServiceWakeup = {
+        let wake: WakeCallback = {
             let signals = signals.clone();
             Arc::new(move |_| signals.notify())
         };
@@ -251,7 +250,7 @@ impl FolderServicesRuntime {
             eprintln!("unknown command '{name}'");
             return;
         }
-        let wake: ServiceWakeup = {
+        let wake: WakeCallback = {
             let signals = self.signals.clone();
             Arc::new(move |_| signals.notify())
         };
@@ -530,22 +529,11 @@ fn route_folder_action(
             let Value::Text(item) = argument else {
                 return Err(format!("{name} expects a tray item id"));
             };
+            let (item, x, y) = (item.clone(), point.0, point.1);
             match name {
-                "desktop.tray.activate" => DesktopAction::TrayActivate {
-                    item: item.clone(),
-                    x: point.0,
-                    y: point.1,
-                },
-                "desktop.tray.secondary" => DesktopAction::TraySecondaryActivate {
-                    item: item.clone(),
-                    x: point.0,
-                    y: point.1,
-                },
-                _ => DesktopAction::TrayContextMenu {
-                    item: item.clone(),
-                    x: point.0,
-                    y: point.1,
-                },
+                "desktop.tray.activate" => DesktopAction::TrayActivate { item, x, y },
+                "desktop.tray.secondary" => DesktopAction::TraySecondaryActivate { item, x, y },
+                _ => DesktopAction::TrayContextMenu { item, x, y },
             }
         }
         _ => unreachable!(),
@@ -559,7 +547,7 @@ fn launch_command(
     name: &str,
     specs: &BTreeMap<String, CommandSpec>,
     state: &Arc<Mutex<CommandState>>,
-    wake: &ServiceWakeup,
+    wake: &WakeCallback,
 ) {
     let Some(spec) = specs.get(name).cloned() else {
         return;

@@ -88,6 +88,24 @@ struct App {
     root: PathBuf,
     manifest: Manifest,
 }
+
+fn load_source(
+    root: PathBuf,
+    view: PathBuf,
+    palette: PathBuf,
+    title: String,
+    size: (u32, u32),
+    runtime: Option<Arc<FolderServicesRuntime>>,
+) -> Result<Box<dyn bead::wayland::SceneSource>, String> {
+    let loaded = if let Some(runtime) = runtime {
+        FolderView::load_with_runtime(root, view, palette, &title, size, runtime)
+    } else {
+        FolderView::load(root, view, palette, &title, size)
+    };
+    loaded
+        .map(|view| Box::new(view) as Box<dyn bead::wayland::SceneSource>)
+        .map_err(|error| error.to_string())
+}
 impl App {
     fn load(folder: &Path) -> Result<Self, Box<dyn Error>> {
         let root = folder
@@ -266,21 +284,14 @@ impl App {
                 on_resize: None,
                 fallback: fallback.clone(),
                 factory: Arc::new(move |_| {
-                    let loaded = if let Some(runtime) = &runtime {
-                        FolderView::load_with_runtime(
-                            root.clone(),
-                            view.clone(),
-                            palette.clone(),
-                            &title,
-                            size,
-                            runtime.clone(),
-                        )
-                    } else {
-                        FolderView::load(root.clone(), view.clone(), palette.clone(), &title, size)
-                    };
-                    loaded
-                        .map(|v| Box::new(v) as Box<dyn bead::wayland::SceneSource>)
-                        .map_err(|e| e.to_string())
+                    load_source(
+                        root.clone(),
+                        view.clone(),
+                        palette.clone(),
+                        title.clone(),
+                        size,
+                        runtime.clone(),
+                    )
                 }),
                 model: Arc::new(|_| Default::default()),
             });
@@ -295,27 +306,14 @@ impl App {
                 let title = self.manifest.title.clone();
                 let runtime = runtime.clone();
                 move |_| {
-                    let loaded = if let Some(runtime) = &runtime {
-                        FolderView::load_with_runtime(
-                            root.clone(),
-                            view.clone(),
-                            palette.clone(),
-                            &title,
-                            surface_size,
-                            runtime.clone(),
-                        )
-                    } else {
-                        FolderView::load(
-                            root.clone(),
-                            view.clone(),
-                            palette.clone(),
-                            &title,
-                            surface_size,
-                        )
-                    };
-                    loaded
-                        .map(|v| Box::new(v) as Box<dyn bead::wayland::SceneSource>)
-                        .map_err(|e| e.to_string())
+                    load_source(
+                        root.clone(),
+                        view.clone(),
+                        palette.clone(),
+                        title.clone(),
+                        surface_size,
+                        runtime.clone(),
+                    )
                 }
             });
             options.primary_factory = Some(factory);
