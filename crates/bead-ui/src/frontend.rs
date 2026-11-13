@@ -1650,7 +1650,13 @@ fn diagnostic(entry: &Path, error: mlua::Error) -> Diagnostic {
             }
         }
     }
-    Diagnostic::new(entry, 1, 1, message)
+    // Cached bytecode compiles without a chunk name: "syntax error: LINE: ...".
+    let line = message
+        .strip_prefix("syntax error: ")
+        .and_then(|rest| rest.split_once(':'))
+        .and_then(|(line, _)| line.parse().ok())
+        .unwrap_or(1);
+    Diagnostic::new(entry, line, 1, message)
 }
 
 #[cfg(test)]

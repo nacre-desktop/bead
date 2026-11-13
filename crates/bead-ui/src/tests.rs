@@ -457,6 +457,21 @@ fn cycles_script_errors_and_changes_during_staging_are_rejected() {
     assert_eq!(error.line, 2);
 }
 #[test]
+fn mounted_module_syntax_errors_report_their_file_and_line() {
+    let path = Path::new("plugins/greeting/widget.luau");
+    let sources = frontend::Sources::from([(
+        path.to_path_buf(),
+        b"return {\n  id = 1,\n  render = function()\n    return 1\n  end,\n  x = = 2,\n}".to_vec(),
+    )]);
+    let error = frontend::LuauFrontEnd::new(Path::new("view/main.luau"), &sources)
+        .err()
+        .unwrap();
+    assert_eq!(
+        (error.file.as_str(), error.line),
+        (path.to_str().unwrap(), 6)
+    );
+}
+#[test]
 fn dirty_bindings_ignore_unrelated_state_and_speculative_cache_values_do_not_leak() {
     let script=script::Script::load(br#"local calls=0; return {stores={a=1,b=2},actions={},computed={label=function(s) calls+=1; return tostring(s.a)..":"..tostring(calls) end}}"#,Path::new("binding.luau")).unwrap();
     let stores = Stores::default()

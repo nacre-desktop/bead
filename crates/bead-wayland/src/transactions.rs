@@ -169,6 +169,29 @@ impl App {
                     self.output_sessions.insert(id, session);
                     return;
                 }
+                if matches!(*inner, UiEvent::Reload)
+                    && let Some(arm) = session.defer_reload()
+                {
+                    self.output_sessions.insert(id, session);
+                    if arm
+                        && let Err(error) = self.loop_handle.insert_source(
+                            Timer::from_duration(Duration::from_millis(50)),
+                            move |_, _, app| {
+                                if let Some(session) =
+                                    app.output_sessions.values_mut().find(|s| s.epoch == epoch)
+                                {
+                                    session.reload_fired();
+                                    let id = session.id.clone();
+                                    app.ui(UiEvent::Output(epoch, id, Box::new(UiEvent::Reload)));
+                                }
+                                TimeoutAction::Drop
+                            },
+                        )
+                    {
+                        self.fail(error);
+                    }
+                    return;
+                }
                 let previous_output = self.active_output.replace(id.clone());
                 let previous_epoch = self.active_output_epoch.replace(epoch);
                 std::mem::swap(&mut self.runtime, &mut session.source);

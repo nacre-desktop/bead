@@ -157,6 +157,24 @@ pub(super) struct OutputSession {
     pub(super) ui_serial: u64,
     pub(super) initialized: bool,
     pub(super) animations: bead_core::animation::Animations,
+    /// A debounced watch reload is armed, or has fired and is being delivered.
+    pub(super) reload_pending: bool,
+    pub(super) reload_due: bool,
+}
+impl OutputSession {
+    /// After the initial load a Reload comes from the file watcher, and one edit fires
+    /// several events: defer it so the burst reloads once (and reports one error), as the
+    /// primary and panel paths do. `Some(true)` arms the timer, `None` delivers the reload.
+    pub(super) fn defer_reload(&mut self) -> Option<bool> {
+        if !self.initialized || std::mem::take(&mut self.reload_due) {
+            return None;
+        }
+        Some(!std::mem::replace(&mut self.reload_pending, true))
+    }
+    pub(super) fn reload_fired(&mut self) {
+        self.reload_pending = false;
+        self.reload_due = true;
+    }
 }
 
 /// B0192: until presentation feedback names the real refresh, the advertised mode is not trusted below
@@ -2236,6 +2254,8 @@ impl App {
                             ui_serial: 0,
                             initialized: false,
                             animations: Default::default(),
+                            reload_pending: false,
+                            reload_due: false,
                         },
                     );
                     println!("UI_SESSION_CREATED output={output_id} epoch={epoch}");
@@ -2905,5 +2925,49 @@ mod palette_barrier_tests {
         );
         assert!(aborted_palette_retry_outputs("DP-1", false, &frames, &palette).is_empty());
         assert!(aborted_palette_retry_outputs("DP-1", true, &frames, &other_palette).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod reload_debounce_tests {
+    use super::OutputSession;
+
+    #[test]
+    fn watch_reload_bursts_after_the_initial_load_deliver_once() {
+        let mut session = OutputSession {
+            id: "HEADLESS-1".into(),
+            epoch: 1,
+            source: None,
+            scene: bead_render::Scene::empty(100., 36.),
+            ui_serial: 0,
+            initialized: false,
+            animations: Default::default(),
+            reload_pending: false,
+            reload_due: false,
+        };
+        assert_eq!(
+            session.defer_reload(),
+            None,
+            "the initial load is not delayed"
+        );
+        session.initialized = true;
+        assert_eq!(
+            session.defer_reload(),
+            Some(true),
+            "the first event arms the timer"
+        );
+        assert_eq!(session.defer_reload(), Some(false));
+        assert_eq!(session.defer_reload(), Some(false));
+        session.reload_fired();
+        assert_eq!(
+            session.defer_reload(),
+            None,
+            "the timer delivers one reload"
+        );
+        assert_eq!(
+            session.defer_reload(),
+            Some(true),
+            "a later edit arms again"
+        );
     }
 }

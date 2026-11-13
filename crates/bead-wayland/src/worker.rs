@@ -265,6 +265,7 @@ pub struct Source {
     frame_pending: bool,
     pending: Arc<std::sync::atomic::AtomicUsize>,
     poisoned: bool,
+    reported: Option<String>,
     asynchronous_resources: bool,
     current: Scene,
     candidate: Option<Scene>,
@@ -287,6 +288,7 @@ impl Source {
             frame_pending: false,
             pending: Default::default(),
             poisoned: false,
+            reported: None,
             asynchronous_resources: false,
             current: fallback,
             candidate: None,
@@ -297,6 +299,20 @@ impl Source {
     pub fn with_image_policy(mut self, policy: bead_render::tree::ImagePolicy) -> Self {
         self.image_policy = policy;
         self
+    }
+    /// Ready and Accepted packets both carry a staging error, and a broken view fails again
+    /// on later events: report each distinct error once until a clean frame is accepted.
+    /// The host reports `Failed` errors itself when `stage` returns them.
+    fn report(&mut self, packet: &Packet) -> bool {
+        let Some(error) = &packet.error else {
+            if packet.is_accepted() {
+                self.reported = None;
+            }
+            return false;
+        };
+        let new = self.reported.as_ref() != Some(error);
+        self.reported = Some(error.clone());
+        new && !packet.is_failed()
     }
     fn send(&self, job: Job) -> Result<(), Box<dyn Error>> {
         self.sender
@@ -992,8 +1008,8 @@ impl SceneSource for Source {
             if let Some(mirror) = &packet.mirror {
                 self.mirror = mirror.clone();
             }
-            if let Some(error) = &packet.error {
-                eprintln!("UI_ERROR {error}");
+            if self.report(&packet) {
+                eprintln!("UI_ERROR {}", packet.error.as_deref().unwrap_or_default());
             }
             match packet.phase {
                 Phase::Failed => {
@@ -2434,5 +2450,30 @@ mod tests {
                 "explicit reload keeps force-refresh semantics"
             );
         }
+    }
+
+    #[test]
+    fn repeated_reload_failures_are_reported_once_until_a_clean_frame() {
+        let mut source = Source::new(Box::new(|| Err("unused".into())), scene());
+        let packet = |phase, error: Option<&str>| Packet {
+            resume: false,
+            animation_frame: false,
+            phase,
+            token: 1,
+            scene: None,
+            mirror: None,
+            error: error.map(Into::into),
+            reload: true,
+            wallpaper_palette: None,
+        };
+        let broken = Some("main.luau:2:1: syntax error");
+        assert!(source.report(&packet(Phase::Ready, broken)));
+        assert!(!source.report(&packet(Phase::Accepted, broken)));
+        assert!(!source.report(&packet(Phase::Ready, broken)));
+        assert!(source.report(&packet(Phase::Ready, Some("main.luau:3:1: other"))));
+        assert!(!source.report(&packet(Phase::Ready, None)));
+        assert!(!source.report(&packet(Phase::Accepted, None)));
+        assert!(source.report(&packet(Phase::Ready, broken)));
+        assert!(!source.report(&packet(Phase::Failed, Some("bake failed"))));
     }
 }
