@@ -253,15 +253,14 @@ fn niri_stream(i: &Arc<Inner>) -> Result<(), String> {
         let v: Value =
             serde_json::from_str(line.trim()).map_err(|e| format!("invalid niri event: {e}"))?;
         apply_niri_event(&mut state, &v);
-        if v.get("WorkspacesChanged").is_some() || v.get("ConfigLoaded").is_some() {
-            if let Err(error) = refresh_niri_outputs(&i.path, &mut state) {
-                emit(i, Event::Error(Error::Protocol(error)));
-            }
+        if (v.get("WorkspacesChanged").is_some() || v.get("ConfigLoaded").is_some())
+            && let Err(error) = refresh_niri_outputs(&i.path, &mut state)
+        {
+            emit(i, Event::Error(Error::Protocol(error)));
         }
-        if let Some(output) = state.focused_workspace().and_then(|w| w.output.clone()) {
-            for screen in &mut state.outputs {
-                screen.focused = screen.id == output;
-            }
+        let focused_output = state.focused_workspace().and_then(|w| w.output.clone());
+        for screen in &mut state.outputs {
+            screen.focused = Some(&screen.id) == focused_output.as_ref();
         }
         publish(i, state.clone());
         if i.stopping.load(Ordering::Acquire) {
@@ -368,18 +367,18 @@ fn apply_niri_event(s: &mut Snapshot, v: &Value) {
     {
         s.windows = w.iter().filter_map(|x| niri_window(s, x)).collect();
     }
-    if let Some(x) = v.get("WindowOpenedOrChanged").and_then(|x| x.get("window")) {
-        if let Some(w) = niri_window(s, x) {
-            if w.focused {
-                for old in &mut s.windows {
-                    old.focused = false;
-                }
+    if let Some(x) = v.get("WindowOpenedOrChanged").and_then(|x| x.get("window"))
+        && let Some(w) = niri_window(s, x)
+    {
+        if w.focused {
+            for old in &mut s.windows {
+                old.focused = false;
             }
-            if let Some(old) = s.windows.iter_mut().find(|q| q.id == w.id) {
-                *old = w
-            } else {
-                s.windows.push(w)
-            }
+        }
+        if let Some(old) = s.windows.iter_mut().find(|q| q.id == w.id) {
+            *old = w
+        } else {
+            s.windows.push(w)
         }
     }
     if let Some(id) = v.get("WindowClosed").and_then(|x| x["id"].as_u64()) {
