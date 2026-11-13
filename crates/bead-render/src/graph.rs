@@ -16,19 +16,6 @@ pub struct GraphGeometry {
     pub positions: Arc<[[f32; 2]]>,
     pub radii: Arc<[f32]>,
     pub edges: Arc<[[u32; 2]]>,
-    /// Per node, or empty when nothing is hidden.
-    pub hidden: Arc<[bool]>,
-    /// Per node, or empty when nothing is highlighted (then nothing is dimmed).
-    pub highlighted: Arc<[bool]>,
-}
-impl GraphGeometry {
-    pub fn bytes(&self) -> usize {
-        self.positions.len() * 8
-            + self.radii.len() * 4
-            + self.edges.len() * 8
-            + self.hidden.len()
-            + self.highlighted.len()
-    }
 }
 /// `screen = rect.center + (world - center) * zoom`, in logical pixels.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -65,7 +52,6 @@ pub struct GraphStyle {
     pub edge: [u8; 4],
     pub hover: [u8; 4],
     pub selected: [u8; 4],
-    pub highlight: [u8; 4],
     pub label: [u8; 4],
     pub label_size: f32,
     /// From this zoom on, visible nodes get labels by weight until `max_labels`.
@@ -76,8 +62,6 @@ pub struct GraphStyle {
     /// Below this zoom only every fourth unfocused edge is drawn, at `far_edge_alpha`.
     pub lod_zoom: f32,
     pub far_edge_alpha: u8,
-    /// Alpha applied to nodes and edges outside a non-empty highlight set.
-    pub dim_alpha: u8,
 }
 impl Default for GraphStyle {
     fn default() -> Self {
@@ -86,7 +70,6 @@ impl Default for GraphStyle {
             edge: [105, 115, 130, 150],
             hover: [255, 190, 40, 255],
             selected: [255, 255, 255, 255],
-            highlight: [255, 160, 90, 255],
             label: [220, 220, 220, 255],
             label_size: 13.,
             label_zoom: 1.2,
@@ -94,7 +77,6 @@ impl Default for GraphStyle {
             node_radius: 3.,
             lod_zoom: 0.8,
             far_edge_alpha: 85,
-            dim_alpha: 70,
         }
     }
 }
@@ -126,11 +108,9 @@ pub(crate) fn hash_graph(
         style.edge,
         style.hover,
         style.selected,
-        style.highlight,
         style.label,
         style.max_labels,
         style.far_edge_alpha,
-        style.dim_alpha,
         hover,
         selected,
     )
@@ -189,9 +169,6 @@ pub(crate) fn interaction_damage(
         let Some(&p) = geometry.positions.get(i) else {
             continue;
         };
-        if geometry.hidden.get(i).copied().unwrap_or(false) {
-            continue;
-        }
         let p = camera.to_screen(*rect, p);
         let radius = (geometry.radii.get(i).copied().unwrap_or(3.) * camera.zoom * scale)
             .clamp(1., 64.)
@@ -205,19 +182,16 @@ pub(crate) fn interaction_damage(
             radius * 2.,
         ));
     }
-    if camera.zoom < style.lod_zoom || geometry.highlighted.iter().any(|h| *h) {
+    // Below the LOD zoom a focused node's edges switch between decimated and drawn.
+    if camera.zoom < style.lod_zoom {
         for [a, b] in geometry.edges.iter() {
             if !changed.contains(a) && !changed.contains(b) {
                 continue;
             }
-            let (a, b) = (*a as usize, *b as usize);
-            if geometry.hidden.get(a).copied().unwrap_or(false)
-                || geometry.hidden.get(b).copied().unwrap_or(false)
-            {
-                continue;
-            }
-            let (Some(&a), Some(&b)) = (geometry.positions.get(a), geometry.positions.get(b))
-            else {
+            let (Some(&a), Some(&b)) = (
+                geometry.positions.get(*a as usize),
+                geometry.positions.get(*b as usize),
+            ) else {
                 continue;
             };
             let (a, b) = (camera.to_screen(*rect, a), camera.to_screen(*rect, b));
@@ -374,17 +348,8 @@ pub fn paint(
     let by = (rect.y + oy + rect.h * 0.5) * scale - camera.center[1] * a;
     let device = |p: [f32; 2]| [p[0] * a + bx, p[1] * a + by];
     let n = geometry.positions.len();
-    let hidden = |i: usize| geometry.hidden.get(i).copied().unwrap_or(false);
-    let lit = |i: usize| geometry.highlighted.get(i).copied().unwrap_or(false);
-    let any_lit = geometry.highlighted.iter().any(|h| *h);
-    let dim = |mut c: [u8; 4], focus: bool| {
-        if any_lit && !focus {
-            c[3] = (u16::from(c[3]) * u16::from(style.dim_alpha) / 255) as u8;
-        }
-        c
-    };
     let far = camera.zoom < style.lod_zoom;
-    let focused = |i: usize| Some(i as u32) == hover || Some(i as u32) == selected || lit(i);
+    let focused = |i: usize| Some(i as u32) == hover || Some(i as u32) == selected;
     let (fx0, fy0, fx1, fy1) = (
         canvas.x0 as f32 - 1.,
         canvas.y0 as f32 - 1.,
@@ -393,7 +358,7 @@ pub fn paint(
     );
     for (i, [s, t]) in geometry.edges.iter().enumerate() {
         let (s, t) = (*s as usize, *t as usize);
-        if s >= n || t >= n || hidden(s) || hidden(t) {
+        if s >= n || t >= n {
             continue;
         }
         let focus = focused(s) || focused(t);
@@ -412,15 +377,11 @@ pub fn paint(
         if far {
             color[3] = style.far_edge_alpha;
         }
-        let color = dim(color, focus);
         if color[3] > 0 {
             canvas.line(p, q, color);
         }
     }
     for i in 0..n {
-        if hidden(i) {
-            continue;
-        }
         let p = device(geometry.positions[i]);
         let r = (geometry.radii.get(i).copied().unwrap_or(3.) * a).clamp(1., 64.);
         let ring = r + 2. * scale;
@@ -432,12 +393,7 @@ pub fn paint(
         } else if Some(i as u32) == selected {
             canvas.disc(p, ring, style.selected);
         }
-        let color = if lit(i) {
-            style.highlight
-        } else {
-            dim(style.node, false)
-        };
-        canvas.disc(p, r, color);
+        canvas.disc(p, r, style.node);
     }
 }
 
@@ -469,8 +425,6 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
                 .into(),
-            hidden: Arc::from([]),
-            highlighted: Arc::from([]),
         }
     }
     fn strip(w: u32, h: u32) -> Vec<u8> {
@@ -517,8 +471,6 @@ mod tests {
             positions: Arc::from([[-10., 0.], [10., 0.], [500., 500.]]),
             radii: Arc::from([3.; 3]),
             edges: Arc::from([[0, 1], [1, 2]]),
-            hidden: Arc::from([]),
-            highlighted: Arc::from([]),
         };
         let (w, h) = (64, 64);
         let mut plain = strip(w, h);
@@ -557,11 +509,6 @@ mod tests {
             alpha_sum(&hovered) > alpha_sum(&plain),
             "hover ring adds coverage"
         );
-        let mut hidden = strip(w, h);
-        let mut g = geometry.clone();
-        g.hidden = vec![true, true, true].into();
-        paint_into(&mut hidden, w, h, &g, Camera::default(), None);
-        assert_eq!(alpha_sum(&hidden), 0);
     }
     #[test]
     fn far_zoom_decimates_edges() {

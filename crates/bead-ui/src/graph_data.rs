@@ -16,17 +16,13 @@ const MAX_EDGES: usize = 100_000;
 pub struct GraphNode {
     pub id: Box<str>,
     pub label: Box<str>,
-    /// Index into [`GraphResource::groups`].
-    pub group: u16,
     pub weight: f32,
-    pub pinned: bool,
 }
 /// One graph's topology and node attributes; shared by the view node and its canvas.
 #[derive(Debug, Default, PartialEq)]
 pub struct GraphResource {
     pub nodes: Vec<GraphNode>,
     pub edges: Arc<[[u32; 2]]>,
-    pub groups: Vec<Box<str>>,
     /// Node indices by descending weight: the label priority.
     pub priority: Vec<u32>,
     /// Node indices sorted by id.
@@ -65,34 +61,21 @@ impl GraphResource {
                 LuaValue::String(s) => s.to_str()?.as_ref().into(),
                 _ => "".into(),
             };
-            let group = match item.raw_get::<LuaValue>("group")? {
-                LuaValue::String(s) => s.to_str()?.as_ref().to_owned(),
-                _ => String::new(),
-            };
-            let group = match out.groups.iter().position(|g| **g == *group) {
-                Some(i) => i,
-                None => {
-                    out.groups.push(group.into());
-                    out.groups.len() - 1
-                }
-            };
             let weight = match item.raw_get::<LuaValue>("weight")? {
                 LuaValue::Nil => 1.,
                 LuaValue::Integer(i) => i as f64,
                 LuaValue::Number(n) => n,
                 _ => f64::NAN,
             };
-            if !(weight >= 0. && (weight as f32).is_finite()) || group > usize::from(u16::MAX) {
+            if !(weight >= 0. && (weight as f32).is_finite()) {
                 return Err(mlua::Error::runtime(format!(
-                    "GraphCanvas node {id} needs a finite weight >= 0 and fewer than 65536 groups"
+                    "GraphCanvas node {id} needs a finite weight >= 0"
                 )));
             }
             out.nodes.push(GraphNode {
                 id,
                 label,
-                group: group as u16,
                 weight: weight as f32,
-                pinned: matches!(item.raw_get::<LuaValue>("pinned")?, LuaValue::Boolean(true)),
             });
         }
         let nodes = &out.nodes;
@@ -198,6 +181,10 @@ pub(crate) fn resolve(token: u64) -> Option<Arc<GraphResource>> {
 pub(crate) fn begin_build() {
     REGISTRY.with_borrow_mut(|r| r.fresh.clear());
 }
+/// True when the current build handed over new graph data.
+pub(crate) fn handed_over() -> bool {
+    REGISTRY.with_borrow(|r| !r.fresh.is_empty())
+}
 
 #[cfg(test)]
 mod tests {
@@ -210,19 +197,17 @@ mod tests {
     }
 
     #[test]
-    fn parses_interns_groups_orders_priority_and_resolves_edges() {
+    fn parses_orders_priority_and_resolves_edges() {
         let lua = Lua::new();
         let g = parse(
             &lua,
-            r#"return {{id="a",label="Alpha",weight=5,group="g"},{id=7,group="g"},{id="c",pinned=true}},
+            r#"return {{id="a",label="Alpha",weight=5},{id=7},{id="c",weight=2}},
                       {{from="a",to=7},{from="c",to="a"}}"#,
         )
         .unwrap();
-        assert_eq!(g.groups, vec!["g".into(), "".into()]);
         assert_eq!(g.nodes[1].id.as_ref(), "7");
         assert_eq!(g.nodes[1].label.as_ref(), "7");
-        assert!(g.nodes[2].pinned && g.nodes[2].group == 1);
-        assert_eq!(g.priority[0], 0);
+        assert_eq!(g.priority, [0, 2, 1]);
         assert_eq!(&*g.edges, &[[0, 1], [2, 0]]);
         assert_eq!(g.index("c"), Some(2));
         assert_eq!(g.index("x"), None);

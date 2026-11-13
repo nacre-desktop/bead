@@ -177,13 +177,8 @@ pub const PROPERTIES: &[&str] = &[
     "masked",
     "graph",
     "style",
-    "highlight",
-    "hidden_groups",
-    "selected_node",
     "on_hover",
     "on_select",
-    "on_view_changed",
-    "on_pin",
 ];
 pub fn allowed_property(name: &str) -> bool {
     static SORTED: std::sync::OnceLock<[&str; PROPERTIES.len()]> = std::sync::OnceLock::new();

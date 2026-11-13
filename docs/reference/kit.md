@@ -30,7 +30,7 @@
 - `ChipRow`: compact choices; items, `per_row`, `on_change`.
 - `ImagePick`: image hit grid; `icon`, `cols`, `rows`, `on_pick`.
 - `PreviewCard`: miniature desktop preview; dimensions, labels, colors, optional image.
-- `GraphCanvas`: force-directed graph view (spec 0232); `nodes`, `edges` (or `graph = ui.graph(nodes, edges)` handed over once from a module), `style`, `highlight`, `hidden_groups`, `selected`, `on_hover`, `on_select`, `on_activate`, `on_pin`, `on_view_changed`. Layout, hit testing, pan, zoom and labels run in Rust; data is reconciled by stable id and lives once in Rust after hand-over.
+- `GraphCanvas`: force-directed graph view (spec 0232); `graph = ui.graph(nodes, edges)` (handed over once, best from a module), `style`, `on_hover`, `on_select`. Layout, hit testing, pan, zoom, selection and labels run in Rust; data is reconciled by stable id and lives once in Rust after hand-over.
 
 Item callbacks (`on_change`, `on_pick`, `on_touch`, `on_action`, `ListEditor`'s `on_remove`, and the `CollectionSwitcher` callbacks) take an action name, and the component supplies the argument, such as the chosen item's `id`. Other `on_*` props take a `ui.action(...)` descriptor.
 

@@ -246,9 +246,7 @@ impl GraphSlot {
                 .map(|i| graph_gpu::Node {
                     radius: geometry.radii.get(i).copied().unwrap_or(3.),
                     color: style.node,
-                    flags: (u32::from(geometry.hidden.get(i) == Some(&true)) * graph_gpu::HIDDEN)
-                        | (u32::from(geometry.highlighted.get(i) == Some(&true))
-                            * graph_gpu::HIGHLIGHTED),
+                    flags: 0,
                 })
                 .collect::<Vec<_>>()
         };
@@ -261,11 +259,7 @@ impl GraphSlot {
                 if !Arc::ptr_eq(&old.positions, &geometry.positions) {
                     self.gpu.set_positions(queue, 0, &geometry.positions);
                 }
-                if !Arc::ptr_eq(&old.radii, &geometry.radii)
-                    || !Arc::ptr_eq(&old.hidden, &geometry.hidden)
-                    || !Arc::ptr_eq(&old.highlighted, &geometry.highlighted)
-                    || self.style.node != style.node
-                {
+                if !Arc::ptr_eq(&old.radii, &geometry.radii) || self.style.node != style.node {
                     self.gpu.set_nodes(queue, 0, &nodes());
                 }
             }
@@ -391,13 +385,13 @@ impl GpuRenderer {
                     zoom: camera.zoom,
                     far: camera.zoom < style.lod_zoom,
                     far_edge_alpha: style.far_edge_alpha,
-                    any_highlighted: geometry.highlighted.iter().any(|h| *h),
-                    dim_alpha: style.dim_alpha,
+                    any_highlighted: false,
+                    dim_alpha: 255,
                     hover: *hover,
                     selected: *selected,
                     hover_color: style.hover,
                     selected_color: style.selected,
-                    highlight_color: style.highlight,
+                    highlight_color: style.node,
                     line_width: 1.,
                 },
             );
@@ -656,31 +650,19 @@ mod tests {
     };
 
     fn scene(geometry: &Arc<GraphGeometry>, zoom: f32, hover: Option<u32>) -> Scene {
-        Scene {
-            opacity: 1.,
-            motion: None,
-            resource_revision: 0,
-            asset_data: Default::default(),
-            clips: Default::default(),
-            layers: vec![],
-            prepared: Default::default(),
-            font_files: vec![],
-            width: 64.,
-            slide: None,
-            primitives: vec![Primitive::Graph {
-                rect: Rect::new(8., 8., 48., 48.),
-                geometry: geometry.clone(),
-                camera: Camera {
-                    center: [0., 0.],
-                    zoom,
-                },
-                style: GraphStyle::default(),
-                hover,
-                selected: None,
-            }],
-            offset: (0., 0.),
-            bounds: Rect::new(0., 0., 64., 64.),
-        }
+        let mut scene = Scene::empty(64., 64.);
+        scene.primitives.push(Primitive::Graph {
+            rect: Rect::new(8., 8., 48., 48.),
+            geometry: geometry.clone(),
+            camera: Camera {
+                center: [0., 0.],
+                zoom,
+            },
+            style: GraphStyle::default(),
+            hover,
+            selected: None,
+        });
+        scene
     }
 
     /// The wgpu path selects the retained graph renderer: the baked layer carries neither

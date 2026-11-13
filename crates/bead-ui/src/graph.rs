@@ -1,54 +1,34 @@
 // SPDX-License-Identifier: MIT
-//! GraphCanvas engine (spec 0232, phase 2a). A `Graph` view node carries its data once
-//! per change; the session keeps one `Canvas` per node id: the layout worker, the latest
-//! positions, the camera and the hover/selection state. Camera, hover and layout
-//! snapshots patch the committed scene directly without re-running Luau; data and
-//! style changes arrive through ordinary materialization and are reconciled by id.
-use crate::{Diagnostic, Node, Session, layout::Source};
+//! GraphCanvas engine (spec 0232). A `Graph` view node carries its handed-over data; the
+//! session keeps one `Canvas` per node id: the layout worker, the latest positions, the
+//! camera and the hover/selection state. Camera, hover and layout snapshots patch the
+//! committed scene directly without re-running Luau; data and style changes arrive through
+//! ordinary materialization and are reconciled by id.
+use crate::{Diagnostic, Node, Session, graph_data::GraphResource, layout::Source};
 use bead_core::{
     Value,
-    graph::{Command, Grid, Point, Snapshot, Worker},
+    graph::{Grid, Point, Replace, Snapshot, Worker},
 };
 use bead_render::{
     Palette, Primitive, Rect, Scene,
     graph::{Camera, GraphGeometry, GraphStyle},
 };
 use serde_json::{Map, Value as Json};
-use std::{
-    collections::BTreeMap,
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
+use std::sync::{Arc, Mutex};
 
 /// Host wake callback shared with layout workers; set once the host registers its event sink.
 pub(crate) type WakeSlot = Arc<Mutex<Option<Arc<dyn Fn() + Send + Sync>>>>;
 type ActionParser<'a> = dyn Fn(&str) -> Result<Option<(String, Option<Value>)>, Diagnostic> + 'a;
-const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 const LABEL_WIDTH: f32 = 200.;
 const HIT_CELL: f32 = 64.;
-
-fn id_text(value: &Json) -> Option<String> {
-    match value {
-        Json::String(id) if !id.is_empty() && id.len() <= 256 => Some(id.clone()),
-        Json::Number(id) => Some(id.to_string()),
-        _ => None,
-    }
-}
 
 /// Parsed `Graph` properties; colours stay unresolved until the palette is known.
 #[derive(Default)]
 pub struct GraphData {
-    pub topology: Arc<crate::graph_data::GraphResource>,
+    pub topology: Arc<GraphResource>,
     pub style: Map<String, Json>,
-    pub highlight: Vec<String>,
-    pub hidden_groups: Vec<String>,
-    pub selected: Option<String>,
-    pub label_family: String,
     pub on_hover: Option<String>,
     pub on_select: Option<String>,
-    pub on_activate: Option<String>,
-    pub on_view_changed: Option<String>,
-    pub on_pin: Option<String>,
 }
 impl GraphData {
     /// `p` reads one authored property with its binding resolved.
@@ -65,46 +45,17 @@ impl GraphData {
                 .ok_or_else(|| source.error("graph data expired; pass a live ui.graph handle"))?,
             Some(_) => return Err(source.error("graph must be a ui.graph(nodes, edges) handle")),
         };
-        let ids = |name: &str| -> Result<Vec<String>, Diagnostic> {
-            match p(name) {
-                None => Ok(vec![]),
-                Some(Json::Array(values)) => values
-                    .iter()
-                    .map(|v| match v {
-                        Json::String(id) => Ok(id.clone()),
-                        Json::Number(id) => Ok(id.to_string()),
-                        _ => Err(source.error(format!("{name} entries must be ids"))),
-                    })
-                    .collect(),
-                Some(Json::Object(values)) if values.is_empty() => Ok(vec![]),
-                Some(_) => Err(source.error(format!("{name} must be an array"))),
-            }
-        };
         let style = match p("style") {
             None => Map::new(),
             Some(Json::Object(style)) => style.clone(),
             Some(_) => return Err(source.error("style must be a record")),
         };
-        let label_family = style
-            .get("label_family")
-            .and_then(Json::as_str)
-            .map_or_else(
-                || crate::theme::with_sans_family(str::to_owned),
-                str::to_owned,
-            );
         let name = |property: &str| Ok::<_, Diagnostic>(action(property)?.map(|(name, _)| name));
         Ok(Self {
             topology,
             style,
-            highlight: ids("highlight")?,
-            hidden_groups: ids("hidden_groups")?,
-            selected: p("selected_node").and_then(id_text),
-            label_family,
             on_hover: name("on_hover")?,
             on_select: name("on_select")?,
-            on_activate: name("on_activate")?,
-            on_view_changed: name("on_view_changed")?,
-            on_pin: name("on_pin")?,
         })
     }
     /// Resolve theme roles and thresholds; absent slots fall back to palette roles.
@@ -143,24 +94,23 @@ impl GraphData {
             edge: slot("edge", "outlineVariant", d.edge, 150)?,
             hover: slot("hover", "secondary", d.hover, 255)?,
             selected: slot("selected", "onSurface", d.selected, 255)?,
-            highlight: slot("highlight", "primaryContainer", d.highlight, 255)?,
-            label: slot("label", "onSurface", [220, 220, 220, 255], 255)?,
+            label: slot("label", "onSurface", d.label, 255)?,
             label_size: number(
                 "label_size",
                 crate::transcript::Scale::builtin().caption.max(8.),
                 6. ..=64.,
             )?,
-            label_zoom: number("label_zoom", 1.2, 0. ..=100.)?,
-            max_labels: number("max_labels", 32., 0. ..=256.)? as u16,
-            node_radius: number("node_radius", 3., 0.5..=64.)?,
+            label_zoom: number("label_zoom", d.label_zoom, 0. ..=100.)?,
+            max_labels: number("max_labels", f32::from(d.max_labels), 0. ..=256.)? as u16,
+            node_radius: number("node_radius", d.node_radius, 0.5..=64.)?,
             lod_zoom: number("lod_zoom", d.lod_zoom, 0. ..=100.)?,
             far_edge_alpha: number("far_edge_alpha", f32::from(d.far_edge_alpha), 0. ..=255.)?
                 as u8,
-            dim_alpha: number("dim_alpha", f32::from(d.dim_alpha), 0. ..=255.)? as u8,
         })
     }
 }
 
+/// A press on the canvas: a click selects `node`, a drag pans from `camera`.
 struct Press {
     node: Option<u32>,
     origin: [f32; 2],
@@ -171,13 +121,13 @@ pub(crate) struct Canvas {
     worker: Worker,
     data: Arc<GraphData>,
     positions: Arc<[Point]>,
-    pinned: Vec<bool>,
     geometry: Arc<GraphGeometry>,
     geometry_dirty: bool,
-    attributes_dirty: bool,
+    radii_dirty: bool,
     hit_grid: Grid,
     hit_grid_dirty: bool,
     hit_max_radius: f32,
+    /// Snapshots from before this worker command describe another topology.
     command_revision: u64,
     style: GraphStyle,
     rect: Rect,
@@ -189,7 +139,6 @@ pub(crate) struct Canvas {
     hover: Option<u32>,
     selected: Option<u32>,
     press: Option<Press>,
-    last_click: Option<(u32, Instant)>,
 }
 fn seed_position(i: usize, n: usize) -> Point {
     // A deterministic scatter sized to the node count, so a fresh graph starts spread out.
@@ -220,12 +169,11 @@ impl Canvas {
             .map_err(|e| Diagnostic::new(std::path::Path::new("graph"), 1, 1, e))?;
         let mut canvas = Self {
             worker,
-            data: Arc::new(GraphData::default()),
+            data: Arc::default(),
             positions: Arc::from([]),
-            pinned: vec![],
             geometry: Arc::default(),
             geometry_dirty: true,
-            attributes_dirty: true,
+            radii_dirty: true,
             hit_grid: Grid::default(),
             hit_grid_dirty: true,
             hit_max_radius: 0.,
@@ -239,61 +187,51 @@ impl Canvas {
             hover: None,
             selected: None,
             press: None,
-            last_click: None,
         };
         canvas.reconcile(data, style);
         Ok(canvas)
     }
-    /// Apply new view data: positions follow ids, new nodes start near a neighbour and
-    /// settle locally, renames and style changes never reach the worker.
+    /// Apply new view data: positions, hover and selection follow ids, new nodes start near
+    /// a placed neighbour and settle locally, renames and style changes never reach the worker.
     fn reconcile(&mut self, data: &Arc<GraphData>, style: GraphStyle) {
-        let old = &self.data;
-        let old_node_radius = self.style.node_radius;
-        let topology = &data.topology;
-        let topology_changed =
-            !Arc::ptr_eq(&old.topology, &data.topology) && old.topology != data.topology;
-        if topology_changed {
-            let old_hover = self.hover.map(|i| self.id(i));
-            let old_press = self.press.as_ref().and_then(|p| p.node).map(|i| self.id(i));
-            let old_click = self.last_click.map(|(i, at)| (self.id(i), at));
-            let n = topology.nodes.len();
-            let mut positions = vec![[f32::NAN, f32::NAN]; n];
-            let mut hot = vec![false; n];
-            let mut pinned = Vec::with_capacity(n);
-            for (i, node) in topology.nodes.iter().enumerate() {
-                let old_index = old.topology.index(&node.id);
-                if let Some(old_index) = old_index {
-                    positions[i] = self.positions[old_index as usize];
-                    let old_node = &old.topology.nodes[old_index as usize];
-                    hot[i] = old_node.pinned != node.pinned;
-                    pinned.push(
-                        node.pinned
-                            || (old_node.pinned == node.pinned && self.pinned[old_index as usize]),
-                    );
-                } else {
-                    hot[i] = true;
-                    pinned.push(node.pinned);
-                }
+        let (old, new) = (&self.data.topology, &data.topology);
+        let same_ids = || {
+            old.nodes.len() == new.nodes.len()
+                && old.nodes.iter().zip(&new.nodes).all(|(a, b)| a.id == b.id)
+        };
+        // Weights may change radii; labels are read per frame.
+        self.radii_dirty |= !Arc::ptr_eq(old, new);
+        if !Arc::ptr_eq(old, new) && (old.edges != new.edges || !same_ids()) {
+            let remap = |i: Option<u32>| i.and_then(|i| new.index(&old.nodes[i as usize].id));
+            self.hover = remap(self.hover);
+            self.selected = remap(self.selected);
+            if let Some(press) = &mut self.press {
+                press.node = remap(press.node);
             }
-            for i in 0..n {
-                if positions[i][0].is_finite() {
-                    continue;
-                }
-                // Place a new node beside a placed neighbour; an isolated one joins the scatter.
-                let neighbour = topology.edges.iter().find_map(|[a, b]| {
-                    let other = if *a as usize == i {
-                        *b
-                    } else if *b as usize == i {
-                        *a
-                    } else {
-                        return None;
-                    };
-                    positions
-                        .get(other as usize)
-                        .filter(|p| p[0].is_finite())
-                        .copied()
+            let n = new.nodes.len();
+            let mut positions: Vec<Point> = new
+                .nodes
+                .iter()
+                .map(|node| {
+                    old.index(&node.id)
+                        .map_or([f32::NAN; 2], |i| self.positions[i as usize])
+                })
+                .collect();
+            let mut hot: Vec<bool> = positions.iter().map(|p| !p[0].is_finite()).collect();
+            let fresh = hot.iter().all(|h| *h);
+            for i in (0..n).filter(|i| hot[*i]) {
+                // Beside a placed neighbour; a fresh graph or an isolated node joins the scatter.
+                let neighbour = (!fresh).then(|| {
+                    new.edges.iter().find_map(|&[a, b]| {
+                        let other = match i as u32 {
+                            i if i == a => b,
+                            i if i == b => a,
+                            _ => return None,
+                        };
+                        Some(positions[other as usize]).filter(|p| p[0].is_finite())
+                    })
                 });
-                positions[i] = match neighbour {
+                positions[i] = match neighbour.flatten() {
                     Some(p) => {
                         let angle = (i as f32) * 2.399_963;
                         [p[0] + angle.cos() * 40., p[1] + angle.sin() * 40.]
@@ -301,41 +239,20 @@ impl Canvas {
                     None => seed_position(i, n),
                 };
             }
-            if !self.positions.is_empty() && self.positions.len() == n && !hot.iter().any(|h| *h) {
-                // Pins or edges changed: everything may settle again, nothing is reseeded.
+            if self.positions.len() == n && !hot.contains(&true) {
+                // Only edges changed: everything may settle again, nothing is reseeded.
                 hot.fill(true);
             }
-            self.command_revision = self.worker.send(Command::Replace {
+            self.command_revision = self.worker.send(Replace {
                 positions: positions.clone(),
-                pinned: pinned.clone(),
-                edges: topology.edges.clone(),
+                edges: new.edges.clone(),
                 hot,
             });
             self.positions = positions.into();
-            self.pinned = pinned;
-            self.geometry_dirty = true;
-            self.hit_grid_dirty = true;
-            self.hover = old_hover.as_ref().and_then(|id| topology.index(id));
-            if let Some(id) = old_press {
-                if let Some(index) = topology.index(&id) {
-                    if let Some(press) = self.press.as_mut() {
-                        press.node = Some(index);
-                    }
-                } else {
-                    self.press = None;
-                }
-            }
-            self.last_click = old_click.and_then(|(id, at)| topology.index(&id).map(|i| (i, at)));
         }
-        self.selected = data.selected.as_ref().and_then(|id| topology.index(id));
-        let style_changed = style != self.style;
-        let radii_changed = style.node_radius != old_node_radius || topology_changed;
-        let attributes_changed = topology_changed
-            || old.highlight != data.highlight
-            || old.hidden_groups != data.hidden_groups;
-        self.geometry_dirty |= style_changed || attributes_changed;
-        self.attributes_dirty |= attributes_changed || style.node_radius != old_node_radius;
-        self.hit_grid_dirty |= radii_changed;
+        self.radii_dirty |= style.node_radius != self.style.node_radius;
+        self.hit_grid_dirty |= self.radii_dirty;
+        self.geometry_dirty |= self.radii_dirty || style != self.style;
         self.style = style;
         self.data = data.clone();
     }
@@ -382,145 +299,89 @@ impl Canvas {
         };
         self.fitted = true;
     }
-    fn hidden(&self) -> Vec<bool> {
-        if self.data.hidden_groups.is_empty() {
-            return vec![];
-        }
-        self.data
-            .topology
-            .nodes
-            .iter()
-            .map(|n| {
-                self.data.hidden_groups.iter().any(|g| {
-                    self.data
-                        .topology
-                        .groups
-                        .get(n.group as usize)
-                        .is_some_and(|v| v.as_ref() == g.as_str())
-                })
-            })
-            .collect()
-    }
     fn geometry(&mut self) -> Arc<GraphGeometry> {
         if self.geometry_dirty {
-            let (radii, hidden, highlighted) = if self.attributes_dirty {
-                let mut highlighted = vec![false; self.data.topology.nodes.len()];
-                for id in &self.data.highlight {
-                    if let Some(i) = self.data.topology.index(id) {
-                        highlighted[i as usize] = true;
-                    }
-                }
-                (
-                    self.data
-                        .topology
-                        .nodes
-                        .iter()
-                        .map(|node| self.style.node_radius * node.weight.clamp(0.25, 16.).sqrt())
-                        .collect::<Vec<_>>()
-                        .into(),
-                    self.hidden().into(),
-                    if self.data.highlight.is_empty() {
-                        Arc::from([])
-                    } else {
-                        highlighted.into()
-                    },
-                )
+            let radii = if self.radii_dirty {
+                let r = self.style.node_radius;
+                let nodes = &self.data.topology.nodes;
+                nodes
+                    .iter()
+                    .map(|node| r * node.weight.clamp(0.25, 16.).sqrt())
+                    .collect()
             } else {
-                (
-                    self.geometry.radii.clone(),
-                    self.geometry.hidden.clone(),
-                    self.geometry.highlighted.clone(),
-                )
+                self.geometry.radii.clone()
             };
             self.geometry = Arc::new(GraphGeometry {
                 revision: self.geometry.revision + 1,
                 positions: self.positions.clone(),
                 radii,
                 edges: self.data.topology.edges.clone(),
-                hidden,
-                highlighted,
             });
             self.geometry_dirty = false;
-            self.attributes_dirty = false;
+            self.radii_dirty = false;
         }
         self.geometry.clone()
     }
-    fn visible(&self, i: usize) -> Option<[f32; 2]> {
-        if self.geometry.hidden.get(i).copied().unwrap_or(false) {
-            return None;
-        }
-        let s = self.camera.to_screen(self.rect, self.positions[i]);
+    fn visible(&self, i: u32) -> Option<[f32; 2]> {
+        let s = self.camera.to_screen(self.rect, self.positions[i as usize]);
         let r = self.rect;
         (s[0] >= r.x && s[1] >= r.y && s[0] < r.x + r.w && s[1] < r.y + r.h).then_some(s)
     }
-    /// Label primitives in priority order: hovered, selected, highlighted by weight, then
-    /// every visible node by weight once zoomed past `label_zoom`; capped by `max_labels`.
+    /// Label primitives in priority order: hovered, selected, then every visible node by
+    /// weight once zoomed past `label_zoom`; capped by `max_labels` and the free text slots.
     fn labels(&self, clip: Option<Rect>, remaining: usize) -> Vec<(Primitive, Rect)> {
         let cap = usize::from(self.style.max_labels).min(remaining);
-        let mut chosen: Vec<u32> = Vec::with_capacity(cap.min(64));
-        let priority = self.data.topology.priority.iter().copied();
+        let zoomed = self.camera.zoom >= self.style.label_zoom;
+        let by_weight = self.data.topology.priority.iter().copied();
         let candidates = [self.hover, self.selected]
             .into_iter()
             .flatten()
-            .chain(
-                priority
-                    .clone()
-                    .filter(|i| self.geometry.highlighted.get(*i as usize) == Some(&true)),
-            )
-            .chain(
-                (self.camera.zoom >= self.style.label_zoom)
-                    .then_some(priority)
-                    .into_iter()
-                    .flatten(),
-            );
+            .chain(zoomed.then_some(by_weight).into_iter().flatten());
+        let mut chosen: Vec<(u32, [f32; 2])> = Vec::new();
         for i in candidates {
             if chosen.len() >= cap {
                 break;
             }
-            if !chosen.contains(&i) && self.visible(i as usize).is_some() {
-                chosen.push(i);
+            if !chosen.iter().any(|(c, _)| *c == i)
+                && let Some(s) = self.visible(i)
+            {
+                chosen.push((i, s));
             }
         }
         let clip = clip.map_or(self.rect, |c| c.intersect(self.rect));
+        let size = self.style.label_size;
+        let family = crate::theme::with_sans_family(str::to_owned);
         chosen
             .into_iter()
-            .filter_map(|i| {
-                let s = self.visible(i as usize)?;
+            .map(|(i, s)| {
                 let radius =
                     self.geometry.radii.get(i as usize).copied().unwrap_or(3.) * self.camera.zoom;
-                let size = self.style.label_size;
-                Some((
-                    Primitive::Text {
-                        weight: 400,
-                        align: None,
-                        rect: Rect::new(
-                            s[0] + radius + 4.,
-                            s[1] - size * 0.75,
-                            LABEL_WIDTH,
-                            size * 1.5,
-                        ),
-                        text: self.data.topology.nodes[i as usize].label.to_string(),
-                        family: self.data.label_family.clone(),
-                        size,
-                        color: self.style.label,
-                        shadow: None,
-                    },
-                    clip,
-                ))
+                let text = Primitive::Text {
+                    weight: 400,
+                    align: None,
+                    rect: Rect::new(
+                        s[0] + radius + 4.,
+                        s[1] - size * 0.75,
+                        LABEL_WIDTH,
+                        size * 1.5,
+                    ),
+                    text: self.data.topology.nodes[i as usize].label.to_string(),
+                    family: family.clone(),
+                    size,
+                    color: self.style.label,
+                    shadow: None,
+                };
+                (text, clip)
             })
             .collect()
     }
     /// Nearest node under a logical point, within its radius plus a small slack.
-    fn rebuild_hit_grid(&mut self) {
-        if !self.hit_grid_dirty {
-            return;
-        }
-        self.hit_grid.update(&self.positions, HIT_CELL);
-        self.hit_max_radius = self.geometry.radii.iter().copied().fold(0., f32::max);
-        self.hit_grid_dirty = false;
-    }
     fn hit(&mut self, x: f32, y: f32) -> Option<u32> {
-        self.rebuild_hit_grid();
+        if self.hit_grid_dirty {
+            self.hit_grid.update(&self.positions, HIT_CELL);
+            self.hit_max_radius = self.geometry.radii.iter().copied().fold(0., f32::max);
+            self.hit_grid_dirty = false;
+        }
         let w = self.camera.to_world(self.rect, [x, y]);
         let slack = 3. / self.camera.zoom;
         let reach = ((self.hit_max_radius + slack) / HIT_CELL).ceil() as i32;
@@ -528,17 +389,12 @@ impl Canvas {
         let mut best: Option<(f32, u32)> = None;
         for dx in -reach..=reach {
             for dy in -reach..=reach {
-                for id in self.hit_grid.at([cell[0] + dx, cell[1] + dy]) {
-                    let id = id as u32;
-                    let i = id as usize;
-                    if self.geometry.hidden.get(i).copied().unwrap_or(false) {
-                        continue;
-                    }
+                for i in self.hit_grid.at([cell[0] + dx, cell[1] + dy]) {
                     let p = self.positions[i];
                     let r = self.geometry.radii.get(i).copied().unwrap_or(3.) + slack;
                     let d2 = (p[0] - w[0]).powi(2) + (p[1] - w[1]).powi(2);
                     if d2 <= r * r && best.is_none_or(|(b, _)| d2 < b) {
-                        best = Some((d2, id));
+                        best = Some((d2, i as u32));
                     }
                 }
             }
@@ -548,51 +404,16 @@ impl Canvas {
     fn id(&self, i: u32) -> String {
         self.data.topology.nodes[i as usize].id.to_string()
     }
-    fn view_argument(&self) -> Value {
-        Value::list(vec![
-            Json::from(f64::from(self.camera.zoom)),
-            Json::from(f64::from(self.camera.center[0])),
-            Json::from(f64::from(self.camera.center[1])),
-        ])
-    }
-    /// Positions and pin flags by id, for host persistence.
-    pub fn layout(&self) -> BTreeMap<String, ([f32; 2], bool)> {
-        self.data
-            .topology
-            .nodes
-            .iter()
-            .enumerate()
-            .map(|(i, node)| (node.id.to_string(), (self.positions[i], self.pinned[i])))
-            .collect()
-    }
-    /// Restore saved positions by id; nodes missing from the table keep settling locally.
-    pub fn set_layout(&mut self, saved: &BTreeMap<String, ([f32; 2], bool)>) {
-        let mut hot = vec![false; self.positions.len()];
-        for (i, node) in self.data.topology.nodes.iter().enumerate() {
-            if let Some((p, pinned)) = saved
-                .get(node.id.as_ref())
-                .filter(|(p, _)| p.iter().all(|v| v.is_finite()))
-            {
-                Arc::make_mut(&mut self.positions)[i] = *p;
-                self.pinned[i] = *pinned;
-            } else {
-                hot[i] = true;
-            }
-        }
-        self.command_revision = self.worker.send(Command::Replace {
-            positions: self.positions.to_vec(),
-            pinned: self.pinned.clone(),
-            edges: self.data.topology.edges.clone(),
-            hot,
-        });
-        self.geometry_dirty = true;
-        self.hit_grid_dirty = true;
-        self.fitted = false;
-        self.settled_fit = false;
-        self.user_moved = false;
-    }
 }
 
+/// Index of the `Graph` primitive a canvas node emitted into its own layer.
+fn graph_primitive(scene: &Scene, id: &str) -> Option<usize> {
+    let layer = scene.layers.iter().find(|layer| layer.id == id)?;
+    layer
+        .own
+        .clone()
+        .find(|i| matches!(scene.primitives.get(*i), Some(Primitive::Graph { .. })))
+}
 impl Session {
     pub(crate) fn graph_canvas_at(&self, x: f32, y: f32) -> Option<String> {
         self.current_nodes
@@ -607,39 +428,36 @@ impl Session {
         &mut self,
         scene: &mut Scene,
         nodes: &[Node],
-        palette: &Palette,
+        _palette: &Palette,
     ) -> Result<(), Diagnostic> {
-        let mut seen = Vec::new();
-        for node in nodes.iter().filter(|node| node.graph.is_some()) {
-            let data = node.graph.as_ref().unwrap();
-            let rect = crate::rect(&node.draw);
-            let source = node.source.as_ref().map_or_else(
-                || Source {
-                    file: "ui/main.luau".into(),
-                    line: 1,
-                },
-                |(path, line, _)| Source {
-                    file: path.to_string_lossy().into_owned(),
-                    line: *line,
-                },
-            );
-            let style = data.style(palette, &source)?;
-            match self.graphs.get_mut(&node.id) {
+        // shortcut: `_palette` is unused since layout resolves the style; drop it when session.rs is free.
+        // Layout resolved and validated every style, so a rejected update never reaches an engine.
+        let updates: Vec<_> = nodes
+            .iter()
+            .filter_map(|node| {
+                let data = node.graph.as_ref()?;
+                let style = match graph_primitive(scene, &node.id).map(|i| &scene.primitives[i]) {
+                    Some(Primitive::Graph { style, .. }) => *style,
+                    _ => GraphStyle::default(),
+                };
+                Some((node.id.clone(), data, crate::rect(&node.draw), style))
+            })
+            .collect();
+        self.graphs
+            .retain(|id, _| updates.iter().any(|(seen, ..)| seen == id));
+        for (id, data, rect, style) in updates {
+            match self.graphs.get_mut(&id) {
                 Some(canvas) => {
                     canvas.reconcile(data, style);
                     canvas.rect = rect;
                     canvas.pull();
                 }
                 None => {
-                    self.graphs.insert(
-                        node.id.clone(),
-                        Canvas::new(data, style, rect, &self.graph_wake)?,
-                    );
+                    let canvas = Canvas::new(data, style, rect, &self.graph_wake)?;
+                    self.graphs.insert(id, canvas);
                 }
             }
-            seen.push(node.id.clone());
         }
-        self.graphs.retain(|id, _| seen.contains(id));
         self.place_graphs(scene);
         Ok(())
     }
@@ -656,17 +474,7 @@ impl Session {
         for (id, canvas) in &mut self.graphs {
             canvas.fit();
             let geometry = canvas.geometry();
-            let Some(index) = scene
-                .layers
-                .iter()
-                .find(|layer| &layer.id == id)
-                .and_then(|layer| {
-                    layer
-                        .own
-                        .clone()
-                        .find(|i| matches!(scene.primitives.get(*i), Some(Primitive::Graph { .. })))
-                })
-            else {
+            let Some(index) = graph_primitive(scene, id) else {
                 continue;
             };
             let clip = scene.clips.get(&index).copied();
@@ -721,90 +529,61 @@ impl Session {
         self.pending = Some(self.patched_pending());
         Ok(Some(scene))
     }
-    fn graph_action(&mut self, name: &str, argument: Value) -> Result<Option<Scene>, Diagnostic> {
-        self.graph_actions(&[(name.to_owned(), argument)])
-    }
-    fn action_or_frame(
+    /// Run the actions, then stage their state; without a view change only the graphs repaint.
+    fn graph_actions(
         &mut self,
-        action: Option<String>,
-        argument: Value,
-        frame_without_action: bool,
+        actions: Vec<(String, Value)>,
     ) -> Result<Option<Scene>, Diagnostic> {
-        match action {
-            Some(name) => self.graph_action(&name, argument),
-            None if frame_without_action => self.graph_frame(true),
-            None => Ok(None),
-        }
-    }
-    fn graph_actions(&mut self, actions: &[(String, Value)]) -> Result<Option<Scene>, Diagnostic> {
-        let Some(generation) = &self.generation else {
-            return Ok(None);
+        let Some(generation) = self.generation.as_ref().filter(|_| !actions.is_empty()) else {
+            return self.graph_frame(true);
         };
         let mut stores = self.stores.clone();
         for (name, argument) in actions {
-            stores = generation.script.action(name, &stores, argument.clone())?;
+            stores = generation.script.action(&name, &stores, argument)?;
         }
         match self.stage_state(stores)? {
             Some(scene) => Ok(Some(scene)),
             None => self.graph_frame(true),
         }
     }
-    /// Hover over or away from a canvas; a scene when the hovered node changed.
+    /// Hover over or away from a canvas; a scene when a hovered node changed.
     pub(crate) fn graph_hover(&mut self, x: f32, y: f32) -> Result<Option<Scene>, Diagnostic> {
-        let over = self.graph_canvas_at(x, y);
-        let previous = self
-            .graphs
-            .iter()
-            .find(|(_, c)| c.hover.is_some())
-            .map(|(id, _)| id.clone());
-        if previous
-            .as_ref()
-            .and_then(|id| self.graphs.get(id))
-            .is_some_and(|c| c.press.is_some())
-        {
+        if self.graphs.values().any(|c| c.press.is_some()) {
             return Ok(None);
         }
+        let over = self.graph_canvas_at(x, y);
         let mut actions = Vec::new();
         let mut changed = false;
-        if previous != over
-            && let Some(id) = previous
-        {
-            let canvas = self.graphs.get_mut(&id).unwrap();
-            canvas.hover = None;
+        for (id, canvas) in &mut self.graphs {
+            let hit = if over.as_ref() == Some(id) {
+                canvas.hit(x, y)
+            } else {
+                None
+            };
+            if hit == canvas.hover {
+                continue;
+            }
+            canvas.hover = hit;
             changed = true;
             if let Some(action) = &canvas.data.on_hover {
-                actions.push((action.clone(), Value::Text(String::new())));
+                let id = hit.map_or_else(String::new, |i| canvas.id(i));
+                actions.push((action.clone(), Value::Text(id)));
             }
         }
-        if let Some(id) = over {
-            let canvas = self.graphs.get_mut(&id).unwrap();
-            let hit = canvas.hit(x, y);
-            if hit != canvas.hover {
-                canvas.hover = hit;
-                changed = true;
-                if let Some(action) = &canvas.data.on_hover {
-                    actions.push((
-                        action.clone(),
-                        Value::Text(hit.map_or(String::new(), |i| canvas.id(i))),
-                    ));
-                }
-            }
-        }
-        if !changed {
-            return Ok(None);
-        }
-        if actions.is_empty() {
-            self.graph_frame(true)
+        if changed {
+            self.graph_actions(actions)
         } else {
-            self.graph_actions(&actions)
+            Ok(None)
         }
     }
-    /// True when a press at this point starts a graph gesture (node drag or pan).
+    /// True when a press at this point starts a graph gesture (click or pan).
     pub(crate) fn graph_press(&mut self, x: f32, y: f32) -> bool {
-        let Some(id) = self.graph_canvas_at(x, y) else {
+        let Some(canvas) = self
+            .graph_canvas_at(x, y)
+            .and_then(|id| self.graphs.get_mut(&id))
+        else {
             return false;
         };
-        let canvas = self.graphs.get_mut(&id).unwrap();
         canvas.press = Some(Press {
             node: canvas.hit(x, y),
             origin: [x, y],
@@ -816,6 +595,7 @@ impl Session {
     fn pressed_canvas(&mut self) -> Option<&mut Canvas> {
         self.graphs.values_mut().find(|c| c.press.is_some())
     }
+    /// Pan once the pointer left a small slop around the press.
     pub(crate) fn graph_drag(
         &mut self,
         x: f32,
@@ -825,79 +605,36 @@ impl Session {
             return Ok(None);
         };
         let press = canvas.press.as_mut().unwrap();
-        if !press.moved && (x - press.origin[0]).abs() < 2. && (y - press.origin[1]).abs() < 2. {
+        let (dx, dy) = (x - press.origin[0], y - press.origin[1]);
+        if !press.moved && dx.abs() < 2. && dy.abs() < 2. {
             return Ok(Some(None));
         }
         press.moved = true;
-        match press.node {
-            Some(node) => {
-                let world = canvas.camera.to_world(canvas.rect, [x, y]);
-                Arc::make_mut(&mut canvas.positions)[node as usize] = world;
-                canvas.pinned[node as usize] = true;
-                canvas.geometry_dirty = true;
-                canvas.hit_grid_dirty = true;
-                canvas.command_revision = canvas.worker.send(Command::Pin {
-                    node,
-                    position: Some(world),
-                    pinned: true,
-                });
-            }
-            None => {
-                let zoom = press.camera.zoom;
-                canvas.camera.center = [
-                    press.camera.center[0] - (x - press.origin[0]) / zoom,
-                    press.camera.center[1] - (y - press.origin[1]) / zoom,
-                ];
-                canvas.user_moved = true;
-            }
-        }
+        let start = press.camera;
+        canvas.camera.center = [
+            start.center[0] - dx / start.zoom,
+            start.center[1] - dy / start.zoom,
+        ];
+        canvas.user_moved = true;
         self.graph_frame(true).map(Some)
     }
+    /// A click (no pan) on a node selects it and runs `on_select` with its id.
     pub(crate) fn graph_release(&mut self) -> Result<Option<Option<Scene>>, Diagnostic> {
         let Some(canvas) = self.pressed_canvas() else {
             return Ok(None);
         };
         let press = canvas.press.take().unwrap();
-        let now = Instant::now();
-        let result = match (press.node, press.moved) {
-            (Some(node), true) => {
-                let id = canvas.id(node);
-                let p = canvas.positions[node as usize];
-                let action = canvas.data.on_pin.clone();
-                let argument = Value::list(vec![
-                    Json::from(id),
-                    Json::from(f64::from(p[0])),
-                    Json::from(f64::from(p[1])),
-                ]);
-                self.action_or_frame(action, argument, true)?
-            }
-            (Some(node), false) => {
-                let id = canvas.id(node);
-                let double = canvas
-                    .last_click
-                    .take()
-                    .is_some_and(|(n, at)| n == node && now - at < DOUBLE_CLICK);
-                canvas.last_click = (!double).then_some((node, now));
-                canvas.selected = Some(node);
-                let action = if double {
-                    canvas
-                        .data
-                        .on_activate
-                        .clone()
-                        .or(canvas.data.on_select.clone())
-                } else {
-                    canvas.data.on_select.clone()
-                };
-                self.action_or_frame(action, Value::Text(id), true)?
-            }
-            (None, true) => {
-                let action = canvas.data.on_view_changed.clone();
-                let argument = canvas.view_argument();
-                self.action_or_frame(action, argument, false)?
-            }
-            (None, false) => None,
+        let Some(node) = press.node.filter(|_| !press.moved) else {
+            return Ok(Some(None));
         };
-        Ok(Some(result))
+        canvas.selected = Some(node);
+        let actions = canvas
+            .data
+            .on_select
+            .iter()
+            .map(|action| (action.clone(), Value::Text(canvas.id(node))))
+            .collect();
+        self.graph_actions(actions).map(Some)
     }
     /// Wheel zoom around the pointer; a scene when the pointer is over a canvas.
     pub(crate) fn graph_scroll(
@@ -906,10 +643,12 @@ impl Session {
         y: f32,
         delta: f64,
     ) -> Result<Option<Option<Scene>>, Diagnostic> {
-        let Some(id) = self.graph_canvas_at(x, y) else {
+        let Some(canvas) = self
+            .graph_canvas_at(x, y)
+            .and_then(|id| self.graphs.get_mut(&id))
+        else {
             return Ok(None);
         };
-        let canvas = self.graphs.get_mut(&id).unwrap();
         let anchor = canvas.camera.to_world(canvas.rect, [x, y]);
         let zoom = (canvas.camera.zoom * (-delta as f32 / 300.).exp()).clamp(0.05, 20.);
         let r = canvas.rect;
@@ -921,26 +660,7 @@ impl Session {
             zoom,
         };
         canvas.user_moved = true;
-        let action = canvas.data.on_view_changed.clone();
-        let argument = canvas.view_argument();
-        let result = self.action_or_frame(action, argument, true)?;
-        Ok(Some(result))
-    }
-    /// Positions and pin flags of one canvas by node id, for host persistence.
-    pub fn graph_layout(&self, id: &str) -> Option<BTreeMap<String, ([f32; 2], bool)>> {
-        self.graphs.get(id).map(Canvas::layout)
-    }
-    /// Restore a saved layout into one canvas; unknown ids are ignored, missing nodes settle.
-    pub fn set_graph_layout(
-        &mut self,
-        id: &str,
-        layout: &BTreeMap<String, ([f32; 2], bool)>,
-    ) -> Result<Option<Scene>, Diagnostic> {
-        let Some(canvas) = self.graphs.get_mut(id) else {
-            return Ok(None);
-        };
-        canvas.set_layout(layout);
-        self.graph_frame(true)
+        self.graph_frame(true).map(Some)
     }
 }
 
@@ -948,12 +668,11 @@ impl Session {
 mod tests {
     use super::*;
     use crate::tests::Fixture;
-    use std::fs;
+    use std::{collections::BTreeMap, fs};
 
     const BEHAVIOR: &str = r#"return {
- stores={hovered="",selected="",events=0},
- actions={hover=function(s,id) s.hovered=id end, select=function(s,id) s.selected=id end,
-  activate=function(s) s.events+=1 end, view=function(s) s.events+=1 end, pin=function(s) s.events+=1 end},
+ stores={hovered="",selected=""},
+ actions={hover=function(s,id) s.hovered=id end, select=function(s,id) s.selected=id end},
  computed={}
 }"#;
     fn view(label_b: &str) -> String {
@@ -962,10 +681,9 @@ mod tests {
 local kit=require("bead.kit")
 return ui.Column{{id="root",width=400,height=300,
  kit.GraphCanvas{{id="canvas",width=400,height=300,
-  nodes={{{{id="a",label="Alpha",weight=5,pinned=true}},{{id="b",label="{label_b}",group="g"}},{{id="c"}}}},
-  edges={{{{from="a",to="b"}},{{from="b",to="c"}}}},selected=ui.bind("selected"),highlight={{"a"}},
-  style={{label_zoom=0,node_radius=1}},on_hover=ui.action("hover"),on_select=ui.action("select"),
-  on_activate=ui.action("activate"),on_view_changed=ui.action("view"),on_pin=ui.action("pin")}}}}"#
+  graph=ui.graph({{{{id="a",label="Alpha",weight=5}},{{id="b",label="{label_b}"}},{{id="c"}}}},
+   {{{{from="a",to="b"}},{{from="b",to="c"}}}}),
+  style={{label_zoom=0,node_radius=1}},on_hover=ui.action("hover"),on_select=ui.action("select")}}}}"#
         )
     }
     fn session() -> (Fixture, Session) {
@@ -1003,11 +721,8 @@ return ui.Column{{id="root",width=400,height=300,
             })
             .unwrap()
     }
-    fn events(s: &Session) -> f64 {
-        match s.stores.get("events") {
-            Some(Value::Number(n)) => *n,
-            _ => panic!("events store"),
-        }
+    fn text(s: &Session, store: &str) -> Option<Value> {
+        s.stores.get(store).cloned()
     }
 
     #[test]
@@ -1023,15 +738,14 @@ return ui.Column{{id="root",width=400,height=300,
     }
 
     #[test]
-    fn empty_graph_data_keeps_the_shared_empty_topology() {
+    fn missing_graph_is_empty_and_a_stale_token_is_rejected() {
         let source = Source {
             file: "graph".into(),
             line: 1,
         };
-        let properties = serde_json::json!({"highlight": {}, "hidden_groups": {}});
-        let data = GraphData::parse(&|name| properties.get(name), &|_| Ok(None), &source).unwrap();
+        let none = serde_json::json!({});
+        let data = GraphData::parse(&|name| none.get(name), &|_| Ok(None), &source).unwrap();
         assert!(data.topology.nodes.is_empty() && data.topology.edges.is_empty());
-        assert!(data.highlight.is_empty() && data.hidden_groups.is_empty());
         let stale = serde_json::json!({"graph": 123456789});
         assert!(GraphData::parse(&|name| stale.get(name), &|_| Ok(None), &source).is_err());
     }
@@ -1040,8 +754,8 @@ return ui.Column{{id="root",width=400,height=300,
     fn invalid_graph_update_keeps_every_canvas_and_layout() {
         let initial = r#"local ui=require("bead.ui") local kit=require("bead.kit")
 return ui.Column{id="root",width=400,height=300,
- kit.GraphCanvas{id="a",width=200,height=300,nodes={{id="a"}},edges={}},
- kit.GraphCanvas{id="b",width=200,height=300,nodes={{id="b"}},edges={}}}"#;
+ kit.GraphCanvas{id="a",width=200,height=300,graph=ui.graph({{id="a"}},{})},
+ kit.GraphCanvas{id="b",width=200,height=300,graph=ui.graph({{id="b"}},{})}}"#;
         let (f, mut s) = session_with(initial);
         let before = ["root.a", "root.b"].map(|id| {
             let canvas = &s.graphs[id];
@@ -1056,8 +770,8 @@ return ui.Column{id="root",width=400,height=300,
         // update is rejected and neither engine hears about it.
         let invalid = r#"local ui=require("bead.ui") local kit=require("bead.kit")
 return ui.Column{id="root",width=400,height=300,
- kit.GraphCanvas{id="a",width=200,height=300,nodes={{id="a"},{id="new"}},edges={{from="a",to="new"}}},
- kit.GraphCanvas{id="b",width=200,height=300,nodes={{id="b"}},edges={{from="b",to="missing"}}}}"#;
+ kit.GraphCanvas{id="a",width=200,height=300,graph=ui.graph({{id="a"},{id="new"}},{{from="a",to="new"}})},
+ kit.GraphCanvas{id="b",width=200,height=300,graph=ui.graph({{id="b"}},{{from="b",to="missing"}})}}"#;
         fs::write(f.0.join("ui/main.luau"), invalid).unwrap();
         assert!(s.reload().is_err());
         for (id, topology, positions, revision) in before {
@@ -1102,10 +816,7 @@ return ui.Column{id="root",width=400,height=300,
                     .iter()
                     .enumerate()
                     .filter_map(|(i, p)| {
-                        if canvas.geometry.hidden.get(i).copied().unwrap_or(false) {
-                            return None;
-                        }
-                        let r = canvas.geometry.radii.get(i).copied().unwrap_or(3.) + slack;
+                        let r = canvas.geometry.radii[i] + slack;
                         let d2 = (p[0] - world[0]).powi(2) + (p[1] - world[1]).powi(2);
                         (d2 <= r * r).then_some((d2, i as u32))
                     })
@@ -1117,74 +828,51 @@ return ui.Column{id="root",width=400,height=300,
     }
 
     #[test]
-    fn reorder_remaps_interaction_and_keeps_runtime_pins() {
+    fn reorder_remaps_interaction_and_discards_older_snapshots() {
         let (f, mut s) = session();
         let positions = s.graphs["root.canvas"].positions.to_vec();
-        s.graphs.get_mut("root.canvas").unwrap().hover = Some(1);
-        s.graphs.get_mut("root.canvas").unwrap().last_click = Some((1, Instant::now()));
-        s.graphs.get_mut("root.canvas").unwrap().pinned[1] = true;
+        let canvas = s.graphs.get_mut("root.canvas").unwrap();
+        (canvas.hover, canvas.selected) = (Some(1), Some(2));
+        let revision = canvas.command_revision;
         let reordered = r#"local ui=require("bead.ui") local kit=require("bead.kit")
 return ui.Column{id="root",width=400,height=300,kit.GraphCanvas{id="canvas",width=400,height=300,
-nodes={{id="b",label="Beta",group="g"},{id="c"},{id="a",label="Alpha",weight=5,pinned=true}},
-edges={{from="b",to="c"},{from="c",to="a"}},style={node_radius=1}}}"#;
+graph=ui.graph({{id="b",label="Beta"},{id="c"},{id="a",label="Alpha",weight=5}},
+{{from="b",to="c"},{from="c",to="a"}}),style={node_radius=1}}}"#;
         fs::write(f.0.join("ui/main.luau"), reordered).unwrap();
         let scene = s.reload().unwrap();
         s.commit(scene);
-        let c = &s.graphs["root.canvas"];
-        assert_eq!(
-            c.hover
-                .map(|i| c.data.topology.nodes[i as usize].id.as_ref()),
-            Some("b")
-        );
-        assert_eq!(
-            c.last_click
-                .map(|(i, _)| c.data.topology.nodes[i as usize].id.as_ref()),
-            Some("b")
-        );
-        let b = c.data.topology.index("b").unwrap() as usize;
-        assert_eq!(b, 0);
-        assert!(c.pinned[b]);
-        assert_eq!(c.positions[b], positions[1]);
-    }
-
-    #[test]
-    fn restore_discards_pre_restore_snapshot() {
-        let (_f, mut s) = session();
-        let canvas = s.graphs.get_mut("root.canvas").unwrap();
-        let old_revision = canvas.command_revision;
-        canvas.set_layout(&BTreeMap::from([("a".into(), ([123., 45.], true))]));
-        let restored = canvas.positions.to_vec();
+        let c = s.graphs.get_mut("root.canvas").unwrap();
+        let id = |i: Option<u32>| i.map(|i| c.data.topology.nodes[i as usize].id.to_string());
+        assert_eq!(id(c.hover).as_deref(), Some("b"));
+        assert_eq!(id(c.selected).as_deref(), Some("c"));
+        assert_eq!(c.positions[0], positions[1]);
+        // A snapshot computed for the old order would scramble the new one.
+        assert!(c.command_revision > revision);
         let stale = Snapshot {
-            revision: 99,
-            command_revision: old_revision,
-            positions: vec![[900., 900.]; restored.len()].into(),
+            command_revision: revision,
+            positions: vec![[900., 900.]; 3].into(),
             settled: false,
         };
-        assert!(!canvas.apply_snapshot(stale));
-        assert_eq!(canvas.positions.to_vec(), restored);
+        let kept = c.positions.to_vec();
+        assert!(!c.apply_snapshot(stale));
+        assert_eq!(c.positions.to_vec(), kept);
     }
 
     #[test]
-    fn graph_canvas_renders_hovers_selects_pans_zooms_and_pins() {
+    fn graph_canvas_renders_hovers_selects_pans_and_zooms() {
         let (f, mut s) = session();
-        let graphs = s
+        let graphs: Vec<_> = s
             .current
             .primitives
             .iter()
-            .filter(|p| matches!(p, Primitive::Graph { .. }))
-            .count();
-        assert_eq!(graphs, 1);
-        let Some(Primitive::Graph { geometry, .. }) = s
-            .current
-            .primitives
-            .iter()
-            .find(|p| matches!(p, Primitive::Graph { .. }))
-        else {
-            unreachable!()
-        };
-        assert_eq!(geometry.positions.len(), 3);
-        assert_eq!(&*geometry.edges, &[[0, 1], [1, 2]]);
-        assert_eq!(&*geometry.highlighted, &[true, false, false]);
+            .filter_map(|p| match p {
+                Primitive::Graph { geometry, .. } => Some(geometry.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(graphs.len(), 1);
+        assert_eq!(graphs[0].positions.len(), 3);
+        assert_eq!(&*graphs[0].edges, &[[0, 1], [1, 2]]);
         let labels: Vec<_> = s
             .current
             .primitives
@@ -1204,68 +892,42 @@ edges={{from="b",to="c"},{from="c",to="a"}},style={node_radius=1}}}"#;
         let (ax, ay) = screen(&s, 0);
         let scene = s.hover(ax, ay).unwrap().unwrap();
         s.commit(scene);
-        assert_eq!(s.stores.get("hovered"), Some(&Value::Text("a".into())));
+        assert_eq!(text(&s, "hovered"), Some(Value::Text("a".into())));
         let (ex, ey) = empty_point(&s);
         let scene = s.hover(ex, ey).unwrap().unwrap();
         s.commit(scene);
-        assert_eq!(s.stores.get("hovered"), Some(&Value::Text(String::new())));
+        assert_eq!(text(&s, "hovered"), Some(Value::Text(String::new())));
 
         assert!(s.click(ax, ay).unwrap().is_none());
         let scene = s.release().unwrap().unwrap();
         s.commit(scene);
-        assert_eq!(s.stores.get("selected"), Some(&Value::Text("a".into())));
+        assert_eq!(text(&s, "selected"), Some(Value::Text("a".into())));
         assert_eq!(s.graphs["root.canvas"].selected, Some(0));
-        s.click(ax, ay).unwrap();
-        let scene = s.release().unwrap().unwrap();
-        s.commit(scene);
-        assert_eq!(events(&s), 1., "double click activates");
 
+        // A drag pans, even from a node, and selects nothing.
+        let center = s.graphs["root.canvas"].camera.center;
         let (bx, by) = screen(&s, 1);
         s.click(bx, by).unwrap();
-        let scene = s.drag(bx + 30., by + 10.).unwrap().unwrap();
-        s.commit(scene);
-        assert!(s.graphs["root.canvas"].pinned[1]);
-        let scene = s.release().unwrap().unwrap();
-        s.commit(scene);
-        assert_eq!(events(&s), 2., "node drag pins");
-
-        let zoom = s.graphs["root.canvas"].camera.zoom;
-        let scene = s.scroll(ax, ay, -300.).unwrap().unwrap();
-        s.commit(scene);
-        assert!(s.graphs["root.canvas"].camera.zoom > zoom);
-        assert_eq!(events(&s), 3., "zoom reports the view");
-
-        let center = s.graphs["root.canvas"].camera.center;
-        let (ex, ey) = empty_point(&s);
-        s.click(ex, ey).unwrap();
-        let scene = s.drag(ex + 40., ey + 30.).unwrap().unwrap();
+        let scene = s.drag(bx + 40., by + 30.).unwrap().unwrap();
         s.commit(scene);
         assert_ne!(s.graphs["root.canvas"].camera.center, center);
-        let scene = s.release().unwrap().unwrap();
-        s.commit(scene);
-        assert_eq!(events(&s), 4., "pan reports the view");
+        assert!(s.release().unwrap().is_none());
+        assert_eq!(s.graphs["root.canvas"].selected, Some(0));
 
-        let layout = s.graph_layout("root.canvas").unwrap();
-        assert_eq!(layout.len(), 3);
-        assert!(layout["a"].1 && layout["b"].1);
+        let zoom = s.graphs["root.canvas"].camera.zoom;
+        let scene = s.scroll(200., 150., -300.).unwrap().unwrap();
+        s.commit(scene);
+        assert!(s.graphs["root.canvas"].camera.zoom > zoom);
         let positions = s.graphs["root.canvas"].positions.to_vec();
 
         // A rename reaches the view, not the worker: positions stay where they were.
+        let revision = s.graphs["root.canvas"].command_revision;
         fs::write(f.0.join("ui/main.luau"), view("Renamed")).unwrap();
         let scene = s.reload().unwrap();
         s.commit(scene);
-        assert_eq!(s.graphs["root.canvas"].positions.to_vec(), positions);
-        assert_eq!(
-            s.graphs["root.canvas"].data.topology.nodes[1]
-                .label
-                .as_ref(),
-            "Renamed"
-        );
-
-        let mut saved = layout;
-        saved.get_mut("c").unwrap().0 = [123., 45.];
-        let scene = s.set_graph_layout("root.canvas", &saved).unwrap().unwrap();
-        s.commit(scene);
-        assert_eq!(s.graphs["root.canvas"].positions[2], [123., 45.]);
+        let c = &s.graphs["root.canvas"];
+        assert_eq!(c.positions.to_vec(), positions);
+        assert_eq!(c.command_revision, revision);
+        assert_eq!(c.data.topology.nodes[1].label.as_ref(), "Renamed");
     }
 }

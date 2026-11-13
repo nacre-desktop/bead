@@ -400,20 +400,13 @@ return function(ui, tokens)
     end
     function kit.List(p) return ui.Scroll(props(p,{grow=1})) end
     function kit.ListRow(p) return kit.Button(props(p,{height=40,width="fill",text_align="left"})) end
-    -- A graph canvas (spec 0232). `nodes={{id,label?,group?,weight?,pinned?}}` and `edges={{from,to}}` are
-    -- handed to Rust once per change (or pass `graph=ui.graph(nodes, edges)` from a module to hand them over
-    -- once and let the tables go); Rust reconciles by id and owns layout, hit testing, pan, zoom, hover and
-    -- the selection ring.
-    -- Actions get node ids (`on_hover` gets "" when nothing is hovered); `on_pin` gets `{id,x,y}` after a
-    -- node drag and `on_view_changed` gets `{zoom,cx,cy}`. `style` holds palette roles (`node`, `edge`,
-    -- `hover`, `selected`, `highlight`, `label`) and numbers (`node_radius`, `label_size`, `label_zoom`,
-    -- `max_labels`, `lod_zoom`, `far_edge_alpha`, `dim_alpha`); `highlight` and `hidden_groups` are lists.
-    function kit.GraphCanvas(p)
-        local out=props(p,{width="fill",height="fill",fill="surface",radius=tokens.radii.small},{selected=true,nodes=true,edges=true})
-        out.selected_node=p.selected
-        out.graph=p.graph or ui.graph(p.nodes or {}, p.edges or {})
-        return ui.Graph(out)
-    end
+    -- A graph canvas (spec 0232). `graph=ui.graph(nodes, edges)` hands `{{id,label?,weight?}}` and
+    -- `{{from,to}}` to Rust once (from a module, so the tables can go); Rust reconciles by id and owns
+    -- layout, hit testing, pan, zoom, hover, selection and labels. `on_hover` gets the node id ("" when
+    -- nothing is hovered) and `on_select` the clicked node's id. `style` holds palette roles (`node`,
+    -- `edge`, `hover`, `selected`, `label`) and numbers (`node_radius`, `label_size`, `label_zoom`,
+    -- `max_labels`, `lod_zoom`, `far_edge_alpha`).
+    function kit.GraphCanvas(p) return ui.Graph(props(p,{width="fill",height="fill",fill="surface",radius=tokens.radii.small})) end
     function kit.Card(p) return ui.Column(props(p,{padding=tokens.spacing.md,gap=tokens.spacing.sm,radius=tokens.radii.medium,fill="surfaceContainer"})) end
     function kit.TextInput(p) return ui.TextInput(props(p,{height=40,padding=tokens.spacing.sm,radius=tokens.radii.small,font_size=tokens.text.body*4/3})) end
     function kit.Pill(p) return ui.Row(p) end

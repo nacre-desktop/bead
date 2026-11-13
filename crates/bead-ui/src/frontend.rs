@@ -1349,6 +1349,10 @@ impl FrontEnd for LuauFrontEnd {
             // The expanded size, without a second walk (memo markers count twice).
             Ok((raw, 8 * bead_core::cache::MIB - remaining))
         });
+        // A graph hand-over leaves its Luau tables as garbage and the VM may idle from now on.
+        if crate::graph_data::handed_over() {
+            let _ = lua.gc_collect();
+        }
         // Live VM allocation after this build (retained module state plus
         // not-yet-collected garbage), not an allocator high-water estimate.
         self.vm_build_bytes.set(lua.used_memory());
