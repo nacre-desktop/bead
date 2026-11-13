@@ -442,6 +442,8 @@ impl Script {
                 return Err(self.error(format!("{id} is Rust-owned and read-only to actions")));
             }
         }
+        // Unchanged values are already validated durable state.
+        changes.retain(|id, value| stores.get(id) != Some(value));
         let mut next = stores.clone();
         next.commit(changes).map_err(|e| self.error(e))?;
         Ok(next)
