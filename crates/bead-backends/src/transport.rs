@@ -5,9 +5,9 @@ use std::{
     ffi::OsString,
     io::{BufRead, BufReader, Read, Write},
     os::unix::net::UnixStream,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
-        Mutex, Weak,
+        Condvar, Mutex, Weak,
         atomic::{AtomicBool, AtomicU64, Ordering},
     },
     thread,
@@ -24,8 +24,9 @@ struct Inner {
     next: AtomicU64,
     stopping: AtomicBool,
     stream: Mutex<Option<UnixStream>>,
+    backoff: (Mutex<()>, Condvar),
 }
-struct Client(Arc<Inner>);
+struct Client(Arc<Inner>, Option<thread::JoinHandle<()>>);
 pub fn connect(backend: &str, path: PathBuf) -> Arc<dyn Backend> {
     let s = Snapshot {
         backend: backend.into(),
@@ -42,13 +43,14 @@ pub fn connect(backend: &str, path: PathBuf) -> Arc<dyn Backend> {
         next: AtomicU64::new(1),
         stopping: AtomicBool::new(false),
         stream: Mutex::new(None),
+        backoff: (Mutex::new(()), Condvar::new()),
     });
     let weak = Arc::downgrade(&inner);
-    thread::Builder::new()
+    let worker = thread::Builder::new()
         .name(format!("bead-{backend}-ipc"))
         .spawn(move || worker(weak))
         .expect("spawn compositor IPC worker");
-    Arc::new(Client(inner))
+    Arc::new(Client(inner, Some(worker)))
 }
 fn selection(
     niri: Option<OsString>,
@@ -118,27 +120,18 @@ impl Backend for Client {
 impl Drop for Client {
     fn drop(&mut self) {
         self.0.stopping.store(true, Ordering::Release);
-        if let Some(stream) = self
-            .0
-            .stream
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .as_ref()
+        // Pair with the backoff lock so a stop cannot miss the worker's wait.
         {
+            let _waiting = self.0.backoff.0.lock().unwrap();
+            self.0.backoff.1.notify_all();
+        }
+        if let Some(stream) = self.0.stream.lock().unwrap().as_ref() {
             let _ = stream.shutdown(std::net::Shutdown::Both);
         }
-    }
-}
-impl Drop for Inner {
-    fn drop(&mut self) {
-        self.stopping.store(true, Ordering::Release);
-        if let Some(s) = self
-            .stream
-            .get_mut()
-            .unwrap_or_else(|e| e.into_inner())
-            .take()
+        if let Some(worker) = self.1.take()
+            && worker.thread().id() != thread::current().id()
         {
-            let _ = s.shutdown(std::net::Shutdown::Both);
+            let _ = worker.join();
         }
     }
 }
@@ -160,6 +153,9 @@ fn publish(i: &Inner, mut s: Snapshot) {
     s.epoch = guard.epoch;
     s.connected = true;
     s.capabilities = capabilities(&i.backend);
+    if *guard == s {
+        return;
+    }
     *guard = s;
     let snap = Arc::new(guard.clone());
     drop(guard);
@@ -201,8 +197,12 @@ fn worker(weak: Weak<Inner>) {
         attempt = attempt.saturating_add(1);
         let delay =
             Duration::from_millis((100u64.saturating_mul(1u64 << attempt.min(6))).min(5000));
-        drop(i);
-        thread::sleep(delay);
+        let waiting = i.backoff.0.lock().unwrap();
+        let _wait = i
+            .backoff
+            .1
+            .wait_timeout_while(waiting, delay, |_| !i.stopping.load(Ordering::Acquire))
+            .unwrap();
     }
 }
 fn niri_stream(i: &Arc<Inner>) -> Result<(), String> {
@@ -258,9 +258,9 @@ fn niri_stream(i: &Arc<Inner>) -> Result<(), String> {
                 emit(i, Event::Error(Error::Protocol(error)));
             }
         }
-        if let Some(output) = state.focused_workspace().and_then(|w| w.output.as_ref()) {
+        if let Some(output) = state.focused_workspace().and_then(|w| w.output.clone()) {
             for screen in &mut state.outputs {
-                screen.focused = &screen.id == output;
+                screen.focused = screen.id == output;
             }
         }
         publish(i, state.clone());
@@ -269,7 +269,7 @@ fn niri_stream(i: &Arc<Inner>) -> Result<(), String> {
         }
     }
 }
-fn niri_req(path: &PathBuf, req: &Value) -> Result<Value, String> {
+fn niri_req(path: &Path, req: &Value) -> Result<Value, String> {
     let mut s = UnixStream::connect(path).map_err(|e| e.to_string())?;
     s.set_read_timeout(Some(Duration::from_secs(2)))
         .map_err(|e| e.to_string())?;
@@ -281,32 +281,26 @@ fn niri_req(path: &PathBuf, req: &Value) -> Result<Value, String> {
     s.shutdown(std::net::Shutdown::Write)
         .map_err(|e| e.to_string())?;
     let mut b = String::new();
-    s.read_to_string(&mut b).map_err(|e| e.to_string())?;
+    BufReader::new(s)
+        .read_line(&mut b)
+        .map_err(|e| e.to_string())?;
     serde_json::from_str(b.trim()).map_err(|e| e.to_string())
 }
 fn unwrap_ok(v: Value) -> Result<Value, String> {
     if let Some(e) = v.get("Err") {
         Err(e.to_string())
     } else {
-        Ok(v.get("Ok").cloned().unwrap_or(v))
+        v.get("Ok")
+            .cloned()
+            .ok_or_else(|| "missing niri Ok/Err reply".into())
     }
 }
-fn refresh_niri_outputs(path: &PathBuf, s: &mut Snapshot) -> Result<(), String> {
+fn refresh_niri_outputs(path: &Path, s: &mut Snapshot) -> Result<(), String> {
     let v = unwrap_ok(niri_req(path, &json!("Outputs"))?)?;
-    let outputs = v.get("Outputs").unwrap_or(&v);
+    let outputs = &v["Outputs"];
     let Some(m) = outputs.as_object() else {
         return Err("niri outputs was not a map".into());
     };
-    let focused = niri_req(path, &json!("FocusedOutput"))
-        .ok()
-        .and_then(|v| unwrap_ok(v).ok())
-        .and_then(|v| {
-            v.get("FocusedOutput")
-                .unwrap_or(&v)
-                .get("name")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        });
     s.outputs = m
         .iter()
         .map(|(name, v)| {
@@ -327,7 +321,7 @@ fn refresh_niri_outputs(path: &PathBuf, s: &mut Snapshot) -> Result<(), String> 
                 refresh_mhz: mode["refresh_rate"].as_u64().unwrap_or(0) as u32,
                 x: l["x"].as_i64().unwrap_or(0) as i32,
                 y: l["y"].as_i64().unwrap_or(0) as i32,
-                focused: focused.as_deref() == Some(name.as_str()),
+                focused: false,
             }
         })
         .collect();
@@ -342,10 +336,7 @@ fn apply_niri_event(s: &mut Snapshot, v: &Value) {
             .iter()
             .map(|x| {
                 let id = x["id"].as_u64().unwrap_or(0);
-                let n = x["name"]
-                    .as_str()
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| x["idx"].as_u64().unwrap_or(0).to_string());
+                let n = x["name"].as_str().unwrap_or("").to_owned();
                 Workspace {
                     id: stable_id("niri", s.epoch, "workspace", id),
                     name: n,
@@ -356,22 +347,19 @@ fn apply_niri_event(s: &mut Snapshot, v: &Value) {
                     active: x["is_active"].as_bool().unwrap_or(false),
                     focused: x["is_focused"].as_bool().unwrap_or(false),
                     urgent: x["is_urgent"].as_bool().unwrap_or(false),
-                    fixed_slot: false,
+                    fixed_slot: x["name"].is_string(),
                     visiting: false,
                 }
             })
             .collect();
     }
-    let workspace_outputs: std::collections::BTreeMap<Id, Option<Id>> = s
-        .workspaces
-        .iter()
-        .map(|w| (w.id.clone(), w.output.clone()))
-        .collect();
-    for window in &mut s.windows {
-        if let Some(workspace) = &window.workspace {
-            if let Some(output) = workspace_outputs.get(workspace) {
-                window.output = output.clone();
-            }
+    if v.get("WorkspacesChanged").is_some() {
+        for window in &mut s.windows {
+            window.output = s
+                .workspaces
+                .iter()
+                .find(|w| Some(&w.id) == window.workspace.as_ref())
+                .and_then(|w| w.output.clone());
         }
     }
     if let Some(w) = v
@@ -382,6 +370,11 @@ fn apply_niri_event(s: &mut Snapshot, v: &Value) {
     }
     if let Some(x) = v.get("WindowOpenedOrChanged").and_then(|x| x.get("window")) {
         if let Some(w) = niri_window(s, x) {
+            if w.focused {
+                for old in &mut s.windows {
+                    old.focused = false;
+                }
+            }
             if let Some(old) = s.windows.iter_mut().find(|q| q.id == w.id) {
                 *old = w
             } else {
@@ -462,14 +455,14 @@ fn niri_window(s: &Snapshot, x: &Value) -> Option<Window> {
         urgent: x["is_urgent"].as_bool().unwrap_or(false),
     })
 }
-fn hypr_socket(dir: &PathBuf, event: bool) -> PathBuf {
+fn hypr_socket(dir: &Path, event: bool) -> PathBuf {
     dir.join(if event {
         ".socket2.sock"
     } else {
         ".socket.sock"
     })
 }
-fn hypr_request(dir: &PathBuf, cmd: &str) -> Result<String, String> {
+fn hypr_request(dir: &Path, cmd: &str) -> Result<String, String> {
     let mut s = UnixStream::connect(hypr_socket(dir, false)).map_err(|e| e.to_string())?;
     s.set_read_timeout(Some(Duration::from_secs(2)))
         .map_err(|e| e.to_string())?;
@@ -486,7 +479,7 @@ fn hypr_request(dir: &PathBuf, cmd: &str) -> Result<String, String> {
         Ok(out)
     }
 }
-fn hypr_json(dir: &PathBuf, cmd: &str) -> Result<Value, String> {
+fn hypr_json(dir: &Path, cmd: &str) -> Result<Value, String> {
     serde_json::from_str(&hypr_request(dir, &format!("j/{cmd}"))?)
         .map_err(|e| format!("invalid Hyprland {cmd} JSON: {e}"))
 }
@@ -549,26 +542,25 @@ fn hypr_stream(i: &Arc<Inner>) -> Result<(), String> {
                 | "monitorremoved"
                 | "monitorremovedv2"
                 | "fullscreen"
+                | "renameworkspace"
+                | "configreloaded"
+                | "activespecial"
+                | "activespecialv2"
         ) {
             refresh_hypr(&i.path, &mut state)?;
-            if matches!(kind, "activewindow" | "activewindowv2") {
-                for window in &mut state.windows {
-                    window.urgent = false;
-                }
-                for workspace in &mut state.workspaces {
-                    workspace.urgent = false;
-                }
-            }
             if kind == "urgent" {
                 let address = line
                     .split_once(">>")
                     .map(|(_, data)| data.trim())
                     .unwrap_or("");
-                if let Some(window) = state
-                    .windows
-                    .iter_mut()
-                    .find(|w| w.id.0.ends_with(&format!(":{address}")))
-                {
+                if let Some(window) = state.windows.iter_mut().find(|w| {
+                    w.id.0
+                        .rsplit(':')
+                        .next()
+                        .unwrap_or("")
+                        .trim_start_matches("0x")
+                        == address.trim_start_matches("0x")
+                }) {
                     window.urgent = true;
                 }
                 for ws in &mut state.workspaces {
@@ -585,7 +577,7 @@ fn hypr_stream(i: &Arc<Inner>) -> Result<(), String> {
         }
     }
 }
-fn refresh_hypr(dir: &PathBuf, s: &mut Snapshot) -> Result<(), String> {
+fn refresh_hypr(dir: &Path, s: &mut Snapshot) -> Result<(), String> {
     let monitors = hypr_json(dir, "monitors")?;
     let workspaces = hypr_json(dir, "workspaces")?;
     let clients = hypr_json(dir, "clients")?;
@@ -632,15 +624,15 @@ fn refresh_hypr(dir: &PathBuf, s: &mut Snapshot) -> Result<(), String> {
     s.workspaces = wss
         .iter()
         .map(|w| {
-            let native = w["id"].as_i64().unwrap_or(0);
+            let native = strf(&w["id"]);
             let name = strf(&w["name"]);
             let mon = strf(&w["monitor"]);
             let active = mons
                 .iter()
-                .any(|m| m["activeWorkspace"]["id"].as_i64() == Some(native));
+                .any(|m| strf(&m["activeWorkspace"]["id"]) == native);
             Workspace {
-                id: stable_id("hyprland", s.epoch, "workspace", native),
-                index: native,
+                id: stable_id("hyprland", s.epoch, "workspace", &native),
+                index: w["id"].as_i64().or_else(|| name.parse().ok()).unwrap_or(-1),
                 name,
                 output: output_id(&mon),
                 active,
@@ -655,10 +647,7 @@ fn refresh_hypr(dir: &PathBuf, s: &mut Snapshot) -> Result<(), String> {
             }
         })
         .collect();
-    let active_address = hypr_json(dir, "activewindow")
-        .ok()
-        .and_then(|w| w.get("address").map(strf))
-        .unwrap_or_default();
+    let active_address = strf(&hypr_json(dir, "activewindow")?["address"]);
     let old_urgent: std::collections::HashSet<String> = s
         .windows
         .iter()
@@ -669,24 +658,25 @@ fn refresh_hypr(dir: &PathBuf, s: &mut Snapshot) -> Result<(), String> {
         .iter()
         .map(|w| {
             let native = strf(&w["address"]);
-            let wid = w["workspace"]["id"].as_i64().unwrap_or(0);
+            let wid = strf(&w["workspace"]["id"]);
             let ws = s
                 .workspaces
                 .iter()
-                .find(|q| q.id == stable_id("hyprland", s.epoch, "workspace", wid));
+                .find(|q| q.id == stable_id("hyprland", s.epoch, "workspace", &wid));
             let mon = strf(&w["monitor"]);
             Window {
                 id: stable_id("hyprland", s.epoch, "window", &native),
                 title: strf(&w["title"]),
                 app_id: w.get("class").and_then(Value::as_str).unwrap_or("").into(),
-                workspace: Some(stable_id("hyprland", s.epoch, "workspace", wid)),
+                workspace: Some(stable_id("hyprland", s.epoch, "workspace", &wid)),
                 output: ws
                     .and_then(|q| q.output.clone())
                     .or_else(|| output_id(&mon)),
-                focused: native == active_address,
+                focused: !active_address.is_empty() && native == active_address,
                 floating: w["floating"].as_bool().unwrap_or(false),
                 fullscreen: None,
-                urgent: w["urgent"].as_bool().unwrap_or(false) || old_urgent.contains(&native),
+                urgent: native != active_address
+                    && (w["urgent"].as_bool().unwrap_or(false) || old_urgent.contains(&native)),
             }
         })
         .collect();
@@ -715,17 +705,23 @@ fn send_action(i: &Inner, a: Action) -> Result<(), Error> {
             if i.backend == "niri" {
                 json!({"Action":{"FocusWorkspace":{"reference":{"Id":n.parse::<u64>().map_err(|_|Error::UnknownId(workspace.0.clone()))?}}}}).to_string()
             } else {
-                let workspace = n
-                    .parse::<i64>()
-                    .map_err(|_| Error::UnknownId(workspace.0.clone()))?;
-                format!("/dispatch workspace {workspace}")
+                let target = s.workspaces.iter().find(|w| w.id == workspace).unwrap();
+                let selector = if n.parse::<i64>().is_ok_and(|id| id > 0) {
+                    n
+                } else {
+                    format!("name:{}", target.name)
+                };
+                if selector.bytes().any(|b| b.is_ascii_control() || b == b';') {
+                    return Err(Error::Protocol(
+                        "workspace name contains command syntax".into(),
+                    ));
+                }
+                format!("/dispatch workspace {selector}")
             }
         }
         Action::SwitchWorkspaceIndex { index } => {
-            if index < 0 {
-                return Err(Error::Protocol(
-                    "workspace index must be non-negative".into(),
-                ));
+            if index <= 0 {
+                return Err(Error::Protocol("workspace index must be positive".into()));
             }
             if i.backend == "niri" {
                 let idx = u8::try_from(index)
@@ -796,13 +792,13 @@ fn validate_id(s: &Snapshot, id: &Id, kind: &str) -> Result<String, Error> {
     let prefix = format!("{}:{}:{kind}:", s.backend, s.epoch);
     id.0.strip_prefix(&prefix)
         .filter(|n| {
-            match kind {
-                "workspace" => s.workspaces.iter().any(|x| x.id == *id),
-                "window" => s.windows.iter().any(|x| x.id == *id),
-                "output" => s.outputs.iter().any(|x| x.id == *id),
-                _ => false,
-            }
-            &&!n.is_empty()
+            !n.is_empty()
+                && match kind {
+                    "workspace" => s.workspaces.iter().any(|x| x.id == *id),
+                    "window" => s.windows.iter().any(|x| x.id == *id),
+                    "output" => s.outputs.iter().any(|x| x.id == *id),
+                    _ => false,
+                }
         })
         .map(str::to_owned)
         .ok_or_else(|| Error::UnknownId(id.0.clone()))
@@ -927,6 +923,7 @@ mod tests {
             next: AtomicU64::new(1),
             stopping: AtomicBool::new(false),
             stream: Mutex::new(None),
+            backoff: (Mutex::new(()), Condvar::new()),
         };
         send_action(&i, Action::SwitchWorkspace { workspace }).unwrap();
         assert_eq!(

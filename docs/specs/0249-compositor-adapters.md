@@ -1,7 +1,7 @@
 # 0249 — Compositor adapters
 
 `bead-backends` provides clean-room niri and Hyprland Unix-socket clients behind
-the default-on `transports` feature. They implement the existing neutral
+the default-on `compositors` feature. They implement the existing neutral
 `Backend`, `Snapshot`, subscription and error contracts using only the standard
 library, serde and serde_json. Disabling the feature retains the neutral types.
 Detection prefers a non-empty `NIRI_SOCKET`, then `HYPRLAND_INSTANCE_SIGNATURE`
