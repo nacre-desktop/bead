@@ -3,11 +3,11 @@ title = "Hello status"
 
 [layer]
 edge = "top"
-size = 42
+size = 76
 exclusive = true
 
 [services]
-desktop = ["clock", "battery", "audio", "media", "power"]
+desktop = ["clock", "battery", "audio", "media", "power", "workspaces"]
 
 [commands.kernel]
 argv = ["uname", "-r"]

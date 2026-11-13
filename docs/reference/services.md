@@ -29,6 +29,9 @@ All values are under `desktop.`. Missing numeric readings use `-1`; missing stri
 | `media.player`, `media.status`, `media.title`, `media.artist`, `media.album`, `media.art_url` | Text | `media` |
 | `media.length_ms`, `media.position_ms` | Number, -1 if unavailable | `media` |
 | `media.can_play_pause`, `media.can_next`, `media.can_previous`, `media.can_seek` | Bool | `media` |
+| `workspaces` | List of `{id: Text, index: Number, name: Text, output: Text, active: Bool, focused: Bool, urgent: Bool}` | `workspaces` |
+| `window.title`, `window.app_id` | Text; focused window, empty when none | `workspaces` |
+| `compositor` | Text: `niri`, `hyprland`, or empty when undetected | `workspaces` |
 | `power.available` | Bool | `power` |
 | `power.profile`, `power.degraded` | Text | `power` |
 | `power.profiles` | List of `{name: Text}` records, in daemon order | `power` |
@@ -54,6 +57,8 @@ local devices = stores["desktop.bluetooth_devices.devices"]
 
 The optional `network_devices` service follows NetworkManager and is separate from the `network` summary; see [spec 0247](../specs/0247-network.md). `connect` takes an SSID from `access_points`: known networks use their saved profile, open networks are added without secrets, and other secured networks report `secured network needs a password agent`.
 
+The optional `workspaces` service starts one compositor adapter shared by all views. Detection prefers a non-empty `$NIRI_SOCKET`, then `$HYPRLAND_INSTANCE_SIGNATURE` under `$XDG_RUNTIME_DIR/hypr`. Updates follow IPC events; reconnect uses bounded exponential backoff. Workspace `id` and `output` are opaque Text values (`output` is empty when unknown). Indices are labels, not identities: niri indices are per output, while Hyprland indices are global. Pass the record's `id` to target an exact workspace. No detected compositor means an empty list, empty window fields, and an empty compositor name; focus actions report a clear error. See [spec 0249](../specs/0249-compositor-adapters.md) and [hello-status](../../examples/hello-status/).
+
 ## Actions
 
 | Action | Argument | Requirement and effect |
@@ -72,6 +77,9 @@ The optional `network_devices` service follows NetworkManager and is separate fr
 | `desktop.network_devices.scan`, `desktop.network_devices.disconnect` | None | Requires `network_devices`; scans on the first Wi-Fi device (at most every 10 seconds), or disconnects the first connected one. |
 | `desktop.network_devices.connect` | SSID Text | Requires `network_devices`; activates a known or open network. |
 | `desktop.network_devices.forget` | Saved connection id Text | Requires `network_devices`; deletes that saved connection; ambiguous ids are refused. |
+
+| `desktop.workspace.focus` | Number integer index or opaque workspace ID Text | Requires `workspaces`; focuses a workspace. |
+| `desktop.window.focus` | Opaque window ID Text | Requires `workspaces`; focuses a window. |
 | `command.NAME` | Any/unused | Runs declared command `NAME`; unknown names produce no result. |
 
 Wrong arguments produce explicit action errors: `desktop.volume expects a number`, `desktop.mute expects a boolean`, and tray actions require a text item id. Desktop actions against undeclared services report the missing service. Commands run without a shell; output, timeout, and interval limits are in the [manifest reference](manifest.md).

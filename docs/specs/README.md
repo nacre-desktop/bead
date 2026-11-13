@@ -24,5 +24,6 @@ This index contains current framework contracts and repository-boundary decision
 | [0245 — Shell interaction CPU](0245-interaction-cpu.md) | Interaction CPU attribution and renderer/power trade-offs |
 | [0246 — Bluetooth devices service](0246-bluetooth.md) | Event-driven BlueZ adapter and device snapshots and controls for folder apps |
 | [0247 — Network devices service](0247-network.md) | Event-driven NetworkManager device, access point and saved-connection snapshots and controls for folder apps |
+| [0249 — Compositor adapters](0249-compositor-adapters.md) | Clean-room niri and Hyprland IPC snapshots and folder workspace focus |
 
 This index covers Bead framework contracts. See the [documentation index](../README.md) for the current framework overview and the [framework ownership decision](0214-framework-split.md).

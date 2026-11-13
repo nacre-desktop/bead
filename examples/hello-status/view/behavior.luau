@@ -3,6 +3,18 @@ return {
     stores = {},
     actions = {},
     computed = {
+        ["status.workspaces"] = function(s)
+            local rows = {}
+            for _, workspace in ipairs(s["desktop.workspaces"]) do
+                table.insert(rows, {
+                    id = workspace.id,
+                    label = workspace.name ~= "" and workspace.name or tostring(workspace.index),
+                    fill = workspace.focused and "primary" or "surface",
+                    color = workspace.focused and "onPrimary" or "onSurface",
+                })
+            end
+            return rows
+        end,
         ["status.battery"] = function(s)
             if s["desktop.battery.available"] then
                 return "Battery " .. tostring(s["desktop.battery.percent"]) .. "%"
