@@ -43,6 +43,7 @@ All values are under `desktop.`. Missing numeric readings use `-1`; missing stri
 | `bluetooth_devices.devices` | List of `{path,name,address,icon: Text, paired,connected: Bool, battery: Number or null}` records | `bluetooth_devices` |
 
 `desktop.date` is provided by the `clock` service. Clock seconds updates are leased when `clock` is declared.
+When PipeWire (`audio`) or the system D-Bus is missing or drops, the host retries with exponential backoff capped at 60 s and logs each distinct failure once; it reconnects on the next attempt after the service appears.
 The optional `media` service selects the active MPRIS player using the policy in [spec 0239](../specs/0239-mpris.md). While it is Playing, `media.position_ms` is extrapolated and refreshed at 1 Hz without additional D-Bus reads.
 The optional `power` service follows power-profiles-daemon and publishes its active profile, available profiles, and performance degradation reason as described in [spec 0244](../specs/0244-power-profiles.md).
 The optional `bluetooth_devices` service publishes BlueZ adapters and devices and provides power, scan, connect, disconnect, and forget actions as described in [spec 0246](../specs/0246-bluetooth.md). Declare it in the folder manifest, then pass a selected device path to the connect action:

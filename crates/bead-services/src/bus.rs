@@ -24,8 +24,9 @@ type Objects = HashMap<OwnedObjectPath, HashMap<String, Properties>>;
 
 pub fn run(shared: Arc<Shared>, mut receiver: mpsc::Receiver<Command>, tray_watcher: bool) {
     super::runtime::block_worker_signals();
-    let mut retry = 0;
+    let mut retry = crate::runtime::Retry::new();
     while !shared.stop.load(Ordering::SeqCst) {
+        let started = Instant::now();
         // A bus disconnect ends this executor, cancelling the tray client's owned
         // signal tasks before a replacement connection starts.
         let runtime = match tokio::runtime::Builder::new_current_thread()
@@ -40,9 +41,17 @@ pub fn run(shared: Arc<Shared>, mut receiver: mpsc::Receiver<Command>, tray_watc
         };
         let result = runtime.block_on(connect(&shared, &mut receiver, tray_watcher));
         drop(runtime);
-        match result {
+        let error = match result {
             Ok(()) => break,
-            Err(error) => eprintln!("SERVICE_BUS disconnected: {error}"),
+            Err(error) => error.to_string(),
+        };
+        // A connection that stayed up for a while was live: pace its loss from the start.
+        if started.elapsed() >= crate::runtime::Retry::CAP {
+            retry = crate::runtime::Retry::new();
+        }
+        let (delay, log) = retry.next(Some(error));
+        if let Some(error) = log {
+            eprintln!("SERVICE_BUS disconnected: {error} (retrying with backoff)");
         }
         shared.change(|s| {
             s.battery = Battery::default();
@@ -62,19 +71,7 @@ pub fn run(shared: Arc<Shared>, mut receiver: mpsc::Receiver<Command>, tray_watc
                 }
             }
         }
-        if shared.stop.load(Ordering::SeqCst) {
-            break;
-        }
-        retry = (retry + 1).min(3);
-        let guard = shared
-            .audio_wait
-            .0
-            .lock()
-            .unwrap_or_else(crate::runtime::poisoned);
-        let _ = shared
-            .audio_wait
-            .1
-            .wait_timeout(guard, Duration::from_millis(200u64 << retry));
+        shared.wait_retry(delay);
     }
 }
 pub(crate) async fn system_connection() -> zbus::Result<Connection> {

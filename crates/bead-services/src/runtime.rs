@@ -70,7 +70,47 @@ pub(crate) struct Shared {
     pub audio_sender: Mutex<Option<pipewire::channel::Sender<super::audio::Command>>>,
     pub audio_wait: (Mutex<()>, std::sync::Condvar),
 }
+/// Reconnect pacing for the audio and bus workers: the delay doubles from 400 ms to a
+/// 60 s cap, and each distinct failure is returned for logging once instead of per retry.
+pub(crate) struct Retry {
+    delay: std::time::Duration,
+    logged: Option<String>,
+}
+impl Retry {
+    pub const CAP: std::time::Duration = std::time::Duration::from_secs(60);
+    pub fn new() -> Self {
+        Self {
+            delay: std::time::Duration::from_millis(200),
+            logged: None,
+        }
+    }
+    /// Delay before the next attempt and the error to log, if it is new. `None` means the
+    /// attempt connected, which resets the pacing.
+    pub fn next(&mut self, error: Option<String>) -> (std::time::Duration, Option<String>) {
+        let log = match error {
+            None => {
+                *self = Self::new();
+                None
+            }
+            Some(error) if self.logged.as_ref() == Some(&error) => None,
+            Some(error) => {
+                self.logged = Some(error.clone());
+                Some(error)
+            }
+        };
+        self.delay = (self.delay * 2).min(Self::CAP);
+        (self.delay, log)
+    }
+}
 impl Shared {
+    /// Sleep until the next reconnect attempt or `Desktop::stop`. Checking `stop` under the
+    /// lock that `stop` takes before notifying means a long wait cannot miss the wakeup.
+    pub fn wait_retry(&self, delay: std::time::Duration) {
+        let guard = self.audio_wait.0.lock().unwrap_or_else(poisoned);
+        if !self.stop.load(Ordering::SeqCst) {
+            let _ = self.audio_wait.1.wait_timeout(guard, delay);
+        }
+    }
     /// Wake the clock worker to re-read the lease count; taking the lock first means the worker
     /// either sees the new count under its own lock or is already waiting on the condvar.
     pub fn wake_clock(&self) {
@@ -303,6 +343,7 @@ impl Desktop {
         {
             let _ = sender.send(super::audio::Command::Stop);
         }
+        drop(self.shared.audio_wait.0.lock().unwrap_or_else(poisoned));
         self.shared.audio_wait.1.notify_all();
         for worker in self
             .workers
@@ -425,5 +466,51 @@ mod clock_lease_tests {
             desktop.shared.clock_seconds_leases.load(Ordering::Acquire),
             0
         );
+    }
+}
+
+#[cfg(test)]
+mod retry_tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn reconnects_back_off_to_a_cap_and_log_each_failure_once() {
+        let mut retry = Retry::new();
+        let failed = |retry: &mut Retry, error: &str| retry.next(Some(error.into()));
+        assert_eq!(
+            failed(&mut retry, "Creation failed"),
+            (Duration::from_millis(400), Some("Creation failed".into()))
+        );
+        let delays: Vec<_> = (0..12)
+            .map(|_| failed(&mut retry, "Creation failed"))
+            .collect();
+        assert!(delays.iter().all(|(_, log)| log.is_none()), "{delays:?}");
+        assert_eq!(delays[0].0, Duration::from_millis(800));
+        assert_eq!(delays.last().unwrap().0, Retry::CAP);
+        assert_eq!(failed(&mut retry, "other").1.as_deref(), Some("other"));
+        assert_eq!(retry.next(None), (Duration::from_millis(400), None));
+        assert_eq!(
+            failed(&mut retry, "Creation failed").1.as_deref(),
+            Some("Creation failed")
+        );
+    }
+
+    #[test]
+    fn stop_interrupts_a_capped_retry_wait() {
+        let desktop = Desktop::start_config(Config {
+            audio: false,
+            bus: false,
+            tray_watcher: false,
+        });
+        let shared = desktop.shared.clone();
+        let waiter = std::thread::spawn(move || {
+            let started = Instant::now();
+            shared.wait_retry(Retry::CAP);
+            started.elapsed()
+        });
+        std::thread::sleep(Duration::from_millis(100));
+        desktop.stop();
+        assert!(waiter.join().unwrap() < Duration::from_secs(5));
     }
 }

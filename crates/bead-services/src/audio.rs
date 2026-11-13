@@ -15,7 +15,6 @@ use std::{
     collections::HashMap,
     rc::Rc,
     sync::{Arc, atomic::Ordering},
-    time::Duration,
 };
 type Reply = std::sync::mpsc::Sender<Result<(), String>>;
 pub(crate) enum Command {
@@ -70,29 +69,18 @@ pub(crate) fn spawn(shared: Arc<Shared>) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         super::runtime::block_worker_signals();
         pw::init();
-        let mut retry = 0;
+        let mut retry = crate::runtime::Retry::new();
         while !shared.stop.load(Ordering::SeqCst) {
-            if let Err(error) = connect(&shared) {
-                eprintln!("SERVICE_AUDIO disconnected: {error}");
+            let (delay, log) = retry.next(connect(&shared).err().map(|e| e.to_string()));
+            if let Some(error) = log {
+                eprintln!("SERVICE_AUDIO disconnected: {error} (retrying with backoff)");
             }
             *shared
                 .audio_sender
                 .lock()
                 .unwrap_or_else(crate::runtime::poisoned) = None;
             shared.change(|s| s.audio = Audio::default());
-            if shared.stop.load(Ordering::SeqCst) {
-                break;
-            }
-            retry = (retry + 1).min(3);
-            let guard = shared
-                .audio_wait
-                .0
-                .lock()
-                .unwrap_or_else(crate::runtime::poisoned);
-            let _ = shared
-                .audio_wait
-                .1
-                .wait_timeout(guard, Duration::from_millis(200u64 << retry));
+            shared.wait_retry(delay);
         }
     })
 }
