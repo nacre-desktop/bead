@@ -27,6 +27,10 @@ version="=0.25.1"
 
 [dependencies.accesskit_unix]
 version="=0.24.0"
+# The default async-io executor keeps an async-io reactor and a blocking pool thread alive
+# (one 500 ms wakeup each) for the whole process; the tokio path drives zbus on one thread.
+default-features=false
+features=["tokio"]
 
 [dev-dependencies]
 wayland-server = "=0.31.11"

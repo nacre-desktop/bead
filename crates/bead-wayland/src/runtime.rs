@@ -314,6 +314,11 @@ pub fn run_runtime(
     renderer: Box<dyn Renderer>,
     runtime: Option<Box<dyn SceneSource>>,
 ) -> Result<(), Box<dyn Error>> {
+    // Panel workers come and go; each leaves a glibc arena of freed pages behind (0271: ~1 MiB at idle).
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    if std::env::var_os("MALLOC_ARENA_MAX").is_none() {
+        unsafe { libc::mallopt(libc::M_ARENA_MAX, 2) };
+    }
     if options.namespace.is_empty()
         || options.namespace.len() > 128
         || options.namespace.contains('\0')

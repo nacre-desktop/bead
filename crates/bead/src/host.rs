@@ -1418,6 +1418,20 @@ impl SceneSource for FolderView {
             | UiEvent::Scroll { x, y, .. } => self.pointer = Some((*x, *y)),
             _ => {}
         }
+        // A closed, kept-alive panel stops receiving service wakeups; reopening registers
+        // again, which delivers one fresh model hint.
+        if let (UiEvent::PanelVisibility(open), Some(runtime), Some(wakeup)) =
+            (&event, &self.runtime, &self.wakeup)
+        {
+            match (open, self.registration) {
+                (false, Some(id)) => {
+                    runtime.unregister(id);
+                    self.registration = None;
+                }
+                (true, None) => self.registration = Some(runtime.register(wakeup.clone())),
+                _ => {}
+            }
+        }
         // Host-owned actions never reach behavior.luau: input updates focus and press
         // state only, then the action is routed below.
         let host_action = match &event {
@@ -3215,5 +3229,40 @@ mod tests {
         assert!(local.session.state_summary().contains("\"count\":1"));
 
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn closed_panel_gets_no_service_wakeups_and_resubscribes_on_reopen() {
+        use std::sync::mpsc;
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/hello-status");
+        let runtime = FolderServicesRuntime::start(FolderServices {
+            desktop: BTreeSet::from(["clock".into()]),
+            commands: BTreeMap::new(),
+        })
+        .unwrap();
+        let mut view = FolderView::load_with_runtime(
+            root,
+            "view/main.luau".into(),
+            "palette.json".into(),
+            "Status",
+            (1280, 42),
+            runtime.clone(),
+        )
+        .unwrap();
+        let (tx, rx) = mpsc::channel();
+        view.services(Box::new(move |event| {
+            let _ = tx.send(event);
+        }));
+        let _ = rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        view.stage(UiEvent::PanelVisibility(false)).unwrap();
+        runtime.signals.notify();
+        assert!(rx.recv_timeout(Duration::from_millis(100)).is_err());
+        view.stage(UiEvent::PanelVisibility(true)).unwrap();
+        assert!(matches!(
+            rx.recv_timeout(Duration::from_secs(1)),
+            Ok(UiEvent::Model(_))
+        ));
+        runtime.signals.notify();
+        assert!(rx.recv_timeout(Duration::from_secs(1)).is_ok());
     }
 }
