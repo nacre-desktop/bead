@@ -66,7 +66,9 @@ static-body open/close; making it the default needs the compositor side and is n
 - Tests: every curve (endpoints, monotonicity, out-back overshoot bound, spring settle), marker
   pacing and retarget, pulse loop, paint-only patches (0 Luau, 0 layout, exact geometry, node boxes
   follow), layout markers (0 Luau), reveal with a body at 0/25/50/100 % and after a retarget, grow
-  damage within consecutive bodies, `a_frozen_slide_damages_only_where_the_group_was_and_is`.
+  damage within consecutive bodies, `a_frozen_slide_damages_only_where_the_group_was_and_is`,
+  `status_peek_draws_its_first_line_while_revealing_and_at_rest` (worker bake, reveal and
+  damage-only repaints of the example peek at a 0 and a 32 px scene margin).
 - Surface damage (Platform NN0042): frame-based panels send `FrameDamage` rects (body and previous
   body; a paint-only marker frame only its node, 19,840 B). A reopened non-reveal panel paints from
   its frozen CPU snapshot and sent `Damage::full` every frame; it now sends the group's old and new
