@@ -364,19 +364,21 @@ fn content_body(scene: &Scene) -> Option<bead_render::Rect> {
         })
 }
 
+/// `margin`: the scene's shadow margin, `-bounds` origin (32 from Luau layout, 0 for a folder view
+/// that fills its surface), so a panel's resting content sits where its host laid it out.
 fn motion_scene_offset(
     prior_x: f32,
     edge: bead_core::Edge,
     opening: bool,
-    dx: f32,
-    dy: f32,
+    (dx, dy): (f32, f32),
+    margin: (f32, f32),
 ) -> (f32, f32) {
     let x = if !opening && matches!(edge, bead_core::Edge::Top | bead_core::Edge::Bottom) {
         prior_x
     } else {
-        32. + dx
+        margin.0 + dx
     };
-    (x, 32. + dy)
+    (x, margin.1 + dy)
 }
 
 /// The docked layer may be clipped to the output while its detached window
@@ -2041,7 +2043,13 @@ impl App {
                 opaque_motion = active && (dx != 0. || dy != 0. || (reveal && open));
                 // A vertical exit retains the open x origin instead of
                 // re-centering from the live surface width every frame.
-                scene.offset = motion_scene_offset(prior_x, edge, open, dx, dy);
+                scene.offset = motion_scene_offset(
+                    prior_x,
+                    edge,
+                    open,
+                    (dx, dy),
+                    (-scene.bounds.x, -scene.bounds.y),
+                );
             }
 
             if !panel {
@@ -2672,6 +2680,15 @@ impl App {
                             w as u32,
                             h as u32,
                         )?
+                    } else if _kind == RendererKind::Cpu {
+                        // A frozen CPU snapshot (a reopened panel): only its group moves.
+                        s.visual_damage.update_group(
+                            scene.bounds,
+                            scene.offset,
+                            scale,
+                            w as u32,
+                            h as u32,
+                        )
                     } else {
                         vec![Damage::full(w as u32, h as u32)]
                     }
@@ -4067,8 +4084,13 @@ mod input_tests {
             let progress = 1. - t.powi(4);
             let (bottom_dx, bottom_dy) =
                 bead_core::Edge::Bottom.closed_offset(1100., 590., progress);
-            let bottom =
-                motion_scene_offset(812., bead_core::Edge::Bottom, false, bottom_dx, bottom_dy);
+            let bottom = motion_scene_offset(
+                812.,
+                bead_core::Edge::Bottom,
+                false,
+                (bottom_dx, bottom_dy),
+                (32., 32.),
+            );
             assert_eq!(bottom.0, 812.);
             if let Some(previous) = previous_vertical_x {
                 assert_eq!(bottom.0, previous);
@@ -4076,14 +4098,22 @@ mod input_tests {
             previous_vertical_x = Some(bottom.0);
 
             let (right_dx, right_dy) = bead_core::Edge::Right.closed_offset(1100., 590., progress);
-            let right =
-                motion_scene_offset(812., bead_core::Edge::Right, false, right_dx, right_dy);
+            let right = motion_scene_offset(
+                812.,
+                bead_core::Edge::Right,
+                false,
+                (right_dx, right_dy),
+                (32., 32.),
+            );
             assert_eq!(right.1, 32.);
             if let Some(previous) = previous_side_y {
                 assert_eq!(right.1, previous);
             }
             previous_side_y = Some(right.1);
         }
+        // A folder view's scene has no shadow margin: its open panel rests at the surface origin.
+        let open = motion_scene_offset(0., bead_core::Edge::Top, true, (0., 0.), (0., 0.));
+        assert_eq!(open, (0., 0.));
     }
 
     fn scene() -> Scene {

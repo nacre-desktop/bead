@@ -28,6 +28,8 @@ pub struct FrameDamage {
     previous: Vec<Record>,
     dimensions: Option<(u32, u32, u32)>,
     alignment: Vec<u16>,
+    /// The last frozen-snapshot group painted (buffer pixels), while frames come from a snapshot.
+    group: Option<Damage>,
 }
 fn intersect(a: Damage, b: Damage) -> Damage {
     let x = a.x.max(b.x);
@@ -160,7 +162,9 @@ impl FrameDamage {
     ) -> crate::Result<Vec<Damage>> {
         let mut current = Vec::with_capacity(frame.items.len());
         let mut dirty = Vec::new();
-        let changed_size = self.dimensions != Some((width, height, frame.scale.to_bits()));
+        // Pixels painted from a frozen group are not in `previous`: repaint once in full.
+        let changed_size = self.group.take().is_some()
+            || self.dimensions != Some((width, height, frame.scale.to_bits()));
         for item in &frame.items {
             let source = if let Some(raster) = &item.raster {
                 let original = rect(&item.primitive);
@@ -305,6 +309,42 @@ impl FrameDamage {
             add(&mut dirty, a.union(b));
         }
         Ok(dirty)
+    }
+    /// A frozen CPU snapshot paints one flattened group of the scene `bounds` at `offset` (and
+    /// clears the rest of the damage): damage where the group was and where it is now.
+    pub fn update_group(
+        &mut self,
+        bounds: Rect,
+        offset: (f32, f32),
+        scale: f32,
+        width: u32,
+        height: u32,
+    ) -> Vec<Damage> {
+        // The blit rounds the origin and covers the ceiled group size (TreeCpuRenderer::render).
+        let (x, y) = (
+            ((offset.0 + bounds.x) * scale).round(),
+            ((offset.1 + bounds.y) * scale).round(),
+        );
+        let clamp = |v: f32, max: u32| v.clamp(0., max as f32) as u32;
+        let (left, top) = (clamp(x, width), clamp(y, height));
+        let painted = Damage {
+            x: left,
+            y: top,
+            w: clamp(x + (bounds.w * scale).ceil(), width) - left,
+            h: clamp(y + (bounds.h * scale).ceil(), height) - top,
+        };
+        let dimensions = Some((width, height, scale.to_bits()));
+        let previous = self
+            .group
+            .replace(painted)
+            .filter(|_| self.dimensions == dimensions);
+        self.previous.clear();
+        self.dimensions = dimensions;
+        let damage = previous.map_or(Damage::full(width, height), |p| p.union(painted));
+        if damage.w == 0 || damage.h == 0 {
+            return Vec::new();
+        }
+        vec![damage]
     }
 }
 

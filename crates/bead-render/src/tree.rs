@@ -7783,6 +7783,60 @@ mod tests {
     }
 
     #[test]
+    fn a_frozen_slide_damages_only_where_the_group_was_and_is() {
+        // A reopened panel paints from its frozen snapshot: each slide frame repairs only the old
+        // and new group, and the repaired buffer equals a full repaint.
+        const W: u32 = 48;
+        const H: u32 = 96;
+        fn target(bytes: &mut [u8]) -> ShmTarget<'_> {
+            ShmTarget {
+                bytes,
+                width: W,
+                height: H,
+                scale: 1.5,
+                format: PixelFormat::Bgra,
+            }
+        }
+        let (w, h, scale) = (W, H, 1.5);
+        let mut scene = scene();
+        let mut frozen = TreeCpuRenderer::snapshot(&scene, scale).unwrap();
+        let mut tracker = crate::damage::FrameDamage::default();
+        let mut actual = vec![7; w as usize * h as usize * 4];
+        for (frame, (y, opacity)) in [(-20., 0.), (-12.3, 0.4), (-5.6, 0.8), (-1.2, 1.), (0., 1.)]
+            .into_iter()
+            .enumerate()
+        {
+            scene.offset = (1.7, y);
+            scene.opacity = opacity;
+            frozen.prepare(&scene, scale).unwrap();
+            assert!(frozen.prepared_frame().is_none());
+            let regions = tracker.update_group(scene.bounds, scene.offset, scale, w, h);
+            let area: u32 = regions.iter().map(|d| d.w * d.h).sum();
+            if frame == 0 {
+                assert_eq!(regions, vec![Damage::full(w, h)]);
+            } else {
+                assert!(area < w * h / 2, "frame {frame}: {regions:?}");
+            }
+            for damage in regions {
+                frozen.render(&scene, target(&mut actual), damage).unwrap();
+            }
+            let mut expected = vec![0; actual.len()];
+            frozen
+                .render(&scene, target(&mut expected), Damage::full(w, h))
+                .unwrap();
+            assert_eq!(actual, expected, "frame {frame}");
+        }
+        // Back on prepared frames, the first update repaints in full.
+        let mut direct = TreeCpuRenderer::default();
+        direct.prepare(&scene, scale).unwrap();
+        let frame = direct.prepared_frame().unwrap();
+        assert_eq!(
+            tracker.update(&frame, scene.offset, 1., w, h).unwrap(),
+            vec![Damage::full(w, h)]
+        );
+    }
+
+    #[test]
     fn closed_snapshot_drops_full_rasters_and_keeps_the_first_frame_pixels() {
         let mut scene = scene();
         let mut source_cache = TreeCache::default();

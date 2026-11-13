@@ -26,16 +26,13 @@ Luau animations to markers; the Nacre shell's peek-grows-into-panel surface buil
 | `in-quart` (the exit curve) | t^4 | `emphasized_accelerate` |
 | `spring` | (1-(1+8t)e^-8t)/(1-9e^-8) | `spring` |
 
-`bead_layer_motion_v1` version 3 (Bead's own MIT XML, matching the Platform compositor's bump)
-appends the three values with `since="3"`; no opcodes change. Bead binds `min(server, 3)` and sends
-values 5-7 only on a version 3 binding; on a version 1 or 2 compositor (the laptop until its
-nacre-niri package updates) a motion using one of them stays on the client frame path
-(`curves_supported`), never approximated. `protocol_curves_follow_the_bound_version` covers both.
+`bead_layer_motion_v1` version 3 (matching the Platform compositor's bump) appends the three values
+with `since="3"`; Bead binds `min(server, 3)` and sends 5-7 only on a v3 binding, else the motion
+stays on the client frame path (`curves_supported`), never approximated (tested both ways).
 
-Durations (s): hover .09, press .06, release .12, trace .12, badge .14, close .16, fade .16,
-osd_in .16, switch .18, peek .2, osd_out .2, open .22, toast .22, dock .22, slide .24, drop .26,
-pulse 1.6 (the review's 120 Hz table). Reduced motion: every target is reached at once; a pulse
-holds at `hi`.
+Durations (s, the review's 120 Hz table): hover .09, press .06, release .12, trace .12, badge .14,
+close .16, fade .16, osd_in .16, switch .18, peek .2, osd_out .2, open .22, toast .22, dock .22,
+slide .24, drop .26, pulse 1.6. Reduced motion reaches every target at once; a pulse holds at `hi`.
 
 ## Driver
 
@@ -67,17 +64,17 @@ static-body open/close; making it the default needs the compositor side and is n
 ## Evidence
 
 - Tests: every curve (endpoints, monotonicity, out-back overshoot bound, spring settle), marker
-  pacing and retarget, pulse loop, paint-only patches (0 Luau, 0 layout, exact final geometry, node
-  boxes follow), layout markers (0 Luau), reveal with a body at 0/25/50/100 % and after a retarget,
-  frame damage of a 26-frame grow bounded by the union of consecutive bodies.
-- Damage (`body_frames_damage_only_the_union_of_the_old_and_new_body`, 488x584 logical surface at
-  scale 1.5, bytes painted per frame): peek at rest 0; a paint-only marker frame (one chip's fill
-  alpha) 19,840 (that node's bounds only); mid-grow at most 2,395,800, bounded by the previous and
-  current body plus shadow margin; full panel at rest 0; a full 2880x1800 frame would be 46.7 MB.
-- Bench (dev-1 container, release, median of 40 frames, the 0252 bar fixture with one capsule):
-  `ui.animate` frame 565 us / 3,212 allocations (Luau + IR + layout); `ui.animated` frame (alpha,
-  radius, translate_x patched in the cached scene) 49.5 us / 379 allocations, where the 379 are the
-  scene and node copies the session hands the host per frame (worker hot-path unit), not the patch.
-- Example: `examples/bar-with-panels` `status` panel (More/Less regrow the body as one surface).
-- Capture: `.lead/capture-peek.sh` (untracked) runs the example under headless sway at 120 Hz and
-  reports PANEL_SLIDE gap p50/p95/max; the 120 Hz desktop capture is booked by the lead.
+  pacing and retarget, pulse loop, paint-only patches (0 Luau, 0 layout, exact geometry, node boxes
+  follow), layout markers (0 Luau), reveal with a body at 0/25/50/100 % and after a retarget, grow
+  damage within consecutive bodies, `a_frozen_slide_damages_only_where_the_group_was_and_is`.
+- Surface damage (Platform NN0042): frame-based panels send `FrameDamage` rects (body and previous
+  body; a paint-only marker frame only its node, 19,840 B). A reopened non-reveal panel paints from
+  its frozen CPU snapshot and sent `Damage::full` every frame; it now sends the group's old and new
+  rect (`FrameDamage::update_group`), full once at freeze and thaw. Headless sway, 2880x1800 at 1.5,
+  px per frame (bytes = px x 4): status open median 118,260 of 364,536 (first frame full), close
+  110,430, resident reopen 53,460; calendar reopen 74,880 (its group is the whole surface).
+- Panel motion offset content by a fixed 32 px; it now uses the scene's own margin (`-bounds`
+  origin: 32 from Luau layout, 0 for folder views), so a `bead run` popup body hangs from the bar.
+- Bench (dev-1, release, median of 40, the 0252 bar fixture): `ui.animate` frame 501 us / 3,152
+  allocations, `ui.animated` frame 35 us / 349 (the scene copies handed to the host, not the patch).
+- Example: `examples/bar-with-panels` `status`; desktop capture: `.lead/capture-peek.sh` (untracked).

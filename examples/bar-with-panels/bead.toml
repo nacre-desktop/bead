@@ -18,4 +18,4 @@ size = [260, 140]
 
 [panels.status]
 view = "view/status.luau"
-size = [424, 300]
+size = [488, 332]

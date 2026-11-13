@@ -968,6 +968,10 @@ impl LayerShellHandler for App {
             s.width = config.new_size.0;
             s.height = config.new_size.1;
             s.configured = true;
+            if s.companion && bead_core::profile::frame_trace() {
+                // Pairs with the next companion UI_FRAME: the first-frame latency after configure.
+                println!("PANEL_CONFIGURE monotonic_ns={}", super::monotonic_ns());
+            }
             if let Some(bridge) = &mut self.accessibility {
                 let bounds = accesskit::Rect {
                     x0: 0.,

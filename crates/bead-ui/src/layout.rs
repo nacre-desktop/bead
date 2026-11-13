@@ -1479,14 +1479,17 @@ pub fn layout(
         }
         if let Some(graph) = &view.graph {
             // Geometry, camera and interaction are filled in by the session's graph engine.
-            emit(Primitive::Graph {
-                rect: r,
-                geometry: Default::default(),
-                camera: Default::default(),
-                style: graph.style(palette, source)?,
-                hover: None,
-                selected: None,
-            });
+            emit(
+                Primitive::Graph {
+                    rect: r,
+                    geometry: Default::default(),
+                    camera: Default::default(),
+                    style: graph.style(palette, source)?,
+                    hover: None,
+                    selected: None,
+                },
+                None,
+            );
         }
         out.scene.layers[layer_index].own.end = out.scene.primitives.len();
         let inherited_scroll = view.scroll.as_deref().or(scroll_store);
