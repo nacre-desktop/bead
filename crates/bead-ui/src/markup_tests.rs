@@ -4476,18 +4476,35 @@ return ui.Column{id="gallery",width=420,height=520,gap=6,
         [0x30, 0x30, 0x30, 255]
     );
     assert!(on.w > off.w, "the icon widens the chip");
-    let tag = node(".tag");
-    assert_eq!(tag.h, 20.);
-    let (radius, _, border) = rounded(tag).expect("tag box");
-    assert_eq!(
-        (radius, border.map(|b| b.0)),
-        (6., Some([0x77, 0x88, 0x99, 255]))
-    );
+    // Plain rows are not view nodes: find the tag box and the segment track by their paint.
+    let (tag, radius, border) = primitives
+        .iter()
+        .find_map(|p| match p {
+            Primitive::Rounded {
+                rect,
+                radius,
+                border: Some(b),
+                ..
+            } if *radius == 6. => Some((*rect, *radius, b.0)),
+            _ => None,
+        })
+        .expect("tag box");
+    assert_eq!((tag.h, radius, border), (20., 6., [0x77, 0x88, 0x99, 255]));
     assert!(primitives.iter().any(
         |p| matches!(p, Primitive::Text { text, size, .. } if text == "codex" && *size == 11.)
     ));
-    let seg = node(".seg");
-    assert_eq!(seg.h, 34.);
+    let track = primitives
+        .iter()
+        .find_map(|p| match p {
+            Primitive::Rounded { rect, fill, .. }
+                if rect.h == 34. && *fill == [0x30, 0x30, 0x30, 255] =>
+            {
+                Some(*rect)
+            }
+            _ => None,
+        })
+        .expect("segment track");
+    assert!(track.w < 200., "the track hugs its options: {}", track.w);
     let chosen = node(".option-2");
     assert_eq!(
         rounded(chosen).expect("selected option").1,
@@ -4503,8 +4520,17 @@ return ui.Column{id="gallery",width=420,height=520,gap=6,
             .iter()
             .any(|p| matches!(p, Primitive::Text { text, .. } if text == "chevron_right"))
     );
-    let tile = node(".tile");
-    assert_eq!(rounded(tile).expect("tile").0, 18.);
+    let tile = primitives
+        .iter()
+        .find_map(|p| match p {
+            Primitive::Rounded { rect, radius, .. } if (rect.w, rect.h) == (380., 56.) => {
+                Some((*rect, *radius))
+            }
+            _ => None,
+        })
+        .expect("slider tile");
+    assert_eq!(tile.1, 18.);
+    let tile = tile.0;
     let end = node(".end");
     assert_eq!((end.w, end.h), (28., 28.));
     assert_eq!(

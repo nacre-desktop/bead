@@ -303,6 +303,7 @@ return function(ui, tokens)
         local size=tokens.text.caption*4/3
         local height=tokens.spacing.huge+tokens.spacing.hairline
         local current=value(p.value,nil)
+        local total=2*tokens.spacing.xs-tokens.spacing.hairline
         local pill={id=p.id or "segment",height=height,shrink=0,padding=tokens.spacing.xs,gap=tokens.spacing.hairline,align="center",
             radius=tokens.radii.full,fill=ui.alpha("surfaceContainerHigh",on and 1 or .4)}
         for i,o in ipairs(p.options) do
@@ -312,6 +313,7 @@ return function(ui, tokens)
             local ink=chosen and "onPrimary" or (live and "onSurfaceVariant" or "onSurface")
             local width=math.ceil(ui.text_width(o.label,ui.default_font_family,size))+2*tokens.spacing.md+tokens.spacing.hairline
             local option_h=height-2*tokens.spacing.xs
+            total=total+width+tokens.spacing.hairline
             pill[#pill+1]=kit.Button{id="option-"..i,width=width,height=option_h,padding=0,padding_top=(option_h-20)/2,shrink=0,
                 radius=tokens.radii.full,selected=chosen,justify="center",align="center",
                 fill=chosen and "primary" or "transparent",
@@ -320,6 +322,7 @@ return function(ui, tokens)
                 ui.Text{id="label",text=o.label,width=width,height=20,text_align="center",
                     font_size=size,font_weight=500,color=ui.alpha(ink,live and 1 or .4)}}
         end
+        pill.width=total
         return ui.Row(pill)
     end
     -- Settings row that navigates: `title` (or `label`), optional `subtitle` (or `description`) and `icon`,
