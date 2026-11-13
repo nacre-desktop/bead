@@ -17,7 +17,7 @@ Bead is an independent MIT-licensed framework for building Wayland shells. Nacre
 - Commit author and committer: siverteh <92440237+Siverteh@users.noreply.github.com>. Include `[no-publish]` in every commit message. Never kill processes you did not start.
 
 - Keep framework checks independent of any application checkout. The minimal host in `examples/minimal-shell` must remain usable with Bead alone.
-- Run formatting, warnings-denied Clippy, tests, feature checks, dependency/license checks, and minimal-shell proofs for implementation changes. CI is authoritative; see `docs/development/ci.md`.
+- Run formatting, warnings-denied Clippy, tests, feature checks, dependency/license checks, and minimal-shell proofs for implementation changes. CI is authoritative; see `CONTRIBUTING.md`.
 - Specs document framework contracts and decisions. Keep them focused and remove product-specific history from this repository.
 - Preserve the direction rule: framework crates do not depend on or reference `nacre-*`, Nacre product paths, or `nacrectl`.
 

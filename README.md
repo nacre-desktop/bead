@@ -1,61 +1,34 @@
 # Bead
 
-Bead is an actively developed, MIT-licensed Rust framework for building Wayland shells. It provides reusable rendering, input, Luau UI, widgets, host adapters, and optional desktop-service primitives. Bead is an independent framework; applications supply their own identity, shell content, assets, configuration, service routes, and installation policy.
+Bead is an MIT-licensed Rust framework for building Wayland shells. Write a bar, panel or window as a `bead.toml` and a few Luau files; Bead provides rendering, input, layer-shell surfaces, reusable widgets and optional desktop services. Edits reload live: Bead validates the complete new view before swapping it in, so a broken edit keeps the last working UI and reports its file and line.
 
-**Status:** workspace crates are not published to crates.io. Applications should pin a reviewed Git revision; APIs may change between revisions.
+Bead is independent of any one desktop. Applications built on it supply their own identity, shell content, assets, configuration, service routes and installation policy.
+
+**Status:** actively developed. The crates are not published to crates.io; applications pin a reviewed Git revision, and APIs may change between revisions.
 
 ![Bead's minimal shell running in a private Wayland session.](docs/images/minimal-shell.png)
 *The minimal shell example running on Bead.*
 
-## What Bead provides
+## Get started
 
-Views describe presentation and behavior in Luau. Rust owns reusable platform, rendering, input, and service primitives. Reload validates a complete new view generation before swapping it atomically; invalid changes leave the last working UI active and report a source location and error.
-
-## Try the minimal shell
-
-[`examples/minimal-shell`](examples/minimal-shell/README.md) is a standalone host using only Bead. Its headless check is:
+Build the `bead` CLI from this checkout, then run a folder app in your Wayland session:
 
 ```sh
-cargo run -p bead-minimal-shell --locked -- --check
+cargo build --release --locked -p bead-cli
+target/release/bead run examples/hello-bar
 ```
 
-Omit `--check` to open the Wayland window. The lower-level `bead --example minimal` is a renderer/facade smoke example.
+The build needs the Rust toolchain from `rust-toolchain.toml` and the system packages installed by the first step of [CI](.github/workflows/ci.yml). Put `target/release/bead` on your `PATH` to use `bead` as the docs do. `bead check examples/hello-bar` validates and renders an app on the CPU without a compositor.
 
-## Getting started
+Then build a bar in 15 minutes with the [bar tutorial](docs/tutorial/bar.md).
 
-Install or build the `bead` CLI, then check and run a folder app:
+## Learn more
 
-```sh
-bead check examples/hello-bar
-bead run examples/hello-bar
-```
+- [Documentation index](docs/README.md): tutorials, references, decisions and specifications.
+- [Example gallery](examples/README.md), including the standalone Rust host in [`examples/minimal-shell`](examples/minimal-shell/README.md).
+- [Framework crates](crates/README.md).
+- [Contributing](CONTRIBUTING.md) and [security policy](SECURITY.md).
 
-Start with the [documentation index](docs/README.md) and [15-minute bar tutorial](docs/tutorial/bar.md).
+## License
 
-## Workspace layout
-
-- [`crates/`](crates/) — framework crates.
-- [`examples/`](examples/) — minimal host and plugin example.
-- [`docs/`](docs/) — framework contracts and development guides.
-- [`protocols/`](protocols/) — protocol definitions used by the workspace.
-- [`tools/`](tools/) — repository checks and test support.
-
-## Crates
-
-See the [crate guide](crates/README.md) for the workspace crate breakdown.
-
-## Examples
-
-See the [examples guide](examples/README.md) for the minimal host and plugin example.
-
-## Documentation
-
-See the [documentation index](docs/README.md) for the tutorial, references, examples, architecture decisions, and specifications.
-
-## License and third-party notices
-
-Bead framework code and original documentation are licensed under the MIT License in [`LICENSE`](LICENSE). Third-party components retain their own notices and licenses; see the notices under `vendor/` and `crates/bead-test/fonts/`.
-
-## Contributing
-
-See the [CI guide](docs/development/ci.md) and [repository rules](AGENTS.md) before contributing.
+Bead is licensed under the MIT License; see [`LICENSE`](LICENSE). Third-party components keep their own notices and licenses under `vendor/` and `crates/bead-test/fonts/`.

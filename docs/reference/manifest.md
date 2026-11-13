@@ -13,7 +13,7 @@
 | `[layer].edge` | Required enum: `top`, `bottom`, `left`, `right`. | `edge = "top"` |
 | `[layer].size` | Required positive `u32` thickness. Top/bottom checks use 1280×size; left/right use size×720. | `size = 36` |
 | `[layer].exclusive` | Boolean; default `true` (reserve the edge). | `exclusive = false` |
-| `[services].desktop` | Array of strings; default `[]`. Allowed: `clock`, `audio`, `battery`, `network`, `bluetooth`, `tray`, `session`, `media`. | `desktop = ["clock", "audio"]` |
+| `[services].desktop` | Array of strings; default `[]`. Allowed: `clock`, `audio`, `battery`, `network`, `bluetooth`, `tray`, `session`, `media`, `power`. | `desktop = ["clock", "audio"]` |
 | `[commands.NAME].argv` | Required non-empty string array; no argument may contain NUL. Executed directly, without a shell. | `argv = ["uname", "-r"]` |
 | `[commands.NAME].interval` | Optional positive integer seconds; no default periodic run. | `interval = 60` |
 | `[commands.NAME].timeout` | Integer seconds, default `5`, range 1–60. | `timeout = 10` |

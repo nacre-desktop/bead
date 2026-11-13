@@ -67,17 +67,17 @@ local ui = require("bead.ui")
 return ui.Row {
     id = "bar", width = "fill", height = "fill", align = "center", gap = 12, padding = 12,
     fill = "surface",
-    ui.Row { id = "left", width = 0, grow = 1, align = "center", ui.Text { text = "Tutorial", width = 90, height = 24, color = "primary" } },
-    ui.Text { id = "clock", text = ui.bind("desktop.clock"), width = 64, height = 24, text_align = "center", color = "onSurface" },
+    ui.Row { id = "left", width = 0, grow = 1, align = "center", ui.Text { text = "Tutorial", width = "content", height = 24, color = "primary" } },
+    ui.Text { id = "clock", text = ui.bind("desktop.clock"), width = "content", height = 24, text_align = "center", color = "onSurface" },
     ui.Row { id = "right", width = 0, grow = 1, justify = "end", align = "center", gap = 8,
-        ui.Text { id = "battery", text = ui.bind("battery"), width = 130, height = 24, color = "onSurfaceVariant" },
+        ui.Text { id = "battery", text = ui.bind("battery"), width = "content", height = 24, color = "onSurfaceVariant" },
         ui.Button { id = "mute", text = ui.bind("mute"), width = 72, height = 30, color = "onPrimary", fill = "primary", on_activate = ui.action("desktop.mute.toggle") },
-        ui.Text { id = "volume", text = ui.bind("volume"), width = 120, height = 24, color = "onSurfaceVariant" },
+        ui.Text { id = "volume", text = ui.bind("volume"), width = "content", height = 24, color = "onSurfaceVariant" },
     },
 }
 ```
 
-The left and right sections each grow into half of the remaining space, which keeps the fixed-width clock centered. `width = "content"` measures each label and includes its horizontal padding, so siblings keep their space; `align = "center"` centers each section's children vertically. `ui.bind` subscribes displayed values to store updates. The mute button sends `desktop.mute.toggle`, so each click flips the latest mute state. It remains wired when audio is unavailable; the host reports a diagnostic and does nothing. The kit Button has no bound disabled state.
+The left and right sections each grow into half of the remaining space, which keeps the clock centered. `width = "content"` measures each label and includes its horizontal padding, so siblings keep their space; `align = "center"` centers each section's children vertically. `ui.bind` subscribes displayed values to store updates. The mute button sends `desktop.mute.toggle`, so each click flips the latest mute state. It remains wired when audio is unavailable; the host reports a diagnostic and does nothing. The kit Button has no bound disabled state.
 
 ## Run it
 
