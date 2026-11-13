@@ -77,7 +77,7 @@ pub fn run(shared: Arc<Shared>, mut receiver: mpsc::Receiver<Command>, tray_watc
             .wait_timeout(guard, Duration::from_millis(200u64 << retry));
     }
 }
-async fn system_connection() -> zbus::Result<Connection> {
+pub(crate) async fn system_connection() -> zbus::Result<Connection> {
     if let Ok(address) = std::env::var("DBUS_SYSTEM_BUS_ADDRESS") {
         zbus::connection::Builder::address(address.as_str())?
             .build()

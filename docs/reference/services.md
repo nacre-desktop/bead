@@ -32,6 +32,10 @@ All values are under `desktop.`. Missing numeric readings use `-1`; missing stri
 | `power.available` | Bool | `power` |
 | `power.profile`, `power.degraded` | Text | `power` |
 | `power.profiles` | List of `{name: Text}` records, in daemon order | `power` |
+| `network_devices.available`, `network_devices.wireless_enabled` | Bool | `network_devices` |
+| `network_devices.primary_name`, `network_devices.primary_kind` (`wifi`, `ethernet`, `vpn`, `other`, or empty) | Text | `network_devices` |
+| `network_devices.access_points` | List of `{ssid,security: Text, strength: Number, active,known: Bool}` records, one per SSID, strongest first | `network_devices` |
+| `network_devices.known` | List of `{id,kind: Text}` saved connections | `network_devices` |
 
 `desktop.date` is provided by the `clock` service. Clock seconds updates are leased when `clock` is declared.
 The optional `media` service selects the active MPRIS player using the policy in [spec 0239](../specs/0239-mpris.md). While it is Playing, `media.position_ms` is extrapolated and refreshed at 1 Hz without additional D-Bus reads.
@@ -48,6 +52,8 @@ local devices = stores["desktop.bluetooth_devices.devices"]
 -- An item action can send devices[1].path as its Text argument.
 ```
 
+The optional `network_devices` service follows NetworkManager and is separate from the `network` summary; see [spec 0247](../specs/0247-network.md). `connect` takes an SSID from `access_points`: known networks use their saved profile, open networks are added without secrets, and other secured networks report `secured network needs a password agent`.
+
 ## Actions
 
 | Action | Argument | Requirement and effect |
@@ -62,6 +68,10 @@ local devices = stores["desktop.bluetooth_devices.devices"]
 | `desktop.media.seek` | Number milliseconds | Requires `media`; targets the active track and fails if seeking is unavailable or the track changed. |
 | `desktop.power.set` | Profile name Text | Requires `power`; accepts only a profile in the daemon's current list. |
 | `desktop.power.cycle` | None | Requires `power`; selects the next profile in daemon order, wrapping at the end. |
+| `desktop.network_devices.wireless` | Bool | Requires `network_devices`; enables or disables Wi-Fi. |
+| `desktop.network_devices.scan`, `desktop.network_devices.disconnect` | None | Requires `network_devices`; scans on the first Wi-Fi device (at most every 10 seconds), or disconnects the first connected one. |
+| `desktop.network_devices.connect` | SSID Text | Requires `network_devices`; activates a known or open network. |
+| `desktop.network_devices.forget` | Saved connection id Text | Requires `network_devices`; deletes that saved connection; ambiguous ids are refused. |
 | `command.NAME` | Any/unused | Runs declared command `NAME`; unknown names produce no result. |
 
 Wrong arguments produce explicit action errors: `desktop.volume expects a number`, `desktop.mute expects a boolean`, and tray actions require a text item id. Desktop actions against undeclared services report the missing service. Commands run without a shell; output, timeout, and interval limits are in the [manifest reference](manifest.md).

@@ -21,7 +21,8 @@ This index contains current framework contracts and repository-boundary decision
 | [0238 — API stability and versioning](0238-api-stability.md) | Proposed stable surfaces, compatibility rules, hazards, and publishing readiness |
 | [0239 — MPRIS media service](0239-mpris.md) | Event-driven media snapshots and controls for folder apps |
 | [0244 — Power profiles service](0244-power-profiles.md) | Event-driven system power profile snapshots and controls for folder apps |
-| [0246 — Bluetooth devices service](0246-bluetooth.md) | Event-driven BlueZ adapter and device snapshots and controls for folder apps |
 | [0245 — Shell interaction CPU](0245-interaction-cpu.md) | Interaction CPU attribution and renderer/power trade-offs |
+| [0246 — Bluetooth devices service](0246-bluetooth.md) | Event-driven BlueZ adapter and device snapshots and controls for folder apps |
+| [0247 — Network devices service](0247-network.md) | Event-driven NetworkManager device, access point and saved-connection snapshots and controls for folder apps |
 
 This index covers Bead framework contracts. See the [documentation index](../README.md) for the current framework overview and the [framework ownership decision](0214-framework-split.md).

@@ -23,7 +23,7 @@ def main() -> int:
             "--",
             "bash",
             "-c",
-            'export DBUS_SYSTEM_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS"; cargo test -p bead-services --locked -j2 --quiet private_bus_sensor -- --ignored && cargo test -p bead-services --test tray_watcher_private_bus --locked -j2 -- --ignored && cargo test -p bead-services --test media_private_bus --locked -j2 -- --ignored && cargo test -p bead-services --test power_profiles_private_bus --locked -j2 -- --ignored && cargo test -p bead-services --test bluetooth_private_bus --locked -j2 -- --ignored',
+            'export DBUS_SYSTEM_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS"; cargo test -p bead-services --locked -j2 --quiet private_bus_sensor -- --ignored && cargo test -p bead-services --test tray_watcher_private_bus --locked -j2 -- --ignored && cargo test -p bead-services --test media_private_bus --locked -j2 -- --ignored && cargo test -p bead-services --test power_profiles_private_bus --locked -j2 -- --ignored && cargo test -p bead-services --test bluetooth_private_bus --locked -j2 -- --ignored && cargo test -p bead-services --test network_private_bus --locked -j2 -- --ignored',
         ]
         result = subprocess.run(
             ["nice", "-n", "10", *command],

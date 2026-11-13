@@ -11,6 +11,7 @@ use bead_services::{
     Subscription,
     bluetooth::{Bluetooth as BluetoothDevices, BluetoothAction, BluetoothSnapshot},
     media::{Media, MediaAction, MediaSnapshot},
+    network::{Network as NetworkDevices, NetworkAction, NetworkSnapshot},
     power_profiles::{PowerProfiles, PowerProfilesAction, PowerProfilesSnapshot},
 };
 use std::{
@@ -90,6 +91,16 @@ impl RuntimeSignals {
     }
 }
 
+/// Wake every view when a service publishes, without keeping the runtime alive.
+fn notifier<T: 'static>(signals: &Arc<RuntimeSignals>) -> impl Fn(T) + Send + Sync + 'static {
+    let signals = Arc::downgrade(signals);
+    move |_| {
+        if let Some(signals) = signals.upgrade() {
+            signals.notify();
+        }
+    }
+}
+
 /// Process-wide owner for the services shared by all views of a folder app.
 pub struct FolderServicesRuntime {
     services: FolderServices,
@@ -102,6 +113,8 @@ pub struct FolderServicesRuntime {
     _power_subscription: Option<bead_services::power_profiles::Subscription>,
     bluetooth_devices: Option<Arc<BluetoothDevices>>,
     _bluetooth_subscription: Option<bead_services::bluetooth::Subscription>,
+    network_devices: Option<Arc<NetworkDevices>>,
+    _network_subscription: Option<bead_services::network::Subscription>,
     commands: Arc<Mutex<CommandState>>,
     signals: Arc<RuntimeSignals>,
     stop: Arc<(Mutex<bool>, Condvar)>,
@@ -133,6 +146,11 @@ impl FolderServicesRuntime {
             .desktop
             .contains("bluetooth_devices")
             .then(BluetoothDevices::start_system)
+            .flatten();
+        let network_devices = services
+            .desktop
+            .contains("network_devices")
+            .then(NetworkDevices::start_system)
             .flatten();
         let clock_lease = if services.desktop.contains("clock") {
             desktop
@@ -166,6 +184,9 @@ impl FolderServicesRuntime {
                 }
             })
         });
+        let network_subscription = network_devices
+            .as_ref()
+            .map(|service| service.subscribe(notifier(&signals)));
         let subscription = desktop.as_ref().map(|desktop| {
             let signals = Arc::downgrade(&signals);
             desktop.subscribe(move |_| {
@@ -264,6 +285,8 @@ impl FolderServicesRuntime {
             _power_subscription: power_subscription,
             bluetooth_devices,
             _bluetooth_subscription: bluetooth_subscription,
+            network_devices,
+            _network_subscription: network_subscription,
             commands,
             signals,
             stop,
@@ -495,6 +518,89 @@ fn bluetooth_device_values(snapshot: &BluetoothSnapshot) -> BTreeMap<String, Val
         ("desktop.bluetooth_devices.devices".into(),Value::list(snapshot.devices.iter().map(|d|serde_json::json!({"path":d.path,"name":d.name,"address":d.address,"icon":d.icon,"paired":d.paired,"connected":d.connected,"battery":d.battery})).collect())),
     ])
 }
+fn network_device_values(snapshot: &NetworkSnapshot) -> BTreeMap<String, Value> {
+    let primary = snapshot.primary.as_ref();
+    let access_points = snapshot.access_points.iter().map(|a| {
+        serde_json::json!({"ssid": a.ssid, "strength": a.strength, "security": a.security,
+            "active": a.active, "known": a.known})
+    });
+    let known = snapshot
+        .known_connections
+        .iter()
+        .map(|k| serde_json::json!({"id": k.id, "kind": k.kind}));
+    BTreeMap::from([
+        (
+            "desktop.network_devices.available".into(),
+            Value::Bool(snapshot.available),
+        ),
+        (
+            "desktop.network_devices.wireless_enabled".into(),
+            Value::Bool(snapshot.wireless_enabled),
+        ),
+        (
+            "desktop.network_devices.primary_name".into(),
+            Value::Text(primary.map_or_else(String::new, |p| p.name.clone())),
+        ),
+        (
+            "desktop.network_devices.primary_kind".into(),
+            Value::Text(primary.map_or("", |p| p.kind).into()),
+        ),
+        (
+            "desktop.network_devices.access_points".into(),
+            Value::list(access_points.collect()),
+        ),
+        (
+            "desktop.network_devices.known".into(),
+            Value::list(known.collect()),
+        ),
+    ])
+}
+/// Resolve a folder request to a service action on the first Wi-Fi device that applies.
+fn network_action(
+    snapshot: &NetworkSnapshot,
+    request: NetworkRequest,
+) -> Result<NetworkAction, String> {
+    let wifi = |connected: bool| {
+        snapshot
+            .devices
+            .iter()
+            .find(|d| d.kind == "wifi" && (!connected || !d.active_connection.is_empty()))
+            .map(|d| d.path.clone())
+    };
+    Ok(match request {
+        NetworkRequest::Wireless(on) => NetworkAction::SetWirelessEnabled(on),
+        NetworkRequest::Scan => {
+            NetworkAction::Scan(wifi(false).ok_or("no Wi-Fi device is available")?)
+        }
+        NetworkRequest::Disconnect => {
+            NetworkAction::Disconnect(wifi(true).ok_or("Wi-Fi is not connected")?)
+        }
+        NetworkRequest::Connect(ssid) => {
+            let ap = snapshot
+                .access_points
+                .iter()
+                .find(|ap| ap.ssid == ssid)
+                .ok_or_else(|| format!("unknown Wi-Fi network '{ssid}'"))?;
+            let known = snapshot
+                .known_connections
+                .iter()
+                .find(|k| k.kind == "wifi" && k.ssid == ap.ssid_bytes);
+            match known {
+                Some(known) => NetworkAction::ActivateKnown(known.path.clone(), ap.device.clone()),
+                // The service rejects secured networks: they need a password agent.
+                None => NetworkAction::ActivateOpen(ap.ssid_bytes.clone(), ap.device.clone()),
+            }
+        }
+        NetworkRequest::Forget(id) => {
+            let mut matches = snapshot.known_connections.iter().filter(|k| k.id == id);
+            match (matches.next(), matches.next()) {
+                (Some(known), None) => NetworkAction::Forget(known.path.clone()),
+                (None, _) => return Err(format!("unknown saved connection '{id}'")),
+                _ => return Err(format!("saved connection id '{id}' is ambiguous")),
+            }
+        }
+    })
+}
 fn default_bluetooth_adapter(snapshot: &BluetoothSnapshot) -> Option<String> {
     snapshot.adapters.first().map(|a| a.path.clone())
 }
@@ -537,6 +643,7 @@ enum DesktopRequest {
     Media(MediaRequest),
     Power(PowerRequest),
     Bluetooth(BluetoothRequest),
+    Network(NetworkRequest),
     Command(String),
 }
 #[derive(Clone, Debug)]
@@ -557,6 +664,14 @@ enum BluetoothRequest {
     Scan(bool),
     Connect(String),
     Disconnect(String),
+    Forget(String),
+}
+#[derive(Clone, Debug)]
+enum NetworkRequest {
+    Wireless(bool),
+    Scan,
+    Connect(String),
+    Disconnect,
     Forget(String),
 }
 fn route_folder_action(
@@ -588,6 +703,11 @@ fn route_folder_action(
         | "desktop.bluetooth_devices.connect"
         | "desktop.bluetooth_devices.disconnect"
         | "desktop.bluetooth_devices.forget" => "bluetooth_devices",
+        "desktop.network_devices.wireless"
+        | "desktop.network_devices.scan"
+        | "desktop.network_devices.connect"
+        | "desktop.network_devices.disconnect"
+        | "desktop.network_devices.forget" => "network_devices",
         _ => return Err(format!("unknown desktop action '{name}'")),
     };
     if !declared.contains(need) {
@@ -630,6 +750,22 @@ fn route_folder_action(
             _ => return Err(format!("{name} expects a device path")),
         };
         return Ok(Some(DesktopRequest::Bluetooth(action)));
+    }
+    if name.starts_with("desktop.network_devices.") {
+        let request = match (name, argument) {
+            ("desktop.network_devices.wireless", Value::Bool(v)) => NetworkRequest::Wireless(*v),
+            ("desktop.network_devices.wireless", _) => {
+                return Err(format!("{name} expects a boolean"));
+            }
+            ("desktop.network_devices.scan", _) => NetworkRequest::Scan,
+            ("desktop.network_devices.disconnect", _) => NetworkRequest::Disconnect,
+            ("desktop.network_devices.connect", Value::Text(v)) => {
+                NetworkRequest::Connect(v.clone())
+            }
+            ("desktop.network_devices.forget", Value::Text(v)) => NetworkRequest::Forget(v.clone()),
+            _ => return Err(format!("{name} expects text")),
+        };
+        return Ok(Some(DesktopRequest::Network(request)));
     }
     if name == "desktop.power.set" {
         let Value::Text(profile) = argument else {
@@ -847,6 +983,9 @@ impl FolderView {
         if services.desktop.contains("bluetooth_devices") {
             host_stores.extend(bluetooth_device_values(&BluetoothSnapshot::default()));
         }
+        if services.desktop.contains("network_devices") {
+            host_stores.extend(network_device_values(&NetworkSnapshot::default()));
+        }
         for name in services.commands.keys() {
             host_stores.insert(
                 format!("commands.{name}.stdout"),
@@ -898,6 +1037,19 @@ impl FolderView {
                     "desktop.bluetooth_devices.connect",
                     "desktop.bluetooth_devices.disconnect",
                     "desktop.bluetooth_devices.forget",
+                ]
+                .into_iter()
+                .map(str::to_owned),
+            );
+        }
+        if services.desktop.contains("network_devices") {
+            host_actions.extend(
+                [
+                    "desktop.network_devices.wireless",
+                    "desktop.network_devices.scan",
+                    "desktop.network_devices.connect",
+                    "desktop.network_devices.disconnect",
+                    "desktop.network_devices.forget",
                 ]
                 .into_iter()
                 .map(str::to_owned),
@@ -972,6 +1124,13 @@ impl FolderView {
                     .as_ref()
                     .map_or_else(BluetoothSnapshot::default, |service| service.snapshot());
                 changes.extend(bluetooth_device_values(&snapshot));
+            }
+            if runtime.services.desktop.contains("network_devices") {
+                let snapshot = runtime
+                    .network_devices
+                    .as_ref()
+                    .map_or_else(NetworkSnapshot::default, |service| service.snapshot());
+                changes.extend(network_device_values(&snapshot));
             }
             for (name, (stdout, ok, error)) in runtime.command_values() {
                 changes.insert(format!("commands.{name}.stdout"), Value::Text(stdout));
@@ -1212,6 +1371,18 @@ impl SceneSource for FolderView {
                             if let Err(error) = result {
                                 eprintln!("desktop action {name}: {error}");
                             }
+                        }
+                        None
+                    }
+                    Ok(Some(DesktopRequest::Network(request))) => {
+                        if let Some(service) = self
+                            .runtime
+                            .as_ref()
+                            .and_then(|r| r.network_devices.as_ref())
+                            && let Err(error) = network_action(&service.snapshot(), request)
+                                .and_then(|action| service.action(action))
+                        {
+                            eprintln!("desktop action {name}: {error}");
                         }
                         None
                     }
@@ -1843,6 +2014,172 @@ mod tests {
                 None
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn network_device_projection_routing_and_resolution() {
+        use bead_services::network::{
+            NetworkAccessPoint, NetworkConnection, NetworkDevice, NetworkPrimary,
+        };
+        let empty = network_device_values(&NetworkSnapshot::default());
+        assert_eq!(empty.len(), 6);
+        assert_eq!(
+            empty["desktop.network_devices.available"],
+            Value::Bool(false)
+        );
+        assert_eq!(
+            empty["desktop.network_devices.primary_kind"],
+            Value::Text(String::new())
+        );
+        assert!(
+            matches!(&empty["desktop.network_devices.access_points"], Value::List(l) if l.is_empty())
+        );
+        let point = |ssid: &str, security, known| NetworkAccessPoint {
+            path: format!("/ap/{ssid}"),
+            device: "/dev/wlan".into(),
+            ssid: ssid.into(),
+            ssid_bytes: ssid.as_bytes().to_vec(),
+            strength: 60,
+            security,
+            frequency_mhz: 2412,
+            active: known,
+            known,
+        };
+        let saved = |path: &str, id: &str, ssid: &str| NetworkConnection {
+            path: path.into(),
+            id: id.into(),
+            kind: if ssid.is_empty() { "ethernet" } else { "wifi" },
+            ssid: ssid.as_bytes().to_vec(),
+        };
+        let snapshot = NetworkSnapshot {
+            revision: 1,
+            available: true,
+            wireless_enabled: true,
+            wireless_hardware_enabled: true,
+            primary: Some(NetworkPrimary {
+                kind: "wifi",
+                name: "Home".into(),
+                device: "wlan0".into(),
+                state: "activated",
+            }),
+            devices: vec![
+                NetworkDevice {
+                    path: "/dev/eth".into(),
+                    interface: "eth0".into(),
+                    kind: "ethernet",
+                    state: "connected",
+                    active_connection: "/active/eth".into(),
+                },
+                NetworkDevice {
+                    path: "/dev/wlan".into(),
+                    interface: "wlan0".into(),
+                    kind: "wifi",
+                    state: "connected",
+                    active_connection: "/active/wlan".into(),
+                },
+            ],
+            access_points: vec![
+                point("Home", "wpa", true),
+                point("Cafe", "open", false),
+                point("Secure", "wpa3", false),
+            ],
+            known_connections: vec![
+                saved("/s/1", "Home", "Home"),
+                saved("/s/2", "Wired", ""),
+                saved("/s/3", "Twin", ""),
+                saved("/s/4", "Twin", ""),
+            ],
+        };
+        let values = network_device_values(&snapshot);
+        assert_eq!(
+            values["desktop.network_devices.wireless_enabled"],
+            Value::Bool(true)
+        );
+        assert_eq!(
+            values["desktop.network_devices.primary_name"],
+            Value::Text("Home".into())
+        );
+        assert_eq!(
+            values["desktop.network_devices.primary_kind"],
+            Value::Text("wifi".into())
+        );
+        assert!(
+            matches!(&values["desktop.network_devices.access_points"], Value::List(l) if l[0]["ssid"] == "Home" && l[0]["strength"] == 60 && l[0]["security"] == "wpa" && l[0]["active"] == true && l[0]["known"] == true && l[1]["known"] == false)
+        );
+        assert!(
+            matches!(&values["desktop.network_devices.known"], Value::List(l) if l.len() == 4 && l[1]["id"] == "Wired" && l[1]["kind"] == "ethernet")
+        );
+
+        let declared = BTreeSet::from(["network_devices".to_owned()]);
+        let route = |name: &str, argument: Value| match route_folder_action(
+            name, &argument, &declared, None,
+        )? {
+            Some(DesktopRequest::Network(request)) => network_action(&snapshot, request),
+            other => Err(format!("unexpected route {other:?}")),
+        };
+        assert!(matches!(
+            route("desktop.network_devices.wireless", Value::Bool(false)),
+            Ok(NetworkAction::SetWirelessEnabled(false))
+        ));
+        assert!(
+            matches!(route("desktop.network_devices.scan", Value::Bool(true)), Ok(NetworkAction::Scan(d)) if d == "/dev/wlan")
+        );
+        assert!(
+            matches!(route("desktop.network_devices.disconnect", Value::Bool(true)), Ok(NetworkAction::Disconnect(d)) if d == "/dev/wlan")
+        );
+        assert!(
+            matches!(route("desktop.network_devices.connect", Value::Text("Home".into())), Ok(NetworkAction::ActivateKnown(c, d)) if c == "/s/1" && d == "/dev/wlan")
+        );
+        assert!(
+            matches!(route("desktop.network_devices.connect", Value::Text("Cafe".into())), Ok(NetworkAction::ActivateOpen(ssid, d)) if ssid == b"Cafe" && d == "/dev/wlan")
+        );
+        // Secured unknown networks route to ActivateOpen, which the service rejects for the agent.
+        assert!(matches!(
+            route(
+                "desktop.network_devices.connect",
+                Value::Text("Secure".into())
+            ),
+            Ok(NetworkAction::ActivateOpen(..))
+        ));
+        assert!(
+            route(
+                "desktop.network_devices.connect",
+                Value::Text("Gone".into())
+            )
+            .is_err()
+        );
+        assert!(
+            matches!(route("desktop.network_devices.forget", Value::Text("Wired".into())), Ok(NetworkAction::Forget(c)) if c == "/s/2")
+        );
+        assert!(
+            route("desktop.network_devices.forget", Value::Text("Twin".into()))
+                .unwrap_err()
+                .contains("ambiguous")
+        );
+        assert!(route("desktop.network_devices.wireless", Value::Text("on".into())).is_err());
+        assert!(route("desktop.network_devices.connect", Value::Bool(true)).is_err());
+        assert!(
+            route_folder_action(
+                "desktop.network_devices.scan",
+                &Value::Bool(true),
+                &BTreeSet::from(["network".to_owned()]),
+                None
+            )
+            .unwrap_err()
+            .contains("undeclared service 'network_devices'")
+        );
+        let idle = NetworkSnapshot {
+            devices: vec![],
+            ..snapshot.clone()
+        };
+        assert!(network_action(&idle, NetworkRequest::Scan).is_err());
+        assert!(network_action(&idle, NetworkRequest::Disconnect).is_err());
+        assert!(
+            !declared_desktop_values(&Snapshot::default(), &declared)
+                .keys()
+                .any(|key| key.starts_with("desktop.network.")),
+            "network_devices does not publish the Desktop network summary"
         );
     }
 

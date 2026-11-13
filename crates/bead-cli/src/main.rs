@@ -147,6 +147,8 @@ impl App {
             "session",
             "media",
             "power",
+            "bluetooth_devices",
+            "network_devices",
         ];
         if let Some(services) = &manifest.services {
             for name in &services.desktop {
@@ -457,13 +459,13 @@ mod tests {
     #[test]
     fn accepts_service_subset_and_declared_command() {
         let p = folder(&format!(
-            "{}\n[window]\nsize=[10,10]\n[services]\ndesktop=['clock','tray']\n[commands.weather]\nargv=['echo','hi']\ninterval=60\n",
+            "{}\n[window]\nsize=[10,10]\n[services]\ndesktop=['clock','tray','network_devices']\n[commands.weather]\nargv=['echo','hi']\ninterval=60\n",
             base()
         ));
         let app = App::load(&p).unwrap();
         assert_eq!(
             app.folder_services().desktop,
-            BTreeSet::from(["clock".into(), "tray".into()])
+            BTreeSet::from(["clock".into(), "tray".into(), "network_devices".into()])
         );
         assert_eq!(
             app.folder_services().commands["weather"].argv,

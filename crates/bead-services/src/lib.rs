@@ -131,6 +131,7 @@ mod tests;
 
 pub mod bluetooth;
 pub mod media;
+pub mod network;
 pub mod notification_bus;
 pub mod notifications;
 pub mod power_profiles;
