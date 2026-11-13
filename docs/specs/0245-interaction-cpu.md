@@ -3,10 +3,10 @@
 Status: phase 1 complete; phase 2a implemented, awaiting desktop validation against the ~1%-of-one-core goal.
 
 Phase 2a serializes recovery JSON once before writing; atomic replacement and syncs remain unchanged.
-Across sessions, identical bundles skip writes only for private, same-user regular files/directories.
+Across sessions, identical bundles skip data writes only for private, same-user regular files/directories.
 Missing, corrupt or insecure snapshots take the normal save path; recovery loading is unchanged.
 D1/no-renderer/count1: 5,207 / 525,399 encoded bytes use 1 data write versus 2,599 / 262,695 previously.
-D1/no-renderer/CI1: full CI passed, including recovery/atomicity/privacy tests. The JSON vector adds transient memory.
+D1/no-renderer/CI2: full CI passed, including recovery/atomicity/privacy tests. The JSON vector adds transient memory.
 
 ## Method
 
