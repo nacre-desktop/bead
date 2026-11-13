@@ -6,4 +6,4 @@ Folder apps opt in with `[services].desktop = ["bluetooth_devices"]`, which publ
 
 Pairing that needs a PIN, passkey, or confirmation agent is out of scope; BlueZ's pairing errors are returned with an agent-required explanation. OBEX, file transfer, and audio profile selection are out of scope. No temporary duplicate implementation was introduced.
 
-Evidence: [BlueZ Adapter1](https://bluez.readthedocs.io/en/latest/adapter-api/), [Device1](https://bluez.readthedocs.io/en/latest/device-api/), [Battery1](https://bluez.readthedocs.io/en/latest/battery-api/), and the [BlueZ 5 ObjectManager overview](https://www.bluez.org/bluez-5-api-introduction-and-porting-guide/). This design uses the documented public interfaces only; no Nacre source was consulted.
+Evidence: [BlueZ Adapter1](https://bluez.readthedocs.io/en/latest/adapter-api/), [Device1](https://bluez.readthedocs.io/en/latest/device-api/), [Battery1](https://bluez.readthedocs.io/en/latest/battery-api/), and the [BlueZ 5 ObjectManager overview](https://www.bluez.org/bluez-5-api-introduction-and-porting-guide/). This design uses the documented public interfaces only; no application source was consulted.
