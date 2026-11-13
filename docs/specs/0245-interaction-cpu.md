@@ -1,6 +1,7 @@
 # 0245 — Shell interaction CPU
 
-Status: phase 1 complete; phase 2a implemented, awaiting desktop validation against the ~1%-of-one-core goal.
+Status: phase 1 complete; phase 2a implemented; phase 2b framework changes verified.
+Host integration and desktop validation against the ~1%-of-one-core goal remain pending.
 
 Phase 2a serializes recovery JSON once before writing; atomic replacement and syncs remain unchanged.
 Across sessions, identical bundles skip data writes only for private, same-user regular files/directories.
@@ -151,7 +152,7 @@ measure CPU **and** PPT, verify smooth transitions, and retain the steady-idle l
 
 ## Phase 2b — warm source and static layout reuse
 
-Status: framework implementation; host integration and desktop acceptance pending.
+Status: framework checks passed; host integration and desktop acceptance pending.
 
 The teardown is in the framework: `select_panel` releases the previous named
 worker when selecting another view, bypassing the ordinary 120-second same-view
@@ -191,7 +192,8 @@ Rust 1.99.0 release build. The compositor-free fixture has 300 bound list rows
 and six open/close cycles. Preparation and display use separate caches, matching
 the worker/render ownership boundary. The initial harness incorrectly shared
 those roles and is excluded from the following tables. Numbers are medians of
-six cycles; wall time is not shell CPU usage. Cold creates a new Session per open;
+six cycles; timings include allocation instrumentation and are not shell CPU usage.
+Cold creates a new Session per open;
 resident keeps one Session and prepares its content once before the cycles.
 
 | Metric | Baseline cold | Baseline resident | Candidate resident |
@@ -211,7 +213,9 @@ resident keeps one Session and prepares its content once before the cycles.
 The candidate's cold open remains 30.164 ms: warm retention, rather than faster
 initial construction, supplies that saving. The separate worker tests exercise
 actual source admission/resume; the table isolates Session/render work and does
-not claim that the measured production host has enabled retention.
+not claim that the measured production host has enabled retention. It excludes
+host refresh/source-validation I/O, worker scheduling, surface creation and raster
+painting.
 
 Both revisions' 360 prepared pose frames have **zero** evaluations,
 materializations, layouts, display scene preparations, raster builds, and
@@ -230,15 +234,22 @@ panel memory cannot be inferred from this text-only fixture.
 
 Executed benchmark command: `cargo test -p bead-ui --features test-counters
 --release --locked -j2 panel_open_close_baseline -- --ignored --nocapture`.
-Focused suites passed: 164 Wayland, 128 renderer, and 186 UI tests. Actual-worker
+The pre-final focused suites passed: 164 Wayland, 128 renderer, and 186 UI tests.
+Actual-worker
 tests retain one factory across six reopens and two factories across six A/B
 cycles, for both slot kinds with one dormant-entry budget. They also cover pending
 transaction rejection, coalesced input readiness, budget eviction, epoch isolation
 and rejected resume. The small actor fixture declares 16 KiB of source ownership;
 its admission charge is 2,117,910 bytes against a 2,118,934-byte test budget.
 This is a conservative admission proof, distinct from the 300-row heap measurement.
-Warnings-denied Clippy caught a deprecated atomic spelling, now corrected to
-`try_update`; final full-CI verification is pending.
+Warnings-denied Clippy caught a deprecated atomic spelling, corrected to
+`try_update` before the final gate. D2/CPU/CI4 passed the complete
+`.github/workflows/ci.yml` replica on code revision `e1636fbf`, including formatting,
+boundary/negative controls, workspace Clippy/tests, all renderer feature checks,
+every example app and minimal-host proof, private service/tray/clock proofs, and
+all per-manifest dependency/license checks. Source checksums matched before and
+after the run. The final follow-up changes documentation only. Cargo-deny's
+existing locked `async-executor 1.14.0` yanked-version warning is non-fatal.
 
 Dormant admission charges include the declared host bound, a conservative worker
 stack allowance (at least 2 MiB, increased for larger `RUST_MIN_STACK` requests),
