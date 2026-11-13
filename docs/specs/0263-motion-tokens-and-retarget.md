@@ -70,9 +70,14 @@ static-body open/close; making it the default needs the compositor side and is n
   pacing and retarget, pulse loop, paint-only patches (0 Luau, 0 layout, exact final geometry, node
   boxes follow), layout markers (0 Luau), reveal with a body at 0/25/50/100 % and after a retarget,
   frame damage of a 26-frame grow bounded by the union of consecutive bodies.
-- Damage: `body_frames_damage_only_the_union_of_the_old_and_new_body` prints the worst bytes per
-  grow frame on the 488x584 logical surface at scale 1.5 (`PEEK_GROW_DAMAGE`), against 46.7 MB for
-  a full 2880x1800 output frame.
+- Damage (`body_frames_damage_only_the_union_of_the_old_and_new_body`, 488x584 logical surface at
+  scale 1.5, bytes painted per frame): peek at rest 0; a paint-only marker frame (one chip's fill
+  alpha) 19,840 (that node's bounds only); mid-grow at most 2,395,800, bounded by the previous and
+  current body plus shadow margin; full panel at rest 0; a full 2880x1800 frame would be 46.7 MB.
+- Bench (dev-1 container, release, median of 40 frames, the 0252 bar fixture with one capsule):
+  `ui.animate` frame 565 us / 3,212 allocations (Luau + IR + layout); `ui.animated` frame (alpha,
+  radius, translate_x patched in the cached scene) 49.5 us / 379 allocations, where the 379 are the
+  scene and node copies the session hands the host per frame (worker hot-path unit), not the patch.
 - Example: `examples/bar-with-panels` `status` panel (More/Less regrow the body as one surface).
 - Capture: `.lead/capture-peek.sh` (untracked) runs the example under headless sway at 120 Hz and
   reports PANEL_SLIDE gap p50/p95/max; the 120 Hz desktop capture is booked by the lead.
