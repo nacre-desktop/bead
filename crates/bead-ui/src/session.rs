@@ -660,19 +660,44 @@ impl Session {
             scene.offset.1 = 32.;
             let banner_y = (scene.bounds.h - 64. - 84.).max(16.);
             let banner_width = (scene.width - 32.).max(64.);
+            let error = error.chars().take(500).collect::<String>();
+            // Layout scenes pad their bounds by a shadow margin on each side.
+            let root_height = scene.bounds.h + 2. * scene.bounds.y;
+            // A root too short for the 68 px banner and its margins (a bar) gets one line
+            // of the error inside its own height; UI_ERROR in the log has the full text.
+            let (banner, text_rect, text) = if root_height < 100. {
+                let height = (root_height - 4.).max(1.);
+                let line = 14. * 1.4;
+                (
+                    Rect::new(16., 2., banner_width, height),
+                    Rect::new(
+                        28.,
+                        2. + ((height - line) / 2.).max(0.),
+                        (banner_width - 24.).max(1.),
+                        line.min(height),
+                    ),
+                    format!(
+                        "Reload failed — old UI kept: {}",
+                        error.lines().next().unwrap_or_default()
+                    ),
+                )
+            } else {
+                (
+                    Rect::new(16., banner_y, banner_width, 68.),
+                    Rect::new(28., banner_y + 10., (banner_width - 24.).max(1.), 52.),
+                    format!("Reload failed — old UI kept\n{error}"),
+                )
+            };
             scene.resource_revision = self.attempts;
             scene.primitives.push(Primitive::Rounded {
-                rect: Rect::new(16., banner_y, banner_width, 68.),
+                rect: banner,
                 radius: 8.,
                 fill: [75, 20, 25, 250],
                 border: Some(([255, 140, 150, 255], 1.)),
             });
             scene.primitives.push(Primitive::Text {
-                rect: Rect::new(28., banner_y + 10., (banner_width - 24.).max(1.), 52.),
-                text: format!(
-                    "Reload failed — old UI kept\n{}",
-                    error.chars().take(500).collect::<String>()
-                ),
+                rect: text_rect,
+                text,
                 family: crate::theme::sans_family(),
                 weight: 400,
                 align: None,

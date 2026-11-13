@@ -2004,6 +2004,33 @@ mod tests {
     }
 
     #[test]
+    fn reload_failure_notice_fits_a_thin_bar() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/hello-bar");
+        let mut view = FolderView::load(
+            root,
+            "view/main.luau".into(),
+            "palette.json".into(),
+            "Bar",
+            (1280, 36),
+        )
+        .unwrap();
+        view.check_render(UiEvent::Reload).unwrap();
+        let scene = view.error_scene("view/main.luau:13:1: syntax error: boom\nmore".into());
+        let notice = scene.primitives.iter().find_map(|p| match p {
+            crate::render::Primitive::Text { text, rect, .. } if text.starts_with("Reload") => {
+                Some((text.as_str(), *rect))
+            }
+            _ => None,
+        });
+        let (text, rect) = notice.expect("reload failure notice");
+        assert_eq!(
+            text,
+            "Reload failed — old UI kept: view/main.luau:13:1: syntax error: boom"
+        );
+        assert!(rect.y >= 0. && rect.y + rect.h <= 36., "{rect:?}");
+    }
+
+    #[test]
     fn desktop_projection_covers_live_and_unknown_values() {
         let empty = desktop_values(&Snapshot::default());
         assert_eq!(empty["desktop.battery.percent"], Value::Number(-1.));
