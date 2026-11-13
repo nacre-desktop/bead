@@ -564,7 +564,6 @@ impl SnapshotFingerprint {
         ] {
             value.to_bits().hash(&mut metadata);
         }
-        scene.font_files.len().hash(&mut metadata);
         scene.font_files.hash(&mut metadata);
         scene.layers.len().hash(&mut metadata);
         for layer in &scene.layers {
@@ -1643,16 +1642,21 @@ impl TreeCache {
             self.raster = CpuRenderer::default();
             self.font_files = scene.font_files.clone();
         }
-        let mut owners: Vec<Option<&str>> = vec![None; scene.primitives.len()];
+        let mut owners = vec![std::borrow::Cow::Borrowed(""); scene.primitives.len()];
         for layer in &scene.layers {
             for index in layer.own.clone() {
                 let owner = owners
                     .get_mut(index)
                     .ok_or("invalid layer primitive range")?;
-                if owner.is_some() {
+                if !owner.is_empty() {
                     return Err("overlapping layer ownership".into());
                 }
-                *owner = (!layer.id.is_empty()).then_some(layer.id.as_str());
+                *owner = std::borrow::Cow::Borrowed(layer.id.as_str());
+            }
+        }
+        for (index, owner) in owners.iter_mut().enumerate() {
+            if owner.is_empty() {
+                *owner = std::borrow::Cow::Owned(format!("primitive-{index}"));
             }
         }
         let mut ordinals = BTreeMap::<(&str, &'static str), usize>::new();
@@ -1681,17 +1685,9 @@ impl TreeCache {
                 Primitive::Image { .. } => "image",
                 Primitive::Shadow { .. } => "shadow",
             };
-            let mut fallback_ordinal = 0;
-            let ordinal = if let Some(owner) = owners[index] {
-                ordinals.entry((owner, kind)).or_default()
-            } else {
-                &mut fallback_ordinal
-            };
-            let id = if let Some(owner) = owners[index] {
-                format!("{owner}/{kind}/{ordinal}")
-            } else {
-                format!("primitive-{index}/{kind}/{ordinal}")
-            };
+            let owner = owners[index].as_ref();
+            let ordinal = ordinals.entry((owner, kind)).or_default();
+            let id = format!("{owner}/{kind}/{ordinal}");
             *ordinal += 1;
             let key = signature(scene, primitive, scale, &mut asset_keys);
             keys.push(key);
@@ -2048,7 +2044,6 @@ impl TreeCache {
         let mut layers = Vec::with_capacity(scene.layers.len());
         for layer in &scene.layers {
             let mut key = std::collections::hash_map::DefaultHasher::new();
-            layer.id.hash(&mut key);
             let mut own = Vec::new();
             for index in layer.own.clone() {
                 let item = items.get(index).ok_or("retained node range invalid")?;

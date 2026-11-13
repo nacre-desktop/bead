@@ -349,7 +349,7 @@ impl Script {
                 .as_ref()
                 .is_some_and(|tainted| tainted.get());
         if reusable && candidate.reset_action().is_ok() {
-            candidate.source.clear();
+            candidate.source = Vec::new();
             *self.action_vm.borrow_mut() = Some(Box::new(candidate));
         }
         bead_core::profile::mark("luau_handler_ready");
@@ -821,6 +821,11 @@ mod action_isolation_tests {
         assert!(script.action_vm.borrow().is_none());
         script.action("noop", &stores, Value::Bool(true)).unwrap();
         assert!(script.action_vm.borrow().is_some());
+        let warmed = script.memory_bytes();
+        for _ in 0..100 {
+            script.action("noop", &stores, Value::Bool(true)).unwrap();
+        }
+        assert!(script.memory_bytes() <= warmed + 4096);
         assert!(script.memory_bytes() <= 16 * bead_core::cache::MIB);
     }
 }
