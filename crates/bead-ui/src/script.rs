@@ -533,3 +533,80 @@ return {stores={x=slot.x,y=slot.y},actions={},computed={}}"#,
         );
     }
 }
+
+#[cfg(test)]
+mod action_isolation_tests {
+    use super::*;
+
+    #[test]
+    fn actions_start_with_fresh_module_and_sandbox_globals_after_success_or_failure() {
+        let script = Script::load(
+            br#"
+                local hidden = 0
+                return {
+                    stores = { value = 0 },
+                    actions = {
+                        mutate = function(stores)
+                            hidden += 1
+                            leaked = (leaked or 0) + 1
+                            stores.value = hidden + leaked
+                        end,
+                        fail = function(stores)
+                            hidden += 1
+                            leaked = (leaked or 0) + 1
+                            stores.value = 99
+                            error("discard this action VM")
+                        end,
+                    },
+                    computed = {},
+                }
+            "#,
+            Path::new("action-isolation.luau"),
+        )
+        .unwrap();
+        let stores = Stores::default()
+            .reconcile(&script.schema().unwrap())
+            .unwrap();
+
+        assert_eq!(
+            script
+                .action("mutate", &stores, Value::Bool(true))
+                .unwrap()
+                .get("value"),
+            Some(&Value::Number(2.))
+        );
+        assert!(script.action("fail", &stores, Value::Bool(true)).is_err());
+        assert_eq!(
+            script
+                .action("mutate", &stores, Value::Bool(true))
+                .unwrap()
+                .get("value"),
+            Some(&Value::Number(2.))
+        );
+    }
+
+    #[test]
+    fn separately_loaded_plugins_do_not_share_action_globals() {
+        let source = br#"local hidden=0; return {stores={value=0},actions={mutate=function(s) hidden+=1; leaked=(leaked or 0)+1; s.value=hidden+leaked end},computed={}}"#;
+        let first = Script::load(source, Path::new("first.luau")).unwrap();
+        let second = Script::load(source, Path::new("second.luau")).unwrap();
+        let stores = Stores::default()
+            .reconcile(&first.schema().unwrap())
+            .unwrap();
+
+        assert_eq!(
+            first
+                .action("mutate", &stores, Value::Bool(true))
+                .unwrap()
+                .get("value"),
+            Some(&Value::Number(2.))
+        );
+        assert_eq!(
+            second
+                .action("mutate", &stores, Value::Bool(true))
+                .unwrap()
+                .get("value"),
+            Some(&Value::Number(2.))
+        );
+    }
+}
