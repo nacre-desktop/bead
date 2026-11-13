@@ -1349,9 +1349,18 @@ impl FrontEnd for LuauFrontEnd {
             // The expanded size, without a second walk (memo markers count twice).
             Ok((raw, 8 * bead_core::cache::MIB - remaining))
         });
-        // A graph hand-over leaves its Luau tables as garbage and the VM may idle from now on.
+        // A graph hand-over leaves its Luau tables as garbage and the VM may idle from now on:
+        // collect them and return the freed pages (several MiB for a 2k/10k graph).
         if crate::graph_data::handed_over() {
             let _ = lua.gc_collect();
+            #[cfg(all(target_os = "linux", target_env = "gnu"))]
+            {
+                unsafe extern "C" {
+                    fn malloc_trim(pad: usize) -> i32;
+                }
+                // SAFETY: glibc allocator trim only.
+                unsafe { malloc_trim(0) };
+            }
         }
         // Live VM allocation after this build (retained module state plus
         // not-yet-collected garbage), not an allocator high-water estimate.

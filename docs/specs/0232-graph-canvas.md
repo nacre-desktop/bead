@@ -1,6 +1,6 @@
 # 0232 — GraphCanvas feasibility
 
-Status: phase 2a checkpoint blocked by the 1 MiB memory gate (measured +17.105 MiB below); the Luau contract stays provisional until the consumer's design arrives; phase 2b adds the retained GPU path and validates 120 Hz on real GPUs.
+Status: phase 2a engine, CPU path and GPU hookup implemented; memory gate missed by 0.35 MiB (1.35 MiB median against 1 MiB, floor per component below), lead decision pending; the Luau contract stays provisional until the consumer's design arrives; phase 2b adds the retained GPU path and validates 120 Hz on real GPUs.
 
 Target: 2,000 nodes / 10,000 edges at 120 Hz (8.33 ms/frame), including pan/zoom; quiescent when unchanged.
 Applications own content, persistence and theme policy; phase 2b API refinements await consumer design.
@@ -179,68 +179,70 @@ Phase 1 spikes/evidence are ignored; delete seven days after review.
 
 ## Phase 2a: engine, graph primitive, CPU path, Luau binding
 
-What exists:
+What exists (after the follow-up simplicity pass):
 
 - `bead_core::graph`: `Layout` (grid-binned repulsion plus degree-normalised springs, as in the
-  phase 1 spike; no new dependency), `Worker` (one thread owning positions/velocities, commands
-  `Replace { positions, pinned, edges, hot }` and `Pin { node, position, pinned }`, latest-only
-  `Snapshot` mailbox with command sequence checks (old topology/drag/restore snapshots are discarded),
-  one host wake per pending snapshot, condvar park at zero CPU, cancel/join on
-  drop). Settling anneals `alpha` 0.18 → 0.001 (×0.998/step) and stops after 12 quiet steps
-  (mean velocity² < 1e-5) or 3,000 steps. A per-node `heat` lets a local change (new node, unpin)
-  move only the touched node and its neighbours; frozen nodes keep their exact positions.
-- `bead_render::Primitive::Graph { rect, geometry: Arc<GraphGeometry>, camera, style, hover, selected }`
-  with `bead_render::graph`: `GraphGeometry` (revision, positions, radii, edge index pairs, hidden and
-  highlighted flags, replaced as a whole on change), `Camera` (centre + zoom), `GraphStyle`
-  (theme colours and thresholds) and the CPU painter. Hashing and damage compare the geometry
-  revision, camera, style and interaction, never every edge. The painter writes anti-aliased
-  hairline edges (Liang–Barsky clipped, Wu) and coverage discs straight into the damage strip:
-  no scratch and no retained raster, so the 16 MiB repair-scratch guard that failed phase 1 at
-  2880×1800 is not involved. LOD: edges and nodes outside the clip are skipped; below
-  `style.lod_zoom` (default 0.8) only every fourth unfocused edge is drawn at `far_edge_alpha`;
-  edges touching the hovered, selected or highlighted nodes always draw. Hover and selection
-  change only the primitive's interaction fields; damage covers old/new focus nodes and affected
-  incident edges. Camera, topology and style changes damage the viewport.
-  Labels are ordinary `Text` primitives appended by the session (hovered > selected >
-  highlighted by weight > visible nodes by weight once `zoom >= label_zoom`), capped by
-  `max_labels` (default 32, at most 256) and the remaining shared 1,024 scene text slots.
-  The legacy `CpuRenderer` and native GL draw nothing for the primitive and do not fail on it;
-  the wgpu femtovg renderer draws it through the retained GPU path (below).
-- `bead_ui::graph_data`: the data crosses the Luau boundary once. `ui.graph(nodes, edges)` walks the
-  Luau tables straight into one `GraphResource` (ids and labels as `Box<str>`, interned group index,
-  `f32` weight, `Arc<[[u32; 2]]>` edges, an id-sorted index and a weight-sorted label priority;
-  20k nodes / 100k edges caps, duplicate ids, missing edge ends and non-finite weights rejected
-  there) and returns a handle that serializes into the view tree as a small token, so the
-  materialized JSON tree never holds the graph. Equal content keeps its token, so an unchanged
-  view still patches in place; a stale token is a diagnostic, and a handle built in a pure
-  module (the demo does this) is cached with the module, so the Luau tables are garbage after
-  hand-over. `kit.GraphCanvas` accepts `graph = ui.graph(...)` or `nodes`/`edges` (then it hands
-  over per build).
-- `bead_ui::graph`: one `Canvas` per `Graph` view node, owned by the `Session` and surviving view
-  reloads. The canvas shares the `GraphResource` and its edge array with the view node, the
-  worker command and the render geometry (no copies after ingest), holds positions as the
-  worker's latest `Arc<[Point]>` snapshot, and reuses the radius/mask arrays until attributes
-  change. Data is reconciled by id: a rename, weight,
-  group, highlight or style change never reaches the worker; node/edge/pin changes send one
-  `Replace` where kept nodes keep their positions, new nodes start 40 world units from a placed
-  neighbour (or in the scatter) and settle locally. A flat sorted world-space grid
-  (`bead_core::graph::Grid`, shared with the layout step) narrows hit tests;
-  position and radius changes invalidate it. Interaction indices and runtime pins follow stable IDs. Pointer:
-  press on a node then drag moves and pins it (`Pin` command; `on_pin{id,x,y}` on release), press
-  on empty canvas then drag pans, wheel zooms around the pointer (`on_view_changed{zoom,cx,cy}`),
-  click selects (`on_select id`), a second click within 400 ms activates (`on_activate id`), hover
-  emits `on_hover id|""` on change. Camera, hover and layout snapshots patch the committed scene
-  directly (`Session::graph_frame`), without running Luau; a snapshot is consumed at most once per
-  frame. `Session::graph_layout(id)` / `set_graph_layout(id, map)` use the full scoped canvas ID
-  (for example `root.canvas`) and export/import positions and
-  pin flags by id. Host wake: `Session::set_wakeup` (the `bead` host wires it to an empty model
-  event).
-- `kit.GraphCanvas{ id, graph | nodes, edges, style?, highlight?, hidden_groups?, selected?, on_hover?,
-  on_select?, on_activate?, on_pin?, on_view_changed? }` over the `ui.Graph` widget
-  (`selected` maps to the widget's `selected_node`, the data to its `graph` token). Keyboard navigation, context menu, focus
-  animation, `neighborhood` masks and hysteresis at the LOD threshold are still open.
-- `examples/graph-demo`: seeded 2k/10k graph generated in Luau, status line with hover, select,
-  activate, pin and view events; `bead check examples/graph-demo` runs in CI.
+  phase 1 spike; no new dependency) and `Worker` (one thread owning positions/velocities). Its
+  one command, `Replace { positions, edges, hot }`, is kept latest-only; `hot` nodes and their
+  direct neighbours settle while every other node keeps its exact position. Snapshots go through a
+  latest-only mailbox tagged with the command revision they reflect, so the UI discards snapshots
+  computed for an older topology; one host wake per pending snapshot, condvar park at zero CPU,
+  cancel/join on drop. Settling anneals `alpha` 0.18 → 0.001 (×0.998/step) and stops after 12
+  quiet steps (mean velocity² < 1e-5) or 3,000 steps. `Grid` (flat sorted bins) also serves hit tests.
+- `bead_render::Primitive::Graph { rect, geometry: Arc<GraphGeometry>, camera, style, hover, selected }`:
+  `GraphGeometry` (revision, positions, radii, edge index pairs, each an `Arc` slice, replaced as a
+  whole), `Camera` (centre + zoom), `GraphStyle` (theme colours and thresholds) and the CPU
+  painter. Hashing and damage compare the geometry identity/revision, camera, style and
+  interaction, never every edge. The painter writes anti-aliased hairline edges (Liang–Barsky
+  clipped, Wu) and coverage discs straight into the damage strip: no scratch and no retained
+  raster, so the 16 MiB repair-scratch guard that failed phase 1 at 2880×1800 is not involved.
+  LOD: edges and nodes outside the clip are skipped; below `lod_zoom` (default 0.8) only every
+  fourth unfocused edge is drawn, at `far_edge_alpha`; edges of the hovered or selected node always
+  draw. Hover and selection damage only the old/new focus discs (plus their edges below
+  `lod_zoom`); camera, topology and style changes damage the viewport. The legacy `CpuRenderer`,
+  native GL and the Vello comparison kind draw nothing for the primitive; the wgpu femtovg
+  renderer draws it through `GraphGpu` (phase 2b below).
+- `bead_ui::graph_data`: `ui.graph(nodes, edges)` walks the Luau tables once into one
+  `GraphResource` (ids and labels as `Box<str>`, `f32` weight, `Arc<[[u32; 2]]>` edges, an
+  id-sorted index and a weight-sorted label priority; 20k nodes / 100k edges caps; duplicate ids,
+  missing edge ends and negative or non-finite weights rejected) and returns a handle that
+  serializes into the view tree as a token, so the materialized JSON never holds the graph. Equal
+  content keeps its token, so an unchanged view still patches in place. Hand-over is native time,
+  excluded from the 50 ms markup budget like text measurement, and a build that handed over new
+  data runs one full Luau collection afterwards, so the tables do not linger as garbage in an idle VM.
+- `bead_ui::graph`: one `Canvas` per `Graph` view node, owned by the `Session` and surviving
+  reloads. It shares the `GraphResource` and its edge array with the view node, the worker command
+  and the render geometry, holds positions as the worker's latest `Arc<[Point]>` snapshot and
+  rebuilds the radius array only when weights or `node_radius` change. Data is reconciled by id:
+  renames, weights and style never reach the worker; a topology change sends one `Replace` in which
+  kept nodes keep their positions and new nodes start 40 world units from a placed neighbour (a
+  fresh graph starts in a deterministic scatter); hover and selection follow ids. Input: hover emits
+  `on_hover id|""` on change; a click on a node selects it (ring) and runs `on_select id`; a drag
+  pans; the wheel zooms around the pointer. Camera, hover and layout snapshots patch the committed
+  scene (`Session::graph_frame`) without running Luau; a snapshot is consumed at most once per frame.
+  Labels are ordinary `Text` primitives: hovered > selected > visible nodes by weight once
+  `zoom >= label_zoom`, capped by `max_labels` (default 32, at most 256) and the free share of the
+  1,024 scene text slots. Host wake: `Session::set_wakeup` (the `bead` host wires it to an empty
+  model event).
+- `kit.GraphCanvas{ id, graph = ui.graph(nodes, edges), style?, on_hover?, on_select? }` over
+  `ui.Graph`; `style` holds palette roles (`node`, `edge`, `hover`, `selected`, `label`) and numbers
+  (`node_radius`, `label_size`, `label_zoom`, `max_labels`, `lod_zoom`, `far_edge_alpha`).
+- `examples/graph-demo`: a seeded 2k/10k graph built in a pure Luau module and handed over once;
+  the status line shows hover and selection; `bead check examples/graph-demo` runs in CI.
+
+Removed by the simplicity pass because neither `kit.GraphCanvas` nor the demo needs them (bring
+back with a consumer): the `nodes=`/`edges=` input form (one form remains), node drag/pinning
+(`on_pin`, the `Pin` command, `pinned` data), double-click `on_activate`, `on_view_changed`,
+controlled `selected`, `highlight`/`hidden_groups` masks with dimming, node groups, and the
+`graph_layout`/`set_graph_layout` export/import. Keyboard navigation, context menus, focus
+animation, `neighborhood` masks and LOD hysteresis stay open. `GraphGpu` keeps its hidden/highlight
+node flags (phase 2b); the canvas passes none.
+
+Rollback: an update rejected while the view builds (for example an edge naming a missing node)
+leaves every canvas's topology, positions and worker revision untouched
+(`graph::tests::invalid_graph_update_keeps_every_canvas_and_layout`), and every canvas's style is
+resolved before any engine changes. A scene the host rejects after a successful stage
+(`Session::reject`) is not rolled back in the engines; the next build reconciles them by id again.
 
 Measured (secondary build host, Ubuntu 24.04 container, 8 CPUs / 8 GiB, Rust 1.99.0 release,
 ignored `.lead/render-probe.rs` harness;
@@ -258,78 +260,68 @@ Scale is 1 / 2.25 respectively; pan is (4,2), zoom change ×1.01, and hover sele
 one visible node. At zoom 1, incident edge pixels do not change, so only the focus ring
 is damaged. At zoom 0.4, incident edges become visible and their bounds also need repair.
 These completed CPU draws do not meet 120 Hz for camera movement; GPU work remains phase 2b.
-Geometry arrays occupy 104,000 bytes, which excludes data binding and worker state.
+The painter has not changed since this table except that highlight dimming is gone.
 
-Ingestion succeeded in all five final 2k/10k runs with the unchanged 50 ms Luau and
-8 MiB VM limits. Total session-load thread CPU was **49.021 ms median**, 47.828–49.277 ms;
-a separate profiled load spent **27.010 ms** in markup (9.670 ms evaluation, 16.533 ms
-serialization). The post-build markup VM counter was **3,227,724 B (3.078 MiB)**;
-the retained markup-values counter was **3,441,143 B**. These counters are not total
-process memory. The last settled snapshot arrived **1.615 s median / 1.623 s max** after
-load began (five runs, consumed at 8 ms intervals). Worker tests verify no added Linux
-CPU ticks over a bounded 200 ms park interval and joining on drop.
+Memory (phase 2a follow-up). Same method as the checkpoint: five alternating fresh-process
+pairs, an empty-graph control (`ui.graph({}, {})`) against the 2k/10k demo, one release probe
+binary (ignored `.lead/probe.rs`), CPU renderer, 1280×800, same palette, settled layout and first
+completed frame. Unreclaimable = `Pss_Anon + Pss_Shmem + SwapPss`; shmem, swap and DRM were zero.
+Host: oyster, Ubuntu 24.04 container, 6 CPUs / 6 GiB, Rust 1.99.0. Medians in KiB:
 
-**Memory gate: FAIL; do not accept phase 2a under the existing budget.** Five alternating
-fresh-process empty-canvas/2k-10k pairs used the same release binary, CPU renderer,
-1280×800 output, palette and first completed frame, after settling. Median unreclaimable
-memory was **6,204 KiB control / 23,716 KiB graph**; median paired increase was
-**17,516 KiB = 17.105 MiB**, versus the **1 MiB** proposal. Every pair exceeded the cap.
-This is `Pss_Anon + Pss_Shmem + SwapPss`; shmem/swap were zero and no DRM allocation is
-used by this CPU proof. Clean file-backed PSS increased by a separate median **312 KiB**.
-This measures settled retention, not peak ingestion or a GPU/Wayland process comparison.
-The Luau module tables and cached raw JSON remain alongside parsed Rust data and geometry;
-a geometry-only byte count therefore substantially understates the feature cost. Meeting
-the cap requires reworking data ownership/import before acceptance; it has not been raised.
-Transactional rollback of graph engines after a rejected staged scene also needs a proof
-before this provisional API is accepted.
+| Build | Control | Graph | Paired increase |
+|---|---:|---:|---:|
+| `a4e44671` checkpoint (dev-1) | 6,204 | 23,716 | 17,516 (17.1 MiB) |
+| one Rust hand-over, before the simplicity pass | 6,192 | 10,584 | 4,396 (4.29 MiB) |
+| simplicity pass + Luau collection after hand-over | 6,204 | 10,508 | 4,344 (4.24 MiB) |
+| + `malloc_trim(0)` after hand-over (final) | 6,204 | 7,568 | **1,384 (1.35 MiB)** |
 
-The full Ubuntu CI recipe was exercised: formatting, warnings-denied workspace Clippy,
-workspace tests, renderer feature configurations, all five folder examples, both minimal
-hosts, private service/tray/clock proofs, and per-manifest cargo-deny checks. Initial fixture
-and lint failures were corrected and the failed steps rerun successfully. The final startup
-wake fix additionally passed Clippy and all **189 bead-ui tests**. A private headless sway
-capture was inspected: the graph, highlighted node, **Note 813** hover label and matching
-status text rendered without `UI_ERROR`. GPU rendering/presentation and interactive 120 Hz
-remain phase 2b work. Logs, probes and screenshots stay in the unit's ignored `.lead/`;
-only this summary is committed.
+**The 1 MiB budget is still missed by 0.35 MiB**: median 1,384 KiB (1.35 MiB); three pairs
+were 1,284–1,384 KiB and two took a +0.9 MiB allocator step (2,216 and 2,376 KiB), the kind of
+arena step earlier units saw in control and candidate alike. Floor per component, from two
+diagnostic readings later in the same processes (release the markup VM, then `malloc_trim(0)`):
 
-## Phase 2a memory ownership follow-up: baseline
-
-Measured before implementation changes at `a4e44671`: Ubuntu 24.04, Rust 1.99.0 release,
-6-CPU/12-GiB container, same 1280×800 graph-demo and empty-graph control. Three fresh
-alternating pairs used a tagged counting allocator; the graph also received one hover
-to populate its hit index and label. These are median paired **requested live bytes**,
-not RSS, and exclude the meter's separately counted headers/alignment and the identical
-4,096,000-byte output buffer. The production five-pair PSS baseline above is unchanged.
-
-| Retained allocation owner after hover/render | Incremental live bytes |
+| Component (final build) | KiB |
 |---|---:|
-| Luau graph evaluation/module allocations | 2,127,328 |
-| Cached JSON/serde view tree | 8,396,820 |
-| Parsed Rust graph data/IDs/labels/groups/edges | 277,786 |
-| Canvas positions, pins, ID map and priority order | 170,077 |
-| Render geometry (including copied edges/positions) | 104,000 |
-| Layout worker positions/pins/edges/velocities/heat | 122,000 |
-| Hit spatial index | 89,952 |
-| Label primitive strings | 16 |
-| Renderer/text-cache increment | 16,829 |
-| Other view/action allocation increment | 14,023 |
-| **Total (without double-counting the Lua gauge)** | **11,318,831** |
+| Resident graph state left after both (Rust data, layout worker, canvas, worker stack/arena) | 620 |
+| Luau VM residue: pages the markup VM keeps after building the 12k tables (gone only with the VM) | 444 |
+| Allocator retention after the hand-over trim (worker churn during the 2.9 s settle, first frame) | 320 |
+| **Gated increase** | **1,384** |
 
-The mlua 0.12.2 allocator calls Rust `std::alloc`; its `used_memory()` gauge therefore
-overlaps these counts. Loading the graph module added **2,115,936 B** to that gauge.
-Post-collection VM usage was **3,209,844 B graph / 1,090,708 B control**; collection did
-not remove module-owned tables. Releasing the entire markup VM removed the graph-eval
-bucket, but retained JSON remained **8,396,820 B** above control. The old cache charge
-of 3,441,143 B materially understated the actual JSON allocations.
+Estimated make-up of the 620 KiB for 2k/10k: `GraphResource` ~300 KB (node records 80 KB, id and
+label strings ~128 KB with allocator overhead, edges 80 KB, id index and priority 16 KB), layout
+worker ~100 KB (positions, velocities and forces 16 KB each, degree 8 KB, grid 24 KB), canvas
+~24 KB (latest snapshot, radii) and the worker thread's stack and malloc arena (~150 KB); the hit
+grid (24 KB) and labels appear on first hover. Options for the lead (not done): accept ~1.4 MiB;
+trim once more after the first settle (removes the last row, so roughly 1.06 MiB, unmeasured);
+pack ids and labels into one buffer (~0.12 MiB). The VM residue is inherent to describing the
+graph as Luau tables in a VM that stays alive.
 
-The mailbox held no unread snapshot after settling; its tagged peak was **32,032 B**
-(two 16,016-byte snapshots during replacement). Layout bins/step temporaries returned
-to zero live bytes, with a **143,312 B** tagged peak; geometry peaked at **208,288 B**.
-Peaks are allocation-site maxima, not additive simultaneous peaks. The meter's realloc
-implementation allocates/copies/frees, so peak/PSS results are diagnostic only. The
-requested live totals show that Lua tables and the cached JSON tree dominate; they do
-not establish a graph-data floor above 1 MiB. Raw profiles/instrumentation stay ignored.
+What the trim recovered (previous row, same diagnostic readings): of its 4,344 KiB, releasing the
+VM removed 560 KiB and `malloc_trim(0)` returned 3,204 KiB of freed pages glibc kept after the Luau
+tables and ingest temporaries were freed, leaving 580 KiB. Clean file-backed PSS did not change
+beyond noise.
+
+Before this follow-up (`a4e44671`, tagged counting allocator, requested live bytes after one
+hover): Luau graph evaluation and module tables 2,127,328; cached JSON/serde view tree 8,396,820;
+parsed Rust graph data 277,786; canvas positions, pins, id map and priority 170,077; render
+geometry with copied edges and positions 104,000; layout worker 122,000; hit index 89,952; other
+renderer/text/view increments 30,868; total 11,318,831 B. The JSON copy and the retained Luau
+tables are gone; edges and positions are shared instead of copied.
+
+Ingest (probe, release): session-load thread CPU 35.9 ms median (control 9.2 ms), of which
+25.5 ms is evaluating the demo module that builds the 12k Luau tables; the markup VM counter after
+the build is 1.56 MB (control 1.09 MB; 4.9 MB before the collection). The settled snapshot arrived
+2.94 s after load on oyster (median of five; 1.62 s on dev-1 at the checkpoint).
+
+Checks for this follow-up (commands in the unit's ignored `.lead/run9.sh` and `.lead/run13.sh`):
+fmt; warnings-denied Clippy for the workspace and for `bead-render --features wgpu`; the whole
+bead-core (42), bead-render (133), bead-ui (205) and bead-kit test binaries; `bead check
+examples/graph-demo`; the wgpu tests on llvmpipe (Mesa 25.2.8), including
+`gpu::tests::wgpu_path_draws_graphs_after_the_layer_blit`; and the full `ci.yml` replica. A
+private headless sway capture (debug `bead run`, pixman, 1280×800) waited for the layout to
+settle, then hovered four nodes (label and ring, status `hover n1050`, `n1160`, `n1005`, `n156`)
+and clicked one (status `selected n1050`), without `UI_ERROR`. Logs, probes and screenshots
+stay in `.lead/`.
 
 ## Phase 2b: retained GPU graph path
 
@@ -412,15 +404,16 @@ content key must not include the camera. Text labels use `to_screen` per labelle
 
 Hooked up (phase 2a follow-up): `bead_render::gpu::GpuRenderer` (wgpu femtovg kind) keeps one
 `GraphGpu` per `Primitive::Graph` (by primitive index) and syncs it from the shared geometry
-arrays by identity: a new edge array or node count (or edge colour) re-uploads everything, a new
-position array calls `set_positions`, new radius/mask arrays or a node colour call `set_nodes`;
-hover, selection and the camera are the per-frame uniform. The graphs are drawn in one extra
-render pass (`LoadOp::Load`) on the swapchain texture after femtovg's layer blit, scissored to
-each canvas. `prepare` bakes the retained layer from a copy of the scene whose graph primitives
-are transparent rectangles, so the layer key and pixels ignore the graph and the camera; labels
-stay `Text` primitives placed by the session with the same affine as `GraphGpu::to_screen`, so
-a pan still re-bakes the layer for the moved labels (a label overlay layer is the follow-up).
-The Vello comparison kind and native GL still draw nothing for the primitive.
-`gpu::tests::wgpu_path_draws_graphs_after_the_layer_blit` (any Vulkan adapter, llvmpipe in
-CI containers) proves the bake stays empty and camera-independent and that the drawn pixels,
-including the hover ring, land inside the canvas rectangle.
+arrays by identity: a new edge array, node count or edge colour re-uploads everything, a new
+position array (a layout snapshot) calls `set_positions`, a new radius array or node colour calls
+`set_nodes`; hover, selection and the camera are the per-frame uniform. The graphs are drawn in
+one extra render pass (`LoadOp::Load`) on the target after femtovg's layer blit, scissored to each
+canvas. `prepare` bakes the retained layer from a copy of the scene whose graph primitives are
+transparent rectangles, so neither the layer key nor its pixels follow the graph or the camera,
+and the CPU painter never runs on this path. Labels stay `Text` primitives placed by the session
+with the CPU camera's affine (the shader's), so they are baked into the layer under the graph and a
+pan still re-bakes the layer while labels are visible (a label overlay is the follow-up). The
+canvas passes no hidden/highlight flags. The Vello comparison kind and native GL draw nothing for
+the primitive. `gpu::tests::wgpu_path_draws_graphs_after_the_layer_blit` (any Vulkan adapter,
+llvmpipe in CI containers) proves the bake stays empty and camera-independent and that the drawn
+pixels, including the hover ring, land inside the canvas rectangle.
