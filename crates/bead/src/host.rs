@@ -1043,6 +1043,38 @@ pub struct FolderView {
     last_revision: Option<u64>,
     last_media_position_tick: Option<u64>,
     pointer: Option<(f32, f32)>,
+    /// B0250: the host's event sender, kept for `panel.*` actions.
+    wakeup: Option<WakeCallback>,
+    /// B0250: set on a bar that may open popup panels; its pointer position along this
+    /// edge becomes the panel centre. Panel views open other panels without a centre.
+    panel_edge: Option<bead_core::Edge>,
+    fixed_viewport: bool,
+}
+/// Host actions a folder app with `[panels]` may send (spec 0250).
+pub const PANEL_ACTIONS: [&str; 3] = ["panel.open", "panel.toggle", "panel.close"];
+/// The host event for a `panel.*` action: a `CompanionSelect` along the bar axis or a close.
+fn panel_event(
+    name: &str,
+    argument: &Value,
+    pointer: Option<(f32, f32)>,
+    bar_edge: Option<bead_core::Edge>,
+) -> Result<UiEvent, String> {
+    if name == "panel.close" {
+        return Ok(UiEvent::CompanionVisibility(false));
+    }
+    let Value::Text(view) = argument else {
+        return Err(format!("{name} needs a panel name"));
+    };
+    let center = pointer.zip(bar_edge).map(|((x, y), edge)| match edge {
+        bead_core::Edge::Top | bead_core::Edge::Bottom => x,
+        bead_core::Edge::Left | bead_core::Edge::Right => y,
+    });
+    Ok(UiEvent::CompanionSelect {
+        view: view.clone(),
+        output: None,
+        toggle: name == "panel.toggle",
+        center,
+    })
 }
 impl FolderView {
     pub fn load(
@@ -1217,7 +1249,20 @@ impl FolderView {
             last_revision: None,
             last_media_position_tick: None,
             pointer: None,
+            wakeup: None,
+            panel_edge: None,
+            fixed_viewport: false,
         })
+    }
+    /// Allow `panel.open|toggle|close` (spec 0250). `bar_edge` marks the bar whose pointer
+    /// position along that edge centres the panel; panel views pass `None` and keep
+    /// their declared viewport when the panel controller supplies output dimensions.
+    pub fn with_panel_actions(mut self, bar_edge: Option<bead_core::Edge>) -> Self {
+        self.session
+            .add_host_actions(PANEL_ACTIONS.iter().map(|name| (*name).to_owned()));
+        self.panel_edge = bar_edge;
+        self.fixed_viewport = bar_edge.is_none();
+        self
     }
     fn apply_external(&mut self) -> Result<Option<Scene>, Box<dyn Error>> {
         let mut changes = BTreeMap::new();
@@ -1347,14 +1392,19 @@ impl SceneSource for FolderView {
         self.session.watch(wakeup)
     }
     fn services(&mut self, wakeup: Box<dyn Fn(UiEvent) + Send + Sync>) {
+        let wakeup: WakeCallback = Arc::from(wakeup);
+        self.wakeup = Some(wakeup.clone());
         if let Some(runtime) = &self.runtime {
             if let Some(id) = self.registration.take() {
                 runtime.unregister(id);
             }
-            self.registration = Some(runtime.register(Arc::from(wakeup)));
+            self.registration = Some(runtime.register(wakeup));
         }
     }
     fn viewport(&mut self, w: u32, h: u32) -> bool {
+        if self.fixed_viewport {
+            return false;
+        }
         self.size = (w, h);
         self.session.set_viewport(w, h)
     }
@@ -1367,25 +1417,40 @@ impl SceneSource for FolderView {
             | UiEvent::Scroll { x, y, .. } => self.pointer = Some((*x, *y)),
             _ => {}
         }
+        // Host-owned actions never reach behavior.luau: input updates focus and press
+        // state only, then the action is routed below.
         let host_action = match &event {
             UiEvent::Click { x, y } => self.session.press_action_at(*x, *y),
             UiEvent::Release => self.session.release_action(),
-            UiEvent::Command { command, .. } if matches!(command.as_str(), "enter" | "space") => {
-                self.session.focused_action()
-            }
+            UiEvent::Drag { x, y } => self.session.drag_action(*x, *y),
+            UiEvent::Command { command, .. } => match command.as_str() {
+                "enter" | "space" => self.session.focused_action(),
+                "left" | "right" => self.session.range_action(command == "left"),
+                _ => None,
+            },
             _ => None,
         }
-        .filter(|(_, name, _)| name.starts_with("desktop.") || name.starts_with("command."));
+        .filter(|(_, name, _)| self.session.is_host_action(name));
         let mut feedback = None;
-        let event = if let Some((id, name, argument)) = host_action {
+        let event = if let Some((id, name, mut argument)) = host_action {
             feedback = match &event {
                 UiEvent::Click { x, y } => {
                     self.session.capture_pointer(*x, *y);
                     self.session.pointer_focus_id(&id, true, Some(*x))?
                 }
+                UiEvent::Drag { x, .. } => self.session.pointer_focus_id(&id, false, Some(*x))?,
                 UiEvent::Release => self.session.release_without_activation()?,
+                UiEvent::Command { command, .. }
+                    if matches!(command.as_str(), "left" | "right") =>
+                {
+                    self.session.range_step_id(&id)?
+                }
                 _ => self.session.focus_id(&id)?,
             };
+            if matches!(event, UiEvent::Click { .. } | UiEvent::Drag { .. }) {
+                // A slider's value at the pointer, authored after the feedback above.
+                argument = self.session.pointer_argument(&id).unwrap_or(argument);
+            }
             UiEvent::Action { name, argument }
         } else {
             event
@@ -1422,6 +1487,19 @@ impl SceneSource for FolderView {
                 }
                 _ => None,
             },
+            UiEvent::Action { name, argument }
+                if PANEL_ACTIONS.contains(&name.as_str()) && self.session.is_host_action(&name) =>
+            {
+                match panel_event(&name, &argument, self.pointer, self.panel_edge) {
+                    Ok(event) => {
+                        if let Some(wakeup) = &self.wakeup {
+                            wakeup(event);
+                        }
+                    }
+                    Err(e) => eprintln!("folder action: {e}"),
+                }
+                None
+            }
             UiEvent::Action { name, argument } => {
                 let (name, argument) = if name == "desktop.mute.toggle" {
                     let Some(snapshot) = self
@@ -2988,5 +3066,131 @@ mod tests {
             |p| matches!(p,crate::render::Primitive::Text{text,..} if text=="Button presses: 1")
         ));
         assert!(view.session.state_summary().contains("\"count\":1"));
+    }
+
+    #[test]
+    fn panel_actions_need_declaration_and_emit_host_events_with_the_bar_centre() {
+        use crate::wayland::SceneSource;
+        let root = std::env::temp_dir().join(format!(
+            "bead-folder-host-panels-{}-{}",
+            std::process::id(),
+            TEMP_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(root.join("view")).unwrap();
+        std::fs::write(
+            root.join("palette.json"),
+            r#"{"formatVersion":1,"colours":{"surface":"202020"}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("view/behavior.luau"),
+            "return {stores={},actions={},computed={}}",
+        )
+        .unwrap();
+        std::fs::write(root.join("view/main.luau"), "local ui=require('bead.ui');return ui.Row{id='root',width='fill',height='fill',ui.Button{id='clock',text='12:34',width=80,height=30,on_activate=ui.action('panel.toggle','calendar')},ui.Button{id='close',text='x',width=30,height=30,on_activate=ui.action('panel.close')}}").unwrap();
+        let load = || {
+            FolderView::load(
+                root.clone(),
+                "view/main.luau".into(),
+                "palette.json".into(),
+                "Panels",
+                (400, 36),
+            )
+            .unwrap()
+        };
+        assert!(load().check_render(UiEvent::Reload).is_err());
+
+        let mut panel = load().with_panel_actions(None);
+        assert!(!panel.viewport(1280, 720));
+        let scene = panel.check_render(UiEvent::Reload).unwrap();
+        assert_eq!((scene.bounds.w, scene.bounds.h), (400., 36.));
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let mut bar = load().with_panel_actions(Some(bead_core::Edge::Top));
+        let sink = events.clone();
+        bar.services(Box::new(move |event| sink.lock().unwrap().push(event)));
+        bar.check_render(UiEvent::Reload).unwrap();
+        for x in [40., 95.] {
+            bar.stage(UiEvent::Click { x, y: 18. }).unwrap();
+            bar.stage(UiEvent::Release).unwrap();
+        }
+        {
+            let captured = events.lock().unwrap();
+            assert!(
+                matches!(&captured[0], UiEvent::CompanionSelect { view, output: None, toggle: true, center: Some(x) } if view == "calendar" && *x == 40.),
+                "{captured:?}"
+            );
+            assert!(matches!(captured[1], UiEvent::CompanionVisibility(false)));
+            assert_eq!(captured.len(), 2);
+        }
+        // Focus through the same keyboard path as a real panel, then activate its close button.
+        bar.check_render(UiEvent::Command {
+            command: "tab".into(),
+            shift: false,
+        })
+        .unwrap();
+        bar.stage(UiEvent::Command {
+            command: "enter".into(),
+            shift: false,
+        })
+        .unwrap();
+        assert_eq!(events.lock().unwrap().len(), 3);
+        // A host-owned kit slider must route exact pointer previews, drags, and keyboard steps
+        // without trying to find a behavior.luau handler for the host action.
+        std::fs::write(root.join("view/main.luau"), "local kit=require('bead.kit');return kit.Slider{id='level',width=200,value=0,min=0,max=1,step=0.1,on_change='panel.open',change_arg=function(n) return tostring(n) end}").unwrap();
+        std::fs::write(root.join("palette.json"), r#"{"formatVersion":1,"colours":{"surface":"202020","surfaceContainerHighest":"303030","primary":"ffffff","secondary":"cccccc"}}"#).unwrap();
+        let mut slider = load().with_panel_actions(None);
+        let sink = events.clone();
+        slider.services(Box::new(move |event| sink.lock().unwrap().push(event)));
+        slider.check_render(UiEvent::Reload).unwrap();
+        events.lock().unwrap().clear();
+        slider
+            .check_render(UiEvent::Click { x: 55., y: 15. })
+            .unwrap();
+        slider
+            .check_render(UiEvent::Drag { x: 151., y: 15. })
+            .unwrap();
+        slider.check_render(UiEvent::Release).unwrap();
+        slider
+            .check_render(UiEvent::Command {
+                command: "right".into(),
+                shift: false,
+            })
+            .unwrap();
+        let levels: Vec<f64> = events
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|event| {
+                let UiEvent::CompanionSelect { view, .. } = event else {
+                    panic!("unexpected {event:?}")
+                };
+                view.parse().unwrap()
+            })
+            .collect();
+        assert_eq!(levels.len(), 3);
+        assert!((levels[0] - 0.25).abs() < 0.01, "{levels:?}");
+        assert!(levels[1] > 0.7 && levels[2] > levels[1], "{levels:?}");
+        assert!(matches!(
+            panel_event("panel.open", &Value::Text("v".into()), Some((3., 7.)), Some(bead_core::Edge::Left)),
+            Ok(UiEvent::CompanionSelect { toggle: false, center: Some(y), .. }) if y == 7.
+        ));
+        assert!(matches!(
+            panel_event("panel.open", &Value::Text("v".into()), Some((3., 7.)), None),
+            Ok(UiEvent::CompanionSelect { center: None, .. })
+        ));
+        assert!(panel_event("panel.open", &Value::Bool(true), None, None).is_err());
+        std::fs::write(root.join("view/main.luau"), "local ui=require('bead.ui');return ui.Button{id='local',text='Local',width=80,height=30,on_activate=ui.action('panel.close')}").unwrap();
+        std::fs::write(root.join("view/behavior.luau"), "return {stores={count=0},actions={['panel.close']=function(s) s.count=s.count+1 end},computed={}}").unwrap();
+        let mut local = load();
+        local.check_render(UiEvent::Reload).unwrap();
+        local
+            .check_render(UiEvent::Action {
+                name: "panel.close".into(),
+                argument: Value::Bool(true),
+            })
+            .unwrap();
+        assert!(local.session.state_summary().contains("\"count\":1"));
+
+        let _ = std::fs::remove_dir_all(root);
     }
 }

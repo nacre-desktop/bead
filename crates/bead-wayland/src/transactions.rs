@@ -22,6 +22,17 @@ fn panel_event_belongs_to_host(event: &UiEvent) -> bool {
     )
 }
 
+// A panel worker is not wrapped in a primary output session. Named selections inherit
+// its current output, including after a retained worker moves between outputs.
+fn inherit_panel_output(event: &mut UiEvent, panel_output: Option<String>) {
+    if let UiEvent::CompanionSelect { output, .. } | UiEvent::CompanionSelectAt { output, .. } =
+        event
+        && output.is_none()
+    {
+        *output = panel_output;
+    }
+}
+
 #[cfg(feature = "native-gl")]
 fn layer_motion_gl_surface_can_be_deferred(
     renderer: RendererKind,
@@ -487,7 +498,12 @@ impl App {
                         self.panel_navigated(view.clone());
                         return;
                     }
-                    self.ui(*event);
+                    let mut event = *event;
+                    inherit_panel_output(
+                        &mut event,
+                        self.panel_output.as_ref().map(|o| self.output_id(o)),
+                    );
+                    self.ui(event);
                     return;
                 }
                 if matches!(&*event, UiEvent::Reload) {
@@ -1265,6 +1281,22 @@ impl App {
 mod panel_event_routing_tests {
     use super::*;
     use std::collections::BTreeMap;
+
+    #[test]
+    fn panel_selection_keeps_its_output_unless_explicitly_overridden() {
+        for (requested, expected) in [(None, "second"), (Some("first"), "first")] {
+            let mut event = UiEvent::CompanionSelect {
+                view: "calendar".into(),
+                output: requested.map(str::to_owned),
+                toggle: false,
+                center: None,
+            };
+            inherit_panel_output(&mut event, Some("second".into()));
+            assert!(
+                matches!(event, UiEvent::CompanionSelect { output: Some(ref name), .. } if name == expected)
+            );
+        }
+    }
 
     #[test]
     fn companion_selection_from_panel_is_dispatched_by_the_host() {

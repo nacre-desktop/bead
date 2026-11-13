@@ -130,6 +130,14 @@ impl Session {
     pub fn set_host_actions(&mut self, names: impl IntoIterator<Item = String>) {
         self.host_actions = names.into_iter().collect();
     }
+    /// Add host-handled action names to the declared set.
+    pub fn add_host_actions(&mut self, names: impl IntoIterator<Item = String>) {
+        self.host_actions.extend(names);
+    }
+    /// Whether the host, not `behavior.luau`, owns this action.
+    pub fn is_host_action(&self, name: &str) -> bool {
+        generation::host_action_declared(&self.host_actions, name)
+    }
     /// Set the application label exposed for this session's accessible window root.
     pub fn set_accessibility_label(&mut self, label: impl Into<String>) {
         self.accessibility_label = label.into();

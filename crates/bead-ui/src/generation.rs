@@ -178,16 +178,22 @@ fn locate_nodes(path: &Path, bytes: &[u8], nodes: &mut [Node]) {
         }
     }
 }
+/// Whether `name` is a declared host action (exact, or under a `prefix*` entry).
+pub(crate) fn host_action_declared(
+    host_actions: &std::collections::BTreeSet<String>,
+    name: &str,
+) -> bool {
+    host_actions.contains(name)
+        || host_actions
+            .iter()
+            .any(|prefix| prefix.ends_with('*') && name.starts_with(&prefix[..prefix.len() - 1]))
+}
 fn validate_action(
     script: &script::Script,
     name: &str,
     host_actions: &std::collections::BTreeSet<String>,
 ) -> Result<(), Diagnostic> {
-    if host_actions.contains(name)
-        || host_actions
-            .iter()
-            .any(|prefix| prefix.ends_with('*') && name.starts_with(&prefix[..prefix.len() - 1]))
-    {
+    if host_action_declared(host_actions, name) {
         return Ok(());
     }
     if script.validate_action(name).is_ok() {

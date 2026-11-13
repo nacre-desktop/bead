@@ -96,6 +96,7 @@ While running, edits trigger a reload. Bead validates a complete new view genera
 
 ## Next steps
 
+- [Add a popup](popup.md): a calendar panel under the clock.
 - Browse the [example gallery](../../examples/README.md).
 - Look up elements and state in the [Luau UI reference](../reference/luau-ui.md).
 - Add a declared command using the [manifest](../reference/manifest.md) and [services guide](../reference/services.md).

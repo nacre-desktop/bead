@@ -1,0 +1,17 @@
+id = "org.bead.Example.BarWithPanels"
+title = "Bar with panels"
+
+[layer]
+edge = "top"
+size = 36
+
+[services]
+desktop = ["clock", "audio"]
+
+[panels.calendar]
+view = "view/calendar.luau"
+size = [260, 128]
+
+[panels.volume]
+view = "view/volume.luau"
+size = [260, 140]

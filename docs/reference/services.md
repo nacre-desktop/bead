@@ -80,6 +80,8 @@ The optional `workspaces` service starts one compositor adapter shared by all vi
 | `desktop.workspace.focus` | Number integer index or opaque workspace ID Text | Requires `workspaces`; focuses a workspace. |
 | `desktop.window.focus` | Opaque window ID Text | Requires `workspaces`; focuses a window. |
 | `command.NAME` | Any/unused | Runs declared command `NAME`; unknown names produce no result. |
+| `panel.open`, `panel.toggle` | panel name Text | Requires `[panels]`; opens (or toggles) that popup against the bar under the pointer. |
+| `panel.close` | None | Requires `[panels]`; closes the open popup. |
 
 Wrong arguments produce explicit action errors: `desktop.volume expects a number`, `desktop.mute expects a boolean`, and tray actions require a text item id. Desktop actions against undeclared services report the missing service. Commands run without a shell; output, timeout, and interval limits are in the [manifest reference](manifest.md).
 

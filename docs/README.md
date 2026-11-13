@@ -6,6 +6,7 @@ Bead is a framework for building Wayland shells. Folder apps use a manifest and 
 
 - [A bar in 50 lines](tutorial/bar.md) — build and run a desktop bar in about 15 minutes.
 - [Build your first shell widget](tutorial/widget.md) — add a plugin widget to the tutorial bar.
+- [Add a popup](tutorial/popup.md) — open a calendar panel from the bar's clock.
 - [Example gallery](../examples/README.md) — runnable examples and what each demonstrates.
 - [Folder app manifest](reference/manifest.md) — every supported `bead.toml` key and validation error.
 - [Luau UI reference](reference/luau-ui.md) — view elements, state, bindings, and actions.

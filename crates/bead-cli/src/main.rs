@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 use bead::{
     host::{FolderServicesRuntime, FolderView, empty_scene},
-    wayland::{Options, PrimaryFactory, UiEvent, WindowSpec},
+    render::{RendererKind, Scene},
+    wayland::{Options, PanelSpec, Panels, PrimaryFactory, UiEvent, WindowSpec},
 };
 use serde::Deserialize;
 use std::{
@@ -25,6 +26,14 @@ struct Manifest {
     layer: Option<Layer>,
     services: Option<Services>,
     commands: Option<BTreeMap<String, DeclaredCommand>>,
+    /// B0250: popup panels a `[layer]` bar opens with `panel.open|toggle|close`.
+    panels: Option<BTreeMap<String, Panel>>,
+}
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Panel {
+    view: PathBuf,
+    size: [u32; 2],
 }
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -84,11 +93,14 @@ impl From<Edge> for bead::core::Edge {
         }
     }
 }
+#[derive(Debug)]
 struct App {
     root: PathBuf,
     manifest: Manifest,
 }
 
+/// `panels`: `None` when the app has no panels, else the bar edge for the bar view and
+/// `Some(None)` for a panel view (see [`FolderView::with_panel_actions`]).
 fn load_source(
     root: PathBuf,
     view: PathBuf,
@@ -96,6 +108,7 @@ fn load_source(
     title: String,
     size: (u32, u32),
     runtime: Option<Arc<FolderServicesRuntime>>,
+    panels: Option<Option<bead::core::Edge>>,
 ) -> Result<Box<dyn bead::wayland::SceneSource>, String> {
     let loaded = if let Some(runtime) = runtime {
         FolderView::load_with_runtime(root, view, palette, &title, size, runtime)
@@ -103,8 +116,34 @@ fn load_source(
         FolderView::load(root, view, palette, &title, size)
     };
     loaded
+        .map(|view| match panels {
+            Some(bar_edge) => view.with_panel_actions(bar_edge),
+            None => view,
+        })
         .map(|view| Box::new(view) as Box<dyn bead::wayland::SceneSource>)
         .map_err(|error| error.to_string())
+}
+/// A popup sits flush against the bar's inner edge, centred on the invocation point along
+/// the bar and clamped inside the output.
+fn panel_position(
+    edge: Edge,
+    bar: i32,
+    size: (f32, f32),
+    center: Option<f32>,
+    output: (i32, i32),
+) -> (i32, i32) {
+    let (w, h) = (size.0.ceil() as i32, size.1.ceil() as i32);
+    let along = |span: i32, extent: i32| {
+        center
+            .map_or(0, |c| (c - extent as f32 / 2.).round() as i32)
+            .clamp(0, (span - extent).max(0))
+    };
+    match edge {
+        Edge::Top => (along(output.0, w), bar),
+        Edge::Bottom => (along(output.0, w), output.1 - bar - h),
+        Edge::Left => (bar, along(output.1, h)),
+        Edge::Right => (output.0 - bar - w, along(output.1, h)),
+    }
 }
 impl App {
     fn load(folder: &Path) -> Result<Self, Box<dyn Error>> {
@@ -136,6 +175,21 @@ impl App {
         }
         if manifest.layer.as_ref().is_some_and(|l| l.size == 0) {
             return Err(format!("{}: layer.size must be positive", path.display()).into());
+        }
+        if let Some(panels) = &manifest.panels {
+            if manifest.layer.is_none() {
+                return Err(format!("{}: panels require a [layer] surface", path.display()).into());
+            }
+            for (name, panel) in panels {
+                if panel.size.contains(&0) {
+                    return Err(format!(
+                        "{}: panel '{name}' size must be positive",
+                        path.display()
+                    )
+                    .into());
+                }
+                validate_path(&root, &panel.view)?;
+            }
         }
         if let Some(services) = &manifest.services {
             for name in &services.desktop {
@@ -179,7 +233,80 @@ impl App {
                 }
             }
         }
-        Ok(Self { root, manifest })
+        let app = Self { root, manifest };
+        // Name and count rules live in the framework catalog.
+        app.panel_catalog(None, RendererKind::Cpu)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        Ok(app)
+    }
+    /// The bar edge for the bar view, `Some(None)` for a panel view, `None` without panels.
+    fn panel_actions(&self, bar: bool) -> Option<Option<bead::core::Edge>> {
+        self.manifest
+            .panels
+            .as_ref()
+            .and(self.manifest.layer.as_ref())
+            .map(|layer| bar.then(|| layer.edge.into()))
+    }
+    /// The named popup catalog and its default spec (spec 0250), if the manifest declares panels.
+    fn panel_catalog(
+        &self,
+        runtime: Option<Arc<FolderServicesRuntime>>,
+        renderer: RendererKind,
+    ) -> Result<Option<(Panels, PanelSpec)>, String> {
+        let (Some(panels), Some(layer)) = (&self.manifest.panels, &self.manifest.layer) else {
+            return Ok(None);
+        };
+        let (edge, thickness) = (layer.edge, layer.size as i32);
+        let views: BTreeMap<String, PanelSpec> = panels
+            .iter()
+            .map(|(name, panel)| {
+                let size = (panel.size[0], panel.size[1]);
+                let root = self.root.clone();
+                let view = panel.view.clone();
+                let palette = self.manifest.palette.clone();
+                let title = self.manifest.title.clone();
+                let runtime = runtime.clone();
+                let spec = PanelSpec {
+                    engages_decorations: false,
+                    overlay: false,
+                    retain_when_closed: true,
+                    passive: false,
+                    keyboard_focus: true,
+                    text_focus_only: false,
+                    initial_open: false,
+                    factory: Arc::new(move |_| {
+                        load_source(
+                            root.clone(),
+                            view.clone(),
+                            palette.clone(),
+                            title.clone(),
+                            size,
+                            runtime.clone(),
+                            Some(None),
+                        )
+                    }),
+                    fallback: empty_scene(size),
+                    fallback_factory: None,
+                    renderer,
+                    position: Some(Arc::new(
+                        move |scene: &Scene, center: Option<f32>, output: (i32, i32)| {
+                            panel_position(
+                                edge,
+                                thickness,
+                                (scene.bounds.w, scene.bounds.h),
+                                center,
+                                output,
+                            )
+                        },
+                    )),
+                };
+                (name.clone(), spec)
+            })
+            .collect();
+        // An empty table fails inside `Panels::new`.
+        let first = views.keys().next().cloned().unwrap_or_default();
+        let default = views.get(&first).cloned();
+        Panels::new(first, views).map(|panels| default.map(|default| (panels, default)))
     }
     fn folder_services(&self) -> bead::host::FolderServices {
         bead::host::FolderServices {
@@ -208,23 +335,20 @@ impl App {
                 .collect(),
         }
     }
-    fn view(&self, size: (u32, u32)) -> Result<FolderView, Box<dyn Error>> {
+    fn view(&self, view: &Path, size: (u32, u32), bar: bool) -> Result<FolderView, Box<dyn Error>> {
         FolderView::load_with_services(
             self.root.clone(),
-            self.manifest.view.clone(),
+            view.to_path_buf(),
             self.manifest.palette.clone(),
             &self.manifest.title,
             size,
             self.folder_services(),
         )
-        .map_err(|e| {
-            format!(
-                "{} / {}: {e}",
-                self.root.display(),
-                self.manifest.view.display()
-            )
-            .into()
+        .map(|loaded| match self.panel_actions(bar) {
+            Some(bar_edge) => loaded.with_panel_actions(bar_edge),
+            None => loaded,
         })
+        .map_err(|e| format!("{} / {}: {e}", self.root.display(), view.display()).into())
     }
     fn surface_size(&self) -> (u32, u32) {
         if let Some(w) = &self.manifest.window {
@@ -239,9 +363,14 @@ impl App {
     }
     fn check(&self) -> Result<(), Box<dyn Error>> {
         let size = self.surface_size();
-        let mut view = self.view(size)?;
+        let mut view = self.view(&self.manifest.view, size, true)?;
         view.check_render(UiEvent::Reload)
             .map_err(|e| format!("{}: {e}", self.manifest.view.display()))?;
+        for panel in self.manifest.panels.iter().flat_map(|p| p.values()) {
+            let mut view = self.view(&panel.view, (panel.size[0], panel.size[1]), false)?;
+            view.check_render(UiEvent::Reload)
+                .map_err(|e| format!("{}: {e}", panel.view.display()))?;
+        }
         println!("OK {}", self.manifest.title);
         Ok(())
     }
@@ -255,7 +384,7 @@ impl App {
             started: Instant::now(),
             ..Default::default()
         };
-        if let Some(w) = self.manifest.window {
+        if let Some(w) = &self.manifest.window {
             let app_id = self.manifest.id.clone();
             let title = self.manifest.title.clone();
             let root = self.root.clone();
@@ -281,6 +410,7 @@ impl App {
                         title.clone(),
                         size,
                         runtime.clone(),
+                        None,
                     )
                 }),
                 model: Arc::new(|_| Default::default()),
@@ -288,7 +418,8 @@ impl App {
             options.app = Some(vec![]);
             options.interactive = true;
             options.keyboard_focus = true;
-        } else if let Some(l) = self.manifest.layer {
+        } else if let Some(l) = &self.manifest.layer {
+            let panel_actions = self.panel_actions(true);
             let factory: PrimaryFactory = Arc::new({
                 let root = self.root.clone();
                 let view = self.manifest.view.clone();
@@ -303,9 +434,16 @@ impl App {
                         title.clone(),
                         surface_size,
                         runtime.clone(),
+                        panel_actions,
                     )
                 }
             });
+            if let Some((panels, default)) =
+                self.panel_catalog(runtime.clone(), options.renderer)?
+            {
+                options.panels = Some(panels);
+                options.panel_spec = Some(default);
+            }
             options.primary_factory = Some(factory);
             options.bar = true;
             options.primary_surface_viewport = true;
@@ -506,6 +644,102 @@ mod tests {
             "bead check must not run declared commands"
         );
         let _ = std::fs::remove_dir_all(p);
+    }
+    #[test]
+    fn panels_need_a_bar_valid_names_sizes_and_contained_views() {
+        let panel = "[panels.calendar]\nview='view/calendar.luau'\nsize=[320,240]\n";
+        let p = folder(&format!(
+            "{}\n[layer]\nedge='top'\nsize=36\n{panel}",
+            base()
+        ));
+        std::fs::write(p.join("view/calendar.luau"), "return {}\n").unwrap();
+        let app = App::load(&p).unwrap();
+        assert_eq!(app.panel_actions(true), Some(Some(bead::core::Edge::Top)));
+        assert_eq!(app.panel_actions(false), Some(None));
+        let (panels, _) = app.panel_catalog(None, RendererKind::Cpu).unwrap().unwrap();
+        assert_eq!(panels.default_name(), "calendar");
+        for (suffix, message) in [
+            (format!("[window]\nsize=[10,10]\n{panel}"), "require a [layer]"),
+            (
+                "[layer]\nedge='top'\nsize=36\n[panels.Bad]\nview='view/calendar.luau'\nsize=[1,1]\n"
+                    .to_owned(),
+                "invalid panel view name",
+            ),
+            (
+                "[layer]\nedge='top'\nsize=36\n[panels.z]\nview='view/calendar.luau'\nsize=[0,1]\n"
+                    .to_owned(),
+                "size must be positive",
+            ),
+            (
+                "[layer]\nedge='top'\nsize=36\n[panels.z]\nview='/etc/passwd'\nsize=[1,1]\n"
+                    .to_owned(),
+                "relative to the app folder",
+            ),
+            (
+                "[layer]\nedge='top'\nsize=36\n[panels.z]\nview='view/calendar.luau'\nsize=[1,1]\nextra=1\n"
+                    .to_owned(),
+                "unknown field",
+            ),
+        ] {
+            std::fs::write(p.join("bead.toml"), format!("{}\n{suffix}", base())).unwrap();
+            let error = App::load(&p).unwrap_err().to_string();
+            assert!(error.contains(message), "{suffix}: {error}");
+        }
+        let _ = std::fs::remove_dir_all(p);
+    }
+    #[test]
+    fn check_validates_every_panel_view_and_accepts_panel_actions() {
+        let p = folder(&format!(
+            "{}\n[layer]\nedge='top'\nsize=36\n[panels.calendar]\nview='view/calendar.luau'\nsize=[200,100]\n",
+            base()
+        ));
+        std::fs::write(
+            p.join("view/behavior.luau"),
+            "return {stores={},actions={},computed={}}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            p.join("view/main.luau"),
+            "local ui=require('bead.ui'); return ui.Button{id='clock',text='12:34',width=60,height=24,on_activate=ui.action('panel.toggle','calendar')}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            p.join("view/calendar.luau"),
+            "local ui=require('bead.ui'); return ui.Button{id='close',text='Close',width=60,height=24,on_activate=ui.action('panel.close')}\n",
+        )
+        .unwrap();
+        App::load(&p).unwrap().check().unwrap();
+        std::fs::write(p.join("view/calendar.luau"), "return nil +\n").unwrap();
+        let error = App::load(&p).unwrap().check().unwrap_err().to_string();
+        assert!(error.contains("calendar.luau"), "{error}");
+        let _ = std::fs::remove_dir_all(p);
+    }
+    #[test]
+    fn popups_sit_against_the_bar_centred_and_clamped() {
+        let size = (300., 200.);
+        let out = (1280, 720);
+        assert_eq!(
+            panel_position(Edge::Top, 36, size, Some(640.), out),
+            (490, 36)
+        );
+        assert_eq!(panel_position(Edge::Top, 36, size, Some(10.), out), (0, 36));
+        assert_eq!(
+            panel_position(Edge::Top, 36, size, Some(1275.), out),
+            (980, 36)
+        );
+        assert_eq!(panel_position(Edge::Top, 36, size, None, out), (0, 36));
+        assert_eq!(
+            panel_position(Edge::Bottom, 36, size, Some(640.), out),
+            (490, 484)
+        );
+        assert_eq!(
+            panel_position(Edge::Left, 36, size, Some(360.), out),
+            (36, 260)
+        );
+        assert_eq!(
+            panel_position(Edge::Right, 36, size, Some(360.), out),
+            (944, 260)
+        );
     }
     #[test]
     fn rejects_paths_escaping_folder() {
