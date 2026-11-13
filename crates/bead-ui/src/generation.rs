@@ -806,7 +806,11 @@ impl Generation {
                             reads.insert(name.to_owned());
                         }
                     } else {
-                        reads.extend(self.script.store_reads(name, stores));
+                        self.script.store_reads(name, stores, |id| {
+                            if !reads.contains(id) {
+                                reads.insert(id.to_owned());
+                            }
+                        });
                     }
                     // A host can reconcile its schema during a generation's life.
                     // On overflow use ordinary staging instead of growing this cache.

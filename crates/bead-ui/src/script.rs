@@ -460,15 +460,14 @@ impl Script {
         }
         Ok(())
     }
-    pub(super) fn store_reads(&self, name: &str, stores: &Stores) -> Vec<String> {
+    /// Visit the stores `name` reads: itself, or the inputs of its cached computed value.
+    pub(super) fn store_reads(&self, name: &str, stores: &Stores, mut read: impl FnMut(&str)) {
         if stores.get(name).is_some() {
-            return vec![name.into()];
+            return read(name);
         }
-        self.cache
-            .borrow()
-            .get(name)
-            .map(|cached| cached.reads.keys().cloned().collect())
-            .unwrap_or_default()
+        if let Some(cached) = self.cache.borrow().get(name) {
+            cached.reads.keys().for_each(|id| read(id));
+        }
     }
     pub fn resolve(&self, name: &str, stores: &Stores) -> Result<Value, Diagnostic> {
         if let Some(value) = stores.get(name) {
@@ -507,7 +506,7 @@ impl Script {
             name.into(),
             Cached {
                 value: value.clone(),
-                reads: reads.borrow().clone(),
+                reads: reads.take(),
             },
             bytes,
         );
@@ -523,10 +522,13 @@ fn evaluate(
     reads: Rc<RefCell<BTreeMap<String, (u64, Value)>>>,
 ) -> mlua::Result<Value> {
     if let Some(value) = stores.get(name) {
-        reads.borrow_mut().insert(
-            name.into(),
-            (stores.version(name).unwrap_or(0), value.clone()),
-        );
+        let mut reads = reads.borrow_mut();
+        if !reads.contains_key(name) {
+            reads.insert(
+                name.into(),
+                (stores.version(name).unwrap_or(0), value.clone()),
+            );
+        }
         return Ok(value.clone());
     }
     if stack.borrow().len() >= 32 || stack.borrow().iter().any(|id| id == name) {
