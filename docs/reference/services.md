@@ -39,6 +39,8 @@ All values are under `desktop.`. Missing numeric readings use `-1`; missing stri
 | `network_devices.primary_name`, `network_devices.primary_kind` (`wifi`, `ethernet`, `vpn`, `other`, or empty) | Text | `network_devices` |
 | `network_devices.access_points` | List of `{ssid,security: Text, strength: Number, active,known: Bool}` records, one per SSID, strongest first | `network_devices` |
 | `network_devices.known` | List of `{id,kind: Text}` saved connections | `network_devices` |
+| `bluetooth_devices.available`; `bluetooth_devices.powered`, `bluetooth_devices.discovering` (first adapter) | Bool | `bluetooth_devices` |
+| `bluetooth_devices.devices` | List of `{path,name,address,icon: Text, paired,connected: Bool, battery: Number or null}` records | `bluetooth_devices` |
 
 `desktop.date` is provided by the `clock` service. Clock seconds updates are leased when `clock` is declared.
 The optional `media` service selects the active MPRIS player using the policy in [spec 0239](../specs/0239-mpris.md). While it is Playing, `media.position_ms` is extrapolated and refreshed at 1 Hz without additional D-Bus reads.
@@ -73,6 +75,8 @@ The optional `workspaces` service starts one compositor adapter shared by all vi
 | `desktop.media.seek` | Number milliseconds | Requires `media`; targets the active track and fails if seeking is unavailable or the track changed. |
 | `desktop.power.set` | Profile name Text | Requires `power`; accepts only a profile in the daemon's current list. |
 | `desktop.power.cycle` | None | Requires `power`; selects the next profile in daemon order, wrapping at the end. |
+| `desktop.bluetooth_devices.power`, `desktop.bluetooth_devices.scan` | Bool | Requires `bluetooth_devices`; powers the first adapter on or off, or starts or stops discovery on it. |
+| `desktop.bluetooth_devices.connect`, `desktop.bluetooth_devices.disconnect`, `desktop.bluetooth_devices.forget` | Device `path` Text | Requires `bluetooth_devices`; the path must be in the current `devices` list. |
 | `desktop.network_devices.wireless` | Bool | Requires `network_devices`; enables or disables Wi-Fi. |
 | `desktop.network_devices.scan`, `desktop.network_devices.disconnect` | None | Requires `network_devices`; scans on the first Wi-Fi device (at most every 10 seconds), or disconnects the first connected one. |
 | `desktop.network_devices.connect` | SSID Text | Requires `network_devices`; activates a known or open network. |

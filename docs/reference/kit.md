@@ -4,19 +4,19 @@
 
 - `Button`, `IconButton`, `StatusIcon`, `Switch`: controls; `text`, `checked`, `on_activate`, dimensions, colors.
 - `Fill`: gradient fill primitive; `from`, `to`, `width`, `height`.
-- `SliderValue`, `Slider`: numeric range control; `value`, `minimum`, `maximum`, `step`, `on_change`.
-- `Tile`, `ToggleTile`, `LinkTile`, `ButtonTile`, `SliderTile`: standard tiles; `label`, `detail`, `icon`, `value`, action props.
-- `TileGrid`: grid of rendered items; `items`, dimensions, columns.
-- `ReorderList`: reorderable entries; `items`, `on_move`, row renderer.
-- `SegmentedControl`: exclusive choices; `items`, `selected`, `on_change`.
+- `SliderValue`, `Slider`: numeric range control; `value`, `min`, `max`, `step`, `on_change`.
+- `Tile`, `ToggleTile`, `LinkTile`, `ButtonTile`, `SliderTile`: standard tiles; `label`, `detail`, `icon`, `on`, `value` (`SliderTile`), action props.
+- `TileGrid`: rows of tiles; `tiles` (`{size, build}`), `sizes` (per-row count and height for each size), `width`, `gap`.
+- `ReorderList`: drag-to-reorder rows; `items` (`{id, label, build}`), `width`, `item_height`, `gap`, `on_touch`, optional `remove`.
+- `SegmentedControl`: exclusive choices; `items` (`{id, label}`), `value`, `on_change`.
 - `VirtualGrid`: virtualized keyed model; `model`, `key`, `render`, `scroll`.
-- `Transcript`: bounded transcript display; entries/model and scroll state.
-- `Composer`: message input/action; `text`, `on_send`, placeholder.
+- `Transcript`: scrolling message list; `cells` (windowed model), `extent`, `width`, `on_action`.
+- `Composer`: multi-line message input; `text`, `placeholder`, `on_activate` (Enter; Shift+Enter breaks the line).
 - `PasswordField`: masked/revealed text; `text`, `revealed`, `on_toggle`.
 - `ActionButton`, `PillButton`, `ConfirmButton`: action variants; label/text and activation props.
 - `List`, `ListRow`, `Card`, `TextInput`, `Pill`: scrolling, row, container, input, and compact row primitives.
-- `Bar`, `Panel`, `Popover`, `Tooltip`: positioned surfaces; dimensions, edge/content, open/placement props.
-- `CollectionSwitcher`, `CollectionSwitcherMenu`: collection selection; items, selected ID, actions.
+- `Bar`, `Panel`, `Popover`, `Tooltip`: edge-placed containers; `edge`, dimensions and children; `Popover` and `Tooltip` sit `bar_size` plus spacing from that edge. `Peek` is an alias of `Popover`.
+- `CollectionSwitcher`, `CollectionSwitcherMenu`: collection selection; `groups` (`{id, label}`), `current`, `on_toggle` / `on_switch`, `on_rename`, `editing`, `actions`.
 - `LevelMeter`, `HelpText`, `Swatch`: meter, helper copy, and color sample primitives.
 - `FormRow`, `ToggleRow`, `ChoiceRow`, `NumberRow`, `TextRow`, `ListEditor`, `InfoRow`, `ChipsRow`, `DeviceRow`: settings/form rows; label, value, enabled, description and row-specific callbacks.
 - `PickerList`: searchable item list; items, field, selection callback.
@@ -30,5 +30,7 @@
 - `ChipRow`: compact choices; items, `per_row`, `on_change`.
 - `ImagePick`: image hit grid; `icon`, `cols`, `rows`, `on_pick`.
 - `PreviewCard`: miniature desktop preview; dimensions, labels, colors, optional image.
+
+Item callbacks (`on_change`, `on_pick`, `on_touch`, `on_action`, `ListEditor`'s `on_remove`, and the `CollectionSwitcher` callbacks) take an action name, and the component supplies the argument, such as the chosen item's `id`. Other `on_*` props take a `ui.action(...)` descriptor.
 
 Names and props are read from `crates/bead-kit/assets/kit.luau`; private helper functions inside that module are internal and are not part of this list. Refer to [Luau UI](luau-ui.md) for the underlying primitives.

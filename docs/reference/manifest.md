@@ -26,7 +26,7 @@ Panel names are 1–64 characters of lowercase letters, digits, `-`, `_` or `.`;
 
 ## Exact validation errors
 
-The CLI reports these app validation messages (prefixed by `bead.toml`'s path):
+The CLI reports these app validation messages, prefixed by `bead.toml`'s path; path errors are prefixed by the offending path instead, and a view, palette or panel file that does not exist reports the operating-system error (`No such file or directory`):
 
 - Empty identity: `id and title must not be empty`.
 - Neither or both surface tables: `specify exactly one of [window] or [layer]`.
