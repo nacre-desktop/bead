@@ -385,6 +385,8 @@ impl Script {
             .set("randomseed", self.builtin_randomseed.clone())?;
         globals.set("tr", mlua::Value::Nil)?;
         globals.set("copy_value", mlua::Value::Nil)?;
+        // A second full cycle also frees objects released by callback finalizers.
+        self.lua.gc_collect()?;
         self.lua.gc_collect()
     }
     fn execute_action(
@@ -742,6 +744,7 @@ mod action_isolation_tests {
             br#"local module=require("bead.widgets.drag-geometry"); return {
                 stores={value=0}, actions={mutate=function(s)
                     module.counter=(module.counter or 0)+1
+                    module.payload=string.rep("x",5*1024*1024)
                     s.value=module.counter
                 end}, computed={}
             }"#,
@@ -752,6 +755,7 @@ mod action_isolation_tests {
             .reconcile(&script.schema().unwrap())
             .unwrap();
 
+        let initial_memory = script.memory_bytes();
         for _ in 0..2 {
             assert_eq!(
                 script
@@ -760,6 +764,7 @@ mod action_isolation_tests {
                     .get("value"),
                 Some(&Value::Number(1.))
             );
+            assert!(script.memory_bytes() < initial_memory + bead_core::cache::MIB);
         }
     }
 
