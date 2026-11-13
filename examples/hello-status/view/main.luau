@@ -5,6 +5,7 @@ local volume = ui.resolve_for_check(ui.bind("desktop.audio.volume"))
 local audio_available = ui.resolve_for_check(ui.bind("desktop.audio.available"))
 local media_available = ui.resolve_for_check(ui.bind("desktop.media.available"))
 local media_can_play_pause = ui.resolve_for_check(ui.bind("desktop.media.can_play_pause"))
+local power_available = ui.resolve_for_check(ui.bind("desktop.power.available"))
 return ui.Row {
     id = "hello-status", width = "fill", height = "fill", align = "center",
     padding_left = 12, padding_right = 12, gap = 16, fill = "surface",
@@ -17,4 +18,5 @@ return ui.Row {
     ui.Text { text = ui.bind("status.kernel"), width = "content", font_size = 14, color = "onSurface" },
     ui.Text { text = ui.bind("status.media"), width = "content", font_size = 14, color = "onSurfaceVariant" },
     ui.Button { id = "media-play-pause", text = ui.bind("status.media_button"), width = 58, on_activate = media_available and media_can_play_pause and ui.action("desktop.media.play_pause") or nil, height = 30, padding = 5, font_size = 13, fill = "primary", color = "onPrimary", radius = 5 },
+    ui.Button { id = "power-profile", text = ui.bind("status.power"), width = 130, on_activate = power_available and ui.action("desktop.power.cycle") or nil, height = 30, padding = 5, font_size = 13, fill = "surface", color = "onSurface", radius = 5 },
 }

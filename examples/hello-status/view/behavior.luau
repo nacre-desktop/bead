@@ -31,5 +31,9 @@ return {
         ["status.media_button"] = function(s)
             return s["desktop.media.status"] == "Playing" and "Pause" or "Play"
         end,
+        ["status.power"] = function(s)
+            if not s["desktop.power.available"] then return "Power unavailable" end
+            return "Power " .. s["desktop.power.profile"]
+        end,
     },
 }

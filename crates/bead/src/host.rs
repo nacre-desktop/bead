@@ -10,6 +10,7 @@ use bead_services::{
     Action as DesktopAction, ClockSecondsLease, Config as DesktopConfig, Desktop, Snapshot,
     Subscription,
     media::{Media, MediaAction, MediaSnapshot},
+    power_profiles::{PowerProfiles, PowerProfilesAction, PowerProfilesSnapshot},
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -96,6 +97,8 @@ pub struct FolderServicesRuntime {
     _clock_lease: Option<ClockSecondsLease>,
     media: Option<Arc<Media>>,
     _media_subscription: Option<bead_services::media::Subscription>,
+    power: Option<Arc<PowerProfiles>>,
+    _power_subscription: Option<bead_services::power_profiles::Subscription>,
     commands: Arc<Mutex<CommandState>>,
     signals: Arc<RuntimeSignals>,
     stop: Arc<(Mutex<bool>, Condvar)>,
@@ -118,6 +121,11 @@ impl FolderServicesRuntime {
             .contains("media")
             .then(Media::start_session)
             .flatten();
+        let power = services
+            .desktop
+            .contains("power")
+            .then(PowerProfiles::start_system)
+            .flatten();
         let clock_lease = if services.desktop.contains("clock") {
             desktop
                 .as_ref()
@@ -129,6 +137,14 @@ impl FolderServicesRuntime {
         let media_subscription = media.as_ref().map(|media| {
             let signals = Arc::downgrade(&signals);
             media.subscribe(move |_| {
+                if let Some(signals) = signals.upgrade() {
+                    signals.notify();
+                }
+            })
+        });
+        let power_subscription = power.as_ref().map(|power| {
+            let signals = Arc::downgrade(&signals);
+            power.subscribe(move |_| {
                 if let Some(signals) = signals.upgrade() {
                     signals.notify();
                 }
@@ -228,6 +244,8 @@ impl FolderServicesRuntime {
             _clock_lease: clock_lease,
             media,
             _media_subscription: media_subscription,
+            power,
+            _power_subscription: power_subscription,
             commands,
             signals,
             stop,
@@ -424,6 +442,32 @@ fn media_values(snapshot: &MediaSnapshot, now: u64) -> BTreeMap<String, Value> {
     put!("can_seek", Value::Bool(player.is_some_and(|p| p.can_seek)));
     values
 }
+fn power_values(snapshot: &PowerProfilesSnapshot) -> BTreeMap<String, Value> {
+    BTreeMap::from([
+        (
+            "desktop.power.available".into(),
+            Value::Bool(snapshot.available),
+        ),
+        (
+            "desktop.power.profile".into(),
+            Value::Text(snapshot.active.clone()),
+        ),
+        (
+            "desktop.power.profiles".into(),
+            Value::list(
+                snapshot
+                    .profiles
+                    .iter()
+                    .map(|name| serde_json::json!({"name": name}))
+                    .collect(),
+            ),
+        ),
+        (
+            "desktop.power.degraded".into(),
+            Value::Text(snapshot.degraded.clone()),
+        ),
+    ])
+}
 fn media_is_playing(snapshot: &MediaSnapshot) -> bool {
     snapshot
         .active
@@ -461,7 +505,13 @@ fn declared_desktop_values(
 enum DesktopRequest {
     Action(DesktopAction),
     Media(MediaRequest),
+    Power(PowerRequest),
     Command(String),
+}
+#[derive(Clone, Debug)]
+enum PowerRequest {
+    SetProfile(String),
+    Cycle,
 }
 #[derive(Clone, Debug)]
 enum MediaRequest {
@@ -493,6 +543,7 @@ fn route_folder_action(
         | "desktop.media.next"
         | "desktop.media.previous"
         | "desktop.media.seek" => "media",
+        "desktop.power.set" | "desktop.power.cycle" => "power",
         _ => return Err(format!("unknown desktop action '{name}'")),
     };
     if !declared.contains(need) {
@@ -512,6 +563,17 @@ fn route_folder_action(
             _ => return Err(format!("{name} expects no argument")),
         };
         return Ok(Some(DesktopRequest::Media(action)));
+    }
+    if name == "desktop.power.set" {
+        let Value::Text(profile) = argument else {
+            return Err("desktop.power.set expects a profile name".into());
+        };
+        return Ok(Some(DesktopRequest::Power(PowerRequest::SetProfile(
+            profile.clone(),
+        ))));
+    }
+    if name == "desktop.power.cycle" {
+        return Ok(Some(DesktopRequest::Power(PowerRequest::Cycle)));
     }
     let point = pointer
         .map(|(x, y)| (x.round() as i32, y.round() as i32))
@@ -712,6 +774,9 @@ impl FolderView {
         if services.desktop.contains("media") {
             host_stores.extend(media_values(&MediaSnapshot::default(), 0));
         }
+        if services.desktop.contains("power") {
+            host_stores.extend(power_values(&PowerProfilesSnapshot::default()));
+        }
         for name in services.commands.keys() {
             host_stores.insert(
                 format!("commands.{name}.stdout"),
@@ -746,6 +811,13 @@ impl FolderView {
                 ]
                 .into_iter()
                 .map(str::to_owned),
+            );
+        }
+        if services.desktop.contains("power") {
+            host_actions.extend(
+                ["desktop.power.set", "desktop.power.cycle"]
+                    .into_iter()
+                    .map(str::to_owned),
             );
         }
         host_actions.extend(
@@ -803,6 +875,13 @@ impl FolderView {
                     self.last_media_position_tick = None;
                 }
                 changes.extend(values);
+            }
+            if runtime.services.desktop.contains("power") {
+                let snapshot = runtime
+                    .power
+                    .as_ref()
+                    .map_or_else(PowerProfilesSnapshot::default, |power| power.snapshot());
+                changes.extend(power_values(&snapshot));
             }
             for (name, (stdout, ok, error)) in runtime.command_values() {
                 changes.insert(format!("commands.{name}.stdout"), Value::Text(stdout));
@@ -984,6 +1063,22 @@ impl SceneSource for FolderView {
                         }
                         None
                     }
+                    Ok(Some(DesktopRequest::Power(action))) => {
+                        if let Some(power) = self.runtime.as_ref().and_then(|r| r.power.as_ref()) {
+                            let snapshot = power.snapshot();
+                            let profile = match action {
+                                PowerRequest::SetProfile(profile) => Some(profile),
+                                PowerRequest::Cycle => next_power_profile(&snapshot),
+                            };
+                            if let Some(profile) = profile
+                                && let Err(error) =
+                                    power.action(PowerProfilesAction::SetProfile(profile))
+                            {
+                                eprintln!("desktop action {name}: {error}");
+                            }
+                        }
+                        None
+                    }
                     Ok(Some(DesktopRequest::Command(command))) => {
                         if let Some(runtime) = &self.runtime {
                             runtime.run_command(&command);
@@ -1053,6 +1148,17 @@ impl SceneSource for FolderView {
         let scene = self.session.reject(error);
         self.surface_scene(scene)
     }
+}
+fn next_power_profile(snapshot: &PowerProfilesSnapshot) -> Option<String> {
+    if snapshot.profiles.is_empty() {
+        return None;
+    }
+    let index = snapshot
+        .profiles
+        .iter()
+        .position(|profile| profile == &snapshot.active)
+        .map_or(0, |i| (i + 1) % snapshot.profiles.len());
+    Some(snapshot.profiles[index].clone())
 }
 
 impl Drop for FolderView {
@@ -1403,6 +1509,63 @@ mod tests {
         assert_eq!(
             media_values(&paused, 15_000)["desktop.media.position_ms"],
             Value::Number(5_000.)
+        );
+    }
+
+    #[test]
+    fn power_projection_and_actions_follow_daemon_order() {
+        let empty = power_values(&PowerProfilesSnapshot::default());
+        assert_eq!(empty["desktop.power.available"], Value::Bool(false));
+        assert_eq!(empty["desktop.power.profile"], Value::Text(String::new()));
+        assert!(
+            matches!(&empty["desktop.power.profiles"], Value::List(profiles) if profiles.is_empty())
+        );
+        let snapshot = PowerProfilesSnapshot {
+            revision: 2,
+            available: true,
+            active: "balanced".into(),
+            profiles: vec![
+                "power-saver".into(),
+                "balanced".into(),
+                "performance".into(),
+            ],
+            degraded: "".into(),
+        };
+        let values = power_values(&snapshot);
+        assert_eq!(
+            values["desktop.power.profile"],
+            Value::Text("balanced".into())
+        );
+        assert!(
+            matches!(&values["desktop.power.profiles"], Value::List(profiles) if profiles[0]["name"] == "power-saver")
+        );
+        assert_eq!(
+            next_power_profile(&snapshot).as_deref(),
+            Some("performance")
+        );
+        let mut last = snapshot.clone();
+        last.active = "performance".into();
+        assert_eq!(next_power_profile(&last).as_deref(), Some("power-saver"));
+        let declared = BTreeSet::from(["power".to_owned()]);
+        assert!(
+            matches!(route_folder_action("desktop.power.set", &Value::Text("balanced".into()), &declared, None), Ok(Some(DesktopRequest::Power(PowerRequest::SetProfile(profile)))) if profile == "balanced")
+        );
+        assert!(matches!(
+            route_folder_action("desktop.power.cycle", &Value::Bool(false), &declared, None),
+            Ok(Some(DesktopRequest::Power(PowerRequest::Cycle)))
+        ));
+        assert!(
+            route_folder_action("desktop.power.set", &Value::Bool(false), &declared, None).is_err()
+        );
+        assert!(
+            route_folder_action(
+                "desktop.power.cycle",
+                &Value::Bool(false),
+                &BTreeSet::new(),
+                None
+            )
+            .unwrap_err()
+            .contains("undeclared service")
         );
     }
 

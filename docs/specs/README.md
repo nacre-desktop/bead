@@ -20,5 +20,6 @@ This index contains current framework contracts and repository-boundary decision
 | [0236 — Optional StatusNotifierWatcher](0236-tray-watcher.md) | Optional session-bus watcher ownership and registration lifecycle |
 | [0238 — API stability and versioning](0238-api-stability.md) | Proposed stable surfaces, compatibility rules, hazards, and publishing readiness |
 | [0239 — MPRIS media service](0239-mpris.md) | Event-driven media snapshots and controls for folder apps |
+| [0244 — Power profiles service](0244-power-profiles.md) | Event-driven system power profile snapshots and controls for folder apps |
 
 This index covers Bead framework contracts. See the [documentation index](../README.md) for the current framework overview and the [framework ownership decision](0214-framework-split.md).

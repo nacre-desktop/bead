@@ -7,7 +7,7 @@ size = 42
 exclusive = true
 
 [services]
-desktop = ["clock", "battery", "audio", "media"]
+desktop = ["clock", "battery", "audio", "media", "power"]
 
 [commands.kernel]
 argv = ["uname", "-r"]

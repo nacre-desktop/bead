@@ -146,6 +146,7 @@ impl App {
             "tray",
             "session",
             "media",
+            "power",
         ];
         if let Some(services) = &manifest.services {
             for name in &services.desktop {

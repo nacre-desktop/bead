@@ -29,9 +29,13 @@ All values are under `desktop.`. Missing numeric readings use `-1`; missing stri
 | `media.player`, `media.status`, `media.title`, `media.artist`, `media.album`, `media.art_url` | Text | `media` |
 | `media.length_ms`, `media.position_ms` | Number, -1 if unavailable | `media` |
 | `media.can_play_pause`, `media.can_next`, `media.can_previous`, `media.can_seek` | Bool | `media` |
+| `power.available` | Bool | `power` |
+| `power.profile`, `power.degraded` | Text | `power` |
+| `power.profiles` | List of `{name: Text}` records, in daemon order | `power` |
 
 `desktop.date` is provided by the `clock` service. Clock seconds updates are leased when `clock` is declared.
 The optional `media` service selects the active MPRIS player using the policy in [spec 0239](../specs/0239-mpris.md). While it is Playing, `media.position_ms` is extrapolated and refreshed at 1 Hz without additional D-Bus reads.
+The optional `power` service follows power-profiles-daemon and publishes its active profile, available profiles, and performance degradation reason as described in [spec 0244](../specs/0244-power-profiles.md).
 
 ## Actions
 
@@ -45,6 +49,8 @@ The optional `media` service selects the active MPRIS player using the policy in
 | `desktop.tray.menu` | item ID Text | Requires `tray`; sends pointer coordinates. |
 | `desktop.media.play_pause`, `desktop.media.next`, `desktop.media.previous` | None | Requires `media`; targets the active player. |
 | `desktop.media.seek` | Number milliseconds | Requires `media`; targets the active track and fails if seeking is unavailable or the track changed. |
+| `desktop.power.set` | Profile name Text | Requires `power`; accepts only a profile in the daemon's current list. |
+| `desktop.power.cycle` | None | Requires `power`; selects the next profile in daemon order, wrapping at the end. |
 | `command.NAME` | Any/unused | Runs declared command `NAME`; unknown names produce no result. |
 
 Wrong arguments produce explicit action errors: `desktop.volume expects a number`, `desktop.mute expects a boolean`, and tray actions require a text item id. Desktop actions against undeclared services report the missing service. Commands run without a shell; output, timeout, and interval limits are in the [manifest reference](manifest.md).

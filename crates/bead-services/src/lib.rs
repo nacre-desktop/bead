@@ -132,4 +132,5 @@ mod tests;
 pub mod media;
 pub mod notification_bus;
 pub mod notifications;
+pub mod power_profiles;
 pub mod tray_watcher;
