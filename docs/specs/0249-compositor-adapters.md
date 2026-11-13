@@ -10,7 +10,8 @@ with `XDG_RUNTIME_DIR`; no detected compositor means no adapter or worker thread
 Snapshots contain outputs, per-output active and globally focused workspaces,
 urgency, windows and focused window metadata. Niri consumes its initial event
 burst and subsequent updates; Hyprland subscribes before reading its initial
-JSON state and refreshes only for relevant events. There is no snapshot polling.
+JSON state and refreshes only for relevant events. Hyprland urgency follows
+urgent events and clears when the window gains focus. There is no snapshot polling.
 Niri's documented event API has no output-change notification: outputs are read
 at connection and workspace/configuration changes; geometry-only changes may
 remain stale until the next such event. Socket loss clears state and reconnects
@@ -43,7 +44,7 @@ and ID-based buttons, plus the focused title. Its two rows keep the example
 readable. `tutorial-bar` stays unchanged to preserve its 50-line limit. This is
 a framework example with no product/QML counterpart. No new kit primitive or
 temporary duplicate implementation is introduced. The new service's resident
-memory budget is 1 MiB; measurements, when available, exclude clean file pages.
+memory budget is 1 MiB; measurement is pending and must exclude clean file pages.
 
 Licensing: implementation and fixtures were authored from the public
 [niri IPC guide](https://niri-wm.github.io/niri/IPC.html), its linked generated
@@ -53,5 +54,9 @@ No compositor implementation source or application implementation was read or
 copied; no niri-ipc or GPL dependency is added. Fixtures are hand-authored
 protocol examples, not recordings copied from an upstream implementation.
 
-Evidence: validation is recorded after the focused and full CI runs. Raw logs
-and private headless captures remain outside the committed documentation.
+Evidence (validation incomplete): container formatting passed. The first focused
+Clippy run rejected an unused test import; the import is fixed and local rustfmt
+passes. The retry was queued when the build host became unreachable over SSH.
+Socket tests, folder-app checks, boundaries, cargo-deny, the full CI replica,
+headless captures and the memory measurement remain unverified. Raw logs and
+private harnesses stay outside committed documentation.
