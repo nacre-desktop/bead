@@ -16,7 +16,7 @@ use bead_services::{
     power_profiles::{PowerProfiles, PowerProfilesAction, PowerProfilesSnapshot},
 };
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     error::Error,
     path::PathBuf,
     sync::{
@@ -1002,6 +1002,38 @@ pub struct FolderView {
     /// edge becomes the panel centre. Panel views open other panels without a centre.
     panel_edge: Option<bead_core::Edge>,
     fixed_viewport: bool,
+    /// `@icon:NAME` slots resolved through the icon directories, memoised per name (spec 0264).
+    icons: HashMap<String, Option<PathBuf>>,
+}
+/// Find NAME.svg (preferred) or NAME.png under `icons/hicolor` and `pixmaps` of XDG_DATA_HOME and
+/// XDG_DATA_DIRS. shortcut: no index.theme inheritance or size matching (the first PNG wins);
+/// upgrade when a folder app needs a themed icon set.
+fn icon_file(name: &str) -> Option<PathBuf> {
+    let home = std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")));
+    let dirs =
+        std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
+    let mut png = None;
+    for data in home.into_iter().chain(dirs.split(':').map(PathBuf::from)) {
+        let mut stack = vec![data.join("icons/hicolor"), data.join("pixmaps")];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+                let path = entry.path();
+                // Symlinked directories are not followed, so a looping theme cannot hang the walk.
+                if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                    stack.push(path);
+                } else if path.file_stem().is_some_and(|stem| stem == name) {
+                    match path.extension().and_then(|e| e.to_str()) {
+                        Some("svg") => return Some(path),
+                        Some("png") if png.is_none() => png = Some(path),
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+    png
 }
 /// Host actions a folder app with `[panels]` may send (spec 0250).
 pub const PANEL_ACTIONS: [&str; 3] = ["panel.open", "panel.toggle", "panel.close"];
@@ -1205,6 +1237,7 @@ impl FolderView {
             wakeup: None,
             panel_edge: None,
             fixed_viewport: false,
+            icons: HashMap::new(),
         })
     }
     /// Allow `panel.open|toggle|close` (spec 0250). `bar_edge` marks the bar whose pointer
@@ -1299,11 +1332,23 @@ impl FolderView {
                 .map(|s| self.surface_scene(s)))
         }
     }
-    fn surface_scene(&self, mut scene: Scene) -> Scene {
+    fn surface_scene(&mut self, mut scene: Scene) -> Scene {
         // Folder views occupy their surface; Luau layout reserves a panel shadow
         // margin by default, which would clip thin bars and offset their input.
         scene.offset = (0., 0.);
         scene.bounds = Rect::new(0., 0., self.size.0 as f32, self.size.1 as f32);
+        // Icon slots become theme files; an unknown icon keeps its slot path, which the renderer names.
+        for primitive in &mut scene.primitives {
+            if let crate::render::Primitive::Image { path, .. } = primitive
+                && let Some(name) = path.to_str().and_then(|p| p.strip_prefix("@icon:"))
+                && let Some(file) = self
+                    .icons
+                    .entry(name.to_owned())
+                    .or_insert_with(|| icon_file(name))
+            {
+                *path = file.clone();
+            }
+        }
         scene
     }
     /// Stage, validate, and render one update on the CPU without a display connection.

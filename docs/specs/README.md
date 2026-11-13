@@ -27,5 +27,6 @@ This index contains current framework contracts and repository-boundary decision
 | [0249 — Compositor adapters](0249-compositor-adapters.md) | Clean-room niri and Hyprland IPC snapshots and folder workspace focus |
 | [0250 — Popup panels for folder apps](0250-folder-app-panels.md) | Manifest-declared Luau popups a bar opens with `panel.*` actions |
 | [0254 — Render and worker hot paths](0254-hotpath-render.md) | Scene handoff, action isolation, and render preparation costs |
+| [0264 — Tinted icons and badge](0264-tinted-icons-and-badge.md) | Palette-tinted monochrome images and the kit count badge |
 
 This index covers Bead framework contracts. See the [documentation index](../README.md) for the current framework overview and the [framework ownership decision](0214-framework-split.md).

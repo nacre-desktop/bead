@@ -1253,6 +1253,7 @@ mod tests {
                 blur: 0.,
                 fit: bead_render::ImageFit::Fill,
                 clip_polygon: None,
+                tint: None,
             };
             fixture.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));
             let mut cache = bead_render::tree::TreeCache::default()
@@ -1818,6 +1819,7 @@ mod tests {
             blur: 0.,
             fit: bead_render::ImageFit::Fill,
             clip_polygon: None,
+            tint: None,
         };
         fixture.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));
         let mut renderer = bead_render::renderer(bead_render::RendererKind::Cpu).unwrap();
@@ -1877,6 +1879,7 @@ mod tests {
             blur: 0.,
             fit: bead_render::ImageFit::Fill,
             clip_polygon: None,
+            tint: None,
         };
         fixture.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));
         let mut cache = bead_render::tree::TreeCache::default()

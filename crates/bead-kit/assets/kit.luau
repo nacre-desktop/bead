@@ -410,6 +410,20 @@ return function(ui, tokens)
     function kit.Card(p) return ui.Column(props(p,{padding=tokens.spacing.md,gap=tokens.spacing.sm,radius=tokens.radii.medium,fill="surfaceContainer"})) end
     function kit.TextInput(p) return ui.TextInput(props(p,{height=40,padding=tokens.spacing.sm,radius=tokens.radii.small,font_size=tokens.text.body*4/3})) end
     function kit.Pill(p) return ui.Row(p) end
+    -- Count badge (spec 0264): a 15 px pill anchored to the top-right corner of its parent, an icon box
+    -- with a size. `tone` is the fill role; the ink is its on-colour, or the surface colour for host
+    -- roles without one (attention colours contrast with the surface by design). `fill`/`color`
+    -- override, `top`/`right` move the anchor. Hidden when `text` is empty or "0".
+    local badge_ink={primary="onPrimary",secondary="onSecondary",tertiary="onTertiary",error="onError"}
+    function kit.Badge(p)
+        local text=tostring(value(p.text,"") or "")
+        local tone=p.tone or "primary"
+        -- Whole-pixel width: a box sized to a fractional advance can wrap its last glyph.
+        return ui.Text(props(p,{position="absolute",top=-5,right=-7,height=15,radius=7.5,padding=0,
+            width=math.max(15,math.ceil(ui.text_width(text,p.family or ui.default_font_family,10))+8),
+            text=text,text_align="center",font_size=10,font_weight=600,fill=tone,
+            color=badge_ink[tone] or "surface",visible=text~="" and text~="0"},{tone=true}))
+    end
     function kit.Bar(p)
         local e=edge(p);local vertical=e=="left" or e=="right"
         return (vertical and ui.Column or ui.Row)(props(p,{width=vertical and 50 or "100%",height=vertical and "100%" or 50,

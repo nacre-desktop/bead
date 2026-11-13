@@ -191,6 +191,9 @@ pub enum Primitive {
         fit: ImageFit,
         #[serde(default)]
         clip_polygon: Option<Vec<[f32; 2]>>,
+        /// Draw the image's alpha as a mask filled with this colour (palette-tinted monochrome icons).
+        #[serde(default)]
+        tint: Option<[u8; 4]>,
         rect: Rect,
         path: std::path::PathBuf,
     },
@@ -1157,9 +1160,10 @@ fn key(p: &Primitive, scale: f32) -> String {
             blur,
             clip_polygon,
             fit,
+            tint,
         } => {
             format!(
-                "i:{blur}:{clip_polygon:?}:{fit:?}:{scale}:{}:{}:{}",
+                "i:{blur}:{clip_polygon:?}:{fit:?}:{tint:?}:{scale}:{}:{}:{}",
                 rect.w,
                 rect.h,
                 path.display()
@@ -1511,6 +1515,7 @@ impl Renderer for CpuRenderer {
                     blur,
                     clip_polygon,
                     fit,
+                    tint,
                 } => {
                     let pix = load_image(
                         path,
@@ -1518,6 +1523,7 @@ impl Renderer for CpuRenderer {
                         scale,
                         scene.asset_data.get(path).map(|data| data.as_ref()),
                         *fit,
+                        *tint,
                     )?;
                     let mut pix = if *blur > 0. {
                         let size = tiny_skia::IntSize::from_wh(pix.width(), pix.height())
@@ -2102,8 +2108,18 @@ pub fn validate_asset(path: &Path, bytes: &[u8]) -> Result<()> {
         1.,
         Some(bytes),
         ImageFit::Fill,
+        None,
     )
     .map(|_| ())
+}
+/// Read an image asset the scene did not carry in memory, naming the asset on failure.
+pub(crate) fn read_asset(path: &Path) -> Result<Vec<u8>> {
+    if let Some(icon) = path.to_str().and_then(|p| p.strip_prefix("@icon:")) {
+        return Err(
+            format!("icon {icon:?}: not supplied by the host or found in an icon theme").into(),
+        );
+    }
+    std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()).into())
 }
 fn load_image(
     path: &Path,
@@ -2111,30 +2127,31 @@ fn load_image(
     scale: f32,
     snapshot: Option<&[u8]>,
     fit: ImageFit,
+    tint: Option<[u8; 4]>,
 ) -> Result<Pixmap> {
     let file;
     let bytes = if let Some(snapshot) = snapshot {
         snapshot
     } else {
-        file = std::fs::read(path)?;
+        file = read_asset(path)?;
         &file
     };
     let (w, h) = dimensions(rect, scale);
     if w <= 128 && h <= 128 {
-        return load_cached_image(image_cache(), path, bytes, w, h, fit);
+        return load_cached_image(image_cache(), path, bytes, w, h, fit, tint);
     }
     let mut cache = large_image_cache()
         .lock()
         .expect("large image cache poisoned");
     if cache.entries.keys().any(|key| key.path == path) {
-        let key = ImageCacheKey::new(path, bytes, w, h, fit);
+        let key = ImageCacheKey::new(path, bytes, w, h, fit, tint);
         if let Some(pixels) = cache.get(&key) {
             return Ok(pixels.as_ref().clone());
         }
         cache.misses += 1;
     }
     drop(cache);
-    decode_image(path, bytes, w, h, fit)
+    decode_image(path, bytes, w, h, fit, tint)
 }
 
 fn load_cached_image(
@@ -2144,14 +2161,15 @@ fn load_cached_image(
     width: u32,
     height: u32,
     fit: ImageFit,
+    tint: Option<[u8; 4]>,
 ) -> Result<Pixmap> {
-    let key = ImageCacheKey::new(path, bytes, width, height, fit);
+    let key = ImageCacheKey::new(path, bytes, width, height, fit, tint);
     let cached = { cache.lock().expect("image cache poisoned").get(&key) };
     if let Some(pixels) = cached {
         return Ok(pixels.as_ref().clone());
     }
     cache.lock().expect("image cache poisoned").misses += 1;
-    let pixels = decode_image(path, bytes, width, height, fit)?;
+    let pixels = decode_image(path, bytes, width, height, fit, tint)?;
     if pixels.width() <= 128 && pixels.height() <= 128 {
         cache
             .lock()
@@ -2161,7 +2179,32 @@ fn load_cached_image(
     Ok(pixels)
 }
 
-fn decode_image(path: &Path, bytes: &[u8], w: u32, h: u32, fit: ImageFit) -> Result<Pixmap> {
+fn decode_image(
+    path: &Path,
+    bytes: &[u8],
+    w: u32,
+    h: u32,
+    fit: ImageFit,
+    tint: Option<[u8; 4]>,
+) -> Result<Pixmap> {
+    let mut pixels = decode_untinted(path, bytes, w, h, fit)?;
+    if let Some(tint) = tint {
+        apply_tint(pixels.data_mut(), tint);
+    }
+    Ok(pixels)
+}
+/// Replace every premultiplied pixel by `tint` at the pixel's own coverage (its alpha), so a
+/// coloured icon or a symbolic glyph becomes a flat shape in the palette colour.
+fn apply_tint(premultiplied: &mut [u8], tint: [u8; 4]) {
+    for pixel in premultiplied.as_chunks_mut::<4>().0 {
+        let alpha = (u16::from(pixel[3]) * u16::from(tint[3]) + 127) / 255;
+        for channel in 0..3 {
+            pixel[channel] = ((u16::from(tint[channel]) * alpha + 127) / 255) as u8;
+        }
+        pixel[3] = alpha as u8;
+    }
+}
+fn decode_untinted(path: &Path, bytes: &[u8], w: u32, h: u32, fit: ImageFit) -> Result<Pixmap> {
     if path.extension().is_some_and(|e| e == "svg") {
         return svg_pixmap(bytes, w, h);
     }
@@ -2236,9 +2279,17 @@ struct ImageCacheKey {
     width: u32,
     height: u32,
     fit: ImageFit,
+    tint: Option<[u8; 4]>,
 }
 impl ImageCacheKey {
-    fn new(path: &Path, bytes: &[u8], width: u32, height: u32, fit: ImageFit) -> Self {
+    fn new(
+        path: &Path,
+        bytes: &[u8],
+        width: u32,
+        height: u32,
+        fit: ImageFit,
+        tint: Option<[u8; 4]>,
+    ) -> Self {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         bytes.hash(&mut hasher);
         Self {
@@ -2247,6 +2298,7 @@ impl ImageCacheKey {
             width,
             height,
             fit,
+            tint,
         }
     }
 }
@@ -2391,7 +2443,7 @@ pub fn prewarm_image(
 ) -> Result<()> {
     let (w, h) = dimensions(rect, scale);
     if w <= 128 && h <= 128 {
-        return load_image(path, rect, scale, Some(bytes), fit).map(|_| ());
+        return load_image(path, rect, scale, Some(bytes), fit, None).map(|_| ());
     }
     let raster_bytes = (w as usize)
         .checked_mul(h as usize)
@@ -2400,7 +2452,7 @@ pub fn prewarm_image(
     if raster_bytes > LARGE_IMAGE_CACHE_LIMIT {
         return Err("image warm target exceeds the large image cache budget".into());
     }
-    let key = ImageCacheKey::new(path, bytes, w, h, fit);
+    let key = ImageCacheKey::new(path, bytes, w, h, fit, None);
     let mut cache = large_image_cache()
         .lock()
         .expect("large image cache poisoned");
@@ -2409,7 +2461,7 @@ pub fn prewarm_image(
     }
     cache.misses += 1;
     drop(cache);
-    let pixels = Arc::new(decode_image(path, bytes, w, h, fit)?);
+    let pixels = Arc::new(decode_image(path, bytes, w, h, fit, None)?);
     let mut cache = large_image_cache()
         .lock()
         .expect("large image cache poisoned");
@@ -2866,6 +2918,7 @@ mod tests {
             1.,
             Some(&bytes),
             ImageFit::Fill,
+            None,
         )
         .unwrap();
         assert_eq!((actual.width(), actual.height()), (5, 3));
@@ -2900,6 +2953,7 @@ mod tests {
             1.,
             Some(&bytes),
             ImageFit::Cover,
+            None,
         )
         .unwrap();
         let premultiplied = |pixel: [u8; 4]| {
@@ -3611,6 +3665,7 @@ mod tests {
                             blur: 0.,
                             fit: crate::ImageFit::Fill,
                             clip_polygon: None,
+                            tint: None,
                             rect: Rect::new(14., 8., 15., 15.),
                             path: image_path.0.clone(),
                         },
@@ -3709,17 +3764,60 @@ mod tests {
         let png_path = Path::new("cache-reuse-unique.png");
         let png = solid_png([210, 30, 10, 255]);
         let cache = isolated_image_cache();
-        let first = load_cached_image(&cache, png_path, &png, 8, 8, ImageFit::Fill).unwrap();
-        let second = load_cached_image(&cache, png_path, &png, 8, 8, ImageFit::Fill).unwrap();
+        let first = load_cached_image(&cache, png_path, &png, 8, 8, ImageFit::Fill, None).unwrap();
+        let second = load_cached_image(&cache, png_path, &png, 8, 8, ImageFit::Fill, None).unwrap();
         assert_eq!(first.data(), second.data());
         assert_eq!(cache.lock().unwrap().hits, 1);
 
         let svg_path = Path::new("cache-reuse-unique.svg");
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="#12ab34"/></svg>"##;
-        let svg_first = load_cached_image(&cache, svg_path, svg, 8, 8, ImageFit::Fill).unwrap();
-        let svg_second = load_cached_image(&cache, svg_path, svg, 8, 8, ImageFit::Fill).unwrap();
+        let svg_first =
+            load_cached_image(&cache, svg_path, svg, 8, 8, ImageFit::Fill, None).unwrap();
+        let svg_second =
+            load_cached_image(&cache, svg_path, svg, 8, 8, ImageFit::Fill, None).unwrap();
         assert_eq!(svg_first.data(), svg_second.data());
         assert_eq!(cache.lock().unwrap().hits, 2);
+    }
+
+    /// B0264: a tint replaces every pixel by the tint colour at the source pixel's coverage, for
+    /// raster and vector sources alike, and the tinted raster is cached per (icon, size, tint).
+    #[test]
+    fn tinted_image_is_the_alpha_mask_filled_with_the_tint_and_cached() {
+        use image::ImageEncoder;
+        let source =
+            image::RgbaImage::from_raw(2, 1, vec![255, 0, 0, 255, 10, 200, 30, 128]).unwrap();
+        let mut png = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut png)
+            .write_image(source.as_raw(), 2, 1, image::ExtendedColorType::Rgba8)
+            .unwrap();
+        let tint = [40, 80, 120, 255];
+        let cache = isolated_image_cache();
+        let path = Path::new("tint-unique.png");
+        let tinted =
+            load_cached_image(&cache, path, &png, 2, 1, ImageFit::Fill, Some(tint)).unwrap();
+        // Opaque red becomes the tint; a half-covered green pixel becomes the tint at half coverage.
+        assert_eq!(tinted.data(), &[40, 80, 120, 255, 20, 40, 60, 128]);
+        let again =
+            load_cached_image(&cache, path, &png, 2, 1, ImageFit::Fill, Some(tint)).unwrap();
+        assert_eq!(again.data(), tinted.data());
+        assert_eq!(cache.lock().unwrap().hits, 1);
+        // Another tint, or no tint, is a different cache entry rather than a stale raster.
+        let plain = load_cached_image(&cache, path, &png, 2, 1, ImageFit::Fill, None).unwrap();
+        assert_eq!(&plain.data()[..4], &[255, 0, 0, 255]);
+        assert_eq!(cache.lock().unwrap().entries.len(), 2);
+        // A translucent tint scales the coverage; a vector icon is masked the same way.
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="1" height="2" fill="#000"/></svg>"##;
+        let vector = load_cached_image(
+            &cache,
+            Path::new("tint-unique.svg"),
+            svg,
+            2,
+            2,
+            ImageFit::Fill,
+            Some([200, 100, 0, 128]),
+        )
+        .unwrap();
+        assert_eq!(&vector.data()[..8], &[100, 50, 0, 128, 0, 0, 0, 0]);
     }
 
     #[test]
@@ -3728,13 +3826,13 @@ mod tests {
         let first = solid_png([255, 0, 0, 255]);
         let changed = solid_png([0, 255, 0, 255]);
         let cache = isolated_image_cache();
-        let red = load_cached_image(&cache, path, &first, 8, 8, ImageFit::Fill).unwrap();
-        let green = load_cached_image(&cache, path, &changed, 8, 8, ImageFit::Fill).unwrap();
+        let red = load_cached_image(&cache, path, &first, 8, 8, ImageFit::Fill, None).unwrap();
+        let green = load_cached_image(&cache, path, &changed, 8, 8, ImageFit::Fill, None).unwrap();
         assert_ne!(red.data(), green.data());
         assert_eq!(green.data()[1], 255);
 
-        load_cached_image(&cache, path, &changed, 9, 8, ImageFit::Fill).unwrap();
-        load_cached_image(&cache, path, &changed, 8, 8, ImageFit::Cover).unwrap();
+        load_cached_image(&cache, path, &changed, 9, 8, ImageFit::Fill, None).unwrap();
+        load_cached_image(&cache, path, &changed, 8, 8, ImageFit::Cover, None).unwrap();
         assert_eq!(cache.lock().unwrap().entries.len(), 4);
     }
 
@@ -3758,6 +3856,7 @@ mod tests {
                 width: 8,
                 height: 8,
                 fit: ImageFit::Fill,
+                tint: None,
             })
             .collect();
         for key in keys.iter().take(8) {
@@ -3792,7 +3891,7 @@ mod tests {
         let rect = Rect::new(0., 0., 320., 240.);
         prewarm_image(&path, &bytes, rect, 1., ImageFit::Cover).unwrap();
         let before = large_image_cache_stats();
-        let pixels = load_image(&path, rect, 1., Some(&bytes), ImageFit::Cover).unwrap();
+        let pixels = load_image(&path, rect, 1., Some(&bytes), ImageFit::Cover, None).unwrap();
         let after = large_image_cache_stats();
         assert_eq!(pixels.width(), 320);
         assert_eq!(pixels.height(), 240);
@@ -3850,6 +3949,30 @@ mod weight_tests {
 #[cfg(test)]
 mod symbol_ink_tests {
     use super::*;
+
+    /// The fixture subset resolves each status glyph name to one ligature glyph, so its advance
+    /// is one em wide rather than the width of the spelled-out letters.
+    #[test]
+    fn fixture_symbols_resolve_status_glyph_names() {
+        let font = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../bead-test/fonts/FixtureSymbols.ttf");
+        let mut scene = Scene::empty(200., 40.);
+        scene.font_files = vec![font];
+        for name in [
+            "battery_full",
+            "battery_android_0",
+            "battery_android_question",
+            "question_mark",
+            "wifi",
+        ] {
+            let advance =
+                text_boundary_x(&scene, name, name.len(), "Bead Test Symbols", 24., 200.).unwrap();
+            assert!(
+                advance > 12. && advance <= 26.4,
+                "{name} advance {advance} is not one 24 px glyph"
+            );
+        }
+    }
 
     #[test]
     fn material_symbol_ink_centres_in_its_box_at_fractional_scales() {

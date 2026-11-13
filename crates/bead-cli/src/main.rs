@@ -615,6 +615,45 @@ mod tests {
             let _ = std::fs::remove_dir_all(p);
         }
     }
+    /// B0264: an icon slot resolved from the icon directories (tinted) and a kit badge pass
+    /// `bead check` in a folder app; an unknown icon names itself in the error.
+    #[test]
+    fn check_accepts_tinted_icon_slots_and_kit_badges() {
+        let p = folder(&format!("{}\n[layer]\nedge='top'\nsize=36\n", base()));
+        let apps = p.join("data/icons/hicolor/scalable/apps");
+        std::fs::create_dir_all(&apps).unwrap();
+        std::fs::write(
+            apps.join("bell.svg"),
+            r##"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="#000"/></svg>"##,
+        )
+        .unwrap();
+        // SAFETY: only the icon lookup reads XDG_DATA_DIRS in this process.
+        unsafe { std::env::set_var("XDG_DATA_DIRS", p.join("data")) };
+        std::fs::write(
+            p.join("palette.json"),
+            r#"{"formatVersion":1,"colours":{"surface":"202020","onSurface":"eeeeee","primary":"90c0f0","onPrimary":"102030","secondary":"a0d0b0"}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            p.join("view/main.luau"),
+            "local ui=require('bead.ui'); local kit=require('bead.kit')\nreturn ui.Box{id='slot',width=20,height=20,ui.Image{id='icon',icon='bell',width=16,height=16,tint='secondary'},kit.Badge{id='count',text='9',tone='primary'}}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            p.join("view/behavior.luau"),
+            "return {stores={},actions={},computed={}}\n",
+        )
+        .unwrap();
+        App::load(&p).unwrap().check().unwrap();
+        std::fs::write(
+            p.join("view/main.luau"),
+            "local ui=require('bead.ui'); return ui.Image{id='icon',icon='no-such-icon',width=16,height=16}\n",
+        )
+        .unwrap();
+        let error = App::load(&p).unwrap().check().unwrap_err().to_string();
+        assert!(error.contains("icon \"no-such-icon\""), "{error}");
+        let _ = std::fs::remove_dir_all(p);
+    }
     #[test]
     fn check_does_not_start_declared_services_or_commands() {
         let p = folder(&format!(

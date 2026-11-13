@@ -139,6 +139,7 @@ pub const PROPERTIES: &[&str] = &[
     "text_shadow_color",
     "family",
     "icon",
+    "tint",
     "path",
     "aria_label",
     "open",
@@ -253,6 +254,7 @@ pub struct ViewSpec {
     pub text_shadow_color: Option<Json>,
     pub family: String,
     pub icon: Option<String>,
+    pub tint: Option<Json>,
     pub path: Option<PathBuf>,
     pub aria_label: String,
     pub text_align: Option<bead_render::TextAlign>,
@@ -902,6 +904,7 @@ impl ViewSpec {
                     .get("icon")
                     .map(|_| text(p, "icon", "", source).map(str::to_owned))
                     .transpose()?,
+                tint: p.get("tint").cloned(),
                 path: p
                     .get("path")
                     .map(|_| text(p, "path", "", source).map(PathBuf::from))
@@ -1329,6 +1332,11 @@ pub fn layout(
                 blur: view.blur,
                 fit: view.image_fit,
                 clip_polygon: view.clip_polygon.clone(),
+                tint: view
+                    .tint
+                    .as_ref()
+                    .map(|tint| color(Some(tint), foreground, palette, source))
+                    .transpose()?,
                 rect: r,
                 path,
             });

@@ -4331,3 +4331,94 @@ fn reloading_a_bundle_reuses_cached_bytecode() {
     assert_eq!(load(), 3, "first load compiles each source once");
     assert_eq!(load(), 0, "a second generation reuses the bytecode");
 }
+
+/// B0264: `tint` carries the resolved palette colour into the Image primitive, and `kit.Badge`
+/// is a 15 px pill anchored at the parent's top-right corner (top -5, right -7), at least 15 wide,
+/// hidden for an empty or "0" count, with the surface colour as ink for a host role without an on-colour.
+#[test]
+fn image_tint_resolves_palette_roles_and_kit_badge_anchors_a_count_pill() {
+    let f = fixture();
+    fs::write(
+        f.0.join("palette.json"),
+        r#"{"formatVersion":1,"mode":"dark","colours":{"surface":"202020","onSurface":"eeeeee","primary":"90c0f0","onPrimary":"102030","secondary":"a0d0b0","warn":"e8b36f"}}"#,
+    )
+    .unwrap();
+    fs::write(f.0.join("ui/main.luau"),r#"local ui=require("bead.ui");local kit=require("bead.kit")
+local function slot(id,text,tone) return ui.Box{id=id,width=20,height=20,metadata=id,kit.Badge{id="count",text=text,tone=tone}} end
+return ui.Row{id="bar",width=400,height=50,gap=10,
+ ui.Image{id="plain",icon="bell",width=16,height=16},
+ ui.Image{id="tinted",icon="bell",width=16,height=16,tint="secondary"},
+ ui.Image{id="faded",icon="bell",width=16,height=16,tint=ui.alpha("secondary",.5)},
+ slot("one","9","primary"),slot("two","56","warn"),slot("zero","0","primary"),slot("none","","primary")}"#).unwrap();
+    let session = session(&f);
+    let primitives = &session.current.primitives;
+    let tints: Vec<_> = primitives
+        .iter()
+        .filter_map(|p| match p {
+            Primitive::Image { tint, path, .. } if path == Path::new("@icon:bell") => Some(*tint),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        tints,
+        [
+            None,
+            Some([0xa0, 0xd0, 0xb0, 255]),
+            Some([0xa0, 0xd0, 0xb0, 128])
+        ]
+    );
+    let slot = |id: &str| {
+        rect(
+            &session
+                .view_nodes()
+                .iter()
+                .find(|n| n.id.ends_with(id))
+                .unwrap()
+                .draw,
+        )
+    };
+    let label = |text: &str| {
+        primitives
+            .iter()
+            .find_map(|p| match p {
+                Primitive::Text {
+                    text: t,
+                    rect,
+                    color,
+                    size,
+                    weight,
+                    ..
+                } if t == text => Some((*rect, *color, *size, *weight)),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("badge {text:?} is drawn"))
+    };
+    for (id, text, ink) in [
+        (".one", "9", [0x10, 0x20, 0x30, 255]),
+        (".two", "56", [0x20, 0x20, 0x20, 255]),
+    ] {
+        let parent = slot(id);
+        let (r, color, size, weight) = label(text);
+        assert_eq!((r.h, r.y), (15., parent.y - 5.), "{id} badge height/top");
+        assert!(r.w >= 15., "{id} badge width {}", r.w);
+        assert_eq!(r.x + r.w, parent.x + parent.w + 7., "{id} badge right edge");
+        assert_eq!(
+            (color, size, weight),
+            (ink, 10., 600),
+            "{id} badge text style"
+        );
+        // The pill fill has the badge's geometry and the tone colour.
+        assert!(primitives.iter().any(
+            |p| matches!(p, Primitive::Rounded { rect, fill, .. } if *rect == r && fill[3] == 255)
+        ));
+    }
+    assert!(label("56").0.w > label("9").0.w);
+    for hidden in ["0", ""] {
+        assert!(
+            !primitives
+                .iter()
+                .any(|p| matches!(p, Primitive::Text { text, .. } if text == hidden)),
+            "badge {hidden:?} must be hidden"
+        );
+    }
+}

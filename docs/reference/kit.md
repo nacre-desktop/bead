@@ -15,6 +15,7 @@
 - `PasswordField`: masked/revealed text; `text`, `revealed`, `on_toggle`.
 - `ActionButton`, `PillButton`, `ConfirmButton`: action variants; label/text and activation props.
 - `List`, `ListRow`, `Card`, `TextInput`, `Pill`: scrolling, row, container, input, and compact row primitives.
+- `Badge`: 15 px count pill anchored to its parent's top-right corner (spec 0264); `text`, `tone` (fill role; ink is its on-colour or `surface`), optional `top`/`right`/`fill`/`color`; hidden for `""` or `"0"`.
 - `Bar`, `Panel`, `Popover`, `Tooltip`: edge-placed containers; `edge`, dimensions and children; `Popover` and `Tooltip` sit `bar_size` plus spacing from that edge. `Peek` is an alias of `Popover`.
 - `CollectionSwitcher`, `CollectionSwitcherMenu`: collection selection; `groups` (`{id, label}`), `current`, `on_toggle` / `on_switch`, `on_rename`, `editing`, `actions`.
 - `LevelMeter`, `HelpText`, `Swatch`: meter, helper copy, and color sample primitives.

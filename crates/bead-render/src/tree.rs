@@ -191,6 +191,7 @@ impl ImagePayload {
             path,
             fit,
             clip_polygon,
+            tint,
             ..
         } = &self.primitive
         else {
@@ -225,7 +226,14 @@ impl ImagePayload {
         let mut pixels = if self.native_cover {
             crate::decode_native_image(&self.encoded.bytes)?
         } else {
-            crate::load_image(path, *rect, self.scale, Some(&self.encoded.bytes), *fit)?
+            crate::load_image(
+                path,
+                *rect,
+                self.scale,
+                Some(&self.encoded.bytes),
+                *fit,
+                *tint,
+            )?
         };
         if let Some(points) = clip_polygon {
             crate::apply_polygon_clip(&mut pixels, points)?;
@@ -866,11 +874,12 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
             blur,
             fit,
             clip_polygon,
+            tint,
             rect: r,
             path,
         } => {
             rect(r, hash);
-            (blur.to_bits(), fit, path).hash(hash);
+            (blur.to_bits(), fit, path, tint).hash(hash);
             clip_polygon.is_some().hash(hash);
             for coordinate in clip_polygon.iter().flatten().flatten() {
                 coordinate.to_bits().hash(hash);
@@ -2077,6 +2086,7 @@ impl TreeCache {
                     blur,
                     fit,
                     clip_polygon,
+                    tint,
                     ..
                 } = primitive
                     && *blur == 0.
@@ -2089,9 +2099,11 @@ impl TreeCache {
                             .get(path)
                             .cloned()
                             .map(Ok)
-                            .unwrap_or_else(|| std::fs::read(path).map(Arc::from))?;
+                            .unwrap_or_else(|| crate::read_asset(path).map(Arc::from))?;
+                        // The native decode skips `load_image`, so a tinted image never takes it.
                         let native_cover = *fit == crate::ImageFit::Cover
                             && clip_polygon.is_none()
+                            && tint.is_none()
                             && !path.extension().is_some_and(|e| e == "svg");
                         let (width, height) = if native_cover {
                             image::ImageReader::new(std::io::Cursor::new(encoded.as_ref()))
@@ -5465,6 +5477,7 @@ mod tests {
                 fit: crate::ImageFit::Cover,
                 blur: 0.,
                 clip_polygon: Some(vec![[0., 0.], [1., 0.], [1., 1.], [0., 1.]]),
+                tint: None,
             });
         }
         assert!(worker.prepare(&scene, 1.).is_err());
@@ -5530,6 +5543,20 @@ mod tests {
         assert_eq!((payload.width, payload.height), (1920, 1080));
         assert_eq!(payload.scratch_budget.used(), 0);
         assert!(payload.budget.used() < 40 * bead_core::cache::MIB);
+    }
+    /// B0264: the native cover decode skips the tint, so a tinted cover image is rasterised.
+    #[test]
+    fn tinted_cover_image_skips_the_native_decode() {
+        for (tint, native) in [(None, true), (Some([1, 2, 3, 255]), false)] {
+            let mut scene = scene();
+            if let Primitive::Image { fit, tint: t, .. } = &mut scene.primitives[0] {
+                (*fit, *t) = (crate::ImageFit::Cover, tint);
+            }
+            let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+            worker.prepare(&scene, 1.).unwrap();
+            let items = &worker.frame.as_ref().unwrap().items;
+            assert_eq!(items[0].image.as_ref().unwrap().native_cover, native);
+        }
     }
     #[test]
     fn ui_cpu_prepare_reuses_exact_snapshot_and_defers_native_or_changed_images() {
@@ -6163,6 +6190,7 @@ mod tests {
             blur: 0.,
             fit: crate::ImageFit::Fill,
             clip_polygon: None,
+            tint: None,
         };
         let mut dense = TreeCache::default();
         dense.prepare(&scene, 1.5).unwrap();
@@ -6252,6 +6280,7 @@ mod tests {
             blur: 0.,
             fit: crate::ImageFit::Fill,
             clip_polygon: None,
+            tint: None,
         };
         scene.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="2300" height="2200"><rect width="2300" height="2200" fill="#123456"/></svg>"##[..]));
         let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
@@ -6638,6 +6667,7 @@ mod tests {
             blur: 0.,
             fit: crate::ImageFit::Fill,
             clip_polygon: None,
+            tint: None,
         };
         replacement.primitives = (0..1025)
             .map(|index| {
@@ -7049,6 +7079,7 @@ mod tests {
                     blur: 0.,
                     fit: crate::ImageFit::Fill,
                     clip_polygon: None,
+                    tint: None,
                     rect: Rect::new(2., 2., 8., 8.),
                     path: "proof.png".into(),
                 },
@@ -7089,6 +7120,7 @@ mod tests {
                 fit: crate::ImageFit::Cover,
                 blur: 0.,
                 clip_polygon: None,
+                tint: None,
             });
         }
 
@@ -7152,6 +7184,7 @@ mod tests {
                 blur: 0.,
                 fit: crate::ImageFit::Fill,
                 clip_polygon: None,
+                tint: None,
                 rect: Rect::new(x, 2., 512., 512.),
                 path: "proof.png".into(),
             });
@@ -7300,6 +7333,7 @@ mod tests {
                 blur: 0.,
                 fit: crate::ImageFit::Fill,
                 clip_polygon: None,
+                tint: None,
                 rect: Rect::new(2., y, 12., 6.),
                 path: "proof.png".into(),
             });
@@ -8022,6 +8056,7 @@ mod tests {
             fit: crate::ImageFit::Fill,
             blur: 0.,
             clip_polygon: None,
+            tint: None,
         }];
 
         let started = std::time::Instant::now();

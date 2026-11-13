@@ -46,7 +46,10 @@ ui.TextInput { id="name", text=ui.bind("name"), placeholder="Name" }
 ```
 ```luau
 ui.Image { id="image", icon="wallpaper", width=120, height=80 }
--- Image slot; the host supplies the asset represented by icon.
+-- Image slot; the host supplies the asset represented by icon (folder apps look it up in the
+-- hicolor icon directories; `path` names a bundle file instead).
+-- tint="secondary" (a palette role, `ui.alpha(...)` or `ui.tint(...)`) draws the image's alpha as a
+-- mask filled with that colour, so themed icons and symbol glyphs follow the palette.
 ```
 ```luau
 ui.Arc { id="arc", width=40, height=40 }

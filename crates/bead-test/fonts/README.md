@@ -18,6 +18,8 @@ Capture: tools/build-test-font.py using isolated fonttools4.60.1; source hash is
 verified, default variable axes instantiated, GSUB closure retained. This avoids
 incorrect glyphs seen with the earlier unrelated renamed variable test subset.
 No production fonts are changed. CI uses the committed bytes, not the Python tool.
-Output SHA256 81aeebd29b992fee4a7f94b88e1feab968f0476bee9fa5850723c267b55efd83.
+Output SHA256 d4ad18ea53987d04306c340911068d09929f4a0154e54b8029674618c10dbbdf
+(B0264 added the characters `0` and `q`, bringing in `battery_android_0`,
+`battery_android_question` and `question_mark`; the text is the tool's `populate` line).
 Capture validation: notification PNG has zero differing pixels against the full
 pinned upstream font with the same fixed fixture, scale and CPU renderer.

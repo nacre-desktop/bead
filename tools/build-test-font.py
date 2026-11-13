@@ -22,7 +22,7 @@ options.name_IDs = ["*"]
 options.name_legacy = True
 options.name_languages = ["*"]
 subsetter = subset.Subsetter(options=options)
-subsetter.populate(text="close expand_less expand_more chevron_right star desktop_windows volume_up volume_off mic mic_off brightness_high battery_full bluetooth wifi network_wifi power_settings_new search settings keyboard notifications info warning")
+subsetter.populate(text="close expand_less expand_more chevron_right star desktop_windows volume_up volume_off mic mic_off brightness_high battery_full battery_android_0 battery_android_question bluetooth wifi network_wifi power_settings_new search settings keyboard notifications info warning")
 subsetter.subset(font)
 for record in font["name"].names:
     text = {1: "Bead Test Symbols", 2: "Regular", 4: "Bead Test Symbols", 6: "BeadTestSymbols", 16: "Bead Test Symbols", 17: "Regular"}.get(record.nameID)

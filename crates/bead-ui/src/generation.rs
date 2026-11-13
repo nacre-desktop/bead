@@ -495,7 +495,10 @@ impl Generation {
             if !valid_shape || !valid_rect(rect(&node.draw)) {
                 return Err(node.diagnostic(format!("invalid geometry for {}", node.id)));
             }
-            if let Primitive::Image { path, .. } = &mut node.draw {
+            // `@icon:` slots are filled by the host, not read from the bundle.
+            if let Primitive::Image { path, .. } = &mut node.draw
+                && !path.to_str().is_some_and(|s| s.starts_with("@icon:"))
+            {
                 let bytes = loader.read(path)?;
                 bead_render::validate_asset(path, &bytes)
                     .map_err(|e| Diagnostic::new(path, 1, 1, e))?;
