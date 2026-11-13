@@ -690,6 +690,12 @@ pub trait SceneSource {
     fn stage(&mut self, event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>>;
     fn validate(&self) -> Result<(), Box<dyn Error>>;
     fn state_summary(&self) -> String;
+    /// Changes whenever `accessibility_tree`, `state_summary` or `saved_state` may return
+    /// something else. While it holds, the worker reuses its last copies of them; None
+    /// reads them for every worker packet.
+    fn state_revision(&self) -> Option<u64> {
+        None
+    }
     fn resource_counts(&self) -> String {
         String::new()
     }

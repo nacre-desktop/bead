@@ -158,6 +158,7 @@ impl Session {
             .map_err(|error| Diagnostic::new(&self.entry, 1, 1, error))?;
         if let Some(patched) = &scene {
             self.current = patched.clone();
+            self.state_epoch += 1;
         }
         Ok(Some(LocalRangeFeedback { argument, scene }))
     }

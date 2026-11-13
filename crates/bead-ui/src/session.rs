@@ -28,7 +28,8 @@ pub(super) struct Pending {
     source_root: PathBuf,
     palette_source: PathBuf,
     pub(super) watch_revision: u64,
-    pub(super) nodes: Vec<Node>,
+    /// None: a feedback-only frame keeps the committed nodes.
+    pub(super) nodes: Option<Vec<Node>>,
 }
 pub type Projector = Box<dyn Fn(&Stores) -> Result<BTreeMap<String, Value>, Diagnostic>>;
 /// Scope host-intercepted pointer actions so programmatic focus uses pointer styling.
@@ -76,6 +77,8 @@ pub struct Session {
     accepted_watch_revision: u64,
     pub(crate) current: Scene,
     pub(super) current_nodes: Vec<Node>,
+    /// Bumped when the accessibility inputs outside `stores` change (see `state_revision`).
+    pub(super) state_epoch: u64,
     pub(super) editors: BTreeMap<String, input::Editor>,
     pub(super) committed_editors: BTreeMap<String, input::Editor>,
     pub(super) viewport: (f32, f32),
@@ -146,6 +149,7 @@ impl Session {
     /// Set the application label exposed for this session's accessible window root.
     pub fn set_accessibility_label(&mut self, label: impl Into<String>) {
         self.accessibility_label = label.into();
+        self.state_epoch += 1;
     }
     /// Keep the returned guard alive while routing an intercepted pointer action.
     pub fn pointer_input(&self) -> PointerInput {
@@ -243,6 +247,7 @@ impl Session {
             accepted_watch_revision: 0,
             current: fallback,
             current_nodes: vec![],
+            state_epoch: 0,
             viewport: (1200., 800.),
             editors: BTreeMap::new(),
             committed_editors: BTreeMap::new(),
@@ -282,7 +287,7 @@ impl Session {
             source_root: self.root.clone(),
             palette_source: self.palette_path.clone(),
             watch_revision: 0,
-            nodes: self.current_nodes.clone(),
+            nodes: None,
         }
     }
     /// The UI root this session loads from (plugin configuration is keyed by it).
@@ -557,7 +562,7 @@ impl Session {
             source_root: self.root.clone(),
             palette_source: self.palette_path.clone(),
             watch_revision,
-            nodes,
+            nodes: Some(nodes),
         });
         Ok(scene)
     }
@@ -618,7 +623,10 @@ impl Session {
             self.base_palette = base_palette;
             self.runtime_palette = runtime_palette;
             self.current = scene;
-            self.current_nodes = nodes;
+            if let Some(nodes) = nodes {
+                self.current_nodes = nodes;
+            }
+            self.state_epoch += 1;
             self.cancel_invalid_deferred();
             self.committed_editors = self.editors.clone();
         }
@@ -877,12 +885,20 @@ impl Session {
         if stores.revision() == base && !animation_due && !feedback_due {
             return Ok(None);
         }
+        let materialize = |stores: &Stores| {
+            generation
+                .materialize(stores, &self.palette, self.viewport)
+                .map(|(scene, nodes)| (scene, std::borrow::Cow::Owned(nodes)))
+        };
         let (mut scene, mut nodes) = if stores.revision() == base && !animation_due {
             let mut scene = self.current.clone();
             self.strip_graph_labels(&mut scene);
-            (scene, self.current_nodes.clone())
+            (
+                scene,
+                std::borrow::Cow::Borrowed(self.current_nodes.as_slice()),
+            )
         } else {
-            generation.materialize(&stores, &self.palette, self.viewport)?
+            materialize(&stores)?
         };
         if self.coalesce_projection
             && let Some(projector) = &self.projector
@@ -894,7 +910,7 @@ impl Session {
                 .commit(changes)
                 .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
             if stores.revision() != revision {
-                (scene, nodes) = generation.materialize(&stores, &self.palette, self.viewport)?;
+                (scene, nodes) = materialize(&stores)?;
             }
         }
         if self.preview_deadline.is_none()
@@ -917,7 +933,7 @@ impl Session {
                         Value::Text(String::new()),
                     )]))
                     .map_err(|e| generation.script.error(e))?;
-                (scene, nodes) = generation.materialize(&stores, &self.palette, self.viewport)?;
+                (scene, nodes) = materialize(&stores)?;
             }
         }
         if let Some(Value::Text(focused)) = stores.get("bead.focused")
@@ -933,7 +949,7 @@ impl Session {
             stores
                 .commit(BTreeMap::from([("bead.focused".into(), Value::Text(next))]))
                 .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
-            (scene, nodes) = generation.materialize(&stores, &self.palette, self.viewport)?;
+            (scene, nodes) = materialize(&stores)?;
         }
 
         if self.deferred_action.as_ref().is_some_and(|pending| {
@@ -948,7 +964,7 @@ impl Session {
                         Value::Bool(false),
                     )]))
                     .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
-                (scene, nodes) = generation.materialize(&stores, &self.palette, self.viewport)?;
+                (scene, nodes) = materialize(&stores)?;
             }
         }
 
@@ -970,7 +986,19 @@ impl Session {
             &self.scrollbar_config,
             (std::time::Instant::now(), self.frame_interval),
         );
-        self.attach_graphs(&mut scene, &nodes, &Palette(self.palette.0.clone()))?;
+        let nodes = match nodes {
+            std::borrow::Cow::Owned(nodes) => Some(nodes),
+            std::borrow::Cow::Borrowed(_) => None,
+        };
+        // The graph hook borrows the session mutably: lend it the committed nodes by move.
+        let committed = std::mem::take(&mut self.current_nodes);
+        let attached = self.attach_graphs(
+            &mut scene,
+            nodes.as_deref().unwrap_or(&committed),
+            &Palette(self.palette.0.clone()),
+        );
+        self.current_nodes = committed;
+        attached?;
         scene.font_files = self.current.font_files.clone();
         if self.error.is_some() && self.source_fault {
             let old = self.current.clone();
@@ -1118,7 +1146,7 @@ impl Session {
             source_root: self.root.clone(),
             palette_source: self.palette_path.clone(),
             watch_revision: 0,
-            nodes,
+            nodes: Some(nodes),
         });
         Ok(Some(scene))
     }
@@ -1163,7 +1191,7 @@ impl Session {
             source_root: self.root.clone(),
             palette_source: self.palette_path.clone(),
             watch_revision: 0,
-            nodes,
+            nodes: Some(nodes),
         });
         Ok(Some(scene))
     }
@@ -1297,6 +1325,20 @@ impl Session {
                 .map(Vec::capacity)
                 .sum::<usize>())
         )
+    }
+    /// Changes whenever `accessibility_tree` or `state_summary` may: on a commit, a label
+    /// change or any store change. In-place store commits advance the store revision, and
+    /// a host's direct `stores` assignment reconciles in new ids, which changes the count.
+    pub fn state_revision(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        (
+            self.state_epoch,
+            self.stores.revision(),
+            self.stores.values().len(),
+        )
+            .hash(&mut hash);
+        hash.finish()
     }
     /// Store dump for traces. Stores named `*.secret` (password buffers) are never included.
     pub fn state_summary(&self) -> String {

@@ -29,23 +29,30 @@ struct Mirror {
     regions: Vec<InputRegion>,
     surrounding: Option<(String, i32, i32)>,
     sensitive: bool,
-    tree: Option<accesskit::TreeUpdate>,
-    summary: String,
+    /// `SceneSource::state_revision` when the three shared copies below were read.
+    revision: Option<u64>,
+    tree: Option<Arc<accesskit::TreeUpdate>>,
+    summary: Arc<str>,
     resources: String,
-    saved_state: serde_json::Value,
+    saved_state: Arc<serde_json::Value>,
 }
 impl Mirror {
     fn region_at(&self, x: f32, y: f32) -> Option<&InputRegion> {
         self.regions.iter().rev().find(|r| r.contains(x, y))
     }
 
+    /// Read `source` into a new `last`, sharing `last`'s accessibility tree, summary and
+    /// saved state while the source's state revision is unchanged.
     fn read(
         source: &dyn SceneSource,
         cache: &bead_render::tree::TreeCache,
         stack_bytes: usize,
-    ) -> Self {
+        last: &mut Arc<Self>,
+    ) -> Arc<Self> {
         let _profile = bead_core::profile::Span::new("mirror");
-        Self {
+        let revision = source.state_revision();
+        let same = revision.is_some() && revision == last.revision;
+        *last = Arc::new(Self {
             dormant_ready: source.dormant_ready(),
             retained_bytes: source.warm_retained_bytes().and_then(|bytes| {
                 bytes
@@ -62,11 +69,25 @@ impl Mirror {
             regions: source.input_regions(),
             surrounding: source.surrounding_text(),
             sensitive: source.sensitive_input(),
-            tree: source.accessibility_tree(),
-            summary: source.state_summary(),
+            tree: if same {
+                last.tree.clone()
+            } else {
+                source.accessibility_tree().map(Arc::new)
+            },
+            summary: if same {
+                last.summary.clone()
+            } else {
+                source.state_summary().into()
+            },
             resources: source.resource_counts(),
-            saved_state: source.saved_state(),
-        }
+            saved_state: if same {
+                last.saved_state.clone()
+            } else {
+                Arc::new(source.saved_state())
+            },
+            revision,
+        });
+        last.clone()
     }
 }
 #[derive(Clone, Copy, Debug)]
@@ -557,6 +578,7 @@ impl SceneSource for Source {
                 let mut idle = false;
                 let mut needs_trim = false;
                 let mut accepted_resource_revision = None;
+                let mut mirrored = Arc::new(Mirror::default());
                 'actor: loop {
                     for job in receiver.try_iter() {
                         match job {
@@ -692,11 +714,12 @@ impl SceneSource for Source {
                                         phase: Phase::Settled,
                                         token,
                                         scene: None,
-                                        mirror: Some(Arc::new(Mirror::read(
+                                        mirror: Some(Mirror::read(
                                             source.as_ref(),
                                             &cache,
                                             stack_bytes,
-                                        ))),
+                                            &mut mirrored,
+                                        )),
                                         error: None,
                                         reload,
                                         wallpaper_palette,
@@ -792,13 +815,13 @@ impl SceneSource for Source {
                                 started.elapsed().as_secs_f64() * 1000.,
                                 cache.builds
                             );
-                            let scene = Arc::new(scene);
                             wakeup(UiEvent::Worker(Arc::new(Packet {
                                 resume,
                                 animation_frame,
                                 phase: Phase::Ready,
                                 token,
-                                scene: Some(Arc::clone(&scene)),
+                                // The UI keeps this as its candidate; Accepted does not resend it.
+                                scene: Some(Arc::new(scene)),
                                 mirror: None,
                                 error: fault.clone(),
                                 reload,
@@ -844,12 +867,13 @@ impl SceneSource for Source {
                                                     animation_frame,
                                                     phase: Phase::Accepted,
                                                     token,
-                                                    scene: Some(scene),
-                                                    mirror: Some(Arc::new(Mirror::read(
+                                                    scene: None,
+                                                    mirror: Some(Mirror::read(
                                                         source.as_ref(),
                                                         &cache,
                                                         stack_bytes,
-                                                    ))),
+                                                        &mut mirrored,
+                                                    )),
                                                     error: fault,
                                                     reload,
                                                     wallpaper_palette: wallpaper_palette.clone(),
@@ -864,11 +888,12 @@ impl SceneSource for Source {
                                                         phase: Phase::Accepted,
                                                         token,
                                                         scene: Some(Arc::new(overlay)),
-                                                        mirror: Some(Arc::new(Mirror::read(
+                                                        mirror: Some(Mirror::read(
                                                             source.as_ref(),
                                                             &cache,
                                                             stack_bytes,
-                                                        ))),
+                                                            &mut mirrored,
+                                                        )),
                                                         error: Some(error),
                                                         reload,
                                                         wallpaper_palette: wallpaper_palette
@@ -988,6 +1013,10 @@ impl SceneSource for Source {
                 .map(|packet| packet.scene)
                 .unwrap_or_else(|packet| packet.scene.clone())
                 .map(Arc::unwrap_or_clone);
+            if scene.is_none() && self.accepted {
+                // Accepting the Ready packet's candidate: it was delivered once already.
+                return Ok(self.candidate.clone());
+            }
             self.candidate = scene.clone();
             return Ok(scene);
         }
@@ -1044,16 +1073,16 @@ impl SceneSource for Source {
         self.current.clone()
     }
     fn state_summary(&self) -> String {
-        self.mirror.summary.clone()
+        self.mirror.summary.to_string()
     }
     fn saved_state(&self) -> serde_json::Value {
-        self.mirror.saved_state.clone()
+        (*self.mirror.saved_state).clone()
     }
     fn resource_counts(&self) -> String {
         self.mirror.resources.clone()
     }
     fn accessibility_tree(&self) -> Option<accesskit::TreeUpdate> {
-        self.mirror.tree.clone()
+        self.mirror.tree.as_deref().cloned()
     }
     fn surrounding_text(&self) -> Option<(String, i32, i32)> {
         self.mirror.surrounding.clone()
@@ -1475,6 +1504,137 @@ mod tests {
         fn error_scene(&mut self, _: String) -> Scene {
             scene()
         }
+    }
+    #[test]
+    fn settled_packets_share_state_copies_until_the_source_revision_changes() {
+        struct Settled {
+            revision: Option<Arc<std::sync::atomic::AtomicU64>>,
+            reads: Arc<AtomicUsize>,
+        }
+        impl SceneSource for Settled {
+            fn watch(
+                &mut self,
+                _: Box<dyn Fn(Result<(), String>) + Send>,
+            ) -> Result<(), Box<dyn Error>> {
+                Ok(())
+            }
+            fn stage(&mut self, _: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+                Ok(None)
+            }
+            fn validate(&self) -> Result<(), Box<dyn Error>> {
+                Ok(())
+            }
+            fn state_revision(&self) -> Option<u64> {
+                self.revision.as_ref().map(|r| r.load(Ordering::SeqCst))
+            }
+            fn state_summary(&self) -> String {
+                let read = self.reads.fetch_add(1, Ordering::SeqCst);
+                format!("read {read}")
+            }
+            fn saved_state(&self) -> serde_json::Value {
+                serde_json::json!({"page": "details"})
+            }
+            fn commit(&mut self) -> bool {
+                true
+            }
+            fn error_scene(&mut self, _: String) -> Scene {
+                scene()
+            }
+        }
+        for revisioned in [true, false] {
+            let revision = Arc::new(std::sync::atomic::AtomicU64::new(7));
+            let reads = Arc::new(AtomicUsize::new(0));
+            let source_revision = revisioned.then(|| revision.clone());
+            let source_reads = reads.clone();
+            let mut source = Source::new(
+                Box::new(move || {
+                    Ok(Box::new(Settled {
+                        revision: source_revision,
+                        reads: source_reads,
+                    }))
+                }),
+                scene(),
+            );
+            let (sender, receiver) = mpsc::channel();
+            source.services(Box::new(move |event| {
+                let _ = sender.send(event);
+            }));
+            let settle = |source: &mut Source| {
+                source.stage(UiEvent::Hover { x: 1., y: 1. }).unwrap();
+                let event = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+                let UiEvent::Worker(packet) = &event else {
+                    panic!("worker packet expected")
+                };
+                assert!(packet.is_settled());
+                let mirror = packet.mirror.clone().unwrap();
+                assert!(source.stage(event).unwrap().is_none());
+                assert_eq!(source.state_summary(), *mirror.summary);
+                assert_eq!(source.saved_state(), serde_json::json!({"page": "details"}));
+                mirror
+            };
+            let first = settle(&mut source);
+            let second = settle(&mut source);
+            assert_eq!(&*first.summary, "read 0");
+            if revisioned {
+                assert_eq!(&*second.summary, "read 0");
+                assert_eq!(
+                    reads.load(Ordering::SeqCst),
+                    1,
+                    "no-change packet reuses its copies"
+                );
+                assert!(Arc::ptr_eq(&first.summary, &second.summary));
+                assert!(Arc::ptr_eq(&first.saved_state, &second.saved_state));
+                revision.store(8, Ordering::SeqCst);
+                let third = settle(&mut source);
+                assert_eq!(&*third.summary, "read 1", "a new revision reads again");
+            } else {
+                assert_eq!(
+                    &*second.summary, "read 1",
+                    "an unknown revision always reads"
+                );
+            }
+        }
+    }
+    #[test]
+    fn accepted_packets_accept_the_ready_candidate_without_resending_it() {
+        let commits = Arc::new(AtomicUsize::new(0));
+        let count = commits.clone();
+        let mut source = Source::new(
+            Box::new(move || {
+                Ok(Box::new(Mock {
+                    commits: count,
+                    panic: false,
+                    scales: vec![],
+                    expected_scales: None,
+                }))
+            }),
+            scene(),
+        );
+        let (sender, receiver) = mpsc::channel();
+        source.services(Box::new(move |event| {
+            let _ = sender.send(event);
+        }));
+        source.stage(UiEvent::Reload).unwrap();
+        let ready = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        let staged = source.stage(ready).unwrap().unwrap();
+        assert!(!source.commit(), "Ready only acknowledges");
+        let accepted = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        let UiEvent::Worker(packet) = &accepted else {
+            panic!("worker packet expected")
+        };
+        assert!(packet.is_accepted() && packet.scene.is_none());
+        let shared = source
+            .stage(accepted)
+            .unwrap()
+            .expect("the candidate is accepted");
+        let json = |scene: &Scene| serde_json::to_value(&scene.primitives).unwrap();
+        assert_eq!(json(&shared), json(&staged));
+        let frame = |scene: &Scene| scene.prepared[&1_f32.to_bits()].clone();
+        assert!(Arc::ptr_eq(&frame(&shared), &frame(&staged)));
+        assert!(source.commit());
+        assert_eq!(json(&source.current), json(&staged));
+        assert!(Arc::ptr_eq(&frame(&source.current), &frame(&staged)));
+        assert_eq!(commits.load(Ordering::SeqCst), 1);
     }
     #[test]
     fn content_scroll_queue_preserves_travel_without_replaying_every_sample() {

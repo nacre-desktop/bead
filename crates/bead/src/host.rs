@@ -1643,6 +1643,9 @@ impl SceneSource for FolderView {
     fn state_summary(&self) -> String {
         self.session.state_summary()
     }
+    fn state_revision(&self) -> Option<u64> {
+        Some(self.session.state_revision())
+    }
     fn pointer_cursor(&self, x: f32, y: f32) -> &str {
         self.session.pointer_cursor(x, y)
     }

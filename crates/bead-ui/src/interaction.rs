@@ -617,7 +617,8 @@ impl Session {
     pub fn pointer_argument(&self, id: &str) -> Option<Value> {
         self.pending
             .as_ref()
-            .map_or(self.current_nodes.as_slice(), |pending| &pending.nodes)
+            .and_then(|pending| pending.nodes.as_deref())
+            .unwrap_or(&self.current_nodes)
             .iter()
             .find(|node| node.id == id)
             .and_then(|node| node.pointer_arg.clone())
@@ -1120,7 +1121,8 @@ impl Session {
         let nodes = self
             .pending
             .as_ref()
-            .map_or(&self.current_nodes, |p| &p.nodes);
+            .and_then(|p| p.nodes.as_deref())
+            .unwrap_or(&self.current_nodes);
         let stores = self.pending.as_ref().map_or(&self.stores, |p| &p.stores);
         let Some(Value::Text(focused)) = stores.get("bead.focused") else {
             return Ok(());

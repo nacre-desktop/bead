@@ -549,3 +549,143 @@ fn shared_markup_modules_are_snapshotted_and_reload_is_atomic() {
     assert_eq!(error.file, "view/bundle.json");
     assert!(error.message.contains("root-relative"));
 }
+#[test]
+fn state_revision_holds_exactly_while_accessibility_and_summary_cannot_change() {
+    let fixture = Fixture::new();
+    let mut session = fixture.session();
+    fs::create_dir_all(fixture.0.join("ui")).unwrap();
+    fs::write(
+        fixture.0.join("ui/main.luau"),
+        "local ui=require('bead.ui')\nreturn ui.Column{id='root',width=100,height=60,ui.Button{id='a',text=ui.bind('shown'),hover_fill='surface',on_activate=ui.action('noop'),width=100,height=20},ui.Button{id='b',text='b',on_activate=ui.action('noop'),width=100,height=20}}",
+    )
+    .unwrap();
+    fs::write(
+        fixture.0.join("ui/behavior.luau"),
+        "return {stores={shown='x',unread=1},actions={noop=function(s) end},computed={}}",
+    )
+    .unwrap();
+    session.entry = "ui/main.luau".into();
+    let first = session.reload().unwrap();
+    session.commit(first);
+    let observe = |s: &Session| {
+        (
+            s.state_revision(),
+            s.state_summary(),
+            s.accessibility_tree(),
+        )
+    };
+    let mut last = observe(&session);
+    let mut step = |s: &mut Session, changed: bool, what: &str| {
+        let next = observe(s);
+        if next.0 == last.0 {
+            assert!(!changed, "{what}: revision must change");
+            assert_eq!(next.1, last.1, "{what}: summary changed under one revision");
+            assert!(next.2 == last.2, "{what}: tree changed under one revision");
+        } else {
+            assert!(changed, "{what}: revision changed without a state change");
+        }
+        last = next;
+    };
+    let (x, y) = {
+        let r = rect(
+            &session
+                .view_nodes()
+                .iter()
+                .find(|n| n.id.rsplit('.').next() == Some("b"))
+                .unwrap()
+                .draw,
+        );
+        (r.x + 1., r.y + 1.)
+    };
+    let hovered = session
+        .hover(x, y)
+        .unwrap()
+        .expect("hover onto b stages a scene");
+    step(&mut session, false, "staged hover is not committed");
+    session.commit(hovered);
+    step(&mut session, true, "committed hover");
+    assert!(session.hover(x + 1., y).unwrap().is_none());
+    step(&mut session, false, "pointer move within b");
+    assert!(session.update(BTreeMap::new()).unwrap().is_none());
+    step(&mut session, false, "empty update");
+    assert!(
+        session
+            .update_model(BTreeMap::from([("unread".into(), Value::Number(2.))]))
+            .unwrap()
+            .is_none()
+    );
+    step(
+        &mut session,
+        true,
+        "unread model store committed without a scene",
+    );
+    session.set_accessibility_label("App");
+    step(&mut session, true, "window label");
+    session.stores = session
+        .stores
+        .reconcile(&BTreeMap::from([("host.extra".into(), Value::Bool(true))]))
+        .unwrap();
+    step(&mut session, true, "host reconciled a new store directly");
+    let scene = session.relayout().unwrap().unwrap();
+    step(&mut session, false, "staged relayout");
+    session.commit(scene);
+    step(&mut session, true, "committed relayout");
+}
+#[test]
+fn feedback_frames_keep_the_committed_nodes_and_repaint_only_the_thumb() {
+    let fixture = Fixture::new();
+    let mut session = fixture.session();
+    fs::create_dir_all(fixture.0.join("ui")).unwrap();
+    let rows: String = (0..10)
+        .map(|i| format!("ui.Text{{id='r{i}',text='Row {i}',width=100,height=20}},"))
+        .collect();
+    fs::write(
+        fixture.0.join("ui/main.luau"),
+        format!("local ui=require('bead.ui')\nreturn ui.Scroll{{id='list',scroll=ui.bind('scroll'),width=100,height=40,ui.Column{{id='rows',width=100,{rows}}}}}"),
+    )
+    .unwrap();
+    fs::write(
+        fixture.0.join("ui/behavior.luau"),
+        "return {stores={scroll=0},actions={},computed={}}",
+    )
+    .unwrap();
+    session.entry = "ui/main.luau".into();
+    let first = session.reload().unwrap();
+    session.commit(first);
+    let scrolled = session.scroll(50., 20., 12.).unwrap().unwrap();
+    session.commit(scrolled);
+    let boxes = |s: &Session| {
+        s.view_nodes()
+            .iter()
+            .map(|n| (n.id.clone(), rect(&n.draw)))
+            .collect::<Vec<_>>()
+    };
+    let content = |scene: &Scene| {
+        let end = scene
+            .layers
+            .iter()
+            .find(|l| l.id.starts_with("@scrollbar:"))
+            .map_or(scene.primitives.len(), |l| l.own.start);
+        serde_json::to_value(&scene.primitives[..end]).unwrap()
+    };
+    let committed = boxes(&session);
+    let mut frames = 0;
+    while frames < 3
+        && let Some(deadline) = session.preview_deadline()
+    {
+        std::thread::sleep(deadline.saturating_duration_since(std::time::Instant::now()));
+        let Some(scene) = session.update(BTreeMap::new()).unwrap() else {
+            break;
+        };
+        assert!(
+            session.pending.as_ref().unwrap().nodes.is_none(),
+            "a feedback frame shares the committed nodes"
+        );
+        assert_eq!(content(&scene), content(&session.current));
+        assert!(scene.layers.iter().any(|l| l.id.starts_with("@scrollbar:")));
+        session.commit(scene);
+        assert_eq!(boxes(&session), committed);
+        frames += 1;
+    }
+    assert_eq!(frames, 3, "the thumb fades in over several frames");
+}
