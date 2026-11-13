@@ -1,6 +1,6 @@
 # Window framework
 
-`bead-wayland::Options::window` optionally configures an on-demand xdg toplevel through `WindowSpec`. The current spec supplies:
+`bead-wayland::Options::window` optionally configures an on-demand xdg toplevel through `WindowSpec`. Hosts build it with `WindowSpec::new(app_id, title, size, fallback, factory)` and then assign the optional fields (see [0262](0262-non-exhaustive.md)). The current spec supplies:
 
 - `app_id` and `title` for window identity;
 - `command_targets` for the exact commands dispatched to its source;

@@ -37,7 +37,12 @@ pub struct Player {
     pub can_previous: bool,
     pub can_seek: bool,
 }
+/// Non-exhaustive: start from `MediaSnapshot::default()` and assign fields.
+/// ```compile_fail
+/// let snapshot = bead_services::media::MediaSnapshot { revision: 1, ..Default::default() };
+/// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct MediaSnapshot {
     pub revision: u64,
     pub players: Vec<Player>,

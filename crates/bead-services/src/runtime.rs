@@ -159,7 +159,13 @@ impl Drop for Subscription {
     }
 }
 /// Transitional composite service configuration; hosts can disable outside lanes.
+///
+/// Non-exhaustive: start from `Config::default()` and assign fields.
+/// ```compile_fail
+/// let config = bead_services::Config { audio: false, ..Default::default() };
+/// ```
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct Config {
     pub audio: bool,
     pub bus: bool,

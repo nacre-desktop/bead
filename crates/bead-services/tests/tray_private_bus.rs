@@ -138,11 +138,9 @@ async fn private_sni_registration_actions_owner_loss_and_recovery() {
         .build()
         .await
         .expect("private foreign watcher");
-    let service = Desktop::start_config(Config {
-        audio: false,
-        bus: true,
-        tray_watcher: false,
-    });
+    let mut config = Config::default();
+    config.audio = false;
+    let service = Desktop::start_config(config);
     async fn wait_replacement(service: &Desktop, old: &str) -> Option<String> {
         tokio::time::timeout(Duration::from_secs(4), async {
             loop {
@@ -544,11 +542,9 @@ async fn session_bus_reconnect_client_helper() {
     let Some(root) = std::env::var_os("BEAD_TRAY_RECONNECT_HELPER_DIR").map(PathBuf::from) else {
         return;
     };
-    let service = Desktop::start_config(Config {
-        audio: false,
-        bus: true,
-        tray_watcher: false,
-    });
+    let mut config = Config::default();
+    config.audio = false;
+    let service = Desktop::start_config(config);
     let mut fixture = tokio::spawn(async {
         let _ = fixture::run().await;
     });

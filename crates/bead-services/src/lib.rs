@@ -98,7 +98,12 @@ impl LocalDate {
         (1..=9999).contains(&self.year) && self.day >= 1 && self.day <= days
     }
 }
+/// Non-exhaustive: start from `Snapshot::default()` and assign fields.
+/// ```compile_fail
+/// let snapshot = bead_services::Snapshot { revision: 1, ..Default::default() };
+/// ```
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Snapshot {
     /// Origin order survives concurrent audio/bus callback delivery.
     #[serde(default)]

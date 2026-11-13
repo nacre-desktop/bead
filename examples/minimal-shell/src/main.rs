@@ -6,7 +6,7 @@ use bead::{
     render::Scene,
     wayland::{Options, SceneSource, UiEvent, WindowSpec},
 };
-use std::{collections::BTreeMap, error::Error, path::PathBuf, sync::Arc};
+use std::{error::Error, path::PathBuf, sync::Arc};
 
 const APP_ID: &str = "org.bead.Example.MinimalShell";
 const TITLE: &str = "Bead minimal shell";
@@ -88,16 +88,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             SIZE,
         )?);
     }
-    let window = WindowSpec {
-        app_id: APP_ID.into(),
-        title: TITLE.into(),
-        command_targets: vec![],
-        size: SIZE,
-        min_size: (320, 240),
-        size_for_output: None,
-        on_resize: None,
-        fallback: Scene::empty(SIZE.0 as f32, SIZE.1 as f32),
-        factory: Arc::new(move |_| {
+    let mut window = WindowSpec::new(
+        APP_ID,
+        TITLE,
+        SIZE,
+        Scene::empty(SIZE.0 as f32, SIZE.1 as f32),
+        Arc::new(move |_| {
             View::load(
                 root.clone(),
                 "view/main.luau".into(),
@@ -108,20 +104,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             .map(|v| Box::new(v) as Box<dyn SceneSource>)
             .map_err(|e| e.to_string())
         }),
-        model: Arc::new(|_| BTreeMap::new()),
-    };
-    bead::wayland::run(
-        Options {
-            namespace: "bead-minimal-shell".into(),
-            window: Some(window),
-            app: Some(vec![]),
-            interactive: true,
-            keyboard_focus: true,
-            seconds,
-            ..Default::default()
-        },
-        Scene::empty(SIZE.0 as f32, SIZE.1 as f32),
-    )
+    );
+    window.min_size = (320, 240);
+    let mut options = Options::default();
+    options.namespace = "bead-minimal-shell".into();
+    options.window = Some(window);
+    options.app = Some(vec![]);
+    options.interactive = true;
+    options.seconds = seconds;
+    bead::wayland::run(options, Scene::empty(SIZE.0 as f32, SIZE.1 as f32))
 }
 
 #[cfg(test)]

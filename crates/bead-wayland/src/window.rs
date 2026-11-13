@@ -25,7 +25,14 @@ pub type WindowSizing = Arc<dyn Fn((u32, u32)) -> (u32, u32) + Send + Sync>;
 /// Optional product callback when the compositor commits a new logical window size.
 pub type WindowResize = Arc<dyn Fn((u32, u32)) + Send + Sync>;
 
+/// Non-exhaustive: build with [`WindowSpec::new`] and assign optional fields.
+/// ```compile_fail
+/// fn retitle(spec: bead_wayland::WindowSpec) -> bead_wayland::WindowSpec {
+///     bead_wayland::WindowSpec { title: "Other".into(), ..spec }
+/// }
+/// ```
 #[derive(Clone)]
+#[non_exhaustive]
 pub struct WindowSpec {
     pub app_id: String,
     pub title: String,
@@ -41,6 +48,30 @@ pub struct WindowSpec {
     pub fallback: Scene,
     pub factory: WindowFactory,
     pub model: WindowModel,
+}
+impl WindowSpec {
+    /// `fallback` is required so the first frame is never blank. `min_size` starts at `size`;
+    /// no command targets, sizing or resize callbacks; `model` maps every `open` to no patch.
+    pub fn new(
+        app_id: impl Into<String>,
+        title: impl Into<String>,
+        size: (u32, u32),
+        fallback: Scene,
+        factory: WindowFactory,
+    ) -> Self {
+        Self {
+            app_id: app_id.into(),
+            title: title.into(),
+            command_targets: Vec::new(),
+            size,
+            min_size: size,
+            size_for_output: None,
+            on_resize: None,
+            fallback,
+            factory,
+            model: Arc::new(|_| Default::default()),
+        }
+    }
 }
 
 pub(super) struct Win {

@@ -81,7 +81,12 @@ pub struct NetworkConnection {
     /// Raw SSID for Wi-Fi connections, empty otherwise.
     pub ssid: Vec<u8>,
 }
+/// Non-exhaustive: start from `NetworkSnapshot::default()` and assign fields.
+/// ```compile_fail
+/// let snapshot = bead_services::network::NetworkSnapshot { available: true, ..Default::default() };
+/// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct NetworkSnapshot {
     pub revision: u64,
     pub available: bool,

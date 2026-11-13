@@ -18,7 +18,12 @@ const NAMES: [&str; 2] = [
     "net.hadess.PowerProfiles",
 ];
 
+/// Non-exhaustive: start from `PowerProfilesSnapshot::default()` and assign fields.
+/// ```compile_fail
+/// let snapshot = bead_services::power_profiles::PowerProfilesSnapshot { available: true, ..Default::default() };
+/// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct PowerProfilesSnapshot {
     pub revision: u64,
     pub available: bool,

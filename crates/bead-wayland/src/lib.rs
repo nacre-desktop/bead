@@ -771,7 +771,12 @@ pub enum CanvasLayer {
     Top,
     Overlay,
 }
+/// Non-exhaustive: start from `Options::default()` and assign fields.
+/// ```compile_fail
+/// let options = bead_wayland::Options { namespace: "app".into(), ..Default::default() };
+/// ```
 #[derive(Clone)]
+#[non_exhaustive]
 pub struct Options {
     /// Optional per-output primary UI source. When absent the legacy shared UI is used.
     pub primary_factory: Option<PrimaryFactory>,

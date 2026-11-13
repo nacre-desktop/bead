@@ -10,7 +10,6 @@ use std::{
     error::Error,
     path::{Path, PathBuf},
     sync::Arc,
-    time::Instant,
 };
 
 #[derive(Debug, Deserialize)]
@@ -378,12 +377,9 @@ impl App {
         let surface_size = self.surface_size();
         let runtime = FolderServicesRuntime::start(self.folder_services());
         let fallback = Scene::empty(surface_size.0 as f32, surface_size.1 as f32);
-        let mut options = Options {
-            namespace: self.manifest.id.clone(),
-            seconds,
-            started: Instant::now(),
-            ..Default::default()
-        };
+        let mut options = Options::default();
+        options.namespace = self.manifest.id.clone();
+        options.seconds = seconds;
         if let Some(w) = &self.manifest.window {
             let app_id = self.manifest.id.clone();
             let title = self.manifest.title.clone();
@@ -393,16 +389,12 @@ impl App {
             let size = (w.size[0], w.size[1]);
             let runtime = runtime.clone();
             let min = w.min_size.map(|s| (s[0], s[1])).unwrap_or((320, 240));
-            options.window = Some(WindowSpec {
+            let mut spec = WindowSpec::new(
                 app_id,
-                title: title.clone(),
-                command_targets: vec![],
+                title.clone(),
                 size,
-                min_size: min,
-                size_for_output: None,
-                on_resize: None,
-                fallback: fallback.clone(),
-                factory: Arc::new(move |_| {
+                fallback.clone(),
+                Arc::new(move |_| {
                     load_source(
                         root.clone(),
                         view.clone(),
@@ -413,8 +405,9 @@ impl App {
                         None,
                     )
                 }),
-                model: Arc::new(|_| Default::default()),
-            });
+            );
+            spec.min_size = min;
+            options.window = Some(spec);
             options.app = Some(vec![]);
             options.interactive = true;
             options.keyboard_focus = true;

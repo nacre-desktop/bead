@@ -92,7 +92,7 @@ Do not retain temporary duplicate implementations during cleanup. If a compatibi
 ## 6. Recommended next units
 
 1. Inventory and classify every reachable facade item; hide accidental `pub` exports and record the reviewed API snapshot.
-2. Add non-exhaustive/default construction patterns to `Config`, service `Snapshot`, `Options`, and `WindowSpec`; migrate the known consumer literals.
+2. Done in [0262](0262-non-exhaustive.md): `#[non_exhaustive]` on `Config`, the service snapshots, `Options` and `WindowSpec` (with `WindowSpec::new`); Bead's own literals are migrated, and 0262 lists the Nacre sites for its pin bump.
 3. Encapsulate `Scene` implementation fields behind constructors/mutators; migrate consumer scene literals.
 4. Decide the CLI/package consolidation and complete a dry-run package/dependency/license audit (no publication).
 5. Approve the stability table, changelog/deprecation rules, manifest compatibility decision, and only then schedule an owner-controlled first release.

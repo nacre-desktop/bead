@@ -47,11 +47,9 @@ async fn busy_signal_handler_cannot_skip_a_minute_tick() {
         .build()
         .await
         .unwrap();
-    let desktop = Desktop::start_config(Config {
-        audio: false,
-        bus: true,
-        tray_watcher: false,
-    });
+    let mut config = Config::default();
+    config.audio = false;
+    let desktop = Desktop::start_config(config);
     tokio::time::timeout(Duration::from_secs(10), async {
         while desktop.snapshot().clock.is_empty() {
             tokio::time::sleep(Duration::from_millis(10)).await;

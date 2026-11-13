@@ -47,7 +47,12 @@ pub struct BluetoothDevice {
     pub battery: Option<u8>,
     pub rssi: Option<i16>,
 }
+/// Non-exhaustive: start from `BluetoothSnapshot::default()` and assign fields.
+/// ```compile_fail
+/// let snapshot = bead_services::bluetooth::BluetoothSnapshot { available: true, ..Default::default() };
+/// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct BluetoothSnapshot {
     pub revision: u64,
     pub available: bool,

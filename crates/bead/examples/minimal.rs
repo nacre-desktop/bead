@@ -27,11 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("FACADE_CHECK_OK");
         return Ok(());
     }
-    bead::wayland::run(
-        bead::wayland::Options {
-            namespace: "bead-minimal-example".into(),
-            ..Default::default()
-        },
-        scene,
-    )
+    let mut options = bead::wayland::Options::default();
+    options.namespace = "bead-minimal-example".into();
+    bead::wayland::run(options, scene)
 }

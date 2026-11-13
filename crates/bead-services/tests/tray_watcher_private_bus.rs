@@ -182,11 +182,10 @@ async fn desktop_opt_in_starts_watcher_before_tray_client_snapshot() {
         std::env::var("BEAD_PRIVATE_SERVICES_TEST").as_deref(),
         Ok("1")
     );
-    let service = bead_services::Desktop::start_config(Config {
-        audio: false,
-        bus: true,
-        tray_watcher: true,
-    });
+    let mut config = Config::default();
+    config.audio = false;
+    config.tray_watcher = true;
+    let service = bead_services::Desktop::start_config(config);
     let host = Connection::session().await.unwrap();
     wait_owner(&host, true, "desktop opt-in claim").await;
     Proxy::new(&host, NAME, "/StatusNotifierWatcher", NAME)

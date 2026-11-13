@@ -109,11 +109,10 @@ fn injected_service_parity_and_lifecycle() -> Result<(), Box<dyn std::error::Err
 
 #[test]
 fn composite_host_contract_without_outside_connections() {
-    let service = bead_services::Desktop::start_config(bead_services::Config {
-        audio: false,
-        bus: false,
-        tray_watcher: false,
-    });
+    let mut config = bead_services::Config::default();
+    config.audio = false;
+    config.bus = false;
+    let service = bead_services::Desktop::start_config(config);
     let subscription = service.subscribe(|snapshot| {
         assert!(!snapshot.audio.connected);
     });

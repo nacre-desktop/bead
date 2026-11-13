@@ -60,16 +60,16 @@ struct CommandState {
 type WakeCallback = Arc<dyn Fn(UiEvent) + Send + Sync>;
 
 fn desktop_config(services: &BTreeSet<String>) -> DesktopConfig {
-    DesktopConfig {
-        audio: services.contains("audio"),
-        bus: services.iter().any(|service| {
-            matches!(
-                service.as_str(),
-                "battery" | "network" | "bluetooth" | "tray" | "session"
-            )
-        }),
-        tray_watcher: services.contains("tray"),
-    }
+    let mut config = DesktopConfig::default();
+    config.audio = services.contains("audio");
+    config.bus = services.iter().any(|service| {
+        matches!(
+            service.as_str(),
+            "battery" | "network" | "bluetooth" | "tray" | "session"
+        )
+    });
+    config.tray_watcher = services.contains("tray");
+    config
 }
 
 #[derive(Default)]
@@ -2036,51 +2036,49 @@ mod tests {
         assert_eq!(empty["desktop.battery.percent"], Value::Number(-1.));
         assert_eq!(empty["desktop.audio.volume"], Value::Number(-1.));
         assert_eq!(empty["desktop.network.strength"], Value::Number(-1.));
-        let snapshot = Snapshot {
-            clock: "12:34".into(),
-            clock_seconds: "12:34:56".into(),
-            date: Some(bead_services::LocalDate {
-                year: 2026,
-                month: 11,
-                day: 12,
-            }),
-            audio: bead_services::Audio {
-                connected: true,
-                default_sink: Some("Speakers".into()),
-                volume: Some(0.42),
-                muted: Some(true),
-                ..Default::default()
-            },
-            battery: bead_services::Battery {
-                available: true,
-                percentage: Some(83.),
-                charging: true,
-                on_battery: false,
-            },
-            network: bead_services::Network {
-                available: true,
-                connected: true,
-                wireless_enabled: true,
-                name: "wifi".into(),
-                strength: Some(70),
-            },
-            bluetooth: bead_services::Bluetooth {
-                available: true,
-                powered: true,
-                connected_devices: vec!["Headphones".into()],
-            },
-            tray: vec![bead_services::TrayItem {
-                id: "item".into(),
-                title: "Tray".into(),
-                icon_name: "icon".into(),
-                attention: true,
-                has_menu: true,
-                ..Default::default()
-            }],
-            session: bead_services::Session {
-                locked: true,
-                ..Default::default()
-            },
+        let mut snapshot = Snapshot::default();
+        snapshot.clock = "12:34".into();
+        snapshot.clock_seconds = "12:34:56".into();
+        snapshot.date = Some(bead_services::LocalDate {
+            year: 2026,
+            month: 11,
+            day: 12,
+        });
+        snapshot.audio = bead_services::Audio {
+            connected: true,
+            default_sink: Some("Speakers".into()),
+            volume: Some(0.42),
+            muted: Some(true),
+            ..Default::default()
+        };
+        snapshot.battery = bead_services::Battery {
+            available: true,
+            percentage: Some(83.),
+            charging: true,
+            on_battery: false,
+        };
+        snapshot.network = bead_services::Network {
+            available: true,
+            connected: true,
+            wireless_enabled: true,
+            name: "wifi".into(),
+            strength: Some(70),
+        };
+        snapshot.bluetooth = bead_services::Bluetooth {
+            available: true,
+            powered: true,
+            connected_devices: vec!["Headphones".into()],
+        };
+        snapshot.tray = vec![bead_services::TrayItem {
+            id: "item".into(),
+            title: "Tray".into(),
+            icon_name: "icon".into(),
+            attention: true,
+            has_menu: true,
+            ..Default::default()
+        }];
+        snapshot.session = bead_services::Session {
+            locked: true,
             ..Default::default()
         };
         let values = desktop_values(&snapshot);
@@ -2132,11 +2130,10 @@ mod tests {
             can_play_pause: true,
             ..Default::default()
         };
-        let snapshot = MediaSnapshot {
-            revision: 1,
-            players: vec![player],
-            active: Some("org.mpris.MediaPlayer2.example".into()),
-        };
+        let mut snapshot = MediaSnapshot::default();
+        snapshot.revision = 1;
+        snapshot.players = vec![player];
+        snapshot.active = Some("org.mpris.MediaPlayer2.example".into());
         assert!(media_is_playing(&snapshot));
         let values = media_values(&snapshot, 11_000);
         assert_eq!(values["desktop.media.available"], Value::Bool(true));
@@ -2169,17 +2166,15 @@ mod tests {
         assert!(
             matches!(&empty["desktop.power.profiles"], Value::List(profiles) if profiles.is_empty())
         );
-        let snapshot = PowerProfilesSnapshot {
-            revision: 2,
-            available: true,
-            active: "balanced".into(),
-            profiles: vec![
-                "power-saver".into(),
-                "balanced".into(),
-                "performance".into(),
-            ],
-            degraded: "".into(),
-        };
+        let mut snapshot = PowerProfilesSnapshot::default();
+        snapshot.revision = 2;
+        snapshot.available = true;
+        snapshot.active = "balanced".into();
+        snapshot.profiles = vec![
+            "power-saver".into(),
+            "balanced".into(),
+            "performance".into(),
+        ];
         let values = power_values(&snapshot);
         assert_eq!(
             values["desktop.power.profile"],
@@ -2259,29 +2254,28 @@ mod tests {
         assert!(
             matches!(&empty["desktop.bluetooth_devices.devices"],Value::List(devices) if devices.is_empty())
         );
-        let snapshot = BluetoothSnapshot {
-            revision: 1,
-            available: true,
-            adapters: vec![bead_services::bluetooth::BluetoothAdapter {
-                path: "/org/bluez/hci0".into(),
-                name: "adapter".into(),
-                powered: true,
-                discovering: true,
-                pairable: true,
-            }],
-            devices: vec![bead_services::bluetooth::BluetoothDevice {
-                path: "/org/bluez/hci0/dev_AA".into(),
-                adapter: "/org/bluez/hci0".into(),
-                address: "AA".into(),
-                name: "Headphones".into(),
-                icon: "audio-headphones".into(),
-                paired: true,
-                trusted: true,
-                connected: true,
-                battery: Some(73),
-                rssi: Some(-42),
-            }],
-        };
+        let mut snapshot = BluetoothSnapshot::default();
+        snapshot.revision = 1;
+        snapshot.available = true;
+        snapshot.adapters = vec![bead_services::bluetooth::BluetoothAdapter {
+            path: "/org/bluez/hci0".into(),
+            name: "adapter".into(),
+            powered: true,
+            discovering: true,
+            pairable: true,
+        }];
+        snapshot.devices = vec![bead_services::bluetooth::BluetoothDevice {
+            path: "/org/bluez/hci0/dev_AA".into(),
+            adapter: "/org/bluez/hci0".into(),
+            address: "AA".into(),
+            name: "Headphones".into(),
+            icon: "audio-headphones".into(),
+            paired: true,
+            trusted: true,
+            connected: true,
+            battery: Some(73),
+            rssi: Some(-42),
+        }];
         let values = bluetooth_device_values(&snapshot);
         assert_eq!(
             values["desktop.bluetooth_devices.powered"],
@@ -2394,45 +2388,44 @@ mod tests {
             kind: if ssid.is_empty() { "ethernet" } else { "wifi" },
             ssid: ssid.as_bytes().to_vec(),
         };
-        let snapshot = NetworkSnapshot {
-            revision: 1,
-            available: true,
-            wireless_enabled: true,
-            wireless_hardware_enabled: true,
-            primary: Some(NetworkPrimary {
+        let mut snapshot = NetworkSnapshot::default();
+        snapshot.revision = 1;
+        snapshot.available = true;
+        snapshot.wireless_enabled = true;
+        snapshot.wireless_hardware_enabled = true;
+        snapshot.primary = Some(NetworkPrimary {
+            kind: "wifi",
+            name: "Home".into(),
+            device: "wlan0".into(),
+            state: "activated",
+        });
+        snapshot.devices = vec![
+            NetworkDevice {
+                path: "/dev/eth".into(),
+                interface: "eth0".into(),
+                kind: "ethernet",
+                state: "connected",
+                active_connection: "/active/eth".into(),
+            },
+            NetworkDevice {
+                path: "/dev/wlan".into(),
+                interface: "wlan0".into(),
                 kind: "wifi",
-                name: "Home".into(),
-                device: "wlan0".into(),
-                state: "activated",
-            }),
-            devices: vec![
-                NetworkDevice {
-                    path: "/dev/eth".into(),
-                    interface: "eth0".into(),
-                    kind: "ethernet",
-                    state: "connected",
-                    active_connection: "/active/eth".into(),
-                },
-                NetworkDevice {
-                    path: "/dev/wlan".into(),
-                    interface: "wlan0".into(),
-                    kind: "wifi",
-                    state: "connected",
-                    active_connection: "/active/wlan".into(),
-                },
-            ],
-            access_points: vec![
-                point("Home", "wpa", true),
-                point("Cafe", "open", false),
-                point("Secure", "wpa3", false),
-            ],
-            known_connections: vec![
-                saved("/s/1", "Home", "Home"),
-                saved("/s/2", "Wired", ""),
-                saved("/s/3", "Twin", ""),
-                saved("/s/4", "Twin", ""),
-            ],
-        };
+                state: "connected",
+                active_connection: "/active/wlan".into(),
+            },
+        ];
+        snapshot.access_points = vec![
+            point("Home", "wpa", true),
+            point("Cafe", "open", false),
+            point("Secure", "wpa3", false),
+        ];
+        snapshot.known_connections = vec![
+            saved("/s/1", "Home", "Home"),
+            saved("/s/2", "Wired", ""),
+            saved("/s/3", "Twin", ""),
+            saved("/s/4", "Twin", ""),
+        ];
         let values = network_device_values(&snapshot);
         assert_eq!(
             values["desktop.network_devices.wireless_enabled"],
@@ -2511,10 +2504,8 @@ mod tests {
             .unwrap_err()
             .contains("undeclared service 'network_devices'")
         );
-        let idle = NetworkSnapshot {
-            devices: vec![],
-            ..snapshot.clone()
-        };
+        let mut idle = snapshot.clone();
+        idle.devices.clear();
         assert!(network_action(&idle, NetworkRequest::Scan).is_err());
         assert!(network_action(&idle, NetworkRequest::Disconnect).is_err());
         assert!(

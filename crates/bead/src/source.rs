@@ -287,19 +287,17 @@ mod clock_projection_tests {
     use super::*;
     #[test]
     fn clock_source_excludes_bulk_tray_payloads() {
-        let snapshot = bead_services::Snapshot {
-            clock: "12:34".into(),
-            date: Some(bead_services::LocalDate {
-                year: 2024,
-                month: 2,
-                day: 29,
-            }),
-            tray: vec![bead_services::TrayItem {
-                icon_pixmap: vec![(1024, 1024, vec![255; 4 * 1024 * 1024])],
-                ..Default::default()
-            }],
+        let mut snapshot = bead_services::Snapshot::default();
+        snapshot.clock = "12:34".into();
+        snapshot.date = Some(bead_services::LocalDate {
+            year: 2024,
+            month: 2,
+            day: 29,
+        });
+        snapshot.tray = vec![bead_services::TrayItem {
+            icon_pixmap: vec![(1024, 1024, vec![255; 4 * 1024 * 1024])],
             ..Default::default()
-        };
+        }];
         let data = clock_data(&snapshot);
         assert_eq!(data["date"]["day"], 29);
         assert!(serde_json::to_vec(&data).unwrap().len() < 128);
@@ -307,11 +305,10 @@ mod clock_projection_tests {
     }
     #[test]
     fn stopping_clock_detaches_only_its_subscription() {
-        let host = bead_services::Desktop::start_config(bead_services::Config {
-            audio: false,
-            bus: false,
-            tray_watcher: false,
-        });
+        let mut config = bead_services::Config::default();
+        config.audio = false;
+        config.bus = false;
+        let host = bead_services::Desktop::start_config(config);
         let source = Clock::attach(host.clone()).unwrap();
         assert_eq!(host.subscription_count(), 1);
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -342,11 +339,10 @@ mod desktop_view_tests {
     use super::*;
     #[test]
     fn stopping_a_read_only_projection_detaches_only_its_own_subscription() {
-        let host = bead_services::Desktop::start_config(bead_services::Config {
-            audio: false,
-            bus: false,
-            tray_watcher: false,
-        });
+        let mut config = bead_services::Config::default();
+        config.audio = false;
+        config.bus = false;
+        let host = bead_services::Desktop::start_config(config);
         let source =
             DesktopView::attach(host.clone(), |s| serde_json::json!({"battery":s.battery}))
                 .unwrap();
