@@ -36,7 +36,9 @@ Folder apps opt in with `[services] desktop = ["workspaces"]`. One shared
 Workspace and output IDs are opaque Text; an unknown output is empty Text.
 `desktop.workspace.focus` accepts an integer Number index or Text ID;
 `desktop.window.focus` accepts a Text window ID. Both require the declaration
-and report an error if no compositor is detected. Undetected defaults are an
+and report an error if no compositor is detected. Pointer presses, deferred
+releases and keyboard activation forward host actions before Luau dispatch.
+Undetected defaults are an
 empty list and empty strings. `bead check` declares defaults without connecting.
 
 `hello-status` demonstrates a computed workspace list with focused palette roles
@@ -44,7 +46,9 @@ and ID-based buttons, plus the focused title. Its two rows keep the example
 readable. `tutorial-bar` stays unchanged to preserve its 50-line limit. This is
 a framework example with no product/QML counterpart. No new kit primitive or
 temporary duplicate implementation is introduced. The new service's resident
-memory budget is 1 MiB; measurement is pending and must exclude clean file pages.
+memory budget is 1 MiB. Five alternating detected/undetected CPU bar pairs
+measured a +136 KiB median in Anonymous + Pss_Shmem + SwapPss, excluding clean
+file pages; the budget passes.
 
 Licensing: implementation and fixtures were authored from the public
 [niri IPC guide](https://niri-wm.github.io/niri/IPC.html), its linked generated
@@ -54,9 +58,11 @@ No compositor implementation source or application implementation was read or
 copied; no niri-ipc or GPL dependency is added. Fixtures are hand-authored
 protocol examples, not recordings copied from an upstream implementation.
 
-Evidence (validation incomplete): container formatting passed. The first focused
-Clippy run rejected an unused test import; the import is fixed and local rustfmt
-passes. The retry was queued when the build host became unreachable over SSH.
-Socket tests, folder-app checks, boundaries, cargo-deny, the full CI replica,
-headless captures and the memory measurement remain unverified. Raw logs and
-private harnesses stay outside committed documentation.
+Evidence: the complete Ubuntu 24.04 CI replica passed: formatting, warnings-denied
+workspace Clippy, 615 workspace tests (15 standard ignores), feature configurations,
+boundaries and negative controls, both minimal hosts, all four folder apps, private
+service/tray/clock proofs, and cargo-deny for all 13 manifest roots. Focused socket
+and folder-host tests also pass, including a populated-view click/keyboard regression.
+Private headless sway captures were inspected for idle, hover, pressed and switched
+states: a click sends native workspace ID 2 and events update the highlight and title.
+Raw logs, captures and harnesses remain outside committed documentation.

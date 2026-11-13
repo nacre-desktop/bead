@@ -1352,6 +1352,29 @@ impl SceneSource for FolderView {
             | UiEvent::Scroll { x, y, .. } => self.pointer = Some((*x, *y)),
             _ => {}
         }
+        let host_action = match &event {
+            UiEvent::Click { x, y } => self.session.press_action_at(*x, *y),
+            UiEvent::Release => self.session.release_action(),
+            UiEvent::Command { command, .. } if matches!(command.as_str(), "enter" | "space") => {
+                self.session.focused_action()
+            }
+            _ => None,
+        }
+        .filter(|(_, name, _)| name.starts_with("desktop.") || name.starts_with("command."));
+        let mut feedback = None;
+        let event = if let Some((id, name, argument)) = host_action {
+            feedback = match &event {
+                UiEvent::Click { x, y } => {
+                    self.session.capture_pointer(*x, *y);
+                    self.session.pointer_focus_id(&id, true, Some(*x))?
+                }
+                UiEvent::Release => self.session.release_without_activation()?,
+                _ => self.session.focus_id(&id)?,
+            };
+            UiEvent::Action { name, argument }
+        } else {
+            event
+        };
         let reload = matches!(&event, UiEvent::Reload);
         let model_update = matches!(&event, UiEvent::Model(_));
         let scene = match event {
@@ -1556,7 +1579,7 @@ impl SceneSource for FolderView {
             UiEvent::WatchError(e) => return Err(e.into()),
             _ => None,
         };
-        let mut scene = scene;
+        let mut scene = scene.or(feedback);
         if reload || model_update {
             scene = self.apply_external()?.or(scene);
         }
@@ -2702,6 +2725,142 @@ mod tests {
         let started = std::time::Instant::now();
         drop(runtime);
         assert!(started.elapsed() < Duration::from_millis(100));
+    }
+
+    #[test]
+    fn hello_status_renders_populated_workspaces_and_updates_focus() {
+        fn model(focused: &str, title: &str) -> BTreeMap<String, Value> {
+            BTreeMap::from([
+                ("desktop.workspaces".into(), Value::list([("code", "Code"), ("web", "Web")]
+                    .into_iter().enumerate().map(|(i, (id, name))| serde_json::json!({
+                        "id": id, "index": i + 1, "name": name, "output": "",
+                        "active": id == focused, "focused": id == focused, "urgent": false
+                    })).collect())),
+                ("desktop.window.title".into(), Value::Text(title.into())),
+            ])
+        }
+        fn button_fill(scene: &Scene, label: &str) -> [u8; 4] {
+            use crate::render::Primitive;
+            let text = scene
+                .primitives
+                .iter()
+                .find_map(|p| match p {
+                    Primitive::Text { text, rect, .. } if text == label => Some(*rect),
+                    _ => None,
+                })
+                .expect("workspace button label");
+            let (x, y) = (text.x + text.w / 2., text.y + text.h / 2.);
+            scene
+                .primitives
+                .iter()
+                .filter_map(|p| match p {
+                    Primitive::Rounded { rect, fill, .. }
+                        if x >= rect.x
+                            && y >= rect.y
+                            && x <= rect.x + rect.w
+                            && y <= rect.y + rect.h =>
+                    {
+                        Some((rect, *fill))
+                    }
+                    _ => None,
+                })
+                .min_by(|(a, _), (b, _)| (a.w * a.h).total_cmp(&(b.w * b.h)))
+                .expect("workspace button background")
+                .1
+        }
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/hello-status");
+        let services = FolderServices {
+            desktop: ["clock", "battery", "audio", "media", "power", "workspaces"]
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+            commands: BTreeMap::from([(
+                "kernel".into(),
+                CommandSpec {
+                    argv: vec!["uname".into(), "-r".into()],
+                    interval: None,
+                    timeout: Duration::from_secs(1),
+                },
+            )]),
+        };
+        let mut view = FolderView::load_with_services(
+            root,
+            "view/main.luau".into(),
+            "palette.json".into(),
+            "Status",
+            (1280, 76),
+            services.clone(),
+        )
+        .unwrap();
+        view.check_render(UiEvent::Reload).unwrap();
+        let first = view
+            .check_render(UiEvent::Model(model("code", "Editor")))
+            .unwrap();
+        assert_ne!(button_fill(&first, "Code"), button_fill(&first, "Web"));
+        let second = view
+            .check_render(UiEvent::Model(model("web", "Browser")))
+            .unwrap();
+        assert_eq!(button_fill(&first, "Code"), button_fill(&second, "Web"));
+        assert_eq!(button_fill(&first, "Web"), button_fill(&second, "Code"));
+        assert!(second.primitives.iter().any(|p| matches!(p,
+            crate::render::Primitive::Text {text, ..} if text == "Browser")));
+
+        struct RecordingBackend(Mutex<Vec<CompositorAction>>);
+        impl CompositorBackend for RecordingBackend {
+            fn snapshot(&self) -> Arc<bead_backends::Snapshot> {
+                Arc::new(bead_backends::Snapshot::default())
+            }
+            fn action(&self, action: CompositorAction) -> Result<(), bead_backends::Error> {
+                self.0.lock().unwrap().push(action);
+                Ok(())
+            }
+            fn subscribe(
+                &self,
+                _: Box<dyn Fn(bead_backends::Event) + Send + Sync>,
+            ) -> bead_backends::Subscription {
+                bead_backends::Subscription::new(|| {})
+            }
+        }
+        let backend = Arc::new(RecordingBackend(Mutex::new(Vec::new())));
+        // Start no desktop transports or commands; inject only the recording backend.
+        let mut runtime = FolderServicesRuntime::start(FolderServices {
+            commands: services.commands.clone(),
+            ..Default::default()
+        })
+        .unwrap();
+        let state = Arc::get_mut(&mut runtime).unwrap();
+        state.services.desktop = services.desktop;
+        state.compositor = Some(backend.clone());
+        view.runtime = Some(runtime);
+        let target = second
+            .primitives
+            .iter()
+            .find_map(|p| match p {
+                crate::render::Primitive::Text { text, rect, .. } if text == "Web" => Some(*rect),
+                _ => None,
+            })
+            .unwrap();
+        view.check_render(UiEvent::Click {
+            x: target.x + target.w / 2.,
+            y: target.y + target.h / 2.,
+        })
+        .unwrap();
+        view.stage(UiEvent::Release).unwrap();
+        view.commit();
+        view.check_render(UiEvent::Command {
+            command: "enter".into(),
+            shift: false,
+        })
+        .unwrap();
+        assert_eq!(
+            *backend.0.lock().unwrap(),
+            vec![
+                CompositorAction::SwitchWorkspace {
+                    workspace: CompositorId("web".into()),
+                };
+                2
+            ]
+        );
     }
 
     #[test]

@@ -561,6 +561,10 @@ fn hyprland_sockets_events_actions_and_reconnect_update_public_snapshot() {
     assert!(server.request_seen("j/workspaces"));
     assert!(server.request_seen("j/clients"));
     assert!(server.request_seen("j/activewindow"));
+    // The initial snapshot acknowledges all initial queries, with no events queued.
+    let request_count = server.requests.lock().unwrap().len();
+    thread::sleep(Duration::from_millis(150));
+    assert_eq!(server.requests.lock().unwrap().len(), request_count);
 
     let (events_tx, events_rx) = mpsc::channel();
     let _subscription = backend.subscribe(Box::new(move |event| {
@@ -657,9 +661,6 @@ fn hyprland_sockets_events_actions_and_reconnect_update_public_snapshot() {
         },
         "Hyprland action requests",
     );
-    let request_count = server.requests.lock().unwrap().len();
-    thread::sleep(Duration::from_millis(150));
-    assert_eq!(server.requests.lock().unwrap().len(), request_count);
 
     let epoch = changed.epoch;
     server.close_event();

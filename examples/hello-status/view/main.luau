@@ -10,7 +10,8 @@ return ui.Column {
     id = "hello-status", width = "fill", height = "fill", padding = 6, gap = 4, fill = "surface",
     ui.Row { height = 30, align = "center", gap = 8,
         ui.Repeat { id = "workspaces", model = ui.bind("status.workspaces"), key = "id", render = function(workspace)
-            return ui.Button { id = "workspace", text = workspace.label, width = "content", height = 30,
+            return ui.Button { id = "workspace", text = workspace.label,
+                width = math.ceil(ui.text_width(workspace.label, ui.default_font_family, 14)) + 16, height = 30, font_size = 14,
                 padding = 5, radius = 5, fill = workspace.fill, color = workspace.color,
                 on_activate = ui.action("desktop.workspace.focus", workspace.id) }
         end },

@@ -77,7 +77,6 @@ The optional `workspaces` service starts one compositor adapter shared by all vi
 | `desktop.network_devices.scan`, `desktop.network_devices.disconnect` | None | Requires `network_devices`; scans on the first Wi-Fi device (at most every 10 seconds), or disconnects the first connected one. |
 | `desktop.network_devices.connect` | SSID Text | Requires `network_devices`; activates a known or open network. |
 | `desktop.network_devices.forget` | Saved connection id Text | Requires `network_devices`; deletes that saved connection; ambiguous ids are refused. |
-
 | `desktop.workspace.focus` | Number integer index or opaque workspace ID Text | Requires `workspaces`; focuses a workspace. |
 | `desktop.window.focus` | Opaque window ID Text | Requires `workspaces`; focuses a window. |
 | `command.NAME` | Any/unused | Runs declared command `NAME`; unknown names produce no result. |
