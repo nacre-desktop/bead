@@ -9,7 +9,8 @@ Applications own content, persistence and theme policy; phase 2 waits for approv
 
 Release, offscreen measurements use dev-1 (Ryzen 9 9950X, 32 host threads),
 Ubuntu 24.04, Rust 1.99.0/workspace release profiles, fresh 6-CPU / 12-GiB slot; target inside.
-Seven samples/case; median and nearest-rank p95 (the maximum at n=7), in ms.
+CPU and llvmpipe results use seven samples/case (nearest-rank p95 is max at n=7); real-GPU
+results use five samples/case (p95 is max at n=5). Times are milliseconds.
 The same seeded 2k/10k graph spans 1480×1000 world units; viewport 1280×800,
 scale 1 / 2.25; pan (4,2), zoom ×1.01, one visible hover target.
 RGBA output; no Wayland presentation/readback/compositor scheduling is timed.
@@ -38,6 +39,22 @@ Each frame cell is **median/p95 ms**; “full” is a warm full repaint, not fir
 | dev-1 | Vello vectors, llvmpipe | 2880x1800 | 6.73/48.72 | 5.92/76.36 | 6.32/75.10 | 6.86/75.74 |
 | dev-1 | Vello vectors + LOD, llvmpipe | 1280x800 | 15.56/82.31 | 15.83/83.55 | 14.19/83.77 | 14.52/83.60 |
 | dev-1 | Vello vectors + LOD, llvmpipe | 2880x1800 | 3.87/4.01 | 3.68/4.46 | 3.60/4.17 | 3.85/42.89 |
+| desktop NVIDIA GeForce RTX 4070 / driver 615.78.08 | Vello raster | 1280x800 | 1.227/1.265 | 1.481/2.062 | 641.993/649.233 | 379.030/379.594 |
+| desktop NVIDIA GeForce RTX 4070 / driver 615.78.08 | Vello raster | 2880x1800 | 5.977/6.014 | 6.130/6.385 | 1747.802/1882.373 | 1741.760/1747.935 |
+| desktop NVIDIA GeForce RTX 4070 / driver 615.78.08 | Vello raster + LOD | 1280x800 | 2.304/2.348 | 2.257/2.613 | 166.958/168.372 | 100.305/101.770 |
+| desktop NVIDIA GeForce RTX 4070 / driver 615.78.08 | Vello raster + LOD | 2880x1800 | 5.826/6.155 | 5.999/6.130 | 455.697/457.716 | 456.763/492.771 |
+| desktop NVIDIA GeForce RTX 4070 / driver 615.78.08 | Vello vectors | 1280x800 | 2.584/2.682 | 2.736/2.849 | 2.721/2.789 | 2.664/3.012 |
+| desktop NVIDIA GeForce RTX 4070 / driver 615.78.08 | Vello vectors | 2880x1800 | 5.040/5.069 | 5.482/5.644 | 5.149/5.268 | 5.109/5.424 |
+| desktop NVIDIA GeForce RTX 4070 / driver 615.78.08 | Vello vectors + LOD | 1280x800 | 12.095/12.468 | 12.644/12.697 | 12.672/13.013 | 1.522/3.255 |
+| desktop NVIDIA GeForce RTX 4070 / driver 615.78.08 | Vello vectors + LOD | 2880x1800 | 3.847/3.998 | 4.016/4.461 | 4.150/4.215 | 4.045/4.472 |
+| desktop AMD Ryzen 5 7600 6-Core (RADV RAPHAEL_MENDOCINO) / Mesa 26.2.5-arch3.1 | Vello raster | 1280x800 | 1.851/2.949 | 1.711/2.709 | 642.029/643.223 | 377.502/378.060 |
+| desktop AMD Ryzen 5 7600 6-Core (RADV RAPHAEL_MENDOCINO) / Mesa 26.2.5-arch3.1 | Vello raster | 2880x1800 | 5.099/5.113 | 5.133/5.257 | 1734.236/1766.807 | 1738.417/1754.230 |
+| desktop AMD Ryzen 5 7600 6-Core (RADV RAPHAEL_MENDOCINO) / Mesa 26.2.5-arch3.1 | Vello raster + LOD | 1280x800 | 1.337/1.362 | 1.334/1.387 | 166.968/170.863 | 99.542/101.198 |
+| desktop AMD Ryzen 5 7600 6-Core (RADV RAPHAEL_MENDOCINO) / Mesa 26.2.5-arch3.1 | Vello raster + LOD | 2880x1800 | 4.431/4.459 | 4.539/4.546 | 447.530/451.262 | 447.221/448.430 |
+| desktop AMD Ryzen 5 7600 6-Core (RADV RAPHAEL_MENDOCINO) / Mesa 26.2.5-arch3.1 | Vello vectors | 1280x800 | 2.381/2.421 | 2.390/2.467 | 2.345/2.421 | 2.348/2.434 |
+| desktop AMD Ryzen 5 7600 6-Core (RADV RAPHAEL_MENDOCINO) / Mesa 26.2.5-arch3.1 | Vello vectors | 2880x1800 | 10.424/10.579 | 10.816/11.538 | 10.947/11.540 | 10.435/10.631 |
+| desktop AMD Ryzen 5 7600 6-Core (RADV RAPHAEL_MENDOCINO) / Mesa 26.2.5-arch3.1 | Vello vectors + LOD | 1280x800 | 20.770/21.258 | 20.683/20.799 | 20.805/20.912 | 20.676/20.839 |
+| desktop AMD Ryzen 5 7600 6-Core (RADV RAPHAEL_MENDOCINO) / Mesa 26.2.5-arch3.1 | Vello vectors + LOD | 2880x1800 | 1.668/2.353 | 1.534/2.163 | 2.402/2.554 | 2.148/2.542 |
 
 The 852-byte loop-generated Luau view failed 7/7 attempts at the 8 MiB VM limit:
 **12.954/14.747 ms** to rejection, not a frame. A literal fixture also hits the 1 MiB
@@ -64,7 +81,19 @@ GPU vectors preserve edge compositing, omit labels and append encoded geometry p
 these are synchronized offscreen latencies, not presentation FPS. Each current-Vello
 case sample uses a fresh renderer warmed outside timing; earlier persistent repeated zooms
 hit its raster byte-budget guard at 2880×1800. First paint/initial ingestion are not certified.
-GPU = **llvmpipe, not representative** (LLVM 20.1.2/Mesa 25.2.8); desktop SSH timed out twice.
+The original GPU rows above are **llvmpipe, not representative** (LLVM 20.1.2/Mesa 25.2.8).
+Real-GPU rows are fresh-renderer, synchronized offscreen timings on the desktop test host;
+RTX 4070 used NVIDIA 615.78.08, and integrated graphics used AMD Ryzen 5 7600
+(RADV RAPHAEL_MENDOCINO, Mesa 26.2.5-arch3.1). Both Vulkan adapters were exposed.
+All 64 real-GPU frame cases completed with zero errors. The full captures are in the task's
+ignored `.lead/discrete-gpu.log` and `.lead/integrated-gpu.log`.
+
+Conclusion: the real GPU does not rescue the current Vello raster path for camera changes: at
+2880×1800 zoom/hover take 1.74–1.88 s without LOD and 448–493 ms with LOD on either adapter.
+Retained vectors are much faster (about 1.5–11 ms at 2880×1800), but LOD vectors still reach
+12.7 ms on RTX at 1280×800 and 20.8 ms on the AMD adapter. These paths do not establish
+120-Hz performance at all tested sizes/interactions; a retained graph-specific GPU path remains
+necessary to validate the proposal.
 One-minute host load at CPU phase boundaries: 44.81 → 42.34 → 3.16; GPU: 2.78 → 3.34.
 120 Hz is not feasible for the tested CPU vector path, including retained geometry + LOD:
 2880×1800 pan is 186.30 ms, or 52.06 ms at 0.4 zoom, against 8.33 ms.
