@@ -279,6 +279,44 @@ status text rendered without `UI_ERROR`. GPU rendering/presentation and interact
 remain phase 2b work. Logs, probes and screenshots stay in the unit's ignored `.lead/`;
 only this summary is committed.
 
+## Phase 2a memory ownership follow-up: baseline
+
+Measured before implementation changes at `a4e44671`: Ubuntu 24.04, Rust 1.99.0 release,
+6-CPU/12-GiB container, same 1280×800 graph-demo and empty-graph control. Three fresh
+alternating pairs used a tagged counting allocator; the graph also received one hover
+to populate its hit index and label. These are median paired **requested live bytes**,
+not RSS, and exclude the meter's separately counted headers/alignment and the identical
+4,096,000-byte output buffer. The production five-pair PSS baseline above is unchanged.
+
+| Retained allocation owner after hover/render | Incremental live bytes |
+|---|---:|
+| Luau graph evaluation/module allocations | 2,127,328 |
+| Cached JSON/serde view tree | 8,396,820 |
+| Parsed Rust graph data/IDs/labels/groups/edges | 277,786 |
+| Canvas positions, pins, ID map and priority order | 170,077 |
+| Render geometry (including copied edges/positions) | 104,000 |
+| Layout worker positions/pins/edges/velocities/heat | 122,000 |
+| Hit spatial index | 89,952 |
+| Label primitive strings | 16 |
+| Renderer/text-cache increment | 16,829 |
+| Other view/action allocation increment | 14,023 |
+| **Total (without double-counting the Lua gauge)** | **11,318,831** |
+
+The mlua 0.12.2 allocator calls Rust `std::alloc`; its `used_memory()` gauge therefore
+overlaps these counts. Loading the graph module added **2,115,936 B** to that gauge.
+Post-collection VM usage was **3,209,844 B graph / 1,090,708 B control**; collection did
+not remove module-owned tables. Releasing the entire markup VM removed the graph-eval
+bucket, but retained JSON remained **8,396,820 B** above control. The old cache charge
+of 3,441,143 B materially understated the actual JSON allocations.
+
+The mailbox held no unread snapshot after settling; its tagged peak was **32,032 B**
+(two 16,016-byte snapshots during replacement). Layout bins/step temporaries returned
+to zero live bytes, with a **143,312 B** tagged peak; geometry peaked at **208,288 B**.
+Peaks are allocation-site maxima, not additive simultaneous peaks. The meter's realloc
+implementation allocates/copies/frees, so peak/PSS results are diagnostic only. The
+requested live totals show that Lua tables and the cached JSON tree dominate; they do
+not establish a graph-data floor above 1 MiB. Raw profiles/instrumentation stay ignored.
+
 ## Phase 2b: retained GPU graph path
 
 `bead_render::graph_gpu::GraphGpu` (feature `wgpu`) keeps the graph in three GPU storage
