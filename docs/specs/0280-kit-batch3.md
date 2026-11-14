@@ -29,4 +29,11 @@ The design review's parked framework asks (0274 "Not built"): hover-only childre
 
 ## Evidence
 
-Tests (`bead-ui` materialized_tests): `hover_only_child_fades_in_with_its_group_and_keyboard_focus_without_luau_or_layout`, `pressed_view_scales_and_deepens_its_fill_until_release_without_luau`, `reflow_children_slide_from_their_drawn_position_without_luau_or_layout_per_frame`, `shadow_on_any_surface_and_a_hover_box_inserted_behind_it_paints_like_a_rebuild`; `prewarmed_shadows_are_pinned_and_replaced_per_call` (`bead-render`). `bead check examples/kit-gallery`.
+Tests (`bead-ui` materialized_tests): `hover_only_child_fades_in_with_its_group_and_keyboard_focus_without_luau_or_layout`, `pressed_view_scales_and_deepens_its_fill_until_release_without_luau`, `reflow_children_slide_from_their_drawn_position_without_luau_or_layout_per_frame`, `shadow_on_any_surface_and_a_hover_box_inserted_behind_it_paints_like_a_rebuild`; `prewarmed_shadows_are_pinned_and_replaced_per_call` (`bead-render`). `bead check examples/kit-gallery`. No golden changed.
+
+Headless sway capture of the gallery (dev-1, 1000x900, scale 1, pixman; screenshots kept in the worktree's `.lead/`): at rest no
+toast shows its dismiss button; hovering the second toast's background shows only its dismiss glyph; moving off hides it again.
+"Add toast" chip ink box 127 x 36 px hovered, 123 x 36 pressed (.97), deeper tint, back to 127 after the release; the card shows
+the panel shadow halo. The press inserts a toast at the top (the chip acts on press): 0.12 s after it the new toast is drawn in
+place (y 188) while the others are on their way from their old rows (y 268, 348) to their new ones (348, 428), at 337 and 417;
+after the slide the rows sit at 188, 268, 348, 428.
