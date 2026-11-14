@@ -197,6 +197,13 @@ pub(super) struct EdgeState {
     cue_fade: f32,
     cue_epoch: u64,
     external: ExternalCueTracker,
+    /// A fired external open is in flight for this lip: it keeps the dwell-complete look
+    /// until the panel reports open, so the lip never drops to the rest bar in between.
+    opening: Option<String>,
+}
+/// Progress a lip is drawn with: a pending open holds the completed dwell.
+fn drawn_progress(opening: Option<&str>, key: &str, raw: f32) -> f32 {
+    if opening == Some(key) { 1. } else { raw }
 }
 fn cancel_for_external_source(edge: &mut EdgeState) -> Option<String> {
     edge.dwelling = None;
@@ -608,6 +615,9 @@ impl App {
             && self.panel_output.as_ref() == Some(output)
     }
     fn lip_progress(&self, key: &str) -> f32 {
+        drawn_progress(self.edge.opening.as_deref(), key, self.raw_lip_progress(key))
+    }
+    fn raw_lip_progress(&self, key: &str) -> f32 {
         if let Some((external_key, progress)) = &self.edge.external.progress
             && external_key == key
         {
@@ -685,6 +695,9 @@ impl App {
             return;
         };
         let k = key(&cue.output, &lip.id);
+        if cue.phase == ExternalEdgePhase::Approach {
+            self.edge.opening = None;
+        }
         self.edge.hovered = Some(k.clone());
         self.edge.exit_epoch = self.edge.exit_epoch.wrapping_add(1);
         self.settle_edge_exit();
@@ -740,6 +753,7 @@ impl App {
         if active || !self.lip_allowed(lip) || !self.edge.gate.can_open(&k) {
             return;
         }
+        self.edge.opening = Some(k);
         self.open_lip(output, lip);
     }
 
@@ -765,6 +779,7 @@ impl App {
             return;
         }
         let (size, scale120) = (s.size, s.scale120);
+        let mut opened = false;
         let svg = match &s.kind {
             Kind::Reserved(_) => None,
             Kind::Lip(id) => self.lip_named(id).and_then(|lip| {
@@ -772,10 +787,16 @@ impl App {
                     progress: self.lip_progress(&key(&s.output_name, id)),
                     active: self.lip_active(&s.output, &lip),
                 };
+                if state.active && self.edge.opening == Some(key(&s.output_name, id)) {
+                    opened = true;
+                }
                 let art = self.options.edge_art.as_ref()?;
                 art(&lip, (size.0 as f32, size.1 as f32), state)
             }),
         };
+        if opened {
+            self.edge.opening = None;
+        }
         // Skip identical frames: the art is a pure function of the state.
         let stamp = svg.as_ref().map_or(0, |s| {
             use std::hash::{Hash, Hasher};
@@ -1617,6 +1638,28 @@ mod tests {
         complete_edge_cue(&mut edge);
         assert_eq!(edge.cue_fade, 0.);
         assert_eq!(edge.cue_epoch, 42);
+    }
+
+    #[test]
+    fn pending_open_holds_the_completed_dwell_instead_of_the_rest_bar() {
+        let mut tracker = ExternalCueTracker::default();
+        let cue = |phase, progress| ExternalEdgeCue {
+            output: "DP-1".into(),
+            edge: Edge::Left,
+            phase,
+            position: (0., 10.),
+            progress,
+        };
+        let k = "DP-1/l".to_string();
+        tracker.update(&cue(ExternalEdgePhase::Approach, 1.), Some(k.clone()));
+        tracker.update(&cue(ExternalEdgePhase::Triggered, 1.), Some(k.clone()));
+        let raw = tracker.progress.as_ref().unwrap().1;
+        assert_eq!(raw, 0., "fired cue drops to 0 before the panel is active");
+        assert_eq!(drawn_progress(Some(&k), &k, raw), 1., "pending open holds");
+        tracker.close();
+        assert_eq!(drawn_progress(Some(&k), &k, 0.), 1., "cue close keeps it");
+        assert_eq!(drawn_progress(None, &k, 0.), 0., "no open: rest");
+        assert_eq!(drawn_progress(Some("DP-1/other"), &k, 0.), 0.);
     }
 
     #[test]
