@@ -74,9 +74,8 @@ pub struct RevealContour {
 }
 
 impl RevealContour {
-    /// Retain this contour's geometry for later retargeting while leaving the
-    /// full-scene close atlas visually unchanged.
-    pub fn tracking_only(&self) -> Self {
+    /// The same contour played from open back to closed (a reveal close).
+    pub fn reversed(&self) -> Self {
         let mut contour = self.clone();
         contour.animated_from = self.animated_to;
         contour.animated_to = self.animated_from;
@@ -84,6 +83,13 @@ impl RevealContour {
         contour.radii_to = self.radii_from;
         contour.content_clip_from = self.content_clip_to;
         contour.content_clip_to = self.content_clip_from;
+        contour
+    }
+
+    /// Retain this contour's geometry for later retargeting while leaving the
+    /// full-scene close atlas visually unchanged.
+    pub fn tracking_only(&self) -> Self {
+        let mut contour = self.reversed();
         contour.mode = RevealMode::TrackingOnly;
         contour
     }
@@ -419,9 +425,9 @@ pub fn scene_ink_bounds(scene: &Scene, scale: f32, offset: (f32, f32)) -> Option
 }
 
 /// The atlas plane's closed endpoint, shared by planning and renderer eligibility.
-pub fn closed_plane_offset(scene: &Scene, opening: bool) -> Option<(f32, f32)> {
+pub fn closed_plane_offset(scene: &Scene) -> Option<(f32, f32)> {
     let motion = scene.motion.as_ref()?;
-    Some(if opening && motion.reveal {
+    Some(if motion.reveal {
         motion.slide_distance.map_or((0., 0.), |distance| {
             motion.edge.closed_offset(distance, distance, 0.)
         })
@@ -437,21 +443,19 @@ pub fn closed_plane_offset(scene: &Scene, opening: bool) -> Option<(f32, f32)> {
 /// Conservative renderer-side preflight, matching the planner's translation rule.
 pub fn motion_atlas_ink_is_safe(
     scene: &Scene,
-    opening: bool,
     width: u32,
     height: u32,
     scale: f32,
     offset: (f32, f32),
 ) -> bool {
-    if opening
-        && scene
-            .motion
-            .as_ref()
-            .is_some_and(|motion| motion.reveal && motion.slide_distance.is_none())
+    if scene
+        .motion
+        .as_ref()
+        .is_some_and(|motion| motion.reveal && motion.slide_distance.is_none())
     {
         return true;
     }
-    let Some(closed_offset) = closed_plane_offset(scene, opening) else {
+    let Some(closed_offset) = closed_plane_offset(scene) else {
         return false;
     };
     scene_ink_bounds(scene, scale, offset)
@@ -700,8 +704,11 @@ impl LayerMotionPlan {
         let Some(motion) = scene.motion.as_ref() else {
             return Ok(None);
         };
+        // A reveal grows out of its edge when opening and shrinks back into it
+        // when closing; only an explicit slide distance closes as a whole scene.
+        let in_place = opening || motion.slide_distance.is_none();
         if bead_core::animation::reduced_motion()
-            || opening
+            || in_place
                 && motion.reveal
                 && motion
                     .art
@@ -721,15 +728,19 @@ impl LayerMotionPlan {
         if !duration.is_finite() || !(0.001..=10.).contains(&duration) {
             return Ok(None);
         }
-        let Some(closed_offset) = closed_plane_offset(scene, opening) else {
+        let Some(closed_offset) = closed_plane_offset(scene) else {
             return Ok(None);
         };
         let (reveal, reveal_owned_indices) = if motion.reveal {
             if let Some(art) = motion.art.as_ref() {
                 if let Some(contour) = art.contour.as_ref() {
-                    let (contour, indices) = if opening {
+                    let (contour, indices) = if in_place {
                         (
-                            contour.clone(),
+                            if opening {
+                                contour.clone()
+                            } else {
+                                contour.reversed()
+                            },
                             motion
                                 .parts
                                 .iter()
@@ -748,8 +759,11 @@ impl LayerMotionPlan {
                     (None, Default::default())
                 }
             } else if let Some((contour, indices)) = inferred_reveal_contour(scene, width, height) {
-                let (contour, indices) = if opening {
-                    (contour, indices.into_iter().collect())
+                let (contour, indices) = if in_place {
+                    (
+                        if opening { contour } else { contour.reversed() },
+                        indices.into_iter().collect(),
+                    )
                 } else {
                     (contour.tracking_only(), Default::default())
                 };
@@ -823,7 +837,7 @@ impl LayerMotionPlan {
         let mut pixels = vec![0; bytes];
         let mut final_scene = scene.clone();
         final_scene.panel_offset(1., opening);
-        if !opening
+        if !in_place
             && let Some(art) = final_scene
                 .motion
                 .as_ref()
@@ -1101,9 +1115,9 @@ mod tests {
                 PixelFormat::Rgba,
                 &mut renderer,
             )?
-            .expect("whole-scene close retains its default extent");
+            .expect("stationary reveal close shrinks into its edge");
             assert_eq!(plan.planes[0].from.destination, Rect::new(0., 0., 96., 72.));
-            assert_eq!(plan.planes[0].to.destination, Rect::new(0., 72., 96., 72.));
+            assert_eq!(plan.planes[0].to.destination, Rect::new(0., 0., 96., 72.));
         }
         Ok(())
     }
@@ -1177,14 +1191,7 @@ mod tests {
         let changed_body = overflow.primitives[0].clone();
         overflow.motion.as_mut().unwrap().parts = vec![(0, changed_body)];
         overflow.motion.as_mut().unwrap().slide_distance = None;
-        assert!(motion_atlas_ink_is_safe(
-            &overflow,
-            true,
-            96,
-            72,
-            1.,
-            (0., 0.)
-        ));
+        assert!(motion_atlas_ink_is_safe(&overflow, 96, 72, 1., (0., 0.)));
         let mut renderer = TreeCpuRenderer::default();
         let plan = LayerMotionPlan::for_slide(
             &overflow,
@@ -1203,23 +1210,47 @@ mod tests {
         assert_eq!(plan.planes[0].from.destination.y, 0.);
 
         overflow.motion.as_mut().unwrap().slide_distance = Some(32.);
-        assert!(!motion_atlas_ink_is_safe(
-            &overflow,
-            true,
-            96,
-            72,
-            1.,
-            (0., 0.)
-        ));
-        overflow.motion.as_mut().unwrap().slide_distance = None;
-        assert!(!motion_atlas_ink_is_safe(
-            &overflow,
-            false,
-            96,
-            72,
-            1.,
-            (0., 0.)
-        ));
+        assert!(!motion_atlas_ink_is_safe(&overflow, 96, 72, 1., (0., 0.)));
+        Ok(())
+    }
+
+    #[test]
+    fn stationary_reveal_close_is_the_reversed_open_with_no_plane_travel() -> Result<()> {
+        let mut source = scene(true, false);
+        source.motion.as_mut().unwrap().slide_distance = None;
+        let mut renderer = TreeCpuRenderer::default();
+        let mut plan = |opening| {
+            LayerMotionPlan::for_slide(
+                &source,
+                opening,
+                96,
+                72,
+                1.,
+                PixelFormat::Rgba,
+                &mut renderer,
+            )
+            .map(|plan| plan.expect("stationary reveal plan"))
+        };
+        let (open, close) = (plan(true)?, plan(false)?);
+        let (open_contour, close_contour) = (open.reveal.unwrap(), close.reveal.unwrap());
+        assert_eq!(close_contour.mode, RevealMode::Visible);
+        assert_eq!(close_contour.animated_from, open_contour.animated_to);
+        assert_eq!(close_contour.animated_to, open_contour.animated_from);
+        assert_eq!(
+            close_contour.content_clip_from,
+            open_contour.content_clip_to
+        );
+        assert_eq!(
+            close_contour.content_clip_to,
+            open_contour.content_clip_from
+        );
+        let plane = &close.planes[0];
+        assert_eq!(plane.from.destination, plane.to.destination);
+        assert_eq!(plane.to.destination, open.planes[0].from.destination);
+        assert_eq!(
+            close.atlas.pixels, open.atlas.pixels,
+            "contour-owned art stays out of both atlases"
+        );
         Ok(())
     }
 

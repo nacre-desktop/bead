@@ -2040,7 +2040,7 @@ impl App {
                 let (reveal, edge) = (motion.reveal, motion.edge);
                 let (dx, dy) = scene.panel_offset(progress, open);
                 layer_motion_pose = (dx, dy);
-                opaque_motion = active && (dx != 0. || dy != 0. || (reveal && open));
+                opaque_motion = active && (dx != 0. || dy != 0. || reveal);
                 // A vertical exit retains the open x origin instead of
                 // re-centering from the live surface width every frame.
                 scene.offset = motion_scene_offset(
@@ -2230,16 +2230,14 @@ impl App {
             let layer_motion_ink_safe = layer_motion_transport_eligible
                 && layer_motion_pose_eligible
                 && !layer_motion_reuses_atlas
-                && layer_motion_opening.is_some_and(|opening| {
-                    bead_render::layer_motion::motion_atlas_ink_is_safe(
-                        scene,
-                        opening,
-                        render_size.0,
-                        render_size.1,
-                        scale,
-                        resting_offset,
-                    )
-                });
+                && layer_motion_opening.is_some()
+                && bead_render::layer_motion::motion_atlas_ink_is_safe(
+                    scene,
+                    render_size.0,
+                    render_size.1,
+                    scale,
+                    resting_offset,
+                );
             let layer_motion_candidate = layer_motion_transport_eligible
                 && layer_motion_pose_eligible
                 && (layer_motion_reuses_atlas || layer_motion_ink_safe);

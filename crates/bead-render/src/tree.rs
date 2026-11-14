@@ -3521,11 +3521,11 @@ impl SlideContent {
             .as_ref()
             .filter(|m| m.reveal && m.progress < 1.)?;
         let window = scene.reveal_window();
-        if motion.open && window.is_none() {
+        if motion.reshapes_body() && window.is_none() {
             return None;
         }
-        // Opening, the body (its parts and whatever lies below them) is reshaped per frame.
-        let scene_start = if motion.open {
+        // Opening (or closing in place), the body (its parts and whatever lies below them) is reshaped per frame.
+        let scene_start = if motion.reshapes_body() {
             motion.parts.iter().map(|(index, _)| index + 1).max()?
         } else {
             0
@@ -3574,7 +3574,7 @@ impl SlideContent {
         scene
             .motion
             .as_ref()
-            .filter(|m| m.reveal && m.open && m.progress >= 1.)?;
+            .filter(|m| m.reveal && m.open && m.slide_distance.is_some() && m.progress >= 1.)?;
         let posed_start = frame.items.len().checked_sub(scene.primitives.len())?;
         (posed_start < frame.items.len()).then_some(Self {
             scene_start: 0,

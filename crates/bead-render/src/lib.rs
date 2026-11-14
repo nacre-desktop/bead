@@ -447,6 +447,10 @@ impl Motion {
     }
 }
 impl Motion {
+    /// A reveal that grows out of and shrinks back into its edge, rather than closing as a slid scene.
+    pub fn reshapes_body(&self) -> bool {
+        self.reveal && (self.open || self.slide_distance.is_none())
+    }
     /// Scene opacity at a progress: the progress itself when fading, else opaque once any of it is shown.
     pub fn opacity(&self, progress: f32) -> f32 {
         if self.fade || progress <= 0.001 {
@@ -500,9 +504,9 @@ impl Scene {
             bounds: Rect::new(0., 0., width, height),
         }
     }
-    /// Pose a panel motion. Revealing panels grow from their dock while opening;
-    /// closing moves the complete scene as one unit so content cannot escape the
-    /// shrinking body at the final edge.
+    /// Pose a panel motion. Revealing panels grow from their dock while opening
+    /// and shrink back into it on close (B0277). With an explicit slide distance
+    /// a close still moves the complete scene as one unit.
     pub fn panel_offset(&mut self, progress: f32, opening: bool) -> (f32, f32) {
         let Some((edge, reveal, distance, width, height)) = self.motion.as_ref().map(|motion| {
             (
@@ -518,7 +522,7 @@ impl Scene {
         if let Some(motion) = &mut self.motion {
             motion.open = opening;
         }
-        if reveal && opening {
+        if reveal && (opening || distance.is_none()) {
             self.reveal(progress);
             (0., 0.)
         } else {
@@ -822,7 +826,7 @@ impl Scene {
         let m = self
             .motion
             .as_ref()
-            .filter(|m| m.reveal && m.open && m.progress < 1.)?;
+            .filter(|m| m.reshapes_body() && m.progress < 1.)?;
         self.reveal_window_at(m.progress)
     }
     /// Reveal clip for an explicit eased progress, including closed/open endpoints.
@@ -3260,6 +3264,102 @@ mod tests {
         }
         assert_eq!(serde_json::to_vec(&scene.primitives)?, original);
         Ok(())
+    }
+
+    /// B0277: a reveal close with no slide distance mirrors the open (the body shrinks back into its anchor
+    /// edge, plane offset 0), so no border, shadow or corner can travel across the surface.
+    #[test]
+    fn reveal_close_mirrors_the_open_and_settles_into_every_anchor_edge() {
+        use bead_core::Edge;
+        for edge in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right] {
+            let mut scene = Scene::empty(364., 264.);
+            scene.primitives = vec![
+                Primitive::Shadow {
+                    rect: Rect::new(2., 2., 360., 260.),
+                    radius: 18.,
+                    blur: 10.,
+                },
+                Primitive::Rounded {
+                    rect: Rect::new(32., 32., 300., 200.),
+                    radius: 18.,
+                    fill: [1, 2, 3, 255],
+                    border: Some(([200, 100, 50, 255], 2.)),
+                },
+            ];
+            scene.motion = Some(Motion {
+                id: "m".into(),
+                open: true,
+                duration: 0.3,
+                return_duration: None,
+                return_curve: None,
+                spring: false,
+                curve: None,
+                edge,
+                slide_distance: None,
+                fade: false,
+                reveal: true,
+                progress: 1.,
+                parts: Vec::new(),
+                art: None,
+                body: None,
+            });
+            for progress in [1., 0.75, 0.5, 0.25, 0.01, 0.] {
+                let (mut open, mut close) = (scene.clone(), scene.clone());
+                assert_eq!(open.panel_offset(progress, true), (0., 0.));
+                assert_eq!(close.panel_offset(progress, false), (0., 0.), "{edge:?}");
+                assert_eq!(
+                    serde_json::to_vec(&open.primitives).unwrap(),
+                    serde_json::to_vec(&close.primitives).unwrap(),
+                    "{edge:?} {progress}"
+                );
+                assert_eq!(open.reveal_window(), close.reveal_window());
+                assert_eq!(open.clip_at(5), close.clip_at(5));
+            }
+            // The last close frame is hidden by opacity; the frames before it keep every
+            // border, shadow and corner pixel within the shrinking body at its anchor edge.
+            assert_eq!(scene.motion.as_ref().unwrap().opacity(0.), 0.);
+            let body = Rect::new(32., 32., 300., 200.);
+            for progress in [0.5, 0.1, 0.02] {
+                let mut posed = scene.clone();
+                posed.panel_offset(progress, false);
+                posed.motion = None;
+                let mut pixels = vec![0; 364 * 264 * 4];
+                let mut renderer = tree::TreeCpuRenderer::default();
+                renderer.prepare(&posed, 1.).unwrap();
+                renderer
+                    .render(
+                        &posed,
+                        ShmTarget {
+                            bytes: &mut pixels,
+                            width: 364,
+                            height: 264,
+                            scale: 1.,
+                            format: PixelFormat::Rgba,
+                        },
+                        Damage::full(364, 264),
+                    )
+                    .unwrap();
+                // Body plus its 30 px shadow reach and blur.
+                let allowed = Scene::revealed(body, edge, progress);
+                let allowed = Rect::new(
+                    allowed.x - 40.,
+                    allowed.y - 40.,
+                    allowed.w + 80.,
+                    allowed.h + 80.,
+                );
+                for (i, pixel) in pixels.chunks(4).enumerate() {
+                    let (x, y) = ((i % 364) as f32 + 0.5, (i / 364) as f32 + 0.5);
+                    assert!(
+                        pixel[3] == 0
+                            || (x >= allowed.x
+                                && x <= allowed.x + allowed.w
+                                && y >= allowed.y
+                                && y <= allowed.y + allowed.h),
+                        "{edge:?} {progress}: ink at ({x}, {y}) outside the revealed body"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
