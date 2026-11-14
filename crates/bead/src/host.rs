@@ -2970,6 +2970,8 @@ mod tests {
         set_binding(&root, "desktop.clock.seconds");
         view.check_render(UiEvent::Reload).unwrap();
         view.commit();
+        assert!(view.session.has_store("desktop.clock.seconds"), "store");
+        assert!(view.session.reads_store("desktop.clock.seconds"), "reads");
         assert!(view.seconds_lease.is_some(), "a seconds binding takes the lease");
         set_binding(&root, "desktop.clock");
         view.check_render(UiEvent::Reload).unwrap();
