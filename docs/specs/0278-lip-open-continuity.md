@@ -21,4 +21,6 @@ unset and still returns the lip to rest. Panel close returns to rest through `ac
 
 The bar-hosted cue (`publish_cue`) still hides at fire; only the lip's own drawing holds.
 Test: `edges::tests::pending_open_holds_the_completed_dwell_instead_of_the_rest_bar`.
-Limit: if a requested open never happens the lip stays swollen until the next Approach.
+Expiry: a one-shot 1 s timer (per-fire `opening_epoch`) clears the mark; if the lip is still
+inactive it redraws to rest (host child down or slow). It never clears on pointer leave, since the
+pointer often moves to the opening panel first. Test: `opening_expiry_rests_inactive_ignores_stale_and_just_clears_active`.

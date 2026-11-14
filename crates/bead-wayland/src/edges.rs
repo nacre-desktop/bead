@@ -199,13 +199,21 @@ pub(super) struct EdgeState {
     external: ExternalCueTracker,
     /// A fired external open is in flight for this lip: it keeps the dwell-complete look
     /// until the panel reports open, so the lip never drops to the rest bar in between.
-    // shortcut: a requested open that never reports active keeps the lip swollen until the
-    // next Approach cue; add an expiry if hosts can refuse opens.
     opening: Option<String>,
+    /// Per-fire id, so a stale expiry timer cannot clear a newer fire.
+    opening_epoch: u64,
 }
 /// Progress a lip is drawn with: a pending open holds the completed dwell.
 fn drawn_progress(opening: Option<&str>, key: &str, raw: f32) -> f32 {
     if opening == Some(key) { 1. } else { raw }
+}
+/// How long a fired open may stay pending: a host that never reports active (child down or
+/// slow) must not leave the lip swollen. Not cleared on pointer leave: it often moves to the panel.
+const OPENING_EXPIRY: Duration = Duration::from_secs(1);
+/// The expiry timer fired: `None` = stale, ignore; `Some(redraw)` = clear the mark, and redraw
+/// only when the lip is still inactive so it falls back to rest.
+fn opening_expired(epoch: u64, fired: u64, pending: bool, active: bool) -> Option<bool> {
+    (pending && epoch == fired).then_some(!active)
 }
 fn cancel_for_external_source(edge: &mut EdgeState) -> Option<String> {
     edge.dwelling = None;
@@ -746,8 +754,37 @@ impl App {
     fn external_lip_fire(&mut self, output: &str, lip: &Lip) {
         complete_edge_cue(&mut self.edge);
         let k = key(output, &lip.id);
-        let active = self
-            .output
+        if self.lip_active_on(output, lip) || !self.lip_allowed(lip) || !self.edge.gate.can_open(&k)
+        {
+            return;
+        }
+        self.edge.opening = Some(k);
+        self.edge.opening_epoch = self.edge.opening_epoch.wrapping_add(1);
+        let epoch = self.edge.opening_epoch;
+        let (out, id) = (output.to_owned(), lip.id.clone());
+        let _ = self.loop_handle.insert_source(
+            Timer::from_duration(OPENING_EXPIRY),
+            move |_, _, app| {
+                let k = key(&out, &id);
+                let pending = app.edge.opening.as_deref() == Some(&k);
+                let active = app
+                    .lip_named(&id)
+                    .is_some_and(|lip| app.lip_active_on(&out, &lip));
+                if let Some(redraw) =
+                    opening_expired(epoch, app.edge.opening_epoch, pending, active)
+                {
+                    app.edge.opening = None;
+                    if redraw {
+                        app.redraw_lips();
+                    }
+                }
+                TimeoutAction::Drop
+            },
+        );
+        self.open_lip(output, lip);
+    }
+    fn lip_active_on(&self, output: &str, lip: &Lip) -> bool {
+        self.output
             .outputs()
             .into_iter()
             .find_map(|wl_output| {
@@ -755,12 +792,7 @@ impl App {
                     (info.name.as_deref() == Some(output)).then(|| self.lip_active(&wl_output, lip))
                 })
             })
-            .unwrap_or(false);
-        if active || !self.lip_allowed(lip) || !self.edge.gate.can_open(&k) {
-            return;
-        }
-        self.edge.opening = Some(k);
-        self.open_lip(output, lip);
+            .unwrap_or(false)
     }
 
     fn open_lip(&mut self, output: &str, lip: &Lip) {
@@ -1667,6 +1699,14 @@ mod tests {
         assert_eq!(drawn_progress(Some(&k), &k, 0.), 1., "cue close keeps it");
         assert_eq!(drawn_progress(None, &k, 0.), 0., "no open: rest");
         assert_eq!(drawn_progress(Some("DP-1/other"), &k, 0.), 0.);
+    }
+
+    #[test]
+    fn opening_expiry_rests_inactive_ignores_stale_and_just_clears_active() {
+        assert_eq!(opening_expired(3, 3, true, false), Some(true), "rest");
+        assert_eq!(opening_expired(2, 3, true, false), None, "stale epoch");
+        assert_eq!(opening_expired(3, 3, false, false), None, "already cleared");
+        assert_eq!(opening_expired(3, 3, true, true), Some(false), "active");
     }
 
     #[test]
