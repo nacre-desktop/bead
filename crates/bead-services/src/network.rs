@@ -2,11 +2,8 @@
 //! Event-driven client for the public NetworkManager system-bus API.
 use futures_util::StreamExt;
 use std::{
-    collections::{BTreeMap, HashMap, HashSet, hash_map::Entry},
-    sync::{
-        Arc, Mutex, Weak,
-        atomic::{AtomicU64, Ordering},
-    },
+    collections::{HashMap, HashSet, hash_map::Entry},
+    sync::{Arc, Mutex},
     thread::JoinHandle,
     time::{Duration, Instant},
 };
@@ -112,49 +109,17 @@ pub enum NetworkAction {
     /// Saved connection path to delete.
     Forget(String),
 }
-type Callback = Arc<dyn Fn(Arc<NetworkSnapshot>) + Send + Sync>;
+impl crate::bus::Revision for NetworkSnapshot {
+    fn revision(&mut self) -> &mut u64 {
+        &mut self.revision
+    }
+}
 struct Shared {
-    snapshot: Mutex<Arc<NetworkSnapshot>>,
-    callbacks: Mutex<BTreeMap<u64, Callback>>,
-    next: AtomicU64,
+    snapshots: Arc<crate::bus::Snapshots<NetworkSnapshot>>,
     stopped: tokio::sync::Notify,
     scans: Mutex<HashMap<String, Instant>>,
 }
-impl Shared {
-    fn publish(&self, mut next: NetworkSnapshot) {
-        let mut old = self.snapshot.lock().unwrap_or_else(|e| e.into_inner());
-        next.revision = old.revision;
-        if next == **old {
-            return;
-        }
-        next.revision = old.revision.saturating_add(1);
-        let next = Arc::new(next);
-        *old = next.clone();
-        drop(old);
-        let callbacks = self
-            .callbacks
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .values()
-            .cloned()
-            .collect::<Vec<_>>();
-        callbacks.into_iter().for_each(|cb| cb(next.clone()));
-    }
-}
-pub struct Subscription {
-    shared: Weak<Shared>,
-    id: u64,
-}
-impl Drop for Subscription {
-    fn drop(&mut self) {
-        if let Some(s) = self.shared.upgrade() {
-            s.callbacks
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .remove(&self.id);
-        }
-    }
-}
+pub type Subscription = crate::bus::Subscription<NetworkSnapshot>;
 /// Owns a worker watching `org.freedesktop.NetworkManager` on the supplied system-bus connection.
 pub struct Network {
     shared: Arc<Shared>,
@@ -173,9 +138,7 @@ impl Network {
     }
     fn spawn(runtime: Option<tokio::runtime::Runtime>, connection: Connection) -> Arc<Self> {
         let shared = Arc::new(Shared {
-            snapshot: Mutex::new(Arc::new(NetworkSnapshot::default())),
-            callbacks: Mutex::new(BTreeMap::new()),
-            next: AtomicU64::new(1),
+            snapshots: crate::bus::Snapshots::new(),
             stopped: tokio::sync::Notify::new(),
             scans: Mutex::new(HashMap::new()),
         });
@@ -184,7 +147,7 @@ impl Network {
             runtime,
             shared.clone(),
             |s| &s.stopped,
-            |s| s.publish(NetworkSnapshot::default()),
+            |s| s.snapshots.change(|n| *n = NetworkSnapshot::default()),
             move |s| run(conn.clone(), s),
         );
         Arc::new(Self {
@@ -194,35 +157,13 @@ impl Network {
         })
     }
     pub fn snapshot(&self) -> NetworkSnapshot {
-        (**self
-            .shared
-            .snapshot
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()))
-        .clone()
+        (*self.shared.snapshots.get()).clone()
     }
     pub fn subscribe(
         &self,
         callback: impl Fn(Arc<NetworkSnapshot>) + Send + Sync + 'static,
     ) -> Subscription {
-        let id = self.shared.next.fetch_add(1, Ordering::Relaxed);
-        let callback: Callback = Arc::new(callback);
-        self.shared
-            .callbacks
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(id, callback.clone());
-        callback(
-            self.shared
-                .snapshot
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .clone(),
-        );
-        Subscription {
-            shared: Arc::downgrade(&self.shared),
-            id,
-        }
+        self.shared.snapshots.subscribe(callback)
     }
     /// Validate `action` against the current snapshot and send it; blocks until NM replies.
     pub fn action(&self, action: NetworkAction) -> Result<(), String> {
@@ -374,7 +315,8 @@ async fn run(c: Connection, s: Arc<Shared>) -> zbus::Result<()> {
         reconcile(&c, &mut cache).await;
     }
     loop {
-        s.publish(build(&cache));
+        let next = build(&cache);
+        s.snapshots.change(|n| *n = next);
         tokio::select! {
             changed = owners.next() => {
                 let changed = changed.ok_or(zbus::Error::Failure("owner stream ended".into()))?;

@@ -2,11 +2,8 @@
 //! Event-driven client for the public MPRIS MediaPlayer2 and Player interfaces.
 use futures_util::StreamExt;
 use std::{
-    collections::{BTreeMap, HashMap},
-    sync::{
-        Arc, Mutex, Weak,
-        atomic::{AtomicU64, Ordering},
-    },
+    collections::HashMap,
+    sync::{Arc, Mutex},
     thread::JoinHandle,
 };
 use zbus::{
@@ -55,50 +52,17 @@ pub enum MediaAction {
     Previous(String),
     Seek(String, i64),
 }
-type Callback = Arc<dyn Fn(Arc<MediaSnapshot>) + Send + Sync>;
+impl crate::bus::Revision for MediaSnapshot {
+    fn revision(&mut self) -> &mut u64 {
+        &mut self.revision
+    }
+}
 struct Shared {
-    snapshot: Mutex<Arc<MediaSnapshot>>,
+    snapshots: Arc<crate::bus::Snapshots<MediaSnapshot>>,
     playing_order: Mutex<Vec<String>>,
-    callbacks: Mutex<BTreeMap<u64, Callback>>,
-    next: AtomicU64,
     stopped: tokio::sync::Notify,
 }
-impl Shared {
-    fn change(&self, f: impl FnOnce(&mut MediaSnapshot)) {
-        let mut old = self.snapshot.lock().unwrap_or_else(|e| e.into_inner());
-        let mut next = (**old).clone();
-        f(&mut next);
-        if next.players == old.players && next.active == old.active {
-            return;
-        }
-        next.revision = old.revision.saturating_add(1);
-        let next = Arc::new(next);
-        *old = next.clone();
-        drop(old);
-        let callbacks = self
-            .callbacks
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .values()
-            .cloned()
-            .collect::<Vec<_>>();
-        callbacks.into_iter().for_each(|cb| cb(next.clone()));
-    }
-}
-pub struct Subscription {
-    shared: Weak<Shared>,
-    id: u64,
-}
-impl Drop for Subscription {
-    fn drop(&mut self) {
-        if let Some(s) = self.shared.upgrade() {
-            s.callbacks
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .remove(&self.id);
-        }
-    }
-}
+pub type Subscription = crate::bus::Subscription<MediaSnapshot>;
 /// Owns the event worker; dropping the final Arc stops it and releases the bus connection.
 pub struct Media {
     shared: Arc<Shared>,
@@ -117,10 +81,8 @@ impl Media {
     }
     fn spawn(runtime: Option<tokio::runtime::Runtime>, connection: Connection) -> Arc<Self> {
         let shared = Arc::new(Shared {
-            snapshot: Mutex::new(Arc::new(MediaSnapshot::default())),
+            snapshots: crate::bus::Snapshots::new(),
             playing_order: Mutex::new(Vec::new()),
-            callbacks: Mutex::new(BTreeMap::new()),
-            next: AtomicU64::new(1),
             stopped: tokio::sync::Notify::new(),
         });
         let conn = connection.clone();
@@ -129,7 +91,7 @@ impl Media {
             shared.clone(),
             |s| &s.stopped,
             |s| {
-                s.change(|s| {
+                s.snapshots.change(|s| {
                     s.players.clear();
                     s.active = None;
                 })
@@ -143,35 +105,13 @@ impl Media {
         })
     }
     pub fn snapshot(&self) -> MediaSnapshot {
-        (**self
-            .shared
-            .snapshot
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()))
-        .clone()
+        (*self.shared.snapshots.get()).clone()
     }
     pub fn subscribe(
         &self,
         callback: impl Fn(Arc<MediaSnapshot>) + Send + Sync + 'static,
     ) -> Subscription {
-        let id = self.shared.next.fetch_add(1, Ordering::Relaxed);
-        let callback: Callback = Arc::new(callback);
-        self.shared
-            .callbacks
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(id, callback.clone());
-        callback(
-            self.shared
-                .snapshot
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .clone(),
-        );
-        Subscription {
-            shared: Arc::downgrade(&self.shared),
-            id,
-        }
+        self.shared.snapshots.subscribe(callback)
     }
     pub fn action(&self, action: MediaAction) -> Result<(), String> {
         crate::bus::runtime()
@@ -227,7 +167,7 @@ async fn run(connection: Connection, shared: Arc<Shared>) -> zbus::Result<()> {
                         refresh(&connection, &shared, name).await;
                     } else {
                         names_by_owner.retain(|_, player| player != &name);
-                        shared.change(|s| {
+                        shared.snapshots.change(|s| {
                             s.players.retain(|p| p.id != name);
                             let mut order = shared.playing_order.lock().unwrap_or_else(|e| e.into_inner());
                             order.retain(|id| id != &name);
@@ -242,7 +182,7 @@ async fn run(connection: Connection, shared: Arc<Shared>) -> zbus::Result<()> {
                     if h.interface().is_some_and(|i|i.as_str()=="org.freedesktop.DBus.Properties") && h.member().is_some_and(|m|m.as_str()=="PropertiesChanged") {
                         if let Some(name) = h.sender().and_then(|sender| names_by_owner.get(sender.as_str())).cloned() { refresh(&connection,&shared,name).await; }
                     } else if h.interface().is_some_and(|i|i.as_str()==PLAYER) && h.member().is_some_and(|m|m.as_str()=="Seeked") && let (Some(sender),Ok(position))=(h.sender(),message.body().deserialize::<i64>()) && let Some(name)=names_by_owner.get(sender.as_str()) {
-                        let id=name.clone(); shared.change(|s| { if let Some(p)=s.players.iter_mut().find(|p|p.id==id) { p.position_ms=(position/1000).max(0); p.position_at=monotonic_millis(); } });
+                        let id=name.clone(); shared.snapshots.change(|s| { if let Some(p)=s.players.iter_mut().find(|p|p.id==id) { p.position_ms=(position/1000).max(0); p.position_at=monotonic_millis(); } });
                     }
                 }
             }
@@ -267,9 +207,8 @@ pub fn monotonic_millis() -> u64 {
 }
 async fn refresh(connection: &Connection, shared: &Shared, name: String) {
     let old = shared
-        .snapshot
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        .snapshots
+        .get()
         .players
         .iter()
         .find(|p| p.id == name)
@@ -286,7 +225,7 @@ async fn refresh(connection: &Connection, shared: &Shared, name: String) {
             player.position_ms = old.position_ms;
             player.position_at = old.position_at;
         }
-        shared.change(|s| {
+        shared.snapshots.change(|s| {
             let was_playing = s
                 .players
                 .iter()
@@ -400,9 +339,8 @@ async fn action_async(c: &Connection, s: &Shared, a: MediaAction) -> Result<(), 
         MediaAction::Seek(id, position) => (id, "SetPosition", Some(position)),
     };
     let p = s
-        .snapshot
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        .snapshots
+        .get()
         .players
         .iter()
         .find(|p| p.id == id)

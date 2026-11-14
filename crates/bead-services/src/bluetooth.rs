@@ -2,11 +2,8 @@
 //! Event-driven client for the public BlueZ system-bus API.
 use futures_util::StreamExt;
 use std::{
-    collections::{BTreeMap, HashMap},
-    sync::{
-        Arc, Mutex, Weak,
-        atomic::{AtomicU64, Ordering},
-    },
+    collections::HashMap,
+    sync::{Arc, Mutex},
     thread::JoinHandle,
     time::Duration,
 };
@@ -70,12 +67,14 @@ pub enum BluetoothAction {
     SetTrusted(String, bool),
     Remove(String),
 }
-type Callback = Arc<dyn Fn(Arc<BluetoothSnapshot>) + Send + Sync>;
+impl crate::bus::Revision for BluetoothSnapshot {
+    fn revision(&mut self) -> &mut u64 {
+        &mut self.revision
+    }
+}
 struct Shared {
-    snapshot: Mutex<Arc<BluetoothSnapshot>>,
+    snapshots: Arc<crate::bus::Snapshots<BluetoothSnapshot>>,
     objects: Mutex<ManagedObjects>,
-    callbacks: Mutex<BTreeMap<u64, Callback>>,
-    next: AtomicU64,
     stopped: tokio::sync::Notify,
     scan_timeout: Duration,
     deadlines: Mutex<HashMap<String, tokio::time::Instant>>,
@@ -120,47 +119,14 @@ impl Shared {
         }
         adapters.sort_by(|a, b| a.path.cmp(&b.path));
         devices.sort_by(|a, b| a.path.cmp(&b.path));
-        let mut old = self.snapshot.lock().unwrap_or_else(|e| e.into_inner());
-        let mut next = BluetoothSnapshot {
-            revision: old.revision,
-            available,
-            adapters,
-            devices,
-        };
-        if next.available == old.available
-            && next.adapters == old.adapters
-            && next.devices == old.devices
-        {
-            return;
-        }
-        next.revision = old.revision.saturating_add(1);
-        let next = Arc::new(next);
-        *old = next.clone();
-        drop(old);
-        let callbacks = self
-            .callbacks
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .values()
-            .cloned()
-            .collect::<Vec<_>>();
-        callbacks.into_iter().for_each(|cb| cb(next.clone()));
+        self.snapshots.change(|s| {
+            s.available = available;
+            s.adapters = adapters;
+            s.devices = devices;
+        });
     }
 }
-pub struct Subscription {
-    shared: Weak<Shared>,
-    id: u64,
-}
-impl Drop for Subscription {
-    fn drop(&mut self) {
-        if let Some(s) = self.shared.upgrade() {
-            s.callbacks
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .remove(&self.id);
-        }
-    }
-}
+pub type Subscription = crate::bus::Subscription<BluetoothSnapshot>;
 /// Owns a worker watching `org.bluez` on the supplied system-bus connection.
 pub struct Bluetooth {
     shared: Arc<Shared>,
@@ -191,10 +157,8 @@ impl Bluetooth {
         scan_timeout: Duration,
     ) -> Arc<Self> {
         let shared = Arc::new(Shared {
-            snapshot: Mutex::new(Arc::new(BluetoothSnapshot::default())),
+            snapshots: crate::bus::Snapshots::new(),
             objects: Mutex::new(HashMap::new()),
-            callbacks: Mutex::new(BTreeMap::new()),
-            next: AtomicU64::new(1),
             stopped: tokio::sync::Notify::new(),
             scan_timeout,
             deadlines: Mutex::new(HashMap::new()),
@@ -215,35 +179,13 @@ impl Bluetooth {
         })
     }
     pub fn snapshot(&self) -> BluetoothSnapshot {
-        (**self
-            .shared
-            .snapshot
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()))
-        .clone()
+        (*self.shared.snapshots.get()).clone()
     }
     pub fn subscribe(
         &self,
         callback: impl Fn(Arc<BluetoothSnapshot>) + Send + Sync + 'static,
     ) -> Subscription {
-        let id = self.shared.next.fetch_add(1, Ordering::Relaxed);
-        let callback: Callback = Arc::new(callback);
-        self.shared
-            .callbacks
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(id, callback.clone());
-        callback(
-            self.shared
-                .snapshot
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .clone(),
-        );
-        Subscription {
-            shared: Arc::downgrade(&self.shared),
-            id,
-        }
+        self.shared.snapshots.subscribe(callback)
     }
     pub fn action(&self, action: BluetoothAction) -> Result<(), String> {
         crate::bus::runtime()

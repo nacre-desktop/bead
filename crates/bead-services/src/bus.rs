@@ -130,6 +130,87 @@ where
         });
     })
 }
+type Callback<T> = Arc<dyn Fn(Arc<T>) + Send + Sync>;
+/// A service snapshot whose `revision` [`Snapshots::change`] bumps.
+pub(crate) trait Revision: Clone + Default + PartialEq {
+    fn revision(&mut self) -> &mut u64;
+}
+/// The latest snapshot of one event service and its subscribers.
+pub(crate) struct Snapshots<T> {
+    current: std::sync::Mutex<Arc<T>>,
+    callbacks: std::sync::Mutex<std::collections::BTreeMap<u64, Callback<T>>>,
+    next: std::sync::atomic::AtomicU64,
+}
+impl<T: Revision> Snapshots<T> {
+    pub(crate) fn new() -> Arc<Self> {
+        Arc::new(Self {
+            current: Default::default(),
+            callbacks: Default::default(),
+            next: 1.into(),
+        })
+    }
+    pub(crate) fn get(&self) -> Arc<T> {
+        self.current
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+    /// Apply `update`; if anything but the revision changed, bump it and notify subscribers.
+    pub(crate) fn change(&self, update: impl FnOnce(&mut T)) {
+        let mut current = self.current.lock().unwrap_or_else(|e| e.into_inner());
+        let mut next = (**current).clone();
+        let revision = *next.revision();
+        update(&mut next);
+        *next.revision() = revision;
+        if next == **current {
+            return;
+        }
+        *next.revision() = revision.saturating_add(1);
+        let next = Arc::new(next);
+        *current = next.clone();
+        drop(current);
+        let callbacks = self
+            .callbacks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        callbacks.into_iter().for_each(|cb| cb(next.clone()));
+    }
+    /// Register `callback` and call it once with the current snapshot.
+    pub(crate) fn subscribe(
+        self: &Arc<Self>,
+        callback: impl Fn(Arc<T>) + Send + Sync + 'static,
+    ) -> Subscription<T> {
+        let id = self.next.fetch_add(1, Ordering::Relaxed);
+        let callback: Callback<T> = Arc::new(callback);
+        self.callbacks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, callback.clone());
+        callback(self.get());
+        Subscription {
+            snapshots: Arc::downgrade(self),
+            id,
+        }
+    }
+}
+/// Keeps a service callback registered until dropped.
+pub struct Subscription<T> {
+    snapshots: std::sync::Weak<Snapshots<T>>,
+    id: u64,
+}
+impl<T> Drop for Subscription<T> {
+    fn drop(&mut self) {
+        if let Some(s) = self.snapshots.upgrade() {
+            s.callbacks
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&self.id);
+        }
+    }
+}
 async fn connect(
     shared: &Arc<Shared>,
     receiver: &mut mpsc::Receiver<Command>,

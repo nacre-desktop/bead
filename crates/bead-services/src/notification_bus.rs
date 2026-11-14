@@ -329,6 +329,20 @@ async fn signal<T: serde::Serialize + zbus::zvariant::DynamicType>(
         .emit_signal(None::<&str>, PATH, INTERFACE, name, value)
         .await
 }
+/// Send `action` and wait until the service processed it.
+async fn call(sender: &mpsc::Sender<Request>, action: Control) -> Result<(), String> {
+    let (reply, receive) = oneshot::channel();
+    sender
+        .try_send(Request {
+            action,
+            reply: Some(reply),
+        })
+        .map_err(|_| "notification service busy or stopped")?;
+    tokio::time::timeout(Duration::from_secs(3), receive)
+        .await
+        .map_err(|_| "notification call timed out")?
+        .map_err(|_| "notification service stopped")?
+}
 fn wall_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -381,17 +395,7 @@ impl Handle {
     }
     /// A successful result means the action was processed, not merely enqueued.
     pub async fn call(&self, action: Control) -> Result<(), String> {
-        let (reply, receive) = oneshot::channel();
-        self.sender
-            .try_send(Request {
-                action,
-                reply: Some(reply),
-            })
-            .map_err(|_| "notification service busy or stopped")?;
-        tokio::time::timeout(Duration::from_secs(3), receive)
-            .await
-            .map_err(|_| "notification call timed out")?
-            .map_err(|_| "notification service stopped")?
+        call(&self.sender, action).await
     }
     pub async fn stop(mut self) -> Result<(), String> {
         self.stop.notify_one();
@@ -584,17 +588,7 @@ pub struct Server {
 impl Server {
     /// Host API processing acknowledgement on the caller's existing Tokio runtime.
     pub async fn call(&self, action: Control) -> Result<(), String> {
-        let (reply, receive) = oneshot::channel();
-        self.sender
-            .try_send(Request {
-                action,
-                reply: Some(reply),
-            })
-            .map_err(|_| "notification service busy or stopped")?;
-        tokio::time::timeout(Duration::from_secs(3), receive)
-            .await
-            .map_err(|_| "notification call timed out")?
-            .map_err(|_| "notification service stopped")?
+        call(&self.sender, action).await
     }
     pub fn control(&self, command: Control) -> Result<(), String> {
         self.sender

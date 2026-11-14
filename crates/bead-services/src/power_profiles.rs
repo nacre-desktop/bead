@@ -2,11 +2,8 @@
 //! Event-driven client for the public power-profiles-daemon D-Bus interface.
 use futures_util::StreamExt;
 use std::{
-    collections::{BTreeMap, HashMap},
-    sync::{
-        Arc, Mutex, Weak,
-        atomic::{AtomicU64, Ordering},
-    },
+    collections::HashMap,
+    sync::{Arc, Mutex},
     thread::JoinHandle,
 };
 use zbus::{Connection, Proxy, fdo::DBusProxy, zvariant::OwnedValue};
@@ -35,56 +32,16 @@ pub struct PowerProfilesSnapshot {
 pub enum PowerProfilesAction {
     SetProfile(String),
 }
-type Callback = Arc<dyn Fn(Arc<PowerProfilesSnapshot>) + Send + Sync>;
+impl crate::bus::Revision for PowerProfilesSnapshot {
+    fn revision(&mut self) -> &mut u64 {
+        &mut self.revision
+    }
+}
 struct Shared {
-    snapshot: Mutex<Arc<PowerProfilesSnapshot>>,
-    callbacks: Mutex<BTreeMap<u64, Callback>>,
-    next: AtomicU64,
+    snapshots: Arc<crate::bus::Snapshots<PowerProfilesSnapshot>>,
     stopped: tokio::sync::Notify,
 }
-impl Shared {
-    fn change(&self, update: impl FnOnce(&mut PowerProfilesSnapshot)) {
-        let mut old = self.snapshot.lock().unwrap_or_else(|e| e.into_inner());
-        let mut next = (**old).clone();
-        update(&mut next);
-        if next.available == old.available
-            && next.active == old.active
-            && next.profiles == old.profiles
-            && next.degraded == old.degraded
-        {
-            return;
-        }
-        next.revision = old.revision.saturating_add(1);
-        let next = Arc::new(next);
-        *old = next.clone();
-        drop(old);
-        let callbacks = self
-            .callbacks
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .values()
-            .cloned()
-            .collect::<Vec<_>>();
-        callbacks
-            .into_iter()
-            .for_each(|callback| callback(next.clone()));
-    }
-}
-pub struct Subscription {
-    shared: Weak<Shared>,
-    id: u64,
-}
-impl Drop for Subscription {
-    fn drop(&mut self) {
-        if let Some(shared) = self.shared.upgrade() {
-            shared
-                .callbacks
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .remove(&self.id);
-        }
-    }
-}
+pub type Subscription = crate::bus::Subscription<PowerProfilesSnapshot>;
 /// Owns the event worker for the system bus connection.
 pub struct PowerProfiles {
     shared: Arc<Shared>,
@@ -103,9 +60,7 @@ impl PowerProfiles {
     }
     fn spawn(runtime: Option<tokio::runtime::Runtime>, connection: Connection) -> Arc<Self> {
         let shared = Arc::new(Shared {
-            snapshot: Mutex::new(Arc::new(PowerProfilesSnapshot::default())),
-            callbacks: Mutex::new(BTreeMap::new()),
-            next: AtomicU64::new(1),
+            snapshots: crate::bus::Snapshots::new(),
             stopped: tokio::sync::Notify::new(),
         });
         let conn = connection.clone();
@@ -113,7 +68,7 @@ impl PowerProfiles {
             runtime,
             shared.clone(),
             |s| &s.stopped,
-            |s| s.change(unavailable),
+            |s| s.snapshots.change(unavailable),
             move |s| run(conn.clone(), s),
         );
         Arc::new(Self {
@@ -123,35 +78,13 @@ impl PowerProfiles {
         })
     }
     pub fn snapshot(&self) -> PowerProfilesSnapshot {
-        (**self
-            .shared
-            .snapshot
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()))
-        .clone()
+        (*self.shared.snapshots.get()).clone()
     }
     pub fn subscribe(
         &self,
         callback: impl Fn(Arc<PowerProfilesSnapshot>) + Send + Sync + 'static,
     ) -> Subscription {
-        let id = self.shared.next.fetch_add(1, Ordering::Relaxed);
-        let callback: Callback = Arc::new(callback);
-        self.shared
-            .callbacks
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(id, callback.clone());
-        callback(
-            self.shared
-                .snapshot
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .clone(),
-        );
-        Subscription {
-            shared: Arc::downgrade(&self.shared),
-            id,
-        }
+        self.shared.snapshots.subscribe(callback)
     }
     pub fn action(&self, action: PowerProfilesAction) -> Result<(), String> {
         let PowerProfilesAction::SetProfile(profile) = action;
@@ -226,7 +159,7 @@ async fn run(connection: Connection, shared: Arc<Shared>) -> zbus::Result<()> {
 }
 async fn refresh(connection: &Connection, shared: &Shared) {
     let Ok(name) = current_name(connection).await else {
-        shared.change(unavailable);
+        shared.snapshots.change(unavailable);
         return;
     };
     let Ok(proxy) = Proxy::new(connection, name, PATH, INTERFACE).await else {
@@ -249,7 +182,7 @@ async fn refresh(connection: &Connection, shared: &Shared) {
                 .and_then(|value| <String>::try_from(value).ok())
         })
         .collect();
-    shared.change(|s| {
+    shared.snapshots.change(|s| {
         s.available = true;
         s.active = active;
         s.profiles = profiles;
