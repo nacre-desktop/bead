@@ -111,7 +111,7 @@ where
     S: Send + Sync + 'static,
     F: Future<Output = zbus::Result<()>>,
 {
-    std::thread::spawn(move || {
+    std::thread::Builder::new().name("bead-svc-bus".into()).spawn(move || {
         let Some(rt) = runtime.or_else(|| self::runtime().ok()) else {
             return;
         };
@@ -128,7 +128,7 @@ where
                 }
             }
         });
-    })
+    }).expect("spawn bead-svc-bus")
 }
 type Callback<T> = Arc<dyn Fn(Arc<T>) + Send + Sync>;
 /// A service snapshot whose `revision` [`Snapshots::change`] bumps.

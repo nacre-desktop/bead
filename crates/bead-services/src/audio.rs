@@ -66,7 +66,7 @@ fn publish(graph: &Rc<RefCell<Graph>>, shared: &Shared) {
     shared.change(|s| s.audio = audio);
 }
 pub(crate) fn spawn(shared: Arc<Shared>) -> std::thread::JoinHandle<()> {
-    std::thread::spawn(move || {
+    std::thread::Builder::new().name("bead-audio".into()).spawn(move || {
         super::runtime::block_worker_signals();
         pw::init();
         let mut retry = crate::runtime::Retry::new();
@@ -82,7 +82,7 @@ pub(crate) fn spawn(shared: Arc<Shared>) -> std::thread::JoinHandle<()> {
             shared.change(|s| s.audio = Audio::default());
             shared.wait_retry(delay);
         }
-    })
+    }).expect("spawn bead-audio")
 }
 fn connect(shared: &Arc<Shared>) -> Result<(), Box<dyn std::error::Error>> {
     let mainloop = pw::main_loop::MainLoopRc::new(None)?;

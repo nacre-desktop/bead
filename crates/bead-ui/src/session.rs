@@ -321,6 +321,12 @@ impl Session {
     pub fn has_store(&self, id: &str) -> bool {
         self.stores.get(id).is_some()
     }
+    /// Whether the committed view may read store `id` (conservatively true for views that do not track reads).
+    pub fn reads_store(&self, id: &str) -> bool {
+        self.generation
+            .as_ref()
+            .is_some_and(|g| g.model_affects_view(std::iter::once(id)))
+    }
     pub fn restore_on_start(&mut self, values: BTreeMap<String, Value>) {
         self.restore = Some(values);
     }

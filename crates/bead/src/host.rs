@@ -122,7 +122,6 @@ pub struct FolderServicesRuntime {
     services: FolderServices,
     desktop: Option<Arc<Desktop>>,
     _subscription: Option<Subscription>,
-    _clock_lease: Option<ClockSecondsLease>,
     media: Option<Arc<Media>>,
     _media_subscription: Option<bead_services::media::Subscription>,
     power: Option<Arc<PowerProfiles>>,
@@ -181,13 +180,6 @@ impl FolderServicesRuntime {
             .contains("workspaces")
             .then(bead_backends::detect)
             .flatten();
-        let clock_lease = if services.desktop.contains("clock") {
-            desktop
-                .as_ref()
-                .map(|desktop| desktop.clock_seconds_lease())
-        } else {
-            None
-        };
         let signals = Arc::new(RuntimeSignals::default());
         let media_subscription = media
             .as_ref()
@@ -227,7 +219,7 @@ impl FolderServicesRuntime {
             let media = media.clone();
             let signals = signals.clone();
             let stop_signal = stop.clone();
-            std::thread::spawn(move || {
+            std::thread::Builder::new().name("bead-media-tick".into()).spawn(move || {
                 let mut last_tick = monotonic_millis();
                 loop {
                     let stopped = stop_signal.0.lock().unwrap();
@@ -248,7 +240,7 @@ impl FolderServicesRuntime {
                         last_tick = now;
                     }
                 }
-            })
+            }).expect("spawn bead-media-tick")
         });
         let scheduler = if intervals.is_empty() {
             None
@@ -257,7 +249,7 @@ impl FolderServicesRuntime {
             let commands = commands.clone();
             let wake = wake.clone();
             let stop_signal = stop.clone();
-            Some(std::thread::spawn(move || {
+            Some(std::thread::Builder::new().name("bead-scheduler".into()).spawn(move || {
                 let mut next = intervals
                     .into_iter()
                     .map(|(name, interval)| (name, interval, std::time::Instant::now()))
@@ -284,13 +276,12 @@ impl FolderServicesRuntime {
                         }
                     }
                 }
-            }))
+            }).expect("spawn bead-scheduler"))
         };
         Some(Arc::new(Self {
             services,
             desktop,
             _subscription: subscription,
-            _clock_lease: clock_lease,
             media,
             _media_subscription: media_subscription,
             power,
@@ -932,14 +923,14 @@ fn launch_command(
     let name = name.to_owned();
     let state = state.clone();
     let wake = wake.clone();
-    std::thread::spawn(move || {
+    std::thread::Builder::new().name("bead-command".into()).spawn(move || {
         let (stdout, ok, error) = execute_command(&spec);
         if let Ok(mut shared) = state.lock() {
             shared.active.remove(&name);
             shared.results.insert(name, (stdout, ok, error));
         }
         wake(UiEvent::Model(BTreeMap::new()));
-    });
+    }).expect("spawn bead-command");
 }
 fn execute_command(spec: &CommandSpec) -> (String, bool, String) {
     let mut command = bead_services::process::command(&spec.argv[0]);
@@ -991,6 +982,8 @@ pub struct FolderView {
     size: (u32, u32),
     runtime: Option<Arc<FolderServicesRuntime>>,
     registration: Option<u64>,
+    /// Held while this view binds `desktop.clock.seconds`; the shared clock ticks at 1 Hz only then.
+    seconds_lease: Option<ClockSecondsLease>,
     initialized: bool,
     needs_external_refresh: bool,
     last_revision: Option<u64>,
@@ -1259,6 +1252,7 @@ impl FolderView {
             size,
             runtime,
             registration: None,
+            seconds_lease: None,
             initialized: false,
             needs_external_refresh: false,
             last_revision: None,
@@ -1279,6 +1273,16 @@ impl FolderView {
         self.panel_edge = bar_edge;
         self.fixed_viewport = bar_edge.is_none();
         self
+    }
+    fn sync_seconds_lease(&mut self) {
+        const SECONDS: &str = "desktop.clock.seconds";
+        let wanted = self.session.has_store(SECONDS) && self.session.reads_store(SECONDS);
+        if wanted != self.seconds_lease.is_some() {
+            self.seconds_lease = wanted
+                .then(|| self.runtime.as_ref()?.desktop.as_ref())
+                .flatten()
+                .map(|desktop| desktop.clock_seconds_lease());
+        }
     }
     fn apply_external(&mut self) -> Result<Option<Scene>, Box<dyn Error>> {
         let mut changes = BTreeMap::new();
@@ -1750,6 +1754,7 @@ impl SceneSource for FolderView {
             return true;
         };
         self.session.commit(scene);
+        self.sync_seconds_lease();
         self.initialized = true;
         if self.needs_external_refresh {
             self.needs_external_refresh = false;
@@ -2912,6 +2917,83 @@ mod tests {
         drop(second);
         drop(runtime);
         let _ = std::fs::remove_dir_all(base);
+    }
+
+    fn seconds_app(binding: &str) -> (PathBuf, Arc<FolderServicesRuntime>, FolderView) {
+        let root = std::env::temp_dir().join(format!(
+            "bead-folder-seconds-{}-{}",
+            std::process::id(),
+            TEMP_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(root.join("view")).unwrap();
+        std::fs::write(
+            root.join("palette.json"),
+            r#"{"formatVersion":1,"colours":{}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("view/behavior.luau"),
+            "return {stores={},actions={},computed={}}",
+        )
+        .unwrap();
+        let runtime = FolderServicesRuntime::start(FolderServices {
+            desktop: BTreeSet::from(["clock".into()]),
+            commands: BTreeMap::new(),
+        })
+        .unwrap();
+        set_binding(&root, binding);
+        let mut view = FolderView::load_with_runtime(
+            root.clone(),
+            "view/main.luau".into(),
+            "palette.json".into(),
+            "Seconds",
+            (200, 40),
+            runtime.clone(),
+        )
+        .unwrap();
+        view.check_render(UiEvent::Reload).unwrap();
+        view.commit();
+        (root, runtime, view)
+    }
+    fn set_binding(root: &std::path::Path, binding: &str) {
+        std::fs::write(
+            root.join("view/main.luau"),
+            format!("local ui=require('bead.ui'); return ui.Text{{id='t',text=ui.bind('{binding}'),width=120,height=24}}"),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn seconds_lease_follows_the_views_that_bind_the_seconds_clock() {
+        let (root, _runtime, mut view) = seconds_app("desktop.clock");
+        assert!(view.seconds_lease.is_none(), "minute binding must not tick");
+        set_binding(&root, "desktop.clock.seconds");
+        view.check_render(UiEvent::Reload).unwrap();
+        view.commit();
+        assert!(view.seconds_lease.is_some(), "a seconds binding takes the lease");
+        set_binding(&root, "desktop.clock");
+        view.check_render(UiEvent::Reload).unwrap();
+        view.commit();
+        assert!(view.seconds_lease.is_none(), "dropping the binding frees it");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_seconds_tick_produces_exactly_one_frame() {
+        let (root, runtime, mut view) = seconds_app("desktop.clock.seconds");
+        let desktop = runtime.desktop.clone().unwrap();
+        let _ = view.stage(UiEvent::Model(BTreeMap::new())).unwrap();
+        view.commit();
+        let seen = desktop.snapshot().revision;
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        while desktop.snapshot().revision == seen {
+            assert!(std::time::Instant::now() < deadline, "no seconds tick");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(view.stage(UiEvent::Model(BTreeMap::new())).unwrap().is_some());
+        view.commit();
+        assert!(view.stage(UiEvent::Model(BTreeMap::new())).unwrap().is_none());
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

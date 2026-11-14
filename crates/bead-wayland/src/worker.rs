@@ -553,7 +553,7 @@ impl SceneSource for Source {
         // Leave Rust's stack-size policy intact; only admission accounting reads
         // the request, conservatively charging at least the ordinary default.
         let stack_bytes = stack_charge(std::env::var("RUST_MIN_STACK").ok().as_deref());
-        self.thread = Some(std::thread::spawn(move || {
+        self.thread = Some(std::thread::Builder::new().name("bead-worker".into()).spawn(move || {
             bead_core::profile::mark("worker_started");
             let wakeup: Arc<dyn Fn(UiEvent) + Send + Sync> = Arc::from(wakeup);
             let report = wakeup.clone();
@@ -932,7 +932,7 @@ impl SceneSource for Source {
             if result.is_err() {
                 report(UiEvent::Fatal("script worker panicked".into()));
             }
-        }));
+        }).expect("spawn bead-worker"));
         if let Some(interval) = self.frame_interval {
             let _ = self.send(Job::FrameInterval(interval));
         }
