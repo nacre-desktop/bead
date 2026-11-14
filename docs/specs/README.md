@@ -35,5 +35,6 @@ This index contains current framework contracts and repository-boundary decision
 | [0270 — Panel first frame](0270-panel-first-frame.md) | Cold and reopened panel-open latency: per-axis shadow templates (the GL context lifetime is pending a desktop gate) |
 | [0271 — Idle memory ownership](0271-idle-memory.md) | Idle PSS and heap ownership of a Bead process (Luau VMs, keep-alive panels, a11y threads, arenas); proposed fixes |
 | [0271 — Idle memory ownership](0271-idle-memory.md) | Idle PSS and heap ownership of a Bead process (Luau VMs, keep-alive panels, a11y threads, arenas); fixes landed |
+| [0263 — Reveal close (B0277)](0263-motion-tokens-and-retarget.md#reveal-close-b0277) | A stationary reveal closes as the open reversed (shrinks into its anchor edge) on the CPU and compositor paths |
 
 This index covers Bead framework contracts. See the [documentation index](../README.md) for the current framework overview and the [framework ownership decision](0214-framework-split.md).

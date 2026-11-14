@@ -80,3 +80,29 @@ static-body open/close; making it the default needs the compositor side and is n
 - Bench (dev-1, release, median of 40, the 0252 bar fixture): `ui.animate` frame 501 us / 3,152
   allocations, `ui.animated` frame 35 us / 349 (the scene copies handed to the host, not the patch).
 - Example: `examples/bar-with-panels` `status`; desktop capture: `.lead/capture-peek.sh` (untracked).
+
+## Reveal close (B0277)
+
+- Cause (confirmed): a reveal open without `slide_distance` clips in place (plane offset 0), but close fell
+  into the whole-scene branch (`Scene::panel_offset`, `closed_plane_offset`, `tracking_only` contour,
+  deliberate since eed9aa56 so content cannot escape the shrinking body): the plane travelled the full
+  surface height with the body's far edge, corners, border and shadow riding to the anchor edge, and the
+  slab was gone after about 78 % of the close (dead time, a pop), so the close was not the open reversed.
+- Fix: a stationary reveal (`reveal`, no `slide_distance`) closes as the open reversed on both paths.
+  CPU: `panel_offset` reshapes the body and clips content for a close too (`Motion::reshapes_body`; the
+  reveal window, slide-content cache and `reveal_window` follow it). Compositor: `closed_plane_offset` is
+  (0,0), the planner sends `RevealContour::reversed()` in `Visible` mode with contour-owned art left out of
+  the atlas, and `motion_atlas_ink_is_safe` shares the rule. Protocol unchanged. `slide_distance =
+  Some(_)` closes keep the whole-scene translation and `tracking_only` contour, as do non-reveal motions;
+  reduced motion still skips. Net: +212/-69 lines, product code about neutral, the rest tests.
+- Tests: `reveal_close_mirrors_the_open_and_settles_into_every_anchor_edge` (4 edges: close pose equals the
+  open pose at each progress, offset 0, ink stays inside the shrinking body, hidden at progress 0),
+  `stationary_reveal_close_is_the_reversed_open_with_no_plane_travel`, and a wayland wire test (visible
+  contour once, no tracking mode). Retarget keeps working: both directions sample the same pose function.
+- Evidence (dev-1, headless sway 1920x1080@120, CPU path, status peek, `.lead/capture.sh` untracked, 3 s
+  slow variant): before, the peek had vanished at 78 % of the close and its far edge rode up as a slab
+  (bottom edge y 155, 144, 103, 63, 40, none); after it shrinks into the bar for the whole close (155,
+  148, 124, 67, 42, 39, none, last visible frame at 100 %). Frame gaps in the close, normal 0.22 s: p50 8.3,
+  p95 10.6, max 10.6 ms (before: 8.0, 10.1, 10.1). The compositor path is covered by the plan and wire
+  tests only: the desktop capture is parked (swap gate closed, see the unit handoff).
+
