@@ -67,6 +67,9 @@ pub(crate) struct Shared {
     pub clock_seconds_leases: std::sync::atomic::AtomicUsize,
     /// Wakes the clock worker on lease changes and stop.
     pub clock_wait: (Mutex<()>, std::sync::Condvar),
+    /// The clock worker's wall-clock timer; `None` falls back to waiting on `clock_wait`.
+    #[cfg(target_os = "linux")]
+    pub clock_timer: Option<std::os::fd::OwnedFd>,
     pub audio_sender: Mutex<Option<pipewire::channel::Sender<super::audio::Command>>>,
     pub audio_wait: (Mutex<()>, std::sync::Condvar),
 }
@@ -111,10 +114,15 @@ impl Shared {
             let _ = self.audio_wait.1.wait_timeout(guard, delay);
         }
     }
-    /// Wake the clock worker to re-read the lease count; taking the lock first means the worker
-    /// either sees the new count under its own lock or is already waiting on the condvar.
+    /// Wake the clock worker to re-read the lease count and `stop`; taking the lock first means
+    /// the worker either sees the new value under its own lock or has armed its wait already.
     pub fn wake_clock(&self) {
-        drop(self.clock_wait.0.lock().unwrap_or_else(poisoned));
+        let guard = self.clock_wait.0.lock().unwrap_or_else(poisoned);
+        #[cfg(target_os = "linux")]
+        if let Some(timer) = &self.clock_timer {
+            super::bus::clock_fd::arm(timer, std::time::UNIX_EPOCH);
+        }
+        drop(guard);
         self.clock_wait.1.notify_all();
     }
     pub fn change(&self, mutate: impl FnOnce(&mut Snapshot)) {
@@ -215,6 +223,8 @@ impl Desktop {
             stop: AtomicBool::new(false),
             clock_seconds_leases: std::sync::atomic::AtomicUsize::new(0),
             clock_wait: (Mutex::new(()), std::sync::Condvar::new()),
+            #[cfg(target_os = "linux")]
+            clock_timer: super::bus::clock_fd::timer(),
             audio_sender: Mutex::new(None),
             audio_wait: (Mutex::new(()), std::sync::Condvar::new()),
         });
@@ -328,17 +338,8 @@ impl Desktop {
             .len()
     }
     pub fn stop(&self) {
-        {
-            // Under the clock lock so the clock worker cannot miss the wakeup.
-            let _guard = self
-                .shared
-                .clock_wait
-                .0
-                .lock()
-                .unwrap_or_else(crate::runtime::poisoned);
-            self.shared.stop.store(true, Ordering::SeqCst);
-        }
-        self.shared.clock_wait.1.notify_all();
+        self.shared.stop.store(true, Ordering::SeqCst);
+        self.shared.wake_clock();
         let _ = self.sender.try_send(Command::Stop);
         if let Some(sender) = self
             .shared
@@ -439,6 +440,24 @@ mod clock_lease_tests {
         let started = Instant::now();
         desktop.stop();
         assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn any_clock_wake_republishes_the_wall_clock_at_once() {
+        let desktop = Desktop::start_config(Config {
+            audio: false,
+            bus: false,
+            tray_watcher: false,
+        });
+        assert!(wait(&desktop, Duration::from_secs(5), |s| s.clock.len() == 5));
+        // A stale snapshot and a wake without a lease change: the same timer readiness the
+        // kernel gives a cancelled wait after a wall-clock step or resume.
+        desktop.shared.change(|s| s.clock = "stale".into());
+        desktop.shared.wake_clock();
+        assert!(
+            wait(&desktop, Duration::from_secs(1), |s| s.clock != "stale"),
+            "a wake must recompute at once, not at the next boundary"
+        );
     }
 
     #[test]

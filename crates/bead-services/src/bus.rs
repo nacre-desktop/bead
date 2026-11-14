@@ -176,20 +176,22 @@ async fn connect(
                         && let Ok(sleeping) = message.body().deserialize::<bool>()
                     {
                         shared.change(|s| s.session.sleeping = sleeping);
-                        if !sleeping {
-                            // Tokio deadlines use a monotonic clock, which may have
-                            // stopped while the machine was suspended.
+                        // Linux: resume cancels the clock worker's realtime timer. Elsewhere its
+                        // wait is monotonic, which stops while the machine is suspended.
+                        if !sleeping && cfg!(not(target_os = "linux")) {
                             shared.change(update_clock);
                         }
                     }
                     refresh_lock(shared, &system).await;
                 }
-                if path == "/org/freedesktop/timedate1"
-                    || (interface == "org.freedesktop.DBus"
-                        && header.member().is_some_and(|s| s.as_str() == "NameOwnerChanged")
-                        && message.body().deserialize::<(String, String, String)>().is_ok_and(
-                            |(name, _, _)| name == "org.freedesktop.timedate1",
-                        ))
+                // Linux: the clock worker watches /etc/localtime itself.
+                if cfg!(not(target_os = "linux"))
+                    && (path == "/org/freedesktop/timedate1"
+                        || (interface == "org.freedesktop.DBus"
+                            && header.member().is_some_and(|s| s.as_str() == "NameOwnerChanged")
+                            && message.body().deserialize::<(String, String, String)>().is_ok_and(
+                                |(name, _, _)| name == "org.freedesktop.timedate1",
+                            )))
                 {
                     shared.change(update_clock);
                 }
@@ -225,26 +227,21 @@ async fn refresh_lock(shared: &Shared, connection: &Connection) {
     shared.change(|s| s.session.locked = locked);
 }
 /// Publish the wall clock at every minute (or, under a seconds lease, second) boundary without
-/// any bus; resume and resolution changes refresh early through `clock_wait`.
+/// any bus. Every wake recomputes at once: lease changes and stop, and on Linux a wall-clock step,
+/// resume (both cancel the CLOCK_REALTIME timer) or a change of /etc/localtime.
 pub(crate) fn run_clock(shared: Arc<Shared>) {
     super::runtime::block_worker_signals();
-    let mut slot = None;
-    let mut sample: Option<(SystemTime, Instant)> = None;
-    loop {
+    // With TZ set the zone comes from the environment, not /etc/localtime.
+    #[cfg(target_os = "linux")]
+    let zone = std::env::var_os("TZ")
+        .is_none()
+        .then(|| clock_fd::watch_zone(c"/etc"))
+        .flatten();
+    while !shared.stop.load(Ordering::SeqCst) {
         let wall_now = SystemTime::now();
-        let monotonic_now = Instant::now();
         let seconds_enabled = shared.clock_seconds_leases.load(Ordering::Acquire) > 0;
-        if clock_slot_changed(&mut slot, wall_now, seconds_enabled)
-            || sample.is_some_and(|(wall, monotonic)| {
-                clock_drifted(
-                    wall_now.duration_since(wall).unwrap_or_default(),
-                    monotonic_now.duration_since(monotonic),
-                )
-            })
-        {
-            shared.change(update_clock);
-        }
-        sample = Some((wall_now, monotonic_now));
+        // Every wake recomputes; `change` drops a snapshot equal to the published one.
+        shared.change(update_clock);
         let guard = shared
             .clock_wait
             .0
@@ -254,12 +251,137 @@ pub(crate) fn run_clock(shared: Arc<Shared>) {
             return;
         }
         if (shared.clock_seconds_leases.load(Ordering::Acquire) > 0) != seconds_enabled {
-            continue; // a lease changed while publishing; recompute the slot and delay
+            continue; // a lease changed while publishing; recompute the deadline
         }
-        let _ = shared
-            .clock_wait
-            .1
-            .wait_timeout(guard, next_clock_delay(wall_now, seconds_enabled));
+        // From the pre-publish time, so a boundary crossed while publishing is already due.
+        let deadline = wall_now + next_clock_delay(wall_now, seconds_enabled);
+        #[cfg(target_os = "linux")]
+        if let Some(timer) = &shared.clock_timer {
+            clock_fd::arm(timer, deadline);
+            drop(guard);
+            // The timer reports steps after arming; a backward one since `wall_now` recomputes here.
+            if SystemTime::now() >= wall_now {
+                clock_fd::wait(timer, zone.as_ref());
+            }
+            continue;
+        }
+        let delay = deadline
+            .duration_since(SystemTime::now())
+            .unwrap_or_default();
+        let _ = shared.clock_wait.1.wait_timeout(guard, delay);
+    }
+}
+/// The clock worker's Linux wait: a CLOCK_REALTIME timerfd and an inotify watch in one poll.
+#[cfg(target_os = "linux")]
+pub(crate) mod clock_fd {
+    use std::{
+        ffi::CStr,
+        os::fd::{AsRawFd, FromRawFd, OwnedFd},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    unsafe extern "C" {
+        fn tzset();
+    }
+
+    /// `None` (the condvar fallback) if the kernel refuses a timer.
+    pub fn timer() -> Option<OwnedFd> {
+        // SAFETY: plain syscall; a non-negative result is a new descriptor owned here.
+        let fd = unsafe {
+            libc::timerfd_create(libc::CLOCK_REALTIME, libc::TFD_CLOEXEC | libc::TFD_NONBLOCK)
+        };
+        // SAFETY: as above.
+        (fd >= 0).then(|| unsafe { OwnedFd::from_raw_fd(fd) })
+    }
+    /// Fire at the wall-clock `deadline`, or early when the wall clock is set or the system
+    /// resumes. A past deadline (`UNIX_EPOCH` wakes the worker) fires at once.
+    pub fn arm(timer: &OwnedFd, deadline: SystemTime) {
+        let since = deadline.duration_since(UNIX_EPOCH).unwrap_or_default();
+        let value = libc::itimerspec {
+            it_interval: libc::timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            it_value: libc::timespec {
+                tv_sec: since.as_secs() as libc::time_t,
+                // 0 s 0 ns would disarm the timer instead.
+                tv_nsec: since.subsec_nanos().max(1) as _,
+            },
+        };
+        // SAFETY: valid descriptor and itimerspec; the previous value is not requested.
+        unsafe {
+            libc::timerfd_settime(
+                timer.as_raw_fd(),
+                libc::TFD_TIMER_ABSTIME | libc::TFD_TIMER_CANCEL_ON_SET,
+                &value,
+                std::ptr::null_mut(),
+            );
+        }
+    }
+    /// Block until the timer fires or is cancelled or `zone` has events; re-read the local
+    /// timezone when those events touched `localtime`.
+    pub fn wait(timer: &OwnedFd, zone: Option<&OwnedFd>) {
+        let mut fds = [Some(timer), zone].map(|fd| libc::pollfd {
+            fd: fd.map_or(-1, AsRawFd::as_raw_fd),
+            events: libc::POLLIN,
+            revents: 0,
+        });
+        let mut expirations = 0u64;
+        // SAFETY: valid pollfd array (poll ignores a negative fd) and an 8-byte read buffer.
+        // The read yields an expiry count, or ECANCELED after a wall-clock step or resume;
+        // either way the caller recomputes.
+        unsafe {
+            libc::poll(fds.as_mut_ptr(), 2, -1);
+            libc::read(timer.as_raw_fd(), (&raw mut expirations).cast(), 8);
+        }
+        if fds[1].revents != 0 && zone.is_some_and(zone_changed) {
+            // SAFETY: tzset only reloads the process timezone; localtime_r locks against it.
+            unsafe { tzset() };
+        }
+    }
+    /// Watch `dir` for `localtime` being replaced (usually a renamed new symlink), rewritten or
+    /// removed. shortcut: edits to the zone file it points at are not watched (a tzdata update
+    /// shows after the next zone change or restart).
+    pub fn watch_zone(dir: &CStr) -> Option<OwnedFd> {
+        // SAFETY: plain syscall; a non-negative result is a new descriptor owned here.
+        let fd = unsafe { libc::inotify_init1(libc::IN_CLOEXEC | libc::IN_NONBLOCK) };
+        if fd < 0 {
+            return None;
+        }
+        // SAFETY: as above.
+        let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+        let mask = libc::IN_CREATE
+            | libc::IN_DELETE
+            | libc::IN_MOVED_FROM
+            | libc::IN_MOVED_TO
+            | libc::IN_CLOSE_WRITE;
+        // SAFETY: valid descriptor and NUL-terminated path.
+        (unsafe { libc::inotify_add_watch(fd.as_raw_fd(), dir.as_ptr(), mask) } >= 0).then_some(fd)
+    }
+    /// Drain the pending events; true when one names `localtime`.
+    pub fn zone_changed(zone: &OwnedFd) -> bool {
+        const HEADER: usize = std::mem::size_of::<libc::inotify_event>();
+        let mut buffer = [0u8; 4096];
+        let mut changed = false;
+        loop {
+            // SAFETY: valid descriptor and buffer bounds.
+            let read =
+                unsafe { libc::read(zone.as_raw_fd(), buffer.as_mut_ptr().cast(), buffer.len()) };
+            let Ok(read @ 1..) = usize::try_from(read) else {
+                return changed;
+            };
+            // Records are a 16-byte header (`len` at offset 12) and a NUL-terminated, padded name.
+            let mut records = &buffer[..read];
+            while let Some(header) = records.get(..HEADER) {
+                let len = u32::from_ne_bytes([header[12], header[13], header[14], header[15]]);
+                let end = HEADER + len as usize;
+                let Some(name) = records.get(HEADER..end) else {
+                    break;
+                };
+                changed |= name.starts_with(b"localtime\0");
+                records = &records[end..];
+            }
+        }
     }
 }
 fn update_clock(snapshot: &mut crate::Snapshot) {
@@ -300,21 +422,6 @@ fn next_clock_delay(now: SystemTime, seconds_enabled: bool) -> Duration {
         .as_millis() as u64;
     let period = if seconds_enabled { 1_000 } else { 60_000 };
     Duration::from_millis(period - millis % period)
-}
-fn clock_slot_changed(
-    previous: &mut Option<(bool, u64)>,
-    now: SystemTime,
-    seconds_enabled: bool,
-) -> bool {
-    let seconds = now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
-    let slot = (
-        seconds_enabled,
-        seconds / if seconds_enabled { 1 } else { 60 },
-    );
-    previous.replace(slot) != Some(slot)
-}
-fn clock_drifted(wall_elapsed: Duration, monotonic_elapsed: Duration) -> bool {
-    wall_elapsed.abs_diff(monotonic_elapsed) > Duration::from_secs(2)
 }
 fn civil_date(tm: &libc::tm) -> Option<crate::LocalDate> {
     let year = tm.tm_year.checked_add(1900)?;
@@ -844,32 +951,38 @@ mod clock_tests {
     }
 
     #[test]
-    fn wall_aligned_ticks_and_suspend_drift_rearm_from_realtime() {
+    fn wall_aligned_ticks_rearm_from_realtime() {
         let now = epoch(1_700_000_000) + Duration::from_millis(250);
         assert_eq!(next_clock_delay(now, true), Duration::from_millis(750));
         assert_eq!(next_clock_delay(now, false), Duration::from_millis(39_750));
-        assert!(!clock_drifted(
-            Duration::from_secs(3),
-            Duration::from_secs(2)
-        ));
-        assert!(clock_drifted(Duration::from_secs(2_400), Duration::ZERO));
-        assert!(clock_drifted(Duration::ZERO, Duration::from_secs(3)));
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
-    fn clock_slots_survive_busy_boundaries_resume_and_resolution_changes() {
-        let mut slot = None;
-        assert!(clock_slot_changed(&mut slot, epoch(59), false));
-        assert!(!clock_slot_changed(&mut slot, epoch(59), false));
-        // A handler straddles the minute with no monotonic/realtime drift.
-        assert!(clock_slot_changed(&mut slot, epoch(61), false));
-        assert!(!clock_slot_changed(&mut slot, epoch(62), false));
-        assert!(clock_slot_changed(&mut slot, epoch(3_661), false));
-        assert!(clock_slot_changed(&mut slot, epoch(3_661), true));
-        assert!(clock_slot_changed(&mut slot, epoch(3_662), true));
-        assert!(clock_slot_changed(&mut slot, epoch(3_662), false));
-        // A backwards wall-clock adjustment also refreshes immediately.
-        assert!(clock_slot_changed(&mut slot, epoch(60), false));
+    fn zone_watch_reports_only_localtime_entries() {
+        use std::os::unix::ffi::OsStrExt;
+        let dir = std::env::temp_dir().join(format!("bead-zone-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir(&dir).unwrap();
+        let path = std::ffi::CString::new(dir.as_os_str().as_bytes()).unwrap();
+        let zone = clock_fd::watch_zone(&path).unwrap();
+        assert!(!clock_fd::zone_changed(&zone), "no events yet");
+        std::fs::write(dir.join("resolv.conf"), "x").unwrap();
+        // A dangling relative link: nothing is ever written through it.
+        std::os::unix::fs::symlink("zone", dir.join(".#localtime")).unwrap();
+        assert!(
+            !clock_fd::zone_changed(&zone),
+            "other names and temporaries are ignored"
+        );
+        // A zone switch renames a new symlink over `localtime`.
+        std::fs::rename(dir.join(".#localtime"), dir.join("localtime")).unwrap();
+        assert!(clock_fd::zone_changed(&zone));
+        assert!(!clock_fd::zone_changed(&zone), "events were drained");
+        std::fs::remove_file(dir.join("localtime")).unwrap();
+        assert!(clock_fd::zone_changed(&zone));
+        std::fs::write(dir.join("localtime"), "a copied zone file").unwrap();
+        assert!(clock_fd::zone_changed(&zone));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
