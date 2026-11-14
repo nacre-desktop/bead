@@ -66,6 +66,19 @@ opt-level = 3
 [profile.release.package.fdeflate]
 opt-level = 3
 
+# Debug tests decode, resample and encode real-size images (40 MiB budget fixtures): optimised codecs
+# cut the bead-render test binary from 47 s to 10 s for about 30 s more cold build at -j2.
+[profile.dev.package]
+image.opt-level = 3
+png.opt-level = 3
+fdeflate.opt-level = 3
+miniz_oxide.opt-level = 3
+crc32fast.opt-level = 3
+adler2.opt-level = 3
+tiny-skia.opt-level = 3
+zune-jpeg.opt-level = 3
+zune-core.opt-level = 3
+
 # Upstream 0.8.9 leaves DBusMenu signal tasks alive after an item exits.
 [patch.crates-io]
 system-tray = { path = "vendor/system-tray" }
